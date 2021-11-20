@@ -17,7 +17,6 @@
 #![allow(missing_docs)]
 #![allow(clippy::large_enum_variant)]
 
-use crate::async_sink;
 use beef::Cow;
 use error_chain::error_chain;
 use hdrhistogram::{self, serialization as hdr_s};
@@ -171,8 +170,6 @@ error_chain! {
         RegexError(regex::Error);
         ReqwestError(reqwest::Error);
         RustlsError(rustls::TLSError);
-        SinkDequeueError(async_sink::SinkDequeueError);
-        SinkEnqueueError(async_sink::SinkEnqueueError);
         Sled(sled::Error);
         SnappyError(snap::Error);
         Timeout(async_std::future::TimeoutError);
@@ -317,6 +314,10 @@ error_chain! {
         MissingConfiguration(s: String) {
             description("Missing Configuration")
                 display("Missing Configuration for {}", s)
+        }
+        InvalidConfiguration(configured_thing: String, msg: String) {
+            description("Invalid Configuration")
+                display("Invalid Configuration for {}: {}", configured_thing, msg)
         }
         InvalidConnect(target: String, port: Cow<'static, str>) {
             description("Invalid Connect attempt")

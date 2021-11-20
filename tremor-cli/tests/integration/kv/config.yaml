@@ -31,25 +31,15 @@ connector:
 binding:
   - id: kv
     links:
-      # "/connector/input/{instance}/out":
-      #   - "/pipeline/in/{instance}/in"
-      # "/pipeline/system::passthrough/{instance}/out":
-      #   - "/offramp/system::stdout/{instance}/in"
-      # "/pipeline/in/{instance}/out":
-      #   - "/offramp/system::stdout/{instance}/in"
-
-      # "/pipeline/in/{instance}/err":
-      #   - "/offramp/system::stdout/{instance}/in"
-
       "/connector/input/{instance}/out":
         - "/pipeline/in/{instance}/in"
       "/pipeline/in/{instance}/out":
         - "/connector/kv/{instance}/in"
-        - "/offramp/system::stdout/{instance}/in"
+        - "/connector/system::stdio/{instance}/in"
       "/connector/kv/{instance}/out":
         - "/pipeline/out/{instance}/in"
       "/pipeline/out/{instance}/out":
-        - "/offramp/system::stdout/{instance}/in"
+        - "/connector/system::stdio/{instance}/in"
         - "/connector/output/{instance}/in"
       "/pipeline/out/{instance}/exit":
         - "/connector/exit/{instance}/in"

@@ -12,10 +12,11 @@
 - print names of failing tests
 - Add `check_topic_metadata` configuration flag to kafka source to bypass topic metadata fetch
 - port `json!` improvements to `literal!`
+- Add support for `troy` deployment language. The language adds the `pipeline`, `connector`, `flow`, `links`, `connect`, `to`, `deploy` and `config` reserved keywords. These are now reserved in the scripting and query languages and must now be escaped when they appear in event data. This is a breaking change in the query and script language dialects.
 - Add support for `FLOAT4` and `FLOAT8` serialization/deserialization to postgres connectors
 - Add `std::path::try_default` fn
 - Experimental ARM support
-- Add `default => {...}` and `default "key" => "value` to patch
+- Add `default => {...}` and `default "key" => "value"` to patch
 - Add `zstd` pre- and post-processors [#1100](https://github.com/tremor-rs/tremor-runtime/issues/1100)
 - Remove `rental` from `Event` [#1031](https://github.com/tremor-rs/tremor-runtime/issues/1031) [#1037](https://github.com/tremor-rs/tremor-runtime/issues/1037)
 - Put event raw payload into `Arc` to improve cloning perf
@@ -78,7 +79,11 @@
 ### Breaking CHhanges
 
 - changed naming for `record` object to avoid keywords like `select` and `merge`. New names are `record.extract` and `record.combine`.
+- command seperators are now unified, both `patch`, `match` and `for` now use `;` the same way the rest of the language does
+- in all definitial statements `args` now specifies interface arguments that are overwritable in the correspanding `create` statement, while `with` specifies non overwritable configuration in both `define` and `create` statements - this unifiers the use of `with`  and `args` between trickle and troy
+
 ## 0.11.4
+
 
 ### New features
 

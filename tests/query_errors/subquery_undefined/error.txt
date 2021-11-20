@@ -1,3 +1,0 @@
-Error: 
-    1 | create query snot;
-      | ^^^^^^^^^^^^^^^^^ query `snot` not found

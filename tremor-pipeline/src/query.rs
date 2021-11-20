@@ -33,13 +33,13 @@ use petgraph::algo::is_cyclic_directed;
 use tremor_common::ids::OperatorIdGen;
 use tremor_script::{
     ast::{
-        self, BaseExpr, CompilationUnit, Ident, NodeMetas, SelectType, Stmt, SubqueryStmt,
+        self, BaseExpr, CompilationUnit, Ident, NodeMetas, PipelineStmt, SelectType, Stmt,
         WindowDecl, WindowKind,
     },
     errors::{
-        query_node_duplicate_name_err, query_node_reserved_name_err,
-        query_stream_duplicate_name_err, query_stream_not_defined_err,
-        subquery_stmt_duplicate_name_err, subquery_unknown_port_err, CompilerError,
+        pipeline_stmt_duplicate_name_err, pipeline_unknown_port_err, query_node_duplicate_name_err,
+        query_node_reserved_name_err, query_stream_duplicate_name_err,
+        query_stream_not_defined_err, CompilerError,
     },
     highlighter::{Dumb, Highlighter},
     path::ModulePath,
@@ -133,11 +133,13 @@ impl Query {
             .get("id")
             .and_then(ValueAccess::as_str)
     }
+
     /// Source of the query
     #[must_use]
     pub fn source(&self) -> &str {
         &self.0.source
     }
+
     /// Parse a query
     ///
     /// # Errors
@@ -160,6 +162,30 @@ impl Query {
         )?))
     }
 
+    /// Parse a query with arguments
+    ///
+    /// # Errors
+    /// if the trickle script can not be parsed
+    pub fn parse_with_args(
+        module_path: &ModulePath,
+        script: &str,
+        file_name: &str,
+        cus: Vec<CompilationUnit>,
+        reg: &Registry,
+        aggr_reg: &AggrRegistry,
+        args: &Value<'_>,
+    ) -> std::result::Result<Self, CompilerError> {
+        Ok(Self(tremor_script::query::Query::parse_with_args(
+            module_path,
+            file_name,
+            script,
+            cus,
+            reg,
+            aggr_reg,
+            args,
+        )?))
+    }
+
     /// Turn a query into a executable pipeline graph
     ///
     /// # Errors
@@ -177,8 +203,8 @@ impl Query {
         let mut links: IndexMap<OutputPort, Vec<InputPort>> = IndexMap::new();
         let mut inputs = HashMap::new();
         let mut outputs: Vec<petgraph::graph::NodeIndex> = Vec::new();
-        // Used to rewrite `subquery/port` to `internal_stream`
-        let mut subqueries: HashMap<String, SubqueryStmt> = HashMap::new();
+        // Used to rewrite `pipeline/port` to `internal_stream`
+        let mut subqueries: HashMap<String, PipelineStmt> = HashMap::new();
 
         let metric_interval = query
             .config
@@ -233,7 +259,7 @@ impl Query {
         for (i, stmt) in stmts.into_iter().enumerate() {
             match stmt.suffix() {
                 Stmt::Select(ref select) => {
-                    // Rewrite subquery/port to their internal streams
+                    // Rewrite pipeline/port to their internal streams
                     let mut select_rewrite = select.clone();
                     for select_io in
                         vec![&mut select_rewrite.stmt.from, &mut select_rewrite.stmt.into]
@@ -245,7 +271,7 @@ impl Query {
                                 select_io.0.id = internal_stream.clone().into();
                             } else {
                                 let sio = select_io.clone();
-                                return Err(subquery_unknown_port_err(
+                                return Err(pipeline_unknown_port_err(
                                     &select_rewrite,
                                     &sio.0,
                                     sio.0.to_string(),
@@ -412,10 +438,11 @@ impl Query {
                 Stmt::WindowDecl(_)
                 | Stmt::ScriptDecl(_)
                 | Stmt::OperatorDecl(_)
-                | Stmt::SubqueryDecl(_) => {}
-                Stmt::SubqueryStmt(s) => {
+                | Stmt::PipelineDecl(_) => {}
+                Stmt::PipelineStmt(s) => {
+                    // FIXME NOTE - This should really be using the node id with module
                     if subqueries.contains_key(&s.id) {
-                        return Err(subquery_stmt_duplicate_name_err(
+                        return Err(pipeline_stmt_duplicate_name_err(
                             s,
                             s,
                             s.id.to_string(),
@@ -423,7 +450,7 @@ impl Query {
                         )
                         .into());
                     }
-                    subqueries.insert(s.id.clone(), s.clone());
+                    subqueries.insert(s.id.to_string(), s.clone());
                 }
                 Stmt::Operator(o) => {
                     if nodes.contains_key(&common_cow(o.node_id.id())) {
@@ -455,14 +482,8 @@ impl Query {
                                 .ok_or("operator not found")?
                                 .clone();
                             if let Some(Stmt::Operator(o)) = query.stmts.get(i) {
-                                if let Some(params) = &o.params {
-                                    if let Some(decl_params) = decl.params.as_mut() {
-                                        for (k, v) in params {
-                                            decl_params.insert(k.clone(), v.clone());
-                                        }
-                                    } else {
-                                        decl.params = Some(params.clone());
-                                    }
+                                for (k, v) in &o.params {
+                                    decl.params.insert(k.clone(), v.clone());
                                 }
                             };
                             let inner_stmt = Stmt::OperatorDecl(decl);
@@ -494,11 +515,11 @@ impl Query {
                         );
                     }
 
-                    let fqsn = o.node_id.target_fqn(&o.target);
+                    let fqn = o.node_id.target_fqn(&o.target);
 
                     let stmt_srs =
                         srs::Stmt::try_new_from_query::<&'static str, _>(&self.0.query, |query| {
-                            let decl = query.scripts.get(&fqsn).ok_or("script not found")?.clone();
+                            let decl = query.scripts.get(&fqn).ok_or("script not found")?.clone();
                             let inner_stmt = Stmt::ScriptDecl(Box::new(decl));
                             Ok(inner_stmt)
                         })?;
@@ -824,13 +845,14 @@ mod test {
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in into out;";
-        let query = Query::parse(
+        let query = Query::parse_with_args(
             module_path,
             src,
             "<test>",
             Vec::new(),
             &*crate::FN_REGISTRY.lock().unwrap(),
             &aggr_reg,
+            &literal!({}),
         )
         .unwrap();
         assert!(query.id().is_none());
@@ -838,13 +860,14 @@ mod test {
 
         // check that we can overwrite the id with a config variable
         let src = "#!config id = \"test\"\nselect event from in into out;";
-        let query = Query::parse(
+        let query = Query::parse_with_args(
             module_path,
             src,
             "<test>",
             Vec::new(),
             &*crate::FN_REGISTRY.lock().unwrap(),
             &aggr_reg,
+            &literal!({}),
         )
         .unwrap();
         assert_eq!(query.id().unwrap(), "test");
@@ -857,13 +880,14 @@ mod test {
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in/test_in into out/test_out;";
-        let q = Query::parse(
+        let q = Query::parse_with_args(
             module_path,
             src,
             "<test>",
             Vec::new(),
             &*crate::FN_REGISTRY.lock().unwrap(),
             &aggr_reg,
+            &literal!({}),
         )
         .unwrap();
 

@@ -6,7 +6,7 @@ connector:
       path: "in.json"
     codec: json
     preprocessors:
-      - lines-no-buffer
+      - lines
   - id: out
     type: file
     config:
@@ -27,7 +27,7 @@ binding:
       "/connector/in/{instance}/err":
         - "/pipeline/system::passthrough/{instance}_debug/in"
       "/pipeline/system::passthrough/{instance}_debug/out":
-        - "/connector/system::stdout/{instance}/in"
+        - "/connector/system::stdio/{instance}/in"
       # connect main pipeline to next one
       "/pipeline/main/{instance}/out":
         - "/pipeline/system::passthrough/{instance}/in"

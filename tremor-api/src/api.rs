@@ -16,13 +16,11 @@ use crate::errors::Error;
 use http_types::{headers, StatusCode};
 use serde::{Deserialize, Serialize};
 use tide::Response;
+use tremor_common::url::TremorUrl;
 use tremor_runtime::system::World;
-use tremor_runtime::url::TremorUrl;
 
 pub mod binding;
 pub mod connector;
-pub mod offramp;
-pub mod onramp;
 pub mod pipeline;
 pub mod prelude;
 pub mod version;

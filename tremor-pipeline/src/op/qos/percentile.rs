@@ -33,6 +33,7 @@ use tremor_script::prelude::*;
 const OVERFLOW: Cow<'static, str> = Cow::const_str("overflow");
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// The maximum allowed timeout before backoff is applied
     pub timeout: f64,

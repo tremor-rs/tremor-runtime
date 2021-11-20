@@ -1,0 +1,27 @@
+define pipeline first
+args
+ min_aint = 20
+pipeline
+  define pipeline second
+  args
+    min_aint = 30
+  pipeline
+    select event from in where event.aint>args.min_aint into out;
+  end;
+
+  create pipeline snot from second
+  with
+    min_aint = args.min_aint
+  end;
+
+  select event from in into snot;
+  select event from snot into out having event.abool;
+end;
+
+create pipeline badger from first
+with
+  min_aint = 35
+end;
+
+select event from in into badger;
+select event from badger into out;

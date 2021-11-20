@@ -15,7 +15,6 @@ connector:
     config:
       path: "output.log"
       mode: truncate
-      close_after_events: 3
   - id: tcp_client
     type: tcp_client
     codec: json
@@ -66,7 +65,7 @@ binding:
       "/connector/tcp_client/{instance}/err":
         - "/pipeline/system::passthrough/{instance}_debug/in"
       "/pipeline/system::passthrough/{instance}_debug/out":
-        - "/connector/system::stdout/{instance}/in"
+        - "/connector/system::stdio/{instance}/in"
 
       # flow from tcp_server to file
       "/connector/tcp_server/{instance}/out":

@@ -25,7 +25,7 @@ use std::io::Write;
 use std::sync::atomic::Ordering;
 use tremor_api as api;
 use tremor_common::file;
-use tremor_runtime::system::{self, ShutdownMode, World};
+use tremor_runtime::system::{ShutdownMode, World};
 use tremor_runtime::{self, version};
 
 async fn handle_api_request<
@@ -60,7 +60,7 @@ fn api_server(world: &World) -> tide::Server<api::State> {
         .get(|r| handle_api_request(r, api::binding::get_artefact))
         .delete(|r| handle_api_request(r, api::binding::unpublish_artefact));
     app.at("/binding/:aid/:sid")
-        .get(|r| handle_api_request(r, api::binding::get_servant))
+        .get(|r| handle_api_request(r, api::binding::get_instance))
         .put(|r| handle_api_request(r, api::binding::spawn_instance))
         .delete(|r| handle_api_request(r, api::binding::shutdown_instance));
     app.at("/pipeline")
@@ -69,18 +69,6 @@ fn api_server(world: &World) -> tide::Server<api::State> {
     app.at("/pipeline/:aid")
         .get(|r| handle_api_request(r, api::pipeline::get_artefact))
         .delete(|r| handle_api_request(r, api::pipeline::unpublish_artefact));
-    app.at("/onramp")
-        .get(|r| handle_api_request(r, api::onramp::list_artefact))
-        .post(|r| handle_api_request(r, api::onramp::publish_artefact));
-    app.at("/onramp/:aid")
-        .get(|r| handle_api_request(r, api::onramp::get_artefact))
-        .delete(|r| handle_api_request(r, api::onramp::unpublish_artefact));
-    app.at("/offramp")
-        .get(|r| handle_api_request(r, api::offramp::list_artefact))
-        .post(|r| handle_api_request(r, api::offramp::publish_artefact));
-    app.at("/offramp/:aid")
-        .get(|r| handle_api_request(r, api::offramp::get_artefact))
-        .delete(|r| handle_api_request(r, api::offramp::unpublish_artefact));
     // connectors api
     app.at("/connector")
         .get(|r| handle_api_request(r, api::connector::list_artefacts))
@@ -106,12 +94,7 @@ async fn handle_signals(signals: Signals, world: World) {
         );
         match signal {
             SIGINT | SIGTERM => {
-                if let Err(_e) = world
-                    .stop(ShutdownMode::Graceful {
-                        timeout: system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
-                    })
-                    .await
-                {
+                if let Err(_e) = world.stop(ShutdownMode::Graceful).await {
                     if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
                         error!("Error handling signal {}: {}", signal, e);
                     }
@@ -136,6 +119,8 @@ async fn handle_signals(signals: Signals, world: World) {
 #[cfg(not(tarpaulin_include))]
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
+    use tremor_runtime::system::WorldConfig;
+
     // Logging
     if let Some(logger_config) = matches.value_of("logger-config") {
         if let Err(e) = log4rs::init_file(logger_config, log4rs::config::Deserializers::default())
@@ -176,7 +161,13 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         .value_of("storage-directory")
         .map(std::string::ToString::to_string);
     // TODO: Allow configuring this for offramps and pipelines
-    let (world, handle) = World::start(storage_directory).await?;
+    let config = WorldConfig {
+        storage_directory,
+        debug_connectors: matches.is_present("debug-connectors"),
+        ..WorldConfig::default()
+    };
+
+    let (world, handle) = World::start(config).await?;
 
     // signal handling
     let signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
@@ -189,6 +180,14 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         for config_file in config_files {
             let kind = get_source_kind(config_file);
             match kind {
+                SourceKind::Troy => {
+                    return Err(ErrorKind::UnsupportedFileType(
+                        config_file.to_string(),
+                        kind,
+                        "troy",
+                    )
+                    .into());
+                }
                 SourceKind::Trickle => {
                     if let Err(e) = tremor_runtime::load_query_file(&world, config_file).await {
                         return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
@@ -246,12 +245,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         }
         future::Either::Right((_api_res, manager_handle)) => {
             // api stopped
-            if let Err(e) = world
-                .stop(ShutdownMode::Graceful {
-                    timeout: system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
-                })
-                .await
-            {
+            if let Err(e) = world.stop(ShutdownMode::Graceful).await {
                 error!("Error shutting down gracefully: {}", e);
             }
             manager_handle.cancel().await;

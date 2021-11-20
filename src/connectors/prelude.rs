@@ -13,7 +13,6 @@
 // limitations under the License.
 
 pub use crate::connectors::quiescence::QuiescenceBeacon;
-pub use crate::connectors::reconnect::{Attempt, ConnectionLostNotifier};
 pub use crate::connectors::sink::{
     AsyncSinkReply, ChannelSink, ChannelSinkRuntime, ContraflowData, EventSerializer,
     SingleStreamSink, SingleStreamSinkRuntime, Sink, SinkAck, SinkAddr, SinkContext,
@@ -23,17 +22,28 @@ pub use crate::connectors::source::{
     ChannelSource, ChannelSourceRuntime, Source, SourceAddr, SourceContext, SourceManagerBuilder,
     SourceReply, SourceReplySender, StreamReader, DEFAULT_POLL_INTERVAL,
 };
+pub use crate::connectors::utils::reconnect::{Attempt, ConnectionLostNotifier};
 pub use crate::connectors::{
-    Connector, ConnectorBuilder, ConnectorContext, ConnectorState, StreamDone, StreamIdGen,
+    Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context, StreamDone, StreamIdGen,
 };
 pub use crate::errors::{Error, ErrorKind, Result};
-pub use crate::url::TremorUrl;
 pub use crate::utils::hostname;
 pub use crate::{Event, OpConfig, QSIZE};
 pub use std::sync::atomic::Ordering;
-pub use tremor_pipeline::{ConfigImpl, EventOriginUri, DEFAULT_STREAM_ID};
-
+pub use tremor_common::url::{
+    ports::{ERR, IN, METRICS, OUT},
+    TremorUrl,
+};
+pub use tremor_pipeline::{
+    CbAction, ConfigImpl, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
+};
+pub use tremor_script::prelude::*;
+pub use tremor_value::prelude::*;
+/// default buf size used for reading from files and streams (sockets etc)
+///
+/// equals default chunk size for BufReader
+pub(crate) const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 /// default buf size used for reading from files and streams (sockets etc)
 pub(crate) fn default_buf_size() -> usize {
-    8192
+    DEFAULT_BUF_SIZE
 }

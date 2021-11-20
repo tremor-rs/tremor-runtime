@@ -1,0 +1,62 @@
+# file something.troy
+
+define connector wal
+args
+  ## Directory to store the data in
+  dir,
+  ## Maximal data size in MiB
+  size_in_mib = 1
+with
+  config = {
+    "dir": args.dir + "/wal",
+    "size": size::MiB(args.size_in_mib)
+  }
+end;
+
+define pipeline outer
+pipeline
+  define generic::batch operator batch 
+  args
+    size = 100
+  with
+    size = args.size
+  end;
+  define tumbling window 10s
+  args
+    size = 10
+  with
+    size = args.size
+  end;
+end;
+
+define pipeline outer
+from in
+into out, err
+args
+  config[0] = "one"
+pipeline
+
+    define pipeline inner
+    args
+      # args has access to the outer args
+      config[1] = args.config[0]
+    pipeline
+      # body has access to the with
+      select args.config[1] from in into out;
+    end
+
+    create pipeline inner
+    with
+      config[1] = args.config[0]
+    end;
+end;
+
+create flow ...
+args
+  config[2]
+flow
+  create pipeline outer
+  with
+    config[0] = args.config[2]
+  end;
+end

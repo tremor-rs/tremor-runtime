@@ -11,12 +11,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::connectors::{self, source::SourceMsg};
+use crate::connectors::{self, sink::SinkMsg, source::SourceMsg};
 use crate::errors::Result;
-use crate::permge::{PriorityMerge, M};
-use crate::registry::ServantId;
+use crate::permge::PriorityMerge;
+use crate::registry::instance::InstanceState;
 use crate::repository::PipelineArtefact;
-use crate::url::TremorUrl;
 use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::stream::StreamExt;
 use async_std::task::{self, JoinHandle};
@@ -25,6 +24,7 @@ use std::fmt;
 use std::time::Duration;
 use tremor_common::ids::OperatorIdGen;
 use tremor_common::time::nanotime;
+use tremor_common::url::TremorUrl;
 use tremor_pipeline::errors::ErrorKind as PipelineErrorKind;
 use tremor_pipeline::{CbAction, Event, ExecutableGraph, SignalKind};
 
@@ -36,20 +36,20 @@ type Eventset = Vec<(Cow<'static, str>, Event)>;
 /// Address for a pipeline
 #[derive(Clone)]
 pub struct Addr {
-    addr: Sender<Msg>,
+    addr: Sender<Box<Msg>>,
     cf_addr: Sender<CfMsg>,
     mgmt_addr: Sender<MgmtMsg>,
-    id: ServantId,
+    id: TremorUrl,
 }
 
 impl Addr {
     /// creates a new address
     #[must_use]
     pub fn new(
-        addr: Sender<Msg>,
+        addr: Sender<Box<Msg>>,
         cf_addr: Sender<CfMsg>,
         mgmt_addr: Sender<MgmtMsg>,
-        id: ServantId,
+        id: TremorUrl,
     ) -> Self {
         Self {
             addr,
@@ -75,7 +75,7 @@ impl Addr {
     /// pipeline instance id
     #[cfg(not(tarpaulin_include))]
     #[must_use]
-    pub fn id(&self) -> &ServantId {
+    pub fn id(&self) -> &TremorUrl {
         &self.id
     }
 
@@ -83,17 +83,21 @@ impl Addr {
         Ok(self.cf_addr.send(CfMsg::Insight(event)).await?)
     }
 
-    pub(crate) async fn send(&self, msg: Msg) -> Result<()> {
+    /// send a data-plane message to the pipeline
+    pub async fn send(&self, msg: Box<Msg>) -> Result<()> {
         Ok(self.addr.send(msg).await?)
-    }
-
-    #[cfg(not(tarpaulin_include))]
-    pub(crate) fn try_send(&self, msg: Msg) -> Result<()> {
-        Ok(self.addr.try_send(msg)?)
     }
 
     pub(crate) async fn send_mgmt(&self, msg: MgmtMsg) -> Result<()> {
         Ok(self.mgmt_addr.send(msg).await?)
+    }
+
+    pub(crate) async fn stop(&self) -> Result<()> {
+        self.send_mgmt(MgmtMsg::Stop).await
+    }
+
+    pub(crate) async fn start(&self) -> Result<()> {
+        self.send_mgmt(MgmtMsg::Start).await
     }
 }
 
@@ -163,6 +167,17 @@ pub enum MgmtMsg {
     DisconnectOutput(Cow<'static, str>, TremorUrl),
     /// disconnect an input
     DisconnectInput(TremorUrl),
+
+    /// FIXME: messages for transitioning from one state to the other
+    /// start the pipeline
+    Start,
+    /// pause the pipeline - currently a no-op
+    Pause,
+    /// resume from pause - currently a no-op
+    Resume,
+    /// stop the pipeline
+    Stop,
+
     /// for testing - ensures we drain the channel up to this message
     #[cfg(test)]
     Echo(Sender<()>),
@@ -182,6 +197,14 @@ pub enum Msg {
     Signal(Event),
 }
 
+/// wrapper for all possible messages handled by the pipeline task
+#[derive(Debug)]
+pub(crate) enum M {
+    F(Msg),
+    C(CfMsg),
+    M(MgmtMsg),
+}
+
 impl OutputTarget {
     /// send an event out to this destination
     ///
@@ -189,15 +212,16 @@ impl OutputTarget {
     ///  * when sending the event via the dest channel fails
     pub async fn send_event(&mut self, input: Cow<'static, str>, event: Event) -> Result<()> {
         match self {
-            Self::Pipeline(addr) => addr.send(Msg::Event { input, event }).await?,
+            Self::Pipeline(addr) => addr.send(Box::new(Msg::Event { input, event })).await?,
             Self::Sink(addr) => {
                 addr.addr
-                    .send(connectors::sink::SinkMsg::Event { event, port: input })
+                    .send(SinkMsg::Event { event, port: input })
                     .await?;
             }
         }
         Ok(())
     }
+
     /// send a signal out to this destination
     ///
     /// # Errors
@@ -208,13 +232,11 @@ impl OutputTarget {
                 // Each pipeline has their own ticks, we don't
                 // want to propagate them
                 if signal.kind != Some(SignalKind::Tick) {
-                    addr.send(Msg::Signal(signal)).await?;
+                    addr.send(Box::new(Msg::Signal(signal))).await?;
                 }
             }
             Self::Sink(addr) => {
-                addr.addr
-                    .send(connectors::sink::SinkMsg::Signal { signal })
-                    .await?;
+                addr.addr.send(SinkMsg::Signal { signal }).await?;
             }
         }
         Ok(())
@@ -226,7 +248,7 @@ pub struct Create {
     /// the pipeline config
     pub config: PipelineArtefact,
     /// the pipeline id
-    pub id: ServantId,
+    pub id: TremorUrl,
 }
 
 /// control plane message for pipeline manager
@@ -323,9 +345,9 @@ async fn handle_insights(pipeline: &mut ExecutableGraph, onramps: &Inputs) {
     }
 }
 
-async fn tick(tick_tx: Sender<Msg>) {
+async fn tick(tick_tx: Sender<Box<Msg>>) {
     let mut e = Event::signal_tick();
-    while tick_tx.send(Msg::Signal(e.clone())).await.is_ok() {
+    while tick_tx.send(Box::new(Msg::Signal(e.clone()))).await.is_ok() {
         task::sleep(Duration::from_millis(TICK_MS)).await;
         e.ingest_ns = nanotime();
     }
@@ -350,7 +372,7 @@ async fn pipeline_task(
     id: TremorUrl,
     mut pipeline: ExecutableGraph,
     addr: Addr,
-    rx: Receiver<Msg>,
+    rx: Receiver<Box<Msg>>,
     cf_rx: Receiver<CfMsg>,
     mgmt_rx: Receiver<MgmtMsg>,
 ) -> Result<()> {
@@ -362,9 +384,11 @@ async fn pipeline_task(
     let mut inputs: Inputs = halfbrown::HashMap::new();
     let mut eventset: Eventset = Vec::new();
 
-    info!("[Pipeline:{}] starting task.", id);
+    let mut state: InstanceState = InstanceState::Initialized;
 
-    let ff = rx.map(M::F);
+    info!("[Pipeline:{}] Starting Pipeline.", id);
+
+    let ff = rx.map(|e| M::F(*e));
     let cf = cf_rx.map(M::C);
     let mf = mgmt_rx.map(M::M);
 
@@ -446,10 +470,7 @@ async fn pipeline_task(
                     // as this will create a nasty circle filling up queues.
                     // In general this does not avoid cycles via more complex constructs.
                     //
-                    // Also don't connect anything as input to the metrics pipeline, as we dont want any contraflow to flow via the METRICS_PIPELINE
-                    if !pid.same_instance_as(&output_url)
-                        && !crate::system::METRICS_PIPELINE.same_instance_as(&output_url)
-                    {
+                    if !pid.same_instance_as(&output_url) {
                         if let Err(e) = pipe
                             .send_mgmt(MgmtMsg::ConnectInput {
                                 input_url: pid.clone(),
@@ -504,6 +525,40 @@ async fn pipeline_task(
                 info!("[Pipeline::{}] Disconnecting {} from 'in'", pid, &input_url);
                 inputs.remove(&input_url);
             }
+            M::M(MgmtMsg::Start) if state == InstanceState::Initialized => {
+                // No-op
+                state = InstanceState::Running;
+            }
+            M::M(MgmtMsg::Start) => {
+                info!(
+                    "[Pipeline::{}] Ignoring Start Msg. Current state: {}",
+                    &pid, &state
+                );
+            }
+            M::M(MgmtMsg::Pause) if state == InstanceState::Running => {
+                // No-op
+                state = InstanceState::Paused;
+            }
+            M::M(MgmtMsg::Pause) => {
+                info!(
+                    "[Pipeline::{}] Ignoring Pause Msg. Current state: {}",
+                    &pid, &state
+                );
+            }
+            M::M(MgmtMsg::Resume) if state == InstanceState::Paused => {
+                // No-op
+                state = InstanceState::Running;
+            }
+            M::M(MgmtMsg::Resume) => {
+                info!(
+                    "[Pipeline::{}] Ignoring Resume Msg. Current state: {}",
+                    &pid, &state
+                );
+            }
+            M::M(MgmtMsg::Stop) => {
+                info!("[Pipeline::{}] Stopping...", &pid);
+                break;
+            }
             #[cfg(test)]
             M::M(MgmtMsg::Echo(sender)) => {
                 if let Err(e) = sender.send(()).await {
@@ -516,7 +571,7 @@ async fn pipeline_task(
         }
     }
 
-    info!("[Pipeline:{}] stopping task.", id);
+    info!("[Pipeline:{}] Stopped.", id);
     Ok(())
 }
 
@@ -558,7 +613,7 @@ impl Manager {
 
         let id = req.id.clone();
 
-        let (tx, rx) = bounded::<Msg>(self.qsize);
+        let (tx, rx) = bounded::<Box<Msg>>(self.qsize);
         // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
         // there is soundness to this.
         // The unbounded channel ensures that on counterflow we never have to block, or in other
@@ -598,11 +653,14 @@ impl Manager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::url::ports::IN;
     use crate::url::ports::OUT;
-    use async_std::future::timeout;
+    use async_std::prelude::*;
     use tremor_pipeline::EventId;
     use tremor_pipeline::FN_REGISTRY;
 
+    use crate::connectors::sink::SinkAddr;
+    use crate::connectors::sink::SinkMsg;
     use tremor_script::prelude::*;
     use tremor_script::{path::ModulePath, query::Query};
 
@@ -625,12 +683,16 @@ mod tests {
         echo(&addr).await
     }
     async fn wait_for_event(
-        offramp_rx: &Receiver<offramp::Msg>,
+        connector_rx: &Receiver<SinkMsg>,
         wait_for: Option<Duration>,
     ) -> Result<Event> {
         loop {
-            match timeout(wait_for.unwrap_or(POSITIVE_RECV_TIMEOUT), offramp_rx.recv()).await {
-                Ok(Ok(offramp::Msg::Event { event, .. })) => return Ok(event),
+            match connector_rx
+                .recv()
+                .timeout(wait_for.unwrap_or(POSITIVE_RECV_TIMEOUT))
+                .await
+            {
+                Ok(Ok(SinkMsg::Event { event, .. })) => return Ok(event),
                 Ok(_) => continue, // ignore anything else, like signals
                 Err(_) => return Err("timeout waiting for event at offramp".into()),
             }
@@ -663,114 +725,141 @@ mod tests {
         let create = Create { config, id };
         let create_msg = ManagerMsg::Create(tx, Box::new(create));
         sender.send(create_msg).await?;
-        let addr = rx.recv().await??;
+        let pipeline_addr = rx.recv().await??;
 
-        // connect a fake onramp
-        let (onramp_tx, onramp_rx) = unbounded();
-        let onramp_addr = onramp::Addr(onramp_tx);
-        let onramp_url = TremorUrl::parse("/onramp/fake_onramp/instance/out")?;
-        addr.send_mgmt(MgmtMsg::ConnectInput {
-            input_url: onramp_url.clone(),
-            target: ConnectTarget::Onramp(onramp_addr), // clone avoids the channel to be closed on disconnect below
-            is_transactional: true,
-        })
-        .await?;
+        // connect a fake connector source
+        let (source_tx, source_rx) = unbounded();
+        let connector_source_addr = connectors::source::SourceAddr {
+            addr: source_tx.clone(),
+        };
+        let connector_url =
+            TremorUrl::from_connector_instance("fake_connector", "instance")?.with_port(&OUT);
+        pipeline_addr
+            .send_mgmt(MgmtMsg::ConnectInput {
+                input_url: connector_url.clone(),
+                target: InputTarget::Source(connector_source_addr.clone()), // clone avoids the channel to be closed on disconnect below
+                is_transactional: true,
+            })
+            .await?;
 
-        // connect another fake onramp, not transactional
-        let (onramp2_tx, onramp2_rx) = unbounded();
-        let onramp2_url = TremorUrl::parse("/onramp/fake_onramp2/instance/out")?;
-        addr.send_mgmt(MgmtMsg::ConnectInput {
-            input_url: onramp2_url.clone(),
-            target: ConnectTarget::Onramp(onramp::Addr(onramp2_tx.clone())),
-            is_transactional: false,
-        })
-        .await?;
-        manager_fence(&addr).await?;
+        // connect another fake connector source, not transactional
+        let (source2_tx, source2_rx) = unbounded();
+        let connector2_source_addr = connectors::source::SourceAddr {
+            addr: source2_tx.clone(),
+        };
+        let connector2_url =
+            TremorUrl::from_connector_instance("fake_connector2", "instance")?.with_port(&OUT);
+        pipeline_addr
+            .send_mgmt(MgmtMsg::ConnectInput {
+                input_url: connector2_url.clone(),
+                target: InputTarget::Source(connector2_source_addr.clone()),
+                is_transactional: false,
+            })
+            .await?;
+        // start connectors
+        source_tx.send(SourceMsg::Start).await?;
+        assert!(matches!(
+            source_rx.recv().timeout(POSITIVE_RECV_TIMEOUT).await,
+            Ok(Ok(SourceMsg::Start))
+        ));
+        source2_tx.send(SourceMsg::Start).await?;
+        assert!(matches!(
+            source2_rx.recv().timeout(POSITIVE_RECV_TIMEOUT).await,
+            Ok(Ok(SourceMsg::Start))
+        ));
+        manager_fence(&pipeline_addr).await?;
 
         // send a non-cb insight
         let event_id = EventId::from((0, 0, 1));
-        addr.send_insight(Event {
-            id: event_id.clone(),
-            cb: CbAction::Ack,
-            ..Event::default()
-        })
-        .await?;
+        pipeline_addr
+            .send_insight(Event {
+                id: event_id.clone(),
+                cb: CbAction::Ack,
+                ..Event::default()
+            })
+            .await?;
 
-        // transactional onramp received it
+        // transactional connector source received it
         // chose exceptionally big timeout, which we will only hit in the bad case that stuff isnt working, normally this should return fine
-        match timeout(POSITIVE_RECV_TIMEOUT, onramp_rx.recv()).await {
-            Ok(Ok(onramp::Msg::Cb(CbAction::Ack, cb_id))) => assert_eq!(cb_id, event_id),
+        match source_rx.recv().timeout(POSITIVE_RECV_TIMEOUT).await {
+            Ok(Ok(SourceMsg::Cb(CbAction::Ack, cb_id))) => assert_eq!(cb_id, event_id),
             Err(_) => assert!(false, "No msg received."),
             m => assert!(false, "received unexpected msg: {:?}", m),
         }
 
         // non-transactional did not
-        assert!(onramp2_rx.is_empty());
+        assert!(source2_rx.is_empty());
 
         // send a cb insight
         let event_id = EventId::from((0, 0, 1));
-        addr.send_insight(Event {
-            id: event_id.clone(),
-            cb: CbAction::Close,
-            ..Event::default()
-        })
-        .await?;
+        pipeline_addr
+            .send_insight(Event {
+                id: event_id.clone(),
+                cb: CbAction::Close,
+                ..Event::default()
+            })
+            .await?;
 
         // transactional onramp received it
         // chose exceptionally big timeout, which we will only hit in the bad case that stuff isnt working, normally this should return fine
-        match timeout(POSITIVE_RECV_TIMEOUT, onramp_rx.recv()).await {
-            Ok(Ok(onramp::Msg::Cb(CbAction::Close, cb_id))) => assert_eq!(cb_id, event_id),
+        match source_rx.recv().timeout(POSITIVE_RECV_TIMEOUT).await {
+            Ok(Ok(SourceMsg::Cb(CbAction::Close, cb_id))) => assert_eq!(cb_id, event_id),
             Err(_) => assert!(false, "No msg received."),
             m => assert!(false, "received unexpected msg: {:?}", m),
         }
 
         // non-transactional did also receive it
-        match timeout(POSITIVE_RECV_TIMEOUT, onramp2_rx.recv()).await {
-            Ok(Ok(onramp::Msg::Cb(CbAction::Close, cb_id))) => assert_eq!(cb_id, event_id),
+        match source2_rx.recv().timeout(POSITIVE_RECV_TIMEOUT).await {
+            Ok(Ok(SourceMsg::Cb(CbAction::Close, cb_id))) => assert_eq!(cb_id, event_id),
             Err(_) => assert!(false, "No msg received."),
 
             m => assert!(false, "received unexpected msh: {:?}", m),
         }
 
         // disconnect our fake offramp
-        addr.send_mgmt(MgmtMsg::DisconnectInput(onramp_url)).await?;
-        manager_fence(&addr).await?; // ensure the last message has been processed
+        pipeline_addr
+            .send_mgmt(MgmtMsg::DisconnectInput(connector_url))
+            .await?;
+        manager_fence(&pipeline_addr).await?; // ensure the last message has been processed
 
         // probe it with an insight
         let event_id2 = EventId::from((0, 0, 2));
-        addr.send_insight(Event {
-            id: event_id2.clone(),
-            cb: CbAction::Close,
-            ..Event::default()
-        })
-        .await?;
+        pipeline_addr
+            .send_insight(Event {
+                id: event_id2.clone(),
+                cb: CbAction::Close,
+                ..Event::default()
+            })
+            .await?;
         // we expect nothing after disconnect, so we run into a timeout
-        match timeout(NEGATIVE_RECV_TIMEOUT, onramp_rx.recv()).await? {
+        match source_rx.recv().timeout(NEGATIVE_RECV_TIMEOUT).await {
             Ok(m) => assert!(false, "Didnt expect a message. Got: {:?}", m),
             Err(_e) => {}
         };
 
         // second onramp received it, as it is a CB insight
-        match onramp2_rx.recv().await {
-            Ok(onramp::Msg::Cb(CbAction::Close, cb_id)) => assert_eq!(cb_id, event_id2),
+        match source2_rx.recv().await {
+            Ok(SourceMsg::Cb(CbAction::Close, cb_id)) => assert_eq!(cb_id, event_id2),
             m => assert!(false, "received unexpected msg: {:?}", m),
         };
 
-        addr.send_mgmt(MgmtMsg::DisconnectInput(onramp2_url))
+        pipeline_addr
+            .send_mgmt(MgmtMsg::DisconnectInput(connector2_url))
             .await?;
-        manager_fence(&addr).await?; // ensure the last message has been processed
+        manager_fence(&pipeline_addr).await?; // ensure the last message has been processed
 
         // probe it with an insight
         let event_id3 = EventId::from((0, 0, 3));
-        addr.send_insight(Event {
-            id: event_id3.clone(),
-            cb: CbAction::Open,
-            ..Event::default()
-        })
-        .await?;
+        pipeline_addr
+            .send_insight(Event {
+                id: event_id3.clone(),
+                cb: CbAction::Open,
+                ..Event::default()
+            })
+            .await?;
 
         // we expect nothing after disconnect, so we run into a timeout
-        match timeout(NEGATIVE_RECV_TIMEOUT, onramp2_rx.recv()).await {
+        match source2_rx.recv().timeout(NEGATIVE_RECV_TIMEOUT).await {
             Ok(m) => assert!(false, "Didnt expect a message. Got: {:?}", m),
             Err(_e) => {}
         };
@@ -807,29 +896,34 @@ mod tests {
         let create_msg = ManagerMsg::Create(tx, Box::new(create));
         sender.send(create_msg).await?;
         let addr = rx.recv().await??;
-        let (offramp_tx, offramp_rx) = unbounded();
+        let (sink_tx, sink_rx) = unbounded();
+        let sink_addr = SinkAddr {
+            addr: sink_tx.clone(),
+        };
 
-        let offramp_url = TremorUrl::parse("/offramp/fake_offramp/instance/in")?;
+        let connector_url =
+            TremorUrl::from_connector_instance("fake_connector", "instance")?.with_port(&IN);
         // connect a channel so we can receive events from the back of the pipeline :)
         addr.send_mgmt(MgmtMsg::ConnectOutput {
             port: OUT,
-            output_url: offramp_url.clone(),
-            target: ConnectTarget::Offramp(offramp_tx.clone().into()),
+            output_url: connector_url.clone(),
+            target: OutputTarget::Sink(sink_addr.clone()),
         })
         .await?;
+        sink_tx.send(SinkMsg::Start).await?;
         manager_fence(&addr).await?;
 
         // sending an event, that triggers an error
-        addr.send(Msg::Event {
+        addr.send(Box::new(Msg::Event {
             event: Event::default(),
-            input: "in".into(),
-        })
+            input: IN,
+        }))
         .await?;
 
-        // no event at offramp
-        match timeout(NEGATIVE_RECV_TIMEOUT, offramp_rx.recv()).await {
-            Ok(Ok(m @ offramp::Msg::Event { .. })) => {
-                assert!(false, "Did not expect an event, but got: {:?}", m)
+        // no event at sink
+        match sink_rx.recv().timeout(NEGATIVE_RECV_TIMEOUT).await {
+            Ok(Ok(SinkMsg::Event { event, .. })) => {
+                assert!(false, "Did not expect an event, but got: {:?}", event)
             }
             Ok(Err(e)) => return Err(e.into()),
             _ => {}
@@ -841,32 +935,32 @@ mod tests {
             "non_existent": true
         })
         .into();
-        addr.send(Msg::Event {
+        addr.send(Box::new(Msg::Event {
             event: second_event,
             input: "in".into(),
-        })
+        }))
         .await?;
 
-        let event = wait_for_event(&offramp_rx, None).await?;
+        let event = wait_for_event(&sink_rx, None).await?;
         let (value, _meta) = event.data.suffix().clone().into_parts();
         assert_eq!(Value::from(true), value); // check that we received what we sent in, not the faulty event
 
         // disconnect the output
-        addr.send_mgmt(MgmtMsg::DisconnectOutput(OUT, offramp_url))
+        addr.send_mgmt(MgmtMsg::DisconnectOutput(OUT, connector_url))
             .await?;
         manager_fence(&addr).await?;
 
         // probe it with an Event
-        addr.send(Msg::Event {
+        addr.send(Box::new(Msg::Event {
             event: Event::default(),
             input: "in".into(),
-        })
+        }))
         .await?;
 
         // we expect nothing to arrive, so we run into a timeout
-        match timeout(NEGATIVE_RECV_TIMEOUT, offramp_rx.recv()).await {
-            Ok(Ok(m @ offramp::Msg::Event { .. })) => {
-                assert!(false, "Didnt expect to receive something, got: {:?}", m)
+        match sink_rx.recv().timeout(NEGATIVE_RECV_TIMEOUT).await {
+            Ok(Ok(SinkMsg::Event { event, .. })) => {
+                assert!(false, "Didnt expect to receive something, got: {:?}", event)
             }
             Ok(Err(e)) => return Err(e.into()),
             _ => {}

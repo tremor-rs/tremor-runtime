@@ -137,7 +137,12 @@ pub(crate) fn ident_to_token(ident: &str) -> Token {
         "use" => Token::Use,
         "as" => Token::As,
         "recur" => Token::Recur,
-        "query" => Token::Subquery,
+        "pipeline" => Token::Pipeline,
+        "connector" => Token::Connector,
+        "connect" => Token::Connect,
+        "flow" => Token::Flow,
+        "to" => Token::To,
+        "deploy" => Token::Deploy,
         src => Token::Ident(src.into(), false),
     }
 }
@@ -393,8 +398,18 @@ pub enum Token<'input> {
     LineDirective(Location, Cow<'input, str>),
     /// Config Directive
     ConfigDirective,
-    /// Subquery Keyword
-    Subquery,
+    /// The `pipeline` keyword
+    Pipeline,
+    /// The `connector` keyword
+    Connector,
+    /// The `flow` keyword
+    Flow,
+    /// The `connect` keyword
+    Connect,
+    /// The `to` keyword
+    To,
+    /// The `deploy` keyword
+    Deploy,
 }
 
 impl<'input> Default for Token<'input> {
@@ -470,7 +485,12 @@ impl<'input> Token<'input> {
                 | Token::Where
                 | Token::Window
                 | Token::With
-                | Token::Subquery
+                | Token::Pipeline
+                | Token::Connector
+                | Token::Flow
+                | Token::Connect
+                | Token::To
+                | Token::Deploy
         )
     }
 
@@ -747,8 +767,8 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Use => write!(f, "use"),
             Token::As => write!(f, "as"),
             Token::Recur => write!(f, "recur"),
+            // Preprocessor
             Token::ConfigDirective => write!(f, "#!config "),
-            Token::Subquery => write!(f, "query"),
             Token::LineDirective(l, file) => write!(
                 f,
                 "#!line {} {} {} {} {}",
@@ -758,6 +778,13 @@ impl<'input> fmt::Display for Token<'input> {
                 l.unit_id,
                 file
             ),
+            // Troy
+            Token::Pipeline => write!(f, "pipeline"),
+            Token::Connector => write!(f, "connector"),
+            Token::Flow => write!(f, "flow"),
+            Token::Connect => write!(f, "connect"),
+            Token::To => write!(f, "to"),
+            Token::Deploy => write!(f, "deploy"),
         }
     }
 }
@@ -979,15 +1006,23 @@ impl<'input> Preprocessor {
         include_stack: &mut IncludeStack,
     ) -> Result<(usize, Box<Path>)> {
         let mut file = PathBuf::from(rel_module_path);
-        file.set_extension("tremor");
-
+        file.set_extension("troy");
         if let Some(path) = module_path.resolve(&file) {
             if path.is_file() {
                 let cu = include_stack.push(path.as_os_str())?;
                 return Ok((cu, path));
             }
         }
+
         file.set_extension("trickle");
+        if let Some(path) = module_path.resolve(&file) {
+            if path.is_file() {
+                let cu = include_stack.push(path.as_os_str())?;
+                return Ok((cu, path));
+            }
+        }
+
+        file.set_extension("tremor");
 
         if let Some(path) = module_path.resolve(&file) {
             if path.is_file() {

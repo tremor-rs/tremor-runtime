@@ -23,10 +23,6 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-// TODO this is needed due to a false positive in clippy
-// https://github.com/rust-lang/rust/issues/83125
-// we will need this in 1.53.1
-#![allow(proc_macro_back_compat)]
 
 #[macro_use]
 extern crate serde_derive;
@@ -557,7 +553,7 @@ impl EventId {
 
 impl From<(u64, u64, u64)> for EventId {
     fn from(x: (u64, u64, u64)) -> Self {
-        EventId::new(x.0, x.1, x.2, DEFAULT_PULL_ID)
+        EventId::new(x.0, x.1, x.2, x.2)
     }
 }
 

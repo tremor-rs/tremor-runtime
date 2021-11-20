@@ -1,21 +1,21 @@
-define query snot
-with
+define pipeline outer
+args
   add = 42
-query
-  define query badger
-  with
+pipeline
+  define pipeline inner
+  args
     add = args.add
-  query
+  pipeline
     select args from in into out;
   end;
 
-  create query badger;
+  create pipeline inner;
 
-  select event from in into badger;
-  select event from badger into out;
+  select event from in into inner;
+  select event from inner into out;
 end;
 
-create query snot;
+create pipeline outer;
 
-select event from in into snot;
-select event from snot into out;
+select event from in into outer;
+select event from outer into out;

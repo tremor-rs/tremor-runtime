@@ -1,0 +1,6 @@
+Error: 
+    8 | create pipeline passthrough_42
+    9 | with
+   10 |  new_param = 43
+   11 | end;
+      | ^^^ Unknown parameter `new_param`

@@ -45,6 +45,7 @@ error_chain! {
         Runtime(tremor_runtime::errors::Error, tremor_runtime::errors::ErrorKind);
     }
     foreign_links {
+        Value(tremor_value::Error);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
         JsonError(simd_json::Error) #[doc = "Error during json parsing"];
         Io(std::io::Error) #[doc = "Error during std::io"];

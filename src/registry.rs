@@ -12,71 +12,61 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// ┌─────────────────┐
-/// │  Configuration  │
-/// └─────────────────┘
-///          │
-///       publish
-///          │
-///          ▼
-/// ┌─────────────────┐
-/// │   Repository    │
-/// └─────────────────┘
-///          │
-///        find
-///          │
-///          ▼
-/// ┌─────────────────┐
-/// │    Artefact     │
-/// └─────────────────┘
-///          │
-///        bind
-///          │
-///          ▼
-/// ┌─────────────────┐
-/// │    Registry     │ (instance registry)
-/// └─────────────────┘
+//! ┌─────────────────┐
+//! │  Configuration  │
+//! └─────────────────┘
+//!          │
+//!       publish
+//!          │
+//!          ▼
+//! ┌─────────────────┐
+//! │   Repository    │
+//! └─────────────────┘
+//!          │
+//!        find
+//!          │
+//!          ▼
+//! ┌─────────────────┐
+//! │    Artefact     │
+//! └─────────────────┘
+//!          │
+//!        bind
+//!          │
+//!          ▼
+//! ┌─────────────────┐
+//! │    Registry     │ (instance registry)
+//! └─────────────────┘
+//!
+
+use crate::binding::{Addr as BindingAddr, Msg as BindingMsg};
+use crate::connectors::{Addr as ConnectorAddr, ConnectorResult, Msg as ConnectorMsg};
 use crate::errors::{ErrorKind, Result};
-use crate::lifecycle::{InstanceLifecycleFsm, InstanceState};
-use crate::repository::{
-    Artefact, ArtefactId, BindingArtefact, ConnectorArtefact, OfframpArtefact, OnrampArtefact,
-    PipelineArtefact,
-};
-use crate::url::{ResourceType, TremorUrl};
-use crate::QSIZE;
-use async_std::channel::{bounded, Sender};
-use async_std::future::timeout;
+use crate::pipeline::MgmtMsg as PipelineMsg;
+use crate::repository::{Artefact, BindingArtefact, ConnectorArtefact, PipelineArtefact};
+use crate::{pipeline, QSIZE};
+use async_std::channel::{bounded, unbounded, Sender};
+use async_std::prelude::*;
 use async_std::task;
 use hashbrown::HashMap;
 use std::default::Default;
 use std::fmt;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+use tremor_common::url::{ResourceType, TremorUrl};
 
-mod instance;
-mod servant;
+/// containing the InstanceState
+pub mod instance;
 
-pub use servant::{
-    Binding as BindingServant, Connector as ConnectorServant, Id as ServantId,
-    Offramp as OfframpServant, Onramp as OnrampServant, Pipeline as PipelineServant,
-};
-
-pub use instance::Instance;
-
-#[derive(Clone, Debug)]
-pub(crate) struct Servant<A>
-where
-    A: Artefact,
-{
+#[derive(Debug, Clone)]
+pub(crate) struct RegistryItem<A: Artefact> {
+    /// only kept around for serializing it when saving the config
     artefact: A,
-    artefact_id: ArtefactId,
-    id: ServantId,
+    instance: A::SpawnResult,
 }
-
 #[derive(Debug)]
 pub(crate) struct Registry<A: Artefact> {
     resource_type: ResourceType,
-    map: HashMap<ServantId, InstanceLifecycleFsm<A>>,
+    map: HashMap<TremorUrl, RegistryItem<A>>,
 }
 
 impl<A: Artefact> Registry<A> {
@@ -87,36 +77,28 @@ impl<A: Artefact> Registry<A> {
         }
     }
 
-    pub fn find(&self, mut id: ServantId) -> Option<&InstanceLifecycleFsm<A>> {
-        id.trim_to_instance();
-        self.map.get(&id)
+    pub fn find(&self, id: &TremorUrl) -> Option<&RegistryItem<A>> {
+        self.map.get(&id.to_instance())
     }
 
-    pub fn find_mut(&mut self, mut id: ServantId) -> Option<&mut InstanceLifecycleFsm<A>> {
-        id.trim_to_instance();
-        self.map.get_mut(&id)
-    }
-
-    pub fn publish(
-        &mut self,
-        mut id: ServantId,
-        servant: InstanceLifecycleFsm<A>,
-    ) -> Result<&InstanceLifecycleFsm<A>> {
-        id.trim_to_instance();
-        match self.map.insert(id.clone(), servant) {
-            Some(_old) => Err(ErrorKind::PublishFailedAlreadyExists(id.to_string()).into()),
-            None => self
-                .map
-                .get(&id)
-                .ok_or_else(|| ErrorKind::PublishFailedAlreadyExists(id.to_string()).into()),
+    pub fn publish(&mut self, id: &TremorUrl, item: RegistryItem<A>) -> Result<&RegistryItem<A>> {
+        let instance_id = id.to_instance();
+        match self.map.insert(instance_id.clone(), item) {
+            Some(_old) => {
+                Err(ErrorKind::PublishFailedAlreadyExists(instance_id.to_string()).into())
+            }
+            None => self.map.get(&instance_id).ok_or_else(|| {
+                ErrorKind::PublishFailedAlreadyExists(instance_id.to_string()).into()
+            }),
         }
     }
 
-    pub fn unpublish(&mut self, mut id: ServantId) -> Result<InstanceLifecycleFsm<A>> {
-        id.trim_to_instance();
-        match self.map.remove(&id) {
+    pub fn unpublish(&mut self, id: &TremorUrl) -> Result<RegistryItem<A>> {
+        match self.map.remove(&id.to_instance()) {
             Some(removed) => Ok(removed),
-            None => Err(ErrorKind::UnpublishFailedDoesNotExist(id.to_string()).into()),
+            None => {
+                Err(ErrorKind::UnpublishFailedDoesNotExist(id.to_instance().to_string()).into())
+            }
         }
     }
 
@@ -125,21 +107,16 @@ impl<A: Artefact> Registry<A> {
     }
 
     /// returns a list of all ids of all instances currently registered
-    pub fn servant_ids(&self) -> Vec<ServantId> {
-        self.map.values().map(|v| v.id.clone()).collect()
+    pub fn instance_ids(&self) -> Vec<TremorUrl> {
+        self.map.keys().cloned().collect()
     }
 }
 pub(crate) enum Msg<A: Artefact> {
-    ListServants(Sender<Vec<ServantId>>),
-    SerializeServants(Sender<Vec<A>>),
-    FindServant(Sender<Result<Option<A::SpawnResult>>>, ServantId),
-    PublishServant(
-        Sender<Result<InstanceState>>,
-        ServantId,
-        InstanceLifecycleFsm<A>,
-    ),
-    UnpublishServant(Sender<Result<InstanceLifecycleFsm<A>>>, ServantId),
-    Transition(Sender<Result<InstanceState>>, ServantId, InstanceState),
+    List(Sender<Vec<TremorUrl>>),
+    Serialize(Sender<Vec<A>>),
+    Find(Sender<Result<Option<RegistryItem<A>>>>, TremorUrl),
+    Publish(Sender<Result<()>>, TremorUrl, RegistryItem<A>),
+    Unpublish(Sender<Result<RegistryItem<A>>>, TremorUrl),
 }
 
 impl<A> Registry<A>
@@ -153,38 +130,23 @@ where
         task::spawn::<_, Result<()>>(async move {
             loop {
                 match rx.recv().await? {
-                    Msg::ListServants(r) => r.send(self.servant_ids()).await?,
-                    Msg::SerializeServants(r) => r.send(self.values()).await?,
-                    Msg::FindServant(r, id) => {
-                        r.send(
-                            A::servant_id(&id).map(|id| self.find(id).map(|v| v.instance.clone())),
-                        )
-                        .await?;
+                    Msg::List(r) => r.send(self.instance_ids()).await?,
+                    Msg::Serialize(r) => r.send(self.values()).await?,
+                    Msg::Find(r, id) => {
+                        let item = A::instance_id(&id)
+                            .map(|id| self.find(&id).map(std::clone::Clone::clone));
+                        r.send(item).await?;
                     }
-                    Msg::PublishServant(r, id, s) => {
-                        r.send(
-                            A::servant_id(&id).and_then(|id| self.publish(id, s).map(|p| p.state)),
-                        )
-                        .await?;
-                    }
-
-                    Msg::UnpublishServant(r, id) => {
-                        let x =
-                            A::servant_id(&id).and_then(|instance_id| self.unpublish(instance_id));
-                        r.send(x).await?;
-                    }
-                    Msg::Transition(r, id, new_state) => {
-                        let id_str = id.to_string();
-                        let res = match self.find_mut(id) {
-                            Some(s) => s.transition(new_state).await.map(|s| s.state),
-                            None => Err(ErrorKind::InstanceNotFound(
-                                self.resource_type.to_string(),
-                                id_str,
-                            )
-                            .into()),
-                        };
-
+                    Msg::Publish(r, id, s) => {
+                        let res =
+                            A::instance_id(&id).and_then(|id| self.publish(&id, s).map(|_| ()));
                         r.send(res).await?;
+                    }
+
+                    Msg::Unpublish(r, id) => {
+                        let x = A::instance_id(&id)
+                            .and_then(|instance_id| self.unpublish(&instance_id));
+                        r.send(x).await?;
                     }
                 }
             }
@@ -197,8 +159,6 @@ where
 #[derive(Clone)]
 pub struct Registries {
     pipeline: Sender<Msg<PipelineArtefact>>,
-    onramp: Sender<Msg<OnrampArtefact>>,
-    offramp: Sender<Msg<OfframpArtefact>>,
     connector: Sender<Msg<ConnectorArtefact>>,
     binding: Sender<Msg<BindingArtefact>>,
 }
@@ -224,20 +184,7 @@ async fn wait<F, T>(future: F) -> Result<T>
 where
     F: std::future::Future<Output = T>,
 {
-    Ok(timeout(DEFAULT_TIMEOUT, future).await?)
-}
-
-macro_rules! transition_instance {
-    ($(#[$meta:meta])* $registry:ident, $fn_name:ident, $new_state:expr) => {
-        $(#[$meta])*
-        pub async fn $fn_name(&self, id: &TremorUrl) -> Result<InstanceState> {
-            let (tx, rx) = bounded(1);
-            self.$registry
-                .send(Msg::Transition(tx, id.clone(), $new_state))
-                .await?;
-            rx.recv().await?
-        }
-    };
+    Ok(future.timeout(DEFAULT_TIMEOUT).await?)
 }
 
 impl Registries {
@@ -247,8 +194,6 @@ impl Registries {
         Self {
             binding: Registry::new(ResourceType::Binding).start(),
             pipeline: Registry::new(ResourceType::Pipeline).start(),
-            onramp: Registry::new(ResourceType::Onramp).start(),
-            offramp: Registry::new(ResourceType::Offramp).start(),
             connector: Registry::new(ResourceType::Connector).start(),
         }
     }
@@ -258,7 +203,7 @@ impl Registries {
     ///  * if we can't serialize the mappings
     pub async fn serialize_mappings(&self) -> Result<crate::config::MappingMap> {
         let (tx, rx) = bounded(1);
-        self.binding.send(Msg::SerializeServants(tx)).await?;
+        self.binding.send(Msg::Serialize(tx)).await?;
         Ok(wait(rx.recv()).await?.map(|bindings| {
             bindings
                 .into_iter()
@@ -273,13 +218,10 @@ impl Registries {
     ///
     /// # Errors
     ///  * if we can't find a pipeline
-    pub async fn find_pipeline(
-        &self,
-        id: &TremorUrl,
-    ) -> Result<Option<<PipelineArtefact as Artefact>::SpawnResult>> {
+    pub async fn find_pipeline(&self, id: &TremorUrl) -> Result<Option<pipeline::Addr>> {
         let (tx, rx) = bounded(1);
-        self.pipeline.send(Msg::FindServant(tx, id.clone())).await?;
-        wait(rx.recv()).await??
+        self.pipeline.send(Msg::Find(tx, id.to_instance())).await?;
+        wait(rx.recv()).await??.map(|item| item.map(|i| i.instance))
     }
     /// Publishes a pipeline
     ///
@@ -288,11 +230,13 @@ impl Registries {
     pub async fn publish_pipeline(
         &self,
         id: &TremorUrl,
-        servant: PipelineServant,
-    ) -> Result<InstanceState> {
+        artefact: PipelineArtefact,
+        instance: pipeline::Addr,
+    ) -> Result<()> {
         let (tx, rx) = bounded(1);
+        let item = RegistryItem { artefact, instance };
         self.pipeline
-            .send(Msg::PublishServant(tx, id.clone(), servant))
+            .send(Msg::Publish(tx, id.to_instance(), item))
             .await?;
         wait(rx.recv()).await??
     }
@@ -301,157 +245,83 @@ impl Registries {
     ///
     /// # Errors
     ///  * if we can't unpublish a pipeline
-    pub async fn unpublish_pipeline(&self, id: &TremorUrl) -> Result<PipelineServant> {
+    pub async fn unpublish_pipeline(&self, id: &TremorUrl) -> Result<pipeline::Addr> {
         let (tx, rx) = bounded(1);
         self.pipeline
-            .send(Msg::UnpublishServant(tx, id.clone()))
+            .send(Msg::Unpublish(tx, id.to_instance()))
             .await?;
-        wait(rx.recv()).await??
+        wait(rx.recv()).await??.map(|item| item.instance)
     }
 
-    transition_instance!(
-        /// start a pipeline
-        pipeline,
-        start_pipeline,
-        InstanceState::Running
-    );
-    transition_instance!(
-        /// pause a pipeline
-        pipeline,
-        pause_pipeline,
-        InstanceState::Paused
-    );
-    transition_instance!(
-        /// resume a pipeline
-        pipeline,
-        resume_pipeline,
-        InstanceState::Running
-    );
-    transition_instance!(
-        /// stop a pipeline - the instance in the registry will be invalid afterwards
-        pipeline,
-        stop_pipeline,
-        InstanceState::Stopped
-    );
-
-    /// Finds an onramp
+    /// start a pipeline
     ///
     /// # Errors
-    ///  * if we can't find a onramp
-    pub async fn find_onramp(
-        &self,
-        id: &TremorUrl,
-    ) -> Result<Option<<OnrampArtefact as Artefact>::SpawnResult>> {
-        let (tx, rx) = bounded(1);
-        self.onramp.send(Msg::FindServant(tx, id.clone())).await?;
-        rx.recv().await?
-    }
-    /// Publishes an onramp
-    ///
-    /// # Errors
-    ///  * if we can't publish the onramp
-    pub async fn publish_onramp(
-        &self,
-        id: &TremorUrl,
-        servant: OnrampServant,
-    ) -> Result<InstanceState> {
-        let (tx, rx) = bounded(1);
-        self.onramp
-            .send(Msg::PublishServant(tx, id.clone(), servant))
-            .await?;
-        wait(rx.recv()).await??
-    }
-    /// Usnpublishes an onramp
-    ///
-    /// # Errors
-    ///  * if we can't unpublish an onramp
-    pub async fn unpublish_onramp(&self, id: &TremorUrl) -> Result<OnrampServant> {
-        let (tx, rx) = bounded(1);
-        self.onramp
-            .send(Msg::UnpublishServant(tx, id.clone()))
-            .await?;
-        wait(rx.recv()).await??
+    ///   * if the pipeline could not be started
+    pub async fn start_pipeline(&self, id: &TremorUrl) -> Result<()> {
+        if let Some(addr) = self.find_pipeline(id).await? {
+            addr.start().await
+        } else {
+            Err(
+                ErrorKind::InstanceNotFound(ResourceType::Pipeline.to_string(), id.to_string())
+                    .into(),
+            )
+        }
     }
 
-    #[cfg(test)]
-    pub async fn transition_onramp(
-        &self,
-        id: &TremorUrl,
-        new_state: InstanceState,
-    ) -> Result<InstanceState> {
-        let (tx, rx) = bounded(1);
-        self.onramp
-            .send(Msg::Transition(tx, id.clone(), new_state))
-            .await?;
-        wait(rx.recv()).await??
-    }
-
-    /// Finds an onramp
+    /// pause a pipeline
     ///
     /// # Errors
-    ///  * if we can't find an offramp
-    pub async fn find_offramp(
-        &self,
-        id: &TremorUrl,
-    ) -> Result<Option<<OfframpArtefact as Artefact>::SpawnResult>> {
-        let (tx, rx) = bounded(1);
-        self.offramp.send(Msg::FindServant(tx, id.clone())).await?;
-        rx.recv().await?
+    ///   * if the pipeline could not be started
+    pub async fn pause_pipeline(&self, id: &TremorUrl) -> Result<()> {
+        if let Some(addr) = self.find_pipeline(id).await? {
+            addr.send_mgmt(PipelineMsg::Pause).await
+        } else {
+            Err(
+                ErrorKind::InstanceNotFound(ResourceType::Pipeline.to_string(), id.to_string())
+                    .into(),
+            )
+        }
     }
 
-    /// Publishes an offramp
+    /// resume a pipeline
     ///
     /// # Errors
-    ///  * if we can't pubish an offramp
-    pub async fn publish_offramp(
-        &self,
-        id: &TremorUrl,
-        servant: OfframpServant,
-    ) -> Result<InstanceState> {
-        let (tx, rx) = bounded(1);
-        self.offramp
-            .send(Msg::PublishServant(tx, id.clone(), servant))
-            .await?;
-        rx.recv().await?
-    }
-    /// Unpublishes an offramp - stops it first
-    ///
-    /// # Errors
-    ///  * if we can't unpublish an offramp
-    pub async fn unpublish_offramp(&self, id: &TremorUrl) -> Result<OfframpServant> {
-        let (tx, rx) = bounded(1);
-        self.offramp
-            .send(Msg::UnpublishServant(tx, id.clone()))
-            .await?;
-        wait(rx.recv()).await??
+    ///   * if the given `id` is not found or if we couldn't communicate with it
+    pub async fn resume_pipeline(&self, id: &TremorUrl) -> Result<()> {
+        if let Some(addr) = self.find_pipeline(id).await? {
+            addr.send_mgmt(PipelineMsg::Resume).await
+        } else {
+            Err(
+                ErrorKind::InstanceNotFound(ResourceType::Pipeline.to_string(), id.to_string())
+                    .into(),
+            )
+        }
     }
 
-    #[cfg(test)]
-    pub async fn transition_offramp(
-        &self,
-        id: &TremorUrl,
-        new_state: InstanceState,
-    ) -> Result<InstanceState> {
-        let (tx, rx) = bounded(1);
-        self.offramp
-            .send(Msg::Transition(tx, id.clone(), new_state))
-            .await?;
-        rx.recv().await?
+    /// stop a pipeline - the instance in the registry will be invalid afterwards
+    ///
+    /// # Errors
+    ///   * if the pipeline could not be started
+    pub async fn stop_pipeline(&self, id: &TremorUrl) -> Result<()> {
+        if let Some(addr) = self.find_pipeline(id).await? {
+            // TODO: should we wait for this?
+            addr.stop().await
+        } else {
+            Err(
+                ErrorKind::InstanceNotFound(ResourceType::Pipeline.to_string(), id.to_string())
+                    .into(),
+            )
+        }
     }
 
     /// Finds a connector
     ///
     /// # Errors
     ///  * if we can't find the connector instance identified by `id`
-    pub async fn find_connector(
-        &self,
-        id: &TremorUrl,
-    ) -> Result<Option<<ConnectorArtefact as Artefact>::SpawnResult>> {
+    pub async fn find_connector(&self, id: &TremorUrl) -> Result<Option<ConnectorAddr>> {
         let (tx, rx) = bounded(1);
-        self.connector
-            .send(Msg::FindServant(tx, id.clone()))
-            .await?;
-        rx.recv().await?
+        self.connector.send(Msg::Find(tx, id.clone())).await?;
+        wait(rx.recv()).await??.map(|item| item.map(|i| i.instance))
     }
 
     /// Publishes a connector
@@ -461,11 +331,13 @@ impl Registries {
     pub async fn publish_connector(
         &self,
         id: &TremorUrl,
-        servant: ConnectorServant,
-    ) -> Result<InstanceState> {
+        artefact: ConnectorArtefact,
+        instance: ConnectorAddr,
+    ) -> Result<()> {
         let (tx, rx) = bounded(1);
+        let item = RegistryItem { artefact, instance };
         self.connector
-            .send(Msg::PublishServant(tx, id.clone(), servant))
+            .send(Msg::Publish(tx, id.clone(), item))
             .await?;
         wait(rx.recv()).await??
     }
@@ -473,51 +345,108 @@ impl Registries {
     ///
     /// # Errors
     ///  * if we can't stop or unpublish the connector identified by `id`
-    pub async fn unpublish_connector(&self, id: &TremorUrl) -> Result<ConnectorServant> {
+    pub async fn unpublish_connector(&self, id: &TremorUrl) -> Result<ConnectorAddr> {
         let (tx, rx) = bounded(1);
-        self.connector
-            .send(Msg::UnpublishServant(tx, id.clone()))
-            .await?;
-        wait(rx.recv()).await??
+        self.connector.send(Msg::Unpublish(tx, id.clone())).await?;
+        wait(rx.recv()).await??.map(|item| item.instance)
     }
 
-    transition_instance!(
-        /// start a connector
-        connector,
-        start_connector,
-        InstanceState::Running
-    );
-    transition_instance!(
-        /// pause a connector
-        connector,
-        pause_connector,
-        InstanceState::Paused
-    );
-    transition_instance!(
-        /// resume a connector
-        connector,
-        resume_connector,
-        InstanceState::Running
-    );
-    transition_instance!(
-        /// stop a connector - the instance in the registry will be invalid afterwards
-        connector,
-        stop_connector,
-        InstanceState::Stopped
-    );
+    /// start a connector
+    pub async fn start_connector(&self, id: &TremorUrl) -> Result<()> {
+        if let Some(addr) = self.find_connector(id).await? {
+            // TODO: should we wait for this?
+            addr.send(ConnectorMsg::Start).await
+        } else {
+            Err(
+                ErrorKind::InstanceNotFound(ResourceType::Connector.to_string(), id.to_string())
+                    .into(),
+            )
+        }
+    }
 
-    /// Finds a binding
+    /// pause a connector - does not wait for the actual pausing process, just sends the msg
+    pub async fn pause_connector(&self, id: &TremorUrl) -> Result<()> {
+        if let Some(addr) = self.find_connector(id).await? {
+            // TODO: should we wait for this?
+            addr.send(ConnectorMsg::Pause).await
+        } else {
+            Err(
+                ErrorKind::InstanceNotFound(ResourceType::Connector.to_string(), id.to_string())
+                    .into(),
+            )
+        }
+    }
+
+    /// resume a connector - does not wait for the actual resuming process, just sends the msg
+    pub async fn resume_connector(&self, id: &TremorUrl) -> Result<()> {
+        if let Some(addr) = self.find_connector(id).await? {
+            addr.send(ConnectorMsg::Resume).await
+        } else {
+            Err(
+                ErrorKind::InstanceNotFound(ResourceType::Connector.to_string(), id.to_string())
+                    .into(),
+            )
+        }
+    }
+
+    /// stop a connector - notification for the result of the stop process will be sent to `sender`
+    pub async fn stop_connector(
+        &self,
+        id: &TremorUrl,
+        sender: Sender<ConnectorResult<()>>,
+    ) -> Result<()> {
+        if let Some(addr) = self.find_connector(id).await? {
+            addr.send(ConnectorMsg::Stop(sender)).await
+        } else {
+            Err(
+                ErrorKind::InstanceNotFound(ResourceType::Connector.to_string(), id.to_string())
+                    .into(),
+            )
+        }
+    }
+
+    /// drain a connector - notification for the result of the drain process will be sent to `sender`
+    pub async fn drain_connector(
+        &self,
+        id: &TremorUrl,
+        sender: Sender<ConnectorResult<()>>,
+    ) -> Result<()> {
+        if let Some(addr) = self.find_connector(id).await? {
+            addr.send(ConnectorMsg::Drain(sender)).await
+        } else {
+            Err(
+                ErrorKind::InstanceNotFound(ResourceType::Connector.to_string(), id.to_string())
+                    .into(),
+            )
+        }
+    }
+
+    /// Finds a binding.
+    /// Returns both the BindingAddr as well as the BindingArtefact that has been modified by applying mapping to the links.
     ///
     /// # Errors
     ///  * if we can't find a binding
     pub async fn find_binding(
         &self,
         id: &TremorUrl,
-    ) -> Result<Option<<BindingArtefact as Artefact>::SpawnResult>> {
+    ) -> Result<Option<(BindingAddr, BindingArtefact)>> {
         let (tx, rx) = bounded(1);
-        self.binding.send(Msg::FindServant(tx, id.clone())).await?;
-        rx.recv().await?
+        self.binding.send(Msg::Find(tx, id.clone())).await?;
+        wait(rx.recv())
+            .await??
+            .map(|item| item.map(|i| (i.instance, i.artefact)))
     }
+
+    /// Lists all binding instances.
+    ///
+    /// # Errors
+    ///   * if we cannot communicate with the registry
+    pub async fn list_bindings(&self) -> Result<Vec<TremorUrl>> {
+        let (tx, rx) = bounded(1);
+        self.binding.send(Msg::List(tx)).await?;
+        Ok(wait(rx.recv()).await??)
+    }
+
     /// Publishes a binding
     ///
     /// # Errors
@@ -525,11 +454,13 @@ impl Registries {
     pub async fn publish_binding(
         &self,
         id: &TremorUrl,
-        servant: BindingServant,
-    ) -> Result<InstanceState> {
+        artefact: BindingArtefact,
+        instance: BindingAddr,
+    ) -> Result<()> {
         let (tx, rx) = bounded(1);
+        let item = RegistryItem { artefact, instance };
         self.binding
-            .send(Msg::PublishServant(tx, id.clone(), servant))
+            .send(Msg::Publish(tx, id.clone(), item))
             .await?;
         wait(rx.recv()).await??
     }
@@ -538,48 +469,121 @@ impl Registries {
     ///
     /// # Errors
     ///  * if we can't unpublish a binding
-    pub async fn unpublish_binding(&self, id: &TremorUrl) -> Result<BindingServant> {
+    pub async fn unpublish_binding(
+        &self,
+        id: &TremorUrl,
+    ) -> Result<(BindingAddr, BindingArtefact)> {
         let (tx, rx) = bounded(1);
-        self.binding
-            .send(Msg::UnpublishServant(tx, id.clone()))
-            .await?;
-        wait(rx.recv()).await??
+        self.binding.send(Msg::Unpublish(tx, id.clone())).await?;
+        wait(rx.recv())
+            .await??
+            .map(|item| (item.instance, item.artefact))
     }
 
-    transition_instance!(
-        /// start a binding
-        binding,
-        start_binding,
-        InstanceState::Running
-    );
-    transition_instance!(
-        /// pause a binding
-        binding,
-        pause_binding,
-        InstanceState::Paused
-    );
-    transition_instance!(
-        /// resume a binding
-        binding,
-        resume_binding,
-        InstanceState::Running
-    );
-    transition_instance!(
-        /// stop a binding - the instance should be unpublished afterwards
-        binding,
-        stop_binding,
-        InstanceState::Stopped
-    );
+    /// start a binding
+    pub async fn start_binding(&self, id: &TremorUrl) -> Result<()> {
+        if let Some((addr, _)) = self.find_binding(id).await? {
+            addr.send(BindingMsg::Start).await
+        } else {
+            Err(
+                ErrorKind::InstanceNotFound(ResourceType::Binding.to_string(), id.to_string())
+                    .into(),
+            )
+        }
+    }
 
-    /// stop all bindings in the binding registry
+    /// pause a binding
+    pub async fn pause_binding(&self, id: &TremorUrl) -> Result<()> {
+        if let Some((addr, _)) = self.find_binding(id).await? {
+            addr.send(BindingMsg::Pause).await
+        } else {
+            Err(
+                ErrorKind::InstanceNotFound(ResourceType::Binding.to_string(), id.to_string())
+                    .into(),
+            )
+        }
+    }
+
+    /// resume a binding
+    pub async fn resume_binding(&self, id: &TremorUrl) -> Result<()> {
+        if let Some((addr, _)) = self.find_binding(id).await? {
+            addr.send(BindingMsg::Resume).await
+        } else {
+            Err(
+                ErrorKind::InstanceNotFound(ResourceType::Binding.to_string(), id.to_string())
+                    .into(),
+            )
+        }
+    }
+
+    /// stop a binding - notification for the result of the stop process will be sent to `sender`
+    pub async fn stop_binding(&self, id: &TremorUrl, sender: Sender<Result<()>>) -> Result<()> {
+        if let Some((addr, _)) = self.find_binding(id).await? {
+            addr.send(BindingMsg::Stop(sender)).await
+        } else {
+            Err(
+                ErrorKind::InstanceNotFound(ResourceType::Binding.to_string(), id.to_string())
+                    .into(),
+            )
+        }
+    }
+
+    /// drain a binding - notification for the result of the drain process will be sent to `sender`
+    pub async fn drain_binding(&self, id: &TremorUrl, sender: Sender<Result<()>>) -> Result<()> {
+        if let Some((addr, _)) = self.find_binding(id).await? {
+            addr.send(BindingMsg::Drain(sender)).await
+        } else {
+            Err(
+                ErrorKind::InstanceNotFound(ResourceType::Binding.to_string(), id.to_string())
+                    .into(),
+            )
+        }
+    }
+
+    /// drain all bindings in the binding registry
     /// thereby starting the quiescence process
     ///
     /// # Errors
+    ///   * If we can't drain all the bindings
+    pub async fn drain_all_bindings(&self, timeout: Duration) -> Result<()> {
+        let ids = self.list_bindings().await?;
+        if !ids.is_empty() {
+            info!(
+                "Draining Bindings: {}",
+                ids.iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            let (tx, rx) = unbounded();
+            for id in &ids {
+                self.drain_binding(id, tx.clone()).await?;
+            }
+
+            let mut expected_drains = ids.len();
+            // spawn a task for waiting on all the drain messages
+            let h = task::spawn::<_, Result<()>>(async move {
+                while expected_drains > 0 {
+                    let res = rx.recv().await?;
+                    if let Err(e) = res {
+                        error!("Error during Draining of a Binding: {}", e);
+                    }
+                    expected_drains = expected_drains.saturating_sub(1);
+                }
+                Ok(())
+            });
+            h.timeout(timeout).await??;
+        }
+
+        Ok(())
+    }
+
+    /// stop all bindings in the binding registry
+    ///
+    /// # Errors
     ///   * If we can't stop all bindings
-    pub async fn stop_all_bindings(&self) -> Result<()> {
-        let (tx, rx) = bounded(1);
-        self.binding.send(Msg::ListServants(tx)).await?;
-        let ids = rx.recv().await?;
+    pub async fn stop_all_bindings(&self, timeout: Duration) -> Result<()> {
+        let ids = self.list_bindings().await?;
         if !ids.is_empty() {
             info!(
                 "Stopping Bindings: {}",
@@ -588,10 +592,22 @@ impl Registries {
                     .collect::<Vec<_>>()
                     .join(", ")
             );
-            let res = futures::future::join_all(ids.iter().map(|id| self.stop_binding(id))).await;
-            for r in res {
-                r?;
+            let (tx, rx) = unbounded();
+            for id in &ids {
+                self.stop_binding(id, tx.clone()).await?;
             }
+            let mut expected_stops = ids.len();
+            let h = task::spawn::<_, Result<()>>(async move {
+                while expected_stops > 0 {
+                    let res = rx.recv().await?;
+                    if let Err(e) = res {
+                        error!("Error during Stopping of a Binding: {}", e);
+                    }
+                    expected_stops = expected_stops.saturating_sub(1);
+                }
+                Ok(())
+            });
+            h.timeout(timeout).await??;
         }
 
         Ok(())

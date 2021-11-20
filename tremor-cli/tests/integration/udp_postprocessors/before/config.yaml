@@ -1,26 +1,27 @@
-onramp:
+connector:
   - id: udp-in
-    type: udp
+    type: udp_server
     codec: string
     config:
       host: "127.0.0.1"
       port: 4242
-
-offramp:
   - id: out
     type: file
     codec: string
+    preprocessors:
+      - lines
     config:
-      file: "gen.log"
+      path: "gen.log"
+      mode: truncate
   - id: exit
     type: exit
 
 binding:
   - id: main
     links:
-      "/onramp/udp-in/{instance}/out": ["/pipeline/main/{instance}/in"]
-      "/pipeline/main/{instance}/out": ["/offramp/out/{instance}/in", "/offramp/system::stdout/{instance}/in" ]
-      "/pipeline/main/{instance}/exit": ["/offramp/exit/{instance}/in" ]
+      "/connector/udp-in/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/connector/out/{instance}/in", "/connector/system::stdout/{instance}/in" ]
+      "/pipeline/main/{instance}/exit": ["/connector/exit/{instance}/in" ]
 
 mapping:
   /binding/main/1:

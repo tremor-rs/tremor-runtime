@@ -1,0 +1,5 @@
+Error: 
+    1 | define 1 + 2 + 3 connector empty
+      |        ^ Found the token `1` but expected one of `<ident>`, `flow`, `pipeline`
+    2 | end;
+    3 |

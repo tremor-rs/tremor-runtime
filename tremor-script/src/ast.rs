@@ -16,6 +16,8 @@ pub(crate) mod analyzer;
 /// Base definition for expressions
 pub mod base_expr;
 pub(crate) mod binary;
+/// Tremor Deploy ( troy ) AST
+pub mod deploy;
 /// custom equality definition - checking for equivalence of different AST nodes
 /// e.g. two different event paths with different metadata
 pub mod eq;
@@ -32,6 +34,7 @@ pub mod visitors;
 /// collection of AST visitors
 pub mod walkers;
 
+pub use self::node_id::{BaseRef, NodeId};
 pub use crate::lexer::CompilationUnit;
 use crate::{
     ast::{
@@ -59,6 +62,7 @@ use crate::{
 pub(crate) use analyzer::*;
 pub use base_expr::BaseExpr;
 use beef::Cow;
+pub use deploy::*;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
@@ -527,23 +531,38 @@ pub struct Helper<'script, 'registry>
 where
     'script: 'registry,
 {
+    // NOTE We should refactor this into multiple structs as its becoming a bit of a
+    // spaghetti junction over time the languages and runtime continue to evolve. What
+    // we have today is no longer a helper, its essential, but badly factored for what
+    // we need today and looking forward
+    //
     reg: &'registry Registry,
     aggr_reg: &'registry AggrRegistry,
     can_emit: bool,
     is_in_aggr: bool,
+    // Troy
+    instances: HashMap<NodeId, DeployFlow<'script>>,
+    definitions: HashMap<NodeId, DeployStmt<'script>>,
+    // flow_defns: HashMap<NodeId, FlowDecl<'script>>,
+    // connector_defns: HashMap<NodeId, ConnectorDecl<'script>>,
+    // pipeline_defns: HashMap<NodeId, PipelineDecl<'script>>,
+    // Trickle
+    queries: HashMap<String, PipelineDecl<'script>>,
     windows: HashMap<String, WindowDecl<'script>>,
     scripts: HashMap<String, ScriptDecl<'script>>,
     operators: HashMap<String, OperatorDecl<'script>>,
-    subquery_defns: HashMap<String, SubqueryDecl<'script>>,
-    aggregates: Vec<InvokeAggrFn<'script>>,
+    /// Aggregates
+    pub aggregates: Vec<InvokeAggrFn<'script>>,
     /// Warnings
     pub warnings: Warnings,
     shadowed_vars: Vec<String>,
     func_vec: Vec<CustomFn<'script>>,
     pub(crate) locals: HashMap<String, usize>,
     pub(crate) functions: HashMap<Vec<String>, usize>,
-    pub(crate) consts: Consts<'script>,
-    pub(crate) meta: NodeMetas,
+    /// Runtime constant pool
+    pub consts: Consts<'script>,
+    /// AST Metadata
+    pub meta: NodeMetas,
     docs: Docs,
     module: Vec<String>,
     possible_leaf: bool,
@@ -611,7 +630,9 @@ where
         mem::swap(&mut self.locals, locals);
     }
 
-    pub(crate) fn new(
+    /// Creates a new AST helper
+    #[must_use]
+    pub fn new(
         reg: &'registry Registry,
         aggr_reg: &'registry AggrRegistry,
         cus: Vec<crate::lexer::CompilationUnit>,
@@ -621,11 +642,19 @@ where
             aggr_reg,
             can_emit: true,
             is_in_aggr: false,
+            // Troy
+            instances: HashMap::new(),
+            definitions: HashMap::new(),
+            // flow_defns: HashMap::new(),
+            // connector_defns: HashMap::new(),
+            // pipeline_defns: HashMap::new(),
+            // Trickle
+            queries: HashMap::new(),
             windows: HashMap::new(),
             scripts: HashMap::new(),
             operators: HashMap::new(),
-            subquery_defns: HashMap::new(),
             aggregates: Vec::new(),
+            // Common
             warnings: BTreeSet::new(),
             locals: HashMap::new(),
             consts: Consts::default(),
@@ -643,6 +672,9 @@ where
         }
     }
 
+    // FIXME TODO This needs to be revisited so that an error is not propagated for troy, but is propagated otherwise for trickle/tremor and/or semantics reconsidered given troy needs
+    #[allow(clippy::unnecessary_wraps)] // FIXME TODO See above
+    #[allow(clippy::branches_sharing_code)] // FIXME TODO See above
     fn register_fun(&mut self, f: CustomFn<'script>) -> Result<usize> {
         let i = self.func_vec.len();
         let mut mf = self.module.clone();
@@ -652,7 +684,9 @@ where
             self.func_vec.push(f);
             Ok(i)
         } else {
-            Err(format!("function {} already defined.", f.name).into())
+            // TODO prevent duck typing !!!
+            // Err(format!("function {} already defined.", f.name).into())
+            Ok(i)
         }
     }
 
@@ -708,6 +742,11 @@ where
 /// A tremor script instance
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Script<'script> {
+    pub(crate) mid: usize,
+    /// Start
+    pub start: crate::pos::Location,
+    /// End
+    pub end: crate::pos::Location,
     /// Import definitions
     pub imports: Imports,
     /// Expressions of the script
@@ -726,6 +765,7 @@ pub struct Script<'script> {
     /// Documentation from the script
     pub docs: Docs,
 }
+impl_expr_mid!(Script);
 
 impl<'script> Script<'script> {
     const NOT_IMUT: &'static str = "Not an imutable expression";
@@ -1312,7 +1352,7 @@ impl<'script> StringLit<'script> {
     where
         'script: 'event,
     {
-        // Shortcircut when we have a 1 literal string
+        // Short-circuit when we have a 1 literal string
         if let [StrLitElement::Lit(l)] = self.elements.as_slice() {
             return Ok(l.clone());
         }

@@ -173,20 +173,21 @@ impl ErrorKind {
             AccessError, AggrInAggr, ArrayOutOfRange, AssignIntoArray, AssignToConst,
             BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity,
             BadArrayIndex, BadType, BinaryDrop, BinaryEmit, CantSetArgsConst, CantSetGroupConst,
-            CantSetWindowConst, Common, DecreasingRange, DoubleConst, DoubleStream,
-            DoubleSubqueryStmt, EmptyInterpolation, EmptyScript, ExtraToken, Generic, Grok,
-            InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst, InvalidDrop, InvalidEmit,
-            InvalidExtractor, InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidIntLiteral,
-            InvalidMod, InvalidRecur, InvalidToken, InvalidUnary, InvalidUtf8Sequence, Io,
-            JsonError, MergeTypeConflict, MissingEffectors, MissingFunction, MissingModule,
-            ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed, NoEventReferencesAllowed,
-            NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops, ParseIntError,
-            ParserError, PatchKeyExists, PreprocessorError, QueryNodeDuplicateName,
-            QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit, RuntimeError,
-            SubqueryUnknownPort, TailingHereDoc, TypeConflict, UnexpectedCharacter,
-            UnexpectedEndOfStream, UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor,
-            UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
-            UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error, ValueError,
+            CantSetWindowConst, Common, DecreasingRange, DeployArgNotSpecified,
+            DeployArtefactNotDefined, DeployRequiredArgDoesNotResolve, DoubleConst,
+            DoublePipelineStmt, DoubleStream, EmptyInterpolation, EmptyScript, ExtraToken, Generic,
+            Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst, InvalidDrop,
+            InvalidEmit, InvalidExtractor, InvalidFloatLiteral, InvalidFn, InvalidHexLiteral,
+            InvalidIntLiteral, InvalidMod, InvalidRecur, InvalidToken, InvalidUnary,
+            InvalidUtf8Sequence, Io, JsonError, MergeTypeConflict, MissingEffectors,
+            MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed,
+            NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
+            ParseIntError, ParserError, PatchKeyExists, PipelineUnknownPort, PreprocessorError,
+            QueryNodeDuplicateName, QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit,
+            RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
+            UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
+            UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
+            UpdateKeyMissing, Utf8Error, ValueError,
         };
         match self {
             NoClauseHit(outer)
@@ -220,7 +221,7 @@ impl ErrorKind {
             | AssignToConst(outer, inner, _)
             | DoubleConst(outer, inner, _)
             | DoubleStream(outer, inner, _)
-            | DoubleSubqueryStmt(outer, inner, _)
+            | DoublePipelineStmt(outer, inner, _)
             | InvalidExtractor(outer, inner, _, _, _)
             | InvalidFloatLiteral(outer, inner, _)
             | InvalidHexLiteral(outer, inner, _)
@@ -236,7 +237,7 @@ impl ErrorKind {
             | NoLocalsAllowed(outer, inner)
             | NoConstsAllowed(outer, inner)
             | QueryStreamNotDefined(outer, inner, _)
-            | SubqueryUnknownPort(outer, inner, _, _)
+            | PipelineUnknownPort(outer, inner, _, _)
             | RuntimeError(outer, inner, _, _, _, _)
             | TypeConflict(outer, inner, _, _)
             | UnexpectedCharacter(outer, inner, _, _)
@@ -253,7 +254,10 @@ impl ErrorKind {
             | TailingHereDoc(outer, inner, _, _)
             | Generic(outer, inner, _)
             | AggrInAggr(outer, inner)
-            | NotConstant(outer, inner) => (Some(*outer), Some(*inner)),
+            | NotConstant(outer, inner)
+            | DeployArtefactNotDefined(outer, inner, _)
+            | DeployArgNotSpecified(outer, inner, _)
+            | DeployRequiredArgDoesNotResolve(outer, inner, _) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
             | Common(_)
@@ -709,9 +713,9 @@ error_chain! {
             description("Can't declare a stream twice")
                 display("Can't declare the stream `{}` twice", name)
         }
-        DoubleSubqueryStmt(expr: Range, inner: Range, name: String) {
+        DoublePipelineStmt(expr: Range, inner: Range, name: String) {
             description("Can't create a query twice")
-                display("Can't create the query `{}` twice", name)
+                display("Can't create the pipeline `{}` twice", name)
         }
         AssignToConst(expr: Range, inner: Range, name: String) {
             description("Can't assign to a constant")
@@ -828,9 +832,24 @@ error_chain! {
                 display("Name `{}` is already in use for another node, please use another name.", name)
         }
 
-        SubqueryUnknownPort(stmt: Range, inner: Range, subq_name: String, port_name: String) {
+        PipelineUnknownPort(stmt: Range, inner: Range, subq_name: String, port_name: String) {
             description("Query does not have this port")
                 display("Query `{}` does not have port `{}`", subq_name, port_name)
+        }
+        /*
+         * Troy statements
+         */
+        DeployArtefactNotDefined(stmt: Range, inner: Range, name: String) {
+            description("Deployment artefact is not defined")
+                display("Artefact used in `from` is not defined or not found: {}", name)
+        }
+        DeployArgNotSpecified(stmt: Range, inner: Range, name: String) {
+            description("Deployment artefact has unknown argument")
+                display("Argument used was not formally specified in originating definition: {}", name)
+        }
+        DeployRequiredArgDoesNotResolve(stmt: Range, inner: Range, name: String) {
+            description("Deployment artefact argument has no value bound")
+                display("Argument `{}` is required, but no defaults are provided in the definition and no final values in the instance", name)
         }
     }
 }
@@ -860,19 +879,19 @@ pub fn query_stream_duplicate_name_err<S: BaseExpr, I: BaseExpr>(
     ErrorKind::DoubleStream(stmt.extent(meta), inner.extent(meta), name).into()
 }
 
-/// Creates a subquery stmt duplicate name error
-pub fn subquery_stmt_duplicate_name_err<S: BaseExpr, I: BaseExpr>(
+/// Creates a pipeline stmt duplicate name error
+pub fn pipeline_stmt_duplicate_name_err<S: BaseExpr, I: BaseExpr>(
     stmt: &S,
     inner: &I,
     name: String,
     meta: &NodeMetas,
 ) -> Error {
     let name = meta.name(stmt.mid()).map_or(name, |s| s.into());
-    ErrorKind::DoubleSubqueryStmt(stmt.extent(meta), inner.extent(meta), name).into()
+    ErrorKind::DoublePipelineStmt(stmt.extent(meta), inner.extent(meta), name).into()
 }
 
-/// Creates a subquery unknown port error
-pub fn subquery_unknown_port_err<S: BaseExpr, I: BaseExpr>(
+/// Creates a pipeline unknown port error
+pub fn pipeline_unknown_port_err<S: BaseExpr, I: BaseExpr>(
     stmt: &S,
     inner: &I,
     subq_name: String,
@@ -880,7 +899,7 @@ pub fn subquery_unknown_port_err<S: BaseExpr, I: BaseExpr>(
     meta: &NodeMetas,
 ) -> Error {
     let subq_name = meta.name(inner.mid()).map_or(subq_name, |s| s.into());
-    ErrorKind::SubqueryUnknownPort(stmt.extent(meta), inner.extent(meta), subq_name, port_name)
+    ErrorKind::PipelineUnknownPort(stmt.extent(meta), inner.extent(meta), subq_name, port_name)
         .into()
 }
 
@@ -927,7 +946,11 @@ pub fn query_guard_not_bool_err<O: BaseExpr, I: BaseExpr>(
     error_type_conflict_mult_err(stmt, inner, got.value_type(), vec![ValueType::Bool], meta)
 }
 
-pub(crate) fn error_generic<T, O: BaseExpr, I: BaseExpr, S: ToString>(
+/// A bad thing happened for which no specialized hygienic error handling strategy is defined
+/// We can still be polite in our error reports!
+/// # Errors
+/// The parameters transformed into a generic error
+pub fn error_generic<T, O: BaseExpr, I: BaseExpr, S: ToString>(
     outer: &O,
     inner: &I,
     error: &S,

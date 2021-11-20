@@ -16,12 +16,13 @@ mod gelf;
 pub(crate) use gelf::Gelf;
 pub(crate) mod lines;
 
+use crate::config::Preprocessor as PreprocessorConfig;
 use crate::errors::{Error, Result};
-use crate::url::TremorUrl;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::buf::Buf;
 use bytes::BytesMut;
 use std::str;
+use tremor_common::url::TremorUrl;
 
 use std::io::{self, Read};
 
@@ -40,22 +41,33 @@ pub trait Preprocessor: Sync + Send {
     ///
     /// * Errors if the data can not processed
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>>;
+
+    /// Finish processing data and emit anything that might be left.
+    /// Takes a `data` buffer of input data, that is potentially empty,
+    /// especially if this is the first preprocessor in a chain.
+    ///
+    /// # Errors
+    ///
+    /// * if finishing fails for some reason lol
+    fn finish(&mut self, _data: &[u8]) -> Result<Vec<Vec<u8>>> {
+        Ok(vec![])
+    }
 }
 
-/// Lookup a preprocessor implementation via its unique id
+/// Lookup a preprocessor implementation via its configuration
 ///
 /// # Errors
 ///
 ///   * Errors if the preprocessor is not known
 #[cfg(not(tarpaulin_include))]
-pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
-    match name {
+pub fn lookup_with_config(config: &PreprocessorConfig) -> Result<Box<dyn Preprocessor>> {
+    match config.name.as_str() {
         // TODO once preprocessors allow configuration, remove multiple entries for lines here
-        "lines" => Ok(Box::new(Lines::new('\n', 1_048_576, true))),
-        "lines-null" => Ok(Box::new(Lines::new('\0', 1_048_576, true))),
-        "lines-pipe" => Ok(Box::new(Lines::new('|', 1_048_576, true))),
-        "lines-no-buffer" => Ok(Box::new(Lines::new('\n', 0, false))),
-        "lines-cr-no-buffer" => Ok(Box::new(Lines::new('\r', 0, false))),
+        "lines" => Ok(Box::new(Lines::from_config(&config.config)?)),
+        "lines-null" => Ok(Box::new(Lines::new(b'\0', 1_048_576, true))),
+        "lines-pipe" => Ok(Box::new(Lines::new(b'|', 1_048_576, true))),
+        "lines-no-buffer" => Ok(Box::new(Lines::new(b'\n', 0, false))),
+        "lines-cr-no-buffer" => Ok(Box::new(Lines::new(b'\r', 0, false))),
         "base64" => Ok(Box::new(Base64::default())),
         "gzip" => Ok(Box::new(Gzip::default())),
         "zlib" => Ok(Box::new(Zlib::default())),
@@ -66,12 +78,21 @@ pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
         "remove-empty" => Ok(Box::new(FilterEmpty::default())),
         "gelf-chunking" => Ok(Box::new(Gelf::default())),
         "gelf-chunking-tcp" => Ok(Box::new(Gelf::tcp())),
-        "ingest-ns" => Ok(Box::new(ExtractIngresTs {})),
+        "ingest-ns" => Ok(Box::new(ExtractIngestTs {})),
         "length-prefixed" => Ok(Box::new(LengthPrefix::default())),
         "textual-length-prefix" => Ok(Box::new(TextualLength::default())),
         "zstd" => Ok(Box::new(Zstd::default())),
-        _ => Err(format!("Preprocessor '{}' not found.", name).into()),
+        name => Err(format!("Preprocessor '{}' not found.", name).into()),
     }
+}
+
+/// Lookup a preprocessor implementation via its unique id
+///
+/// # Errors
+///
+/// * if the preprocessor with `name` is not known
+pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
+    lookup_with_config(&PreprocessorConfig::from(name))
 }
 
 /// Given the slice of preprocessor names: Look them up and return them as `Preprocessors`.
@@ -79,8 +100,11 @@ pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
 /// # Errors
 ///
 ///   * If the preprocessor is not known.
-pub fn make_preprocessors(preprocessors: &[String]) -> Result<Preprocessors> {
-    preprocessors.iter().map(|n| lookup(n)).collect()
+pub fn make_preprocessors(preprocessors: &[PreprocessorConfig]) -> Result<Preprocessors> {
+    preprocessors
+        .iter()
+        .map(|n| lookup_with_config(n))
+        .collect()
 }
 
 /// Canonical way to preprocess data before it is fed to a codec for decoding.
@@ -105,13 +129,41 @@ pub fn preprocess(
             match pp.process(ingest_ns, d) {
                 Ok(mut r) => data1.append(&mut r),
                 Err(e) => {
-                    error!("[{}] Preprocessor [{}] error {}", instance_id, i, e);
+                    error!("[{}] Preprocessor [{}] error: {}", instance_id, i, e);
                     return Err(e);
                 }
             }
         }
         std::mem::swap(&mut data, &mut data1);
     }
+    Ok(data)
+}
+
+/// Canonical way to finish preprocessors up
+///
+/// # Errors
+///
+/// * If a preprocessor failed
+pub fn finish(
+    preprocessors: &mut [Box<dyn Preprocessor>],
+    instance_id: &TremorUrl,
+) -> Result<Vec<Vec<u8>>> {
+    let mut data = vec![vec![]];
+    let mut data1 = Vec::new();
+    for pp in preprocessors {
+        data1.clear();
+        for d in data.iter() {
+            match pp.finish(d) {
+                Ok(mut r) => data1.append(&mut r),
+                Err(e) => {
+                    error!("[{}] Preprocessor finish error: {}", instance_id, e);
+                    return Err(e);
+                }
+            }
+        }
+        std::mem::swap(&mut data, &mut data1);
+    }
+
     Ok(data)
 }
 
@@ -171,11 +223,11 @@ impl Preprocessor for Nulls {
 }
 
 #[derive(Clone, Default, Debug)]
-pub(crate) struct ExtractIngresTs {}
-impl Preprocessor for ExtractIngresTs {
+pub(crate) struct ExtractIngestTs {}
+impl Preprocessor for ExtractIngestTs {
     #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
-        "extract-ingress-ts"
+        "ingest-ts"
     }
 
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -448,19 +500,22 @@ mod test {
     use crate::postprocessor::{self as post, Postprocessor};
     use crate::preprocessor::{self as pre, Preprocessor};
     #[test]
-    fn ts() {
-        let mut pre_p = pre::ExtractIngresTs {};
+    fn ingest_ts() -> Result<()> {
+        let mut pre_p = pre::ExtractIngestTs {};
         let mut post_p = post::AttachIngresTs {};
 
         let data = vec![1_u8, 2, 3];
 
-        let encoded = post_p.process(42, 23, &data).unwrap().pop().unwrap();
+        let encoded = post_p.process(42, 23, &data)?.pop().unwrap();
 
         let mut in_ns = 0u64;
-        let decoded = pre_p.process(&mut in_ns, &encoded).unwrap().pop().unwrap();
+        let decoded = pre_p.process(&mut in_ns, &encoded)?.pop().unwrap();
+
+        assert!(pre_p.finish(&vec![])?.is_empty());
 
         assert_eq!(data, decoded);
         assert_eq!(in_ns, 42);
+        Ok(())
     }
 
     fn textual_prefix(len: usize) -> String {
@@ -592,12 +647,20 @@ mod test {
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         let wire = post_p.process(0, 0, &data)?;
         let (start, end) = wire[0].split_at(7);
-        let id = TremorUrl::parse("/onramp/snot/00").unwrap();
+        let id = TremorUrl::from_connector_instance("snot", "00").unwrap();
         let mut pps: Vec<Box<dyn Preprocessor>> = vec![Box::new(pre_p)];
         let recv = preprocess(pps.as_mut_slice(), &mut it, start.to_vec(), &id)?;
         assert!(recv.is_empty());
         let recv = preprocess(pps.as_mut_slice(), &mut it, end.to_vec(), &id)?;
         assert_eq!(recv[0], data);
+
+        // incomplete data
+        let processed = preprocess(pps.as_mut_slice(), &mut it, start.to_vec(), &id)?;
+        assert!(processed.is_empty());
+        // not emitted upon finish
+        let finished = finish(pps.as_mut_slice(), &id)?;
+        assert!(finished.is_empty());
+
         Ok(())
     }
 
@@ -635,6 +698,7 @@ mod test {
     fn test_filter_empty() -> Result<()> {
         let mut pre = FilterEmpty::default();
         assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &vec![]));
+        assert_eq!(Ok(vec![]), pre.finish(&vec![]));
         Ok(())
     }
 
@@ -642,13 +706,14 @@ mod test {
     fn test_filter_null() -> Result<()> {
         let mut pre = FilterEmpty::default();
         assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &vec![]));
+        assert_eq!(Ok(vec![]), pre.finish(&vec![]));
         Ok(())
     }
 
     macro_rules! assert_decompress {
         ($internal:expr, $which:ident, $magic:expr) => {
             // Assert pre and post processors have a sensible default() ctor
-            let mut inbound = crate::preprocessor::Decompress::default();
+            let mut pre = crate::preprocessor::Decompress::default();
             let mut outbound = crate::postprocessor::$which::default();
 
             // Fake ingest_ns and egress_ns
@@ -661,84 +726,95 @@ mod test {
             // Assert actual encoded form is as expected ( magic code only )
             assert_eq!($magic, decode_magic(&ext));
 
-            let r = inbound.process(&mut ingest_ns, &ext);
+            let r = pre.process(&mut ingest_ns, &ext);
             let out = &r?[0];
             let out = out.as_slice();
             // Assert actual decoded form is as expected
             assert_eq!(&$internal, &out);
+
+            // empty finish, no leftovers
+            assert!(pre.finish(&vec![])?.is_empty());
         };
     }
     macro_rules! assert_simple_symmetric {
         ($internal:expr, $which:ident, $magic:expr) => {
             // Assert pre and post processors have a sensible default() ctor
-            let mut inbound = crate::preprocessor::$which::default();
-            let mut outbound = crate::postprocessor::$which::default();
+            let mut pre = crate::preprocessor::$which::default();
+            let mut post = crate::postprocessor::$which::default();
 
             // Fake ingest_ns and egress_ns
             let mut ingest_ns = 0_u64;
             let egress_ns = 1_u64;
 
-            let r = outbound.process(ingest_ns, egress_ns, $internal);
+            let r = post.process(ingest_ns, egress_ns, $internal);
             let ext = &r?[0];
             let ext = ext.as_slice();
             // Assert actual encoded form is as expected ( magic code only )
             assert_eq!($magic, decode_magic(&ext));
 
-            let r = inbound.process(&mut ingest_ns, &ext);
+            let r = pre.process(&mut ingest_ns, &ext);
             let out = &r?[0];
             let out = out.as_slice();
             // Assert actual decoded form is as expected
             assert_eq!(&$internal, &out);
+            // assert empty finish, no leftovers
+            assert!(pre.finish(&vec![])?.is_empty())
         };
     }
 
     macro_rules! assert_symmetric {
         ($inbound:expr, $outbound:expr, $which:ident) => {
             // Assert pre and post processors have a sensible default() ctor
-            let mut inbound = crate::preprocessor::$which::default();
-            let mut outbound = crate::postprocessor::$which::default();
+            let mut pre = crate::preprocessor::$which::default();
+            let mut post = crate::postprocessor::$which::default();
 
             // Fake ingest_ns and egress_ns
             let mut ingest_ns = 0_u64;
             let egress_ns = 1_u64;
 
             let enc = $outbound.clone();
-            let r = outbound.process(ingest_ns, egress_ns, $inbound);
+            let r = post.process(ingest_ns, egress_ns, $inbound);
             let ext = &r?[0];
             let ext = ext.as_slice();
             // Assert actual encoded form is as expected
             assert_eq!(&enc, &ext);
 
-            let r = inbound.process(&mut ingest_ns, &ext);
+            let r = pre.process(&mut ingest_ns, &ext);
             let out = &r?[0];
             let out = out.as_slice();
             // Assert actual decoded form is as expected
             assert_eq!(&$inbound, &out);
+
+            // assert empty finish, no leftovers
+            assert!(pre.finish(&vec![])?.is_empty())
         };
     }
 
     macro_rules! assert_not_symmetric {
         ($inbound:expr, $internal:expr, $outbound:expr, $which:ident) => {
             // Assert pre and post processors have a sensible default() ctor
-            let mut inbound = crate::preprocessor::$which::default();
-            let mut outbound = crate::postprocessor::$which::default();
+            let mut pre = crate::preprocessor::$which::default();
+            let mut post = crate::postprocessor::$which::default();
 
             // Fake ingest_ns and egress_ns
             let mut ingest_ns = 0_u64;
             let egress_ns = 1_u64;
 
             let enc = $internal.clone();
-            let r = outbound.process(ingest_ns, egress_ns, $inbound);
+            let r = post.process(ingest_ns, egress_ns, $inbound);
             let ext = &r?[0];
             let ext = ext.as_slice();
             // Assert actual encoded form is as expected
             assert_eq!(&enc, &ext);
 
-            let r = inbound.process(&mut ingest_ns, &ext);
+            let r = pre.process(&mut ingest_ns, &ext);
             let out = &r?[0];
             let out = out.as_slice();
             // Assert actual decoded form is as expected
             assert_eq!(&$outbound, &out);
+
+            // assert empty finish, no leftovers
+            assert!(pre.finish(&vec![])?.is_empty())
         };
     }
 
@@ -761,6 +837,23 @@ mod test {
         let enc = "snot\nbadger\n".as_bytes(); // First event ( event per line )
         let out = "snot".as_bytes();
         assert_not_symmetric!(int, enc, out, Lines);
+        Ok(())
+    }
+
+    #[test]
+    fn test_lines_buffered() -> Result<()> {
+        let input = "snot\nbadger\nwombat\ncapybara\nquagga".as_bytes();
+        let mut pre = Lines::new(b'\n', 1000, true);
+        let mut ingest_ns = 0_u64;
+        let mut res = pre.process(&mut ingest_ns, input)?;
+        let splitted = input
+            .split(|c| *c == '\n' as u8)
+            .map(|line| line.to_vec())
+            .collect::<Vec<_>>();
+        assert_eq!(splitted[..splitted.len() - 1].to_vec(), res);
+        let mut finished = pre.finish(&vec![])?;
+        res.append(&mut finished);
+        assert_eq!(splitted, res);
         Ok(())
     }
 
@@ -805,7 +898,7 @@ mod test {
             (b"\n", b"", b"", "3"),
         ];
         for case in &test_data {
-            assert_lines_no_buffer!(case.0, case.1, case.2, case.3, '\n');
+            assert_lines_no_buffer!(case.0, case.1, case.2, case.3, b'\n');
         }
 
         Ok(())
@@ -820,7 +913,7 @@ mod test {
             (b"\r", b"", b"", "3"),
         ];
         for case in &test_data {
-            assert_lines_no_buffer!(case.0, case.1, case.2, case.3, '\r');
+            assert_lines_no_buffer!(case.0, case.1, case.2, case.3, b'\r');
         }
 
         Ok(())

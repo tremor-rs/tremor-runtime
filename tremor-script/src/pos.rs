@@ -28,11 +28,11 @@ pub struct Location {
     /// The compilation unit id
     pub unit_id: usize, // mapping of id -> file ( str )
     /// The Line
-    line: usize,
+    pub(crate) line: usize,
     /// The Column
-    column: usize,
+    pub(crate) column: usize,
     /// Absolute location in bytes starting from 0
-    absolute: usize,
+    pub(crate) absolute: usize,
 }
 
 impl std::ops::Sub for Location {

@@ -3,7 +3,7 @@ connector:
     type: file
     codec: json
     preprocessors:
-      - lines-no-buffer
+      - lines
     config:
       path: "in.json"
       mode: read

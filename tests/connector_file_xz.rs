@@ -40,7 +40,7 @@ id: my_file
 type: file
 codec: string
 preprocessors:
-  - lines-no-buffer
+  - lines
 config:
   path: "{}"
   mode: read
@@ -54,7 +54,7 @@ config:
     // give it some time to read the file
     task::sleep(Duration::from_millis(100)).await;
 
-    let (mut out_events, err_events) = harness.stop(2).await?;
+    let (mut out_events, err_events) = harness.stop().await?;
     // check the out and err channels
     assert!(
         out_events.len() == 2,

@@ -30,6 +30,7 @@ use beef::Cow;
 use tremor_script::prelude::*;
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// List of outputs to round robin over
     #[serde(default = "d_outputs")]

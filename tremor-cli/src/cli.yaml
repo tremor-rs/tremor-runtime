@@ -7,7 +7,6 @@ settings:
   - ArgRequiredElseHelp
   - SubcommandRequiredElseHelp
   - PropagateVersion
-  - ColorAlways
 args:
   - verbose:
       short: v
@@ -45,6 +44,11 @@ subcommands:
         - run:
             about: Runs the tremor server process
             args:
+              - debug-connectors:
+                  long: debug-connectors
+                  about: Load debug connectors (exit, cb, bench, etc.)
+                  takes_value: false
+                  required: false
               - artefacts:
                   about: Paths to files containing pipelines, onramps, offramps to provision
                   short: f
@@ -228,6 +232,16 @@ subcommands:
             long: port
             short: p
             about: selects the port to pull output
+        - ARGS_FILE:
+            long: args
+            takes_value: true
+            about: optional arguments - via json record file
+        - arg:
+            long: arg
+            short: a
+            about: arguments to be passed to the runtime
+            multiple_occurrences: true
+            takes_value: true
   - doc:
       about: >
         Generates documention from tremor script files

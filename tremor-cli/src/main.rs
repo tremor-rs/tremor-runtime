@@ -35,7 +35,7 @@ extern crate lazy_static;
 use crate::errors::{Error, Result};
 use crate::util::{load_config, FormatKind, TremorApp};
 use clap::App;
-use clap::{load_yaml, AppSettings, ArgMatches};
+use clap::{load_yaml, ArgMatches, ColorChoice};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use tremor_common::file;
@@ -91,11 +91,9 @@ lazy_static! {
 #[async_std::main]
 async fn main() -> Result<()> {
     let yaml = load_yaml!("./cli.yaml");
-    let app = App::from(yaml)
-        .version(LONG_VERSION.as_str())
-        .global_setting(AppSettings::ColoredHelp)
-        .global_setting(AppSettings::ColorAlways)
-        .global_setting(AppSettings::PropagateVersion);
+    let long_version = tremor_runtime::version::long_ver();
+    let app = App::from(yaml).color(ColorChoice::Always);
+    let app = app.version(long_version.as_str());
 
     tremor_runtime::functions::load()?;
     let matches = app.clone().get_matches();
@@ -111,7 +109,7 @@ async fn main() -> Result<()> {
         // This means we're going to LEAK this memory, however
         // it is fine since as we do actually need it for the
         // rest of the program execution.
-        tremor_runtime::metrics::INSTANCE = forget_s;
+        tremor_runtime::INSTANCE = forget_s;
     }
     if let Err(e) = run(app, &matches).await {
         eprintln!("{}", e);
