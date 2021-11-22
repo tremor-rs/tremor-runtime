@@ -2078,7 +2078,7 @@ impl<'input> Lexer<'input> {
         loop {
             let next = self
                 .bump()
-                .ok_or_else(|| self.unfinished_token("\"", &string, total_start))?;
+                .ok_or_else(|| self.unfinished_string(&string, total_start))?;
 
             match next {
                 (mut end, '"') => {
@@ -2154,14 +2154,27 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn unfinished_token(&self, pfx: &str, string: &str, start: Location) -> ErrorKind {
+    fn unfinished_extractor(&self, string: &str, start: Location) -> ErrorKind {
         let token_str = self
             .slice_until_eol(&start)
-            .map_or_else(|| format!("{}{}", pfx, string), ToString::to_string);
+            .map_or_else(|| format!("|{}", string), ToString::to_string);
         let mut token_end = start;
         token_end.shift_str(&token_str);
         let range = Range::from((start, token_end));
         ErrorKind::UnterminatedExtractor(
+            range.expand_lines(2),
+            range,
+            UnfinishedToken::new(Range::from((start, token_end)), token_str),
+        )
+    }
+    fn unfinished_string(&self, string: &str, start: Location) -> ErrorKind {
+        let token_str = self
+            .slice_until_eol(&start)
+            .map_or_else(|| format!("\"{}", string), ToString::to_string);
+        let mut token_end = start;
+        token_end.shift_str(&token_str);
+        let range = Range::from((start, token_end));
+        ErrorKind::UnterminatedStringLiteral(
             range.expand_lines(2),
             range,
             UnfinishedToken::new(Range::from((start, token_end)), token_str),
@@ -2176,7 +2189,7 @@ impl<'input> Lexer<'input> {
         loop {
             let next = self
                 .bump()
-                .ok_or_else(|| self.unfinished_token("|", &string, total_start))?;
+                .ok_or_else(|| self.unfinished_extractor(&string, total_start))?;
             match next {
                 (_e, '\\') => {
                     if let Some(ch) = self.test_escape_code(&total_start, &string)? {

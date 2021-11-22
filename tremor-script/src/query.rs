@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{self, Warning};
+use crate::ast::{self, visitors::ConstFolder, walkers::QueryWalker, Warning};
 use crate::errors::{CompilerError, Error, Result};
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 use crate::path::ModulePath;
@@ -53,11 +53,7 @@ where
     /// Converts a troy embedded pipeline with resolved arguments to a runnable query
     /// # Errors
     ///   If the query fails to parse and convert correctly
-    pub fn from_troy(
-        src: &str,
-        deploy: &srs::Deploy,
-        query: &crate::srs::Query,
-    ) -> std::result::Result<Self, CompilerError> {
+    pub fn from_troy(src: &str, deploy: &srs::Deploy, query: &crate::srs::Query) -> Result<Self> {
         let warnings = BTreeSet::new();
         let locals = 0;
         Ok(Self {
@@ -68,7 +64,7 @@ where
         })
     }
 
-    /// Parses a string into a query
+    /// Parses a string into a query supporting query arguments
     ///
     /// # Errors
     /// if the query can not be parsed
@@ -79,30 +75,6 @@ where
         cus: Vec<ast::CompilationUnit>,
         reg: &Registry,
         aggr_reg: &AggrRegistry,
-    ) -> std::result::Result<Self, CompilerError> {
-        Query::parse_with_args(
-            module_path,
-            file_name,
-            script,
-            cus,
-            reg,
-            aggr_reg,
-            &literal!("{}"),
-        )
-    }
-
-    /// Parses a string into a query supporting query arguments
-    ///
-    /// # Errors
-    /// if the query can not be parsed
-    pub fn parse_with_args(
-        module_path: &ModulePath,
-        file_name: &str,
-        script: &'script str,
-        cus: Vec<ast::CompilationUnit>,
-        reg: &Registry,
-        aggr_reg: &AggrRegistry,
-        args: &Value<'_>,
     ) -> std::result::Result<Self, CompilerError> {
         let mut source = script.to_string();
 
@@ -129,7 +101,6 @@ where
                 source.clone(),
                 |src: &mut String| {
                     let mut helper = ast::Helper::new(reg, aggr_reg, cus);
-                    helper.consts.args = args.clone_static();
                     let cu = include_stack.push(&file_name)?;
                     let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
                         module_path,
@@ -144,12 +115,14 @@ where
                         .filter(|t| !t.value.is_ignorable());
                     let script_stage_1 =
                         crate::parser::g::QueryParser::new().parse(filtered_tokens)?;
-                    let script = script_stage_1.up_script(&mut helper)?;
+                    let mut query = script_stage_1.up_script(&mut helper)?;
+
+                    ConstFolder::new(&helper).walk_query(&mut query)?;
 
                     std::mem::swap(&mut warnings, &mut helper.warnings);
                     locals = helper.locals.len();
-
-                    Ok(script)
+                    query.consts = helper.consts;
+                    Ok(query)
                 },
             )?;
 
@@ -240,57 +213,5 @@ where
     /// on io errors
     pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> std::io::Result<()> {
         Self::format_error_from_script(&self.source, h, e)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    fn parse(query: &str) {
-        let reg = crate::registry();
-        let aggr_reg = crate::aggr_registry();
-        let module_path = crate::path::load();
-        let cus = vec![];
-        if let Err(e) = Query::parse(&module_path, "test.trickle", query, cus, &reg, &aggr_reg) {
-            eprintln!("{}", e.error());
-            assert!(false)
-        } else {
-            assert!(true)
-        }
-    }
-    #[test]
-    fn for_in_select() {
-        parse(r#"select for event of case (a, b) => b end from in into out;"#);
-    }
-
-    #[test]
-    fn script_with_args() {
-        parse(
-            r#"
-define script test
-args
-  beep = "beep"
-script
-  { "beep": "{args.beep}" }
-end;
-
-create script beep from test;
-create script boop from test
-with
-  beep = "boop" # override
-end;
-
-# Stream ingested data into script with default params
-select event from in into beep;
-
-# Stream ingested data into script with overridden params
-select event from in into boop;
-
-# Stream script operator synthetic events into out stream
-select event from beep into out;
-select event from boop into out;
-        "#,
-        )
     }
 }

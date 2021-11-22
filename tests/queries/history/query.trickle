@@ -1,13 +1,16 @@
 
-define debug::history operator history with
-  op = "op",
-  name = "name",
+define debug::history operator history 
+args
+  op = "op-value"
+with
+  op = args.op,
+  name = "name-value",
 end;
 
 create operator history1 from history;
 
 create operator history2 from history with
-  op = "op2"
+  op = "op-value2"
 end;
 
 select event from in into history1;

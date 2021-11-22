@@ -15,9 +15,10 @@
 use crate::{
     ast::{
         binary::extend_bytes_from_value, BaseExpr, BinExpr, Comprehension, ExprPath, ImutExpr,
-        ImutExprInt, Invoke, InvokeAggr, LocalPath, Match, Merge, Patch, Path, Recur, ReservedPath,
-        Segment, UnaryExpr,
+        Invoke, InvokeAggr, Literal, LocalPath, Match, Merge, NodeMetas, Patch, Path, Recur,
+        ReservedPath, Segment, UnaryExpr,
     },
+    errors::ErrorKind,
     errors::{
         error_bad_key, error_decreasing_range, error_invalid_unary, error_need_obj, error_need_str,
         error_no_clause_hit, error_oops, error_oops_err, Result,
@@ -36,28 +37,6 @@ use std::{
     iter, mem,
 };
 
-impl<'script> ImutExpr<'script> {
-    /// Evaluates the expression
-    ///
-    /// # Errors
-    /// if evaluation fails
-    #[inline]
-    pub fn run<'run, 'event>(
-        &'run self,
-        opts: ExecOpts,
-        env: &'run Env<'run, 'event>,
-        event: &'run Value<'event>,
-        state: &'run Value<'static>,
-        meta: &'run Value<'event>,
-        local: &'run LocalStack<'event>,
-    ) -> Result<Cow<'run, Value<'event>>>
-    where
-        'script: 'event,
-    {
-        self.0.run(opts, env, event, state, meta, local)
-    }
-}
-
 fn owned_val<'val, T>(v: T) -> Cow<'val, Value<'val>>
 where
     T: 'val,
@@ -68,12 +47,58 @@ where
 
 type Bi<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
 
-impl<'script> ImutExprInt<'script> {
+impl<'script> ImutExpr<'script> {
     /// Checks if the expression is a literal expression
     #[inline]
     #[must_use]
     pub fn is_lit(&self) -> bool {
-        matches!(self, ImutExprInt::Literal(_))
+        matches!(self, ImutExpr::Literal(_))
+    }
+
+    /// Checks if the expression is a literal expression
+    #[inline]
+    #[must_use]
+    pub fn into_lit(self) -> Option<Value<'script>> {
+        if let ImutExpr::Literal(Literal { value, .. }) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+
+    /// Checks if the expression is a literal expression
+    #[inline]
+    #[must_use]
+    pub fn try_into_lit(self, meta: &NodeMetas) -> Result<Value<'script>> {
+        // FIXME: Better error
+        match self {
+            ImutExpr::Literal(Literal { value, .. }) => Ok(value),
+            other => Err(ErrorKind::NotConstant(
+                other.extent(meta),
+                other.extent(meta).expand_lines(2),
+            )
+            .into()),
+        }
+    }
+
+    /// Checks if the expression is a literal expression
+    #[inline]
+    #[must_use]
+    pub fn as_lit(&self) -> Option<&Value<'script>> {
+        if let ImutExpr::Literal(Literal { value, .. }) = self {
+            Some(value)
+        } else {
+            None
+        }
+    }
+    /// Checks if the expression is a literal expression
+    #[inline]
+    #[must_use]
+    pub fn try_as_lit(&self, meta: &NodeMetas) -> Result<&Value<'script>> {
+        // FIXME: Better error
+        self.as_lit().ok_or_else(|| {
+            ErrorKind::NotConstant(self.extent(meta), self.extent(meta).expand_lines(2)).into()
+        })
     }
 
     /// Evaluates the expression to a string.
@@ -144,8 +169,8 @@ impl<'script> ImutExprInt<'script> {
         'script: 'event,
     {
         match self {
-            ImutExprInt::String(s) => s.run(opts, env, event, state, meta, local).map(owned_val),
-            ImutExprInt::Recur(Recur { exprs, argc, .. }) => {
+            ImutExpr::String(s) => s.run(opts, env, event, state, meta, local).map(owned_val),
+            ImutExpr::Recur(Recur { exprs, argc, .. }) => {
                 // We need to pre calculate that to ensure that we don't overwrite
                 // local variables that are not used
                 let mut next = Vec::with_capacity(*argc);
@@ -161,12 +186,12 @@ impl<'script> ImutExprInt<'script> {
 
                 Ok(Cow::Borrowed(RECUR_REF))
             }
-            ImutExprInt::Literal(literal) => Ok(Cow::Borrowed(&literal.value)),
-            ImutExprInt::Path(path) => resolve(self, opts, env, event, state, meta, local, path),
-            ImutExprInt::Present { path, .. } => {
+            ImutExpr::Literal(literal) => Ok(Cow::Borrowed(&literal.value)),
+            ImutExpr::Path(path) => resolve(self, opts, env, event, state, meta, local, path),
+            ImutExpr::Present { path, .. } => {
                 self.present(opts, env, event, state, meta, local, path)
             }
-            ImutExprInt::Record(ref record) => {
+            ImutExpr::Record(ref record) => {
                 let mut object: Object = record.base.clone();
                 object.reserve(record.fields.len());
 
@@ -178,7 +203,7 @@ impl<'script> ImutExprInt<'script> {
 
                 Ok(owned_val(object))
             }
-            ImutExprInt::Bytes(ref bytes) => {
+            ImutExpr::Bytes(ref bytes) => {
                 let mut bs: Vec<u8> = Vec::with_capacity(bytes.value.len());
                 let mut used = 0;
                 let mut buf = 0;
@@ -199,29 +224,21 @@ impl<'script> ImutExprInt<'script> {
                 Ok(Cow::Owned(Value::Bytes(bs.into())))
             }
 
-            ImutExprInt::List(ref list) => {
+            ImutExpr::List(ref list) => {
                 let mut r: Vec<Value<'event>> = Vec::with_capacity(list.exprs.len());
                 for expr in &list.exprs {
                     r.push(stry!(expr.run(opts, env, event, state, meta, local)).into_owned());
                 }
                 Ok(owned_val(r))
             }
-            ImutExprInt::Invoke1(ref call) => {
-                self.invoke1(opts, env, event, state, meta, local, call)
-            }
-            ImutExprInt::Invoke2(ref call) => {
-                self.invoke2(opts, env, event, state, meta, local, call)
-            }
-            ImutExprInt::Invoke3(ref call) => {
-                self.invoke3(opts, env, event, state, meta, local, call)
-            }
-            ImutExprInt::Invoke(ref call) => {
-                self.invoke(opts, env, event, state, meta, local, call)
-            }
-            ImutExprInt::InvokeAggr(ref call) => self.emit_aggr(opts, env, call),
-            ImutExprInt::Patch(ref expr) => Self::patch(opts, env, event, state, meta, local, expr),
-            ImutExprInt::Merge(ref expr) => self.merge(opts, env, event, state, meta, local, expr),
-            ImutExprInt::Local {
+            ImutExpr::Invoke1(ref call) => self.invoke1(opts, env, event, state, meta, local, call),
+            ImutExpr::Invoke2(ref call) => self.invoke2(opts, env, event, state, meta, local, call),
+            ImutExpr::Invoke3(ref call) => self.invoke3(opts, env, event, state, meta, local, call),
+            ImutExpr::Invoke(ref call) => self.invoke(opts, env, event, state, meta, local, call),
+            ImutExpr::InvokeAggr(ref call) => self.emit_aggr(opts, env, call),
+            ImutExpr::Patch(ref expr) => Self::patch(opts, env, event, state, meta, local, expr),
+            ImutExpr::Merge(ref expr) => self.merge(opts, env, event, state, meta, local, expr),
+            ImutExpr::Local {
                 idx,
                 mid,
                 is_const: false,
@@ -240,19 +257,17 @@ impl<'script> ImutExprInt<'script> {
                     error_bad_key(self, self, &path, key, vec![], env.meta)
                 }
             }
-            ImutExprInt::Local {
+            ImutExpr::Local {
                 idx,
                 is_const: true,
                 ..
             } => env.get_const(*idx, self, env.meta).map(Cow::Borrowed),
-            ImutExprInt::Unary(ref expr) => self.unary(opts, env, event, state, meta, local, expr),
-            ImutExprInt::Binary(ref expr) => {
-                self.binary(opts, env, event, state, meta, local, expr)
-            }
-            ImutExprInt::Match(ref expr) => {
+            ImutExpr::Unary(ref expr) => self.unary(opts, env, event, state, meta, local, expr),
+            ImutExpr::Binary(ref expr) => self.binary(opts, env, event, state, meta, local, expr),
+            ImutExpr::Match(ref expr) => {
                 self.match_expr(opts, env, event, state, meta, local, expr)
             }
-            ImutExprInt::Comprehension(ref expr) => {
+            ImutExpr::Comprehension(ref expr) => {
                 self.comprehension(opts, env, event, state, meta, local, expr)
             }
         }
@@ -266,7 +281,7 @@ impl<'script> ImutExprInt<'script> {
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'run Comprehension<'event, ImutExprInt<'event>>,
+        expr: &'run Comprehension<'event, ImutExpr<'event>>,
     ) -> Result<Cow<'run, Value<'event>>>
     where
         'script: 'event,
@@ -335,7 +350,7 @@ impl<'script> ImutExprInt<'script> {
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        effector: &'run ImutExprInt<'event>,
+        effector: &'run ImutExpr<'event>,
     ) -> Result<Cow<'run, Value<'event>>>
     where
         'script: 'event,
@@ -352,7 +367,7 @@ impl<'script> ImutExprInt<'script> {
         state: &'run Value<'static>,
         meta: &'run Value<'event>,
         local: &'run LocalStack<'event>,
-        expr: &'run Match<'event, ImutExprInt<'event>>,
+        expr: &'run Match<'event, ImutExpr<'event>>,
     ) -> Result<Cow<'run, Value<'event>>>
     where
         'script: 'event,
@@ -558,7 +573,7 @@ impl<'script> ImutExprInt<'script> {
                     return Ok(Cow::Borrowed(&FALSE));
                 }
                 // Next segment is an index range: index into `current`, if it's an array
-                Segment::Range { start, end, .. } => {
+                Segment::RangeExpr { start, end, .. } => {
                     if let Some(a) = current.as_array() {
                         let array = subrange.unwrap_or_else(|| a.as_slice());
                         let start_idx = stry!(start.eval_to_index(
@@ -573,6 +588,22 @@ impl<'script> ImutExprInt<'script> {
                                 self, segment, path, start_idx, end_idx, env.meta,
                             );
                         } else if end_idx > array.len() {
+                            // Index is out of array bounds: not present
+                            return Ok(Cow::Borrowed(&FALSE));
+                        }
+                        subrange = array.get(start_idx..end_idx);
+                        continue;
+                    }
+                    return Ok(Cow::Borrowed(&FALSE));
+                }
+                // Next segment is an index range: index into `current`, if it's an array
+                Segment::Range { start, end, .. } => {
+                    if let Some(a) = current.as_array() {
+                        let array = subrange.unwrap_or_else(|| a.as_slice());
+                        let start_idx = *start;
+                        let end_idx = *end;
+
+                        if end_idx > array.len() {
                             // Index is out of array bounds: not present
                             return Ok(Cow::Borrowed(&FALSE));
                         }
@@ -830,11 +861,10 @@ fn eval_for_fn_arg<'run, 'event>(
 where
     'event: 'run,
 {
-    match arg.0 {
-        ImutExprInt::Path(Path::Reserved(ReservedPath::Args { .. })) => arg
-            .0
+    match arg {
+        ImutExpr::Path(Path::Reserved(ReservedPath::Args { .. })) => arg
             .run(opts, env, event, state, meta, local)
             .map(|v| Cow::Owned(v.clone_static())),
-        _ => arg.0.run(opts, env, event, state, meta, local),
+        _ => arg.run(opts, env, event, state, meta, local),
     }
 }

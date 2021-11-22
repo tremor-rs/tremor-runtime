@@ -44,7 +44,7 @@ use std::fmt::Display;
 use std::iter::Iterator;
 use std::str::FromStr;
 use std::{fmt, sync::Mutex};
-use tremor_script::prelude::*;
+use tremor_script::{ast::Helper, prelude::*};
 
 /// Pipeline Errors
 pub mod errors;
@@ -83,6 +83,7 @@ pub type NodeLookupFn = fn(
     defn: Option<&tremor_script::srs::Stmt>,
     node: Option<&tremor_script::srs::Stmt>,
     windows: Option<HashMap<String, window::Impl>>,
+    helper: &mut Helper,
 ) -> Result<OperatorNode>;
 
 /// Stringified numeric key
