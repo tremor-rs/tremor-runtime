@@ -25,7 +25,7 @@ use crate::registry::RECUR_PTR;
 use crate::{
     ast::{
         BaseExpr, ClauseGroup, ClausePreCondition, Comprehension, DefaultCase, EmitExpr, EventPath,
-        Expr, IfElse, ImutExprInt, Match, Path, Segment,
+        Expr, IfElse, ImutExpr, Match, Path, Segment,
     },
     errors::error_oops_err,
 };
@@ -336,16 +336,8 @@ impl<'script> Expr<'script> {
         let segments: &'run [Segment<'event>] = path.segments();
 
         let mut current: &Value = match path {
-            Path::Const(p) => {
-                let name = env.meta.name_dflt(p.mid).to_string();
-                return error_assign_to_const(self, name, env.meta);
-            }
-            Path::Reserved(p) => {
-                let name = env.meta.name_dflt(p.mid()).to_string();
-                return error_assign_to_const(self, name, env.meta);
-            }
-            Path::Expr(_p) => {
-                return error_assign_to_const(self, "<expr>".to_string(), env.meta);
+            Path::Const(_) | Path::Reserved(_) | Path::Expr(_) => {
+                return error_assign_to_const(self, env.meta);
             }
 
             Path::Local(lpath) => {
@@ -398,7 +390,7 @@ impl<'script> Expr<'script> {
                             .or_insert_with(|| Value::object_with_capacity(32)),
                     };
                 }
-                Segment::Idx { .. } | Segment::Range { .. } => {
+                Segment::Idx { .. } | Segment::Range { .. } | Segment::RangeExpr { .. } => {
                     return error_assign_array(self, segment, env.meta)
                 }
             }
@@ -426,13 +418,9 @@ impl<'script> Expr<'script> {
         value: Value<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         match path {
-            Path::Const(p) => {
-                error_assign_to_const(self, env.meta.name_dflt(p.mid).into(), env.meta)
+            Path::Const(_) | Path::Reserved(_) | Path::Expr(_) => {
+                error_assign_to_const(self, env.meta)
             }
-            Path::Reserved(p) => {
-                error_assign_to_const(self, env.meta.name_dflt(p.mid()).into(), env.meta)
-            }
-            Path::Expr(_) => error_assign_to_const(self, "<expr>".to_string(), env.meta),
             Path::Local(lpath) => {
                 let o = stry!(local.get_mut(lpath.idx, self, lpath.mid(), env.meta));
                 Ok(Cow::Borrowed(o.insert(value)))
@@ -473,7 +461,7 @@ impl<'script> Expr<'script> {
         match self {
             Expr::Emit(expr) => match expr.borrow() {
                 EmitExpr {
-                    expr: ImutExprInt::Path(Path::Event(EventPath { segments, .. })),
+                    expr: ImutExpr::Path(Path::Event(EventPath { segments, .. })),
                     port,
                     ..
                 } if segments.is_empty() => port

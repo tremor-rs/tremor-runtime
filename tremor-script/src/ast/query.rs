@@ -15,14 +15,17 @@
 pub(crate) mod raw;
 
 use super::{
-    error_generic, error_no_consts, error_no_locals, node_id::NodeId, AggrRegistry, EventPath,
-    HashMap, Helper, Ident, ImutExpr, ImutExprInt, InvokeAggrFn, Location, NodeMetas, Path,
-    Registry, Result, Script, Serialize, Stmts, Upable, Value,
+    error_generic, error_no_consts, error_no_locals,
+    node_id::NodeId,
+    visitors::{ArgsRewriter, ConstFolder},
+    AggrRegistry, EventPath, HashMap, Helper, Ident, ImutExpr, InvokeAggrFn, Location, NodeMetas,
+    Path, Registry, Result, Script, Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
-use crate::ast::eq::AstEq;
+use crate::ast::{eq::AstEq, walkers::ImutExprWalker};
 use crate::{impl_expr_mid, impl_fqn};
 use raw::WindowDefnRaw;
+use simd_json::{Builder, Mutable};
 
 /// A Tremor query
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -39,8 +42,8 @@ pub struct Query<'script> {
     pub scripts: HashMap<String, ScriptDecl<'script>>,
     /// Operators declarations
     pub operators: HashMap<String, OperatorDecl<'script>>,
-    /// Query arguments
-    pub args: Value<'script>,
+    /// Query Constants
+    pub consts: Consts<'script>,
 }
 
 /// Query statement
@@ -48,22 +51,22 @@ pub struct Query<'script> {
 pub enum Stmt<'script> {
     /// A window declaration
     WindowDecl(Box<WindowDecl<'script>>),
-    /// A stream
-    Stream(StreamStmt),
     /// An operator declaration
     OperatorDecl(OperatorDecl<'script>),
     /// A script declaration
     ScriptDecl(Box<ScriptDecl<'script>>),
-    /// An operator creation
-    Operator(OperatorStmt<'script>),
-    /// A script creation
-    Script(ScriptStmt<'script>),
     /// An pipeline declaration
     PipelineDecl(Box<PipelineDecl<'script>>),
+    /// A stream
+    StreamStmt(StreamStmt),
+    /// An operator creation
+    OperatorStmt(OperatorStmt<'script>),
+    /// A script creation
+    ScriptStmt(ScriptStmt<'script>),
     /// An pipeline creation
     PipelineStmt(PipelineStmt),
     /// A select statement
-    Select(SelectStmt<'script>),
+    SelectStmt(SelectStmt<'script>),
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple passthrough
@@ -71,14 +74,14 @@ impl<'script> BaseExpr for Stmt<'script> {
     fn mid(&self) -> usize {
         match self {
             Stmt::WindowDecl(s) => s.mid(),
-            Stmt::Stream(s) => s.mid(),
+            Stmt::StreamStmt(s) => s.mid(),
             Stmt::OperatorDecl(s) => s.mid(),
             Stmt::ScriptDecl(s) => s.mid(),
             Stmt::PipelineDecl(s) => s.mid(),
             Stmt::PipelineStmt(s) => s.mid(),
-            Stmt::Operator(s) => s.mid(),
-            Stmt::Script(s) => s.mid(),
-            Stmt::Select(s) => s.mid(),
+            Stmt::OperatorStmt(s) => s.mid(),
+            Stmt::ScriptStmt(s) => s.mid(),
+            Stmt::SelectStmt(s) => s.mid(),
         }
     }
 }
@@ -129,8 +132,7 @@ impl SelectStmt<'_> {
         if self
             .stmt
             .target
-            .0
-            .ast_eq(&ImutExprInt::Path(Path::Event(EventPath {
+            .ast_eq(&ImutExpr::Path(Path::Event(EventPath {
                 mid: 0,
                 segments: vec![],
             })))
@@ -174,7 +176,7 @@ pub struct OperatorDecl<'script> {
     /// Type of the operator
     pub kind: OperatorKind,
     /// Parameters for the operator
-    pub params: HashMap<String, Value<'script>>,
+    pub params: DefinitioalArgsWith<'script>,
 }
 impl_expr_mid!(OperatorDecl);
 impl_fqn!(OperatorDecl);
@@ -189,7 +191,7 @@ pub struct OperatorStmt<'script> {
     /// Target of the operator
     pub target: String,
     /// parameters of the instance
-    pub params: HashMap<String, Value<'script>>,
+    pub params: CreationalWith<'script>,
 }
 impl_expr_mid!(OperatorStmt);
 
@@ -200,7 +202,7 @@ pub struct ScriptDecl<'script> {
     /// The ID and Module of the Script
     pub node_id: NodeId,
     /// Parameters of a script declaration
-    pub params: HashMap<String, Value<'script>>,
+    pub params: DefinitioalArgs<'script>,
     /// The script itself
     pub script: Script<'script>,
 }
@@ -217,7 +219,7 @@ pub struct ScriptStmt<'script> {
     /// Target of the script
     pub target: String,
     /// Parameters of the script statement
-    pub params: HashMap<String, Value<'script>>,
+    pub params: CreationalWith<'script>,
 }
 impl_expr_mid!(ScriptStmt);
 
@@ -229,15 +231,21 @@ pub struct PipelineDecl<'script> {
     /// metadata id
     pub(crate) mid: usize,
     /// Parameters of a subquery declaration
-    pub params: HashMap<String, Value<'script>>,
+    pub params: DefinitioalArgs<'script>,
     /// Input Ports
     pub from: Vec<Ident<'script>>,
     /// Output Ports
     pub into: Vec<Ident<'script>>,
     /// The raw pipeline statements
     pub raw_stmts: raw::StmtsRaw<'script>,
-    /// The query in it's runnable form
-    pub query: Option<Query<'script>>,
+    // /// The query in it's runnable form
+    // pub query: Option<Query<'script>>,
+}
+
+impl<'script> PipelineDecl<'script> {
+    pub(crate) fn to_query(&self) -> Result<Query<'script>> {
+        todo!()
+    }
 }
 impl_expr_mid!(PipelineDecl);
 impl_fqn!(PipelineDecl);
@@ -278,7 +286,7 @@ pub struct WindowDecl<'script> {
     /// The type of window
     pub kind: WindowKind,
     /// Parameters passed to the window
-    pub params: HashMap<String, Value<'script>>,
+    pub params: CreationalWith<'script>,
     /// The script of the window
     pub script: Option<Script<'script>>,
 }
@@ -320,23 +328,27 @@ impl_expr_mid!(Select);
 
 /// A group by clause
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct GroupBy<'script>(pub(crate) GroupByInt<'script>);
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub(crate) enum GroupByInt<'script> {
+pub enum GroupBy<'script> {
     /// Expression based group by
     Expr {
+        /// mid
         mid: usize,
-        expr: ImutExprInt<'script>,
+        /// expr
+        expr: ImutExpr<'script>,
     },
     /// `set` based group by
     Set {
+        /// mid
         mid: usize,
+        /// items
         items: Vec<GroupBy<'script>>,
     },
     /// `each` based group by
     Each {
+        /// mid
         mid: usize,
-        expr: ImutExprInt<'script>,
+        /// expr
+        expr: ImutExpr<'script>,
     },
 }
 
@@ -351,5 +363,201 @@ pub struct StreamStmt {
 impl BaseExpr for StreamStmt {
     fn mid(&self) -> usize {
         self.mid
+    }
+}
+
+/// A with block in a creational statement
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CreationalWith<'script> {
+    /// `with` seection
+    pub with: WithExprs<'script>,
+}
+impl<'script> CreationalWith<'script> {
+    pub(crate) fn substitute_args<'registry>(
+        &mut self,
+        args: &Value<'script>,
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<()> {
+        self.with.substitute_args(args, helper)
+    }
+
+    /// Renders a with clause into a k/v pair
+    pub fn render(&self, meta: &NodeMetas) -> Result<Value<'script>> {
+        let mut res = Value::object();
+        for (k, v) in self.with.0.iter() {
+            res.insert(k.id.clone(), v.clone().try_into_lit(meta)?.clone())?;
+        }
+        Ok(res)
+    }
+}
+
+/// A args / with block in a definitional statement
+#[derive(Clone, Debug, PartialEq, Serialize, Default)]
+pub struct DefinitioalArgsWith<'script> {
+    /// `args` seection
+    pub args: ArgsExprs<'script>,
+    /// With section
+    pub with: WithExprs<'script>,
+}
+
+impl<'script> DefinitioalArgsWith<'script> {
+    /// Combines the definitional args and with block along with the creational with block
+    /// here the following happens:
+    /// 1) The creational with is merged into the definitial with, overwriting defaults
+    /// 2) We check if all mandatory fiends defined in the creational-args are set
+    /// 3) we incoperate the merged args into the creational with - this results in the final map
+    /// in the with section
+    pub fn ingest_creational_with(&mut self, creational: &CreationalWith<'script>) -> Result<()> {
+        // Ingest creational `with` into definitional `args` and error if `with` contains
+        // a unknown key
+        for (k, v) in &creational.with.0 {
+            if let Some((_, arg_v)) = self
+                .args
+                .0
+                .iter_mut()
+                .find(|(arg_key, _)| arg_key.id == k.id)
+            {
+                *arg_v = Some(v.clone())
+            } else {
+                // FIXME: better error
+                return Err(format!("unknown key: {}", k).into());
+            }
+        }
+
+        if let Some((k, _)) = self.args.0.iter_mut().find(|(_, v)| v.is_none()) {
+            Err(format!("missing key: {}", k).into())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Generates the config
+    pub fn generate_config<'registry>(
+        &self,
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<HashMap<String, Value<'script>>> {
+        let args = self
+            .args
+            .0
+            .iter()
+            .map(|(k, expr)| {
+                let expr = expr.clone().unwrap();
+                Ok((k.id.clone(), ConstFolder::reduce_to_val(helper, expr)?))
+            })
+            .collect::<Result<Value>>()?;
+
+        let config = self
+            .with
+            .0
+            .iter()
+            .map(|(k, v)| {
+                let mut expr = v.clone();
+                ArgsRewriter::new(args.clone(), helper).rewrite_expr(&mut expr)?;
+                Ok((k.id.to_string(), ConstFolder::reduce_to_val(helper, expr)?))
+            })
+            .collect();
+        config
+    }
+    pub(crate) fn substitute_args<'registry>(
+        &mut self,
+        args: &Value<'script>,
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<()> {
+        // We do NOT replace external args in the `with` part as this part will be replaced used
+        // with the internal args
+        //
+        // ```
+        //   define pipeline pipeline_name
+        //   args
+        //     pipeline_server_name
+        //   pipeline
+        //     define http connector server
+        //     args
+        //       server_name: args.pipeline_server_name # this gets replaced
+        //     with
+        //       config = {"server": args.server_name} # this does not get replaced
+        //     end;
+        //     # ...
+        //  end
+        // ```
+
+        self.args.substitute_args(args, helper)
+    }
+}
+
+/// A args block in a definitional statement
+#[derive(Clone, Debug, PartialEq, Serialize, Default)]
+pub struct DefinitioalArgs<'script> {
+    /// `args` seection
+    pub args: ArgsExprs<'script>,
+}
+
+impl<'script> DefinitioalArgs<'script> {
+    pub(crate) fn substitute_args<'registry>(
+        &mut self,
+        args: &Value<'script>,
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<()> {
+        self.args.substitute_args(args, helper)
+    }
+}
+
+/// a With key value pair.
+pub type WithExpr<'script> = (Ident<'script>, ImutExpr<'script>);
+/// list of arguments in a `with` section
+#[derive(Clone, Debug, PartialEq, Serialize, Default)]
+pub struct WithExprs<'script>(pub Vec<WithExpr<'script>>);
+
+impl<'script> WithExprs<'script> {
+    pub(crate) fn substitute_args<'registry>(
+        &mut self,
+        args: &Value<'script>,
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<()> {
+        let mut old = Vec::new();
+        std::mem::swap(&mut old, &mut self.0);
+        self.0 = old
+            .into_iter()
+            .map(|(name, mut value_expr)| {
+                ArgsRewriter::new(args.clone(), helper).rewrite_expr(&mut value_expr)?;
+                ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut value_expr)?;
+
+                Ok((name, value_expr))
+            })
+            .collect::<Result<_>>()?;
+        Ok(())
+    }
+}
+
+/// a Args key value pair.
+pub type ArgsExpr<'script> = (Ident<'script>, Option<ImutExpr<'script>>);
+
+/// list of arguments in a `args` section
+#[derive(Clone, Debug, PartialEq, Serialize, Default)]
+pub struct ArgsExprs<'script>(pub Vec<ArgsExpr<'script>>);
+
+impl<'script> ArgsExprs<'script> {
+    pub(crate) fn substitute_args<'registry>(
+        &mut self,
+        args: &Value<'script>,
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<()> {
+        let mut old = Vec::new();
+        std::mem::swap(&mut old, &mut self.0);
+        self.0 = old
+            .into_iter()
+            .map(|(name, value_expr)| {
+                let value_expr = value_expr
+                    .map(|mut value_expr| -> Result<_> {
+                        ArgsRewriter::new(args.clone(), helper).rewrite_expr(&mut value_expr)?;
+                        ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut value_expr)?;
+                        Ok(value_expr)
+                    })
+                    .transpose()?;
+
+                Ok((name, value_expr))
+            })
+            .collect::<Result<_>>()?;
+        Ok(())
     }
 }

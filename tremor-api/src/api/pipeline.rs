@@ -15,7 +15,6 @@
 use tremor_pipeline::{query::Query, FN_REGISTRY};
 
 use crate::api::prelude::*;
-use tremor_value::literal;
 
 #[derive(Serialize)]
 struct PipelineWrap {
@@ -41,14 +40,13 @@ pub async fn publish_artefact(mut req: Request) -> Result<Response> {
             let body = req.body_string().await?;
             let aggr_reg = tremor_script::registry::aggr();
             let module_path = tremor_script::path::load();
-            let query = Query::parse_with_args(
+            let query = Query::parse(
                 &module_path,
                 &body,
                 "<API>",
                 vec![],
                 &*FN_REGISTRY.lock()?,
                 &aggr_reg,
-                &literal!({}), // TODO add deployment time args support when connectors branch is merged
             )?;
 
             let id = query.id().ok_or_else(|| {

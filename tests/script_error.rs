@@ -43,6 +43,7 @@ macro_rules! test_cases {
                 let mut err = String::new();
                 file.read_to_string(&mut err)?;
                 let err = err.trim();
+
                 let s = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, script_file, contents2, &*FN_REGISTRY.lock()?);
                 if let Err(e) = s {
                     let mut h = Dumb::new();
@@ -53,7 +54,7 @@ macro_rules! test_cases {
                     println!("{}", got);
                     assert_eq!(err, got);
                 } else {
-                    println!("Expected error, but got succeess");
+                    println!("Expected error, but got succeess :/");
                     assert!(false);
                 }
                 Ok(())
@@ -79,10 +80,12 @@ macro_rules! ignored_cases {
                 file.read_to_string(&mut contents)?;
                 let contents2 = contents.clone();
 
+                println!("Loading error: {}", err_file);
                 let mut file = file::open(err_file)?;
                 let mut err = String::new();
                 file.read_to_string(&mut err)?;
                 let _err = err.trim();
+
                 let s = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, script_file, contents2, &*FN_REGISTRY.lock()?);
                 if let Err(e) = s {
                     let mut h = Dumb::new();
@@ -91,10 +94,11 @@ macro_rules! ignored_cases {
                     let got = h.to_string();
                     let got = got.trim();
                     println!("{}", got);
-                    //assert_eq!(err, got);
+                    assert_eq!(err, got);
                 } else {
-                    println!("Expected error, but got succeess");
-                    //assert!(false);
+
+                    println!("Expected error, but got succeess :(");
+                    assert!(false);
                 }
                 Ok(())
             }
@@ -149,8 +153,7 @@ test_cases!(
     bin_invalid_type,
     merge_ident,
     select_ident,
-    // FIXME TODO - semantics changed for troy - this needs a proper fix to prevent duck typing - disabling test for now
-    // function_already_defined,
+    function_already_defined,
     missing_function,
     string_interpolation_empty,
     fn_bad_recur,
