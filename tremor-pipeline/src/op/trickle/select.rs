@@ -69,7 +69,7 @@ impl Select {
             .collect();
         let select = srs::Select::try_new_from_stmt(stmt)?;
         let event_id_gen = EventIdGenerator::new(operator_uid);
-        if let ast::Stmt::Select(SelectStmt { aggregates, .. }) = stmt.suffix() {
+        if let ast::Stmt::SelectStmt(SelectStmt { aggregates, .. }) = stmt.suffix() {
             let windows_itr = windows.iter();
             let dflt_group = Group {
                 value: Value::const_null(),

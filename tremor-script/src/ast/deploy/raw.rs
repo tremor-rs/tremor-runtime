@@ -22,14 +22,17 @@ use super::DeployLink;
 use super::FlowDecl;
 use super::Value;
 use super::{BaseExpr, DeployFlow};
-use crate::ast::raw::{
-    CreationalWith, DefinitioalArgs, DefinitioalArgsWith, ExprRaw, IdentRaw, ModuleRaw,
-    StringLitRaw,
+use crate::ast::{
+    error_generic, node_id::NodeId, query::raw::ConfigRaw, AggrRegistry, Deploy, DeployStmt,
+    Helper, ModDoc, NodeMetas, PipelineDecl, Registry, Script, StringLit, Upable,
 };
 use crate::ast::{
-    error_generic, node_id::NodeId, query::raw::PipelineDeclRaw, raw::WithExprsRaw, AggrRegistry,
-    Deploy, DeployStmt, Helper, ModDoc, NodeMetas, PipelineDecl, Registry, Script, StringLit,
-    Upable,
+    query::raw::{CreationalWithRaw, DefinitioalArgsRaw, DefinitioalArgsWithRaw, PipelineDeclRaw},
+    visitors::ConstFolder,
+};
+use crate::ast::{
+    raw::{ExprRaw, IdentRaw, ModuleRaw, StringLitRaw},
+    walkers::ImutExprWalker,
 };
 use crate::errors::ErrorKind;
 use crate::errors::Result;
@@ -107,7 +110,7 @@ pub(crate) fn run_lit_str<'script, 'registry>(
 
 #[derive(Debug, PartialEq, Serialize)]
 pub struct DeployRaw<'script> {
-    pub(crate) config: WithExprsRaw<'script>,
+    pub(crate) config: ConfigRaw<'script>,
     pub(crate) stmts: DeployStmtsRaw<'script>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
@@ -135,8 +138,13 @@ impl<'script> DeployRaw<'script> {
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         });
 
+        let mut config = HashMap::new();
+        for (k, mut v) in self.config.up(helper)? {
+            ConstFolder::new(helper).walk_expr(&mut v)?;
+            config.insert(k.to_string(), v.try_into_lit(&helper.meta)?);
+        }
         Ok(Deploy {
-            config: self.config.up(helper)?,
+            config,
             stmts,
             definitions: helper.definitions.clone(),
             // connectors: helper.connector_defns.clone(),
@@ -293,7 +301,7 @@ pub struct ConnectorDeclRaw<'script> {
     pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) kind: IdentRaw<'script>,
-    pub(crate) params: DefinitioalArgsWith<'script>,
+    pub(crate) params: DefinitioalArgsWithRaw<'script>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
 
@@ -320,7 +328,7 @@ pub struct FlowDeclRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
-    pub(crate) params: DefinitioalArgs<'script>,
+    pub(crate) params: DefinitioalArgsRaw<'script>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
     pub(crate) atoms: Vec<DeployLinkRaw<'script>>,
 }
@@ -379,19 +387,22 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
                 }
             }
         }
-
+        let mid = helper.add_meta_w_name(self.start, self.end, &self.id);
+        let docs = self
+            .docs
+            .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
+        let params = self.params.up(helper)?;
+        helper.module.pop();
         let node_id = NodeId::new(self.id.clone(), helper.module.clone());
+
         let flow_decl = FlowDecl {
-            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            mid,
             node_id,
-            params: self.params.up(helper)?,
+            params,
             links,
             atoms,
-            docs: self
-                .docs
-                .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
+            docs,
         };
-        helper.module.pop();
         Ok(flow_decl)
     }
 }
@@ -439,7 +450,7 @@ pub struct CreateStmtRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: IdentRaw<'script>,
-    pub(crate) params: CreationalWith<'script>,
+    pub(crate) params: CreationalWithRaw<'script>,
     /// Id of the definition
     pub target: IdentRaw<'script>,
     /// Module of the definition
@@ -468,6 +479,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
                 self.extent(&helper.meta),
                 self.id.extent(&helper.meta),
                 node_id.to_string(),
+                helper.definitions.keys().map(ToString::to_string).collect(),
             )
             .into());
         };
@@ -495,7 +507,7 @@ pub struct DeployFlowRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: IdentRaw<'script>,
-    pub(crate) params: CreationalWith<'script>,
+    pub(crate) params: CreationalWithRaw<'script>,
     /// Id of the definition
     pub target: IdentRaw<'script>,
     /// Module of the definition - FIXME: we don't need the deploy kind here once it's merged
@@ -524,6 +536,7 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
                 self.extent(&helper.meta),
                 self.id.extent(&helper.meta),
                 node_id.to_string(),
+                helper.definitions.keys().map(ToString::to_string).collect(),
             )
             .into());
         };

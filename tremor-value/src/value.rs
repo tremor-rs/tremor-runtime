@@ -1383,11 +1383,8 @@ mod test {
             } else if v1 < v2 {
                prop_assert!(v2 > v1);
             } else if v1 == v2 {
-                dbg!(v1 == v2, v2 == v1);
                 prop_assert!(v2 == v1);
             } else {
-                dbg!(v1 == v2, v2 == v1);
-                dbg!(v1.cmp(&v2), v2.cmp(&v1));
                 prop_assert!(false)
             };
         }

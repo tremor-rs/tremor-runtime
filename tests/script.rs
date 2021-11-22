@@ -147,10 +147,8 @@ test_cases!(
     pp_alias1,
     pp_alias2,
     pp_alias3,
-    // regression
     empty_array_pattern,
-    // TODO
-    // const_in_const_lookup,
+    const_in_const_lookup,
     // INSERT
     size_functions,
     const_expr_path_non_const_segment,

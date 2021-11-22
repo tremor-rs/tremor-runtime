@@ -235,7 +235,7 @@ impl Egress {
     }
 }
 
-fn run_tremor_source(matches: &ArgMatches, src: String, args: &Value) -> Result<()> {
+fn run_tremor_source(matches: &ArgMatches, src: String, _args: &Value) -> Result<()> {
     let raw = slurp_string(&src);
     if let Err(e) = raw {
         eprintln!("Error processing file {}: {}", &src, e);
@@ -247,7 +247,7 @@ fn run_tremor_source(matches: &ArgMatches, src: String, args: &Value) -> Result<
     let env = env::setup()?;
 
     let mut outer = TermHighlighter::stderr();
-    match Script::parse_with_args(&env.module_path, &src, raw.clone(), &env.fun, args) {
+    match Script::parse(&env.module_path, &src, raw.clone(), &env.fun) {
         Ok(mut script) => {
             script.format_warnings_with(&mut outer)?;
 
@@ -317,7 +317,7 @@ fn run_tremor_source(matches: &ArgMatches, src: String, args: &Value) -> Result<
     }
 }
 
-fn run_trickle_source(matches: &ArgMatches, src: &str, args: &Value) -> Result<()> {
+fn run_trickle_source(matches: &ArgMatches, src: &str, _args: &Value) -> Result<()> {
     let raw = slurp_string(src);
     if let Err(e) = raw {
         eprintln!("Error processing file {}: {}", src, e);
@@ -328,15 +328,7 @@ fn run_trickle_source(matches: &ArgMatches, src: &str, args: &Value) -> Result<(
     let env = env::setup()?;
     let mut h = TermHighlighter::stderr();
 
-    let runnable = match Query::parse_with_args(
-        &env.module_path,
-        src,
-        &raw,
-        vec![],
-        &env.fun,
-        &env.aggr,
-        args,
-    ) {
+    let runnable = match Query::parse(&env.module_path, src, &raw, vec![], &env.fun, &env.aggr) {
         Ok(runnable) => runnable,
         Err(e) => {
             if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
@@ -666,11 +658,6 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
             let kv = hashbrown::HashMap::new();
             world.link_binding(&binding_url, kv).await.unwrap();
         }
-
-        // dbg!(world.repo.list_onramps().await.unwrap());
-        // dbg!(world.repo.list_offramps().await.unwrap());
-        // dbg!(world.repo.list_pipelines().await.unwrap());
-        // dbg!(world.repo.list_bindings().await.unwrap());
 
         // At this point we could run a test framework of sorts
         std::thread::sleep(std::time::Duration::from_millis(150_000));

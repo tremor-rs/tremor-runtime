@@ -94,7 +94,6 @@ pub use tremor_pipeline::Event;
 use tremor_pipeline::{query::Query, FN_REGISTRY};
 use tremor_script::highlighter::Term as TermHighlighter;
 use tremor_script::Script;
-use tremor_value::literal;
 
 lazy_static! {
     /// Default Q Size
@@ -120,14 +119,13 @@ pub async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
     // TODO: Should ideally be const
     let aggr_reg = tremor_script::registry::aggr();
     let module_path = tremor_script::path::load();
-    let query = Query::parse_with_args(
+    let query = Query::parse(
         &module_path,
         &raw,
         file_name,
         vec![],
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
-        &literal!({}), // TODO add support for runtime args once troy+connectors branches have merged
     );
     let query = match query {
         Ok(query) => query,

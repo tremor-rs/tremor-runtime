@@ -26,7 +26,6 @@ use std::{
 use tremor_common::{file, time::nanotime};
 use xz2::read::XzDecoder;
 
-// FIXME: enable structured writing
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {

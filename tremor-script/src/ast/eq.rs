@@ -2,8 +2,8 @@ use crate::{CustomFn, TremorFnWrapper};
 
 use super::{
     ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr, Bytes, BytesPart, ClauseGroup,
-    ClausePreCondition, Comprehension, ComprehensionCase, DefaultCase, EventPath, Expression,
-    Field, ImutExpr, ImutExprInt, Invocable, Invoke, InvokeAggr, List, Literal, LocalPath, Match,
+    ClausePreCondition, Comprehension, ComprehensionCase, DefaultCase, EventPath, ExprPath,
+    Expression, Field, ImutExpr, Invocable, Invoke, InvokeAggr, List, Literal, LocalPath, Match,
     Merge, MetadataPath, Patch, PatchOperation, Path, Pattern, PredicateClause, PredicatePattern,
     Record, RecordPattern, Recur, ReservedPath, Segment, StatePath, StrLitElement, StringLit,
     TestExpr, TuplePattern, UnaryExpr,
@@ -64,13 +64,7 @@ where
 
 impl<'script> AstEq for ImutExpr<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.0.ast_eq(&other.0)
-    }
-}
-
-impl<'script> AstEq for ImutExprInt<'script> {
-    fn ast_eq(&self, other: &Self) -> bool {
-        use ImutExprInt::{
+        use ImutExpr::{
             Binary, Bytes, Comprehension, Invoke, Invoke1, Invoke2, Invoke3, InvokeAggr, List,
             Literal, Local, Match, Merge, Patch, Path, Present, Record, Recur, String, Unary,
         };
@@ -121,7 +115,7 @@ impl<'script> AstEq for BytesPart<'script> {
         self.data_type == other.data_type
             && self.endianess == other.endianess
             && self.bits == other.bits
-            && self.data.0.ast_eq(&other.data.0)
+            && self.data.ast_eq(&other.data)
     }
 }
 
@@ -517,21 +511,34 @@ impl<'script> AstEq for Path<'script> {
             (Self::State(s1), Self::State(s2)) => s1.ast_eq(s2),
             (Self::Meta(m1), Self::Meta(m2)) => m1.ast_eq(m2),
             (Self::Reserved(r1), Self::Reserved(r2)) => r1.ast_eq(r2),
-            _ => false,
+            (Self::Expr(e1), Self::Expr(e2)) => e1.ast_eq(e2),
+            (Self::Const(_), _)
+            | (Self::Local(_), _)
+            | (Self::Event(_), _)
+            | (Self::State(_), _)
+            | (Self::Meta(_), _)
+            | (Self::Reserved(_), _)
+            | (Self::Expr(_), _) => false,
         }
     }
 }
 
-impl<'script> AstEq<ImutExprInt<'script>> for Path<'script> {
-    fn ast_eq(&self, other: &ImutExprInt<'script>) -> bool {
+impl<'script> AstEq for ExprPath<'script> {
+    fn ast_eq(&self, other: &Self) -> bool {
+        self.expr.ast_eq(&other.expr) && self.segments.ast_eq(&other.segments)
+    }
+}
+
+impl<'script> AstEq<ImutExpr<'script>> for Path<'script> {
+    fn ast_eq(&self, other: &ImutExpr<'script>) -> bool {
         match (self, other) {
             // special case if a `Local` references the same local variable as this path
-            (Self::Local(local_path), ImutExprInt::Local { idx, is_const, .. })
+            (Self::Local(local_path), ImutExpr::Local { idx, is_const, .. })
                 if local_path.segments.is_empty() =>
             {
                 local_path.idx == *idx && local_path.is_const == *is_const
             }
-            (_, ImutExprInt::Path(other)) => self.ast_eq(other),
+            (_, ImutExpr::Path(other)) => self.ast_eq(other),
             _ => false,
         }
     }
@@ -544,14 +551,26 @@ impl<'script> AstEq for Segment<'script> {
             (Self::Idx { idx: i1, .. }, Self::Idx { idx: i2, .. }) => i1 == i2,
             (Self::Element { expr: e1, .. }, Self::Element { expr: e2, .. }) => e1.ast_eq(e2),
             (
+                Self::RangeExpr {
+                    start: s1, end: e1, ..
+                },
+                Self::RangeExpr {
+                    start: s2, end: e2, ..
+                },
+            ) => s1.ast_eq(s2.as_ref()) && e1.ast_eq(e2.as_ref()),
+            (
                 Self::Range {
                     start: s1, end: e1, ..
                 },
                 Self::Range {
                     start: s2, end: e2, ..
                 },
-            ) => s1.ast_eq(s2.as_ref()) && e1.ast_eq(e2.as_ref()),
-            _ => false,
+            ) => s1 == s2 && e1 == e2,
+            (Self::Id { .. }, _)
+            | (Self::Idx { .. }, _)
+            | (Self::Element { .. }, _)
+            | (Self::Range { .. }, _)
+            | (Self::RangeExpr { .. }, _) => false,
         }
     }
 }
@@ -631,7 +650,7 @@ mod tests {
 
     use std::collections::BTreeMap;
 
-    use crate::ast::{ClauseGroup, Expr, ImutExpr};
+    use crate::ast::{ClauseGroup, Expr};
     use crate::errors::Result;
     use crate::path::ModulePath;
     use crate::registry::registry;
@@ -646,7 +665,7 @@ mod tests {
         let script_script: crate::script::Script =
             crate::script::Script::parse(&module_path, "test", script.to_owned(), &registry)?;
         let script: &crate::ast::Script = script_script.script.suffix();
-        let imut_exprs: Vec<&ImutExprInt> = script
+        let imut_exprs: Vec<&ImutExpr> = script
             .exprs
             .iter()
             .filter_map(|e| {
@@ -1066,10 +1085,10 @@ mod tests {
     }
 
     fn imut_expr() -> ImutExpr<'static> {
-        ImutExpr(ImutExprInt::Path(Path::Event(EventPath {
+        ImutExpr::Path(Path::Event(EventPath {
             mid: 1,
             segments: vec![],
-        })))
+        }))
     }
     #[test]
     fn clause_group() {
@@ -1157,20 +1176,20 @@ mod tests {
 
     #[test]
     fn test_path_local_special_case() -> Result<()> {
-        let path = ImutExprInt::Path(Path::Local(LocalPath {
+        let path = ImutExpr::Path(Path::Local(LocalPath {
             idx: 1,
             mid: 1,
             is_const: false,
             segments: vec![Segment::Idx { idx: 1, mid: 15 }],
         }));
-        let local = ImutExprInt::Local {
+        let local = ImutExpr::Local {
             idx: 1,
             mid: 42,
             is_const: false,
         };
         // has segments
         assert!(!path.ast_eq(&local));
-        let path2 = ImutExprInt::Path(Path::Local(LocalPath {
+        let path2 = ImutExpr::Path(Path::Local(LocalPath {
             idx: 1,
             mid: 1_212_432,
             is_const: false,
@@ -1178,7 +1197,7 @@ mod tests {
         }));
         assert!(path2.ast_eq(&local));
         // different index
-        assert!(!ImutExprInt::Path(Path::Local(LocalPath {
+        assert!(!ImutExpr::Path(Path::Local(LocalPath {
             idx: 2,
             mid: 42,
             is_const: false,
@@ -1186,7 +1205,7 @@ mod tests {
         }))
         .ast_eq(&local));
         // is_const different
-        assert!(!ImutExprInt::Path(Path::Local(LocalPath {
+        assert!(!ImutExpr::Path(Path::Local(LocalPath {
             idx: 1,
             mid: 42,
             is_const: true,

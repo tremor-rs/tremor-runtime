@@ -17,7 +17,7 @@
 
 use self::raw::CreateKind;
 
-use super::{node_id::BaseRef, raw::BaseExpr};
+use super::{node_id::BaseRef, raw::BaseExpr, DefinitioalArgs, DefinitioalArgsWith};
 use super::{node_id::NodeId, PipelineDecl};
 use super::{Docs, HashMap, Value};
 pub use crate::ast::deploy::raw::DeployKind;
@@ -101,7 +101,7 @@ pub struct ConnectorDecl<'script> {
     /// Identifer for the connector
     pub node_id: NodeId,
     /// Resolved argument defaults
-    pub params: HashMap<String, Value<'script>>,
+    pub params: DefinitioalArgsWith<'script>,
     /// Internal / intrinsic builtin name
     pub builtin_kind: String,
     /// Documentation comments
@@ -137,7 +137,7 @@ pub struct FlowDecl<'script> {
     /// Identifer for the connector
     pub node_id: NodeId,
     /// Resolved argument defaults
-    pub params: HashMap<String, Value<'script>>,
+    pub params: DefinitioalArgs<'script>,
     /// Links between artefacts in the flow
     pub links: Vec<DeployLink>,
     /// Deployment atoms

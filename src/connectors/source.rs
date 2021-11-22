@@ -1235,9 +1235,6 @@ where
             if self.should_pull_data() {
                 let data = self.source.pull_data(self.pull_counter, &self.ctx).await;
                 self.pull_counter += 1;
-                // if self.pull_counter % 10_000 == 0 {
-                //     dbg!(self.pull_counter);
-                // }
                 self.handle_data(data).await?;
             };
             if self.pull_wait_start.is_some() {
