@@ -27,6 +27,7 @@ use hashbrown::HashSet;
 use smol::stream::StreamExt;
 use tremor_common::ids::BindingIdGen;
 use tremor_common::url::TremorUrl;
+use tremor_script::ast::ConnectStmt;
 
 /// sender for sending mgmt messages to the Binding Manager
 pub type ManagerSender = Sender<ManagerMsg>;
@@ -205,22 +206,17 @@ impl Manager {
         let sink_connectors: HashSet<TremorUrl> = binding
             .links
             .iter()
-            .flat_map(|(_from, tos)| tos.iter())
-            .map(TremorUrl::to_instance)
-            .filter(TremorUrl::is_connector)
+            .filter_map(ConnectStmt::as_sink_connector_url)
             .collect();
         let source_connectors: HashSet<TremorUrl> = binding
             .links
             .iter()
-            .map(|(from, _tos)| from.to_instance())
-            .filter(TremorUrl::is_connector)
+            .filter_map(ConnectStmt::as_source_connector_url)
             .collect();
         let pipelines: HashSet<TremorUrl> = binding
             .links
             .iter()
-            .flat_map(|(from, tos)| std::iter::once(from).chain(tos.iter()))
-            .filter(|url| url.is_pipeline())
-            .map(TremorUrl::to_instance)
+            .flat_map(ConnectStmt::as_pipeline_urls)
             .collect();
 
         let start_points: HashSet<TremorUrl> = source_connectors

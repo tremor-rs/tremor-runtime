@@ -14,7 +14,7 @@
 
 use crate::op::prelude::*;
 use std::mem;
-use tremor_script::{highlighter, prelude::*, srs, Query};
+use tremor_script::{ast::NodeMetas, highlighter, prelude::*, srs, Query};
 
 #[derive(Debug)]
 pub struct Script {
@@ -23,7 +23,12 @@ pub struct Script {
 }
 
 impl Script {
-    pub fn with_stmt(id: String, decl: &srs::Stmt, instance: &srs::Stmt) -> Result<Self> {
+    pub fn with_stmt(
+        id: String,
+        decl: &srs::Stmt,
+        instance: &srs::Stmt,
+        meta: &NodeMetas,
+    ) -> Result<Self> {
         // We require Value to be static here to enforce the constraint that
         // arguments name/value pairs live at least as long as the operator nodes that have
         // dependencies on them.
@@ -39,9 +44,9 @@ impl Script {
         // The binding association chooses the definition simply as it hosts the parsed script.
         //
 
-        let mut script = srs::ScriptDecl::try_new_from_stmt(decl)?;
+        let mut script = srs::ScriptDecl::try_new_from_stmt(decl, meta)?;
 
-        script.apply_stmt(instance)?;
+        script.apply_stmt(instance, meta)?;
 
         Ok(Self { id, script })
     }

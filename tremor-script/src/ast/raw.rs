@@ -18,14 +18,17 @@
 
 use crate::{
     ast::{
-        base_expr, query, upable::Upable, ArrayPattern, ArrayPredicatePattern, AssignPattern,
-        BinExpr, BinOpKind, Bytes, BytesPart, ClauseGroup, Comprehension, ComprehensionCase,
-        Costly, DefaultCase, EmitExpr, EventPath, Expr, ExprPath, Expression, Field, FnDecl, FnDoc,
-        Helper, Ident, IfElse, ImutExpr, ImutExprInt, Invocable, Invoke, InvokeAggr, InvokeAggrFn,
-        List, Literal, LocalPath, Match, Merge, MetadataPath, ModDoc, NodeMetas, Patch,
-        PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record, RecordPattern,
-        Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit, TestExpr,
-        TuplePattern, UnaryExpr, UnaryOpKind,
+        base_expr, query,
+        upable::Upable,
+        visitors::ConstFolder,
+        walkers::{ExprWalker, ImutExprWalker},
+        ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr, BinOpKind, Bytes, BytesPart,
+        ClauseGroup, Comprehension, ComprehensionCase, Costly, DefaultCase, EmitExpr, EventPath,
+        Expr, ExprPath, Expression, Field, FnDecl, FnDoc, Helper, Ident, IfElse, ImutExpr,
+        Invocable, Invoke, InvokeAggr, InvokeAggrFn, List, Literal, LocalPath, Match, Merge,
+        MetadataPath, ModDoc, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicateClause,
+        PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Script, Segment, StatePath,
+        StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr, UnaryOpKind,
     },
     errors::{
         err_generic, error_generic, error_missing_effector, error_oops, Error, ErrorKind, Result,
@@ -77,7 +80,9 @@ impl<'script> ScriptRaw<'script> {
                     let name_v = vec![name.to_string()];
                     let r = Range::from((start, end));
 
-                    let v = expr.up(&mut helper)?.try_reduce_into_value(helper)?;
+                    let mut expr = expr.up(helper)?;
+                    ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut expr)?;
+                    let v = expr.try_into_lit(&helper.meta)?;
                     let value_type = v.value_type();
 
                     let idx = helper.consts.insert(name_v, v).map_err(|_old| {
@@ -88,7 +93,7 @@ impl<'script> ScriptRaw<'script> {
                         ))
                     })?;
                     if i == last_idx {
-                        exprs.push(Expr::Imut(ImutExprInt::Local {
+                        exprs.push(Expr::Imut(ImutExpr::Local {
                             is_const: true,
                             idx,
                             mid: helper.add_meta_w_name(start, end, &name),
@@ -98,10 +103,15 @@ impl<'script> ScriptRaw<'script> {
                 }
                 ExprRaw::FnDecl(f) => {
                     helper.docs.fns.push(f.doc());
-                    let f = f.up(&mut helper)?;
+                    let mut f = f.up(&mut helper)?;
+                    ExprWalker::walk_fn_decl(&mut ConstFolder::new(helper), &mut f)?;
                     helper.register_fun(f.into())?;
                 }
-                other => exprs.push(other.up(&mut helper)?),
+                other => {
+                    let other = other.up(&mut helper)?;
+                    // ExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut other)?;
+                    exprs.push(other);
+                }
             }
         }
 
@@ -109,11 +119,11 @@ impl<'script> ScriptRaw<'script> {
         // While this is not required logically it allows us to
         // take advantage of the `emit event` optimisation
         if let Some(e) = exprs.last_mut() {
-            if let Expr::Imut(ImutExprInt::Path(Path::Event(p))) = e {
+            if let Expr::Imut(ImutExpr::Path(Path::Event(p))) = e {
                 if p.segments.is_empty() {
                     let expr = EmitExpr {
                         mid: p.mid(),
-                        expr: ImutExprInt::Path(Path::Event(p.clone())),
+                        expr: ImutExpr::Path(Path::Event(p.clone())),
                         port: None,
                     };
                     *e = Expr::Emit(Box::new(expr));
@@ -122,7 +132,7 @@ impl<'script> ScriptRaw<'script> {
         } else {
             let expr = EmitExpr {
                 mid: 0,
-                expr: ImutExprInt::Path(Path::Event(EventPath {
+                expr: ImutExpr::Path(Path::Event(EventPath {
                     mid: 0,
                     segments: vec![],
                 })),
@@ -265,7 +275,7 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
 
         Ok(BytesPart {
             mid: helper.add_meta(self.start, self.end),
-            data: self.data.up(helper).map(ImutExpr)?,
+            data: self.data.up(helper)?,
             data_type,
             endianess,
             bits,
@@ -324,7 +334,8 @@ impl<'script> ModuleRaw<'script> {
                 } => {
                     let mut name_v = helper.module.clone();
                     name_v.push(name.to_string());
-                    let expr = expr.up(helper)?;
+                    let mut expr = expr.up(helper)?;
+                    ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut expr)?;
                     let v = expr.try_into_value(helper)?;
                     helper.consts.insert(name_v, v).map_err(|_old| {
                         let r = Range::from((start, end));
@@ -332,7 +343,8 @@ impl<'script> ModuleRaw<'script> {
                     })?;
                 }
                 ExprRaw::FnDecl(f) => {
-                    let f = f.up(helper)?;
+                    let mut f = f.up(helper)?;
+                    ExprWalker::walk_fn_decl(&mut ConstFolder::new(helper), &mut f)?;
                     let f = CustomFn {
                         name: f.name.id,
                         args: f.args.iter().map(ToString::to_string).collect(),
@@ -342,7 +354,6 @@ impl<'script> ModuleRaw<'script> {
                         open: f.open,
                         inline: f.inline,
                     };
-
                     helper.register_fun(f)?;
                 }
                 // ALLOW: the gramer doesn't allow this
@@ -362,6 +373,16 @@ pub struct IdentRaw<'script> {
     pub id: beef::Cow<'script, str>,
 }
 impl_expr!(IdentRaw);
+
+impl<'script> From<&'script str> for IdentRaw<'script> {
+    fn from(id: &'script str) -> Self {
+        IdentRaw {
+            start: Location::default(),
+            end: Location::default(),
+            id: id.into(),
+        }
+    }
+}
 impl<'script> ToString for IdentRaw<'script> {
     fn to_string(&self) -> String {
         self.id.to_string()
@@ -433,7 +454,7 @@ impl<'script> Upable<'script> for ListRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(List {
             mid: helper.add_meta(self.start, self.end),
-            exprs: self.exprs.up(helper)?.into_iter().map(ImutExpr).collect(),
+            exprs: self.exprs.up(helper)?.into_iter().collect(),
         })
     }
 }
@@ -464,13 +485,6 @@ pub struct StringLitRaw<'script> {
     pub(crate) end: Location,
     pub(crate) elements: StrLitElementsRaw<'script>,
 }
-#[cfg(not(feature = "erlang-float-testing"))]
-fn to_strl_elem(l: &Literal) -> StrLitElement<'static> {
-    l.value.as_str().map_or_else(
-        || StrLitElement::Lit(l.value.encode().into()),
-        |s| StrLitElement::Lit(s.to_string().into()),
-    )
-}
 
 // TODO: The float scenario is different in erlang and rust
 // We knowingly excluded float correctness in string interpolation
@@ -498,45 +512,16 @@ fn to_strl_elem(l: &Literal) -> StrLitElement<'static> {
 impl<'script> Upable<'script> for StringLitRaw<'script> {
     type Target = StringLit<'script>;
 
-    fn up<'registry>(mut self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let mid = helper.add_meta(self.start, self.end);
 
-        self.elements.reverse();
-        let mut new = Vec::with_capacity(self.elements.len());
-        for e in self.elements {
-            let next = match e {
-                StrLitElementRaw::Expr(e) => {
-                    let i = e.up(helper)?;
-                    let i = i.try_reduce(helper)?;
-                    if let ImutExprInt::Literal(l) = i {
-                        to_strl_elem(&l)
-                    } else {
-                        StrLitElement::Expr(i)
-                    }
-                }
-                StrLitElementRaw::Lit(l) => StrLitElement::Lit(l),
-            };
-            if let StrLitElement::Lit(next_lit) = next {
-                if let Some(prev) = new.pop() {
-                    match prev {
-                        StrLitElement::Lit(l) => {
-                            let mut o = l.into_owned();
-                            o.push_str(&next_lit);
-                            new.push(StrLitElement::Lit(o.into()));
-                        }
-                        prev @ StrLitElement::Expr(..) => {
-                            new.push(prev);
-                            new.push(StrLitElement::Lit(next_lit));
-                        }
-                    }
-                } else {
-                    new.push(StrLitElement::Lit(next_lit));
-                }
-            } else {
-                new.push(next);
-            }
-        }
-        Ok(StringLit { mid, elements: new })
+        let elements = self
+            .elements
+            .into_iter()
+            .rev()
+            .map(|e| e.up(helper))
+            .collect::<Result<_>>()?;
+        Ok(StringLit { mid, elements })
     }
 }
 
@@ -544,6 +529,15 @@ impl<'script> Upable<'script> for StringLitRaw<'script> {
 pub enum StrLitElementRaw<'script> {
     Lit(Cow<'script, str>),
     Expr(ImutExprRaw<'script>),
+}
+impl<'script> Upable<'script> for StrLitElementRaw<'script> {
+    type Target = StrLitElement<'script>;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        match self {
+            StrLitElementRaw::Lit(l) => Ok(StrLitElement::Lit(l)),
+            StrLitElementRaw::Expr(e) => Ok(StrLitElement::Expr(e.up(helper)?)),
+        }
+    }
 }
 
 impl<'script> From<ImutExprRaw<'script>> for StrLitElementRaw<'script> {
@@ -667,15 +661,15 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
                 let path = a.path.up(helper)?;
                 let mid = helper.add_meta(a.start, a.end);
                 match a.expr.up(helper)? {
-                    Expr::Imut(ImutExprInt::Merge(m)) => Expr::Assign {
+                    Expr::Imut(ImutExpr::Merge(m)) => Expr::Assign {
                         mid,
                         path,
-                        expr: Box::new(ImutExprInt::Merge(m).into()),
+                        expr: Box::new(ImutExpr::Merge(m).into()),
                     },
-                    Expr::Imut(ImutExprInt::Patch(m)) => Expr::Assign {
+                    Expr::Imut(ImutExpr::Patch(m)) => Expr::Assign {
                         mid,
                         path,
-                        expr: Box::new(ImutExprInt::Patch(m).into()),
+                        expr: Box::new(ImutExpr::Patch(m).into()),
                     },
                     expr => Expr::Assign {
                         mid,
@@ -971,70 +965,59 @@ pub enum ImutExprRaw<'script> {
 impl<'script> ExpressionRaw<'script> for ImutExprRaw<'script> {}
 
 impl<'script> Upable<'script> for ImutExprRaw<'script> {
-    type Target = ImutExprInt<'script>;
+    type Target = ImutExpr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let was_leaf = helper.possible_leaf;
         helper.possible_leaf = false;
         let r = match self {
             ImutExprRaw::Recur(r) => {
                 helper.possible_leaf = was_leaf;
-                ImutExprInt::Recur(r.up(helper)?)
+                ImutExpr::Recur(r.up(helper)?)
             }
-            ImutExprRaw::Binary(b) => {
-                ImutExprInt::Binary(Box::new(b.up(helper)?)).try_reduce(helper)?
-            }
-            ImutExprRaw::Unary(u) => {
-                ImutExprInt::Unary(Box::new(u.up(helper)?)).try_reduce(helper)?
-            }
-            ImutExprRaw::String(s) => ImutExprInt::String(s.up(helper)?).try_reduce(helper)?,
-            ImutExprRaw::Record(r) => ImutExprInt::Record(r.up(helper)?).try_reduce(helper)?,
-            ImutExprRaw::List(l) => ImutExprInt::List(l.up(helper)?).try_reduce(helper)?,
-            ImutExprRaw::Patch(p) => {
-                ImutExprInt::Patch(Box::new(p.up(helper)?)).try_reduce(helper)?
-            }
-            ImutExprRaw::Merge(m) => {
-                ImutExprInt::Merge(Box::new(m.up(helper)?)).try_reduce(helper)?
-            }
-            ImutExprRaw::Present { path, start, end } => ImutExprInt::Present {
+            ImutExprRaw::Binary(b) => ImutExpr::Binary(Box::new(b.up(helper)?)),
+            ImutExprRaw::Unary(u) => ImutExpr::Unary(Box::new(u.up(helper)?)),
+            ImutExprRaw::String(s) => ImutExpr::String(s.up(helper)?),
+            ImutExprRaw::Record(r) => ImutExpr::Record(r.up(helper)?),
+            ImutExprRaw::List(l) => ImutExpr::List(l.up(helper)?),
+            ImutExprRaw::Patch(p) => ImutExpr::Patch(Box::new(p.up(helper)?)),
+            ImutExprRaw::Merge(m) => ImutExpr::Merge(Box::new(m.up(helper)?)),
+            ImutExprRaw::Present { path, start, end } => ImutExpr::Present {
                 path: path.up(helper)?,
                 mid: helper.add_meta(start, end),
-            }
-            .try_reduce(helper)?,
+            },
             ImutExprRaw::Path(p) => match p.up(helper)? {
                 Path::Local(LocalPath {
                     is_const,
                     mid,
                     idx,
                     ref segments,
-                }) if segments.is_empty() => ImutExprInt::Local { mid, idx, is_const },
-                p => ImutExprInt::Path(p),
-            }
-            .try_reduce(helper)?,
-            ImutExprRaw::Literal(l) => ImutExprInt::Literal(l.up(helper)?).try_reduce(helper)?,
+                }) if segments.is_empty() => ImutExpr::Local { mid, idx, is_const },
+                p => ImutExpr::Path(p),
+            },
+            ImutExprRaw::Literal(l) => ImutExpr::Literal(l.up(helper)?),
             ImutExprRaw::Invoke(i) => {
                 if i.is_aggregate(helper) {
-                    ImutExprInt::InvokeAggr(i.into_aggregate().up(helper)?)
+                    ImutExpr::InvokeAggr(i.into_aggregate().up(helper)?)
                 } else {
                     let i = i.up(helper)?;
-                    let i = if i.can_inline() {
+                    if i.can_inline() {
                         i.inline()?
                     } else {
                         match i.args.len() {
-                            1 => ImutExprInt::Invoke1(i),
-                            2 => ImutExprInt::Invoke2(i),
-                            3 => ImutExprInt::Invoke3(i),
-                            _ => ImutExprInt::Invoke(i),
+                            1 => ImutExpr::Invoke1(i),
+                            2 => ImutExpr::Invoke2(i),
+                            3 => ImutExpr::Invoke3(i),
+                            _ => ImutExpr::Invoke(i),
                         }
-                    };
-                    i.try_reduce(helper)?
+                    }
                 }
             }
             ImutExprRaw::Match(m) => {
                 helper.possible_leaf = was_leaf;
-                ImutExprInt::Match(Box::new(m.up(helper)?))
+                ImutExpr::Match(Box::new(m.up(helper)?))
             }
-            ImutExprRaw::Comprehension(c) => ImutExprInt::Comprehension(Box::new(c.up(helper)?)),
-            ImutExprRaw::Bytes(b) => ImutExprInt::Bytes(b.up(helper)?).try_reduce(helper)?,
+            ImutExprRaw::Comprehension(c) => ImutExpr::Comprehension(Box::new(c.up(helper)?)),
+            ImutExprRaw::Bytes(b) => ImutExpr::Bytes(b.up(helper)?),
         };
         helper.possible_leaf = was_leaf;
         Ok(r)
@@ -1075,7 +1058,7 @@ impl<'script> Upable<'script> for RecurRaw<'script> {
                 &helper.meta,
             );
         }
-        let exprs = self.exprs.up(helper)?.into_iter().map(ImutExpr).collect();
+        let exprs = self.exprs.up(helper)?.into_iter().collect();
         helper.possible_leaf = was_leaf;
 
         Ok(Recur {
@@ -1817,7 +1800,7 @@ impl<'script> Upable<'script> for SegmentRangeRaw<'script> {
         let lower_mid = helper.add_meta(start_lower, end_lower);
         let upper_mid = helper.add_meta(start_upper, end_upper);
         let mid = helper.add_meta(start_lower, end_upper);
-        Ok(Segment::Range {
+        Ok(Segment::RangeExpr {
             lower_mid,
             upper_mid,
             start: Box::new(range_start.up(helper)?),
@@ -1842,7 +1825,7 @@ impl<'script> Upable<'script> for SegmentElementRaw<'script> {
         let expr = expr.up(helper)?;
         let r = expr.extent(&helper.meta);
         match expr {
-            ImutExprInt::Literal(l) => match ImutExprInt::Literal(l).try_into_value(helper)? {
+            ImutExpr::Literal(l) => match ImutExpr::Literal(l).try_into_value(helper)? {
                 Value::String(id) => {
                     let mid = helper.add_meta_w_name(start, end, &id);
                     Ok(Segment::Id {
@@ -2385,7 +2368,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                 .reg
                 .find(&module, &self.fun)
                 .map_err(|e| e.into_err(&self, &self, Some(helper.reg), &helper.meta))?;
-            let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
+            let args = self.args.up(helper)?.into_iter().collect();
             let mf = format!("{}::{}", self.module.join("::"), self.fun);
             Ok(Invoke {
                 mid: helper.add_meta_w_name(self.start, self.end, &mf),
@@ -2404,7 +2387,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
             if let Some(f) = helper.functions.get(&abs_module) {
                 if let Some(f) = helper.func_vec.get(*f) {
                     let invocable = Invocable::Tremor(f.clone());
-                    let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
+                    let args = self.args.up(helper)?.into_iter().collect();
                     let mf = abs_module.join("::");
                     Ok(Invoke {
                         mid: helper.add_meta_w_name(self.start, self.end, &mf),
@@ -2495,7 +2478,7 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
             helper.warn_with_scope(self.extent(&helper.meta), &warning);
         }
         let aggr_id = helper.aggregates.len();
-        let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
+        let args = self.args.up(helper)?.into_iter().collect();
         let mf = format!("{}::{}", self.module, self.fun);
         let invoke_meta_id = helper.add_meta_w_name(self.start, self.end, &mf);
 
@@ -2549,98 +2532,6 @@ impl<'script> Upable<'script> for TestExprRaw {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Default)]
-pub struct DefinitioalArgs<'script> {
-    pub args: ArgsClause<'script>,
-}
-
-impl<'script> Upable<'script> for DefinitioalArgs<'script> {
-    type Target = HashMap<String, Value<'script>>;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        self.args.up(helper)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Default)]
-pub struct DefinitioalArgsWith<'script> {
-    pub args: ArgsClause<'script>,
-    pub with: WithClause<'script>,
-}
-
-impl<'script> Upable<'script> for DefinitioalArgsWith<'script> {
-    type Target = HashMap<String, Value<'script>>;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        // FIXME: this is wrong
-        self.with.up(helper)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct CreationalWith<'script> {
-    pub with: WithClause<'script>,
-}
-
-impl<'script> Upable<'script> for CreationalWith<'script> {
-    type Target = HashMap<String, Value<'script>>;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        self.with.up(helper)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum ArgsClause<'script> {
-    Raw(ArgsExprsRaw<'script>),
-    Processed(HashMap<String, Value<'script>>),
-}
-
-impl Default for ArgsClause<'_> {
-    fn default() -> Self {
-        ArgsClause::Raw(vec![])
-    }
-}
-
-impl<'script> Upable<'script> for ArgsClause<'script> {
-    type Target = HashMap<String, Value<'script>>;
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<HashMap<String, Value<'script>>> {
-        match self {
-            ArgsClause::Raw(params) => params
-                .into_iter()
-                .map(|(k, v)| (k, v.expect("FIXME: This is bad")))
-                .collect::<Vec<_>>()
-                .up(helper),
-            ArgsClause::Processed(params) => Ok(params),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum WithClause<'script> {
-    Raw(WithExprsRaw<'script>),
-    Processed(HashMap<String, Value<'script>>),
-}
-
-impl Default for WithClause<'_> {
-    fn default() -> Self {
-        WithClause::Raw(vec![])
-    }
-}
-
-impl<'script> Upable<'script> for WithClause<'script> {
-    type Target = HashMap<String, Value<'script>>;
-    fn up<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<HashMap<String, Value<'script>>> {
-        match self {
-            WithClause::Raw(params) => params.up(helper),
-            WithClause::Processed(params) => Ok(params),
-        }
-    }
-}
-
 pub type ExprsRaw<'script> = Vec<ExprRaw<'script>>;
 pub type ImutExprsRaw<'script> = Vec<ImutExprRaw<'script>>;
 pub type FieldsRaw<'script> = Vec<FieldRaw<'script>>;
@@ -2651,17 +2542,6 @@ pub type PatchOperationsRaw<'script> = Vec<PatchOperationRaw<'script>>;
 pub type ComprehensionCasesRaw<'script, Ex> = Vec<ComprehensionCaseRaw<'script, Ex>>;
 pub type ImutComprehensionCasesRaw<'script> = Vec<ImutComprehensionCaseRaw<'script>>;
 pub type ArrayPredicatePatternsRaw<'script> = Vec<ArrayPredicatePatternRaw<'script>>;
-pub type WithExprsRaw<'script> = Vec<(IdentRaw<'script>, ImutExprRaw<'script>)>;
-pub type ArgsExprsRaw<'script> = Vec<(IdentRaw<'script>, Option<ImutExprRaw<'script>>)>;
-impl<'script> Upable<'script> for Vec<(IdentRaw<'script>, ImutExprRaw<'script>)> {
-    type Target = HashMap<String, Value<'script>>;
-
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        self.into_iter()
-            .map(|(name, value)| Ok((name.to_string(), value.up(helper)?.try_into_value(helper)?)))
-            .collect()
-    }
-}
 
 #[cfg(test)]
 mod test {

@@ -6,7 +6,7 @@ pipeline
   args
     min_aint = 30
   pipeline
-    select event from in where event.aint>args.min_aint into out;
+    select event from in where event.aint > args.min_aint into out;
   end;
 
   create pipeline snot from second

@@ -28,7 +28,7 @@ grammar<'input>;
 // Statements or partials shared between grammers
 
 
-ConfigDirectives: WithExprsRaw<'input> = {
+ConfigDirectives: ConfigRaw<'input> = {
     <directive:ConfigDirective> <directives:ConfigDirectives> => {
         let mut directives = directives;
         directives.insert(0, directive);
@@ -49,9 +49,9 @@ ConfigDirective: (IdentRaw<'input>, ImutExprRaw<'input>) = {
 ///  config = {},
 ///  oops = args.arg1
 /// end;
-ArgsWithEnd: DefinitioalArgsWith<'input> = {
+ArgsWithEnd: DefinitioalArgsWithRaw<'input> = {
     <args:ArgsClause?> <with:WithEndClause> => {
-        DefinitioalArgsWith {
+        DefinitioalArgsWithRaw {
             args: args.unwrap_or_default(),
             with: with
         }
@@ -62,30 +62,22 @@ ArgsWithEnd: DefinitioalArgsWith<'input> = {
 ///   arg1,
 ///   arg2 = 5
 /// # something else
-DefinitionArgs: DefinitioalArgs<'input> = {
-    <args:ArgsClause?> => DefinitioalArgs {
+DefinitionArgs: DefinitioalArgsRaw<'input> = {
+    <args:ArgsClause?> => DefinitioalArgsRaw {
         args: args.unwrap_or_default(),
     }
 }
 
-ArgsClause: ArgsClause<'input> = {
-    "args" <ArgsExprs> => <>,
+ArgsClause: ArgsExprsRaw<'input> = {
+    "args" <ArgsExprs> => ArgsExprsRaw(<>),
 }
 
-ArgsEndClause: ArgsClause<'input> = {
+ArgsEndClause: ArgsExprsRaw<'input> = {
     <ArgsClause> "end" => <>,
 }
 
-ArgsExprs: ArgsClause<'input> = {
-    <fields:ArgsExprs_> => {
-        let mut fields = fields;
-        fields.reverse();
-        ArgsClause::Raw(fields)
-    },
-}
-
-ArgsExprs_: ArgsExprsRaw<'input> = {
-    <args:Sep<ArgsExprs_, ArgsExpr, ",">> => <>
+ArgsExprs: Vec<(IdentRaw<'input>, Option<ImutExprRaw<'input>>)> = {
+    <Sep<ArgsExprs, ArgsExpr, ",">> => <>
 }
 
 ArgsExpr: (IdentRaw<'input>, Option<ImutExprRaw<'input>>) = {
@@ -97,28 +89,23 @@ ArgsExpr: (IdentRaw<'input>, Option<ImutExprRaw<'input>>) = {
 ///   a = 5,
 ///   b = args.xxx
 /// end
-CreationWithEnd: CreationalWith<'input> = {
-    <WithEndClause?> => CreationalWith{ with: <>.unwrap_or_default() }
+CreationWithEnd: CreationalWithRaw<'input> = {
+    <WithEndClause?> => CreationalWithRaw{ with: <>.unwrap_or_default() }
 }
 
-CreationWith: CreationalWith<'input> = {
-    <WithClause?> => CreationalWith{ with: <>.unwrap_or_default() }
+CreationWith: CreationalWithRaw<'input> = {
+    <WithClause?> => CreationalWithRaw{ with: <>.unwrap_or_default() }
 }
 
+WithClause: WithExprsRaw<'input> = {
+    "with" <exprs:WithExprs> => WithExprsRaw(<>)
+}
 
-WithEndClause: WithClause<'input> = {
+WithEndClause: WithExprsRaw<'input> = {
     <WithClause> "end" => <>,
 }
 
-WithClause: WithClause<'input> = {
-    "with" <exprs:WithExprs> => {
-        let mut exprs = exprs;
-        exprs.reverse();
-        WithClause::Raw(exprs)
-    },
-}
-
-WithExprs: WithExprsRaw<'input> = {
+WithExprs: Vec<(IdentRaw<'input>, ImutExprRaw<'input>)> = {
     <Sep<WithExprs, WithExpr, ",">> => <>
 }
 
@@ -189,8 +176,8 @@ DeployStmt: DeployStmtRaw<'input> = {
 
 DeployDeployStmt: DeployStmtRaw<'input> = {
     // FIXME: we don't need a deploy kind here once troy is merged
-    <start:@L> <docs:DocComment> "deploy" <kind:DeployKind> <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
-    <start:@L> <docs:DocComment> "deploy" <kind:DeployKind> <id:Ident> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
+    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id, module: target.0, target: target.1, params, docs }),
+    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id: id.clone(),  module: vec![], target: id, params, docs }),
 }
 
 ConnectorKind: IdentRaw<'input> = {
@@ -202,20 +189,20 @@ DeployModuleStmt: DeployModuleStmtRaw<'input> = {
     <start:@L> "mod" <name:Ident> "with" <docs:ModComment> <stmts:DeployModuleStmts> "end" <end:@L> => DeployModuleStmtRaw{name, start, end, stmts, docs},
 }
 
-WithDeployLinks: DeployLinksRaw<'input> = {
-    "flow" <links:DeployLinks> => <>,
+WithFlowStmts: FlowStmtsRaw<'input> = {
+    "flow" <links:FlowStmts> => <>,
 }
 
-DeployLinks: DeployLinksRaw<'input> = {
-    <fields:DeployLinks_> => {
+FlowStmts: FlowStmtsRaw<'input> = {
+    <fields:FlowStmts_> => {
         let mut fields = fields;
         fields.reverse();
         fields
     },
 }
 
-DeployLinks_: DeployLinksRaw<'input> = {
-    <Sep<DeployLinks_, DeployLink, ";">> => <>
+FlowStmts_: FlowStmtsRaw<'input> = {
+    <Sep<FlowStmts_, DeployLink, ";">> => <>
 }
 
 CreateKind: CreateKind = {
@@ -223,27 +210,31 @@ CreateKind: CreateKind = {
     "pipeline" => CreateKind::Pipeline,
 }
 
-DeployKind: DeployKind = {
-    // FIXME renmve connector here
-    "connector" => DeployKind::Connector,
-    // FIXME renmve pipeline here
-    "pipeline" => DeployKind::Pipeline,
-    "flow" => DeployKind::Flow,
+
+DeployLink: FlowStmtRaw<'input> = {
+    <create:Create> => FlowStmtRaw::Create(create),
+    <connect:Connect> => FlowStmtRaw::Connect(connect),
+}
+
+Create: CreateStmtRaw<'input> = {
+    <start:@L> "create" <kind:CreateKind> <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, kind },
+    <start:@L> "create" <kind:CreateKind> <id:Ident> <params:CreationWithEnd> <end:@L> => CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind },
+
 }
 
 
-DeployLink: DeployLinkRaw<'input> = {
-    <start:@L> <docs:DocComment> "create" <kind:CreateKind> <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
-    <start:@L> <docs:DocComment> "create" <kind:CreateKind> <id:Ident> <params:CreationWithEnd> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
-
-    <start:@L> <docs:DocComment> "connect" <from:DeployEndpoint> "to" <to:DeployEndpoint> <end:@L> => DeployLinkRaw::Link(start, end, docs, from, to),
+Connect: ConnectStmtRaw<'input> = {
+    <start:@L> "connect" "/" "connector" <from:ConnectFrom> "to" "/" "pipeline" <to:ConnectTo> <end:@L>  => ConnectStmtRaw::ConnectorToPipeline{start, end, from, to},
+    <start:@L> "connect" "/" "pipeline" <from:ConnectFrom> "to" "/" "connector" <to:ConnectTo> <end:@L>  => ConnectStmtRaw::PipelineToConnector{start, end, from, to},
+    <start:@L> "connect" "/" "pipeline" <from:ConnectFrom> "to" "/" "pipeline" <to:ConnectTo> <end:@L>  => ConnectStmtRaw::PipelineToPipeline{start, end, from, to}
 }
 
-DeployEndpoint: DeployEndpointRaw<'input> = {
-    /// TODO Consider locking down tremor url syntax to system artefacts only
-    StringLiteral => DeployEndpointRaw::System(<>),
-    <id:Ident> "/" <port:Ident> => DeployEndpointRaw::Troy(id, Some(port)),
-    <id:Ident> => DeployEndpointRaw::Troy(id, None),
+ConnectFrom: DeployEndpointRaw<'input> = {
+     "/" <artefact:Ident> "/" <instance:Ident> <port:MaybePort> => DeployEndpointRaw{artefact, instance, port: port.unwrap_or_else(|| "out".into())},
+}
+
+ConnectTo: DeployEndpointRaw<'input> = {
+    "/" <artefact:Ident> "/" <instance:Ident> <port:MaybePort> => DeployEndpointRaw{artefact, instance, port: port.unwrap_or_else(|| "in".into())},
 }
 
 /// List of expressions at the root of the script
@@ -258,12 +249,12 @@ DeployModuleStmts: DeployStmtsRaw<'input> = {
 
  DefineConnector: DeployStmtRaw<'input> =  {
     // Connectors - these define connectors for deployment
-    <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> <params:ArgsWithEnd> <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, params, docs }),
+    <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> <params:ArgsWithEnd?> <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, params: params.unwrap_or_default(), docs }),
  }
 
 DefineFlow: DeployStmtRaw<'input> = {
     // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
-    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> <atoms:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), params, atoms, docs }),
+    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> <atoms:WithFlowStmts> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), params, atoms, docs }),
 }
 
  // In case we need to limit the content of deploy stmt
@@ -337,9 +328,9 @@ Stmt: StmtRaw<'input> = {
     CreateOperator => <>,
     CreateScript => <>,
     CreatePipeline => <>,
-    <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::Stream(StreamStmtRaw { start, end, id: id.to_string() }),
+    <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::StreamStmt(StreamStmtRaw { start, end, id: id.to_string() }),
 
-    <start:@L> "select" <target:ComplexExprImut> "from" <from:StreamPort> <windows:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:StreamPort> <maybe_having:HavingClause> <end:@L> => StmtRaw::Select(Box::new(SelectRaw { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
+    <start:@L> "select" <target:ComplexExprImut> "from" <from:StreamPort> <windows:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:StreamPort> <maybe_having:HavingClause> <end:@L> => StmtRaw::SelectStmt(Box::new(SelectRaw { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
 }
 
 //// DEFINEs
@@ -371,23 +362,23 @@ DefinePipeline: PipelineDeclRaw<'input> = {
 //// CREATEs
 CreateScript: StmtRaw<'input> = {
     <start:@L> "create" "script" <id:Ident> <params:CreationWithEnd> <end:@L> => {
-        StmtRaw::Script(ScriptStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params })
+        StmtRaw::ScriptStmt(ScriptStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params })
     },
 
     // With ModulartTarget
     <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
-        StmtRaw::Script(ScriptStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params })
+        StmtRaw::ScriptStmt(ScriptStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params })
     }
 }
 
 CreateOperator: StmtRaw<'input> = {
     <start:@L> "create" "operator" <id:Ident> <params:CreationWithEnd> <end:@L> => {
-        StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params })
+        StmtRaw::OperatorStmt(OperatorStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params })
     },
 
     // With ModulartTarget
     <start:@L> "create" "operator" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
-        StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.to_string(), module: target.0, target: target.1.id.to_string(), params })
+        StmtRaw::OperatorStmt(OperatorStmtRaw { start, end, id: id.to_string(), module: target.0, target: target.1.id.to_string(), params })
     }
 }
 

@@ -334,7 +334,7 @@ mod tests {
     #[async_std::test]
     async fn failfast_runtime() -> Result<()> {
         let (tx, rx) = async_std::channel::bounded(1);
-        let url = TremorUrl::from_connector_instance("test", "test")?;
+        let url = TremorUrl::from_connector_instance("test", "test");
         let config = Reconnect::None;
         let mut runtime = ReconnectRuntime::inner(tx, url.clone(), &config);
         let mut connector = FakeConnector {
@@ -361,7 +361,7 @@ mod tests {
     #[async_std::test]
     async fn backoff_runtime() -> Result<()> {
         let (tx, rx) = async_std::channel::bounded(1);
-        let url = TremorUrl::from_connector_instance("test", "test")?;
+        let url = TremorUrl::from_connector_instance("test", "test");
         let config = Reconnect::Custom {
             interval_ms: 10,
             growth_rate: 2.0,

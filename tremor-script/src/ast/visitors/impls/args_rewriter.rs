@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::prelude::*;
+use super::super::prelude::*;
 use crate::Value;
 
 /// Rewrites a path to `args` or an element of `args` inside a script/query
 /// into an expression referencing the concrete `args` values
 /// in order to not leak the current `args` into other scopes upon nesting modules or subqueries, all referencing `args`
 pub(crate) struct ArgsRewriter<'script, 'registry, 'meta> {
-    args: ImutExprInt<'script>,
+    args: ImutExpr<'script>,
     helper: &'meta mut Helper<'script, 'registry>,
 }
 
@@ -30,25 +30,22 @@ impl<'script, 'registry, 'meta> ArgsRewriter<'script, 'registry, 'meta> {
             value: args,
         }
         .into();
-        Self {
-            args: args.0,
-            helper,
-        }
+        Self { args, helper }
     }
 
-    pub(crate) fn rewrite_expr(&mut self, expr: &mut ImutExprInt<'script>) -> Result<()> {
-        self.walk_expr(expr)?;
+    pub(crate) fn rewrite_expr(&mut self, expr: &mut ImutExpr<'script>) -> Result<()> {
+        ImutExprWalker::walk_expr(self, expr)?;
         Ok(())
     }
 
-    pub(crate) fn rewrite_group_by(&mut self, group_by: &mut GroupByInt<'script>) -> Result<()> {
+    pub(crate) fn rewrite_group_by(&mut self, group_by: &mut GroupBy<'script>) -> Result<()> {
         match group_by {
-            GroupByInt::Expr { expr, .. } | GroupByInt::Each { expr, .. } => {
+            GroupBy::Expr { expr, .. } | GroupBy::Each { expr, .. } => {
                 self.rewrite_expr(expr)?;
             }
-            GroupByInt::Set { items, .. } => {
+            GroupBy::Set { items, .. } => {
                 for inner_group_by in items {
-                    self.rewrite_group_by(&mut inner_group_by.0)?;
+                    self.rewrite_group_by(inner_group_by)?;
                 }
             }
         }
@@ -60,6 +57,9 @@ impl<'script, 'registry, 'meta> ImutExprWalker<'script>
     for ArgsRewriter<'script, 'registry, 'meta>
 {
 }
+
+impl<'script, 'registry, 'meta> ExprWalker<'script> for ArgsRewriter<'script, 'registry, 'meta> {}
+impl<'script, 'registry, 'meta> QueryWalker<'script> for ArgsRewriter<'script, 'registry, 'meta> {}
 
 impl<'script, 'registry, 'meta> ImutExprVisitor<'script>
     for ArgsRewriter<'script, 'registry, 'meta>
@@ -78,3 +78,6 @@ impl<'script, 'registry, 'meta> ImutExprVisitor<'script>
         Ok(VisitRes::Walk)
     }
 }
+
+impl<'script, 'registry, 'meta> ExprVisitor<'script> for ArgsRewriter<'script, 'registry, 'meta> {}
+impl<'script, 'registry, 'meta> QueryVisitor<'script> for ArgsRewriter<'script, 'registry, 'meta> {}

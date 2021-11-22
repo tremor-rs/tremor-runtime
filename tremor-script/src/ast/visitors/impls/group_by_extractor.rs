@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::prelude::*;
+use super::super::prelude::*;
 
 /// extracts all expressions used within a tremor-query `group by` clause into field `expressions`
 pub(crate) struct GroupByExprExtractor<'script> {
-    pub(crate) expressions: Vec<ImutExprInt<'script>>,
+    pub(crate) expressions: Vec<ImutExpr<'script>>,
 }
 
 impl<'script> GroupByExprExtractor<'script> {
@@ -27,49 +27,49 @@ impl<'script> GroupByExprExtractor<'script> {
     }
 
     pub(crate) fn extract_expressions(&mut self, group_by: &GroupBy<'script>) {
-        self.walk_group_by(&group_by.0);
+        self.walk_group_by(&group_by);
     }
 }
 
 impl<'script> GroupByVisitor<'script> for GroupByExprExtractor<'script> {
-    fn visit_expr(&mut self, expr: &ImutExprInt<'script>) {
+    fn visit_expr(&mut self, expr: &ImutExpr<'script>) {
         self.expressions.push(expr.clone()); // take this, lifetimes (yes, i am stupid)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::ast::{GroupByInt, List, Literal};
+    use crate::ast::{GroupBy, List, Literal};
     use crate::errors::Result;
 
     use super::*;
     #[test]
     fn test_group_expr_extractor() -> Result<()> {
         let mut visitor = GroupByExprExtractor::new();
-        let lit_42 = ImutExprInt::Literal(Literal {
+        let lit_42 = ImutExpr::Literal(Literal {
             mid: 3,
             value: tremor_value::Value::from(42),
         });
-        let false_array = ImutExprInt::List(List {
+        let false_array = ImutExpr::List(List {
             mid: 5,
-            exprs: vec![crate::ast::ImutExpr(ImutExprInt::Literal(Literal {
+            exprs: vec![ImutExpr::Literal(Literal {
                 mid: 6,
                 value: tremor_value::Value::from(false),
-            }))],
+            })],
         });
-        let group_by = GroupBy(GroupByInt::Set {
+        let group_by = GroupBy::Set {
             mid: 1,
             items: vec![
-                GroupBy(GroupByInt::Expr {
+                GroupBy::Expr {
                     mid: 2,
                     expr: lit_42.clone(),
-                }),
-                GroupBy(GroupByInt::Each {
+                },
+                GroupBy::Each {
                     mid: 4,
                     expr: false_array.clone(),
-                }),
+                },
             ],
-        });
+        };
         visitor.extract_expressions(&group_by);
         assert_eq!(2, visitor.expressions.len());
         assert_eq!(&[lit_42, false_array], visitor.expressions.as_slice());

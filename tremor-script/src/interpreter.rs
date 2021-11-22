@@ -37,10 +37,9 @@ mod imut_expr;
 pub use self::expr::Cont;
 use crate::{
     ast::{
-        ArrayPattern, ArrayPredicatePattern, BaseExpr, BinOpKind, ExprPath, GroupBy, GroupByInt,
-        ImutExprInt, InvokeAggrFn, NodeMetas, Patch, PatchOperation, Path, Pattern,
-        PredicatePattern, RecordPattern, ReservedPath, RunConsts, Segment, StringLit, TuplePattern,
-        UnaryOpKind,
+        ArrayPattern, ArrayPredicatePattern, BaseExpr, BinOpKind, ExprPath, GroupBy, ImutExpr,
+        InvokeAggrFn, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicatePattern,
+        RecordPattern, ReservedPath, RunConsts, Segment, StringLit, TuplePattern, UnaryOpKind,
     },
     errors::{
         err_need_obj, error_array_out_of_bound, error_bad_array_index, error_bad_key,
@@ -580,7 +579,6 @@ where
     Expr: BaseExpr,
     'event: 'run,
 {
-    use Segment::Range;
     // Resolve the targeted value by applying all path segments
     let mut subrange: Option<&[Value<'event>]> = None;
     // The current value
@@ -624,7 +622,7 @@ where
                 return error_need_arr(outer, segment, current.value_type(), env.meta);
             }
             // Next segment is an index range: index into `current`, if it's an array
-            Range { start, end, .. } => {
+            Segment::RangeExpr { start, end, .. } => {
                 if let Some(a) = current.as_array() {
                     let array = subrange.unwrap_or_else(|| a.as_slice());
                     let start = stry!(start
@@ -636,6 +634,23 @@ where
                     if end < start {
                         return error_decreasing_range(outer, segment, path, start, end, env.meta);
                     } else if end > array.len() {
+                        let r = start..end;
+                        let l = array.len();
+                        return error_array_out_of_bound(outer, segment, path, r, l, env.meta);
+                    }
+                    subrange = array.get(start..end);
+                    continue;
+                };
+                return error_need_arr(outer, segment, current.value_type(), env.meta);
+            }
+            // Next segment is an index range: index into `current`, if it's an array
+            Segment::Range { start, end, .. } => {
+                if let Some(a) = current.as_array() {
+                    let array = subrange.unwrap_or_else(|| a.as_slice());
+                    let start = *start;
+                    let end = *end;
+
+                    if end > array.len() {
                         let r = start..end;
                         let l = array.len();
                         return error_array_out_of_bound(outer, segment, path, r, l, env.meta);
@@ -778,10 +793,10 @@ enum PreEvaluatedPatchOperation<'event, 'run> {
     },
     Default {
         cow: beef::Cow<'event, str>,
-        expr: &'run ImutExprInt<'event>,
+        expr: &'run ImutExpr<'event>,
     },
     DefaultRecord {
-        expr: &'run ImutExprInt<'event>,
+        expr: &'run ImutExpr<'event>,
     },
 }
 
@@ -978,7 +993,7 @@ fn test_guard<Expr>(
     state: &Value<'static>,
     meta: &Value,
     local: &LocalStack,
-    guard: &Option<ImutExprInt>,
+    guard: &Option<ImutExpr>,
 ) -> Result<bool>
 where
     Expr: BaseExpr,
@@ -1007,7 +1022,7 @@ pub(crate) fn test_predicate_expr<Expr>(
     local: &LocalStack,
     target: &Value,
     pattern: &Pattern,
-    guard: &Option<ImutExprInt>,
+    guard: &Option<ImutExpr>,
 ) -> Result<bool>
 where
     Expr: BaseExpr,
@@ -1502,15 +1517,10 @@ impl<'script> GroupBy<'script> {
         'script: 'event,
     {
         let mut groups = Vec::with_capacity(16);
-        stry!(self
-            .0
-            .generate_groups(ctx, event, &NULL, node_meta, meta, &mut groups));
+        stry!(self.generate_groups_inner(ctx, event, &NULL, node_meta, meta, &mut groups));
         Ok(groups)
     }
-}
-
-impl<'script> GroupByInt<'script> {
-    pub(crate) fn generate_groups<'event>(
+    fn generate_groups_inner<'event>(
         &self,
         ctx: &EventContext,
         event: &Value<'event>,
@@ -1535,7 +1545,7 @@ impl<'script> GroupByInt<'script> {
             recursion_limit: crate::recursion_limit(),
         };
         match self {
-            GroupByInt::Expr { expr, .. } => {
+            GroupBy::Expr { expr, .. } => {
                 let v = stry!(expr.run(opts, &env, event, state, meta, &local_stack));
                 if let Some((last_group, other_groups)) = groups.split_last_mut() {
                     other_groups
@@ -1549,11 +1559,9 @@ impl<'script> GroupByInt<'script> {
                 Ok(())
             }
 
-            GroupByInt::Set { items, .. } => {
+            GroupBy::Set { items, .. } => {
                 for item in items {
-                    stry!(item
-                        .0
-                        .generate_groups(ctx, event, state, node_meta, meta, groups));
+                    stry!(item.generate_groups_inner(ctx, event, state, node_meta, meta, groups));
                 }
 
                 // set(event.measurement, each(record::keys(event.fields)))
@@ -1570,7 +1578,7 @@ impl<'script> GroupByInt<'script> {
                 // [["a", 7], ["b", 7], ["a", 8], ["b", 8]]
                 Ok(())
             }
-            GroupByInt::Each { expr, .. } => {
+            GroupBy::Each { expr, .. } => {
                 let v = stry!(expr.run(opts, &env, event, state, meta, &local_stack));
                 if let Some(each) = v.as_array() {
                     if groups.is_empty() {
