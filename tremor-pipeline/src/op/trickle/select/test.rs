@@ -21,10 +21,10 @@ use crate::EventId;
 
 use super::*;
 
-use tremor_script::ast::{Stmt, WindowDecl};
+use tremor_script::ast::{visitors::ConstFolder, walkers::QueryWalker, Stmt, WindowDecl};
 use tremor_script::{ast::Consts, Value};
 use tremor_script::{
-    ast::{self, Ident, ImutExpr, Literal},
+    ast::{self, Ident, Literal},
     path::ModulePath,
 };
 use tremor_value::literal;
@@ -54,14 +54,16 @@ fn test_stmt(target: ast::ImutExpr) -> ast::Select {
 }
 
 fn test_query(stmt: ast::Stmt) -> ast::Query {
+    let mut consts = Consts::default();
+    consts.args = literal!({"snot": "badger"});
     ast::Query {
         stmts: vec![stmt.clone()],
-        node_meta: ast::NodeMetas::new(Vec::new()),
+        node_meta: ast::NodeMetas::default(),
         windows: HashMap::new(),
         scripts: HashMap::new(),
         operators: HashMap::new(),
         config: HashMap::new(),
-        args: literal!({"snot": "badger"}),
+        consts,
     }
 }
 
@@ -192,6 +194,7 @@ fn test_count() -> Result<()> {
 }
 
 fn select_stmt_from_query(query_str: &str) -> Result<Select> {
+    let meta = NodeMetas::default();
     let reg = tremor_script::registry();
     let aggr_reg = tremor_script::aggr_registry();
     let module_path = tremor_script::path::load();
@@ -199,7 +202,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
     let query =
         tremor_script::query::Query::parse(&module_path, "fake", query_str, cus, &reg, &aggr_reg)
             .map_err(tremor_script::errors::CompilerError::error)?;
-    let window_decls: Vec<WindowDecl<'_>> = query
+    let mut window_decls: Vec<WindowDecl<'_>> = query
         .suffix()
         .stmts
         .iter()
@@ -211,17 +214,24 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
     let stmt = srs::Stmt::try_new_from_query(&query.query, |q| {
         q.stmts
             .iter()
-            .find(|stmt| matches!(*stmt, Stmt::Select(_)))
+            .find(|stmt| matches!(*stmt, Stmt::SelectStmt(_)))
             .cloned()
             .ok_or_else(|| Error::from("Invalid query, expected only 1 select statement"))
     })?;
     let windows: Vec<(String, window::Impl)> = window_decls
-        .iter()
+        .iter_mut()
         .enumerate()
         .map(|(i, window_decl)| {
+            let fake_consts = Consts::default();
+            let mut f = ConstFolder {
+                meta: &meta,
+                reg: &reg,
+                consts: &fake_consts,
+            };
+            f.walk_window_decl(window_decl).unwrap();
             (
                 i.to_string(),
-                window_decl_to_impl(window_decl).unwrap(), // yes, indeed!
+                window_decl_to_impl(window_decl, &meta).unwrap(), // yes, indeed!
             )
         })
         .collect();
@@ -400,7 +410,7 @@ fn select_multiple_wins_on_signal() -> Result<()> {
     eis = select.on_signal(uid, &mut state, &mut tick4)?;
     assert!(eis.insights.is_empty());
     assert_eq!(1, eis.events.len());
-    let (_port, event) = dbg!(eis).events.remove(0);
+    let (_port, event) = eis.events.remove(0);
     assert_eq!(r#"[{"cat":42}]"#, sorted_serialize(event.data.parts().0)?);
     assert_eq!(true, event.transactional);
 
@@ -435,7 +445,6 @@ fn test_transactional_single_window() -> Result<()> {
     let mut res = op.on_event(0, "in", &mut state, event2)?;
     assert_eq!(1, res.events.len());
     let (_, event) = res.events.pop().unwrap();
-    dbg!(&event);
     assert_eq!(true, event.transactional);
     assert_eq!(true, event.id.is_tracking(&id1));
     assert_eq!(true, event.id.is_tracking(&id2));
@@ -745,12 +754,12 @@ fn select_nowin_nogrp_whrt_havf() -> Result<()> {
 
 fn test_select_stmt(stmt: tremor_script::ast::Select) -> tremor_script::ast::Stmt {
     let aggregates = vec![];
-    ast::Stmt::Select(SelectStmt {
+    ast::Stmt::SelectStmt(SelectStmt {
         stmt: Box::new(stmt),
         aggregates,
         consts: Consts::default(),
         locals: 0,
-        node_meta: ast::NodeMetas::new(vec![]),
+        node_meta: ast::NodeMetas::default(),
     })
 }
 #[test]
@@ -853,8 +862,8 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
     };
     let mut params = halfbrown::HashMap::with_capacity(1);
     params.insert("size".to_string(), Value::from(3));
-    let interval = window_decl
-        .params
+    let with = window_decl.params.render(&NodeMetas::default())?;
+    let interval = with
         .get("interval")
         .and_then(Value::as_u64)
         .ok_or(Error::from("no interval found"))?;

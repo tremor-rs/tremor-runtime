@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::{
-    ArrayPattern, ArrayPredicatePattern, AssignPattern, Expression, ImutExprInt, Pattern,
+    ArrayPattern, ArrayPredicatePattern, AssignPattern, Expression, ImutExpr, Pattern,
     PredicateClause, PredicatePattern, RecordPattern, TestExpr, TuplePattern,
 };
 
@@ -71,7 +71,7 @@ impl<'script> Costly for PredicatePattern<'script> {
                 Cost::CONST
             }
             PredicatePattern::Bin {
-                rhs: ImutExprInt::Literal(_),
+                rhs: ImutExpr::Literal(_),
                 ..
             } => Cost::CONST * 2,
             PredicatePattern::Bin { .. } => Cost::AVERAGE,

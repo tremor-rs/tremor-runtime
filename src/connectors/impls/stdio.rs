@@ -22,8 +22,6 @@ use tremor_pipeline::{EventOriginUri, DEFAULT_STREAM_ID};
 
 const INPUT_SIZE_BYTES: usize = 8192;
 
-// FIXME: consider stderr being a port or metadata instead of a own version of the connector
-
 lazy_static! {
     pub(crate) static ref STDIN: Receiver<Vec<u8>> = {
         // This gets initialized only once - the first time a stdio connector

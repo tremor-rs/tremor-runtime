@@ -1,10 +1,7 @@
 define pipeline identity
 args
   snot = "1",
-config
-  snot = "#{args.snot}2",
 pipeline
   select args from in into out;
 end;
 
-deploy identity;

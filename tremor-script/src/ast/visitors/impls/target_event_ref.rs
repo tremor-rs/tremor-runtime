@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::prelude::*;
+use super::super::prelude::*;
 use crate::errors::error_event_ref_not_allowed;
 
 /// analyze the select target expr if it references the event outside of an aggregate function
@@ -23,14 +23,11 @@ use crate::errors::error_event_ref_not_allowed;
 pub(crate) struct TargetEventRef<'script, 'meta> {
     rewritten: bool,
     meta: &'meta NodeMetas,
-    group_expressions: Vec<ImutExprInt<'script>>,
+    group_expressions: Vec<ImutExpr<'script>>,
 }
 
 impl<'script, 'meta> TargetEventRef<'script, 'meta> {
-    pub(crate) fn new(
-        group_expressions: Vec<ImutExprInt<'script>>,
-        meta: &'meta NodeMetas,
-    ) -> Self {
+    pub(crate) fn new(group_expressions: Vec<ImutExpr<'script>>, meta: &'meta NodeMetas) -> Self {
         Self {
             rewritten: false,
             meta,
@@ -38,19 +35,19 @@ impl<'script, 'meta> TargetEventRef<'script, 'meta> {
         }
     }
 
-    pub(crate) fn rewrite_target(&mut self, target: &mut ImutExprInt<'script>) -> Result<bool> {
+    pub(crate) fn rewrite_target(&mut self, target: &mut ImutExpr<'script>) -> Result<bool> {
         self.walk_expr(target)?;
         Ok(self.rewritten)
     }
 }
 impl<'script, 'meta> ImutExprWalker<'script> for TargetEventRef<'script, 'meta> {}
 impl<'script, 'meta> ImutExprVisitor<'script> for TargetEventRef<'script, 'meta> {
-    fn visit_expr(&mut self, e: &mut ImutExprInt<'script>) -> Result<VisitRes> {
+    fn visit_expr(&mut self, e: &mut ImutExpr<'script>) -> Result<VisitRes> {
         for (idx, group_expr) in self.group_expressions.iter().enumerate() {
             // check if we have an equivalent expression :)
             if e.ast_eq(group_expr) {
                 // rewrite it:
-                *e = ImutExprInt::Path(Path::Reserved(crate::ast::ReservedPath::Group {
+                *e = ImutExpr::Path(Path::Reserved(crate::ast::ReservedPath::Group {
                     mid: e.mid(),
                     segments: vec![crate::ast::Segment::Idx { mid: e.mid(), idx }],
                 }));

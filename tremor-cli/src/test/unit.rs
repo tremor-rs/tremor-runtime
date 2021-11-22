@@ -24,7 +24,7 @@ use std::{collections::HashMap, path::Path};
 use test::tag;
 use tremor_common::time::nanotime;
 use tremor_script::ast::base_expr::BaseExpr;
-use tremor_script::ast::{Expr, ImutExpr, ImutExprInt, Invoke, List, Record};
+use tremor_script::ast::{Expr, ImutExpr, Invoke, List, Record};
 use tremor_script::ctx::EventContext;
 use tremor_script::highlighter::{Dumb as DumbHighlighter, Highlighter, Term as TermHighlighter};
 use tremor_script::interpreter::{AggrType, Env, ExecOpts, LocalStack};
@@ -50,7 +50,7 @@ fn eval_suite_entrypoint(
 
     let spec = suite_spec
         .get_field_expr("tests")
-        .and_then(ImutExprInt::as_list)
+        .and_then(ImutExpr::as_list)
         .ok_or("Missing suite tests")?;
 
     if let Ok((s, mut e)) = eval_suite_tests(env, local, script, spec, tags, config) {
@@ -68,7 +68,7 @@ fn eval_suite_entrypoint(
     Ok((stats, elements))
 }
 
-fn eval(expr: &ImutExprInt, env: &Env, local: &LocalStack) -> Result<Value<'static>> {
+fn eval(expr: &ImutExpr, env: &Env, local: &LocalStack) -> Result<Value<'static>> {
     let state = Value::object();
     let meta = Value::object();
     let event = Value::object();
@@ -91,9 +91,9 @@ fn eval_suite_tests(
 
     let ll = suite_spec.exprs.len();
     for (idx, item) in suite_spec.exprs.iter().enumerate() {
-        if let ImutExpr(ImutExprInt::Invoke1(Invoke {
+        if let ImutExpr::Invoke1(Invoke {
             module, fun, args, ..
-        })) = item
+        }) = item
         {
             if module != &["test"] || fun != "test" {
                 continue;

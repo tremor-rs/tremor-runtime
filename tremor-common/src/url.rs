@@ -33,7 +33,7 @@ pub enum Scope {
     /// This URL identifies a specific port
     Port,
     /// This URL identifies a servant (a running instance)
-    Servant,
+    Instance,
     /// This URL identifes an artefact (a non running configuration)
     Artefact,
     /// This URL identifies a type of artefact
@@ -113,7 +113,7 @@ macro_rules! from_instance_id {
         ///
         /// # Errors
         /// . * If the given ids are invalid
-        pub fn $name(artefact_id: &str, instance_id: &str) -> Result<Self> {
+        pub fn $name(artefact_id: &str, instance_id: &str) -> Self {
             Self::from_instance($resource_type, artefact_id, instance_id)
         }
     };
@@ -159,11 +159,18 @@ impl TremorUrl {
     /// # Errors
     ///  * if the passed ids aren't valid
     pub fn from_instance(
-        resource: ResourceType,
+        resource_type: ResourceType,
         artefact_id: &str,
         instance_id: &str,
-    ) -> Result<Self> {
-        Self::parse(&format!("/{}/{}/{}", resource, artefact_id, instance_id))
+    ) -> Self {
+        Self {
+            resource_type: Some(resource_type),
+            artefact: Some(artefact_id.to_string()),
+            scope: Scope::Instance,
+            host: "localhost".to_string(),
+            instance: Some(instance_id.to_string()),
+            instance_port: None,
+        }
     }
 
     from_instance_id!(from_binding_instance, ResourceType::Binding);
@@ -181,10 +188,11 @@ impl TremorUrl {
             .path_segments()
             .map(std::iter::Iterator::collect::<Vec<_>>)
         {
+            dbg!(&url);
             let (scope, resource_type, artefact, instance, instance_port) = if relative {
                 // TODO: This is not correct!
                 match parts.as_slice() {
-                    [port] => (Scope::Servant, None, None, None, Some((*port).to_string())),
+                    [port] => (Scope::Instance, None, None, None, Some((*port).to_string())),
                     [instance, port] => (
                         Scope::Type,
                         None,
@@ -224,7 +232,7 @@ impl TremorUrl {
                         Some((*port).to_string()),
                     ),
                     [resource_type, artefact, instance] => (
-                        Scope::Servant,
+                        Scope::Instance,
                         Some(decode_type(resource_type)?),
                         Some((*artefact).to_string()),
                         Some((*instance).to_string()),
@@ -285,7 +293,7 @@ impl TremorUrl {
     /// Trims the url to the instance
     pub fn trim_to_instance(&mut self) {
         self.instance_port = None;
-        self.scope = Scope::Servant;
+        self.scope = Scope::Instance;
     }
 
     /// Return a clone which is trimmed to the instance
@@ -312,7 +320,7 @@ impl TremorUrl {
     {
         self.instance = Some(i.to_string());
         if self.scope == Scope::Artefact {
-            self.scope = Scope::Servant;
+            self.scope = Scope::Instance;
         }
     }
 
@@ -324,7 +332,7 @@ impl TremorUrl {
         S: ToString + ?Sized,
     {
         self.instance_port = Some(i.to_string());
-        if self.scope == Scope::Servant {
+        if self.scope == Scope::Instance {
             self.scope = Scope::Port;
         }
     }
@@ -335,7 +343,7 @@ impl TremorUrl {
         S: ToString + ?Sized,
     {
         self.instance_port = Some(i.to_string());
-        if self.scope == Scope::Servant {
+        if self.scope == Scope::Instance {
             self.scope = Scope::Port;
         }
         self
@@ -469,7 +477,7 @@ mod test {
     #[test]
     fn test_servant_scope() -> Result<()> {
         let url = TremorUrl::parse("in")?;
-        assert_eq!(Scope::Servant, url.scope());
+        assert_eq!(Scope::Instance, url.scope());
         assert_eq!(None, url.resource_type());
         assert_eq!(None, url.artefact());
         Ok(())
@@ -517,7 +525,7 @@ mod test {
         assert_eq!(Some("main"), url.artefact());
         assert_eq!(None, url.instance());
         url.set_instance("inst");
-        assert_eq!(Scope::Servant, url.scope());
+        assert_eq!(Scope::Instance, url.scope());
         assert_eq!(Some("inst"), url.instance());
 
         Ok(())

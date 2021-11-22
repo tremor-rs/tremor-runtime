@@ -14,7 +14,7 @@
 
 pub use crate::interpreter::AggrType;
 use crate::{
-    ast::{Docs, Helper, Warning, Warnings},
+    ast::{visitors::ConstFolder, walkers::QueryWalker, Docs, Helper, Warning, Warnings},
     ctx::EventContext,
     errors::{CompilerError, Error, Result},
     highlighter::{Dumb as DumbHighlighter, Highlighter},
@@ -27,7 +27,6 @@ use crate::{
 };
 use serde::Serialize;
 use std::io::{self, Write};
-use tremor_value::literal;
 
 /// Return of a script execution
 #[derive(Debug, Serialize, PartialEq)]
@@ -68,7 +67,7 @@ impl Script {
         self.warnings.iter()
     }
 
-    /// Parses a string and turns it into a script
+    /// Parses a string and turns it into a script with the supplied parameters/arguments
     ///
     /// # Errors
     /// if the script can not be parsed
@@ -77,22 +76,6 @@ impl Script {
         file_name: &str,
         script: String,
         reg: &Registry,
-        // aggr_reg: &AggrRegistry, - we really should shadow and provide a nice hygienic error TODO but not today
-    ) -> std::result::Result<Self, CompilerError> {
-        Script::parse_with_args(module_path, file_name, script, reg, &literal!({}))
-    }
-
-    /// Parses a string and turns it into a script with the supplied parameters/arguments
-    ///
-    /// # Errors
-    /// if the script can not be parsed
-    pub fn parse_with_args(
-        module_path: &ModulePath,
-        file_name: &str,
-        script: String,
-        reg: &Registry,
-        args: &Value<'_>,
-        // aggr_reg: &AggrRegistry, - we really should shadow and provide a nice hygienic error TODO but not today
     ) -> std::result::Result<Self, CompilerError> {
         let mut include_stack = lexer::IncludeStack::default();
         let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
@@ -115,8 +98,9 @@ impl Script {
                 let script_raw = grammar::ScriptParser::new().parse(filtered_tokens)?;
                 let fake_aggr_reg = AggrRegistry::default();
                 let mut helper = Helper::new(reg, &fake_aggr_reg, include_stack.cus.clone());
-                helper.consts.args = args.clone_static();
-                let screw_rust = script_raw.up_script(&mut helper)?;
+                // helper.consts.args = args.clone_static();
+                let mut screw_rust = script_raw.up_script(&mut helper)?;
+                ConstFolder::new(&helper).walk_script(&mut screw_rust)?;
                 std::mem::swap(&mut warnings, &mut helper.warnings);
                 Ok(screw_rust)
             })?;

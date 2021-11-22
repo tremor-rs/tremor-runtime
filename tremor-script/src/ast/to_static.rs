@@ -16,13 +16,13 @@
 #![cfg(not(tarpaulin_include))]
 
 use super::{
-    query::WindowDecl, ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr, Bytes,
-    BytesPart, ClauseGroup, ClausePreCondition, Comprehension, ComprehensionCase, Consts,
-    DefaultCase, EmitExpr, EventPath, Expr, ExprPath, Field, IfElse, ImutExpr, ImutExprInt,
-    Invocable, Invoke, InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath,
-    OperatorDecl, Patch, PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record,
-    RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
-    TuplePattern, UnaryExpr,
+    query::WindowDecl, ArgsExprs, ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr,
+    Bytes, BytesPart, ClauseGroup, ClausePreCondition, Comprehension, ComprehensionCase, Consts,
+    CreationalWith, DefaultCase, DefinitioalArgs, DefinitioalArgsWith, EmitExpr, EventPath, Expr,
+    ExprPath, Field, Ident, IfElse, ImutExpr, Invocable, Invoke, InvokeAggrFn, List, Literal,
+    LocalPath, Match, Merge, MetadataPath, OperatorDecl, Patch, PatchOperation, Path, Pattern,
+    PredicateClause, PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Script, Segment,
+    StatePath, StrLitElement, StringLit, TuplePattern, UnaryExpr, WithExprs,
 };
 use crate::CustomFn;
 use beef::Cow;
@@ -30,35 +30,30 @@ use tremor_value::Value;
 
 impl<'script> ImutExpr<'script> {
     pub(crate) fn into_static(self) -> ImutExpr<'static> {
-        ImutExpr(self.0.into_static())
-    }
-}
-impl<'script> ImutExprInt<'script> {
-    pub(crate) fn into_static(self) -> ImutExprInt<'static> {
         match self {
-            ImutExprInt::Record(e) => ImutExprInt::Record(e.into_static()),
-            ImutExprInt::List(e) => ImutExprInt::List(e.into_static()),
-            ImutExprInt::Binary(e) => ImutExprInt::Binary(Box::new(e.into_static())),
-            ImutExprInt::Unary(e) => ImutExprInt::Unary(Box::new(e.into_static())),
-            ImutExprInt::Patch(e) => ImutExprInt::Patch(Box::new(e.into_static())),
-            ImutExprInt::Match(e) => ImutExprInt::Match(Box::new(e.into_static())),
-            ImutExprInt::Comprehension(e) => ImutExprInt::Comprehension(Box::new(e.into_static())),
-            ImutExprInt::Merge(e) => ImutExprInt::Merge(Box::new(e.into_static())),
-            ImutExprInt::Path(p) => ImutExprInt::Path(p.into_static()),
-            ImutExprInt::String(e) => ImutExprInt::String(e.into_static()),
-            ImutExprInt::Local { idx, mid, is_const } => ImutExprInt::Local { idx, mid, is_const },
-            ImutExprInt::Literal(l) => ImutExprInt::Literal(l.into_static()),
-            ImutExprInt::Present { path, mid } => ImutExprInt::Present {
+            ImutExpr::Record(e) => ImutExpr::Record(e.into_static()),
+            ImutExpr::List(e) => ImutExpr::List(e.into_static()),
+            ImutExpr::Binary(e) => ImutExpr::Binary(Box::new(e.into_static())),
+            ImutExpr::Unary(e) => ImutExpr::Unary(Box::new(e.into_static())),
+            ImutExpr::Patch(e) => ImutExpr::Patch(Box::new(e.into_static())),
+            ImutExpr::Match(e) => ImutExpr::Match(Box::new(e.into_static())),
+            ImutExpr::Comprehension(e) => ImutExpr::Comprehension(Box::new(e.into_static())),
+            ImutExpr::Merge(e) => ImutExpr::Merge(Box::new(e.into_static())),
+            ImutExpr::Path(p) => ImutExpr::Path(p.into_static()),
+            ImutExpr::String(e) => ImutExpr::String(e.into_static()),
+            ImutExpr::Local { idx, mid, is_const } => ImutExpr::Local { idx, mid, is_const },
+            ImutExpr::Literal(l) => ImutExpr::Literal(l.into_static()),
+            ImutExpr::Present { path, mid } => ImutExpr::Present {
                 path: path.into_static(),
                 mid,
             },
-            ImutExprInt::Invoke1(i) => ImutExprInt::Invoke1(i.into_static()),
-            ImutExprInt::Invoke2(i) => ImutExprInt::Invoke2(i.into_static()),
-            ImutExprInt::Invoke3(i) => ImutExprInt::Invoke3(i.into_static()),
-            ImutExprInt::Invoke(i) => ImutExprInt::Invoke(i.into_static()),
-            ImutExprInt::InvokeAggr(e) => ImutExprInt::InvokeAggr(e),
-            ImutExprInt::Recur(r) => ImutExprInt::Recur(r.into_static()),
-            ImutExprInt::Bytes(e) => ImutExprInt::Bytes(e.into_static()),
+            ImutExpr::Invoke1(i) => ImutExpr::Invoke1(i.into_static()),
+            ImutExpr::Invoke2(i) => ImutExpr::Invoke2(i.into_static()),
+            ImutExpr::Invoke3(i) => ImutExpr::Invoke3(i.into_static()),
+            ImutExpr::Invoke(i) => ImutExpr::Invoke(i.into_static()),
+            ImutExpr::InvokeAggr(e) => ImutExpr::InvokeAggr(e),
+            ImutExpr::Recur(r) => ImutExpr::Recur(r.into_static()),
+            ImutExpr::Bytes(e) => ImutExpr::Bytes(e.into_static()),
         }
     }
 }
@@ -263,8 +258,8 @@ impl<'script> Merge<'script> {
     }
 }
 
-impl<'script> Match<'script, ImutExprInt<'script>> {
-    pub(crate) fn into_static(self) -> Match<'static, ImutExprInt<'static>> {
+impl<'script> Match<'script, ImutExpr<'script>> {
+    pub(crate) fn into_static(self) -> Match<'static, ImutExpr<'static>> {
         let Match {
             mid,
             target,
@@ -276,7 +271,7 @@ impl<'script> Match<'script, ImutExprInt<'script>> {
             target: target.into_static(),
             patterns: patterns
                 .into_iter()
-                .map(ClauseGroup::<ImutExprInt>::into_static)
+                .map(ClauseGroup::<ImutExpr>::into_static)
                 .collect(),
             default: default.into_static(),
         }
@@ -336,8 +331,8 @@ impl<'script> IfElse<'script, Expr<'script>> {
     }
 }
 
-impl<'script> ClauseGroup<'script, ImutExprInt<'script>> {
-    pub(crate) fn into_static(self) -> ClauseGroup<'static, ImutExprInt<'static>> {
+impl<'script> ClauseGroup<'script, ImutExpr<'script>> {
+    pub(crate) fn into_static(self) -> ClauseGroup<'static, ImutExpr<'static>> {
         match self {
             ClauseGroup::Simple {
                 precondition,
@@ -346,7 +341,7 @@ impl<'script> ClauseGroup<'script, ImutExprInt<'script>> {
                 precondition: precondition.map(ClausePreCondition::into_static),
                 patterns: patterns
                     .into_iter()
-                    .map(PredicateClause::<ImutExprInt>::into_static)
+                    .map(PredicateClause::<ImutExpr>::into_static)
                     .collect(),
             },
             ClauseGroup::SearchTree {
@@ -362,7 +357,7 @@ impl<'script> ClauseGroup<'script, ImutExprInt<'script>> {
                             v.into_static(),
                             (
                                 es.into_iter()
-                                    .map(ImutExprInt::into_static)
+                                    .map(ImutExpr::into_static)
                                     .collect::<Vec<_>>(),
                                 e.into_static(),
                             ),
@@ -371,7 +366,7 @@ impl<'script> ClauseGroup<'script, ImutExprInt<'script>> {
                     .collect(),
                 rest: rest
                     .into_iter()
-                    .map(PredicateClause::<ImutExprInt>::into_static)
+                    .map(PredicateClause::<ImutExpr>::into_static)
                     .collect(),
             },
             ClauseGroup::Combined {
@@ -381,7 +376,7 @@ impl<'script> ClauseGroup<'script, ImutExprInt<'script>> {
                 precondition: precondition.map(ClausePreCondition::into_static),
                 groups: groups
                     .into_iter()
-                    .map(ClauseGroup::<ImutExprInt>::into_static)
+                    .map(ClauseGroup::<ImutExpr>::into_static)
                     .collect(),
             },
             ClauseGroup::Single {
@@ -452,8 +447,8 @@ impl<'script> ClauseGroup<'script, Expr<'script>> {
     }
 }
 
-impl<'script> PredicateClause<'script, ImutExprInt<'script>> {
-    pub(crate) fn into_static(self) -> PredicateClause<'static, ImutExprInt<'static>> {
+impl<'script> PredicateClause<'script, ImutExpr<'script>> {
+    pub(crate) fn into_static(self) -> PredicateClause<'static, ImutExpr<'static>> {
         let PredicateClause {
             mid,
             pattern,
@@ -465,8 +460,8 @@ impl<'script> PredicateClause<'script, ImutExprInt<'script>> {
         PredicateClause {
             mid,
             pattern: pattern.into_static(),
-            guard: guard.map(ImutExprInt::into_static),
-            exprs: exprs.into_iter().map(ImutExprInt::into_static).collect(),
+            guard: guard.map(ImutExpr::into_static),
+            exprs: exprs.into_iter().map(ImutExpr::into_static).collect(),
             last_expr: last_expr.into_static(),
         }
     }
@@ -485,20 +480,20 @@ impl<'script> PredicateClause<'script, Expr<'script>> {
         PredicateClause {
             mid,
             pattern: pattern.into_static(),
-            guard: guard.map(ImutExprInt::into_static),
+            guard: guard.map(ImutExpr::into_static),
             exprs: exprs.into_iter().map(Expr::into_static).collect(),
             last_expr: last_expr.into_static(),
         }
     }
 }
 
-impl<'script> DefaultCase<ImutExprInt<'script>> {
-    pub(crate) fn into_static(self) -> DefaultCase<ImutExprInt<'static>> {
+impl<'script> DefaultCase<ImutExpr<'script>> {
+    pub(crate) fn into_static(self) -> DefaultCase<ImutExpr<'static>> {
         match self {
             DefaultCase::None => DefaultCase::None,
             DefaultCase::Null => DefaultCase::Null,
             DefaultCase::Many { exprs, last_expr } => DefaultCase::Many {
-                exprs: exprs.into_iter().map(ImutExprInt::into_static).collect(),
+                exprs: exprs.into_iter().map(ImutExpr::into_static).collect(),
                 last_expr: Box::new(last_expr.into_static()),
             },
             DefaultCase::One(e) => DefaultCase::One(e.into_static()),
@@ -520,8 +515,8 @@ impl<'script> DefaultCase<Expr<'script>> {
     }
 }
 
-impl<'script> Comprehension<'script, ImutExprInt<'script>> {
-    pub(crate) fn into_static(self) -> Comprehension<'static, ImutExprInt<'static>> {
+impl<'script> Comprehension<'script, ImutExpr<'script>> {
+    pub(crate) fn into_static(self) -> Comprehension<'static, ImutExpr<'static>> {
         let Comprehension {
             mid,
             key_id,
@@ -536,7 +531,7 @@ impl<'script> Comprehension<'script, ImutExprInt<'script>> {
             target: target.into_static(),
             cases: cases
                 .into_iter()
-                .map(ComprehensionCase::<ImutExprInt>::into_static)
+                .map(ComprehensionCase::<ImutExpr>::into_static)
                 .collect(),
         }
     }
@@ -563,8 +558,8 @@ impl<'script> Comprehension<'script, Expr<'script>> {
     }
 }
 
-impl<'script> ComprehensionCase<'script, ImutExprInt<'script>> {
-    pub(crate) fn into_static(self) -> ComprehensionCase<'static, ImutExprInt<'static>> {
+impl<'script> ComprehensionCase<'script, ImutExpr<'script>> {
+    pub(crate) fn into_static(self) -> ComprehensionCase<'static, ImutExpr<'static>> {
         let ComprehensionCase {
             mid,
             key_name,
@@ -577,8 +572,8 @@ impl<'script> ComprehensionCase<'script, ImutExprInt<'script>> {
             mid,
             key_name: Cow::owned(key_name.to_string()),
             value_name: Cow::owned(value_name.to_string()),
-            guard: guard.map(ImutExprInt::into_static),
-            exprs: exprs.into_iter().map(ImutExprInt::into_static).collect(),
+            guard: guard.map(ImutExpr::into_static),
+            exprs: exprs.into_iter().map(ImutExpr::into_static).collect(),
             last_expr: last_expr.into_static(),
         }
     }
@@ -598,7 +593,7 @@ impl<'script> ComprehensionCase<'script, Expr<'script>> {
             mid,
             key_name: Cow::owned(key_name.to_string()),
             value_name: Cow::owned(value_name.to_string()),
-            guard: guard.map(ImutExprInt::into_static),
+            guard: guard.map(ImutExpr::into_static),
             exprs: exprs.into_iter().map(Expr::into_static).collect(),
             last_expr: last_expr.into_static(),
         }
@@ -749,13 +744,14 @@ impl<'script> Segment<'script> {
                 expr: expr.into_static(),
                 mid,
             },
-            Segment::Range {
+            Segment::Range { mid, start, end } => Segment::Range { mid, start, end },
+            Segment::RangeExpr {
                 lower_mid,
                 upper_mid,
                 mid,
                 start,
                 end,
-            } => Segment::Range {
+            } => Segment::RangeExpr {
                 lower_mid,
                 upper_mid,
                 mid,
@@ -772,7 +768,7 @@ impl<'script> EmitExpr<'script> {
         EmitExpr {
             mid,
             expr: expr.into_static(),
-            port: port.map(ImutExprInt::into_static),
+            port: port.map(ImutExpr::into_static),
         }
     }
 }
@@ -1068,12 +1064,42 @@ impl<'script> WindowDecl<'script> {
             node_id,
             mid,
             kind,
-            params: params
-                .into_iter()
-                .map(|(k, v)| (k, v.into_static()))
-                .collect(),
-
+            params: params.into_static(),
             script: script.map(Script::into_static),
+        }
+    }
+}
+impl<'script> CreationalWith<'script> {
+    /// Removes lifetime dependencies from a `CreationalWith`
+    #[must_use]
+    pub fn into_static(self) -> CreationalWith<'static> {
+        CreationalWith {
+            with: self.with.into_static(),
+        }
+    }
+}
+
+impl<'script> WithExprs<'script> {
+    /// Removes lifetime dependencies from a `WithExprs`
+    #[must_use]
+    pub fn into_static(self) -> WithExprs<'static> {
+        WithExprs(
+            self.0
+                .into_iter()
+                .map(|(k, v)| (k.into_static(), v.into_static()))
+                .collect(),
+        )
+    }
+}
+
+impl<'script> Ident<'script> {
+    /// Removes lifetime dependencies from a `WithExprs`
+    #[must_use]
+    pub fn into_static(self) -> Ident<'static> {
+        let Ident { mid, id } = self;
+        Ident {
+            mid,
+            id: id.into_owned().into(),
         }
     }
 }
@@ -1092,10 +1118,41 @@ impl<'script> OperatorDecl<'script> {
             node_id,
             mid,
             kind,
-            params: params
-                .into_iter()
-                .map(|(k, v)| (k, v.into_static()))
-                .collect(),
+            params: params.into_static(),
         }
+    }
+}
+
+impl<'script> DefinitioalArgs<'script> {
+    /// Removes lifetime dependencies from a `CreationalWith`
+    #[must_use]
+    pub fn into_static(self) -> DefinitioalArgs<'static> {
+        DefinitioalArgs {
+            args: self.args.into_static(),
+        }
+    }
+}
+
+impl<'script> DefinitioalArgsWith<'script> {
+    /// Removes lifetime dependencies from a `CreationalWith`
+    #[must_use]
+    pub fn into_static(self) -> DefinitioalArgsWith<'static> {
+        DefinitioalArgsWith {
+            with: self.with.into_static(),
+            args: self.args.into_static(),
+        }
+    }
+}
+
+impl<'script> ArgsExprs<'script> {
+    /// Removes lifetime dependencies from a `WithExprs`
+    #[must_use]
+    pub fn into_static(self) -> ArgsExprs<'static> {
+        ArgsExprs(
+            self.0
+                .into_iter()
+                .map(|(k, v)| (k.into_static(), v.map(ImutExpr::into_static)))
+                .collect(),
+        )
     }
 }
