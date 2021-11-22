@@ -16,15 +16,15 @@ use crate::connectors::ConnectorType;
 use either::Either;
 use hashbrown::HashMap;
 use tremor_common::url::TremorUrl;
+use tremor_script::ast::ConnectStmt;
 
 pub(crate) type Id = String;
 pub(crate) type ConnectorVec = Vec<Connector>;
 pub(crate) type BindingVec = Vec<Binding>;
-pub(crate) type BindingMap = HashMap<TremorUrl, Vec<TremorUrl>>;
 pub(crate) type MappingMap = HashMap<TremorUrl, HashMap<String, String>>;
 
 /// A full tremor config
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default = "Default::default")]
@@ -194,7 +194,7 @@ pub struct Connector {
 }
 
 /// Configuration for a Binding
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Binding {
     /// ID of the binding
@@ -203,7 +203,7 @@ pub struct Binding {
     /// Description
     pub description: String,
     /// Binding map
-    pub links: BindingMap, // is this right? this should be url to url?
+    pub links: Vec<ConnectStmt>, // is this right? this should be url to url?
 }
 
 #[cfg(test)]

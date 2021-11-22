@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::{FResult, FunctionError, Result};
-use crate::ast::{Expr, Exprs, FnDecl, ImutExpr, ImutExprInt, ImutExprs, InvokeAggrFn};
+use crate::ast::{Expr, Exprs, FnDecl, ImutExpr, ImutExprs, InvokeAggrFn};
 use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
 use crate::prelude::*;
 use crate::Value;
@@ -70,16 +70,16 @@ impl<'script> CustomFn<'script> {
         }
         let i = match self.body.first() {
             Some(Expr::Imut(
-                ImutExprInt::Invoke1(i)
-                | ImutExprInt::Invoke2(i)
-                | ImutExprInt::Invoke3(i)
-                | ImutExprInt::Invoke(i),
+                ImutExpr::Invoke1(i)
+                | ImutExpr::Invoke2(i)
+                | ImutExpr::Invoke3(i)
+                | ImutExpr::Invoke(i),
             )) => i,
             _ => return false,
         };
         let mut a_idx = 0;
         for a in &i.args {
-            if let ImutExpr(ImutExprInt::Local { idx, .. }) = a {
+            if let ImutExpr::Local { idx, .. } = a {
                 if *idx != a_idx {
                     return false;
                 }
@@ -91,21 +91,17 @@ impl<'script> CustomFn<'script> {
 
         true
     }
-    pub(crate) fn inline(
-        &self,
-        args: ImutExprs<'script>,
-        mid: usize,
-    ) -> Result<ImutExprInt<'script>> {
+    pub(crate) fn inline(&self, args: ImutExprs<'script>, mid: usize) -> Result<ImutExpr<'script>> {
         if self.body.len() != 1 {
             return Err(format!("can't inline {}: too large body", self.name).into());
         }
 
         let i = match self.body.first() {
             Some(Expr::Imut(
-                ImutExprInt::Invoke1(i)
-                | ImutExprInt::Invoke2(i)
-                | ImutExprInt::Invoke3(i)
-                | ImutExprInt::Invoke(i),
+                ImutExpr::Invoke1(i)
+                | ImutExpr::Invoke2(i)
+                | ImutExpr::Invoke3(i)
+                | ImutExpr::Invoke(i),
             )) => i,
             Some(e) => {
                 return Err(format!("can't inline {}: bad expression: {:?}", self.name, e).into())
@@ -122,10 +118,10 @@ impl<'script> CustomFn<'script> {
         i.args = args;
 
         Ok(match i.args.len() {
-            1 => ImutExprInt::Invoke1(i),
-            2 => ImutExprInt::Invoke2(i),
-            3 => ImutExprInt::Invoke3(i),
-            _ => ImutExprInt::Invoke(i),
+            1 => ImutExpr::Invoke1(i),
+            2 => ImutExpr::Invoke2(i),
+            3 => ImutExpr::Invoke3(i),
+            _ => ImutExpr::Invoke(i),
         })
     }
 

@@ -14,7 +14,11 @@
 
 use crate::op::prelude::*;
 use beef::Cow;
-use tremor_script::{ast, prelude::*, srs};
+use tremor_script::{
+    ast::{self, Helper},
+    prelude::*,
+    srs,
+};
 #[derive(Debug)]
 pub(crate) struct TrickleOperator {
     pub id: String,
@@ -47,7 +51,12 @@ fn mk_node_config(id: String, op_type: String, config: HashMap<String, Value>) -
 }
 
 impl TrickleOperator {
-    pub fn with_stmt(operator_uid: u64, id: String, decl: &srs::Stmt) -> Result<Self> {
+    pub fn with_stmt(
+        operator_uid: u64,
+        id: String,
+        decl: &srs::Stmt,
+        helper: &mut Helper,
+    ) -> Result<Self> {
         use crate::operator;
         let stmt = decl.suffix();
         let op: Box<dyn Operator> = match stmt {
@@ -56,7 +65,7 @@ impl TrickleOperator {
                 let config = mk_node_config(
                     op.node_id.id().to_string(),
                     format!("{}::{}", op.kind.module, op.kind.operation),
-                    op.params,
+                    op.params.generate_config(helper)?,
                 );
                 operator(operator_uid, &config)?
             }

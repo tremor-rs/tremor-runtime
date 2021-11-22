@@ -21,6 +21,7 @@ use async_std::prelude::FutureExt;
 use async_std::task::JoinHandle;
 use beef::Cow;
 use halfbrown::HashMap;
+use log::{debug, info};
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_common::url::{
@@ -57,7 +58,7 @@ impl ConnectorHarness {
     ) -> Result<Self> {
         let (world, handle) = World::start(WorldConfig::default()).await?;
         let raw_config = serde_yaml::from_slice::<config::Connector>(config.as_bytes())?;
-        let id = TremorUrl::from_connector_instance(raw_config.id.as_str(), "test")?;
+        let id = TremorUrl::from_connector_instance(raw_config.id.as_str(), "test");
         let _connector_config = world.repo.publish_connector(&id, false, raw_config).await?;
         let connector_addr = world.create_connector_instance(&id).await?;
         let mut pipes = HashMap::new();
@@ -68,7 +69,7 @@ impl ConnectorHarness {
             let pipeline_id = TremorUrl::from_pipeline_instance(
                 format!("TEST__{}_pipeline", port).as_str(),
                 "01",
-            )?
+            )
             .with_port(&IN);
             let pipeline = TestPipeline::new(pipeline_id.clone());
             connector_addr

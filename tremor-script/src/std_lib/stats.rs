@@ -983,7 +983,7 @@ mod test {
         a.accumulate(&[&nineteen])?;
         a.accumulate(&[&nine])?;
         let r = a.emit()?.cast_f64().expect("screw it");
-        assert!(approx_eq!(f64, dbg!(r), 173.0 / 3.0));
+        assert!(approx_eq!(f64, r, 173.0 / 3.0));
 
         let mut b = Var::default();
         b.init();
@@ -991,18 +991,18 @@ mod test {
         b.accumulate(&[&four])?;
         b.merge(&a)?;
         let r = b.emit()?.cast_f64().expect("screw it");
-        assert!(approx_eq!(f64, dbg!(r), 43.066_666_666_666_67));
+        assert!(approx_eq!(f64, r, 43.066_666_666_666_67));
 
         let mut c = Var::default();
         c.init();
         c.accumulate(&[&two])?;
         c.accumulate(&[&four])?;
         let r = c.emit()?.cast_f64().expect("screw it");
-        assert!(approx_eq!(f64, dbg!(r), 2.0));
+        assert!(approx_eq!(f64, r, 2.0));
 
         b.merge(&c)?;
         let r = b.emit()?.cast_f64().expect("screw it");
-        assert!(approx_eq!(f64, dbg!(r), 33.928_571_428_571_43));
+        assert!(approx_eq!(f64, r, 33.928_571_428_571_43));
 
         assert_eq!(a.arity(), 1..=1);
 

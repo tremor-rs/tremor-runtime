@@ -33,7 +33,7 @@ use petgraph::algo::is_cyclic_directed;
 use tremor_common::ids::OperatorIdGen;
 use tremor_script::{
     ast::{
-        self, BaseExpr, CompilationUnit, Ident, NodeMetas, PipelineStmt, SelectType, Stmt,
+        self, BaseExpr, CompilationUnit, Helper, Ident, NodeMetas, PipelineStmt, SelectType, Stmt,
         WindowDecl, WindowKind,
     },
     errors::{
@@ -87,21 +87,21 @@ fn resolve_output_port(port: &(Ident, Ident), meta: &NodeMetas) -> OutputPort {
     }
 }
 
-pub(crate) fn window_decl_to_impl(d: &WindowDecl) -> Result<window::Impl> {
+pub(crate) fn window_decl_to_impl(d: &WindowDecl, meta: &NodeMetas) -> Result<window::Impl> {
     use op::trickle::window::{TumblingOnNumber, TumblingOnTime};
     match &d.kind {
         WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
         WindowKind::Tumbling => {
             let script = if d.script.is_some() { Some(d) } else { None };
-            let max_groups = d
-                .params
+            let with = d.params.render(meta)?;
+            let max_groups = with
                 .get(WindowDecl::MAX_GROUPS)
                 .and_then(Value::as_usize)
                 .unwrap_or(window::Impl::DEFAULT_MAX_GROUPS);
 
             match (
-                d.params.get(WindowDecl::INTERVAL).and_then(Value::as_u64),
-                d.params.get(WindowDecl::SIZE).and_then(Value::as_u64),
+                with.get(WindowDecl::INTERVAL).and_then(Value::as_u64),
+                with.get(WindowDecl::SIZE).and_then(Value::as_u64),
             ) {
                 (Some(interval), None) => Ok(window::Impl::from(TumblingOnTime::from_stmt(
                     interval, max_groups, script,
@@ -162,30 +162,6 @@ impl Query {
         )?))
     }
 
-    /// Parse a query with arguments
-    ///
-    /// # Errors
-    /// if the trickle script can not be parsed
-    pub fn parse_with_args(
-        module_path: &ModulePath,
-        script: &str,
-        file_name: &str,
-        cus: Vec<CompilationUnit>,
-        reg: &Registry,
-        aggr_reg: &AggrRegistry,
-        args: &Value<'_>,
-    ) -> std::result::Result<Self, CompilerError> {
-        Ok(Self(tremor_script::query::Query::parse_with_args(
-            module_path,
-            file_name,
-            script,
-            cus,
-            reg,
-            aggr_reg,
-            args,
-        )?))
-    }
-
     /// Turn a query into a executable pipeline graph
     ///
     /// # Errors
@@ -196,7 +172,10 @@ impl Query {
         use std::iter;
 
         let query = self.0.suffix();
-
+        let aggr_reg = tremor_script::aggr_registry();
+        let reg = crate::FN_REGISTRY.lock()?;
+        let mut helper = Helper::new(&reg, &aggr_reg, Vec::new());
+        helper.meta = query.node_meta.clone();
         let mut pipe_graph = ConfigGraph::new();
         let mut pipe_ops = HashMap::new();
         let mut nodes: HashMap<Cow<'static, str>, _> = HashMap::new();
@@ -231,8 +210,14 @@ impl Query {
                 .get(id.index())
                 .ok_or_else(|| Error::from("Error finding freshly added node."))
                 .and_then(|node| {
-                    node.weight
-                        .to_op(idgen.next_id(), supported_operators, None, None, None)
+                    node.weight.to_op(
+                        idgen.next_id(),
+                        supported_operators,
+                        None,
+                        None,
+                        None,
+                        &mut helper,
+                    )
                 })?;
             pipe_ops.insert(id, op);
             match node_kind {
@@ -258,7 +243,7 @@ impl Query {
         let stmts = self.0.extract_stmts();
         for (i, stmt) in stmts.into_iter().enumerate() {
             match stmt.suffix() {
-                Stmt::Select(ref select) => {
+                Stmt::SelectStmt(ref select) => {
                     // Rewrite pipeline/port to their internal streams
                     let mut select_rewrite = select.clone();
                     for select_io in
@@ -338,6 +323,7 @@ impl Query {
                                         None,
                                         None,
                                         None,
+                                        &mut helper,
                                     )
                                 })?;
                             pipe_ops.insert(id, op);
@@ -368,6 +354,7 @@ impl Query {
                                         None,
                                         None,
                                         None,
+                                        &mut helper,
                                     )
                                 })?;
 
@@ -390,7 +377,7 @@ impl Query {
 
                     let mut ww = HashMap::with_capacity(query.windows.len());
                     for (name, decl) in &query.windows {
-                        ww.insert(name.clone(), window_decl_to_impl(decl)?);
+                        ww.insert(name.clone(), window_decl_to_impl(decl, &helper.meta)?);
                     }
                     let op = node.to_op(
                         idgen.next_id(),
@@ -398,12 +385,13 @@ impl Query {
                         None,
                         Some(&stmt),
                         Some(ww),
+                        &mut helper,
                     )?;
                     pipe_ops.insert(id, op);
                     nodes.insert(select_in.id.clone(), id);
                     outputs.push(id);
                 }
-                Stmt::Stream(s) => {
+                Stmt::StreamStmt(s) => {
                     let name = common_cow(&s.id);
                     let id = name.clone();
                     if nodes.contains_key(&id) {
@@ -430,6 +418,7 @@ impl Query {
                         None,
                         Some(&stmt),
                         Some(HashMap::new()),
+                        &mut helper,
                     )?;
                     inputs.insert(name.clone(), id);
                     pipe_ops.insert(id, op);
@@ -452,7 +441,7 @@ impl Query {
                     }
                     subqueries.insert(s.id.to_string(), s.clone());
                 }
-                Stmt::Operator(o) => {
+                Stmt::OperatorStmt(o) => {
                     if nodes.contains_key(&common_cow(o.node_id.id())) {
                         let error_func = if has_builtin_node_name(&common_cow(o.node_id.id())) {
                             query_node_reserved_name_err
@@ -475,16 +464,14 @@ impl Query {
                     let id = pipe_graph.add_node(node.clone());
 
                     let stmt_srs =
-                        srs::Stmt::try_new_from_query::<&'static str, _>(&self.0.query, |query| {
+                        srs::Stmt::try_new_from_query::<Error, _>(&self.0.query, |query| {
                             let mut decl = query
                                 .operators
                                 .get(&fqon)
                                 .ok_or("operator not found")?
                                 .clone();
-                            if let Some(Stmt::Operator(o)) = query.stmts.get(i) {
-                                for (k, v) in &o.params {
-                                    decl.params.insert(k.clone(), v.clone());
-                                }
+                            if let Some(Stmt::OperatorStmt(o)) = query.stmts.get(i) {
+                                decl.params.ingest_creational_with(&o.params)?;
                             };
                             let inner_stmt = Stmt::OperatorDecl(decl);
 
@@ -498,12 +485,13 @@ impl Query {
                         None,
                         Some(&that),
                         None,
+                        &mut helper,
                     )?;
                     pipe_ops.insert(id, op);
                     nodes.insert(common_cow(o.node_id.id()), id);
                     outputs.push(id);
                 }
-                Stmt::Script(o) => {
+                Stmt::ScriptStmt(o) => {
                     if nodes.contains_key(&common_cow(o.node_id.id())) {
                         let error_func = if has_builtin_node_name(&common_cow(o.node_id.id())) {
                             query_node_reserved_name_err
@@ -518,12 +506,27 @@ impl Query {
                     let fqn = o.node_id.target_fqn(&o.target);
 
                     let stmt_srs =
-                        srs::Stmt::try_new_from_query::<&'static str, _>(&self.0.query, |query| {
-                            let decl = query.scripts.get(&fqn).ok_or("script not found")?.clone();
+                        srs::Stmt::try_new_from_query::<Error, _>(&self.0.query, |query| {
+                            // FIXME: Better error
+                            let decl = query
+                                .scripts
+                                .get(&fqn)
+                                .ok_or_else(|| {
+                                    format!(
+                                        "script not found: {} in {}",
+                                        &fqn,
+                                        query
+                                            .scripts
+                                            .keys()
+                                            .cloned()
+                                            .collect::<Vec<_>>()
+                                            .join(", ")
+                                    )
+                                })?
+                                .clone();
                             let inner_stmt = Stmt::ScriptDecl(Box::new(decl));
                             Ok(inner_stmt)
                         })?;
-
                     let label = if let Stmt::ScriptDecl(s) = stmt_srs.suffix() {
                         let e = s.extent(&query.node_meta);
                         let mut h = Dumb::new();
@@ -547,15 +550,17 @@ impl Query {
                         node: Some(stmt.clone()),
                         ..NodeConfig::default()
                     };
-
                     let id = pipe_graph.add_node(node.clone());
+
                     let op = node.to_op(
                         idgen.next_id(),
                         supported_operators,
                         Some(&that_defn),
                         Some(&stmt),
                         None,
+                        &mut helper,
                     )?;
+
                     pipe_ops.insert(id, op);
                     nodes.insert(common_cow(o.node_id.id()), id);
                     outputs.push(id);
@@ -729,7 +734,7 @@ fn select(
         ErrorKind::MissingOpConfig("trickle operators require a statement".into())
     })?;
     let select_type = match node.suffix() {
-        tremor_script::ast::Stmt::Select(ref select) => select.complexity(),
+        tremor_script::ast::Stmt::SelectStmt(ref select) => select.complexity(),
         _ => {
             return Err(ErrorKind::PipelineError(
                 "Trying to turn a non select into a select operator".into(),
@@ -748,7 +753,7 @@ fn select(
                 ErrorKind::MissingOpConfig("select operators require a window mapping".into())
             })?;
             let windows: Result<Vec<(String, window::Impl)>> =
-                if let tremor_script::ast::Stmt::Select(s) = node.suffix() {
+                if let tremor_script::ast::Stmt::SelectStmt(s) = node.suffix() {
                     s.stmt
                         .windows
                         .iter()
@@ -780,6 +785,7 @@ fn operator(
     operator_uid: u64,
     config: &NodeConfig,
     node: Option<&srs::Stmt>,
+    helper: &mut Helper,
 ) -> Result<Box<dyn Operator>> {
     let node = node.ok_or_else(|| {
         ErrorKind::MissingOpConfig("trickle operators require a statement".into())
@@ -788,6 +794,7 @@ fn operator(
         operator_uid,
         config.id.clone(),
         node,
+        helper,
     )?))
 }
 
@@ -795,6 +802,7 @@ fn script(
     config: &NodeConfig,
     defn: Option<&srs::Stmt>,
     node: Option<&srs::Stmt>,
+    meta: &NodeMetas,
 ) -> Result<Box<dyn Operator>> {
     let node = node.ok_or_else(|| {
         ErrorKind::MissingOpConfig("trickle operators require a statement".into())
@@ -803,6 +811,7 @@ fn script(
         config.id.clone(),
         defn.ok_or_else(|| Error::from("Script definition missing"))?,
         node,
+        meta,
     )?))
 }
 pub(crate) fn supported_operators(
@@ -811,13 +820,14 @@ pub(crate) fn supported_operators(
     defn: Option<&srs::Stmt>,
     node: Option<&srs::Stmt>,
     windows: Option<HashMap<String, window::Impl>>,
+    helper: &mut Helper,
 ) -> Result<OperatorNode> {
     let name_parts: Vec<&str> = config.op_type.split("::").collect();
 
     let op: Box<dyn op::Operator> = match name_parts.as_slice() {
         ["trickle", "select"] => select(uid, config, node, windows)?,
-        ["trickle", "operator"] => operator(uid, config, node)?,
-        ["trickle", "script"] => script(config, defn, node)?,
+        ["trickle", "operator"] => operator(uid, config, node, helper)?,
+        ["trickle", "script"] => script(config, defn, node, &helper.meta)?,
         _ => crate::operator(uid, config)?,
     };
     Ok(OperatorNode {
@@ -845,14 +855,13 @@ mod test {
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in into out;";
-        let query = Query::parse_with_args(
+        let query = Query::parse(
             module_path,
             src,
             "<test>",
             Vec::new(),
             &*crate::FN_REGISTRY.lock().unwrap(),
             &aggr_reg,
-            &literal!({}),
         )
         .unwrap();
         assert!(query.id().is_none());
@@ -860,14 +869,13 @@ mod test {
 
         // check that we can overwrite the id with a config variable
         let src = "#!config id = \"test\"\nselect event from in into out;";
-        let query = Query::parse_with_args(
+        let query = Query::parse(
             module_path,
             src,
             "<test>",
             Vec::new(),
             &*crate::FN_REGISTRY.lock().unwrap(),
             &aggr_reg,
-            &literal!({}),
         )
         .unwrap();
         assert_eq!(query.id().unwrap(), "test");
@@ -880,14 +888,13 @@ mod test {
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in/test_in into out/test_out;";
-        let q = Query::parse_with_args(
+        let q = Query::parse(
             module_path,
             src,
             "<test>",
             Vec::new(),
             &*crate::FN_REGISTRY.lock().unwrap(),
             &aggr_reg,
-            &literal!({}),
         )
         .unwrap();
 
