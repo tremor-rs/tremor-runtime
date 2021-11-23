@@ -119,12 +119,6 @@ impl<P> From<std::sync::PoisonError<P>> for Error {
     }
 }
 
-impl<F> From<rental::RentalError<F, Box<Vec<u8>>>> for Error {
-    fn from(_e: rental::RentalError<F, Box<Vec<u8>>>) -> Self {
-        Self::from("Rental Error".to_string())
-    }
-}
-
 #[cfg(test)]
 impl PartialEq for Error {
     fn eq(&self, _other: &Self) -> bool {
@@ -150,7 +144,8 @@ error_chain! {
         CsvError(csv::Error);
         DateTimeParseError(chrono::ParseError);
         DnsError(async_std_resolver::ResolveError);
-        ElasticError(elastic::Error);
+        ElasticError(elasticsearch::Error);
+        ElasticTransportBuildError(elasticsearch::http::transport::BuildError);
         FromUtf8Error(std::string::FromUtf8Error);
         GoogleAuthError(gouth::Error);
         GrokError(grok::Error);

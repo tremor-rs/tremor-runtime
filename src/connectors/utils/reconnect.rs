@@ -327,83 +327,83 @@ mod tests {
         Ok(())
     }
 
-    // #[async_std::test]
-    // async fn failfast_runtime() -> Result<()> {
-    //     let (tx, rx) = async_std::channel::bounded(1);
-    //     let url = TremorUrl::from_connector_instance("test", "test")?;
-    //     let config = Reconnect::None;
-    //     let mut runtime = ReconnectRuntime::inner(tx, url.clone(), &config);
-    //     let mut connector = FakeConnector {
-    //         answer: Some(false),
-    //     };
-    //     let qb = QuiescenceBeacon::default();
-    //     let ctx = ConnectorContext {
-    //         uid: 1,
-    //         url,
-    //         type_name: "fake".to_string(),
-    //         quiescence_beacon: qb,
-    //         notifier: runtime.notifier(),
-    //     };
-    //     // failing attempt
-    //     assert_eq!(
-    //         Connectivity::Disconnected,
-    //         runtime.attempt(&mut connector, &ctx).await?
-    //     );
-    //     async_std::task::sleep(Duration::from_millis(100)).await;
-    //     assert!(rx.is_empty()); // no reconnect attempt has been made
-    //     Ok(())
-    // }
+    #[async_std::test]
+    async fn failfast_runtime() -> Result<()> {
+        let (tx, rx) = async_std::channel::bounded(1);
+        let url = TremorUrl::from_connector_instance("test", "test")?;
+        let config = Reconnect::None;
+        let mut runtime = ReconnectRuntime::inner(tx, url.clone(), &config);
+        let mut connector = FakeConnector {
+            answer: Some(false),
+        };
+        let qb = QuiescenceBeacon::default();
+        let ctx = ConnectorContext {
+            uid: 1,
+            url,
+            connector_type: "fake".into(),
+            quiescence_beacon: qb,
+            notifier: runtime.notifier(),
+        };
+        // failing attempt
+        assert_eq!(
+            Connectivity::Disconnected,
+            runtime.attempt(&mut connector, &ctx).await?
+        );
+        async_std::task::sleep(Duration::from_millis(100)).await;
+        assert!(rx.is_empty()); // no reconnect attempt has been made
+        Ok(())
+    }
 
-    // #[async_std::test]
-    // async fn backoff_runtime() -> Result<()> {
-    //     let (tx, rx) = async_std::channel::bounded(1);
-    //     let url = TremorUrl::from_connector_instance("test", "test")?;
-    //     let config = Reconnect::Custom {
-    //         interval_ms: 10,
-    //         growth_rate: 2.0,
-    //         max_retries: Some(3),
-    //     };
-    //     let mut runtime = ReconnectRuntime::inner(tx, url.clone(), &config);
-    //     let mut connector = FakeConnector {
-    //         answer: Some(false),
-    //     };
-    //     let qb = QuiescenceBeacon::default();
-    //     let ctx = ConnectorContext {
-    //         uid: 1,
-    //         url,
-    //         type_name: "fake".to_string(),
-    //         quiescence_beacon: qb,
-    //         notifier: runtime.notifier(),
-    //     };
-    //     // 1st failing attempt
-    //     assert!(matches!(
-    //         runtime.attempt(&mut connector, &ctx).await?,
-    //         Connectivity::Disconnected
-    //     ));
-    //     async_std::task::sleep(Duration::from_millis(20)).await;
+    #[async_std::test]
+    async fn backoff_runtime() -> Result<()> {
+        let (tx, rx) = async_std::channel::bounded(1);
+        let url = TremorUrl::from_connector_instance("test", "test")?;
+        let config = Reconnect::Custom {
+            interval_ms: 10,
+            growth_rate: 2.0,
+            max_retries: Some(3),
+        };
+        let mut runtime = ReconnectRuntime::inner(tx, url.clone(), &config);
+        let mut connector = FakeConnector {
+            answer: Some(false),
+        };
+        let qb = QuiescenceBeacon::default();
+        let ctx = ConnectorContext {
+            uid: 1,
+            url,
+            connector_type: "fake".into(),
+            quiescence_beacon: qb,
+            notifier: runtime.notifier(),
+        };
+        // 1st failing attempt
+        assert!(matches!(
+            runtime.attempt(&mut connector, &ctx).await?,
+            Connectivity::Disconnected
+        ));
+        async_std::task::sleep(Duration::from_millis(20)).await;
 
-    //     assert_eq!(1, rx.len()); // 1 reconnect attempt has been made
-    //     assert!(matches!(rx.try_recv()?, Msg::Reconnect));
+        assert_eq!(1, rx.len()); // 1 reconnect attempt has been made
+        assert!(matches!(rx.try_recv()?, Msg::Reconnect));
 
-    //     // 2nd failing attempt
-    //     assert!(matches!(
-    //         runtime.attempt(&mut connector, &ctx).await?,
-    //         Connectivity::Disconnected
-    //     ));
-    //     async_std::task::sleep(Duration::from_millis(30)).await;
+        // 2nd failing attempt
+        assert!(matches!(
+            runtime.attempt(&mut connector, &ctx).await?,
+            Connectivity::Disconnected
+        ));
+        async_std::task::sleep(Duration::from_millis(30)).await;
 
-    //     assert_eq!(1, rx.len()); // 1 reconnect attempt has been made
-    //     assert!(matches!(rx.try_recv()?, Msg::Reconnect));
+        assert_eq!(1, rx.len()); // 1 reconnect attempt has been made
+        assert!(matches!(rx.try_recv()?, Msg::Reconnect));
 
-    //     // 3rd failing attempt
-    //     assert!(matches!(
-    //         runtime.attempt(&mut connector, &ctx).await?,
-    //         Connectivity::Disconnected
-    //     ));
-    //     async_std::task::sleep(Duration::from_millis(50)).await;
+        // 3rd failing attempt
+        assert!(matches!(
+            runtime.attempt(&mut connector, &ctx).await?,
+            Connectivity::Disconnected
+        ));
+        async_std::task::sleep(Duration::from_millis(50)).await;
 
-    //     assert!(rx.is_empty()); // no reconnect attempt has been made
+        assert!(rx.is_empty()); // no reconnect attempt has been made
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 }
