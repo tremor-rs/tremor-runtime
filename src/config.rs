@@ -47,11 +47,21 @@ pub enum Reconnect {
         /// start interval to wait after a failing connect attempt
         interval_ms: u64,
         /// growth rate for consecutive connect attempts, will be added to interval_ms
+        #[serde(default = "default_growth_rate")]
         growth_rate: f64,
         //TODO: randomized: bool
         /// maximum number of retries to execute
+        #[serde(default = "default_max_retries")]
         max_retries: Option<u64>,
     },
+}
+
+fn default_growth_rate() -> f64 {
+    1.2
+}
+
+fn default_max_retries() -> Option<u64> {
+    Some(3)
 }
 
 impl Default for Reconnect {

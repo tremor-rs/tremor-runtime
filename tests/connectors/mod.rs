@@ -23,16 +23,19 @@ use beef::Cow;
 use halfbrown::HashMap;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+use tremor_common::url::{
+    ports::{ERR, IN, OUT},
+    TremorUrl,
+};
 use tremor_runtime::connectors;
 use tremor_runtime::connectors::sink::SinkMsg;
 use tremor_runtime::connectors::{Connectivity, StatusReport};
 use tremor_runtime::errors::Result;
 use tremor_runtime::pipeline;
+use tremor_runtime::pipeline::CfMsg;
 use tremor_runtime::registry::instance::InstanceState;
 use tremor_runtime::system::ShutdownMode;
 use tremor_runtime::system::World;
-use tremor_runtime::url::ports::{ERR, IN, OUT};
-use tremor_runtime::url::TremorUrl;
 use tremor_runtime::Event;
 use tremor_runtime::QSIZE;
 use tremor_runtime::{config, system::WorldConfig};
@@ -220,6 +223,20 @@ impl TestPipeline {
             rx_cf,
             rx_mgmt,
             addr,
+        }
+    }
+
+    pub(crate) fn get_contraflow_events(&self) -> Result<Vec<Event>> {
+        let mut events = Vec::with_capacity(self.rx.len());
+        while let Ok(CfMsg::Insight(event)) = self.rx_cf.try_recv() {
+            events.push(event);
+        }
+        Ok(events)
+    }
+
+    pub(crate) async fn get_contraflow(&self) -> Result<Event> {
+        match self.rx_cf.recv().await? {
+            CfMsg::Insight(event) => Ok(event),
         }
     }
 
