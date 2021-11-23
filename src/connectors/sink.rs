@@ -20,6 +20,9 @@ pub mod channel_sink;
 /// Providing a `Sink` implementation for connectors handling only a single Stream
 pub mod single_stream_sink;
 
+/// Utility for limiting concurrency (by sending CB::Close messages when a maximum concurrency value is reached)
+pub(crate) mod concurrency_cap;
+
 use crate::codec::{self, Codec};
 use crate::config::{
     Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
@@ -843,7 +846,17 @@ impl From<&Event> for ContraflowData {
         ContraflowData {
             event_id: event.id.clone(),
             ingest_ns: event.ingest_ns,
-            op_meta: event.op_meta.clone(), // TODO: mem::swap here?
+            op_meta: event.op_meta.clone(),
+        }
+    }
+}
+
+impl From<Event> for ContraflowData {
+    fn from(event: Event) -> Self {
+        ContraflowData {
+            event_id: event.id,
+            ingest_ns: event.ingest_ns,
+            op_meta: event.op_meta,
         }
     }
 }

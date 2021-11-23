@@ -20,6 +20,8 @@ pub(crate) mod cb;
 pub(crate) mod discord;
 /// DNS
 pub(crate) mod dns;
+/// Elasticsearch Connector
+pub(crate) mod elastic;
 /// Exit Connector
 pub(crate) mod exit;
 /// file connector implementation
