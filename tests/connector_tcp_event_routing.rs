@@ -19,8 +19,8 @@ extern crate log;
 
 use async_std::prelude::*;
 use std::time::Duration;
+use tremor_common::url::ports::IN;
 use tremor_pipeline::{Event, EventId};
-use tremor_runtime::url::ports::IN;
 use tremor_value::{literal, Value};
 use value_trait::{Builder, ValueAccess};
 
