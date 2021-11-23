@@ -18,7 +18,10 @@
 
 mod artefact;
 
-use crate::errors::{Kind as ErrorKind, Result};
+use crate::{
+    errors::{Kind as ErrorKind, Result},
+    QSIZE,
+};
 use async_std::channel::{bounded, Sender};
 use async_std::task;
 use hashbrown::{hash_map::Entry, HashMap};
