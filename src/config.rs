@@ -51,17 +51,13 @@ pub enum Reconnect {
         growth_rate: f64,
         //TODO: randomized: bool
         /// maximum number of retries to execute
-        #[serde(default = "default_max_retries")]
+        #[serde(default = "Default::default")]
         max_retries: Option<u64>,
     },
 }
 
 fn default_growth_rate() -> f64 {
     1.2
-}
-
-fn default_max_retries() -> Option<u64> {
-    Some(3)
 }
 
 impl Default for Reconnect {
