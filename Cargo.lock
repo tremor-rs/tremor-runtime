@@ -5409,7 +5409,7 @@ dependencies = [
  "rand 0.8.4",
  "serde",
  "serde_json",
- "sha2",
+ "sha2 0.9.8",
 ]
 
 [[package]]
