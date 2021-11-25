@@ -28,6 +28,7 @@ use tremor_runtime::connectors::sink::SinkMsg;
 use tremor_runtime::connectors::{Connectivity, StatusReport};
 use tremor_runtime::errors::Result;
 use tremor_runtime::pipeline;
+use tremor_runtime::pipeline::CfMsg;
 use tremor_runtime::registry::instance::InstanceState;
 use tremor_runtime::system::ShutdownMode;
 use tremor_runtime::system::World;
@@ -220,6 +221,20 @@ impl TestPipeline {
             rx_cf,
             rx_mgmt,
             addr,
+        }
+    }
+
+    pub(crate) fn get_contraflow_events(&self) -> Result<Vec<Event>> {
+        let mut events = Vec::with_capacity(self.rx.len());
+        while let Ok(CfMsg::Insight(event)) = self.rx_cf.try_recv() {
+            events.push(event);
+        }
+        Ok(events)
+    }
+
+    pub(crate) async fn get_contraflow(&self) -> Result<Event> {
+        match self.rx_cf.recv().await? {
+            CfMsg::Insight(event) => Ok(event),
         }
     }
 

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fmt::Display;
 use std::time::Duration;
 
 use crate::connectors::prelude::*;
@@ -19,11 +20,14 @@ use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
 use crate::errors::{Error, ErrorKind, Result};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::*;
+use elasticsearch::cluster::ClusterHealthParts;
 use elasticsearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
 use elasticsearch::http::Url;
 use elasticsearch::params::Refresh;
-use elasticsearch::{BulkOperation, BulkOperations, BulkParts, Elasticsearch};
+use elasticsearch::{BulkDeleteOperation, BulkOperation, BulkOperations, BulkParts, Elasticsearch};
 use tremor_common::time::nanotime;
+use tremor_value::value::StaticValue;
+use value_trait::Mutable;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -56,18 +60,6 @@ struct Elastic {
     response_rx: Receiver<SourceReply>,
     clients_tx: Sender<Vec<ElasticClient>>,
     clients_rx: Receiver<Vec<ElasticClient>>,
-}
-
-/// avoiding lifetime issues with generics
-/// See: https://github.com/rust-lang/rust/issues/64552
-struct StaticValue(tremor_value::Value<'static>);
-impl<'de> serde::de::Deserialize<'de> for StaticValue {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        tremor_value::Value::deserialize(deserializer).map(|value| StaticValue(value.into_static()))
-    }
 }
 
 #[async_trait::async_trait()]
@@ -111,8 +103,13 @@ impl Connector for Elastic {
             let conn_pool = SingleNodeConnectionPool::new(node.clone());
             let transport = TransportBuilder::new(conn_pool).build()?;
             let client = Elasticsearch::new(transport);
-            let res = client.ping().send().await?;
-            let json = res.json::<StaticValue>().await?.0;
+            // we use the cluster health endpoint, as the ping endpoint is not reliable
+            let res = client
+                .cluster()
+                .health(ClusterHealthParts::None)
+                .send()
+                .await?;
+            let json = res.json::<StaticValue>().await?.into_value();
             let cluster_name = json.get_str("cluster_name").unwrap_or("").to_string();
             info!(
                 "{} Connected to Elasticsearch cluster: {} via node: {}",
@@ -143,6 +140,12 @@ impl ElasticClient {
     }
 }
 
+impl Display for ElasticClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.url)
+    }
+}
+
 /// round robin over the clients
 ///
 /// TODO: behave like the round robin operator
@@ -162,9 +165,14 @@ impl ElasticClients {
     /// so we need to clone it, so we can handle it in a separate task.
     /// Cloning the client should be cheap
     fn next(&mut self) -> Option<ElasticClient> {
-        let idx = self.idx % self.clients.len();
-        self.idx += 1;
-        self.clients.get(idx).cloned()
+        let len = self.clients.len();
+        if len > 0 {
+            let idx = self.idx % len;
+            self.idx += 1;
+            self.clients.get(idx).cloned()
+        } else {
+            None
+        }
     }
 }
 
@@ -214,13 +222,14 @@ impl Sink for ElasticSink {
         start: u64,
     ) -> Result<SinkReply> {
         if let Ok(new_clients) = self.clients_rx.try_recv() {
+            debug!("Received new clients: {:#?}", new_clients);
             self.clients = ElasticClients::new(new_clients);
         }
         // if we exceed the maximum concurrency here, we issue a CB close, but carry on anyhow
         let guard = self.concurrency_cap.inc_for(&event).await?;
 
         if let Some(client) = self.clients.next() {
-            debug!("{} sending event {} to {}", ctx, client.url, event.id);
+            debug!("{} sending event [{}] to {}", ctx, event.id, client.url);
 
             // create task for awaiting the sending and handling the response
             let response_tx = self.response_tx.clone();
@@ -233,70 +242,103 @@ impl Sink for ElasticSink {
                 .spawn::<_, Result<()>>(async move {
                     // build bulk request (we can't do that in a separate function)
                     let mut ops = BulkOperations::new();
-                    // per request options
-                    let mut index = None;
-                    let mut doc_type = None;
-                    let mut routing = None;
-                    let mut refresh: Option<String> = None;
-                    let mut timeout = None;
-                    let mut pipeline = None;
+                    // per request options - extract from event metadata (ignoring batched)
+                    let event_es_meta = ESMeta::new(event.data.suffix().meta());
+                    let index = event_es_meta.get_index();
+                    let doc_type = event_es_meta.get_type();
+                    let routing = event_es_meta.get_routing();
+                    let refresh = event_es_meta.get_refresh();
+                    let timeout = event_es_meta.get_timeout();
+                    let pipeline = event_es_meta.get_pipeline();
                     for (data, meta) in event.value_meta_iter() {
-                        if let Some(connector_meta) = meta.get("connector") {
-                            if let Some(elastic_meta) = connector_meta.get("elastic") {
-                                if index.is_none() {
-                                    index = elastic_meta.get_str("index");
+                        // item metadata
+                        let es_meta = ESMeta::new(meta);
+                        match es_meta.get_action() {
+                            Some("index") | None => { // index is the default action
+                                let mut op = BulkOperation::index(data);
+                                if let Some(index) = es_meta.get_index() {
+                                    op = op.index(index);
                                 }
-                                if doc_type.is_none() {
-                                    doc_type = elastic_meta.get_str("_type");
+                                if let Some(id) = es_meta.get_id() {
+                                    op = op.id(id);
                                 }
-                                if routing.is_none() {
-                                    routing = elastic_meta.get_str("routing");
+                                ops.push(op)?;
+                            }
+                            Some("delete") => {
+                                let mut op: BulkDeleteOperation<()> = if let Some(id) = es_meta.get_id() {
+                                    BulkOperation::delete(id)
+                                } else {
+                                    let e = Error::from(format!("Missing `$connector.elastic[\"_id\"]` for `delete` action."));
+                                    return handle_error(
+                                        e,
+                                        event,
+                                        &origin_uri,
+                                        response_tx,
+                                        reply_tx,
+                                        include_payload
+                                    ).await;
+                                };
+                                if let Some(index) = es_meta.get_index() {
+                                    op = op.index(index);
                                 }
-                                if refresh.is_none() {
-                                    // supported values: true, false, "true", "false", "wait_for"
-                                    refresh = elastic_meta
-                                        .get_bool("refresh")
-                                        .as_ref()
-                                        .map(ToString::to_string)
-                                        .or_else(|| {
-                                            elastic_meta.get_str("refresh").map(ToString::to_string)
-                                        });
+                                ops.push(op)?;
+                            }
+                            Some("create") => {
+                                // create requires an `_id` here, which is not according to spec
+                                let mut op = if let Some(id) = es_meta.get_id() {
+                                    BulkOperation::create(id, data)
+                                } else {
+                                    // Actually `_id` should be completely optional here
+                                    // See: https://github.com/elastic/elasticsearch-rs/issues/190
+                                    let e = Error::from(format!("Missing `$connector.elastic[\"_id\"]` for `create` action."));
+                                    return handle_error(
+                                        e,
+                                        event,
+                                        &origin_uri,
+                                        response_tx,
+                                        reply_tx,
+                                        include_payload
+                                    ).await;
+                                };
+                                if let Some(index) = es_meta.get_index() {
+                                    op = op.index(index);
                                 }
-                                if timeout.is_none() {
-                                    timeout = elastic_meta.get_str("timeout");
+                                ops.push(op)?;
+                            }
+                            Some("update") => {
+                                let mut op = if let Some(id) = es_meta.get_id() {
+                                    BulkOperation::update(id, data)
+                                } else {
+                                    let e = Error::from(format!("Missing `$connector.elastic[\"_id\"]` for `create` action."));
+                                    return handle_error(
+                                        e,
+                                        event,
+                                        &origin_uri,
+                                        response_tx,
+                                        reply_tx,
+                                        include_payload
+                                    ).await;
+                                };
+                                if let Some(index) = es_meta.get_index() {
+                                    op = op.index(index);
                                 }
-                                if pipeline.is_none() {
-                                    pipeline = elastic_meta.get_str("pipeline");
-                                }
-
-                                match elastic_meta.get_str("action") {
-                                    Some("index") | None => {
-                                        let mut op = BulkOperation::index(data);
-                                        if let Some(index) = elastic_meta.get_str("_index") {
-                                            op = op.index(index);
-                                        }
-                                        if let Some(id) = elastic_meta.get_str("_id") {
-                                            op = op.id(id);
-                                        }
-                                        ops.push(op)?;
-                                    } // FIXME: add others
-                                    Some(other) => {
-                                        // FIXME: send error response
-                                        let e = Error::from(format!(
-                                            "Invalid `$connector.elastic.action` {}",
-                                            other
-                                        ));
-                                        return handle_error(
-                                            e,
-                                            event,
-                                            &origin_uri,
-                                            response_tx,
-                                            reply_tx,
-                                            include_payload,
-                                        )
-                                        .await;
-                                    }
-                                }
+                                ops.push(op)?;
+                            }
+                            Some(other) => {
+                                // FIXME: send error response
+                                let e = Error::from(format!(
+                                    "Invalid `$connector.elastic.action` {}",
+                                    other
+                                ));
+                                return handle_error(
+                                    e,
+                                    event,
+                                    &origin_uri,
+                                    response_tx,
+                                    reply_tx,
+                                    include_payload,
+                                )
+                                .await;
                             }
                         }
                     }
@@ -342,9 +384,10 @@ impl Sink for ElasticSink {
                         Ok(response) => {
                             match response.json::<StaticValue>().await {
                                 Ok(value) => {
+                                    let v = value.into_value();
                                     // build responses - one for every item
                                     handle_response(
-                                        value.0,
+                                        v,
                                         event,
                                         &origin_uri,
                                         response_tx,
@@ -410,7 +453,7 @@ impl Sink for ElasticSink {
 }
 
 async fn handle_response(
-    response: Value<'static>,
+    mut response: Value<'static>,
     event: Event,
     elastic_origin_uri: &EventOriginUri,
     response_tx: Sender<SourceReply>,
@@ -420,30 +463,40 @@ async fn handle_response(
 ) -> Result<()> {
     let correlation_values = event.correlation_metas();
     let payload_iter = event.value_iter();
-    if let Some(items) = response.get_array("items") {
-        for ((item, correlation), payload) in items
-            .into_iter()
+    if let Some(items) = response.get_mut("items").and_then(Mutable::as_array_mut) {
+        for ((mut item, correlation), payload) in items
+            .drain(..)
             .zip(correlation_values.into_iter())
             .zip(payload_iter)
         {
-            let (data, meta, port) = if let Some(_error) = item.get("error") {
+            let (action, action_item) = if let Some(item_object) = item.as_object_mut() {
+                if let Some((key, v)) = item_object.drain().next() {
+                    (key, v)
+                } else {
+                    debug!("Skipping invalid action item: empty.");
+                    continue;
+                }
+            } else {
+                debug!("Skipping invalid action item: not an object.");
+                continue;
+            };
+            let (data, meta, port) = if let Some(_error) = action_item.get("error") {
                 // item failed
                 let mut meta = literal!({
                     "connector": {
                         "elastic": {
-                            "_id": item.get("_id").map(Value::clone_static),
-                            "_index": item.get("_index").map(Value::clone_static),
-                            "_type": item.get("_type").map(Value::clone_static),
+                            "_id": action_item.get("_id").map(Value::clone_static),
+                            "_index": action_item.get("_index").map(Value::clone_static),
+                            "_type": action_item.get("_type").map(Value::clone_static),
+                            "action": action.to_owned(),
+                            "success": false
                         }
                     }
                 });
                 if let Some(correlation) = correlation {
                     meta.try_insert("correlation", correlation);
                 }
-                let mut data = literal!({
-                    "success": false,
-                    "item": item.clone_static()
-                });
+                let mut data = literal!({ action: action_item });
                 if include_payload {
                     data.try_insert("payload", payload.clone_static());
                 }
@@ -453,20 +506,19 @@ async fn handle_response(
                 let mut meta = literal!({
                     "connector": {
                         "elastic": {
-                            "_id": item.get("_id").map(Value::clone_static),
-                            "_index": item.get("_index").map(Value::clone_static),
-                            "_type": item.get("_type").map(Value::clone_static),
-                            "version": item.get("_version").map(Value::clone_static)
+                            "_id": action_item.get("_id").map(Value::clone_static),
+                            "_index": action_item.get("_index").map(Value::clone_static),
+                            "_type": action_item.get("_type").map(Value::clone_static),
+                            "version": action_item.get("_version").map(Value::clone_static),
+                            "action": action.to_owned(),
+                            "success": true
                         }
                     }
                 });
                 if let Some(correlation) = correlation {
                     meta.try_insert("correlation", correlation);
                 }
-                let mut data = literal!({
-                    "success": true,
-                    "item": item.clone_static()
-                });
+                let mut data = literal!({ action: action_item });
                 if include_payload {
                     data.try_insert("payload", payload.clone_static());
                 }
@@ -476,17 +528,21 @@ async fn handle_response(
             let source_reply = SourceReply::Structured {
                 origin_uri: elastic_origin_uri.clone(),
                 payload: event_payload,
-                stream: DEFAULT_STREAM_ID, //TODO: assign each bulk request a stream id?
+                stream: DEFAULT_STREAM_ID,
                 port: Some(port),
             };
             response_tx.send(source_reply).await?;
         }
+    } else {
+        // FIXME: return error, invalid
     }
     // ack the event
     let duration = nanotime() - start;
-    reply_tx
-        .send(AsyncSinkReply::Ack(ContraflowData::from(event), duration))
-        .await?;
+    if event.transactional {
+        reply_tx
+            .send(AsyncSinkReply::Ack(ContraflowData::from(event), duration))
+            .await?;
+    }
     Ok(())
 }
 
@@ -527,9 +583,11 @@ where
         port: Some(ERR),
     };
     response_tx.send(source_reply).await?;
-    reply_tx
-        .send(AsyncSinkReply::Fail(ContraflowData::from(event)))
-        .await?;
+    if event.transactional {
+        reply_tx
+            .send(AsyncSinkReply::Fail(ContraflowData::from(event)))
+            .await?;
+    }
     Ok(())
 }
 
@@ -557,7 +615,8 @@ impl Source for ElasticSource {
     }
 }
 
-struct Builder {}
+#[derive(Default)]
+pub(crate) struct Builder {}
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -601,5 +660,58 @@ impl ConnectorBuilder for Builder {
         } else {
             Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
+    }
+}
+
+struct ESMeta<'a, 'value> {
+    meta: Option<&'a Value<'value>>,
+}
+
+impl<'a, 'value> ESMeta<'a, 'value> {
+    fn new(meta: &'a Value<'value>) -> Self {
+        Self {
+            meta: if let Some(connector_meta) = meta.get("connector") {
+                if let Some(elastic_meta) = connector_meta.get("elastic") {
+                    Some(elastic_meta)
+                } else {
+                    None
+                }
+            } else {
+                None
+            },
+        }
+    }
+
+    fn get_id(&self) -> Option<&str> {
+        self.meta.get_str("_id")
+    }
+    fn get_index(&self) -> Option<&str> {
+        self.meta.get_str("_index")
+    }
+
+    fn get_type(&self) -> Option<&str> {
+        self.meta.get_str("_type")
+    }
+    fn get_routing(&self) -> Option<&str> {
+        self.meta.get_str("routing")
+    }
+    fn get_timeout(&self) -> Option<&str> {
+        self.meta.get_str("timeout")
+    }
+    fn get_pipeline(&self) -> Option<&str> {
+        self.meta.get_str("pipeline")
+    }
+
+    fn get_action(&self) -> Option<&str> {
+        self.meta.get_str("action")
+    }
+
+    /// supported values: true, false, "true", "false", "wait_for"
+    fn get_refresh(&self) -> Option<String> {
+        self.meta
+            .get_bool("refresh")
+            .as_ref()
+            .map(ToString::to_string)
+            .or_else(|| self.meta.get_str("refresh").map(ToString::to_string))
     }
 }
