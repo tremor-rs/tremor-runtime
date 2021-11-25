@@ -1239,6 +1239,9 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
     world
         .register_builtin_connector_type(Box::new(impls::discord::Builder::default()))
         .await?;
+    world
+        .register_builtin_connector_type(Box::new(impls::elastic::Builder::default()))
+        .await?;
 
     Ok(())
 }

@@ -5275,6 +5275,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "testcontainers"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5e3ed6e3598dbf32cba8cb356b881c085e0adea57597f387723430dd94b4084"
+dependencies = [
+ "hex",
+ "hmac 0.10.1",
+ "log",
+ "rand 0.8.4",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5971,6 +5986,8 @@ dependencies = [
  "serde_derive",
  "serde_yaml",
  "serenity",
+ "signal-hook",
+ "signal-hook-async-std",
  "simd-json",
  "simd-json-derive",
  "sled",
@@ -5981,6 +5998,7 @@ dependencies = [
  "syslog_loose",
  "tempfile",
  "test-case",
+ "testcontainers",
  "tide",
  "tokio-postgres",
  "tonic",
