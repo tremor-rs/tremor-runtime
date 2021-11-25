@@ -175,9 +175,11 @@ tonic = { version = "0.5.2", default-features = false, features = [
 tremor-otelapis = { version = "0.2.2" }
 
 # aws-s3
-aws-config = { git = "https://github.com/awslabs/aws-sdk-rust", tag = "v0.0.19-alpha", package = "aws-config" }
-aws-sdk-s3 = { git = "https://github.com/awslabs/aws-sdk-rust", tag = "v0.0.19-alpha", package = "aws-sdk-s3" }
-aws-types = { git = "https://github.com/awslabs/aws-sdk-rust", tag = "v0.0.19-alpha", package = "aws-types" }
+aws-config = "0.0.26-alpha" 
+aws-sdk-s3 = "0.0.26-alpha" 
+aws-types = "0.0.26-alpha" 
+aws-endpoint = "0.0.26-alpha" 
+
 
 # gcp
 googapis = { version = "0.5", default-features = false, features = [
