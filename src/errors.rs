@@ -181,6 +181,7 @@ error_chain! {
         TryFromIntError(std::num::TryFromIntError);
         ValueError(tremor_value::Error);
         UrlParserError(url::ParseError);
+        UriParserError(http::uri::InvalidUri);
         Utf8Error(std::str::Utf8Error);
         WsError(async_tungstenite::tungstenite::Error);
         EnvVarError(std::env::VarError);
