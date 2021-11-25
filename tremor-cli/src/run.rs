@@ -477,10 +477,10 @@ fn parse_troy_source(src: &str, args: &Value) -> Result<(String, srs::Deploy)> {
 }
 
 async fn handle_troy_connector(
-    world: &World,
+    _world: &World,
     _stem: &str,
-    instance: &str,
-    atom: &srs::ConnectorDecl,
+    _instance: &str,
+    _atom: &srs::ConnectorDecl,
 ) -> Result<()> {
     // let yaml = serde_yaml::to_string(&atom.params)?;
 
