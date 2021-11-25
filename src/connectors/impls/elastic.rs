@@ -222,7 +222,7 @@ impl Sink for ElasticSink {
         start: u64,
     ) -> Result<SinkReply> {
         if let Ok(new_clients) = self.clients_rx.try_recv() {
-            debug!("Received new clients: {:#?}", new_clients);
+            debug!("{} Received new clients", ctx);
             self.clients = ElasticClients::new(new_clients);
         }
         // if we exceed the maximum concurrency here, we issue a CB close, but carry on anyhow
@@ -559,19 +559,19 @@ where
     E: std::error::Error,
 {
     let e_str = e.to_string();
-    let mut meta = Value::object_with_capacity(1);
+    let mut meta = literal!({
+        "connector": {
+            "elastic": {
+                "success": false
+            }
+        },
+        "error": e_str.clone()
+    });
     if let Some(correlation) = event.correlation_meta() {
         meta.try_insert("correlation", correlation);
     }
 
-    let mut data = literal!({
-        "success": false,
-        "error": e_str,
-        "source": {
-            "event_id": event.id.to_string(),
-            "origin_uri": event.origin_uri.as_ref().map(|uri| uri.to_string())
-        }
-    });
+    let mut data = Value::object_with_capacity(1);
     if include_payload {
         data.try_insert("payload", event.data.suffix().value().clone_static());
     }
