@@ -186,7 +186,7 @@ where
         }
         Ok(())
     }
-    async fn on_done(&self, _stream: u64) -> Result<StreamDone> {
+    async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
         self.underlying_stream.shutdown(std::net::Shutdown::Write)?;
         Ok(StreamDone::StreamClosed)
     }

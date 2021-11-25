@@ -189,6 +189,12 @@ impl ConnectorHarness {
     {
         self.pipes.get(&port.into())
     }
+
+    /// get the out pipeline - if any
+    pub(crate) fn in_port(&self) -> Option<&TestPipeline> {
+        self.get_pipe(IN)
+    }
+
     /// get the out pipeline - if any
     pub(crate) fn out(&self) -> Option<&TestPipeline> {
         self.get_pipe(OUT)
