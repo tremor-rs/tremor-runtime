@@ -113,9 +113,10 @@ lapin = "1.8.1"
 elasticsearch = { version = "=7.14.0-alpha.1", features = ["rustls-tls"] }
 
 # ws
-async-tungstenite = { version = "0.16.0", features = ["async-std-runtime"] }
+async-tungstenite = { version = "0.16.0", features = ["async-std-runtime", "async-tls"] }
+tungstenite = { version = "0.16.0", features = ["rustls" ] }
 
-# for tcp
+# for tcp & ws
 async-tls = "0.11"
 rustls = "0.19"
 rustls-native-certs = "0.5"

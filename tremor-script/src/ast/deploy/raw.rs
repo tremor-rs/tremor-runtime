@@ -513,9 +513,9 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
         let target_module = self
             .module
             .iter()
-            .map(|x| format!("{}", x.to_string()))
+            .map(|x| format!("{}", x.id))
             .collect::<Vec<String>>();
-        let node_id = NodeId::new(self.target.to_string(), target_module.clone());
+        let node_id = NodeId::new(self.target.to_string(), target_module);
 
         let atom = if let Some(artefact) = helper.definitions.get(&node_id) {
             artefact.clone()
@@ -533,7 +533,7 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
             node_id: node_id.clone(),
             alias: self.id.to_string(),
             target: self.target.to_string(),
-            atom: atom,
+            atom,
             kind: self.kind,
             docs: self
                 .docs
