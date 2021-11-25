@@ -1240,7 +1240,13 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
         .register_builtin_connector_type(Box::new(impls::discord::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type(Box::new(impls::elastic::Builder::default()))
+        .register_builtin_connector_type(Box::new(impls::ws::client::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type(Box::new(impls::ws::server::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type(Box::new(impls::exit::Builder::new(world)))
         .await?;
 
     Ok(())
@@ -1254,9 +1260,6 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
 pub async fn register_debug_connector_types(world: &World) -> Result<()> {
     world
         .register_builtin_connector_type(Box::new(impls::cb::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::exit::Builder::new(world)))
         .await?;
     world
         .register_builtin_connector_type(Box::new(impls::file::Builder::default()))

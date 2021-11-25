@@ -223,7 +223,7 @@ pub trait StreamWriter: Send + Sync {
     /// write the given data out to the stream
     async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<SinkMeta>) -> Result<()>;
     /// handle the stream being done, by error or
-    async fn on_done(&self, _stream: u64) -> Result<StreamDone> {
+    async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
         Ok(StreamDone::StreamClosed)
     }
 }

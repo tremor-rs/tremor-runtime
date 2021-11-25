@@ -201,7 +201,6 @@ where
         ctx: &SinkContext,
     ) -> Option<(&u64, &Sender<SinkData>)> {
         let sink_meta = get_sink_meta(meta, ctx);
-        dbg!(sink_meta);
         sink_meta
             .and_then(|sink_meta| (self.resolver)(sink_meta))
             .and_then(|stream_meta| self.streams_meta.get_by_left(&stream_meta))

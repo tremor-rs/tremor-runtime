@@ -255,43 +255,46 @@ pub(crate) fn run_suite(
                             let inner_tags = tags.iter().map(|x| (*x).to_string());
                             found_tags.extend(inner_tags);
                         }
-                    } else if let Some(tags) = spec.get_literal("tags").and_then(Value::as_array) {
-                        let inner_tags = tags.iter().map(|x| (*x).to_string());
-                        found_tags.extend(inner_tags);
+
+                        let suite_tags = scenario_tags.join(Some(found_tags));
+                        let suite_name = spec
+                            .get_literal("name")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default();
+
+                        // TODO revisit tags in unit tests
+                        if let (_matched, true) = config.matches(&suite_tags) {
+                            status::h1("  Suite", suite_name)?;
+                            status::tagsx(
+                                "      ",
+                                &suite_tags,
+                                Some(&config.includes),
+                                Some(&config.excludes),
+                            )?;
+                            let (test_stats, mut test_reports) = eval_suite_entrypoint(
+                                &env,
+                                &local,
+                                &raw,
+                                spec,
+                                &suite_tags,
+                                config,
+                            )?;
+
+                            stats.merge(&test_stats);
+                            elements.append(&mut test_reports);
+                        }
+                        suites.insert(
+                            suite_name.to_string(),
+                            TestSuite {
+                                name: suite_name.to_string(),
+                                description: suite_name.to_string(),
+                                elements,
+                                evidence: None,
+                                stats,
+                                duration: 0,
+                            },
+                        );
                     }
-
-                    let suite_tags = scenario_tags.join(Some(found_tags));
-                    let suite_name = spec
-                        .get_literal("name")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default();
-
-                    // TODO revisit tags in unit tests
-                    if let (_matched, true) = config.matches(&suite_tags) {
-                        status::h1("  Suite", suite_name)?;
-                        status::tagsx(
-                            "      ",
-                            &suite_tags,
-                            Some(&config.includes),
-                            Some(&config.excludes),
-                        )?;
-                        let (test_stats, mut test_reports) =
-                            eval_suite_entrypoint(&env, &local, &raw, spec, &suite_tags, config)?;
-
-                        stats.merge(&test_stats);
-                        elements.append(&mut test_reports);
-                    }
-                    suites.insert(
-                        suite_name.to_string(),
-                        TestSuite {
-                            name: suite_name.to_string(),
-                            description: suite_name.to_string(),
-                            elements,
-                            evidence: None,
-                            stats,
-                            duration: 0,
-                        },
-                    );
                 }
             }
         }
