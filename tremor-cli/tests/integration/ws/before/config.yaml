@@ -1,24 +1,27 @@
-onramp:
+connector:
   - id: ws-in
-    type: ws
+    type: ws_server
     codec: json
+    preprocessors:
+      - lines-no-buffer
     config:
       host: 127.0.0.1
       port: 4242
-
-offramp:
   - id: out
     type: file
     codec: json-sorted
+    postprocessors:
+      - lines
     config:
-      file: "../gen.log"
+      path: "../gen.log"
+      mode: truncate
   - id: exit
     type: exit
 
 binding:
   - id: main
     links:
-      "/onramp/ws-in/{instance}/out": ["/pipeline/ws/{instance}/in"]
-      "/pipeline/ws/{instance}/out": ["/offramp/out/{instance}/in" ]
-      "/pipeline/ws/{instance}/exit": ["/offramp/exit/{instance}/in" ]
+      "/connector/ws-in/{instance}/out": ["/pipeline/ws/{instance}/in"]
+      "/pipeline/ws/{instance}/out": ["/connector/out/{instance}/in" ]
+      "/pipeline/ws/{instance}/exit": ["/connector/exit/{instance}/in" ]
 

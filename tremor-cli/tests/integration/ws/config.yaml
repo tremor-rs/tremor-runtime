@@ -1,24 +1,28 @@
-onramp:
-  - id: in
+connector:
+  - id: input
     type: file
     codec: json
+    preprocessors:
+      - lines
     config:
-      source: "in.json.xz"
-      close_on_done: true
-      sleep_on_done: 10000
-
-offramp:
+      path: "./in.json.xz"
+      mode: read
   - id: ws-out
-    type: ws
+    type: ws_client
     codec: json
+    postprocessors:
+      - lines
     config:
-      url: "ws://127.0.0.1:4242"
+      url: "ws://127.0.0.1:4242/"
+  - id: exit
+    type: exit
 
 binding:
   - id: main
     links:
-      "/onramp/in/{instance}/out": ["/pipeline/main/{instance}/in"]
-      "/pipeline/main/{instance}/out": ["/offramp/ws-out/{instance}/in"]
+      "/connector/input/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/connector/ws-out/{instance}/in"]
+      "/pipeline/main/{instance}/exit": ["/connector/exit/{instance}/in"]
 
 mapping:
   /binding/main/1:

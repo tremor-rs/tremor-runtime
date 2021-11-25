@@ -1257,6 +1257,15 @@ impl<'script> ImutExprInt<'script> {
             None
         }
     }
+    /// Tries to borrow the expression as a record
+    #[must_use]
+    pub fn as_record(&self) -> Option<&Record<'script>> {
+        if let ImutExprInt::Record(r) = self {
+            Some(r)
+        } else {
+            None
+        }
+    }
     pub(crate) fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<Self> {
         match self {
             ImutExprInt::Unary(u) => u.try_reduce(helper),

@@ -1,6 +1,6 @@
 define qos::wal operator wal
 with
-  read_count = 20,
+  read_count = 1,
   max_elements = 1000,
   max_bytes = 10485760
 end;
@@ -9,3 +9,4 @@ create operator wal;
 
 select event from in into wal;
 select event from wal into out;
+select event from in where event == "exit" into out/exit;

@@ -40,3 +40,5 @@ pub(crate) mod tcp;
 pub(crate) mod udp;
 /// Write Ahead Log
 pub(crate) mod wal;
+/// WebSockets
+pub(crate) mod ws;

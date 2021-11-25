@@ -15,11 +15,12 @@
 use crate::value::Value;
 
 /// avoiding lifetime issues with generics
-/// See: https://github.com/rust-lang/rust/issues/64552
+/// See: <https://github.com/rust-lang/rust/issues/64552>
 pub struct StaticValue(Value<'static>);
 
 impl StaticValue {
     /// extract the inner `Value`
+    #[must_use]
     pub fn into_value(self) -> Value<'static> {
         self.0
     }
