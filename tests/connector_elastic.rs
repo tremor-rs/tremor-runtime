@@ -28,9 +28,9 @@ use signal_hook_async_std::Signals;
 use testcontainers::clients;
 use testcontainers::images::generic::GenericImage;
 use testcontainers::{Docker, RunArgs};
+use tremor_common::url::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_runtime::errors::{Error, Result};
-use tremor_runtime::url::ports::IN;
 use tremor_value::{literal, value::StaticValue};
 use value_trait::ValueAccess;
 
