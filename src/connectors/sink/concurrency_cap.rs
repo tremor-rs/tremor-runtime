@@ -37,6 +37,11 @@ impl ConcurrencyCap {
         }
     }
 
+    #[cfg(test)]
+    fn get_counter(&self) -> usize {
+        self.counter.load(Ordering::Acquire)
+    }
+
     /// increment the counter and return a guard for safely counting down
     /// wrapped inside an enum to check whether we exceeded the maximum or not
     pub(crate) async fn inc_for(&self, event: &Event) -> Result<CounterGuard> {
@@ -80,5 +85,50 @@ impl Drop for CounterGuard {
             // TODO: add a ctx log here
             error!("Error sending a CB Open.");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_std::channel::bounded;
+
+    #[async_std::test]
+    async fn concurrency_cap() -> Result<()> {
+        let (tx, rx) = bounded(64);
+        let cap = ConcurrencyCap::new(2, tx);
+        let event1 = Event::default();
+        let guard1 = cap.inc_for(&event1).await?;
+        assert_eq!(1, cap.get_counter());
+        assert!(rx.is_empty());
+        let guard2 = cap.inc_for(&event1).await?;
+        assert_eq!(2, cap.get_counter());
+        assert!(rx.is_empty());
+        // if we exceed the maximum concurrency, we issue a CB Close
+        let guard3 = cap.inc_for(&event1).await?;
+        assert_eq!(3, cap.get_counter());
+        let reply = rx.try_recv()?;
+        assert!(matches!(reply, AsyncSinkReply::CB(_, CbAction::Close)));
+        // one more will not send another Close
+        let guard4 = cap.inc_for(&event1).await?;
+        assert_eq!(4, cap.get_counter());
+        assert!(rx.is_empty());
+
+        // concurrent tasks are finished
+        drop(guard4);
+        assert_eq!(3, cap.get_counter());
+        assert!(rx.is_empty());
+        drop(guard3);
+        assert_eq!(2, cap.get_counter());
+        assert!(rx.is_empty());
+        // when we are below the configured threshold, we issue an Open
+        drop(guard2);
+        assert_eq!(1, cap.get_counter());
+        let reply = rx.try_recv()?;
+        assert!(matches!(reply, AsyncSinkReply::CB(_, CbAction::Open)));
+        drop(guard1);
+        assert_eq!(0, cap.get_counter());
+        assert!(rx.is_empty());
+        Ok(())
     }
 }
