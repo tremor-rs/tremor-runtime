@@ -1,7 +1,5 @@
 {
-  "dir": ".",
-  "cmd": "bash",
-  "args": [
-    "./after/stop.sh"
-  ]
+    "dir": ".",
+    "cmd": "sleep",
+    "args": [ "3" ]
 }

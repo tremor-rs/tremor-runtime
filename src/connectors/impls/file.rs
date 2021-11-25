@@ -317,7 +317,7 @@ impl StreamWriter for FileWriter {
         Ok(())
     }
 
-    async fn on_done(&self, _stream: u64) -> Result<StreamDone> {
+    async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
         if let Err(e) = self.file.sync_all().await {
             error!("[Connector::{}] Error flushing file: {}", &self.url, e);
         }
