@@ -266,6 +266,8 @@ impl ReconnectRuntime {
 mod tests {
     // use crate::connectors::quiescence::QuiescenceBeacon;
 
+    use crate::connectors::quiescence::QuiescenceBeacon;
+
     use super::*;
 
     /// does not connect

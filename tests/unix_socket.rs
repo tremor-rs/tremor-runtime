@@ -11,9 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use tremor_common::url::TremorUrl;
 use tremor_runtime::config::Binding;
 use tremor_runtime::system;
-use tremor_runtime::url::TremorUrl;
 
 use hashbrown::HashMap;
 use pretty_assertions::assert_eq;
