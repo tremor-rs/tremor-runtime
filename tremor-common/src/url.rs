@@ -211,8 +211,7 @@ impl TremorUrl {
                         return Err(Error::InvalidTremorUrl(
                             "Invalid relative URL".to_string(),
                             url.to_string(),
-                        )
-                        .into())
+                        ))
                     }
                 }
             } else {
@@ -250,8 +249,7 @@ impl TremorUrl {
                         return Err(Error::InvalidTremorUrl(
                             "Invalid absolute Url".to_string(),
                             url.to_string(),
-                        )
-                        .into())
+                        ))
                     }
                 }
             };
@@ -266,10 +264,10 @@ impl TremorUrl {
                 instance_port,
             })
         } else {
-            Err(
-                Error::InvalidTremorUrl("Missing resource type".to_string(), url.to_string())
-                    .into(),
-            )
+            Err(Error::InvalidTremorUrl(
+                "Missing resource type".to_string(),
+                url.to_string(),
+            ))
         }
     }
 
@@ -280,7 +278,7 @@ impl TremorUrl {
                 Some("/") => Self::parse_url(&format!("tremor://{}", url), false),
                 _ => Self::parse_url(&format!("tremor:///{}", url), true),
             },
-            Err(e) => Err(Error::InvalidTremorUrl(e.to_string(), url.to_string()).into()),
+            Err(e) => Err(Error::InvalidTremorUrl(e.to_string(), url.to_string())),
         }
     }
 

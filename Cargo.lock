@@ -5286,7 +5286,7 @@ dependencies = [
  "rand 0.8.4",
  "serde",
  "serde_json",
- "sha2",
+ "sha2 0.9.8",
 ]
 
 [[package]]
@@ -6008,6 +6008,7 @@ dependencies = [
  "tremor-pipeline",
  "tremor-script",
  "tremor-value",
+ "tungstenite 0.16.0",
  "url",
  "value-trait",
  "xz2",
@@ -6163,6 +6164,7 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.8.4",
+ "rustls 0.20.2",
  "sha-1",
  "thiserror",
  "url",
