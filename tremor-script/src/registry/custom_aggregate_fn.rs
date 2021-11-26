@@ -1,11 +1,11 @@
 use crate::ast::{Exprs, LocalPath, Path, RunConsts};
+use crate::interpreter::{Cont, Env, LocalStack};
+use crate::prelude::{Builder, ExecOpts};
+use crate::registry::{FResult, FunctionError};
 use crate::{AggrType, Value};
 use beef::Cow;
 use halfbrown::HashMap;
 use tremor_value::Value::Object;
-use crate::interpreter::{Cont, Env, LocalStack};
-use crate::prelude::{Builder, ExecOpts};
-use crate::registry::{FResult, FunctionError};
 
 /// public because lalrpop
 #[derive(Clone)]
@@ -27,12 +27,15 @@ pub struct CustomAggregateFn<'script> {
     /// public because lalrpop
     pub emit_body: Exprs<'script>,
     /// public because lalrpop
-    pub state: Value<'script>
+    pub state: Value<'script>,
 }
 
 impl<'script> CustomAggregateFn<'script> {
     /// Initialize the instance of aggregate function
-    pub fn init<'event>(&mut self, env: &Env<'_, 'event>,) -> FResult<()> where 'script : 'event {
+    pub fn init<'event>(&mut self, env: &Env<'_, 'event>) -> FResult<()>
+    where
+        'script: 'event,
+    {
         let mut local_stack = LocalStack::with_size(128);
 
         let mut no_meta = Value::null();
@@ -46,21 +49,23 @@ impl<'script> CustomAggregateFn<'script> {
                 consts: env.consts,
                 aggrs: &[],
                 meta: env.meta,
-                recursion_limit: env.recursion_limit
+                recursion_limit: env.recursion_limit,
             };
 
             let cont = expr.run(
-                ExecOpts { result_needed: true, aggr: AggrType::Tick },
+                ExecOpts {
+                    result_needed: true,
+                    aggr: AggrType::Tick,
+                },
                 &env_local,
                 &mut no_event,
                 &mut state,
                 &mut no_meta,
-                &mut local_stack
+                &mut local_stack,
             )?;
 
             if body_iter.peek().is_none() {
-                if let Cont::Cont(value) = cont
-                {
+                if let Cont::Cont(value) = cont {
                     self.state = value.into_owned().clone_static();
                 } else {
                     todo!("No state returned in init! Return a proper error here.");
@@ -72,7 +77,10 @@ impl<'script> CustomAggregateFn<'script> {
     }
 
     /// Aggregate a value
-    pub fn aggregate<'event>(&mut self, args: &[&Value], env: &Env<'_, 'event>) where 'script : 'event {
+    pub fn aggregate<'event>(&mut self, args: &[&Value], env: &Env<'_, 'event>)
+    where
+        'script: 'event,
+    {
         let mut body_iter = self.aggregate_body.iter().peekable();
         let args = Value::Array(args.iter().map(|v| v.clone_static()).collect());
         let mut no_meta = Value::null();
@@ -87,22 +95,26 @@ impl<'script> CustomAggregateFn<'script> {
             consts: env.consts.with_new_args(&args), // fixme .with_new_args
             aggrs: &[],
             meta: env.meta,
-            recursion_limit: env.recursion_limit
+            recursion_limit: env.recursion_limit,
         };
 
         while let Some(expr) = body_iter.next() {
-            let cont = expr.run(
-                ExecOpts { result_needed: true, aggr: AggrType::Tick },
-                &env,
-                &mut no_event,
-                &mut state,
-                &mut no_meta,
-                &mut local_stack
-            ).expect("FIXME");
+            let cont = expr
+                .run(
+                    ExecOpts {
+                        result_needed: true,
+                        aggr: AggrType::Tick,
+                    },
+                    &env,
+                    &mut no_event,
+                    &mut state,
+                    &mut no_meta,
+                    &mut local_stack,
+                )
+                .expect("FIXME");
 
             if body_iter.peek().is_none() {
-                if let Cont::Cont(value) = cont
-                {
+                if let Cont::Cont(value) = cont {
                     self.state = value.into_owned().clone_static();
                 } else {
                     todo!("No state returned in init! Return a proper error here.");
@@ -117,7 +129,10 @@ impl<'script> CustomAggregateFn<'script> {
     }
 
     /// Emit the state
-    pub(crate) fn emit<'event>(&mut self, env: &Env<'_, 'event>) -> FResult<Value<'event>> where 'script : 'event {
+    pub(crate) fn emit<'event>(&mut self, env: &Env<'_, 'event>) -> FResult<Value<'event>>
+    where
+        'script: 'event,
+    {
         let mut body_iter = self.emit_body.iter().peekable();
         let mut local_stack = LocalStack::with_size(1);
 
@@ -125,29 +140,33 @@ impl<'script> CustomAggregateFn<'script> {
         let mut state = Value::null().into_static();
         let mut no_event = Value::null();
 
-        local_stack.values.insert(0, Some(dbg!(&self.state).clone()));
+        local_stack
+            .values
+            .insert(0, Some(dbg!(&self.state).clone()));
 
         let env = Env {
             context: env.context,
             consts: env.consts,
             aggrs: &[],
             meta: env.meta,
-            recursion_limit: env.recursion_limit
+            recursion_limit: env.recursion_limit,
         };
 
         while let Some(expr) = body_iter.next() {
             let cont = expr.run(
-                ExecOpts { result_needed: true, aggr: AggrType::Tick },
+                ExecOpts {
+                    result_needed: true,
+                    aggr: AggrType::Tick,
+                },
                 &env,
                 &mut no_event,
                 &mut state,
                 &mut no_meta,
-                &mut local_stack
+                &mut local_stack,
             )?;
 
             if body_iter.peek().is_none() {
-                if let Cont::Cont(value) = cont
-                {
+                if let Cont::Cont(value) = cont {
                     return Ok(value.into_owned());
                 }
             }

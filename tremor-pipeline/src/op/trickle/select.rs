@@ -69,12 +69,27 @@ impl Select {
             .collect();
         let select = srs::Select::try_new_from_stmt(stmt)?;
         let event_id_gen = EventIdGenerator::new(operator_uid);
-        if let ast::Stmt::Select(SelectStmt { stmt: _, aggregates, consts, locals: _, node_meta }) = stmt.suffix() {
+        if let ast::Stmt::Select(SelectStmt {
+            stmt: _,
+            aggregates,
+            consts,
+            locals: _,
+            node_meta,
+        }) = stmt.suffix()
+        {
             let windows_itr = windows.iter();
             let dflt_group = Group {
                 value: Value::const_null(),
                 // fixme probably the default for event context isn't right here
-                windows: GroupWindow::from_windows(aggregates, &EventId::default(), windows_itr, &tremor_script::ctx::EventContext::default(), node_meta, consts.run(), tremor_script::recursion_limit()),
+                windows: GroupWindow::from_windows(
+                    aggregates,
+                    &EventId::default(),
+                    windows_itr,
+                    &tremor_script::ctx::EventContext::default(),
+                    node_meta,
+                    consts.run(),
+                    tremor_script::recursion_limit(),
+                ),
             };
             let windows_itr = windows.iter();
             let max_groups = windows_itr

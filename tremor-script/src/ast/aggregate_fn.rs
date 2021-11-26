@@ -1,9 +1,9 @@
-use halfbrown::HashMap;
 use super::{BaseExpr, NodeMetas};
 use crate::ast::raw::{ExprsRaw, IdentRaw};
 use crate::ast::upable::Upable;
 use crate::ast::{Exprs, Helper, Ident};
 use crate::lexer::Location;
+use halfbrown::HashMap;
 use serde::Serialize;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -37,7 +37,7 @@ pub struct RawAggregateFnBody<'input> {
     /// public because lalrpop
     pub emit_args: Vec<IdentRaw<'input>>,
     /// public because lalrpop
-    pub emit_body: ExprsRaw<'input>
+    pub emit_body: ExprsRaw<'input>,
 }
 
 pub struct AggregateFnDecl<'script> {
@@ -56,7 +56,7 @@ pub struct AggregateFnDecl<'script> {
     /// public because lalrpop
     pub emit_args: Vec<Ident<'script>>,
     /// public because lalrpop
-    pub emit_body: Exprs<'script>
+    pub emit_body: Exprs<'script>,
 }
 
 impl<'script> Upable<'script> for RawAggregateFnDecl<'script> {
@@ -78,7 +78,7 @@ impl<'script> Upable<'script> for RawAggregateFnDecl<'script> {
             merge_args: self.body.merge_args.up(helper)?,
             merge_body: self.body.merge_body.up(helper)?,
             emit_args: self.body.emit_args.up(helper)?,
-            emit_body: self.body.emit_body.up(helper)?
+            emit_body: self.body.emit_body.up(helper)?,
         })
     }
 }

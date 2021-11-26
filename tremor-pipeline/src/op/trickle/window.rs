@@ -73,7 +73,10 @@ impl GroupWindow {
         aggrs: &AggrSlice<'static>,
         id: &EventId,
         mut iter: I,
-        ctx: &EventContext, node_meta:&NodeMetas, consts: RunConsts, recursion_limit: u32
+        ctx: &EventContext,
+        node_meta: &NodeMetas,
+        consts: RunConsts,
+        recursion_limit: u32,
     ) -> Option<Box<Self>>
     where
         I: std::iter::Iterator<Item = &'i Window>,
@@ -104,13 +107,27 @@ impl GroupWindow {
                 id: id.clone(),
                 name: w.name.clone().into(),
                 transactional: false,
-                next: GroupWindow::from_windows(aggrs, id, iter, ctx, node_meta, consts, recursion_limit),
+                next: GroupWindow::from_windows(
+                    aggrs,
+                    id,
+                    iter,
+                    ctx,
+                    node_meta,
+                    consts,
+                    recursion_limit,
+                ),
                 holds_data: false,
             })
         })
     }
     /// Resets the aggregates and transactionality of this window
-    pub(crate) fn reset<'event>(&mut self, ctx: &EventContext, node_meta:&NodeMetas, consts: RunConsts, recursion_limit: u32) {
+    pub(crate) fn reset<'event>(
+        &mut self,
+        ctx: &EventContext,
+        node_meta: &NodeMetas,
+        consts: RunConsts,
+        recursion_limit: u32,
+    ) {
         for aggr in self.aggrs.iter_mut() {
             match aggr.invocable {
                 InvocableAggregate::Intrinsic(ref mut x) => x.init(),
@@ -124,7 +141,7 @@ impl GroupWindow {
                     };
 
                     x.init(&env).expect("FIXME")
-                },
+                }
             }
         }
         self.transactional = false;
@@ -353,7 +370,13 @@ impl Group {
     /// from `GroupWindow::reset` in that it not only resets
     /// the data but also sets to windo into a state of 'never
     /// having seen an element'.
-    pub(crate) fn reset(&mut self, ctx: &EventContext, node_meta:&NodeMetas, consts: RunConsts, recursion_limit: u32) {
+    pub(crate) fn reset(
+        &mut self,
+        ctx: &EventContext,
+        node_meta: &NodeMetas,
+        consts: RunConsts,
+        recursion_limit: u32,
+    ) {
         let mut w = &mut self.windows;
         while let Some(g) = w {
             g.reset(ctx, node_meta, consts, recursion_limit);

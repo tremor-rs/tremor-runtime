@@ -337,7 +337,7 @@ impl<'script> ModuleRaw<'script> {
                         emit_args: f.emit_args.iter().map(ToString::to_string).collect(),
                         emit_body: f.emit_body,
                         init_body: f.init_body,
-                        state: Value::null()
+                        state: Value::null(),
                     };
 
                     helper.register_aggregate_fun(f)?;

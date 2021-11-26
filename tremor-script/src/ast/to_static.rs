@@ -1118,7 +1118,7 @@ impl<'script> CustomAggregateFn<'script> {
             mergein_body,
             emit_args,
             emit_body,
-            state
+            state,
         } = self;
 
         CustomAggregateFn {
@@ -1133,7 +1133,7 @@ impl<'script> CustomAggregateFn<'script> {
                 .collect(),
             mergein_body: mergein_body.into_iter().map(|x| x.into_static()).collect(),
             emit_body: emit_body.into_iter().map(|x| x.into_static()).collect(),
-            state: state.into_static()
+            state: state.into_static(),
         }
     }
 }

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::ast::InvocableAggregate;
 use crate::{
     ast::{
         binary::extend_bytes_from_value, BaseExpr, BinExpr, Comprehension, ExprPath, ImutExpr,
@@ -35,7 +36,6 @@ use std::{
     borrow::{Borrow, Cow},
     iter, mem,
 };
-use crate::ast::InvocableAggregate;
 
 impl<'script> ImutExpr<'script> {
     /// Evaluates the expression
@@ -756,15 +756,14 @@ impl<'script> ImutExprInt<'script> {
         // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1035
         let invocable: &mut InvocableAggregate = unsafe { mem::transmute(inv) };
         let r = match invocable {
-            InvocableAggregate::Intrinsic(ref mut x) => { x.emit() }
-            InvocableAggregate::Tremor(ref mut x) => { x.emit(env) }
+            InvocableAggregate::Intrinsic(ref mut x) => x.emit(),
+            InvocableAggregate::Tremor(ref mut x) => x.emit(env),
         };
 
         let r = stry!(r.map(Cow::Owned).map_err(|e| {
-                let r: Option<&Registry> = None;
-                e.into_err(self, self, r, env.meta)
-
-            }));
+            let r: Option<&Registry> = None;
+            e.into_err(self, self, r, env.meta)
+        }));
         Ok(r)
     }
 
