@@ -139,22 +139,10 @@ impl WsWriter<async_tls::server::TlsStream<async_std::net::TcpStream>> {
     }
 }
 
-impl
-    WsWriter<
-        async_tungstenite::stream::Stream<
-            async_std::net::TcpStream,
-            async_tls::client::TlsStream<async_std::net::TcpStream>,
-        >,
-    >
-{
-    fn new_tls_client(
+impl WsWriter<async_tungstenite::stream::Stream<async_std::net::TcpStream, async_tls::client::TlsStream<async_std::net::TcpStream>>> {
+    fn new_tungstenite_client(
         stream: SplitSink<
-            WebSocketStream<
-                async_tungstenite::stream::Stream<
-                    async_std::net::TcpStream,
-                    async_tls::client::TlsStream<async_std::net::TcpStream>,
-                >,
-            >,
+            WebSocketStream<async_tungstenite::stream::Stream<async_std::net::TcpStream, async_tls::client::TlsStream<async_std::net::TcpStream>>>,
             Message,
         >,
     ) -> Self {
@@ -163,6 +151,20 @@ impl
         }
     }
 }
+
+impl WsWriter<async_tls::client::TlsStream<async_std::net::TcpStream>> {
+    fn new_tls_client(
+        stream: SplitSink<
+            WebSocketStream<async_tls::client::TlsStream<async_std::net::TcpStream>>,
+            Message,
+        >,
+    ) -> Self {
+        Self {
+            wrapped_stream: stream,
+        }
+    }
+}
+
 
 #[async_trait::async_trait]
 impl<S> StreamWriter for WsWriter<S>

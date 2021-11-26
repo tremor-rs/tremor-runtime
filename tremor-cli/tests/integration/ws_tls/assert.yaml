@@ -1,5 +1,5 @@
 status: 0
-name: WS
+name: ws tls connectors
 asserts:
-  - source: gen.log
+  - source: output.log
     equals_file: expected.json
