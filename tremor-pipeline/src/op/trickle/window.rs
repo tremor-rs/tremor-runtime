@@ -73,18 +73,38 @@ impl GroupWindow {
         aggrs: &AggrSlice<'static>,
         id: &EventId,
         mut iter: I,
+        ctx: &EventContext, node_meta:&NodeMetas, consts: RunConsts, recursion_limit: u32
     ) -> Option<Box<Self>>
     where
         I: std::iter::Iterator<Item = &'i Window>,
     {
         iter.next().map(|w| {
+            let mut aggrs_vec = aggrs.to_vec();
+
+            for aggr in aggrs_vec.iter_mut() {
+                match aggr.invocable {
+                    InvocableAggregate::Intrinsic(_) => {}
+                    InvocableAggregate::Tremor(ref mut x) => {
+                        let env = Env {
+                            context: ctx,
+                            consts,
+                            aggrs: &NO_AGGRS,
+                            meta: node_meta,
+                            recursion_limit,
+                        };
+
+                        x.init(&env).expect("FIXME")
+                    }
+                }
+            }
+
             Box::new(Self {
                 window: w.window_impl.clone(),
-                aggrs: aggrs.to_vec(),
+                aggrs: aggrs_vec,
                 id: id.clone(),
                 name: w.name.clone().into(),
                 transactional: false,
-                next: GroupWindow::from_windows(aggrs, id, iter),
+                next: GroupWindow::from_windows(aggrs, id, iter, ctx, node_meta, consts, recursion_limit),
                 holds_data: false,
             })
         })

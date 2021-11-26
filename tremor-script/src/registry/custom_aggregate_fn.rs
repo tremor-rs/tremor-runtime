@@ -73,23 +73,41 @@ impl<'script> CustomAggregateFn<'script> {
 
     /// Aggregate a value
     pub fn aggregate<'event>(&mut self, args: &[&Value], env: &Env<'_, 'event>) where 'script : 'event {
-        let mut body_iter = self.aggregate_body.iter();
+        let mut body_iter = self.aggregate_body.iter().peekable();
         let args = Value::Array(args.iter().map(|v| v.clone_static()).collect());
+        let mut no_meta = Value::null();
+        let mut state = Value::null().into_static();
+        let mut no_event = Value::null();
+        let mut local_stack = LocalStack::with_size(2);
+        local_stack.values.insert(0, Some(self.state.clone()));
+        local_stack.values.insert(1, Some(args[0].clone()));
+
+        let env = Env {
+            context: env.context,
+            consts: env.consts.with_new_args(&args), // fixme .with_new_args
+            aggrs: &[],
+            meta: env.meta,
+            recursion_limit: env.recursion_limit
+        };
+
         while let Some(expr) = body_iter.next() {
-            let _cont = expr.run(
-                ExecOpts { result_needed: false, aggr: AggrType::Tick },
-                &Env {
-                    context: env.context,
-                    consts: env.consts.with_new_args(&args), // fixme .with_new_args
-                    aggrs: &[],
-                    meta: env.meta,
-                    recursion_limit: env.recursion_limit
-                },
-                &mut Default::default(),
-                &mut Default::default(),
-                &mut Default::default(),
-                &mut Default::default()
-            );
+            let cont = expr.run(
+                ExecOpts { result_needed: true, aggr: AggrType::Tick },
+                &env,
+                &mut no_event,
+                &mut state,
+                &mut no_meta,
+                &mut local_stack
+            ).expect("FIXME");
+
+            if body_iter.peek().is_none() {
+                if let Cont::Cont(value) = cont
+                {
+                    self.state = value.into_owned().clone_static();
+                } else {
+                    todo!("No state returned in init! Return a proper error here.");
+                }
+            }
         }
     }
 
@@ -100,14 +118,14 @@ impl<'script> CustomAggregateFn<'script> {
 
     /// Emit the state
     pub(crate) fn emit<'event>(&mut self, env: &Env<'_, 'event>) -> FResult<Value<'event>> where 'script : 'event {
-        let mut body_iter = self.emit_body.iter();
+        let mut body_iter = self.emit_body.iter().peekable();
         let mut local_stack = LocalStack::with_size(1);
 
         let mut no_meta = Value::null();
         let mut state = Value::null().into_static();
         let mut no_event = Value::null();
 
-        local_stack.values.insert(0, Some(self.state.clone()));
+        local_stack.values.insert(0, Some(dbg!(&self.state).clone()));
 
         let env = Env {
             context: env.context,
@@ -127,9 +145,11 @@ impl<'script> CustomAggregateFn<'script> {
                 &mut local_stack
             )?;
 
-            if let Cont::Cont(value) = cont
-            {
-                return Ok(value.into_owned());
+            if body_iter.peek().is_none() {
+                if let Cont::Cont(value) = cont
+                {
+                    return Ok(value.into_owned());
+                }
             }
         }
 

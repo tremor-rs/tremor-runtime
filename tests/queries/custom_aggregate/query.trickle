@@ -8,11 +8,11 @@ mod m with
         init ( ) =>
             "not an empty string"
 
-        aggregate(st, data) =>
-            st + data
+        aggregate(st, x) =>
+            st + x
 
-        mergein(st, other) =>
-            st + other
+        mergein(st, x) =>
+            st + x
 
         emit(st) =>
             st
