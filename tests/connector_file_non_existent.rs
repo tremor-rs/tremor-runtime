@@ -46,8 +46,7 @@ config:
         input_path.display()
     );
     let harness = ConnectorHarness::new(connector_yaml).await?;
-    harness.start().await?;
-    task::sleep(Duration::from_millis(100)).await;
+    assert!(harness.start().await.is_err());
 
     let (out_events, err_events) = harness.stop().await?;
     assert!(out_events.is_empty());

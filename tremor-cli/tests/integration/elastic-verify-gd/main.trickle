@@ -1,9 +1,8 @@
-define script my_little_script
+define script process_batch_item
 script
   # setting required metadata for elastic
   let $elastic = {
     "_index": "my_little_index",
-    "_type": "my_little_doc",
     "action": event.action
   };
   let $correlation = event.snot;
@@ -13,14 +12,26 @@ script
   end;
   event
 end;
-create script my_little_script;
+create script process_batch_item;
 
 define generic::batch operator batch with
   count = 6
 end;
 create operator batch;
 
-select event from in into my_little_script;
-select event from my_little_script into batch;
-select event from batch into out;
-select event from my_little_script/err into err;
+define script process_whole_batch
+script
+  let $elastic = {
+    "_type": "my_little_doc"
+  };
+  event
+end;
+create script process_whole_batch;
+
+select event from in into process_batch_item;
+select event from process_batch_item into batch;
+select event from batch into process_whole_batch;
+select event from process_whole_batch into out;
+
+select event from process_batch_item/err into err;
+select event from process_whole_batch/err into err;

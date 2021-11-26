@@ -16,8 +16,8 @@
 // which it shouldn't
 #![allow(dead_code)]
 
-use async_std::channel::bounded;
-use async_std::channel::Receiver;
+use async_std::channel::{bounded, Receiver};
+use async_std::prelude::FutureExt;
 use async_std::task::JoinHandle;
 use beef::Cow;
 use halfbrown::HashMap;
@@ -27,6 +27,7 @@ use tremor_common::url::{
     ports::{ERR, IN, OUT},
     TremorUrl,
 };
+use tremor_pipeline::{CbAction, EventId};
 use tremor_runtime::connectors;
 use tremor_runtime::connectors::sink::SinkMsg;
 use tremor_runtime::connectors::{Connectivity, StatusReport};
@@ -110,6 +111,14 @@ impl ConnectorHarness {
             .await?;
         let cr = rx.recv().await?;
         cr.res?;
+
+        // send a CBAction::open to the connector, so it starts pulling data
+        self.addr
+            .send_source(connectors::source::SourceMsg::Cb(
+                CbAction::Open,
+                EventId::default(),
+            ))
+            .await?;
         Ok(())
     }
 
@@ -272,7 +281,7 @@ impl TestPipeline {
     /// get a single event from the pipeline
     pub(crate) async fn get_event(&self) -> Result<Event> {
         loop {
-            match *self.rx.recv().await? {
+            match *self.rx.recv().timeout(Duration::from_secs(2)).await?? {
                 pipeline::Msg::Event { event, .. } => break Ok(event),
                 // filter out signals
                 pipeline::Msg::Signal(signal) => {

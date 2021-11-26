@@ -20,7 +20,7 @@ pub(crate) mod prelude;
 pub mod sink;
 
 /// source parts
-pub(crate) mod source;
+pub mod source;
 #[macro_use]
 pub(crate) mod utils;
 
@@ -88,7 +88,12 @@ impl Addr {
         Ok(())
     }
 
-    pub(crate) async fn send_source(&self, msg: SourceMsg) -> Result<()> {
+    /// Send a message to the source part of the connector.
+    /// Results in a no-op if the connector has no source part.
+    ///
+    /// # Errors
+    ///   * if sending failed
+    pub async fn send_source(&self, msg: SourceMsg) -> Result<()> {
         if let Some(source) = self.source.as_ref() {
             source.addr.send(msg).await?;
         }
@@ -173,6 +178,13 @@ impl ConnectorResult<()> {
         Self {
             url: ctx.url.clone(),
             res: Ok(()),
+        }
+    }
+
+    fn err(ctx: &ConnectorContext, err_msg: &'static str) -> Self {
+        Self {
+            url: ctx.url.clone(),
+            res: Err(Error::from(err_msg)),
         }
     }
 }
@@ -710,7 +722,7 @@ impl Manager {
                     Msg::Reconnect => {
                         // reconnect if we are below max_retries, otherwise bail out and fail the connector
                         info!("[Connector::{}] Connecting...", &connector_addr.url);
-                        let new = reconnect.attempt(connector.as_mut(), &ctx).await?;
+                        let (new, will_retry) = reconnect.attempt(connector.as_mut(), &ctx).await?;
                         match (&connectivity, &new) {
                             (Connectivity::Disconnected, Connectivity::Connected) => {
                                 info!("[Connector::{}] Connected.", &connector_addr.url);
@@ -721,7 +733,7 @@ impl Manager {
                                 connector_addr
                                     .send_source(SourceMsg::ConnectionEstablished)
                                     .await?;
-                                if let Some(start_sender) = start_sender.as_ref() {
+                                if let Some(start_sender) = start_sender.take() {
                                     ctx.log_err(
                                         start_sender.send(ConnectorResult::ok(&ctx)).await,
                                         "Error sending start response.",
@@ -740,6 +752,20 @@ impl Manager {
                                     "[Connector::{}] No change: {:?}",
                                     &connector_addr.url, &new
                                 );
+                            }
+                        }
+                        // ugly extra check
+                        if new == Connectivity::Disconnected
+                            && !will_retry
+                            && start_sender.is_some()
+                        {
+                            if let Some(start_sender) = start_sender.take() {
+                                ctx.log_err(
+                                    start_sender
+                                        .send(ConnectorResult::err(&ctx, "Connect failed."))
+                                        .await,
+                                    "Error sending start response",
+                                )
                             }
                         }
                         connectivity = new;
@@ -1265,6 +1291,9 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
     world
         .register_builtin_connector_type(Box::new(impls::exit::Builder::new(world)))
         .await?;
+    world
+        .register_builtin_connector_type(Box::new(impls::elastic::Builder::default()))
+        .await?;
 
     Ok(())
 }
@@ -1279,11 +1308,7 @@ pub async fn register_debug_connector_types(world: &World) -> Result<()> {
         .register_builtin_connector_type(Box::new(impls::cb::Builder::default()))
         .await?;
     world
-<<<<<<< HEAD
-        .register_builtin_connector_type(Box::new(impls::file::Builder::default()))
-=======
         .register_builtin_connector_type(Box::new(impls::exit::Builder::new(world)))
->>>>>>> 8719c138 (Ensure connector startup order by waiting)
         .await?;
     world
         .register_builtin_connector_type(Box::new(impls::bench::Builder::default()))
