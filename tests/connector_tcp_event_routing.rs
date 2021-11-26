@@ -78,8 +78,7 @@ config:
         .await??;
     let (_data, meta) = event.data.parts();
 
-    let connector_meta = meta.get("connector");
-    let tcp_server_meta = connector_meta.get("tcp_server");
+    let tcp_server_meta = meta.get("tcp_server");
     assert_eq!(Some(false), tcp_server_meta.get_bool("tls"));
 
     let peer_obj = tcp_server_meta.get_object("peer").unwrap();
@@ -88,12 +87,10 @@ config:
 
     // lets send an event and route it via metadata to socket 1
     let meta = literal!({
-        "connector": {
-            "tcp_server": {
-                "peer": {
-                    "host": peer_obj.get("host").unwrap().clone_static(),
-                    "port": peer_obj.get("port").unwrap().clone_static()
-                }
+        "tcp_server": {
+            "peer": {
+                "host": peer_obj.get("host").unwrap().clone_static(),
+                "port": peer_obj.get("port").unwrap().clone_static()
             }
         }
     });
