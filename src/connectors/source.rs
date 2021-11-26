@@ -104,21 +104,27 @@ pub enum SourceReply {
         /// Port to send to, defaults to `out`
         port: Option<Cow<'static, str>>,
     },
-    // an already structured event payload
+    /// an already structured event payload
     Structured {
+        /// origin uri
         origin_uri: EventOriginUri,
+        /// payload
         payload: EventPayload,
+        /// stream id
         stream: u64,
         /// Port to send to, defaults to `out`
         port: Option<Cow<'static, str>>,
     },
-    // a bunch of separated `Vec<u8>` with optional metadata
-    // for when the source knows where boundaries are, maybe because it receives chunks already
+    /// a bunch of separated `Vec<u8>` with optional metadata
+    /// for when the source knows where boundaries are, maybe because it receives chunks already
     BatchData {
+        /// origin uri
         origin_uri: EventOriginUri,
+        /// batched raw data with optional metadata
         batch_data: Vec<(Vec<u8>, Option<Value<'static>>)>,
         /// Port to send to, defaults to `out`
         port: Option<Cow<'static, str>>,
+        /// stream id
         stream: u64,
     },
     /// A stream is opened
@@ -127,15 +133,18 @@ pub enum SourceReply {
     /// This might result in additional events being flushed from
     /// preprocessors, that is why we have `origin_uri` and `meta`
     EndStream {
+        /// origin uri
         origin_uri: EventOriginUri,
+        /// stream id
         stream_id: u64,
+        /// optional metadata
         meta: Option<Value<'static>>,
     },
     /// no new data/event, wait for the given ms
     Empty(u64),
 }
 
-// sender for source reply
+/// sender for source reply
 pub type SourceReplySender = Sender<SourceReply>;
 
 /// source part of a connector
@@ -259,6 +268,8 @@ impl ChannelSource {
 pub trait StreamReader: Send {
     /// reads from the source reader
     async fn read(&mut self, stream: u64) -> Result<SourceReply>;
+
+    /// called when the reader is finished or encountered an error
     async fn on_done(&mut self, _stream: u64) -> StreamDone {
         StreamDone::StreamClosed
     }
@@ -377,6 +388,7 @@ impl SourceAddr {
     }
 }
 
+/// Builder for the SourceManager
 #[allow(clippy::module_name_repetitions)]
 pub struct SourceManagerBuilder {
     qsize: usize,
@@ -385,10 +397,12 @@ pub struct SourceManagerBuilder {
 }
 
 impl SourceManagerBuilder {
+    /// queue size configured by the tremor runtime
     pub fn qsize(&self) -> usize {
         self.qsize
     }
 
+    /// spawn a Manager with the given source implementation
     pub fn spawn<S>(self, source: S, ctx: SourceContext) -> Result<SourceAddr>
     where
         S: Source + Send + 'static,
@@ -463,6 +477,7 @@ struct Streams {
 }
 
 impl Streams {
+    /// constructor
     fn new(
         uid: u64,
         codec_config: Either<String, CodecConfig>,
@@ -499,10 +514,12 @@ impl Streams {
         Ok(())
     }
 
+    /// end a stream
     fn end_stream(&mut self, stream_id: u64) -> Option<StreamState> {
         self.states.remove(&stream_id)
     }
 
+    /// get or create a stream
     fn get_or_create_stream(&mut self, stream_id: u64) -> Result<&mut StreamState> {
         Ok(match self.states.entry(stream_id) {
             Entry::Occupied(e) => e.into_mut(),
@@ -518,6 +535,7 @@ impl Streams {
         })
     }
 
+    /// build a stream
     fn build_stream(
         connector_uid: u64,
         stream_id: u64,
@@ -536,6 +554,7 @@ impl Streams {
     }
 }
 
+/// everything that is scoped to a single stream
 struct StreamState {
     stream_id: u64,
     idgen: EventIdGenerator,
@@ -543,6 +562,7 @@ struct StreamState {
     preprocessors: Preprocessors,
 }
 
+/// possible states of a source implementation
 #[derive(Debug, PartialEq)]
 enum SourceState {
     Initialized,
@@ -554,6 +574,7 @@ enum SourceState {
 }
 
 impl SourceState {
+    /// returns true if the runtime should pull the source for new data in this state
     fn should_pull_data(&self) -> bool {
         *self == SourceState::Running || *self == SourceState::Draining
     }
@@ -584,6 +605,7 @@ where
     cb_open_received: bool,
 }
 
+/// control flow enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Control {
     Continue,
@@ -594,6 +616,7 @@ impl<S> SourceManager<S>
 where
     S: Source,
 {
+    /// constructor
     fn new(
         source: S,
         ctx: SourceContext,
@@ -637,6 +660,7 @@ where
             || self.pipelines_out.is_empty()
     }
 
+    /// Handle a control plane message
     async fn handle_control_plane_msg(&mut self, msg: SourceMsg) -> Result<Control> {
         use SourceState::{Drained, Draining, Initialized, Paused, Running, Stopped};
 
@@ -955,10 +979,12 @@ where
         send_error
     }
 
+    /// should this manager pull data from its source?
     fn should_pull_data(&mut self) -> bool {
         self.state.should_pull_data() && !self.pipelines_out.is_empty() && self.cb_open_received
     }
 
+    /// handle data from the source
     async fn handle_data(&mut self, data: Result<SourceReply>) -> Result<()> {
         let data = match data {
             Ok(d) => d,
@@ -1326,6 +1352,7 @@ fn build_last_events(
     }
 }
 
+/// create an error payload
 fn make_error(
     connector_url: &TremorUrl,
     error: &Error,
@@ -1343,6 +1370,7 @@ fn make_error(
     EventPayload::from(ValueAndMeta::from_parts(data, meta))
 }
 
+/// create an event
 fn build_event(
     stream_state: &mut StreamState,
     pull_id: u64,

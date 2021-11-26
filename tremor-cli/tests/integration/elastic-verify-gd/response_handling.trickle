@@ -1,17 +1,19 @@
 select {
-  "success": event.success,
+  "action": $elastic.action,
+  "success": $elastic.success,
   "payload": event.payload,
-  "index": $elastic.index,
-  "doc": $elastic.doc_type,
+  "index": $elastic["_index"],
+  "doc": $elastic["_type"],
   "correlation": $correlation
 }
-from in where event.success into out;
+from in where $elastic.success into out;
 
 select {
+  "action": $elastic.action,
   "payload": event.payload,
-  "success": event.success,
-  "index": $elastic.index,
-  "doc": $elastic.doc_type,
+  "success": $elastic.success,
+  "index": $elastic["_index"],
+  "doc": $elastic["_type"],
   "correlation": $correlation
 }
-from in where not event.success into err;
+from in where not $elastic.success into err;
