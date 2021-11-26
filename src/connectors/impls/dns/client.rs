@@ -166,7 +166,7 @@ impl DnsSink {
         let name = lookup
             .as_str()
             .or_else(|| lookup.get_str("name"))
-            .ok_or("Invaliud DNS request: `connector.dns.lookup` missing")?;
+            .ok_or("Invaliud DNS request: `dns.lookup` missing")?;
 
         let data = if let Some(record_type) =
             lookup.get_str("type").map(str_to_record_type).transpose()?
@@ -202,17 +202,14 @@ impl Sink for DnsSink {
     ) -> Result<SinkReply> {
         for (_, m) in event.value_meta_iter() {
             match self
-                .query(
-                    m.get("connector").get("dns").get("lookup"),
-                    m.get("correlation"),
-                )
+                .query(m.get("dns").get("lookup"), m.get("correlation"))
                 .await
             {
                 Ok(e) => self.tx.send((OUT, e)).await?,
                 Err(err) => {
                     error!("DNS Error: {}", err);
                     let data = literal!({
-                        "request": m.get("connector").get("dns").map(Value::clone_static).unwrap_or_default(),
+                        "request": m.get("dns").map(Value::clone_static).unwrap_or_default(),
                         "error": format!("{}", err),
                     });
                     let meta = m
