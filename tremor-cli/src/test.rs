@@ -42,10 +42,10 @@ mod unit;
 
 impl Test {
     #[allow(clippy::too_many_lines)]
-    pub(crate) fn run(&self, verbose: bool) -> Result<()> {
+    pub(crate) async fn run(&self, verbose: bool) -> Result<()> {
         env_logger::init();
 
-        let base_directory = tremor_common::file::canonicalize(&self.path)?;
+        let base_directory = tremor_common::file::canonicalize(&path)?;
         let mut config = TestConfig {
             quiet: self.quiet,
             verbose,
@@ -59,9 +59,7 @@ impl Test {
         let found = GlobWalkerBuilder::new(&config.base_directory, "meta.json")
             .case_insensitive(true)
             .build()
-            .map_err(|e| {
-                Error::from(format!("failed to walk directory `{}`: {}", &self.path, e))
-            })?;
+            .map_err(|e| Error::from(format!("failed to walk directory `{}`: {}", path, e)))?;
 
         let mut reports = HashMap::new();
         let mut bench_stats = stats::Stats::new();
@@ -91,9 +89,9 @@ impl Test {
                 // meta.json to override the default with.
                 config.meta.mode = self.mode;
                 let test_report = match config.meta.mode {
-                    TestMode::Bench => {
+                    Kind::Bench => {
                         let (s, t) =
-                            run_bench(PathBuf::from(&self.path).as_path(), &config, stats)?;
+                            run_bench(PathBuf::from(path).as_path(), &config, stats).await?;
                         match t {
                             Some(x) => {
                                 bench_stats.merge(&s);
@@ -106,9 +104,9 @@ impl Test {
                             }
                         }
                     }
-                    TestMode::Integration => {
+                    Kind::Integration => {
                         let (s, t) =
-                            run_integration(PathBuf::from(&self.path).as_path(), &config, stats)?;
+                            run_integration(PathBuf::from(path).as_path(), &config, stats).await?;
                         match t {
                             Some(x) => {
                                 integration_stats.merge(&s);
@@ -123,19 +121,23 @@ impl Test {
                     }
                     // Command tests are their own beast, one singular folder might
                     // well result in many tests run
-                    TestMode::Command => {
+                    Kind::Command => {
                         let (s, t) =
-                            command::suite_command(PathBuf::from(&self.path).as_path(), &config)?;
+                            command::suite_command(PathBuf::from(path).as_path(), &config).await?;
                         cmd_stats.merge(&s);
                         t
                     }
-                    TestMode::Unit => {
+                    Kind::Unit => {
                         let (s, t) = suite_unit(&PathBuf::from("/"), &config)?;
                         unit_stats.merge(&s);
                         t
                     }
-                    TestMode::All => {
+                    Kind::All => {
                         eprintln!("No tests run: Don't know how to run test of kind All");
+                        Vec::new()
+                    }
+                    Kind::Unknown(ref x) => {
+                        eprintln!("No tests run: Unknown kind of test: {}", x);
                         Vec::new()
                     }
                 };
@@ -152,36 +154,36 @@ impl Test {
                     let meta: Meta = simd_json::from_str(meta_str.as_mut_str())?;
                     config.meta = meta;
 
-                    if config.meta.mode == TestMode::All {
+                    if config.meta.mode == Kind::All {
                         config.includes.push("all".into());
                     }
 
-                    if !(self.mode == TestMode::All || self.mode == config.meta.mode) {
+                    if !(mode == Kind::All || mode == config.meta.mode) {
                         continue;
                     }
 
                     let test_reports = match config.meta.mode {
-                        TestMode::Bench => {
-                            let (s, t) = suite_bench(root, &config)?;
+                        Kind::Bench => {
+                            let (s, t) = suite_bench(root, &config).await?;
                             bench_stats.merge(&s);
                             t
                         }
-                        TestMode::Integration => {
-                            let (s, t) = suite_integration(root, &config)?;
+                        Kind::Integration => {
+                            let (s, t) = suite_integration(root, &config).await?;
                             integration_stats.merge(&s);
                             t
                         }
-                        TestMode::Command => {
-                            let (s, t) = suite_command(root, &config)?;
+                        Kind::Command => {
+                            let (s, t) = suite_command(root, &config).await?;
                             cmd_stats.merge(&s);
                             t
                         }
-                        TestMode::Unit => {
+                        Kind::Unit => {
                             let (s, t) = suite_unit(root, &config)?;
                             unit_stats.merge(&s);
                             t
                         }
-                        TestMode::All => continue,
+                        Kind::All | Kind::Unknown(_) => continue,
                     };
                     reports.insert(config.meta.mode.to_string(), test_reports);
                     status::hr();
@@ -233,7 +235,7 @@ impl Test {
     }
 }
 
-fn suite_bench(
+async fn suite_bench(
     root: &Path,
     config: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
@@ -250,7 +252,7 @@ fn suite_bench(
         status::h0("Framework", "Finding benchmark test scenarios")?;
 
         for bench in benches {
-            let (s, t) = run_bench(bench.path(), config, stats)?;
+            let (s, t) = run_bench(bench.path(), config, stats).await?;
 
             stats = s;
             if let Some(report) = t {
@@ -264,7 +266,7 @@ fn suite_bench(
     }
 }
 
-fn run_bench(
+async fn run_bench(
     root: &Path,
     config: &TestConfig,
     mut stats: stats::Stats,
@@ -283,7 +285,8 @@ fn run_bench(
             config.base_directory.as_path(),
             &cwd.join(root),
             &tags,
-        )?;
+        )
+        .await?;
 
         // Restore cwd
         file::set_current_dir(&cwd)?;
@@ -306,7 +309,7 @@ fn run_bench(
     }
 }
 
-fn suite_integration(
+async fn suite_integration(
     root: &Path,
     config: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
@@ -323,7 +326,7 @@ fn suite_integration(
         status::h0("Framework", "Finding integration test scenarios")?;
 
         for test in tests {
-            let (s, t) = run_integration(test.path(), config, stats)?;
+            let (s, t) = run_integration(test.path(), config, stats).await?;
 
             stats = s;
             if let Some(report) = t {
@@ -339,7 +342,7 @@ fn suite_integration(
     }
 }
 
-fn run_integration(
+async fn run_integration(
     root: &Path,
     config: &TestConfig,
     mut stats: stats::Stats,
@@ -360,7 +363,7 @@ fn run_integration(
         status::tags(&tags, Some(&matched), Some(&config.excludes))?;
 
         // Run integration tests
-        let test_report = process::run_process("integration", base, root, &tags)?;
+        let test_report = process::run_process("integration", base, root, &tags).await?;
 
         // Restore cwd
         file::set_current_dir(&cwd)?;
