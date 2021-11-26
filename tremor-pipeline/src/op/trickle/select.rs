@@ -324,13 +324,7 @@ impl Operator for Select {
                                 // and reset it . If we didn't clone here we'd need to allocate a new
                                 // group for every event we haven't seen yet
                                 v.insert(dflt_group.clone());
-                                dflt_group.reset(&Env {
-                                    context: &ctx,
-                                    consts: consts.run(),
-                                    aggrs: &[],
-                                    meta: &node_meta,
-                                    recursion_limit
-                                });
+                                dflt_group.reset(&ctx, &node_meta, consts.run(), recursion_limit);
                             }
                         }
                     }
@@ -446,7 +440,7 @@ impl Operator for Select {
                                 can_remove,
                             )?;
                         }
-                        w.reset(&env);
+                        w.reset(ctx.ctx, ctx.node_meta, consts.run(), ctx.recursion_limit);
                     }
                     if can_remove {
                         to_remove.push(group_str.clone());

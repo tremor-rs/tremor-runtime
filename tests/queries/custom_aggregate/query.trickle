@@ -9,7 +9,7 @@ mod m with
             ""
 
         aggregate(st, data) =>
-            state + data
+            st + data
 
         mergein(st, other) =>
             st + other

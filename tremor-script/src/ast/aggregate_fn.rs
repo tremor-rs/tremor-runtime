@@ -1,3 +1,4 @@
+use halfbrown::HashMap;
 use super::{BaseExpr, NodeMetas};
 use crate::ast::raw::{ExprsRaw, IdentRaw};
 use crate::ast::upable::Upable;
@@ -65,6 +66,9 @@ impl<'script> Upable<'script> for RawAggregateFnDecl<'script> {
         self,
         helper: &mut Helper<'script, 'registry>,
     ) -> crate::ast::visitors::prelude::Result<Self::Target> {
+        let mut locals = HashMap::new();
+        locals.insert("st".to_string(), 0usize);
+        helper.swap(&mut Vec::new(), &mut locals);
         Ok(Self::Target {
             name: self.name.up(helper)?,
             init_body: self.body.init_body.up(helper)?,

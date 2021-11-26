@@ -39,7 +39,7 @@ impl<'script> CustomAggregateFn<'script> {
         let mut state = Value::null().into_static();
         let mut no_event = Value::null();
 
-        let mut body_iter = self.init_body.iter();
+        let mut body_iter = self.init_body.iter().peekable();
         while let Some(expr) = body_iter.next() {
             let env_local = Env {
                 context: env.context,
@@ -48,6 +48,7 @@ impl<'script> CustomAggregateFn<'script> {
                 meta: env.meta,
                 recursion_limit: env.recursion_limit
             };
+
             let cont = expr.run(
                 ExecOpts { result_needed: false, aggr: AggrType::Tick },
                 &env_local,
@@ -57,12 +58,16 @@ impl<'script> CustomAggregateFn<'script> {
                 &mut local_stack
             )?;
 
-            if let Cont::Cont(value) = cont
-            {
-                self.state = value.into_owned().clone_static();
-                break;
+            if body_iter.peek().is_none() {
+                if let Cont::Cont(value) = cont
+                {
+                    self.state = value.into_owned().clone_static();
+                } else {
+                    todo!("No state returned in init! Return a proper error here.");
+                }
             }
         }
+
         Ok(())
     }
 
@@ -96,19 +101,17 @@ impl<'script> CustomAggregateFn<'script> {
     /// Emit the state
     pub(crate) fn emit<'event>(&mut self, env: &Env<'_, 'event>) -> FResult<Value<'event>> where 'script : 'event {
         let mut body_iter = self.emit_body.iter();
-        let mut local_stack = LocalStack::with_size(128);
+        let mut local_stack = LocalStack::with_size(1);
 
         let mut no_meta = Value::null();
         let mut state = Value::null().into_static();
         let mut no_event = Value::null();
-        let args_raw = vec![self.state.clone()];
-        for (arg, local) in args_raw.iter().zip(local_stack.values.iter_mut()) {
-            *local = Some((*arg).clone_static());
-        }
-        let args = Value::Array(args_raw);
+
+        local_stack.values.insert(0, Some(self.state.clone()));
+
         let env = Env {
             context: env.context,
-            consts: env.consts.with_new_args(&args),
+            consts: env.consts,
             aggrs: &[],
             meta: env.meta,
             recursion_limit: env.recursion_limit
