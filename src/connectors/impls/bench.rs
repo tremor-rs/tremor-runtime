@@ -50,12 +50,19 @@ pub struct Config {
     pub structured: bool,
 
     /// Number of seconds to collect data before the system is stopped.
+    #[serde(default = "Default::default")]
     pub stop_after_secs: u64,
     /// Significant figures for the histogram
+    #[serde(default = "default_significant_figures")]
     pub significant_figures: u64,
     /// Number of seconds to warmup, events during this time are not
     /// accounted for in the latency measurements
+    #[serde(default = "Default::default")]
     pub warmup_secs: u64,
+}
+
+fn default_significant_figures() -> u64 {
+    2
 }
 
 impl ConfigImpl for Config {}

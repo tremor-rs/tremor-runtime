@@ -581,6 +581,7 @@ where
     connector_channel: Option<Sender<Msg>>,
     expected_drained: usize,
     pull_counter: u64,
+    cb_open_received: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -621,6 +622,7 @@ where
             connector_channel: None,
             expected_drained: 0,
             pull_counter: 0,
+            cb_open_received: false,
         }
     }
 
@@ -814,7 +816,9 @@ where
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Open, _id) => {
+                // FIXME: only start polling for data if we received at least 1 CbAction::Open
                 info!("[Source::{}] Circuit Breaker: Open.", self.ctx.url);
+                self.cb_open_received = true;
                 self.ctx
                     .log_err(self.source.on_cb_open(&self.ctx).await, "on_cb_open failed");
                 // avoid a race condition where the necessary start routine wasnt executed
@@ -949,6 +953,10 @@ where
             }
         }
         send_error
+    }
+
+    fn should_pull_data(&mut self) -> bool {
+        self.state.should_pull_data() && !self.pipelines_out.is_empty() && self.cb_open_received
     }
 
     async fn handle_data(&mut self, data: Result<SourceReply>) -> Result<()> {
@@ -1178,7 +1186,7 @@ where
                 return Ok(());
             }
 
-            if self.state.should_pull_data() && !self.pipelines_out.is_empty() {
+            if self.should_pull_data() {
                 let data = self.source.pull_data(self.pull_counter, &self.ctx).await;
                 self.pull_counter += 1;
                 // if self.pull_counter % 10_000 == 0 {
