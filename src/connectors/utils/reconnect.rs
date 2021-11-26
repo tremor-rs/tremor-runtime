@@ -193,16 +193,16 @@ impl ReconnectRuntime {
         &mut self,
         connector: &mut dyn Connector,
         ctx: &ConnectorContext,
-    ) -> Result<Connectivity> {
+    ) -> Result<(Connectivity, bool)> {
         match connector.connect(ctx, &self.attempt).await {
             Ok(true) => {
                 self.reset();
-                Ok(Connectivity::Connected)
+                Ok((Connectivity::Connected, true))
             }
             Ok(false) => {
-                self.update_and_retry();
+                let will_retry = self.update_and_retry();
 
-                Ok(Connectivity::Disconnected)
+                Ok((Connectivity::Disconnected, will_retry))
             }
 
             Err(e) => {
@@ -210,24 +210,25 @@ impl ReconnectRuntime {
                     "[Connector::{}] Reconnect Error ({}): {}",
                     &ctx.url, self.attempt, e
                 );
-                self.update_and_retry();
+                let will_retry = self.update_and_retry();
 
-                Ok(Connectivity::Disconnected)
+                Ok((Connectivity::Disconnected, will_retry))
             }
         }
     }
 
     /// update internal state for the current failed connect attempt
     /// and spawn a retry task
-    fn update_and_retry(&mut self) {
+    fn update_and_retry(&mut self) -> bool {
         // update internal state
         self.attempt.on_failure();
         // check if we can retry according to strategy
         if let ShouldRetry::No(msg) = self.strategy.should_retry(&self.attempt) {
-            error!(
+            warn!(
                 "[Connector::{}] Not reconnecting: {}",
                 &self.connector_url, msg
             );
+            false
         } else {
             // compute next interval
             let interval = self.strategy.next_interval(self.interval_ms, &self.attempt);
@@ -251,6 +252,7 @@ impl ReconnectRuntime {
                     );
                 }
             });
+            true
         }
     }
 
@@ -348,7 +350,7 @@ mod tests {
         };
         // failing attempt
         assert_eq!(
-            Connectivity::Disconnected,
+            (Connectivity::Disconnected, false),
             runtime.attempt(&mut connector, &ctx).await?
         );
         async_std::task::sleep(Duration::from_millis(100)).await;
@@ -380,7 +382,7 @@ mod tests {
         // 1st failing attempt
         assert!(matches!(
             runtime.attempt(&mut connector, &ctx).await?,
-            Connectivity::Disconnected
+            (Connectivity::Disconnected, true)
         ));
         async_std::task::sleep(Duration::from_millis(20)).await;
 
@@ -390,7 +392,7 @@ mod tests {
         // 2nd failing attempt
         assert!(matches!(
             runtime.attempt(&mut connector, &ctx).await?,
-            Connectivity::Disconnected
+            (Connectivity::Disconnected, true)
         ));
         async_std::task::sleep(Duration::from_millis(30)).await;
 
@@ -400,7 +402,7 @@ mod tests {
         // 3rd failing attempt
         assert!(matches!(
             runtime.attempt(&mut connector, &ctx).await?,
-            Connectivity::Disconnected
+            (Connectivity::Disconnected, false)
         ));
         async_std::task::sleep(Duration::from_millis(50)).await;
 
