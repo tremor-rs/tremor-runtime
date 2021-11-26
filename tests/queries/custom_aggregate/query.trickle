@@ -6,7 +6,7 @@ end;
 mod m with
     aggregate collect_joined of
         init ( ) =>
-            ""
+            "not an empty string"
 
         aggregate(st, data) =>
             st + data

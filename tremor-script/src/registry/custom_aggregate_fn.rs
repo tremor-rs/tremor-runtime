@@ -50,7 +50,7 @@ impl<'script> CustomAggregateFn<'script> {
             };
 
             let cont = expr.run(
-                ExecOpts { result_needed: false, aggr: AggrType::Tick },
+                ExecOpts { result_needed: true, aggr: AggrType::Tick },
                 &env_local,
                 &mut no_event,
                 &mut state,
