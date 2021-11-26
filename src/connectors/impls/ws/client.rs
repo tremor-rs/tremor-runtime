@@ -17,10 +17,16 @@
 
 use super::{WsReader, WsWriter};
 use crate::connectors::prelude::*;
+use crate::connectors::utils::tls::{TLSClientConfig, tls_client_connector};
+use async_std::net::TcpStream;
+use async_tls::TlsConnector;
 use async_tungstenite::async_std::connect_async;
+use async_tungstenite::client_async;
 use async_tungstenite::stream::Stream;
-use futures::StreamExt;
+use either::Either;
+use http_types::Url;
 use std::net::SocketAddr;
+use futures::StreamExt;
 
 const URL_SCHEME: &str = "tremor-ws-client";
 
@@ -32,6 +38,8 @@ pub struct Config {
     ttl: Option<u32>,
     #[serde(default = "default_no_delay")]
     no_delay: bool,
+    #[serde(with = "either::serde_untagged_optional", default = "Default::default")]
+    tls: Option<Either<TLSClientConfig, bool>>,
 }
 
 fn default_no_delay() -> bool {
@@ -52,6 +60,52 @@ pub struct WsClient {
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
+
+async fn resolve_tls_config(config: &Config) -> Result<(Option<TlsConnector>, Option<String>, String)> {
+    let url = Url::parse(&config.url)?;
+    let host = match url.host() {
+        Some(host) => host.to_string(),
+        None => return Err("Not a valid WS type url - host specification missing".into())
+    };
+    let port = match url.port() {
+        Some(port) => port.to_string(),
+        None => return Err("Not a valid WS type url - port specification missing".into())
+    };
+
+    match config.tls.as_ref() {
+        Some(Either::Right(true)) => {
+            Ok((
+                Some(tls_client_connector(&TLSClientConfig::default()).await?),
+                Some(host),
+                port,
+            ))
+        }
+        Some(Either::Left(tls_config)) => Ok((
+            Some(tls_client_connector(tls_config).await?),
+            tls_config.domain.clone(),
+            port,
+        )),
+        Some(Either::Right(false)) | None => Ok((None, None, port)),
+    }
+}
+
+fn condition_tungstenite_stream(
+    config: &Config, stream: &Stream<async_std::net::TcpStream, 
+    async_tls::client::TlsStream<async_std::net::TcpStream>>,
+) -> Result<(SocketAddr, SocketAddr)> {
+    match stream {
+        Stream::Plain(stream) => condition_tcp_stream(config, stream),
+        Stream::Tls(stream) => condition_tcp_stream(config, stream.get_ref())
+    }
+}
+
+fn condition_tcp_stream(config: &Config, stream: &TcpStream) -> Result<(SocketAddr, SocketAddr)> {
+    if let Some(ttl) = config.ttl {
+        stream.set_ttl(ttl)?;
+    }
+    stream.set_nodelay(config.no_delay)?;
+    Ok((stream.local_addr()?, stream.peer_addr()?))
+}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
@@ -124,46 +178,45 @@ impl Connector for WsClient {
             .sink_runtime
             .as_ref()
             .ok_or("Sink runtime not initialized")?;
-        let (ws_stream, _http_response) = connect_async(self.config.url.as_str()).await?;
 
-        let (local_addr, peer_addr) = match ws_stream.get_ref() {
-            Stream::Plain(s) => {
-                // Apply TCP options
-                if let Some(ttl) = self.config.ttl {
-                    s.set_ttl(ttl)?;
-                }
-                s.set_nodelay(self.config.no_delay)?;
-                (s.local_addr()?, s.peer_addr()?)
+        match resolve_tls_config(&self.config).await? {
+            (None,None,_port) => {
+                let (ws_stream, _http_response) = connect_async(self.config.url.as_str()).await?;
+                let (local_addr, peer_addr) = condition_tungstenite_stream(&self.config, ws_stream.get_ref())?;
+                let origin_uri = EventOriginUri {
+                    scheme: URL_SCHEME.to_string(),
+                    host: local_addr.ip().to_string(),
+                    port: Some(local_addr.port()),
+                    path: vec![local_addr.port().to_string()], // local port
+                };
+                let (writer, reader) = ws_stream.split();
+                let meta = ctx.meta(WsClient::meta(peer_addr, false));
+        
+                let ws_reader = WsReader::new(reader, ctx.url.clone(), origin_uri.clone(), meta);
+                source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
+                let ws_writer = WsWriter::new_tungstenite_client(writer);
+                sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer);
             }
-            Stream::Tls(s) => {
-                let tcp = s.get_ref();
-                // Apply TCP options
-                if let Some(ttl) = self.config.ttl {
-                    tcp.set_ttl(ttl)?;
-                }
-                tcp.set_nodelay(self.config.no_delay)?;
-                (tcp.local_addr()?, tcp.peer_addr()?)
+            (Some(tls_connector), Some(tls_domain), port) => {
+                let tcp_stream = async_std::net::TcpStream::connect(&format!("{}:{}", tls_domain, port)).await?;
+                let (local_addr, peer_addr) = condition_tcp_stream(&self.config, &tcp_stream)?;
+                let tls_stream = tls_connector.connect(tls_domain, tcp_stream).await?;
+                let (ws_stream, _http_response) = client_async(self.config.url.as_str(), tls_stream).await?;
+                let origin_uri = EventOriginUri {
+                    scheme: URL_SCHEME.to_string(),
+                    host: local_addr.ip().to_string(),
+                    port: Some(local_addr.port()),
+                    path: vec![local_addr.port().to_string()], // local port
+                };
+                let (writer, reader) = ws_stream.split();
+                let meta = ctx.meta(WsClient::meta(peer_addr, false));
+                let ws_reader = WsReader::new(reader, ctx.url.clone(), origin_uri.clone(), meta);
+                source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
+                let ws_writer = WsWriter::new_tls_client(writer);
+                sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer);
             }
+            _otherwise => return Err("Expected a TLS stream error".into())
         };
-
-        let origin_uri = EventOriginUri {
-            scheme: URL_SCHEME.to_string(),
-            host: local_addr.ip().to_string(),
-            port: Some(local_addr.port()),
-            path: vec![local_addr.port().to_string()], // local port
-        };
-
-        let (writer, reader) = ws_stream.split();
-        let meta = ctx.meta(WsClient::meta(peer_addr, false));
-
-        // register writer
-        let ws_reader = WsReader::new(reader, ctx.url.clone(), origin_uri.clone(), meta);
-
-        source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
-
-        // register writer
-        let ws_writer = WsWriter::new_tls_client(writer);
-        sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer);
 
         Ok(true)
     }
