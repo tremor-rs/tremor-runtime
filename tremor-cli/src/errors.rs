@@ -38,6 +38,12 @@ impl From<tremor_script::errors::CompilerError> for Error {
     }
 }
 
+impl<T> From<async_std::channel::SendError<T>> for Error {
+    fn from(_: async_std::channel::SendError<T>) -> Self {
+        Self::from(format!("Send Error"))
+    }
+}
+
 error_chain! {
     links {
         Script(tremor_script::errors::Error, tremor_script::errors::ErrorKind);

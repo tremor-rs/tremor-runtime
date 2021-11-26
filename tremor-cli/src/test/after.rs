@@ -33,9 +33,7 @@ impl After {
         let cmd = job::which(&self.cmd)?;
         // interpret `dir` as relative to `base`
         let current_dir = base.join(&self.dir).canonicalize()?;
-        let mut process =
-            job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &current_dir)?;
-        process.wait_with_output()?;
+        let process = job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &current_dir)?;
         Ok(Some(process))
     }
 }
@@ -62,7 +60,7 @@ impl AfterController {
         }
     }
 
-    pub(crate) fn spawn(&mut self) -> Result<()> {
+    pub(crate) async fn spawn(&mut self) -> Result<()> {
         let root = &self.base;
         let after_path = root.join("after.json");
         // This is optional
@@ -72,15 +70,13 @@ impl AfterController {
             if let Some(mut process) = after_process {
                 let after_out_file = root.join("after.out.log");
                 let after_err_file = root.join("after.err.log");
-                let after_process = std::thread::spawn(move || {
-                    if let Err(e) = process.tail(&after_out_file, &after_err_file) {
+                let after_process = async_std::task::spawn(async move {
+                    if let Err(e) = process.tail(&after_out_file, &after_err_file).await {
                         eprintln!("failed to tail tremor process: {}", e);
                     }
                 });
 
-                if after_process.join().is_err() {
-                    return Err("Failed to join test after thread/process error".into());
-                }
+                after_process.await
             }
         }
         Ok(())

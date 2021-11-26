@@ -23,8 +23,8 @@ use crate::test::stats;
 use crate::test::tag::{self, Tags};
 use crate::util::slurp_string;
 use globwalk::{FileType, GlobWalkerBuilder};
+use std::collections::HashMap;
 use std::path::Path;
-use std::{collections::HashMap, thread};
 use tremor_common::file;
 use tremor_common::time::nanotime;
 
@@ -56,7 +56,7 @@ pub(crate) struct CommandTest {
 }
 
 #[allow(clippy::too_many_lines)]
-pub(crate) fn suite_command(
+pub(crate) async fn suite_command(
     root: &Path,
     config: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
@@ -91,9 +91,9 @@ pub(crate) fn suite_command(
             file::set_current_dir(&suite_root)?;
 
             let mut before = before::BeforeController::new(suite_root);
-            let before_process = before.spawn()?;
-            thread::spawn(move || {
-                if let Err(e) = before.capture(before_process) {
+            let before_process = before.spawn().await?;
+            async_std::task::spawn(async move {
+                if let Err(e) = before.capture(before_process).await {
                     eprint!("Can't capture results from 'before' process: {}", e);
                 };
             });
@@ -138,12 +138,11 @@ pub(crate) fn suite_command(
                         // TODO wintel
                         let mut fg_process =
                             job::TargetProcess::new_in_current_dir(resolved_cmd, args, &case.env)?;
-                        let exit_status = fg_process.wait_with_output();
 
                         let fg_out_file = suite_root.join(&format!("fg.{}.out.log", counter));
                         let fg_err_file = suite_root.join(&format!("fg.{}.err.log", counter));
                         let start = nanotime();
-                        fg_process.tail(&fg_out_file, &fg_err_file)?;
+                        let exit_status = fg_process.tail(&fg_out_file, &fg_err_file).await?;
                         let elapsed = nanotime() - start;
 
                         counter += 1;
@@ -151,7 +150,7 @@ pub(crate) fn suite_command(
                         let (case_stats, elements) = process_testcase(
                             &fg_out_file,
                             &fg_err_file,
-                            exit_status?.code(),
+                            exit_status.code(),
                             elapsed,
                             &case,
                         )?;
@@ -185,7 +184,7 @@ pub(crate) fn suite_command(
             before::update_evidence(suite_root, &mut evidence)?;
 
             let mut after = after::AfterController::new(suite_root);
-            after.spawn()?;
+            after.spawn().await?;
             after::update_evidence(suite_root, &mut evidence)?;
 
             // Reset cwd
