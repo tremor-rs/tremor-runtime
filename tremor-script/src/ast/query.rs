@@ -238,13 +238,13 @@ pub struct PipelineDecl<'script> {
     pub into: Vec<Ident<'script>>,
     /// The raw pipeline statements
     pub raw_stmts: raw::StmtsRaw<'script>,
-    // /// The query in it's runnable form
-    // pub query: Option<Query<'script>>,
+    /// The query in it's runnable form
+    pub query: Option<Query<'script>>,
 }
 
 impl<'script> PipelineDecl<'script> {
-    pub(crate) fn to_query(&self) -> Result<Query<'script>> {
-        todo!()
+    pub(crate) fn to_query<'registry>(&self) -> Result<Query<'script>> {
+        Ok(self.query.clone().ok_or("not a toplevel query")?)
     }
 }
 impl_expr_mid!(PipelineDecl);

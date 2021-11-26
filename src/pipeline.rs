@@ -732,7 +732,7 @@ mod tests {
             addr: source_tx.clone(),
         };
         let connector_url =
-            TremorUrl::from_connector_instance("fake_connector", "instance")?.with_port(&OUT);
+            TremorUrl::from_connector_instance("fake_connector", "instance").with_port(&OUT);
         pipeline_addr
             .send_mgmt(MgmtMsg::ConnectInput {
                 input_url: connector_url.clone(),
@@ -747,7 +747,7 @@ mod tests {
             addr: source2_tx.clone(),
         };
         let connector2_url =
-            TremorUrl::from_connector_instance("fake_connector2", "instance")?.with_port(&OUT);
+            TremorUrl::from_connector_instance("fake_connector2", "instance").with_port(&OUT);
         pipeline_addr
             .send_mgmt(MgmtMsg::ConnectInput {
                 input_url: connector2_url.clone(),
@@ -901,7 +901,7 @@ mod tests {
         };
 
         let connector_url =
-            TremorUrl::from_connector_instance("fake_connector", "instance")?.with_port(&IN);
+            TremorUrl::from_connector_instance("fake_connector", "instance").with_port(&IN);
         // connect a channel so we can receive events from the back of the pipeline :)
         addr.send_mgmt(MgmtMsg::ConnectOutput {
             port: OUT,

@@ -647,7 +647,7 @@ mod test {
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         let wire = post_p.process(0, 0, &data)?;
         let (start, end) = wire[0].split_at(7);
-        let id = TremorUrl::from_connector_instance("snot", "00").unwrap();
+        let id = TremorUrl::from_connector_instance("snot", "00");
         let mut pps: Vec<Box<dyn Preprocessor>> = vec![Box::new(pre_p)];
         let recv = preprocess(pps.as_mut_slice(), &mut it, start.to_vec(), &id)?;
         assert!(recv.is_empty());

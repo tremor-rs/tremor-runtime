@@ -176,8 +176,8 @@ DeployStmt: DeployStmtRaw<'input> = {
 
 DeployDeployStmt: DeployStmtRaw<'input> = {
     // FIXME: we don't need a deploy kind here once troy is merged
-    <start:@L> <docs:DocComment> "deploy" <kind:DeployKind> <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
-    <start:@L> <docs:DocComment> "deploy" <kind:DeployKind> <id:Ident> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
+    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id, module: target.0, target: target.1, params, docs }),
+    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id: id.clone(),  module: vec![], target: id, params, docs }),
 }
 
 ConnectorKind: IdentRaw<'input> = {
@@ -189,20 +189,20 @@ DeployModuleStmt: DeployModuleStmtRaw<'input> = {
     <start:@L> "mod" <name:Ident> "with" <docs:ModComment> <stmts:DeployModuleStmts> "end" <end:@L> => DeployModuleStmtRaw{name, start, end, stmts, docs},
 }
 
-WithDeployLinks: DeployLinksRaw<'input> = {
-    "flow" <links:DeployLinks> => <>,
+WithFlowStmts: FlowStmtsRaw<'input> = {
+    "flow" <links:FlowStmts> => <>,
 }
 
-DeployLinks: DeployLinksRaw<'input> = {
-    <fields:DeployLinks_> => {
+FlowStmts: FlowStmtsRaw<'input> = {
+    <fields:FlowStmts_> => {
         let mut fields = fields;
         fields.reverse();
         fields
     },
 }
 
-DeployLinks_: DeployLinksRaw<'input> = {
-    <Sep<DeployLinks_, DeployLink, ";">> => <>
+FlowStmts_: FlowStmtsRaw<'input> = {
+    <Sep<FlowStmts_, DeployLink, ";">> => <>
 }
 
 CreateKind: CreateKind = {
@@ -210,27 +210,31 @@ CreateKind: CreateKind = {
     "pipeline" => CreateKind::Pipeline,
 }
 
-DeployKind: DeployKind = {
-    // FIXME renmve connector here
-    "connector" => DeployKind::Connector,
-    // FIXME renmve pipeline here
-    "pipeline" => DeployKind::Pipeline,
-    "flow" => DeployKind::Flow,
+
+DeployLink: FlowStmtRaw<'input> = {
+    <create:Create> => FlowStmtRaw::Create(create),
+    <connect:Connect> => FlowStmtRaw::Connect(connect),
+}
+
+Create: CreateStmtRaw<'input> = {
+    <start:@L> "create" <kind:CreateKind> <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, kind },
+    <start:@L> "create" <kind:CreateKind> <id:Ident> <params:CreationWithEnd> <end:@L> => CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind },
+
 }
 
 
-DeployLink: DeployLinkRaw<'input> = {
-    <start:@L> <docs:DocComment> "create" <kind:CreateKind> <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, kind, docs }),
-    <start:@L> <docs:DocComment> "create" <kind:CreateKind> <id:Ident> <params:CreationWithEnd> <end:@L> => DeployLinkRaw::Atom(CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind, docs }),
-
-    <start:@L> <docs:DocComment> "connect" <from:DeployEndpoint> "to" <to:DeployEndpoint> <end:@L> => DeployLinkRaw::Link(start, end, docs, from, to),
+Connect: ConnectStmtRaw<'input> = {
+    <start:@L> "connect" "/" "connector" <from:ConnectFrom> "to" "/" "pipeline" <to:ConnectTo> <end:@L>  => ConnectStmtRaw::ConnectorToPipeline{start, end, from, to},
+    <start:@L> "connect" "/" "pipeline" <from:ConnectFrom> "to" "/" "connector" <to:ConnectTo> <end:@L>  => ConnectStmtRaw::PipelineToConnector{start, end, from, to},
+    <start:@L> "connect" "/" "pipeline" <from:ConnectFrom> "to" "/" "pipeline" <to:ConnectTo> <end:@L>  => ConnectStmtRaw::PipelineToPipeline{start, end, from, to}
 }
 
-DeployEndpoint: DeployEndpointRaw<'input> = {
-    /// TODO Consider locking down tremor url syntax to system artefacts only
-    StringLiteral => DeployEndpointRaw::System(<>),
-    <id:Ident> "/" <port:Ident> => DeployEndpointRaw::Troy(id, Some(port)),
-    <id:Ident> => DeployEndpointRaw::Troy(id, None),
+ConnectFrom: DeployEndpointRaw<'input> = {
+     "/" <artefact:Ident> "/" <instance:Ident> <port:MaybePort> => DeployEndpointRaw{artefact, instance, port: port.unwrap_or_else(|| "out".into())},
+}
+
+ConnectTo: DeployEndpointRaw<'input> = {
+    "/" <artefact:Ident> "/" <instance:Ident> <port:MaybePort> => DeployEndpointRaw{artefact, instance, port: port.unwrap_or_else(|| "in".into())},
 }
 
 /// List of expressions at the root of the script
@@ -245,12 +249,12 @@ DeployModuleStmts: DeployStmtsRaw<'input> = {
 
  DefineConnector: DeployStmtRaw<'input> =  {
     // Connectors - these define connectors for deployment
-    <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> <params:ArgsWithEnd> <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, params, docs }),
+    <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> <params:ArgsWithEnd?> <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, params: params.unwrap_or_default(), docs }),
  }
 
 DefineFlow: DeployStmtRaw<'input> = {
     // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
-    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> <atoms:WithDeployLinks> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), params, atoms, docs }),
+    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> <atoms:WithFlowStmts> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), params, atoms, docs }),
 }
 
  // In case we need to limit the content of deploy stmt

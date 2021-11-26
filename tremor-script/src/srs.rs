@@ -14,7 +14,7 @@
 
 use crate::{
     ast::BaseRef,
-    ast::{self, query, DeployLink, NodeId, NodeMetas},
+    ast::{self, query, ConnectStmt, NodeId, NodeMetas},
     errors::{Error, Result},
     prelude::*,
 };
@@ -163,6 +163,7 @@ impl Deploy {
 /// This type is not itself self-referential but contains
 /// deployment atoms which may in turn be self-referential.
 ///
+#[derive(Debug)]
 pub struct CreateStmt {
     /// Identity
     pub node_id: NodeId,
@@ -622,7 +623,7 @@ pub struct FlowDecl {
     /// Arguments for this flow definition
     pub params: DefinitioalArgs<'static>,
     /// Link specifications
-    pub links: Vec<DeployLink>,
+    pub links: Vec<ConnectStmt>,
     /// Artefacts to deploy with this flow
     pub atoms: Vec<AtomOfDeployment>,
 }
@@ -663,7 +664,7 @@ impl FlowDecl {
         };
 
         let mut srs_atoms = Vec::new();
-        for stmt in &flow.atoms {
+        for stmt in &flow.creates {
             match &stmt.atom {
                 ast::DeployStmt::ConnectorDecl(instance) => {
                     // TODO wire up args
@@ -717,7 +718,7 @@ impl FlowDecl {
             raw: origin.raw.clone(),
             node_id: id.clone(),
             params: flow.params.clone().into_static(),
-            links: flow.links.clone(),
+            links: flow.connections.clone(),
             atoms: srs_atoms,
         })
     }
