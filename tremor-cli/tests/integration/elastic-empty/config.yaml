@@ -1,64 +1,71 @@
-onramp:
+connector:
   - id: input
-    type: blaster
+    type: bench
     codec: json
     config:
       source: "in.json"
       interval: 3000000 # 1 event per 3 ms
       iters: 10
-
-offramp:
   - id: elastic
     type: elastic
-    linked: true
     config:
       nodes:
         - "http://127.0.0.1:9200/"
       concurrency: 10
+      include_payload_in_response: true
   - id: debug_out
     type: file
     codec: json-sorted
+    postprocessors:
+      - lines
     config:
-      file: debug.log
+      path: debug.log
+      mode: truncate
   - id: errfile
     type: file
     codec: json-sorted
+    postprocessors:
+      - lines
     config:
-      file: "err.log"
+      path: "err.log"
+      mode: truncate
   - id: okfile
     type: file
     codec: json-sorted
+    postprocessors:
+      - lines
     config:
-      file: "ok.log"
+      path: "ok.log"
+      mode: truncate
   - id: exit
     type: exit
 
 binding:
   - id: elastic_integration
     links:
-      "/onramp/input/{instance}/out":
+      "/connector/input/{instance}/out":
         ["/pipeline/main/{instance}/in", "/pipeline/exit/{instance}/in"]
-      "/pipeline/main/{instance}/out": ["/offramp/elastic/{instance}/in"]
-      "/pipeline/exit/{instance}/out": ["/offramp/exit/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/connector/elastic/{instance}/in"]
+      "/pipeline/exit/{instance}/out": ["/connector/exit/{instance}/in"]
 
-      "/offramp/elastic/{instance}/out":
+      "/connector/elastic/{instance}/out":
         [
           "/pipeline/response_handling/{instance}/in",
           "/pipeline/system::passthrough/{instance}/in",
         ]
       "/pipeline/response_handling/{instance}/out":
-        ["/offramp/okfile/{instance}/in"]
+        ["/connector/okfile/{instance}/in"]
 
-      "/offramp/elastic/{instance}/err":
+      "/connector/elastic/{instance}/err":
         [
           "/pipeline/response_handling/{instance}/in",
           "/pipeline/system::passthrough/{instance}/in",
         ]
       "/pipeline/response_handling/{instance}/err":
-        ["/offramp/errfile/{instance}/in"]
+        ["/connector/errfile/{instance}/in"]
 
       "/pipeline/system::passthrough/{instance}/out":
-        ["/offramp/debug_out/{instance}/in"]
+        ["/connector/debug_out/{instance}/in"]
 
 mapping:
   "/binding/elastic_integration/01":
