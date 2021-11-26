@@ -12,10 +12,10 @@ mod m with
             state + data
 
         mergein(st, other) =>
-            state + other
+            st + other
 
         emit(st) =>
-            state
+            st
     end
 end;
 

@@ -757,7 +757,7 @@ impl<'script> ImutExprInt<'script> {
         let invocable: &mut InvocableAggregate = unsafe { mem::transmute(inv) };
         let r = match invocable {
             InvocableAggregate::Intrinsic(ref mut x) => { x.emit() }
-            InvocableAggregate::Tremor(ref mut x) => { x.emit() }
+            InvocableAggregate::Tremor(ref mut x) => { x.emit(env) }
         };
 
         let r = stry!(r.map(Cow::Owned).map_err(|e| {

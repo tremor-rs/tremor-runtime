@@ -311,6 +311,8 @@ impl Operator for Select {
                             dflt_group.value = group_value;
                             dflt_group.value.try_push(v.key().to_string());
 
+                            let recursion_limit = sel_ctx.recursion_limit;
+                            let node_meta = sel_ctx.node_meta.clone();
                             // execute it
                             if !stry!(dflt_group.on_event(sel_ctx, consts, event, &mut events)) {
                                 // if we can't delete it check if we're having too many groups,
@@ -322,7 +324,13 @@ impl Operator for Select {
                                 // and reset it . If we didn't clone here we'd need to allocate a new
                                 // group for every event we haven't seen yet
                                 v.insert(dflt_group.clone());
-                                dflt_group.reset();
+                                dflt_group.reset(&Env {
+                                    context: &ctx,
+                                    consts: consts.run(),
+                                    aggrs: &[],
+                                    meta: &node_meta,
+                                    recursion_limit
+                                });
                             }
                         }
                     }
@@ -389,14 +397,16 @@ impl Operator for Select {
 
                     let mut run = consts.run();
                     run.group = &g.value;
-                    run.window = &w.name;
+                    let window_name = w.name.clone();
+                    run.window = &window_name;
                     let window_event = w.window.on_tick(ingest_ns);
                     let mut can_remove = window_event.emit;
 
                     if window_event.emit {
                         // push
                         let mut env = env(&ctx, run, node_meta, recursion_limit);
-                        env.aggrs = &w.aggrs;
+                        let aggrs = w.aggrs.clone();
+                        env.aggrs = &aggrs;
 
                         let mut outgoing_event_id = event_id_gen.next_id();
 
@@ -436,7 +446,7 @@ impl Operator for Select {
                                 can_remove,
                             )?;
                         }
-                        w.reset();
+                        w.reset(&env);
                     }
                     if can_remove {
                         to_remove.push(group_str.clone());

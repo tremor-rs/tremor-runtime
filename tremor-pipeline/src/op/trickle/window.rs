@@ -90,11 +90,11 @@ impl GroupWindow {
         })
     }
     /// Resets the aggregates and transactionality of this window
-    pub(crate) fn reset(&mut self) {
+    pub(crate) fn reset<'event>(&mut self, env: &Env<'_, 'event>) {
         for aggr in &mut self.aggrs {
             match aggr.invocable {
                 InvocableAggregate::Intrinsic(ref mut x) => x.init(),
-                InvocableAggregate::Tremor(ref mut x) => x.init(),
+                InvocableAggregate::Tremor(ref mut x) => x.init(env).expect("FIXME"),
             }
         }
         self.transactional = false;
@@ -169,7 +169,7 @@ impl GroupWindow {
                         e.into_err(aggr, aggr, r, node_meta)
                     }))
                 }
-                InvocableAggregate::Tremor(ref mut x) => x.aggregate(argv1.as_slice()),
+                InvocableAggregate::Tremor(ref mut x) => x.aggregate(argv1.as_slice(), &env),
             }
         }
         Ok(())
@@ -285,8 +285,15 @@ impl GroupWindow {
                         can_remove
                     ));
             }
+            let aggrs = self.aggrs.clone();
             // since we emitted we now can reset this window
-            self.reset();
+            self.reset(&Env {
+                context: ctx.ctx,
+                consts,
+                aggrs: &aggrs,
+                meta: ctx.node_meta,
+                recursion_limit: ctx.recursion_limit,
+            });
         }
         if window_event.include {
             // if include is set we recorded the event earlier, meaning that
@@ -323,10 +330,10 @@ impl Group {
     /// from `GroupWindow::reset` in that it not only resets
     /// the data but also sets to windo into a state of 'never
     /// having seen an element'.
-    pub(crate) fn reset(&mut self) {
+    pub(crate) fn reset(&mut self, env: &Env) {
         let mut w = &mut self.windows;
         while let Some(g) = w {
-            g.reset();
+            g.reset(env);
             g.window.reset();
             w = &mut g.next;
         }
