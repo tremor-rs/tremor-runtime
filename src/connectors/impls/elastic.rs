@@ -21,6 +21,7 @@ use crate::errors::{Error, ErrorKind, Result};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::*;
 use elasticsearch::cluster::ClusterHealthParts;
+use elasticsearch::http::response::Response;
 use elasticsearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
 use elasticsearch::http::Url;
 use elasticsearch::params::Refresh;
@@ -221,15 +222,16 @@ impl Sink for ElasticSink {
         _serializer: &mut EventSerializer,
         start: u64,
     ) -> Result<SinkReply> {
+        info!("Received: {:?}", &event);
         if let Ok(new_clients) = self.clients_rx.try_recv() {
-            debug!("{} Received new clients", ctx);
+            info!("{} Received new clients", ctx);
             self.clients = ElasticClients::new(new_clients);
         }
         // if we exceed the maximum concurrency here, we issue a CB close, but carry on anyhow
         let guard = self.concurrency_cap.inc_for(&event).await?;
 
         if let Some(client) = self.clients.next() {
-            debug!("{} sending event [{}] to {}", ctx, event.id, client.url);
+            info!("{} sending event [{}] to {}", ctx, event.id, client.url);
 
             // create task for awaiting the sending and handling the response
             let response_tx = self.response_tx.clone();
@@ -254,7 +256,8 @@ impl Sink for ElasticSink {
                         // item metadata
                         let es_meta = ESMeta::new(meta);
                         match es_meta.get_action() {
-                            Some("index") | None => { // index is the default action
+                            Some("index") | None => {
+                                // index is the default action
                                 let mut op = BulkOperation::index(data);
                                 if let Some(index) = es_meta.get_index() {
                                     op = op.index(index);
@@ -265,19 +268,23 @@ impl Sink for ElasticSink {
                                 ops.push(op)?;
                             }
                             Some("delete") => {
-                                let mut op: BulkDeleteOperation<()> = if let Some(id) = es_meta.get_id() {
-                                    BulkOperation::delete(id)
-                                } else {
-                                    let e = Error::from(format!("Missing `$connector.elastic[\"_id\"]` for `delete` action."));
-                                    return handle_error(
-                                        e,
-                                        event,
-                                        &origin_uri,
-                                        response_tx,
-                                        reply_tx,
-                                        include_payload
-                                    ).await;
-                                };
+                                let mut op: BulkDeleteOperation<()> =
+                                    if let Some(id) = es_meta.get_id() {
+                                        BulkOperation::delete(id)
+                                    } else {
+                                        let e = Error::from(format!(
+                                            "Missing `$elastic[\"_id\"]` for `delete` action."
+                                        ));
+                                        return handle_error(
+                                            e,
+                                            event,
+                                            &origin_uri,
+                                            response_tx,
+                                            reply_tx,
+                                            include_payload,
+                                        )
+                                        .await;
+                                    };
                                 if let Some(index) = es_meta.get_index() {
                                     op = op.index(index);
                                 }
@@ -290,15 +297,18 @@ impl Sink for ElasticSink {
                                 } else {
                                     // Actually `_id` should be completely optional here
                                     // See: https://github.com/elastic/elasticsearch-rs/issues/190
-                                    let e = Error::from(format!("Missing `$connector.elastic[\"_id\"]` for `create` action."));
+                                    let e = Error::from(format!(
+                                        "Missing `$elastic[\"_id\"]` for `create` action."
+                                    ));
                                     return handle_error(
                                         e,
                                         event,
                                         &origin_uri,
                                         response_tx,
                                         reply_tx,
-                                        include_payload
-                                    ).await;
+                                        include_payload,
+                                    )
+                                    .await;
                                 };
                                 if let Some(index) = es_meta.get_index() {
                                     op = op.index(index);
@@ -307,17 +317,23 @@ impl Sink for ElasticSink {
                             }
                             Some("update") => {
                                 let mut op = if let Some(id) = es_meta.get_id() {
-                                    BulkOperation::update(id, data)
+                                    BulkOperation::update(
+                                        id,
+                                        literal!({ "doc": data.clone_static() }), // TODO: find a way to not .clone_static()
+                                    )
                                 } else {
-                                    let e = Error::from(format!("Missing `$connector.elastic[\"_id\"]` for `create` action."));
+                                    let e = Error::from(format!(
+                                        "Missing `$elastic[\"_id\"]` for `create` action."
+                                    ));
                                     return handle_error(
                                         e,
                                         event,
                                         &origin_uri,
                                         response_tx,
                                         reply_tx,
-                                        include_payload
-                                    ).await;
+                                        include_payload,
+                                    )
+                                    .await;
                                 };
                                 if let Some(index) = es_meta.get_index() {
                                     op = op.index(index);
@@ -326,10 +342,7 @@ impl Sink for ElasticSink {
                             }
                             Some(other) => {
                                 // FIXME: send error response
-                                let e = Error::from(format!(
-                                    "Invalid `$connector.elastic.action` {}",
-                                    other
-                                ));
+                                let e = Error::from(format!("Invalid `$elastic.action` {}", other));
                                 return handle_error(
                                     e,
                                     event,
@@ -360,7 +373,7 @@ impl Sink for ElasticSink {
                             other => {
                                 return handle_error(
                                     Error::from(format!(
-                                        "Invalid value for `$connector.elastic.refresh`: {}",
+                                        "Invalid value for `$elastic.refresh`: {}",
                                         other
                                     )),
                                     event,
@@ -377,10 +390,13 @@ impl Sink for ElasticSink {
                     if let Some(timeout) = timeout {
                         bulk = bulk.timeout(timeout);
                     }
+                    if let Some(doc_type) = doc_type {
+                        bulk = bulk.ty(doc_type);
+                    }
                     if let Some(pipeline) = pipeline {
                         bulk = bulk.pipeline(pipeline);
                     }
-                    match bulk.send().await {
+                    match bulk.send().await.and_then(Response::error_for_status_code) {
                         Ok(response) => {
                             match response.json::<StaticValue>().await {
                                 Ok(value) => {
@@ -441,7 +457,7 @@ impl Sink for ElasticSink {
     ) -> Result<SinkReply> {
         // check for a client refresh
         if let Ok(new_clients) = self.clients_rx.try_recv() {
-            debug!("{} Received new clients", ctx);
+            info!("{} Received new clients", ctx);
             self.clients = ElasticClients::new(new_clients);
         }
         Ok(SinkReply::default())
@@ -483,14 +499,12 @@ async fn handle_response(
             let (data, meta, port) = if let Some(_error) = action_item.get("error") {
                 // item failed
                 let mut meta = literal!({
-                    "connector": {
-                        "elastic": {
-                            "_id": action_item.get("_id").map(Value::clone_static),
-                            "_index": action_item.get("_index").map(Value::clone_static),
-                            "_type": action_item.get("_type").map(Value::clone_static),
-                            "action": action.to_owned(),
-                            "success": false
-                        }
+                    "elastic": {
+                        "_id": action_item.get("_id").map(Value::clone_static),
+                        "_index": action_item.get("_index").map(Value::clone_static),
+                        "_type": action_item.get("_type").map(Value::clone_static),
+                        "action": action.to_owned(),
+                        "success": false
                     }
                 });
                 if let Some(correlation) = correlation {
@@ -504,15 +518,13 @@ async fn handle_response(
             } else {
                 // item succeeded
                 let mut meta = literal!({
-                    "connector": {
-                        "elastic": {
-                            "_id": action_item.get("_id").map(Value::clone_static),
-                            "_index": action_item.get("_index").map(Value::clone_static),
-                            "_type": action_item.get("_type").map(Value::clone_static),
-                            "version": action_item.get("_version").map(Value::clone_static),
-                            "action": action.to_owned(),
-                            "success": true
-                        }
+                    "elastic": {
+                        "_id": action_item.get("_id").map(Value::clone_static),
+                        "_index": action_item.get("_index").map(Value::clone_static),
+                        "_type": action_item.get("_type").map(Value::clone_static),
+                        "version": action_item.get("_version").map(Value::clone_static),
+                        "action": action.to_owned(),
+                        "success": true
                     }
                 });
                 if let Some(correlation) = correlation {
@@ -560,10 +572,8 @@ where
 {
     let e_str = e.to_string();
     let mut meta = literal!({
-        "connector": {
-            "elastic": {
-                "success": false
-            }
+        "elastic": {
+            "success": false
         },
         "error": e_str.clone()
     });
@@ -670,12 +680,8 @@ struct ESMeta<'a, 'value> {
 impl<'a, 'value> ESMeta<'a, 'value> {
     fn new(meta: &'a Value<'value>) -> Self {
         Self {
-            meta: if let Some(connector_meta) = meta.get("connector") {
-                if let Some(elastic_meta) = connector_meta.get("elastic") {
-                    Some(elastic_meta)
-                } else {
-                    None
-                }
+            meta: if let Some(elastic_meta) = meta.get("elastic") {
+                Some(elastic_meta)
             } else {
                 None
             },

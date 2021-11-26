@@ -134,7 +134,7 @@ pub enum Msg {
     Reconnect,
     // TODO: fill as needed
     /// start the connector
-    Start,
+    Start(Sender<ConnectorResult<()>>),
     /// pause the connector
     ///
     /// source part is not polling for new data
@@ -228,9 +228,7 @@ impl ConnectorContext {
     #[must_use]
     pub fn meta(&self, inner: Value<'static>) -> Value<'static> {
         let mut map = Value::object_with_capacity(1);
-        let mut type_map = Value::object_with_capacity(1);
-        type_map.try_insert(self.connector_type.to_string(), inner);
-        map.try_insert("connector", type_map);
+        map.try_insert(self.connector_type.to_string(), inner);
         map
     }
 }
@@ -533,6 +531,8 @@ impl Manager {
         let send_addr = connector_addr.clone();
         let mut connector_state = InstanceState::Initialized;
         let mut drainage = None;
+        let mut start_sender: Option<Sender<ConnectorResult<()>>> = None;
+
         // TODO: add connector metrics reporter (e.g. for reconnect attempts, cb's received, uptime, etc.)
         task::spawn::<_, Result<()>>(async move {
             // typical 1 pipeline connected to IN, OUT, ERR
@@ -721,6 +721,12 @@ impl Manager {
                                 connector_addr
                                     .send_source(SourceMsg::ConnectionEstablished)
                                     .await?;
+                                if let Some(start_sender) = start_sender.as_ref() {
+                                    ctx.log_err(
+                                        start_sender.send(ConnectorResult::ok(&ctx)).await,
+                                        "Error sending start response.",
+                                    );
+                                }
                             }
                             (Connectivity::Connected, Connectivity::Disconnected) => {
                                 info!("[Connector::{}] Disconnected.", &connector_addr.url);
@@ -738,8 +744,10 @@ impl Manager {
                         }
                         connectivity = new;
                     }
-                    Msg::Start if connector_state == InstanceState::Initialized => {
+                    Msg::Start(sender) if connector_state == InstanceState::Initialized => {
                         info!("[Connector::{}] Starting...", &connector_addr.url);
+                        start_sender = Some(sender);
+
                         // start connector
                         connector_state = match connector.on_start(&ctx).await {
                             Ok(()) => InstanceState::Running,
@@ -762,11 +770,20 @@ impl Manager {
                         // initiate connect asynchronously
                         connector_addr.sender.send(Msg::Reconnect).await?;
                     }
-                    Msg::Start => {
+                    Msg::Start(sender) => {
                         info!(
                             "[Connector::{}] Ignoring Start Msg. Current state: {:?}",
                             &connector_addr.url, &connector_state
                         );
+                        if connector_state == InstanceState::Running
+                            && connectivity == Connectivity::Connected
+                        {
+                            // sending an answer if we are connected
+                            ctx.log_err(
+                                sender.send(ConnectorResult::ok(&ctx)).await,
+                                "Error sending Start result",
+                            );
+                        }
                     }
 
                     Msg::Pause if connector_state == InstanceState::Running => {
@@ -1262,7 +1279,11 @@ pub async fn register_debug_connector_types(world: &World) -> Result<()> {
         .register_builtin_connector_type(Box::new(impls::cb::Builder::default()))
         .await?;
     world
+<<<<<<< HEAD
         .register_builtin_connector_type(Box::new(impls::file::Builder::default()))
+=======
+        .register_builtin_connector_type(Box::new(impls::exit::Builder::new(world)))
+>>>>>>> 8719c138 (Ensure connector startup order by waiting)
         .await?;
     world
         .register_builtin_connector_type(Box::new(impls::bench::Builder::default()))

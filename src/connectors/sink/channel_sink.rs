@@ -20,7 +20,6 @@ use crate::errors::Result;
 use crate::QSIZE;
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::task;
-use beef::Cow;
 use bimap::BiMap;
 use either::Either;
 use hashbrown::HashMap;
@@ -299,16 +298,13 @@ where
 
 /// Extract sink specific metadata from event metadata
 ///
-/// The general path is `$<RESOURCE_TYPE>.<ARTEFACT>`
-/// Example: `$connector.tcp_server`
+/// The general path is `$<CONNECTOR_TYPE>`
+/// Example: `$tcp_server`
 fn get_sink_meta<'lt, 'value>(
     meta: &'lt Value<'value>,
     ctx: &SinkContext,
 ) -> Option<&'lt Value<'value>> {
-    ctx.url
-        .resource_type()
-        .and_then(|rt| meta.get(&Cow::owned(rt.to_string())))
-        .and_then(|rt_meta| rt_meta.get(ctx.connector_type.to_string().as_str()))
+    meta.get(ctx.connector_type.to_string().as_str())
 }
 
 #[async_trait::async_trait()]

@@ -103,7 +103,14 @@ impl ConnectorHarness {
 
     pub(crate) async fn start(&self) -> Result<()> {
         // start the connector
-        self.world.reg.start_connector(&self.connector_id).await
+        let (tx, rx) = bounded(1);
+        self.world
+            .reg
+            .start_connector(&self.connector_id, tx)
+            .await?;
+        let cr = rx.recv().await?;
+        cr.res?;
+        Ok(())
     }
 
     pub(crate) async fn pause(&self) -> Result<()> {

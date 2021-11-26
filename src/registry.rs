@@ -352,10 +352,14 @@ impl Registries {
     }
 
     /// start a connector
-    pub async fn start_connector(&self, id: &TremorUrl) -> Result<()> {
+    pub async fn start_connector(
+        &self,
+        id: &TremorUrl,
+        sender: Sender<ConnectorResult<()>>,
+    ) -> Result<()> {
         if let Some(addr) = self.find_connector(id).await? {
             // TODO: should we wait for this?
-            addr.send(ConnectorMsg::Start).await
+            addr.send(ConnectorMsg::Start(sender)).await
         } else {
             Err(
                 ErrorKind::InstanceNotFound(ResourceType::Connector.to_string(), id.to_string())

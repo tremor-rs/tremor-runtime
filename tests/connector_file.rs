@@ -75,10 +75,8 @@ config:
     // meta
     assert_eq!(
         literal!({
-            "connector": {
-                "file": {
-                    "path": "tests/data/input.txt"
-                }
+            "file": {
+                "path": "tests/data/input.txt"
             }
         }),
         meta

@@ -16,12 +16,12 @@
 
 use crate::config::Binding as BindingConfig;
 use crate::connectors::ConnectorResult;
-use crate::errors::Result;
+use crate::errors::{Error, Result};
 use crate::permge::PriorityMerge;
 use crate::registry::instance::InstanceState;
 use crate::registry::Registries;
 use crate::repository::BindingArtefact;
-use async_std::channel::{bounded, unbounded, Sender};
+use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashSet;
 use smol::stream::StreamExt;
@@ -244,6 +244,18 @@ impl Manager {
         let mut drain_senders = Vec::with_capacity(1);
         let mut stop_senders = Vec::with_capacity(1);
 
+        async fn wait_for_responses(
+            rx: Receiver<ConnectorResult<()>>,
+            n: usize,
+        ) -> Result<Vec<()>> {
+            futures::future::join_all(std::iter::repeat_with(|| rx.recv()).take(n))
+                .await
+                .into_iter()
+                .map(|r| r.map_err(Error::from))
+                .map(|res| res.and_then(|r| r.res))
+                .collect::<Result<Vec<()>>>()
+        }
+
         task::spawn::<_, Result<()>>(async move {
             while let Some(wrapped) = input_channel.next().await {
                 match wrapped {
@@ -252,18 +264,25 @@ impl Manager {
                         for pipe in &pipelines {
                             registries.start_pipeline(pipe).await?;
                         }
-                        // start sink connectors
+                        let (tx, rx) = unbounded();
+                        // start sink connectors first
                         for conn in &end_points {
-                            registries.start_connector(conn).await?;
+                            registries.start_connector(conn, tx.clone()).await?;
                         }
+                        wait_for_responses(rx.clone(), end_points.len()).await?;
+
                         // start source/sink connectors in random order
                         for conn in &mixed_pickles {
-                            registries.start_connector(conn).await?;
+                            registries.start_connector(conn, tx.clone()).await?;
                         }
+                        wait_for_responses(rx.clone(), mixed_pickles.len()).await?;
+
+                        // wait for mixed pickles to be connected
                         // start source only connectors
                         for conn in &start_points {
-                            registries.start_connector(conn).await?;
+                            registries.start_connector(conn, tx.clone()).await?;
                         }
+                        wait_for_responses(rx.clone(), start_points.len()).await?;
 
                         binding_state = InstanceState::Running;
                     }
