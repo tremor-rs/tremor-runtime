@@ -124,12 +124,10 @@ config:
         }
     });
     let meta = literal!({
-        "connector": {
-            "elastic": {
-                "_index": "my_index",
-                "_id": "123",
-                "action": "index"
-            }
+        "elastic": {
+            "_index": "my_index",
+            "_id": "123",
+            "action": "index"
         },
         "correlation": {
             "snot": ["badger", 42, false]
@@ -145,15 +143,13 @@ config:
     let event = out.get_event().await?;
     assert_eq!(
         &literal!({
-            "connector": {
-                "elastic": {
-                    "_id": "123",
-                    "_index": "my_index",
-                    "_type": "_doc",
-                    "version": 1,
-                    "action": "index",
-                    "success": true
-                }
+            "elastic": {
+                "_id": "123",
+                "_index": "my_index",
+                "_type": "_doc",
+                "version": 1,
+                "action": "index",
+                "success": true
             },
             "correlation": {
                 "snot": ["badger", 42, false]
@@ -204,11 +200,9 @@ config:
                     }
                 },
                 "meta": {
-                    "connector": {
-                        "elastic": {
-                            "action": "update",
-                            "_id": "123",
-                        }
+                    "elastic": {
+                        "action": "update",
+                        "_id": "123",
                     }
                 }
             }
@@ -223,11 +217,9 @@ config:
         }
     ]);
     let batched_meta = literal!({
-        "connector": {
-            "elastic": {
-                "_index": "my_index",
-                "_type": "_doc"
-            }
+        "elastic": {
+            "_index": "my_index",
+            "_type": "_doc"
         }
     });
     let batched_id = EventId::new(0, 0, 1, 1);
@@ -243,8 +235,6 @@ config:
     let mut meta = out_event1.data.suffix().meta().clone_static();
     // remove _id
     assert!(meta
-        .get_mut("connector")
-        .expect("no connector in meta")
         .get_mut("elastic")
         .expect("no elastic in meta")
         .remove("_id")?
@@ -252,14 +242,12 @@ config:
         .unwrap_or_default());
     assert_eq!(
         literal!({
-            "connector": {
-                "elastic": {
-                    "_index": "my_index",
-                    "_type": "_doc",
-                    "version": 1,
-                    "action": "index",
-                    "success": true
-                }
+            "elastic": {
+                "_index": "my_index",
+                "_type": "_doc",
+                "version": 1,
+                "action": "index",
+                "success": true
             }
         }),
         meta
@@ -292,15 +280,13 @@ config:
     let meta = err_event2.data.suffix().meta();
     assert_eq!(
         literal!({
-            "connector": {
-                "elastic": {
-                    "_id": "123",
-                    "_index": "my_index",
-                    "_type": "_doc",
-                    "action": "update",
-                    "success": false
-                },
-            }
+            "elastic": {
+                "_id": "123",
+                "_index": "my_index",
+                "_type": "_doc",
+                "action": "update",
+                "success": false
+            },
         }),
         meta
     );
@@ -313,8 +299,6 @@ config:
     let mut meta = out_event3.data.suffix().meta().clone_static();
     // remove _id, as it is random
     assert!(meta
-        .get_mut("connector")
-        .expect("No connector in meta")
         .get_mut("elastic")
         .expect("No elastic in meta")
         .remove("_id")?
@@ -323,14 +307,12 @@ config:
 
     assert_eq!(
         literal!({
-            "connector": {
-                "elastic": {
-                    "success": true,
-                    "_index": "my_index",
-                    "_type": "_doc",
-                    "version": 1,
-                    "action": "index"
-                }
+            "elastic": {
+                "success": true,
+                "_index": "my_index",
+                "_type": "_doc",
+                "version": 1,
+                "action": "index"
             },
             "correlation": "snot"
         }),
@@ -351,12 +333,10 @@ config:
         data: (
             literal!({}),
             literal!({
-                "connector": {
-                    "elastic": {
-                        "_index": "my_index",
-                        "action": "delete",
-                        "_id": "123"
-                    }
+                "elastic": {
+                    "_index": "my_index",
+                    "action": "delete",
+                    "_id": "123"
                 },
                 "correlation": [true, false]
             }),
@@ -370,10 +350,8 @@ config:
     let err_event = err.get_event().await?;
     assert_eq!(
         literal!({
-            "connector": {
-                "elastic": {
-                    "success": false
-                }
+            "elastic": {
+                "success": false
             },
             "error": "error sending request for url (http://127.0.0.1:9200/my_index/_bulk): error trying to connect: tcp connect error: Connection refused (os error 61)",
             "correlation": [true, false]

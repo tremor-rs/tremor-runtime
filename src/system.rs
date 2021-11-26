@@ -735,7 +735,17 @@ type: metrics
             .ok_or_else(|| Error::from("Failed to initialize system::metrics connector."))?;
         // we need to make sure the metrics connector is consuming metrics events
         // before anything else is started, so we don't fill up the metrics_channel and thus lose messages
-        self.reg.start_connector(&METRICS_CONNECTOR).await?;
+        let (tx, rx) = bounded(1);
+        self.reg.start_connector(&METRICS_CONNECTOR, tx).await?;
+        async_std::task::spawn(async move {
+            if let Ok(res) = rx.recv().await {
+                if let Err(e) = res.res {
+                    error!("[Connector::metrics] {} connector failed: {}", res.url, e);
+                } else {
+                    info!("[Connector::metrics] {} connector started.", res.url);
+                }
+            }
+        });
 
         let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
         let aggr_reg = tremor_script::aggr_registry();

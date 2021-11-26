@@ -91,12 +91,7 @@ impl<'v> TryFrom<&'v Value<'v>> for Command<'v> {
     type Error = crate::Error;
 
     fn try_from(v: &'v Value<'v>) -> Result<Self> {
-        let v = v
-            .get("connector")
-            .ok_or("Missing `connectorv` field for commands")?;
-        let v = v
-            .get("kv")
-            .ok_or("Missing `connector.kv` field for commands")?;
+        let v = v.get("kv").ok_or("Missing `$kv` field for commands")?;
         if let Some(key) = v.get_bytes("get").map(|v| v.to_vec()) {
             Ok(Command::Get { key })
         } else if let Some(key) = v.get_bytes("put").map(|v| v.to_vec()) {
@@ -149,11 +144,9 @@ fn ok(op_name: &'static str, k: Vec<u8>, v: Value<'static>) -> (Value<'static>, 
     (
         v,
         literal!({
-            "connector": {
-                "kv": {
-                    "op": op_name,
-                    "ok": Value::Bytes(k.into())
-                }
+            "kv": {
+                "op": op_name,
+                "ok": Value::Bytes(k.into())
             }
         }),
     )
@@ -372,9 +365,7 @@ impl Sink for KvSink {
                     id.track(&event.id);
                     let mut meta = literal!({
                         "error": e.to_string(),
-                        "connector": {
-                            "kv": op.map(|op| literal!({ "op": op, "key": key }))
-                        }
+                        "kv": op.map(|op| literal!({ "op": op, "key": key }))
                     });
                     if let Some(correlation) = correlation {
                         meta.try_insert("correlation", correlation.clone_static());

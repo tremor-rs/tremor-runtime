@@ -142,7 +142,10 @@ pub async fn patch_instance(req: Request) -> Result<Response> {
         }
         (Initialized, Running) => {
             // start
-            registry.start_connector(&instance.url).await?;
+            let (tx, rx) = bounded(1);
+            registry.start_connector(&instance.url, tx).await?;
+            let cr = rx.recv().await?;
+            cr.res?;
         }
         (current, wanted) => {
             // cannot transition
