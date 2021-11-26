@@ -1,8 +1,10 @@
 define script my_little_script
 script
   # setting required metadata for elastic
-  let $index = "my_little_index";
-  let $doc_type = "my_little_doc";
+  let $elastic = {
+    "_index": "my_little_index",
+    "_type": "my_little_doc"
+  };
   event
 end;
 create script my_little_script;
@@ -16,6 +18,6 @@ create operator batch;
 create stream exit;
 
 select event from in where event != "exit" into my_little_script;
-select event from my_little_script into batch;
-select event from batch into out;
+select event from batch into my_little_script;
+select event from my_little_script into out;
 select event from my_little_script/err into err;
