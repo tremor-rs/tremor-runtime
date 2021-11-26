@@ -144,7 +144,7 @@ async fn run(app: App<'_>, cmd: &ArgMatches) -> Result<()> {
             .await
         }
         Some(("dbg", Some(matches))) => debug::run_cmd(matches),
-        Some(("test", Some(matches))) => test::run_cmd(matches),
+        Some(("test", Some(matches))) => test::run_cmd(matches).await,
         other => Err(format!("unknown command: {:?}", other).into()),
     }
 }
