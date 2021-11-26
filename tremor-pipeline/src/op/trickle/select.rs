@@ -399,8 +399,7 @@ impl Operator for Select {
                     if window_event.emit {
                         // push
                         let mut env = env(&ctx, run, node_meta, recursion_limit);
-                        let aggrs = w.aggrs.clone();
-                        env.aggrs = &aggrs;
+                        env.aggrs = &w.aggrs;
 
                         let mut outgoing_event_id = event_id_gen.next_id();
 
