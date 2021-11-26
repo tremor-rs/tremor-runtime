@@ -119,7 +119,7 @@ async fn run(cli: Cli) -> Result<()> {
             command.run().await;
             Ok(())
         }
-        Command::Test(t) => t.run(cli.verbose > 0),
+        Command::Test(t) => t.run(cli.verbose > 0).await,
         Command::Dbg(d) => d.run(),
         Command::Run(r) => r.run(),
         Command::Doc(d) => d.run(),
