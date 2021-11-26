@@ -373,6 +373,16 @@ pub struct IdentRaw<'script> {
     pub id: beef::Cow<'script, str>,
 }
 impl_expr!(IdentRaw);
+
+impl<'script> From<&'script str> for IdentRaw<'script> {
+    fn from(id: &'script str) -> Self {
+        IdentRaw {
+            start: Location::default(),
+            end: Location::default(),
+            id: id.into(),
+        }
+    }
+}
 impl<'script> ToString for IdentRaw<'script> {
     fn to_string(&self) -> String {
         self.id.to_string()

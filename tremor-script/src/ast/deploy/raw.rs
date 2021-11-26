@@ -17,21 +17,20 @@
 
 use super::ConnectorDecl;
 use super::CreateStmt;
-use super::DeployEndpoint;
-use super::DeployLink;
 use super::FlowDecl;
 use super::Value;
 use super::{BaseExpr, DeployFlow};
+use super::{ConnectStmt, DeployEndpoint};
 use crate::ast::{
     error_generic, node_id::NodeId, query::raw::ConfigRaw, AggrRegistry, Deploy, DeployStmt,
-    Helper, ModDoc, NodeMetas, PipelineDecl, Registry, Script, StringLit, Upable,
+    Helper, ModDoc, NodeMetas, PipelineDecl, Registry, Script, Upable,
 };
 use crate::ast::{
     query::raw::{CreationalWithRaw, DefinitioalArgsRaw, DefinitioalArgsWithRaw, PipelineDeclRaw},
     visitors::ConstFolder,
 };
 use crate::ast::{
-    raw::{ExprRaw, IdentRaw, ModuleRaw, StringLitRaw},
+    raw::{ExprRaw, IdentRaw, ModuleRaw},
     walkers::ImutExprWalker,
 };
 use crate::errors::ErrorKind;
@@ -43,13 +42,8 @@ use crate::EventContext;
 use beef::Cow;
 use halfbrown::HashMap;
 use tremor_common::time::nanotime;
-use tremor_common::url::TremorUrl;
 use tremor_value::literal;
 
-// For compile time interpretation support
-use crate::interpreter::Env;
-use crate::interpreter::ExecOpts;
-use crate::interpreter::LocalStack;
 use crate::Return;
 
 /// Evaluate a script expression at compile time with an empty state context
@@ -75,37 +69,6 @@ pub fn run_script<'script, 'registry>(
             &helper.meta,
         ),
     }
-}
-
-/// Evaluate an interpolated literal string at compile time with an empty state context
-/// for use during compile time reduction
-/// # Errors
-/// If evaluation of the expression fails, or a legal value cannot be evaluated by result
-pub(crate) fn run_lit_str<'script, 'registry>(
-    helper: &Helper<'script, 'registry>,
-    literal: &StringLit<'script>,
-) -> Result<Cow<'script, str>> {
-    let eo = ExecOpts {
-        aggr: AggrType::Emit,
-        result_needed: true,
-    };
-    let ctx = EventContext::new(nanotime(), None);
-    let event = literal!({}).into_static();
-    let state = literal!({}).into_static();
-    let meta = literal!({}).into_static();
-
-    let local = LocalStack::with_size(0);
-
-    let run_consts = helper.consts.clone();
-    let run_consts = run_consts.run();
-    let env = Env {
-        context: &ctx,
-        consts: run_consts,
-        aggrs: &helper.aggregates.clone(),
-        meta: &helper.meta.clone(),
-        recursion_limit: crate::recursion_limit(),
-    };
-    literal.run(eo, &env, &event, &state, &meta, &local)
 }
 
 #[derive(Debug, PartialEq, Serialize)]
@@ -322,6 +285,100 @@ impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+/// we're forced to make this pub because of lalrpop
+pub struct DeployEndpointRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
+    pub artefact: IdentRaw<'script>,
+    /// we're forced to make this pub because of lalrpop
+    pub instance: IdentRaw<'script>,
+    /// we're forced to make this pub because of lalrpop
+    pub port: IdentRaw<'script>,
+}
+
+impl<'script> Upable<'script> for DeployEndpointRaw<'script> {
+    type Target = DeployEndpoint;
+    fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        Ok(DeployEndpoint {
+            artefact: self.artefact.to_string(),
+            instance: self.artefact.to_string(),
+            port: self.artefact.to_string(),
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+/// we're forced to make this pub because of lalrpop
+pub enum ConnectStmtRaw<'script> {
+    ConnectorToPipeline {
+        /// The instance we're connecting to
+        start: Location,
+        /// The instance we're connecting to
+        end: Location,
+        /// The instance we're connecting to
+        from: DeployEndpointRaw<'script>,
+        /// The instance being connected
+        to: DeployEndpointRaw<'script>,
+    },
+    PipelineToConnector {
+        /// The instance we're connecting to
+        start: Location,
+        /// The instance we're connecting to
+        end: Location,
+        /// The instance we're connecting to
+        from: DeployEndpointRaw<'script>,
+        /// The instance being connected
+        to: DeployEndpointRaw<'script>,
+    },
+    PipelineToPipeline {
+        /// The instance we're connecting to
+        start: Location,
+        /// The instance we're connecting to
+        end: Location,
+        /// The instance we're connecting to
+        from: DeployEndpointRaw<'script>,
+        /// The instance being connected
+        to: DeployEndpointRaw<'script>,
+    },
+}
+impl<'script> Upable<'script> for ConnectStmtRaw<'script> {
+    type Target = ConnectStmt;
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        match self {
+            ConnectStmtRaw::ConnectorToPipeline {
+                start,
+                end,
+                from,
+                to,
+            } => Ok(ConnectStmt::ConnectorToPipeline {
+                mid: helper.add_meta(start, end),
+                from: from.up(helper)?,
+                to: to.up(helper)?,
+            }),
+            ConnectStmtRaw::PipelineToConnector {
+                start,
+                end,
+                from,
+                to,
+            } => Ok(ConnectStmt::PipelineToConnector {
+                mid: helper.add_meta(start, end),
+                from: from.up(helper)?,
+                to: to.up(helper)?,
+            }),
+            ConnectStmtRaw::PipelineToPipeline {
+                start,
+                end,
+                from,
+                to,
+            } => Ok(ConnectStmt::PipelineToPipeline {
+                mid: helper.add_meta(start, end),
+                from: from.up(helper)?,
+                to: to.up(helper)?,
+            }),
+        }
+    }
+}
+
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FlowDeclRaw<'script> {
@@ -330,15 +387,7 @@ pub struct FlowDeclRaw<'script> {
     pub(crate) id: String,
     pub(crate) params: DefinitioalArgsRaw<'script>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
-    pub(crate) atoms: Vec<DeployLinkRaw<'script>>,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize)]
-/// we're forced to make this pub because of lalrpop
-pub enum DeployEndpointRaw<'script> {
-    System(StringLitRaw<'script>),
-    // TODO modular target with optional port specification - await connectors before revising
-    Troy(IdentRaw<'script>, Option<IdentRaw<'script>>),
+    pub(crate) atoms: Vec<FlowStmtRaw<'script>>,
 }
 
 impl<'script> Upable<'script> for FlowDeclRaw<'script> {
@@ -354,36 +403,15 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
         //
         helper.module.push(self.id.clone());
 
-        let mut links = Vec::new();
-        let mut atoms = Vec::new();
+        let mut connections = Vec::new();
+        let mut creates = Vec::new();
         for link in self.atoms {
             match link {
-                DeployLinkRaw::Link(_start, _end, _docs, from, to) => {
-                    let from = match from {
-                        DeployEndpointRaw::System(string_url) => {
-                            let literal = string_url.up(helper)?;
-                            let raw_url = run_lit_str(helper, &literal);
-                            DeployEndpoint::System(TremorUrl::parse(&raw_url?.to_string())?)
-                        }
-                        DeployEndpointRaw::Troy(id, port) => {
-                            DeployEndpoint::Troy(id.to_string(), port.map(|port| port.to_string()))
-                        }
-                    };
-                    let to = match to {
-                        DeployEndpointRaw::System(string_url) => {
-                            let literal = string_url.up(helper)?;
-                            let raw_url = run_lit_str(helper, &literal);
-                            DeployEndpoint::System(TremorUrl::parse(&raw_url?.to_string())?)
-                        }
-                        DeployEndpointRaw::Troy(id, port) => {
-                            DeployEndpoint::Troy(id.to_string(), port.map(|port| port.to_string()))
-                        }
-                    };
-                    links.push(DeployLink { from, to });
+                FlowStmtRaw::Connect(connect) => {
+                    connections.push(connect.up(helper)?);
                 }
-                DeployLinkRaw::Atom(stmt) => {
-                    let stmt: CreateStmt = stmt.up(helper)?;
-                    atoms.push(stmt);
+                FlowStmtRaw::Create(stmt) => {
+                    creates.push(stmt.up(helper)?);
                 }
             }
         }
@@ -399,40 +427,24 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
             mid,
             node_id,
             params,
-            links,
-            atoms,
+            connections,
+            creates,
             docs,
         };
         Ok(flow_decl)
     }
 }
 
-pub type DeployLinksRaw<'script> = Vec<DeployLinkRaw<'script>>;
+pub type FlowStmtsRaw<'script> = Vec<FlowStmtRaw<'script>>;
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum DeployLinkRaw<'script> {
-    /// we're forced to make this pub because of lalrpop
-    Link(
-        Location,
-        Location,
-        Option<Vec<Cow<'script, str>>>,
-        DeployEndpointRaw<'script>,
-        DeployEndpointRaw<'script>,
-    ),
-    /// we're forced to make this pub because of lalrpop
-    Atom(CreateStmtRaw<'script>),
-}
 
-/// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum DeployKind {
-    /// Reference to a connector definition FIXME - delete this
-    Connector,
-    /// Reference to a pipeline definition FIXME - delete this
-    Pipeline,
-    /// Reference to a flow definition
-    Flow,
+pub enum FlowStmtRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
+    Connect(ConnectStmtRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
+    Create(CreateStmtRaw<'script>),
 }
 
 /// we're forced to make this pub because of lalrpop
@@ -456,7 +468,6 @@ pub struct CreateStmtRaw<'script> {
     /// Module of the definition
     pub(crate) kind: CreateKind,
     pub(crate) module: Vec<IdentRaw<'script>>,
-    pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
 impl_expr!(CreateStmtRaw);
 
@@ -491,9 +502,6 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             target: self.target.to_string(),
             atom,
             kind: self.kind,
-            docs: self
-                .docs
-                .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         };
         // helper.instances.insert(node_id, create_stmt.clone());
 
@@ -511,7 +519,6 @@ pub struct DeployFlowRaw<'script> {
     /// Id of the definition
     pub target: IdentRaw<'script>,
     /// Module of the definition - FIXME: we don't need the deploy kind here once it's merged
-    pub(crate) kind: DeployKind,
     pub(crate) module: Vec<IdentRaw<'script>>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
@@ -547,7 +554,6 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
             alias: self.id.to_string(),
             target: self.target.to_string(),
             atom,
-            kind: self.kind,
             docs: self
                 .docs
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),

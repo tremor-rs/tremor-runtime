@@ -80,13 +80,12 @@ pub mod connectors;
 /// Metrics instance name
 pub static mut INSTANCE: &str = "tremor";
 
+use std::path::Path;
 use std::sync::atomic::AtomicUsize;
-use std::{io::BufReader, path::Path};
 
 use crate::errors::{Error, Result};
 
 pub(crate) use crate::config::{Binding, Connector};
-use crate::repository::BindingArtefact;
 pub use serde_yaml::Value as OpConfig;
 use system::World;
 use tremor_common::url::TremorUrl;
@@ -150,62 +149,37 @@ pub async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
 /// Loads a config yaml file
 /// # Errors
 /// Fails if the file can not be loaded
-pub async fn load_cfg_file(world: &World, file_name: &str) -> Result<usize> {
-    info!(
-        "Loading configuration from {}",
-        tremor_common::file::canonicalize(std::path::Path::new(file_name))?.display()
-    );
-    let mut count = 0;
-    let file = tremor_common::file::open(file_name)?;
-    let buffered_reader = BufReader::new(file);
-    let config: config::Config = serde_yaml::from_reader(buffered_reader)?;
+pub async fn load_cfg_file(_world: &World, _file_name: &str) -> Result<usize> {
+    unimplemented!();
+    // FIXME: delete
+    // info!(
+    //     "Loading configuration from {}",
+    //     tremor_common::file::canonicalize(std::path::Path::new(file_name))?.display()
+    // );
+    // let mut count = 0;
+    // let file = tremor_common::file::open(file_name)?;
+    // let buffered_reader = BufReader::new(file);
+    // let config: config::Config = serde_yaml::from_reader(buffered_reader)?;
 
-    for c in config.connector {
-        let id = TremorUrl::from_connector_id(&c.id)?;
-        info!("Loading {} from file {}.", id, file_name);
-        world.repo.publish_connector(&id, false, c).await?;
-        count += 1;
-    }
-    for binding in config.binding {
-        let id = TremorUrl::from_binding_id(&binding.id)?;
-        info!("Loading {} from file {}.", id, file_name);
-        world
-            .repo
-            .publish_binding(&id, false, BindingArtefact::new(binding, None))
-            .await?;
-        count += 1;
-    }
-    for (binding, mapping) in config.mapping {
-        world.link_binding(&binding, mapping).await?;
-        world.reg.start_binding(&binding).await?;
-        count += 1;
-    }
-    Ok(count)
-}
-
-#[cfg(test)]
-mod test {
-    use crate::config;
-    use serde_yaml;
-    use std::io::BufReader;
-    use tremor_common::file as cfile;
-
-    fn slurp(file: &str) -> config::Config {
-        let file = cfile::open(file).expect("could not open file");
-        let buffered_reader = BufReader::new(file);
-        serde_yaml::from_reader(buffered_reader).expect("Failed to read config.")
-    }
-
-    #[test]
-    fn load_simple_deploys() {
-        let config = slurp("tests/configs/deploy.simple.yaml");
-        assert_eq!(1, config.connector.len());
-        assert_eq!(0, config.binding.len());
-    }
-
-    #[test]
-    fn load_passthrough_stream() {
-        let config = slurp("tests/configs/ut.passthrough.yaml");
-        assert_eq!(2, config.binding[0].links.len());
-    }
+    // for c in config.connector {
+    //     let id = TremorUrl::from_connector_id(&c.id)?;
+    //     info!("Loading {} from file {}.", id, file_name);
+    //     world.repo.publish_connector(&id, false, c).await?;
+    //     count += 1;
+    // }
+    // for binding in config.binding {
+    //     let id = TremorUrl::from_binding_id(&binding.id)?;
+    //     info!("Loading {} from file {}.", id, file_name);
+    //     world
+    //         .repo
+    //         .publish_binding(&id, false, BindingArtefact::new(binding, None))
+    //         .await?;
+    //     count += 1;
+    // }
+    // for (binding, mapping) in config.mapping {
+    //     world.link_binding(&binding, mapping).await?;
+    //     world.reg.start_binding(&binding).await?;
+    //     count += 1;
+    // }
+    // Ok(count)
 }

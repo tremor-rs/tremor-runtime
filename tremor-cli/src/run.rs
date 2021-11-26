@@ -32,7 +32,7 @@ use tremor_runtime::{
     system::{World, WorldConfig},
 };
 use tremor_runtime::{config::Binding, system::ShutdownMode};
-use tremor_script::ast::{DeployEndpoint, Helper};
+use tremor_script::ast::{ConnectStmt, DeployEndpoint, Helper};
 use tremor_script::deploy::Deploy;
 use tremor_script::highlighter::Error as HighlighterError;
 use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
@@ -469,11 +469,12 @@ fn parse_troy_source(src: &str, args: &Value) -> Result<(String, srs::Deploy)> {
 }
 
 async fn handle_troy_connector(
-    _world: &World,
-    _stem: &str,
-    _instance: &str,
-    _atom: &srs::ConnectorDecl,
+    world: &World,
+    stem: &str,
+    instance: &str,
+    atom: &srs::ConnectorDecl,
 ) -> Result<()> {
+    dbg!(world, stem, instance, atom);
     // let yaml = serde_yaml::to_string(&atom.params)?;
 
     // // Map kind to legacy artefact url format
@@ -507,7 +508,7 @@ async fn handle_troy_pipeline(
     _alias: &str,
     atom: &srs::Query,
 ) -> Result<()> {
-    let name = &atom.node_id;
+    let name = dbg!(&atom.node_id);
     let url = TremorUrl::parse(&format!("/pipeline/{}/{}", name.clone(), instance))?;
     world
         .repo
@@ -521,17 +522,18 @@ async fn handle_troy_pipeline(
     Ok(())
 }
 
-#[allow(clippy::unnecessary_wraps)] // TODO This is a placeholder for now
-fn handle_troy_endpoint(_origin: &str, _port: &Option<String>) -> Result<TremorUrl> {
-    Ok(TremorUrl::parse("/")?)
+// TODO This is a placeholder for now
+fn handle_troy_endpoint(origin: &str, port: &Option<String>) -> Result<TremorUrl> {
+    dbg!(origin, port);
+    Ok(TremorUrl::parse("/binding/snot")?)
 }
 
-#[allow(clippy::unnecessary_wraps)] // TODO this is a palceholder for now
+// TODO this is a palceholder for now
 fn handle_system_endpoint(str_url: &TremorUrl) -> Result<TremorUrl> {
     Ok(str_url.clone())
 }
 
-#[allow(clippy::too_many_lines, clippy::unwrap_used)]
+#[allow(clippy::too_many_lines)]
 fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()> {
     env_logger::init();
 
@@ -539,7 +541,7 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
     let unit = deployable.as_deployment_unit()?;
     let storage_directory = Some("./storage".to_string());
     let binding_instance = "snot";
-
+    dbg!();
     block_on(async {
         let config = WorldConfig {
             storage_directory,
@@ -547,8 +549,9 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
             ..WorldConfig::default()
         };
         let (world, _handle) = World::start(config).await.unwrap();
-
-        for (_name, flow) in &unit.instances {
+        dbg!();
+        for (_name, flow) in dbg!(&unit.instances) {
+            dbg!();
             let binding_url = TremorUrl::parse("/binding/troy::deploy/snot").unwrap();
 
             let flow_atoms = &flow.atom;
@@ -556,11 +559,13 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
             for flow in &flow_atoms.atoms {
                 match flow {
                     srs::AtomOfDeployment::Connector(atom) => {
+                        dbg!();
                         handle_troy_connector(&world, &target_stem, binding_instance, atom)
                             .await
                             .unwrap();
                     }
                     srs::AtomOfDeployment::Pipeline(alias, atom) => {
+                        dbg!();
                         handle_troy_pipeline(
                             &world,
                             "raw",
@@ -574,6 +579,7 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
                         .unwrap();
                     }
                     srs::AtomOfDeployment::Flow(atom) => {
+                        dbg!();
                         for flow in &atom.atoms {
                             match flow {
                                 srs::AtomOfDeployment::Connector(atom) => {
@@ -608,45 +614,11 @@ fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()>
                 }
             }
 
-            let mut links: hashbrown::HashMap<TremorUrl, Vec<TremorUrl>> =
-                hashbrown::HashMap::new();
-            for link in &flow_atoms.links {
-                let (from, to) = match (&link.from, &link.to) {
-                    (
-                        DeployEndpoint::Troy(origin, origin_port),
-                        DeployEndpoint::Troy(target, target_port),
-                    ) => {
-                        let origin = handle_troy_endpoint(origin, origin_port).unwrap();
-                        let target = handle_troy_endpoint(target, target_port).unwrap();
-                        (origin, target)
-                    }
-                    (DeployEndpoint::Troy(origin, origin_port), DeployEndpoint::System(target)) => {
-                        let origin = handle_troy_endpoint(origin, origin_port).unwrap();
-                        let target = handle_system_endpoint(target).unwrap();
-                        (origin, target)
-                    }
-                    (DeployEndpoint::System(origin), DeployEndpoint::Troy(target, target_port)) => {
-                        let origin = handle_system_endpoint(origin).unwrap();
-                        let target = handle_troy_endpoint(target, target_port).unwrap();
-                        (origin, target)
-                    }
-                    (DeployEndpoint::System(origin), DeployEndpoint::System(target)) => {
-                        let origin = handle_system_endpoint(origin).unwrap();
-                        let target = handle_system_endpoint(target).unwrap();
-                        (origin, target)
-                    }
-                };
-                // Oversimplification for emulation purposes
-                links.insert(from, vec![to]);
-            }
-
-            // This is the actual deployment of the flow
-
             let binding = BindingArtefact {
                 binding: Binding {
                     id: binding_instance.to_string(),
                     description: "Troy managed binding".to_string(),
-                    links,
+                    links: flow_atoms.links.clone(),
                 },
                 mapping: None,
             };

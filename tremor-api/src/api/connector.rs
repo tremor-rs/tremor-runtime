@@ -75,7 +75,7 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
 pub async fn get_instance(req: Request) -> Result<Response> {
     let a_id = req.param("aid")?;
     let s_id = req.param("sid")?;
-    let instance_url = TremorUrl::from_connector_instance(a_id, s_id)?;
+    let instance_url = TremorUrl::from_connector_instance(a_id, s_id);
     let registry = &req.state().world.reg;
     let instance = registry
         .find_connector(&instance_url)
@@ -99,7 +99,7 @@ pub async fn patch_instance(req: Request) -> Result<Response> {
     let (req, patch): (_, InstancePatch) = decode(req).await?;
     let a_id = req.param("aid")?;
     let s_id = req.param("sid")?;
-    let instance_url = TremorUrl::from_connector_instance(a_id, s_id)?;
+    let instance_url = TremorUrl::from_connector_instance(a_id, s_id);
     let system = &req.state().world;
     let registry = &system.reg;
     let instance = registry

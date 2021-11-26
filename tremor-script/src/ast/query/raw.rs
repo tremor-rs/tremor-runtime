@@ -237,6 +237,13 @@ impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         helper.module.push(self.id.clone());
 
+        let query = QueryRaw {
+            config: vec![],
+            stmts: self.pipeline.clone(),
+        }
+        .up_script(helper)
+        .ok();
+
         let from = self.from.up(helper)?.unwrap_or_else(Self::dflt_in_ports);
         let into = self.into.up(helper)?.unwrap_or_else(Self::dflt_out_ports);
 
@@ -270,6 +277,7 @@ impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
             raw_stmts: self.pipeline,
             from,
             into,
+            query,
         };
 
         let pipeline_name = pipeline_decl.fqn();
