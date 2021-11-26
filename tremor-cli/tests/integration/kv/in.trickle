@@ -1,7 +1,7 @@
 define script process
 script
   use std::json;
-  let $connector = event[0].connector;
+  let $kv = event[0].kv;
   let event = event[1];
   let $correlation = json::encode(event);
   event
