@@ -15,12 +15,11 @@
 mod connectors;
 
 use async_std::path::Path;
-use async_std::task;
 use connectors::ConnectorHarness;
-use simd_json::ValueAccess;
 use std::time::Duration;
 use tremor_runtime::errors::Result;
 use tremor_value::literal;
+use value_trait::ValueAccess;
 
 #[macro_use]
 extern crate log;
@@ -49,23 +48,12 @@ config:
     );
 
     let harness = ConnectorHarness::new(connector_yaml).await?;
+    let out = harness.out().expect("No out pipeline");
     harness.start().await?;
 
-    task::yield_now().await;
-    // give it some time to read the file
-    task::sleep(Duration::from_millis(100)).await;
+    harness.wait_for_connected(Duration::from_secs(5)).await?;
 
-    println!("stopping the harness...");
-    let (mut out_events, err_events) = harness.stop().await?;
-    // check the out and err channels
-    assert_eq!(
-        2,
-        out_events.len(),
-        "didn't receive 2 events on out, but {:?}",
-        out_events
-    );
-    // get 1 event
-    let event = out_events.remove(0);
+    let event = out.get_event().await?;
     assert_eq!(1, event.len());
     let value = event.data.suffix().value();
     let meta = event.data.suffix().meta();
@@ -81,10 +69,18 @@ config:
         }),
         meta
     );
-    let event2 = out_events.remove(0);
+
+    let event2 = out.get_event().await?;
     assert_eq!(1, event2.len());
     let data = event2.data.suffix().value();
     assert_eq!("badger", data.as_str().unwrap());
+
+    let (out_events, err_events) = harness.stop().await?;
+    assert!(
+        out_events.is_empty(),
+        "got some events on OUT port: {:?}",
+        err_events
+    );
 
     assert!(
         err_events.is_empty(),
