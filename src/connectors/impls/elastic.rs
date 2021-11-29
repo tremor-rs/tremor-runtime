@@ -222,7 +222,6 @@ impl Sink for ElasticSink {
         _serializer: &mut EventSerializer,
         start: u64,
     ) -> Result<SinkReply> {
-        info!("Received: {:?}", &event);
         if let Ok(new_clients) = self.clients_rx.try_recv() {
             info!("{} Received new clients", ctx);
             self.clients = ElasticClients::new(new_clients);

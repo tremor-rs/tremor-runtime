@@ -17,10 +17,19 @@ mod connectors;
 #[macro_use]
 extern crate log;
 
-use async_std::{channel::{bounded, Receiver, Sender, TryRecvError}, net::TcpStream, path::Path, task};
+use async_std::{
+    channel::{bounded, Receiver, Sender, TryRecvError},
+    net::TcpStream,
+    path::Path,
+    task,
+};
 use async_tls::TlsConnector;
-use async_tungstenite::{WebSocketStream, client_async, tungstenite::{accept, stream::MaybeTlsStream, Message, WebSocket}};
-use futures::{SinkExt};
+use async_tungstenite::{
+    client_async,
+    tungstenite::{accept, stream::MaybeTlsStream, Message, WebSocket},
+    WebSocketStream,
+};
+use futures::SinkExt;
 use http::Response;
 use rustls::ClientConfig;
 use std::{net::SocketAddr, sync::Arc, thread, time::Duration};
@@ -41,7 +50,7 @@ fn setup_for_tls() -> Result<()> {
     // println!("{}", std::str::from_utf8(&out.stderr)?);
     match out.status.code() {
         Some(0) => Ok(()),
-        _ => Err("Error creating tls certificate for connector_ws test".into())
+        _ => Err("Error creating tls certificate for connector_ws test".into()),
     }
 }
 
@@ -78,9 +87,14 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
             .add_pem_file(&mut pem)
             .expect("Unable to create configuration object.");
         use url::Url;
-        let tcp_stream = TcpStream::connect(&format!("localhost:{}", port)).await.unwrap();
+        let tcp_stream = TcpStream::connect(&format!("localhost:{}", port))
+            .await
+            .unwrap();
         let tls_connector = TlsConnector::from(Arc::new(config));
-        let tls_stream = tls_connector.connect("localhost", tcp_stream).await.unwrap();
+        let tls_stream = tls_connector
+            .connect("localhost", tcp_stream)
+            .await
+            .unwrap();
         let maybe_connect = client_async(Url::parse(&url).unwrap(), tls_stream).await;
         if let Ok((client, http_response)) = maybe_connect {
             Self {
@@ -110,11 +124,11 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
         loop {
             let message = self.client.next().await;
             if let Some(Ok(Message::Text(data))) = message {
-                return Ok(data)
+                return Ok(data);
             } else if let None = message {
                 continue;
             } else {
-                return Err("Unexpected message type".into())
+                return Err("Unexpected message type".into());
             }
         }
     }
@@ -295,20 +309,17 @@ config:
     let (data, meta) = event.data.parts();
     assert_eq!("Hello WebSocket Server", &data.to_string());
 
-    let connector_meta = meta.get("connector");
-    let ws_server_meta = connector_meta.get("ws_server");
+    let ws_server_meta = meta.get("ws_server");
     let peer_obj = ws_server_meta.get_object("peer").unwrap();
 
     //
     // Send from ws server to client and check received event
     //
     let meta = literal!({
-        "connector": {
-            "ws_server": {
-                "peer": {
-                    "host": peer_obj.get("host").unwrap().clone_static(),
-                    "port": c1.port()?,
-                }
+        "ws_server": {
+            "peer": {
+                "host": peer_obj.get("host").unwrap().clone_static(),
+                "port": c1.port()?,
             }
         }
     });
@@ -357,13 +368,11 @@ config:
         .expect("No pipeline connected to 'in' port of tcp_server connector");
 
     let meta = literal!({
-        "connector": {
-            "ws_client": {
-                "peer": {
-                    "host": "127.0.0.1",
-                    "port": free_port,
-                    "url": format!("ws://127.0.0.1:{}", free_port),
-                }
+        "ws_client": {
+            "peer": {
+                "host": "127.0.0.1",
+                "port": free_port,
+                "url": format!("ws://127.0.0.1:{}", free_port),
             }
         }
     });
@@ -416,7 +425,8 @@ config:
     //
     // Send from ws client to server and check received event
     //
-    let mut c1 = TestClient::new_tls(format!("wss://localhost:{}/", free_port), free_port as u16).await;
+    let mut c1 =
+        TestClient::new_tls(format!("wss://localhost:{}/", free_port), free_port as u16).await;
     c1.send("\"Hello WebSocket Server\"").await?;
 
     let event = out_pipeline
@@ -426,20 +436,17 @@ config:
     let (data, meta) = event.data.parts();
     assert_eq!("Hello WebSocket Server", &data.to_string());
 
-    let connector_meta = meta.get("connector");
-    let ws_server_meta = connector_meta.get("ws_server");
+    let ws_server_meta = meta.get("ws_server");
     let peer_obj = ws_server_meta.get_object("peer").unwrap();
 
     //
     // Send from ws server to client and check received event
     //
     let meta = literal!({
-        "connector": {
             "ws_server": {
-                "peer": {
-                    "host": peer_obj.get("host").unwrap().clone_static(),
-                    "port": c1.port()?,
-                }
+            "peer": {
+                "host": peer_obj.get("host").unwrap().clone_static(),
+                "port": c1.port()?,
             }
         }
     });
