@@ -14,6 +14,7 @@
 
 use crate::{Error, Object, Value};
 use beef::Cow;
+use serde::de::{EnumAccess, IntoDeserializer, VariantAccess};
 use serde_ext::de::{
     self, Deserialize, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor,
 };
@@ -90,10 +91,154 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
         }
     }
 
+    #[cfg_attr(not(feature = "no-inline"), inline)]
+    fn deserialize_enum<V>(
+        self,
+        _name: &str,
+        _variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Error>
+    where
+        V: Visitor<'de>,
+    {
+        let (variant, value) = match self {
+            Value::Object(value) => {
+                let mut iter = value.into_iter();
+                let (variant, value) = match iter.next() {
+                    Some(v) => v,
+                    None => {
+                        // FIXME: better error
+                        return Err(Error::Serde("missing enum type".to_string()));
+                    }
+                };
+                // enums are encoded in json as maps with a single key:value pair
+                if iter.next().is_some() {
+                    // FIXME: better error
+                    return Err(Error::Serde("extra values in enum".to_string()));
+                }
+                (variant, Some(value))
+            }
+            Value::String(variant) => (variant, None),
+            _other => {
+                return Err(Error::Serde("Not a string".to_string()));
+            }
+        };
+
+        visitor.visit_enum(EnumDeserializer { variant, value })
+    }
+
     forward_to_deserialize_any! {
         bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
             bytes byte_buf unit unit_struct newtype_struct seq tuple
-            tuple_struct map enum identifier ignored_any
+            tuple_struct map identifier ignored_any
+    }
+}
+
+struct EnumDeserializer<'de> {
+    variant: Cow<'de, str>,
+    value: Option<Value<'de>>,
+}
+
+impl<'de> EnumAccess<'de> for EnumDeserializer<'de> {
+    type Error = Error;
+    type Variant = VariantDeserializer<'de>;
+
+    fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant), Error>
+    where
+        V: DeserializeSeed<'de>,
+    {
+        let variant = self.variant.into_deserializer();
+        let visitor = VariantDeserializer { value: self.value };
+        seed.deserialize(variant).map(|v| (v, visitor))
+    }
+}
+
+impl<'de> IntoDeserializer<'de, Error> for Value<'de> {
+    type Deserializer = Self;
+
+    fn into_deserializer(self) -> Self::Deserializer {
+        self
+    }
+}
+
+struct VariantDeserializer<'de> {
+    value: Option<Value<'de>>,
+}
+
+impl<'de> VariantAccess<'de> for VariantDeserializer<'de> {
+    type Error = Error;
+
+    fn unit_variant(self) -> Result<(), Error> {
+        match self.value {
+            Some(value) => Deserialize::deserialize(value),
+            None => Ok(()),
+        }
+    }
+
+    fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value, Error>
+    where
+        T: DeserializeSeed<'de>,
+    {
+        match self.value {
+            Some(value) => seed.deserialize(value),
+            None => Err(Error::Serde("expected newtype variant".to_string()))
+            // None => Err(serde::de::Error::invalid_type(
+            //     Unexpected::UnitVariant,
+            //     &"newtype variant",
+            // )),
+        }
+    }
+
+    fn tuple_variant<V>(self, _len: usize, visitor: V) -> Result<V::Value, Error>
+    where
+        V: Visitor<'de>,
+    {
+        match self.value {
+            Some(Value::Array(v)) => {
+                if v.is_empty() {
+                    visitor.visit_unit()
+                } else {
+                    visitor.visit_seq(Array(v.iter()))
+                }
+            }
+            // FIXME
+            Some(_) | None => Err(Error::Serde("expected tuple variant".to_string()))
+            // Some(other) => Err(serde::de::Error::invalid_type(
+            //     other.unexpected(),
+            //     &"tuple variant",
+            // )),
+            // None => Err(serde::de::Error::invalid_type(
+            //     Unexpected::UnitVariant,
+            //     &"tuple variant",
+            // )),
+        }
+    }
+
+    fn struct_variant<V>(
+        self,
+        _fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Error>
+    where
+        V: Visitor<'de>,
+    {
+        match self.value {
+            Some(Value::Object(v)) => visitor.visit_map(ObjectAccess {
+                i: v.iter(),
+                v: &Value::Static(StaticNode::Null),
+            }),
+            // FIXME
+            Some(_) | None => Err(Error::Serde("expected struct variant".to_string()))
+
+            // Some(other) => Err(serde::de::Error::invalid_type(
+            //     other.unexpected(),
+            //     &"struct variant",
+            // )),
+            // None => Err(serde::de::Error::invalid_type(
+            //     Unexpected::UnitVariant,
+            //     &"struct variant",
+            // )),
+        }
     }
 }
 
