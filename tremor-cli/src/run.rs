@@ -501,7 +501,7 @@ impl Run {
 
                 // FIXME
                 // self.run_trickle_query(query, raw, &mut h)?;
-                S
+
                 //}
             }
         }

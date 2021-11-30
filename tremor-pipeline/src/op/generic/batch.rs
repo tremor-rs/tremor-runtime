@@ -255,10 +255,10 @@ mod test {
     fn time() -> Result<()> {
         let node_config = NodeConfig::from_config(
             &"badger",
-            Config {
-                count: 100,
-                timeout: Some(1),
-            },
+            Some(literal!({
+                "count": 100,
+                "timeout": 1,
+            })),
         )?;
         let mut op = BatchFactory::new().from_node(42, &node_config)?;
 

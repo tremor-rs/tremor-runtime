@@ -16,31 +16,30 @@
 // which it shouldn't
 #![allow(dead_code)]
 
-use async_std::channel::{bounded, Receiver};
-use async_std::prelude::FutureExt;
-use async_std::task::JoinHandle;
+use async_std::{
+    channel::{bounded, Receiver},
+    prelude::FutureExt,
+    task::JoinHandle,
+};
 use beef::Cow;
 use halfbrown::HashMap;
 use log::{debug, info};
-use std::sync::atomic::Ordering;
-use std::time::Duration;
+use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::url::{
     ports::{ERR, IN, OUT},
     TremorUrl,
 };
 use tremor_pipeline::{CbAction, EventId};
-use tremor_runtime::connectors;
-use tremor_runtime::connectors::sink::SinkMsg;
-use tremor_runtime::connectors::{Connectivity, StatusReport};
-use tremor_runtime::errors::Result;
-use tremor_runtime::pipeline;
-use tremor_runtime::pipeline::CfMsg;
-use tremor_runtime::registry::instance::InstanceState;
-use tremor_runtime::system::ShutdownMode;
-use tremor_runtime::system::World;
-use tremor_runtime::Event;
-use tremor_runtime::QSIZE;
-use tremor_runtime::{config, system::WorldConfig};
+use tremor_runtime::{
+    config,
+    connectors::{self, sink::SinkMsg, Connectivity, StatusReport},
+    errors::Result,
+    pipeline::{self, CfMsg},
+    registry::instance::InstanceState,
+    system::{ShutdownMode, World, WorldConfig},
+    Event, QSIZE,
+};
+use tremor_script::Value;
 
 pub(crate) struct ConnectorHarness {
     connector_id: TremorUrl,
@@ -52,12 +51,15 @@ pub(crate) struct ConnectorHarness {
 }
 
 impl ConnectorHarness {
-    pub(crate) async fn new_with_ports(
-        config: String,
+    pub(crate) async fn new_with_ports<T: ToString>(
+        connector_type: T,
+        defn: Value<'static>,
         ports: Vec<Cow<'static, str>>,
     ) -> Result<Self> {
+        let connector_type = connector_type.to_string();
         let (world, handle) = World::start(WorldConfig::default()).await?;
-        let raw_config = serde_yaml::from_slice::<config::Connector>(config.as_bytes())?;
+        let raw_config =
+            config::Connector::from_defn(connector_type.clone(), connector_type.into(), defn)?;
         let id = TremorUrl::from_connector_instance(raw_config.id.as_str(), "test");
         let _connector_config = world.repo.publish_connector(&id, false, raw_config).await?;
         let connector_addr = world.create_connector_instance(&id).await?;
@@ -99,8 +101,8 @@ impl ConnectorHarness {
             pipes,
         })
     }
-    pub(crate) async fn new(config: String) -> Result<Self> {
-        Self::new_with_ports(config, vec![IN, OUT, ERR]).await
+    pub(crate) async fn new<T: ToString>(connector_type: T, defn: Value<'static>) -> Result<Self> {
+        Self::new_with_ports(connector_type, defn, vec![IN, OUT, ERR]).await
     }
 
     pub(crate) async fn start(&self) -> Result<()> {

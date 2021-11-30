@@ -17,8 +17,6 @@
 
 use tremor_common::url::TremorUrl;
 
-use self::raw::CreateKind;
-
 use super::{node_id::BaseRef, raw::BaseExpr, DefinitioalArgs, DefinitioalArgsWith};
 use super::{node_id::NodeId, PipelineDecl};
 use super::{Docs, HashMap, Value};
@@ -34,14 +32,12 @@ pub struct Deploy<'script> {
     pub config: HashMap<String, Value<'script>>,
     /// Statements
     pub stmts: DeployStmts<'script>,
-    /// Definitions
-    pub definitions: HashMap<NodeId, DeployStmt<'script>>,
     /// Flow Definitions
-    pub flows: HashMap<NodeId, FlowDecl<'script>>,
-    // /// Connector Definitions
-    // pub connectors: HashMap<NodeId, ConnectorDecl<'script>>,
-    // /// Pipeline Definitions
-    // pub pipelines: HashMap<NodeId, PipelineDecl<'script>>,
+    pub flow_decls: HashMap<NodeId, FlowDecl<'script>>,
+    /// Connector Definitions
+    pub connector_decls: HashMap<NodeId, ConnectorDecl<'script>>,
+    /// Pipeline Definitions
+    pub pipeline_decls: HashMap<NodeId, PipelineDecl<'script>>,
     #[serde(skip)]
     /// Documentation comments
     pub docs: Docs,
@@ -200,22 +196,22 @@ pub struct DeployEndpoint {
 
 impl DeployEndpoint {
     /// creates a connector instance url
-    pub fn to_connector_instance(&self) -> TremorUrl {
+    fn to_connector_instance(&self) -> TremorUrl {
         TremorUrl::from_connector_instance(&self.artefact, &self.instance)
     }
     /// creates a connector instance url
     pub fn to_connector_instance_and_port(&self) -> TremorUrl {
-        let mut r = TremorUrl::from_connector_instance(&self.artefact, &self.instance);
+        let mut r = self.to_connector_instance();
         r.set_port(&self.port);
         r
     }
     /// creates a connector instance url
-    pub fn to_pipeline_instance(&self) -> TremorUrl {
+    fn to_pipeline_instance(&self) -> TremorUrl {
         TremorUrl::from_pipeline_instance(&self.artefact, &self.instance)
     }
     /// creates a connector instance url
     pub fn to_pipeline_instance_and_port(&self) -> TremorUrl {
-        let mut r = TremorUrl::from_pipeline_instance(&self.artefact, &self.instance);
+        let mut r = self.to_pipeline_instance();
         r.set_port(&self.port);
         r
     }
@@ -240,6 +236,14 @@ pub struct FlowDecl<'script> {
 impl_expr_mid!(FlowDecl);
 impl_fqn!(FlowDecl);
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+/// A connect target
+pub enum CreateTargetDecl<'script> {
+    /// A connector
+    Connector(ConnectorDecl<'script>),
+    /// A Pipeline
+    Pipeline(PipelineDecl<'script>),
+}
 /// A create statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CreateStmt<'script> {
@@ -251,9 +255,7 @@ pub struct CreateStmt<'script> {
     /// Target for creation
     pub node_id: NodeId,
     /// Atomic unit of deployment
-    pub atom: DeployStmt<'script>,
-    /// The type of this connector
-    pub kind: CreateKind,
+    pub decl: CreateTargetDecl<'script>,
 }
 impl_expr_mid!(CreateStmt);
 impl_fqn!(CreateStmt);
@@ -269,7 +271,7 @@ pub struct DeployFlow<'script> {
     /// Target for creation
     pub node_id: NodeId,
     /// Atomic unit of deployment
-    pub atom: DeployStmt<'script>,
+    pub decl: FlowDecl<'script>,
     /// Documentation comments
     #[serde(skip)]
     pub docs: Option<String>,

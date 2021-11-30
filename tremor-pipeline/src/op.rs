@@ -153,46 +153,15 @@ pub trait InitializableOperator {
 
 /// Trait for detecting errors in config and the key names are included in errors
 pub trait ConfigImpl {
-    /// deserialises the yaml into a struct and returns nice errors
+    /// deserialises the config into a struct and returns nice errors
     /// this doesn't need to be overwritten in most cases.
     ///
     /// # Errors
     /// if the Configuration is invalid
-    fn new(config: &serde_yaml::Value) -> Result<Self>
+    fn new(config: &tremor_value::Value) -> Result<Self>
     where
-        for<'de> Self: serde::de::Deserialize<'de>,
+        Self: serde::de::Deserialize<'static>,
     {
-        // simpler ways, but does not give us the kind of error info we want
-        //let validated_config: Config = serde_yaml::from_value(c.clone())?;
-        //let validated_config: Config = serde_yaml::from_str(&serde_yaml::to_string(c)?)?;
-
-        // serialize the YAML config and deserialize it again, so that we get extra info on
-        // YAML errors here (eg: name of the config key where the errror occured). can just
-        // use serde_yaml::from_value() here, but the error message there is limited.
-        serde_yaml::from_str(&serde_yaml::to_string(config)?).map_err(|e| {
-            // remove the potentially misleading "at line..." info, since it does not
-            // correspond to the numbers in the file now
-            LINE_REGEXP.replace(&e.to_string(), "").to_string().into()
-        })
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn error() {
-        #[derive(serde::Deserialize)]
-        struct C {
-            _s: String,
-        }
-        impl ConfigImpl for C {}
-
-        let y: serde_yaml::Value = serde_yaml::from_str("5").unwrap();
-
-        let e = C::new(&y).err().unwrap().to_string();
-
-        assert_eq!(e, "invalid type: integer `5`, expected struct C")
+        Ok(tremor_value::structurize(config.clone_static())?)
     }
 }
