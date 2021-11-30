@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::env;
+use gen_tonic_impls::generate;
+
 fn get_git_branch() -> std::io::Result<String> {
     use std::process::Command;
 
@@ -57,4 +60,14 @@ fn main() {
     if let Ok(commit) = get_git_commit() {
         println!("cargo:rustc-env=VERSION_HASH={}", commit);
     }
+    let out_dir = env::var_os("OUT_DIR").unwrap();
+    let proto = env::var_os("PROTO_FILES").unwrap();
+    let protos = proto.to_str().unwrap().split(",").collect::<Vec<&str>>();
+    let include = env::var_os("INCLUDE").unwrap();
+    let includes = include.to_str().unwrap().split(",").collect::<Vec<&str>>();
+    let mut config = prost_build::Config::new();
+    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+    tonic_build::configure()
+        .compile_with_config(config, &protos, &includes).unwrap();
+    generate(&protos, &includes, out_dir, false, true).unwrap();
 }

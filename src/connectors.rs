@@ -1159,6 +1159,8 @@ pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
         Box::new(impls::crononome::Builder::default()),
         Box::new(impls::s3::Builder::default()),
         Box::new(impls::kafka::consumer::Builder::default()),
+        #[cfg(feature = "grpc")]
+        Box::new(impls::grpc::client::Builder::default())
     ]
 }
 

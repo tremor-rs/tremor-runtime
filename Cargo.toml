@@ -175,6 +175,8 @@ tonic = { version = "0.5.2", default-features = false, features = [
   "transport",
   "tls",
 ] }
+prost = "0.8"
+prost-types = "0.8"
 tremor-otelapis = { version = "0.2.2" }
 
 # aws-s3
@@ -205,6 +207,11 @@ test-case = "1.2"
 testcontainers = "0.12"
 signal-hook = "0.3"
 signal-hook-async-std = "0.2"
+
+[build-dependencies]
+gen-tonic-impls = { path = "/home/sanskarjaiswal/gen-tonic-impls" }
+tonic-build = "0.5.2"
+prost-build = "0.8"
 
 [features]
 default = []

@@ -177,6 +177,7 @@ error_chain! {
         Timeout(async_std::future::TimeoutError);
         TonicStatusError(tonic::Status);
         TonicTransportError(tonic::transport::Error);
+        TonicMetadataError(tonic::metadata::errors::InvalidMetadataValue);
         TryFromIntError(std::num::TryFromIntError);
         ValueError(tremor_value::Error);
         UrlParserError(url::ParseError);

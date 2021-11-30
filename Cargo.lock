@@ -2238,6 +2238,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "gen-tonic-impls"
+version = "0.1.0"
+dependencies = [
+ "heck",
+ "itertools 0.10.3",
+ "proc-macro2",
+ "prost",
+ "prost-build",
+ "prost-types",
+ "quote",
+ "tempfile",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6265,6 +6279,7 @@ dependencies = [
  "event-listener",
  "file-mode",
  "futures",
+ "gen-tonic-impls",
  "glob",
  "googapis",
  "gouth",
@@ -6293,6 +6308,9 @@ dependencies = [
  "postgres-protocol",
  "pretty_assertions",
  "proptest",
+ "prost",
+ "prost-build",
+ "prost-types",
  "qwal",
  "rand 0.8.4",
  "rdkafka",
@@ -6322,6 +6340,7 @@ dependencies = [
  "tide",
  "tokio-postgres",
  "tonic",
+ "tonic-build",
  "tremor-common",
  "tremor-influx",
  "tremor-otelapis",
