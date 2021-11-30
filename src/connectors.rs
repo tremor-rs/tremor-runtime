@@ -1274,6 +1274,9 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
         .register_builtin_connector_type(Box::new(impls::kv::Builder::default()))
         .await?;
     world
+        .register_builtin_connector_type(Box::new(impls::metronome::Builder::default()))
+        .await?;
+    world
         .register_builtin_connector_type(Box::new(impls::wal::Builder::default()))
         .await?;
     world

@@ -16,7 +16,7 @@ use crate::connectors::ConnectorType;
 use either::Either;
 use hashbrown::HashMap;
 use tremor_common::url::TremorUrl;
-use tremor_script::ast::ConnectStmt;
+use tremor_script::{ast::ConnectStmt, srs::ConnectorDecl};
 
 pub(crate) type Id = String;
 pub(crate) type ConnectorVec = Vec<Connector>;
@@ -191,6 +191,25 @@ pub struct Connector {
     //pub(crate) on_pause: PauseBehaviour,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) metrics_interval_s: Option<u64>,
+}
+
+impl Connector {
+    /// FIXME
+    pub fn from_decl(decl: &ConnectorDecl) -> Connector {
+        // FIXME: make this proper
+        Connector {
+            id: decl.instance_id.clone(),
+            binding_type: decl.kind.clone().into(),
+            description: "FIXME: placeholder description".to_string(),
+            config: None,
+            codec_map: None,
+            preprocessors: None,
+            postprocessors: None,
+            reconnect: Reconnect::None,
+            metrics_interval_s: None,
+            codec: None,
+        }
+    }
 }
 
 /// Configuration for a Binding

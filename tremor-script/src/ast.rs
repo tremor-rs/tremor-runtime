@@ -500,10 +500,9 @@ where
     is_in_aggr: bool,
     // Troy
     instances: HashMap<NodeId, DeployFlow<'script>>,
-    definitions: HashMap<NodeId, DeployStmt<'script>>,
-    // flow_defns: HashMap<NodeId, FlowDecl<'script>>,
-    // connector_defns: HashMap<NodeId, ConnectorDecl<'script>>,
-    // pipeline_defns: HashMap<NodeId, PipelineDecl<'script>>,
+    flow_decls: HashMap<NodeId, FlowDecl<'script>>,
+    connector_decls: HashMap<NodeId, ConnectorDecl<'script>>,
+    pipeline_decls: HashMap<NodeId, PipelineDecl<'script>>,
     // Trickle
     queries: HashMap<String, PipelineDecl<'script>>,
     windows: HashMap<String, WindowDecl<'script>>,
@@ -602,10 +601,9 @@ where
             is_in_aggr: false,
             // Troy
             instances: HashMap::new(),
-            definitions: HashMap::new(),
-            // flow_defns: HashMap::new(),
-            // connector_defns: HashMap::new(),
-            // pipeline_defns: HashMap::new(),
+            flow_decls: HashMap::new(),
+            connector_decls: HashMap::new(),
+            pipeline_decls: HashMap::new(),
             // Trickle
             queries: HashMap::new(),
             windows: HashMap::new(),
