@@ -188,7 +188,6 @@ impl TremorUrl {
             .path_segments()
             .map(std::iter::Iterator::collect::<Vec<_>>)
         {
-            dbg!(&url);
             let (scope, resource_type, artefact, instance, instance_port) = if relative {
                 // TODO: This is not correct!
                 match parts.as_slice() {

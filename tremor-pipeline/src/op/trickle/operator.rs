@@ -33,18 +33,7 @@ fn mk_node_config(id: String, op_type: String, config: HashMap<String, Value>) -
         config: if config.is_empty() {
             None
         } else {
-            Some(serde_yaml::Value::from(
-                config
-                    .iter()
-                    .filter_map(|(k, v)| {
-                        let mut v = v.encode();
-                        Some((
-                            serde_yaml::Value::from(k.as_str()),
-                            simd_json::serde::from_str::<serde_yaml::Value>(&mut v).ok()?,
-                        ))
-                    })
-                    .collect::<serde_yaml::Mapping>(),
-            ))
+            Some(config.into_iter().collect::<Value>().into_static())
         },
         ..NodeConfig::default()
     }

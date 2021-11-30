@@ -361,7 +361,7 @@ impl Manager {
                         let url = create.servant_id.to_instance();
                         // lookup and instantiate connector
                         let connector = if let Some((builder, _)) =
-                            known_connectors.get(&create.config.binding_type)
+                            known_connectors.get(&create.config.connector_type)
                         {
                             let connector_res =
                                 builder.from_config(&url, &create.config.config).await;
@@ -379,10 +379,10 @@ impl Manager {
                         } else {
                             error!(
                                 "[Connector] Connector Type '{}' unknown",
-                                &create.config.binding_type
+                                &create.config.connector_type
                             );
                             tx.send(Err(ErrorKind::UnknownConnectorType(
-                                create.config.binding_type.to_string(),
+                                create.config.connector_type.to_string(),
                             )
                             .into()))
                                 .await?;
@@ -498,7 +498,7 @@ impl Manager {
         let source_ctx = SourceContext {
             uid,
             url: url.clone(),
-            connector_type: config.binding_type.clone(),
+            connector_type: config.connector_type.clone(),
             quiescence_beacon: quiescence_beacon.clone(),
         };
 
@@ -512,7 +512,7 @@ impl Manager {
         let sink_ctx = SinkContext {
             uid,
             url: url.clone(),
-            connector_type: config.binding_type.clone(),
+            connector_type: config.connector_type.clone(),
         };
         // create source instance
         let source_addr = connector.create_source(source_ctx, source_builder).await?;
@@ -535,7 +535,7 @@ impl Manager {
         let ctx = ConnectorContext {
             uid,
             url: url.clone(),
-            connector_type: config.binding_type.clone(),
+            connector_type: config.connector_type.clone(),
             quiescence_beacon: quiescence_beacon.clone(),
             notifier: notifier.clone(),
         };
@@ -1196,7 +1196,7 @@ pub trait Connector: Send {
 }
 
 /// the type of a connector
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub struct ConnectorType(String);
 
 impl From<ConnectorType> for String {
@@ -1272,6 +1272,9 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
         .await?;
     world
         .register_builtin_connector_type(Box::new(impls::kv::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type(Box::new(impls::metronome::Builder::default()))
         .await?;
     world
         .register_builtin_connector_type(Box::new(impls::wal::Builder::default()))

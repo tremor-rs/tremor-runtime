@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::config::{BindingVec, Config, MappingMap};
 use crate::connectors::utils::metrics::METRICS_CHANNEL;
 use crate::errors::{Error, Kind as ErrorKind, Result};
 use crate::registry::Registries;
@@ -590,27 +589,6 @@ impl World {
         Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
     }
 
-    /// Turns the running system into a config
-    ///
-    /// # Errors
-    ///  * If the systems configuration can't be stored
-    pub async fn to_config(&self) -> Result<Config> {
-        let binding: BindingVec = self
-            .repo
-            .serialize_bindings()
-            .await?
-            .into_iter()
-            .map(|b| b.binding)
-            .collect();
-        let mapping: MappingMap = self.reg.serialize_mappings().await?;
-        let config = crate::config::Config {
-            connector: vec![],
-            binding,
-            mapping,
-        };
-        Ok(config)
-    }
-
     /// Starts the runtime system
     ///
     /// # Errors
@@ -677,12 +655,11 @@ impl World {
     #[allow(clippy::too_many_lines)]
     async fn register_system(&mut self) -> Result<()> {
         // register metrics connector
-        let artefact: ConnectorArtefact = serde_yaml::from_str(
-            r#"
-id: system::metrics
-type: metrics
-            "#,
-        )?;
+        let artefact = ConnectorArtefact {
+            id: "system::metrics".into(),
+            connector_type: "metrics".into(),
+            ..ConnectorArtefact::default()
+        };
         self.repo
             .publish_connector(&METRICS_CONNECTOR, true, artefact)
             .await?;
@@ -723,12 +700,11 @@ type: metrics
 
         // Register stdout connector - do not start yet
         // FIXME: how to name this
-        let stdout_artefact: ConnectorArtefact = serde_yaml::from_str(
-            r#"
-id: system::stdio
-type: stdio
-            "#,
-        )?;
+        let stdout_artefact: ConnectorArtefact = ConnectorArtefact {
+            id: "system::stdio".into(),
+            connector_type: "stdio".into(),
+            ..ConnectorArtefact::default()
+        };
         self.repo
             .publish_connector(&STDIO_CONNECTOR, true, stdout_artefact)
             .await?;

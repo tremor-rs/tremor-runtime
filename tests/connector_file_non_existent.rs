@@ -19,6 +19,7 @@ use async_std::task;
 use connectors::ConnectorHarness;
 use std::time::Duration;
 use tremor_runtime::errors::Result;
+use tremor_value::prelude::*;
 
 #[macro_use]
 extern crate log;
@@ -32,20 +33,16 @@ async fn file_connector() -> Result<()> {
         .unwrap()
         .join("data")
         .join("non_existent.txt");
-    let connector_yaml = format!(
-        r#"
-id: my_file
-type: file
-codec: string
-preprocessors:
-  - lines
-config:
-  path: "{}"
-  mode: read
-"#,
-        input_path.display()
-    );
-    let harness = ConnectorHarness::new(connector_yaml).await?;
+    let defn = literal!({
+        "codec": "string",
+        "preprocessors": ["lines"],
+        "config": {
+            "path": input_path.display().to_string(),
+            "mode": "read"
+        }
+    });
+
+    let harness = ConnectorHarness::new("file", defn).await?;
     assert!(harness.start().await.is_err());
 
     let (out_events, err_events) = harness.stop().await?;

@@ -441,7 +441,9 @@ impl<'script> DefinitioalArgsWith<'script> {
             .0
             .iter()
             .map(|(k, expr)| {
-                let expr = expr.clone().unwrap();
+                let expr = expr
+                    .clone()
+                    .ok_or_else(|| format!("Missing configuration variable {}", k))?;
                 Ok((k.id.clone(), ConstFolder::reduce_to_val(helper, expr)?))
             })
             .collect::<Result<Value>>()?;

@@ -39,13 +39,13 @@ pub struct Binding {
     /// The binding itself
     pub binding: crate::Binding,
     /// The mappings
-    pub mapping: Option<crate::config::MappingMap>,
+    pub mapping: Option<()>,
 }
 
 impl Binding {
     /// Constructor
     #[must_use]
-    pub fn new(binding: crate::Binding, mapping: Option<crate::config::MappingMap>) -> Self {
+    pub fn new(binding: crate::Binding, mapping: Option<()>) -> Self {
         Self { binding, mapping }
     }
 }
@@ -352,7 +352,7 @@ impl Artefact for Binding {
         &self,
         system: &World,
         id: &TremorUrl,
-        mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
+        _mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
         use ResourceType::{Connector, Pipeline};
         let mut pipelines: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // pipeline -> {onramp, offramp, pipeline, connector}
@@ -361,15 +361,18 @@ impl Artefact for Binding {
         let mut res = self.clone();
         for link in &self.binding.links {
             match link {
-                ConnectStmt::ConnectorToPipeline { from, to, .. } => {
-                    connectors.push((from.to_connector_instance(), to.to_pipeline_instance()))
-                }
-                ConnectStmt::PipelineToConnector { from, to, .. } => {
-                    pipelines.push((from.to_pipeline_instance(), to.to_connector_instance()))
-                }
-                ConnectStmt::PipelineToPipeline { from, to, .. } => {
-                    pipelines.push((from.to_pipeline_instance(), to.to_pipeline_instance()))
-                }
+                ConnectStmt::ConnectorToPipeline { from, to, .. } => connectors.push((
+                    from.to_connector_instance_and_port(),
+                    to.to_pipeline_instance_and_port(),
+                )),
+                ConnectStmt::PipelineToConnector { from, to, .. } => pipelines.push((
+                    from.to_pipeline_instance_and_port(),
+                    to.to_connector_instance_and_port(),
+                )),
+                ConnectStmt::PipelineToPipeline { from, to, .. } => pipelines.push((
+                    from.to_pipeline_instance_and_port(),
+                    to.to_pipeline_instance_and_port(),
+                )),
             }
         }
 
@@ -434,7 +437,7 @@ impl Artefact for Binding {
         }
         info!("[Binding::{}] Binding successfully linked.", id);
 
-        res.mapping = Some(vec![(id.clone(), mappings)].into_iter().collect());
+        res.mapping = None; // FIXME: we don't have mappings any more Some(vec![(id.clone(), mappings)].into_iter().collect());
         Ok(res)
     }
 

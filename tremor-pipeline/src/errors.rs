@@ -50,6 +50,7 @@ error_chain! {
         ParseIntError(std::num::ParseIntError);
         ParseFloatError(std::num::ParseFloatError);
         Sled(sled::Error);
+        TremorValue(tremor_value::Error);
     }
 
     errors {
