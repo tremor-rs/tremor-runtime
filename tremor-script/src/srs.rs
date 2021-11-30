@@ -59,7 +59,7 @@ impl Debug for Deploy {
 /// The `deploy` that build on these artefacts are the atoms of deployment that
 /// result in similarly named runtime counterparts being deployed against them.
 ///
-pub struct UnitOfDeployment {
+pub struct Flows {
     /// Instances for this deployment unit
     pub instances: HashMap<String, CreateStmt>,
 }
@@ -128,29 +128,24 @@ impl Deploy {
     /// If definitions are incomplete or invalid and instances
     /// are not deployable based on static analysis
     ///
-    pub fn as_deployment_unit(&self) -> Result<UnitOfDeployment> {
+    pub fn as_flows(&self) -> Result<Flows> {
         use ast::deploy::DeployStmt as StmtKind;
         let mut instances = HashMap::new();
 
         for stmt in &self.script.stmts {
             if let StmtKind::DeployFlowStmt(ref stmt) = stmt {
-                // FIXME TODO Caching pre friday-design behaviour - until we verify the friday semantics
-                //                let atom = FlowDecl::new_from_deploy(self, &stmt.atom.fqn())?;
-                let atom = match &stmt.atom {
-                    StmtKind::FlowDecl(atom) => FlowDecl::new_from_deploy(self, &atom.node_id)?,
-                    _otherwise => todo!(),
-                };
+                let decl = FlowDecl::new_from_deploy(self, &stmt.decl.node_id)?;
                 instances.insert(
                     stmt.fqn(),
                     CreateStmt {
-                        node_id: stmt.node_id.clone(),
-                        atom,
+                        instance_id: stmt.node_id.clone(),
+                        decl,
                     },
                 );
             }
         }
 
-        Ok(UnitOfDeployment { instances })
+        Ok(Flows { instances })
     }
 }
 
@@ -166,10 +161,9 @@ impl Deploy {
 #[derive(Debug)]
 pub struct CreateStmt {
     /// Identity
-    pub node_id: NodeId,
+    pub instance_id: NodeId,
     /// Atomic unit of deployment
-    pub atom: FlowDecl,
-    //    pub atom: AtomOfDeployment,
+    pub decl: FlowDecl,
 }
 
 /*
@@ -258,6 +252,8 @@ pub struct Query {
     query: ast::Query<'static>,
     /// NodeId of this declaration
     pub node_id: NodeId,
+    /// The alias
+    pub alias: String,
     /// NodeId of definition this declaration refers to
     target_node_id: NodeId,
 }
@@ -265,7 +261,12 @@ pub struct Query {
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
 impl Debug for Query {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.query.fmt(f)
+        f.debug_struct("Query")
+            .field("alias", &self.alias)
+            .field("node_id", &self.node_id)
+            .field("target_node_id", &self.target_node_id)
+            .field("query", &self.query)
+            .finish()
     }
 }
 
@@ -274,41 +275,31 @@ impl Query {
     /// deployment where the query is embedded in pipeline statements
     /// # Errors
     /// If the query self-referential struct cannot be safely created by id from the deployment provided
-    pub fn new_from_deploy(origin: &Deploy, id: &NodeId, target: &NodeId) -> Result<Self> {
-        let pipeline_refutable = origin
+    pub fn new_from_deploy(origin: &Deploy, alias: String, target: &NodeId) -> Result<Self> {
+        let pipeline = origin
             .script
-            .definitions
+            .pipeline_decls
             .values()
-            .find(|query| {
-                if let ast::deploy::DeployStmt::PipelineDecl(candidate) = query {
-                    target == &candidate.node_id
-                } else {
-                    false
-                }
-            })
-            .ok_or_else(|| Error::from(format!("Invalid query for pipeline {}", &id).as_str()))?;
+            .find(|query| target == &query.node_id)
+            .ok_or_else(|| {
+                Error::from(format!("Invalid query for pipeline {}", &alias).as_str())
+            })?;
 
-        if let ast::deploy::DeployStmt::PipelineDecl(pipeline) = pipeline_refutable {
-            let query = pipeline.to_query()?;
+        let query = pipeline.to_query()?;
 
-            Ok(Self {
-                /// We capture the origin - so that the pinned raw memory is cached
-                /// with our own self-reference composing a self-referential struct
-                /// by composition - by tracking the origin with the embedded query
-                /// of interest referential safety should be preserved
-                raw: origin.raw.clone(),
-                query: unsafe {
-                    mem::transmute::<ast::query::Query<'_>, ast::query::Query<'static>>(query)
-                },
-                node_id: id.clone(),
-                target_node_id: pipeline.node_id.clone(),
-            })
-        } else {
-            return Err(
-                // FIXME TODO hygienic
-                Error::from(format!("Expected a pipeline definition {}", id.fqn()).as_str()),
-            );
-        }
+        Ok(Self {
+            /// We capture the origin - so that the pinned raw memory is cached
+            /// with our own self-reference composing a self-referential struct
+            /// by composition - by tracking the origin with the embedded query
+            /// of interest referential safety should be preserved
+            raw: origin.raw.clone(),
+            query: unsafe {
+                mem::transmute::<ast::query::Query<'_>, ast::query::Query<'static>>(query)
+            },
+            alias,
+            node_id: target.clone(),
+            target_node_id: pipeline.node_id.clone(),
+        })
     }
 
     /// borrows the query
@@ -350,6 +341,7 @@ impl Query {
         Ok(Self {
             raw,
             query: structured,
+            alias: target.to_string(),
             node_id: NodeId::new(target.to_string(), vec![]), // FIXME TODO fix
             target_node_id: NodeId::new(target.to_string(), vec![]),
         })
@@ -542,9 +534,9 @@ impl Stmt {
 #[derive(Clone, PartialEq)]
 pub struct ConnectorDecl {
     /// The local alias of this connector
-    pub alias: String,
+    pub instance_id: String,
     /// The target identity of this connector
-    pub id: NodeId,
+    pub artefact_id: NodeId,
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     /// Arguments for this connector definition
     pub params: DefinitioalArgsWith<'static>,
@@ -555,7 +547,12 @@ pub struct ConnectorDecl {
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
 impl Debug for ConnectorDecl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.kind.fmt(f)
+        f.debug_struct("ConnectorDecl")
+            .field("instance_id", &self.instance_id)
+            .field("id", &self.artefact_id)
+            .field("params", &self.params)
+            .field("kind", &self.kind)
+            .finish()
     }
 }
 
@@ -564,49 +561,28 @@ impl ConnectorDecl {
     /// deployment
     /// # Errors
     /// If the self-referential struct cannot be created safely from the deployment provided
-    pub fn new_from_deploy(
-        origin: &Deploy,
-        alias: String,
-        id: &NodeId,
-    ) -> std::result::Result<Self, CompilerError> {
-        let connector_refutable = origin
+    pub fn new_from_deploy(origin: &Deploy, alias: String, id: &NodeId) -> Result<Self> {
+        let connector = origin
             .script
-            .definitions
+            .connector_decls
             .values()
-            .find(|query| {
-                if let ast::deploy::DeployStmt::ConnectorDecl(target) = query {
-                    id == &target.node_id
-                } else {
-                    false
-                }
-            })
-            .ok_or_else(|| CompilerError {
-                error: Error::from(format!("Invalid connector for deployment {}", &id).as_str()),
-                cus: vec![],
+            .find(|query| id == &query.node_id)
+            .ok_or_else(|| {
+                Error::from(format!("Invalid connector for deployment {}", &id).as_str())
             })?;
 
-        if let ast::deploy::DeployStmt::ConnectorDecl(connector) = connector_refutable {
-            // Irrefutable
-            Ok(Self {
-                /// We capture the origin - so that the pinned raw memory is cached
-                /// with our own self-reference composing a self-referential struct
-                /// by composition - by tracking the origin with the embedded query
-                /// of interest referential safety should be preserved
-                raw: origin.raw.clone(),
-                id: id.clone(),
-                alias,
-                params: connector.params.clone(),
-                kind: connector.builtin_kind.clone(),
-            })
-        } else {
-            return Err(CompilerError {
-                // FIXME TODO hygienic
-                error: Error::from(
-                    format!("Expected a connector definition {}", id.fqn()).as_str(),
-                ),
-                cus: vec![],
-            });
-        }
+        // Irrefutable
+        Ok(Self {
+            /// We capture the origin - so that the pinned raw memory is cached
+            /// with our own self-reference composing a self-referential struct
+            /// by composition - by tracking the origin with the embedded query
+            /// of interest referential safety should be preserved
+            raw: origin.raw.clone(),
+            artefact_id: id.clone(),
+            instance_id: alias,
+            params: connector.params.clone(),
+            kind: connector.builtin_kind.clone(),
+        })
     }
 }
 
@@ -624,8 +600,10 @@ pub struct FlowDecl {
     pub params: DefinitioalArgs<'static>,
     /// Link specifications
     pub links: Vec<ConnectStmt>,
-    /// Artefacts to deploy with this flow
-    pub atoms: Vec<AtomOfDeployment>,
+    /// pipeleines
+    pub pipelines: Vec<Query>,
+    /// connectors
+    pub connectors: Vec<ConnectorDecl>,
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
@@ -641,71 +619,33 @@ impl FlowDecl {
     /// # Errors
     /// If the self-referential struct cannot be created safely from the deployment provided
     pub fn new_from_deploy(origin: &Deploy, id: &NodeId) -> Result<Self> {
-        let flow_refutable = origin
+        let flow = origin
             .script
-            .definitions
+            .flow_decls
             .values()
-            .find(|flow| {
-                if let ast::deploy::DeployStmt::FlowDecl(flow) = flow {
-                    id == &flow.node_id
-                } else {
-                    false
-                }
-            })
+            .find(|flow| id == &flow.node_id)
             .ok_or_else(|| Error::from(format!("Invalid flow for deployment {}", &id).as_str()))?;
 
-        let flow = if let ast::deploy::DeployStmt::FlowDecl(flow) = flow_refutable {
-            flow
-        } else {
-            return Err(
-                // FIXME TODO hygienic
-                Error::from(format!("Expected a flow definition {}", id.fqn()).as_str()),
-            );
-        };
+        let mut pipeline_decls = Vec::new();
+        let mut connector_decls = Vec::new();
 
-        let mut srs_atoms = Vec::new();
         for stmt in &flow.creates {
-            match &stmt.atom {
-                ast::DeployStmt::ConnectorDecl(instance) => {
+            match &stmt.decl {
+                ast::CreateTargetDecl::Connector(instance) => {
                     // TODO wire up args
-                    srs_atoms.push(AtomOfDeployment::Connector(ConnectorDecl::new_from_deploy(
+                    connector_decls.push(ConnectorDecl::new_from_deploy(
                         origin,
-                        stmt.alias.to_string(),
+                        stmt.alias.clone(),
                         &instance.node_id,
-                    )?));
+                    )?);
                 }
-                ast::DeployStmt::PipelineDecl(instance) => {
+                ast::CreateTargetDecl::Pipeline(instance) => {
                     // TODO wire up args
-                    srs_atoms.push(AtomOfDeployment::Pipeline(
-                        stmt.alias.to_string(),
-                        Query::new_from_deploy(origin, &instance.node_id, &instance.node_id)?,
-                    ));
-                }
-                ast::DeployStmt::FlowDecl(flow) => {
-                    // FIXME TODO We do not enable sub-flows within flows at this time
-                    //      Decision
-                    //          1 - Error ( cheap )
-                    //          2 - Or, allow sub-flows where they are self-describing and don't use the system connection type ( not so cheap, preferable )
-                    //
-                    return Err(
-                        // FIXME TODO hygienic
-                        Error::from(
-                            format!("Invalid statement for deployment {}", &flow.node_id.fqn())
-                                .as_str(),
-                        ),
-                    );
-                }
-                ast::DeployStmt::DeployFlowStmt(create) => {
-                    return Err(
-                        // FIXME TODO hygienic
-                        Error::from(
-                            format!(
-                                "Unexpected statement for flow statement {}",
-                                &create.node_id.fqn()
-                            )
-                            .as_str(),
-                        ),
-                    );
+                    pipeline_decls.push(Query::new_from_deploy(
+                        origin,
+                        stmt.alias.clone(),
+                        &instance.node_id,
+                    )?);
                 }
             }
         }
@@ -719,7 +659,8 @@ impl FlowDecl {
             node_id: id.clone(),
             params: flow.params.clone().into_static(),
             links: flow.connections.clone(),
-            atoms: srs_atoms,
+            pipelines: pipeline_decls,
+            connectors: connector_decls,
         })
     }
 }

@@ -20,28 +20,24 @@ use beef::Cow;
 use clap::ArgMatches;
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
-use tremor_common::time::nanotime;
-use tremor_common::url::TremorUrl;
-use tremor_common::{file, ids::OperatorIdGen};
+use tremor_common::{file, ids::OperatorIdGen, time::nanotime};
 use tremor_pipeline::{Event, EventId};
-use tremor_runtime::postprocessor::Postprocessor;
-use tremor_runtime::preprocessor::Preprocessor;
-use tremor_runtime::repository::BindingArtefact;
 use tremor_runtime::{
     codec::Codec,
-    system::{World, WorldConfig},
+    postprocessor::Postprocessor,
+    preprocessor::Preprocessor,
+    system::{ShutdownMode, World, WorldConfig},
 };
-use tremor_runtime::{config::Binding, system::ShutdownMode};
-use tremor_script::ast::{ConnectStmt, DeployEndpoint, Helper};
-use tremor_script::deploy::Deploy;
-use tremor_script::highlighter::Error as HighlighterError;
-use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
-use tremor_script::prelude::*;
-use tremor_script::query::Query;
-use tremor_script::script::{AggrType, Return, Script};
-use tremor_script::srs;
-use tremor_script::{ctx::EventContext, lexer::Tokenizer};
-use tremor_script::{EventPayload, Value, ValueAndMeta};
+use tremor_script::{
+    ast::Helper,
+    ctx::EventContext,
+    highlighter::{Error as HighlighterError, Highlighter, Term as TermHighlighter},
+    lexer::Tokenizer,
+    prelude::*,
+    query::Query,
+    script::{AggrType, Return, Script},
+    EventPayload, Value, ValueAndMeta,
+};
 use tremor_value::literal;
 
 struct Ingress {
@@ -429,210 +425,21 @@ fn run_trickle_query(
     Ok(())
 }
 
-fn parse_troy_source(src: &str, args: &Value) -> Result<(String, srs::Deploy)> {
-    let target_stem = if let Some(stem) = std::path::Path::new(src).file_stem() {
-        stem.to_string_lossy().to_string()
-    } else {
-        eprintln!("Bad troy file, existing");
-        // ALLOW: main.rs
-        std::process::exit(1);
-    };
-
-    let raw = slurp_string(&src);
-    if let Err(e) = raw {
-        eprintln!("Error processing file {}: {}", &src, e);
-        // ALLOW: main.rs
-        std::process::exit(1);
-    }
-    let raw = raw?;
-    let env = env::setup()?;
-    let mut h = TermHighlighter::stderr();
-
-    return match Deploy::parse_with_args(
-        &env.module_path,
-        src,
-        &raw,
-        vec![],
-        &env.fun,
-        &env.aggr,
-        args,
-    ) {
-        Ok(deployable) => Ok((target_stem, deployable.deploy)),
-        Err(e) => {
-            if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
-                eprintln!("Snot Error: {}", e);
-            };
-            // ALLOW: main.rs
-            std::process::exit(1);
-        }
-    };
-}
-
-async fn handle_troy_connector(
-    world: &World,
-    stem: &str,
-    instance: &str,
-    atom: &srs::ConnectorDecl,
-) -> Result<()> {
-    dbg!(world, stem, instance, atom);
-    // let yaml = serde_yaml::to_string(&atom.params)?;
-
-    // // Map kind to legacy artefact url format
-    // match atom.kind.as_str() {
-    //     "blaster" | "stdin" | "metronome" => {
-    //         let stub = "/onramp";
-    //         let ramp = serde_yaml::from_str::<tremor_runtime::config::OnRamp>(&yaml)?;
-    //         let url = TremorUrl::parse(&format!("{}/{}/{}", stub, atom.kind.as_str(), instance))?;
-    //         dbg!(&url.to_string());
-    //         world.repo.publish_onramp(&url, false, ramp).await?;
-    //     }
-    //     "blackhole" | "stdout" | "stderr" => {
-    //         let stub = "/offramp";
-    //         let ramp = serde_yaml::from_str::<tremor_runtime::config::OffRamp>(&yaml)?;
-    //         let url = TremorUrl::parse(&format!("{}/{}/{}", stub, atom.kind.as_str(), instance))?;
-    //         world.repo.publish_offramp(&url, false, ramp).await?;
-    //         dbg!(&url.to_string());
-    //     }
-    //     _otherwise => unimplemented!(),
-    // };
-
-    Ok(())
-}
-
-async fn handle_troy_pipeline(
-    world: &World,
-    raw: &str,
-    deploy: &srs::Deploy,
-    _stem: &str,
-    instance: &str,
-    _alias: &str,
-    atom: &srs::Query,
-) -> Result<()> {
-    let name = dbg!(&atom.node_id);
-    let url = TremorUrl::parse(&format!("/pipeline/{}/{}", name.clone(), instance))?;
-    world
-        .repo
-        .publish_pipeline(
-            &url,
-            false,
-            tremor_pipeline::query::Query(tremor_script::Query::from_troy(raw, deploy, atom)?),
-        )
-        .await?;
-
-    Ok(())
-}
-
-// TODO This is a placeholder for now
-fn handle_troy_endpoint(origin: &str, port: &Option<String>) -> Result<TremorUrl> {
-    dbg!(origin, port);
-    Ok(TremorUrl::parse("/binding/snot")?)
-}
-
-// TODO this is a palceholder for now
-fn handle_system_endpoint(str_url: &TremorUrl) -> Result<TremorUrl> {
-    Ok(str_url.clone())
-}
-
-#[allow(clippy::too_many_lines)]
-fn run_troy_source(_matches: &ArgMatches, src: &str, args: &Value) -> Result<()> {
+fn run_troy_source(_matches: &ArgMatches, file_name: &str) -> Result<()> {
     env_logger::init();
 
-    let (target_stem, deployable) = parse_troy_source(src, args)?;
-    let unit = deployable.as_deployment_unit()?;
-    let storage_directory = Some("./storage".to_string());
-    let binding_instance = "snot";
-    dbg!();
     block_on(async {
         let config = WorldConfig {
-            storage_directory,
+            storage_directory: None,
             debug_connectors: true,
             ..WorldConfig::default()
         };
         let (world, _handle) = World::start(config).await.unwrap();
-        dbg!();
-        for (_name, flow) in dbg!(&unit.instances) {
-            dbg!();
-            let binding_url = TremorUrl::parse("/binding/troy::deploy/snot").unwrap();
+        tremor_runtime::load_troy_file(&world, file_name)
+            .await
+            .unwrap();
 
-            let flow_atoms = &flow.atom;
-
-            for flow in &flow_atoms.atoms {
-                match flow {
-                    srs::AtomOfDeployment::Connector(atom) => {
-                        dbg!();
-                        handle_troy_connector(&world, &target_stem, binding_instance, atom)
-                            .await
-                            .unwrap();
-                    }
-                    srs::AtomOfDeployment::Pipeline(alias, atom) => {
-                        dbg!();
-                        handle_troy_pipeline(
-                            &world,
-                            "raw",
-                            &deployable,
-                            &target_stem,
-                            binding_instance,
-                            alias,
-                            atom,
-                        )
-                        .await
-                        .unwrap();
-                    }
-                    srs::AtomOfDeployment::Flow(atom) => {
-                        dbg!();
-                        for flow in &atom.atoms {
-                            match flow {
-                                srs::AtomOfDeployment::Connector(atom) => {
-                                    handle_troy_connector(
-                                        &world,
-                                        &target_stem,
-                                        binding_instance,
-                                        atom,
-                                    )
-                                    .await
-                                    .unwrap();
-                                }
-                                srs::AtomOfDeployment::Pipeline(alias, atom) => {
-                                    handle_troy_pipeline(
-                                        &world,
-                                        "raw",
-                                        &deployable,
-                                        &target_stem,
-                                        binding_instance,
-                                        alias,
-                                        atom,
-                                    )
-                                    .await
-                                    .unwrap();
-                                }
-                                srs::AtomOfDeployment::Flow(_atom) => {
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            let binding = BindingArtefact {
-                binding: Binding {
-                    id: binding_instance.to_string(),
-                    description: "Troy managed binding".to_string(),
-                    links: flow_atoms.links.clone(),
-                },
-                mapping: None,
-            };
-            world
-                .repo
-                .publish_binding(&binding_url, false, binding)
-                .await
-                .unwrap();
-            let kv = hashbrown::HashMap::new();
-            world.link_binding(&binding_url, kv).await.unwrap();
-        }
-
-        // At this point we could run a test framework of sorts
-        std::thread::sleep(std::time::Duration::from_millis(150_000));
+        async_std::task::sleep(std::time::Duration::from_millis(150_000)).await;
         world.stop(ShutdownMode::Graceful).await.unwrap();
     });
 
@@ -696,10 +503,10 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
 
     let script_file = script_file.to_string();
     match get_source_kind(&script_file) {
-        SourceKind::Troy => run_troy_source(matches, &script_file, &args),
+        SourceKind::Troy => run_troy_source(matches, &script_file),
         SourceKind::Trickle => run_trickle_source(matches, &script_file, &args),
         SourceKind::Tremor | SourceKind::Json => run_tremor_source(matches, script_file, &args),
-        SourceKind::Unsupported(_) | SourceKind::Yaml => {
+        SourceKind::Unsupported(_) => {
             Err(format!("Error: Unable to execute source: {}", &script_file).into())
         }
     }

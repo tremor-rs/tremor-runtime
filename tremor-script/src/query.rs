@@ -57,7 +57,11 @@ where
         let warnings = BTreeSet::new();
         let locals = 0;
         Ok(Self {
-            query: crate::srs::Query::new_from_deploy(deploy, &query.node_id, &query.node_id)?,
+            query: crate::srs::Query::new_from_deploy(
+                deploy,
+                query.node_id.id().to_string(),
+                &query.node_id,
+            )?,
             source: src.to_string(),
             warnings,
             locals,

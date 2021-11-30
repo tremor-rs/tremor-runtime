@@ -361,15 +361,18 @@ impl Artefact for Binding {
         let mut res = self.clone();
         for link in &self.binding.links {
             match link {
-                ConnectStmt::ConnectorToPipeline { from, to, .. } => {
-                    connectors.push((from.to_connector_instance(), to.to_pipeline_instance()))
-                }
-                ConnectStmt::PipelineToConnector { from, to, .. } => {
-                    pipelines.push((from.to_pipeline_instance(), to.to_connector_instance()))
-                }
-                ConnectStmt::PipelineToPipeline { from, to, .. } => {
-                    pipelines.push((from.to_pipeline_instance(), to.to_pipeline_instance()))
-                }
+                ConnectStmt::ConnectorToPipeline { from, to, .. } => connectors.push((
+                    from.to_connector_instance_and_port(),
+                    to.to_pipeline_instance_and_port(),
+                )),
+                ConnectStmt::PipelineToConnector { from, to, .. } => pipelines.push((
+                    from.to_pipeline_instance_and_port(),
+                    to.to_connector_instance_and_port(),
+                )),
+                ConnectStmt::PipelineToPipeline { from, to, .. } => pipelines.push((
+                    from.to_pipeline_instance_and_port(),
+                    to.to_pipeline_instance_and_port(),
+                )),
             }
         }
 
