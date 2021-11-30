@@ -470,15 +470,22 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             .map(|x| x.to_string())
             .collect::<Vec<String>>();
         let node_id = NodeId::new(self.target.to_string(), target_module);
-
+        let outer = self.extent(&helper.meta);
+        let inner = self.id.extent(&helper.meta);
+        let params = self.params.up(helper)?;
         let decl = match self.kind {
             CreateKind::Connector => {
                 if let Some(artefact) = helper.connector_decls.get(&node_id) {
-                    CreateTargetDecl::Connector(artefact.clone())
+                    let mut artefact = artefact.clone();
+                    dbg!(&params);
+                    dbg!(&artefact.params);
+                    artefact.params.ingest_creational_with(&params)?;
+                    dbg!(&artefact.params);
+                    CreateTargetDecl::Connector(artefact)
                 } else {
                     return Err(ErrorKind::DeployArtefactNotDefined(
-                        self.extent(&helper.meta),
-                        self.id.extent(&helper.meta),
+                        outer,
+                        inner,
                         node_id.to_string(),
                         helper
                             .connector_decls
@@ -491,11 +498,14 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             }
             CreateKind::Pipeline => {
                 if let Some(artefact) = helper.pipeline_decls.get(&node_id) {
-                    CreateTargetDecl::Pipeline(artefact.clone())
+                    // FIXME: do we need to ingest args?
+                    let artefact = artefact.clone();
+                    // artefact.params.ingest_creational_with(&params)?;
+                    CreateTargetDecl::Pipeline(artefact)
                 } else {
                     return Err(ErrorKind::DeployArtefactNotDefined(
-                        self.extent(&helper.meta),
-                        self.id.extent(&helper.meta),
+                        outer,
+                        inner,
                         node_id.to_string(),
                         helper
                             .connector_decls

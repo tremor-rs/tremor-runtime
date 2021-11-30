@@ -31,5 +31,5 @@ impl Default for Version {
 }
 
 pub async fn get(req: Request) -> Result<Response> {
-    reply(req, Version::default(), false, StatusCode::Ok).await
+    reply(req, Version::default(), StatusCode::Ok).await
 }

@@ -254,8 +254,6 @@ pub struct Query {
     pub node_id: NodeId,
     /// The alias
     pub alias: String,
-    /// NodeId of definition this declaration refers to
-    target_node_id: NodeId,
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
@@ -264,7 +262,6 @@ impl Debug for Query {
         f.debug_struct("Query")
             .field("alias", &self.alias)
             .field("node_id", &self.node_id)
-            .field("target_node_id", &self.target_node_id)
             .field("query", &self.query)
             .finish()
     }
@@ -275,18 +272,14 @@ impl Query {
     /// deployment where the query is embedded in pipeline statements
     /// # Errors
     /// If the query self-referential struct cannot be safely created by id from the deployment provided
-    pub fn new_from_deploy(origin: &Deploy, alias: String, target: &NodeId) -> Result<Self> {
-        let pipeline = origin
-            .script
-            .pipeline_decls
-            .values()
-            .find(|query| target == &query.node_id)
-            .ok_or_else(|| {
-                Error::from(format!("Invalid query for pipeline {}", &alias).as_str())
-            })?;
-
+    pub fn new_from_deploy(
+        origin: &Deploy,
+        alias: String,
+        pipeline: &ast::PipelineDecl<'static>,
+    ) -> Result<Self> {
+        let node_id = pipeline.node_id.clone();
         let query = pipeline.to_query()?;
-
+        // This remains safe since we capture the original raw
         Ok(Self {
             /// We capture the origin - so that the pinned raw memory is cached
             /// with our own self-reference composing a self-referential struct
@@ -297,8 +290,7 @@ impl Query {
                 mem::transmute::<ast::query::Query<'_>, ast::query::Query<'static>>(query)
             },
             alias,
-            node_id: target.clone(),
-            target_node_id: pipeline.node_id.clone(),
+            node_id,
         })
     }
 
@@ -343,7 +335,6 @@ impl Query {
             query: structured,
             alias: target.to_string(),
             node_id: NodeId::new(target.to_string(), vec![]), // FIXME TODO fix
-            target_node_id: NodeId::new(target.to_string(), vec![]),
         })
     }
 
@@ -533,11 +524,11 @@ impl Stmt {
 /// A connector declaration
 #[derive(Clone, PartialEq)]
 pub struct ConnectorDecl {
+    raw: Vec<Arc<Pin<Vec<u8>>>>,
     /// The local alias of this connector
     pub instance_id: String,
     /// The target identity of this connector
     pub artefact_id: NodeId,
-    raw: Vec<Arc<Pin<Vec<u8>>>>,
     /// Arguments for this connector definition
     pub params: DefinitioalArgsWith<'static>,
     /// The type of connector
@@ -561,24 +552,20 @@ impl ConnectorDecl {
     /// deployment
     /// # Errors
     /// If the self-referential struct cannot be created safely from the deployment provided
-    pub fn new_from_deploy(origin: &Deploy, alias: String, id: &NodeId) -> Result<Self> {
-        let connector = origin
-            .script
-            .connector_decls
-            .values()
-            .find(|query| id == &query.node_id)
-            .ok_or_else(|| {
-                Error::from(format!("Invalid connector for deployment {}", &id).as_str())
-            })?;
-
-        // Irrefutable
+    pub fn new_from_deploy(
+        origin: &Deploy,
+        alias: String,
+        connector: &ast::ConnectorDecl<'static>,
+    ) -> Result<Self> {
+        let artefact_id = connector.node_id.clone();
+        // This remains safe since we capture the original raw
         Ok(Self {
             /// We capture the origin - so that the pinned raw memory is cached
             /// with our own self-reference composing a self-referential struct
             /// by composition - by tracking the origin with the embedded query
             /// of interest referential safety should be preserved
             raw: origin.raw.clone(),
-            artefact_id: id.clone(),
+            artefact_id,
             instance_id: alias,
             params: connector.params.clone(),
             kind: connector.builtin_kind.clone(),
@@ -632,19 +619,19 @@ impl FlowDecl {
         for stmt in &flow.creates {
             match &stmt.decl {
                 ast::CreateTargetDecl::Connector(instance) => {
-                    // TODO wire up args
+                    // FIXME: wire up args
                     connector_decls.push(ConnectorDecl::new_from_deploy(
                         origin,
                         stmt.alias.clone(),
-                        &instance.node_id,
+                        &instance,
                     )?);
                 }
                 ast::CreateTargetDecl::Pipeline(instance) => {
-                    // TODO wire up args
+                    // FIXME: wire up args
                     pipeline_decls.push(Query::new_from_deploy(
                         origin,
                         stmt.alias.clone(),
-                        &instance.node_id,
+                        &instance,
                     )?);
                 }
             }

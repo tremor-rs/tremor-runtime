@@ -1196,7 +1196,7 @@ pub trait Connector: Send {
 }
 
 /// the type of a connector
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 pub struct ConnectorType(String);
 
 impl From<ConnectorType> for String {

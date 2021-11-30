@@ -53,17 +53,14 @@ impl NodeConfig {
     }
 
     /// Creates a `NodeConfig` from a config struct
-    pub fn from_config<C, I>(id: &I, config: C) -> Result<Self>
+    pub fn from_config<I>(id: &I, config: Option<tremor_value::Value<'static>>) -> Result<Self>
     where
-        C: serde::Serialize,
         I: ToString,
     {
-        let config = serde_yaml::to_vec(&config)?;
-
         Ok(NodeConfig {
             id: id.to_string(),
             kind: NodeKind::Operator,
-            config: serde_yaml::from_slice(&config)?,
+            config,
             ..NodeConfig::default()
         })
     }
@@ -82,14 +79,14 @@ impl PartialEq for NodeConfig {
     }
 }
 
-impl std::hash::Hash for NodeConfig {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
-        self.kind.hash(state);
-        self.op_type.hash(state);
-        self.config.hash(state);
-    }
-}
+// impl std::hash::Hash for NodeConfig {
+//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+//         self.id.hash(state);
+//         self.kind.hash(state);
+//         self.op_type.hash(state);
+//         self.config.hash(state);
+//     }
+// }
 
 impl NodeConfig {
     pub(crate) fn to_op(

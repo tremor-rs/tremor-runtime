@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::config::{BindingVec, Config, MappingMap};
 use crate::connectors::utils::metrics::METRICS_CHANNEL;
 use crate::errors::{Error, ErrorKind, Result};
 use crate::registry::Registries;
@@ -22,15 +21,11 @@ use crate::repository::{
 
 use crate::QSIZE;
 use async_std::channel::bounded;
-use async_std::io::prelude::*;
-use async_std::path::Path;
 use async_std::prelude::*;
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use tremor_common::asy::file;
-use tremor_common::time::nanotime;
 use tremor_common::url::{ResourceType, TremorUrl};
 
 pub(crate) use crate::binding;
@@ -599,54 +594,6 @@ impl World {
         Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
     }
 
-    /// Turns the running system into a config
-    ///
-    /// # Errors
-    ///  * If the systems configuration can't be stored
-    pub async fn to_config(&self) -> Result<Config> {
-        let binding: BindingVec = self
-            .repo
-            .serialize_bindings()
-            .await?
-            .into_iter()
-            .map(|b| b.binding)
-            .collect();
-        let mapping: MappingMap = self.reg.serialize_mappings().await?;
-        let config = crate::config::Config {
-            connector: vec![],
-            binding,
-            mapping,
-        };
-        Ok(config)
-    }
-
-    /// Saves the current config
-    ///
-    /// # Errors
-    ///  * if the config can't be saved
-    pub async fn save_config(&self) -> Result<String> {
-        if let Some(storage_directory) = &self.storage_directory {
-            let config = self.to_config().await?;
-            let path = Path::new(storage_directory);
-            let file_name = format!("config_{}.yaml", nanotime());
-            let mut file_path = path.to_path_buf();
-            file_path.push(Path::new(&file_name));
-            info!(
-                "Serializing configuration to file {}",
-                file_path.to_string_lossy()
-            );
-            let mut f = file::create(&file_path).await?;
-            f.write_all(&serde_yaml::to_vec(&config)?).await?;
-            // lets really sync this!
-            f.sync_all().await?;
-            f.sync_all().await?;
-            f.sync_all().await?;
-            Ok(file_path.to_string_lossy().to_string())
-        } else {
-            Ok("".to_string())
-        }
-    }
-
     /// Starts the runtime system
     ///
     /// # Errors
@@ -718,12 +665,11 @@ impl World {
     #[allow(clippy::too_many_lines)]
     async fn register_system(&mut self) -> Result<()> {
         // register metrics connector
-        let artefact: ConnectorArtefact = serde_yaml::from_str(
-            r#"
-id: system::metrics
-type: metrics
-            "#,
-        )?;
+        let artefact = ConnectorArtefact {
+            id: "system::metrics".into(),
+            binding_type: "metrics".into(),
+            ..ConnectorArtefact::default()
+        };
         self.repo
             .publish_connector(&METRICS_CONNECTOR, true, artefact)
             .await?;
@@ -764,12 +710,11 @@ type: metrics
 
         // Register stdout connector - do not start yet
         // FIXME: how to name this
-        let stdout_artefact: ConnectorArtefact = serde_yaml::from_str(
-            r#"
-id: system::stdio
-type: stdio
-            "#,
-        )?;
+        let stdout_artefact: ConnectorArtefact = ConnectorArtefact {
+            id: "system::stdio".into(),
+            binding_type: "stdio".into(),
+            ..ConnectorArtefact::default()
+        };
         self.repo
             .publish_connector(&STDIO_CONNECTOR, true, stdout_artefact)
             .await?;
