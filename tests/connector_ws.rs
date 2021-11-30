@@ -53,6 +53,12 @@ fn setup_for_tls() -> Result<()> {
     }
 }
 
+fn teardown_tls() -> Result<()> {
+    std::fs::remove_file("./tests/localhost.cert")?;
+    std::fs::remove_file("./tests/localhost.key")?;
+    Ok(())
+}
+
 /// Find free TCP port for use in test server endpoints
 async fn find_free_tcp_port() -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").await;
@@ -72,6 +78,13 @@ async fn find_free_tcp_port() -> u16 {
 struct TestClient<S> {
     client: S,
     http_response: Response<()>,
+}
+
+#[derive(Debug, PartialEq)]
+enum ExpectMessage {
+    Text(String),
+    Binary(Vec<u8>),
+    Unexpected(Message),
 }
 
 impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::TcpStream>>> {
@@ -118,16 +131,15 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
         Ok(self.client.get_ref().get_ref().local_addr()?.port())
     }
 
-    async fn expect_text(&mut self) -> Result<String> {
+    async fn expect(&mut self) -> Result<ExpectMessage> {
         use futures::StreamExt;
         loop {
-            let message = self.client.next().await;
-            if let Some(Ok(Message::Text(data))) = message {
-                return Ok(data);
-            } else if let None = message {
-                continue;
-            } else {
-                return Err("Unexpected message type".into());
+            match self.client.next().await {
+                Some(Ok(Message::Text(data))) => return Ok(ExpectMessage::Text(data)),
+                Some(Ok(Message::Binary(data))) => return Ok(ExpectMessage::Binary(data)),
+                Some(Ok(other)) => return Ok(ExpectMessage::Unexpected(other)),
+                Some(Err(e)) => return Err(e.into()),
+                None => continue,
             }
         }
     }
@@ -166,24 +178,24 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
         }
     }
 
-    fn expect_text(&mut self) -> Result<String> {
-        let message = self.client.read_message().expect("Error reading message");
-        if let Message::Text(data) = message {
-            Ok(data)
-        } else {
-            Err("Unexpected message type".into())
+    fn expect(&mut self) -> Result<ExpectMessage> {
+        match self.client.read_message() {
+            Ok(Message::Text(data)) => Ok(ExpectMessage::Text(data)),
+            Ok(Message::Binary(data)) => Ok(ExpectMessage::Binary(data)),
+            Ok(other) => Ok(ExpectMessage::Unexpected(other)),
+            Err(e) => Err(e.into()),
         }
     }
 }
 
 impl<S> TestClient<S> {
-    fn print_headers(&self) {
-        println!("Response HTTP code: {}", self.http_response.status());
-        println!("Response contains the following headers:");
-        for (ref header, _value) in self.http_response.headers() {
-            println!("* {}", header);
-        }
-    }
+    // fn print_headers(&self) {
+    //     println!("Response HTTP code: {}", self.http_response.status());
+    //     println!("Response contains the following headers:");
+    //     for (ref header, _value) in self.http_response.headers() {
+    //         println!("* {}", header);
+    //     }
+    // }
 }
 
 /// A minimal websocket server endpoint test harness
@@ -206,13 +218,13 @@ impl TestServer {
     async fn handle_connection(
         sender: Sender<Message>,
         stream: std::net::TcpStream,
-        addr: SocketAddr,
+        _addr: SocketAddr,
     ) {
         let mut ws = accept(stream).expect("Error during WS handshake sequence");
 
         loop {
             let msg = ws.read_message().unwrap();
-            let sent = sender.send(msg).await.unwrap();
+            let _sent = sender.send(msg).await.unwrap();
         }
     }
 
@@ -233,11 +245,12 @@ impl TestServer {
         Ok(())
     }
 
-    async fn expect_text(&mut self) -> Result<String> {
+    async fn expect(&mut self) -> Result<ExpectMessage> {
         loop {
             match self.rx.try_recv() {
-                Ok(Message::Text(data)) => return Ok(data),
-                Ok(_) => continue,
+                Ok(Message::Text(data)) => return Ok(ExpectMessage::Text(data)),
+                Ok(Message::Binary(data)) => return Ok(ExpectMessage::Binary(data)),
+                Ok(other) => return Ok(ExpectMessage::Unexpected(other)),
                 Err(TryRecvError::Empty) => continue,
                 Err(_e) => return Err("Failed to receive text message".into()),
             }
@@ -328,9 +341,67 @@ config:
         ..Event::default()
     };
     harness.send_to_sink(echo_back, IN).await?;
-    assert_eq!("\"badger\"", c1.expect_text()?);
+    assert_eq!(ExpectMessage::Text("\"badger\"".into()), c1.expect()?);
 
     //cleanup
+    let (_out, err) = harness.stop().await?;
+    assert!(err.is_empty());
+    Ok(())
+}
+
+#[async_std::test]
+async fn connector_ws_client_binary_routing() -> Result<()> {
+    let _ = env_logger::try_init();
+
+    let free_port = find_free_tcp_port().await;
+    let mut ts = TestServer::new("127.0.0.1", free_port);
+    ts.start()?;
+
+    let ws_client_yaml = format!(
+        r#"
+id: my_ws_client
+type: ws_client
+codec: json
+config:
+  url: ws://127.0.0.1:{}
+"#,
+        free_port
+    );
+    let harness = ConnectorHarness::new(ws_client_yaml).await?;
+    harness.start().await?;
+    harness.wait_for_connected(Duration::from_secs(5)).await?;
+
+    let _out_pipeline = harness
+        .out()
+        .expect("No pipeline connected to 'out' port of tcp_server connector");
+
+    let _in_pipeline = harness
+        .in_port()
+        .expect("No pipeline connected to 'in' port of tcp_server connector");
+
+    let meta = literal!({
+        "binary": true,
+        "ws_client": {
+            "peer": {
+                "host": "127.0.0.1",
+                "port": free_port,
+                "url": format!("ws://127.0.0.1:{}", free_port),
+            }
+        }
+    });
+    let echo_back = Event {
+        id: EventId::default(),
+        data: (Value::String("badger".into()), meta).into(),
+        ..Event::default()
+    };
+    harness.send_to_sink(echo_back, IN).await?;
+
+    let data: Vec<u8> = "\"badger\"".to_string().into_bytes();
+    assert_eq!(ExpectMessage::Binary(data), ts.expect().await?);
+
+    ts.stop()?;
+    drop(ts);
+
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
     Ok(())
@@ -358,11 +429,11 @@ config:
     harness.start().await?;
     harness.wait_for_connected(Duration::from_secs(5)).await?;
 
-    let out_pipeline = harness
+    let _out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of tcp_server connector");
 
-    let in_pipeline = harness
+    let _in_pipeline = harness
         .in_port()
         .expect("No pipeline connected to 'in' port of tcp_server connector");
 
@@ -382,7 +453,10 @@ config:
     };
     harness.send_to_sink(echo_back, IN).await?;
 
-    assert_eq!("\"badger\"", ts.expect_text().await?);
+    assert_eq!(
+        ExpectMessage::Text("\"badger\"".to_string()),
+        ts.expect().await?
+    );
 
     ts.stop()?;
     drop(ts);
@@ -399,7 +473,7 @@ async fn connector_wss_server_text_routing() -> Result<()> {
     setup_for_tls()?;
 
     let free_port = find_free_tcp_port().await;
-    let server_addr = format!("localhost:{}", &free_port);
+    let _server_addr = format!("localhost:{}", &free_port);
     let connector_yaml = format!(
         r#"
 id: my_ws_server
@@ -457,10 +531,94 @@ config:
         ..Event::default()
     };
     harness.send_to_sink(echo_back, IN).await?;
-    assert_eq!("\"badger\"", c1.expect_text().await?);
+    assert_eq!(
+        ExpectMessage::Text("\"badger\"".to_string()),
+        c1.expect().await?
+    );
 
     //cleanup
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
+
+    teardown_tls()?;
+
+    Ok(())
+}
+
+#[async_std::test]
+async fn connector_wss_server_binary_routing() -> Result<()> {
+    let _ = env_logger::try_init();
+
+    setup_for_tls()?;
+
+    let free_port = find_free_tcp_port().await;
+    let _server_addr = format!("localhost:{}", &free_port);
+    let connector_yaml = format!(
+        r#"
+id: my_ws_server
+type: ws_server
+codec: json
+config:
+  host: "localhost"
+  port: {}
+  tls:
+    cert: "./tests/localhost.cert"
+    key: "./tests/localhost.key"
+    domain: "localhost"
+"#,
+        free_port
+    );
+
+    let harness = ConnectorHarness::new(connector_yaml).await?;
+    let out_pipeline = harness
+        .out()
+        .expect("No pipeline connected to 'out' port of ws_server connector");
+
+    harness.start().await?;
+    harness.wait_for_connected(Duration::from_secs(5)).await?;
+    //
+    // Send from ws client to server and check received event
+    //
+    let mut c1 =
+        TestClient::new_tls(format!("wss://localhost:{}/", free_port), free_port as u16).await;
+    c1.send("\"Hello WebSocket Server\"").await?;
+
+    let event = out_pipeline
+        .get_event()
+        .timeout(Duration::from_millis(400))
+        .await??;
+    let (data, meta) = event.data.parts();
+    assert_eq!("Hello WebSocket Server", &data.to_string());
+
+    let ws_server_meta = meta.get("ws_server");
+    let peer_obj = ws_server_meta.get_object("peer").unwrap();
+
+    //
+    // Send from ws server to client and check received event
+    //
+    let meta = literal!({
+            "binary": true,
+            "ws_server": {
+            "peer": {
+                "host": peer_obj.get("host").unwrap().clone_static(),
+                "port": c1.port()?,
+            }
+        }
+    });
+    let echo_back = Event {
+        id: EventId::default(),
+        data: (Value::String("badger".into()), meta).into(),
+        ..Event::default()
+    };
+    harness.send_to_sink(echo_back, IN).await?;
+    let data = "\"badger\"".to_string().into_bytes();
+    assert_eq!(ExpectMessage::Binary(data), c1.expect().await?);
+
+    //cleanup
+    let (_out, err) = harness.stop().await?;
+    assert!(err.is_empty());
+
+    teardown_tls()?;
+
     Ok(())
 }
