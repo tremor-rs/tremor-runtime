@@ -47,7 +47,6 @@ fn setup_for_tls() -> Result<()> {
 
     let cmd = Command::new("./tests/refresh_tls_cert.sh").spawn()?;
     let out = cmd.wait_with_output()?;
-    // println!("{}", std::str::from_utf8(&out.stderr)?);
     match out.status.code() {
         Some(0) => Ok(()),
         _ => Err("Error creating tls certificate for connector_ws test".into()),
@@ -388,6 +387,8 @@ config:
     ts.stop()?;
     drop(ts);
 
+    let (_out, err) = harness.stop().await?;
+    assert!(err.is_empty());
     Ok(())
 }
 
