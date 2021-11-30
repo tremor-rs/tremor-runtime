@@ -104,22 +104,22 @@ where
     T: Hash + Eq + Send + 'static,
     F: Fn(&Value<'_>) -> Option<T>,
 {
-    /// constructor
+    /// Construct a new instance of a channel sink that redacts metadata
     pub fn new_no_meta(qsize: usize, resolver: F, reply_tx: Sender<AsyncSinkReply>) -> Self {
         ChannelSink::new(qsize, resolver, reply_tx)
     }
 }
 
-// impl<T, F> ChannelSink<T, F, WithMeta>
-// where
-//     T: Hash + Eq + Send + 'static,
-//     F: Fn(&Value<'_>) -> Option<T>,
-// {
-//     /// constructor
-//     pub fn new_with_meta(qsize: usize, resolver: F, reply_tx: Sender<AsyncSinkReply>) -> Self {
-//         ChannelSink::new(qsize, resolver, reply_tx)
-//     }
-// }
+impl<T, F> ChannelSink<T, F, WithMeta>
+where
+    T: Hash + Eq + Send + 'static,
+    F: Fn(&Value<'_>) -> Option<T>,
+{
+    /// Construct a new instance of a channel sink with metadata support
+    pub fn new_with_meta(qsize: usize, resolver: F, reply_tx: Sender<AsyncSinkReply>) -> Self {
+        ChannelSink::new(qsize, resolver, reply_tx)
+    }
+}
 
 // FIXME: implement PauseBehaviour correctly
 impl<T, F, B> ChannelSink<T, F, B>
