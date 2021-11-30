@@ -102,10 +102,6 @@ impl<A: Artefact> Registry<A> {
         }
     }
 
-    pub fn values(&self) -> Vec<A> {
-        self.map.values().map(|v| v.artefact.clone()).collect()
-    }
-
     /// returns a list of all ids of all instances currently registered
     pub fn instance_ids(&self) -> Vec<TremorUrl> {
         self.map.keys().cloned().collect()
@@ -113,7 +109,6 @@ impl<A: Artefact> Registry<A> {
 }
 pub(crate) enum Msg<A: Artefact> {
     List(Sender<Vec<TremorUrl>>),
-    Serialize(Sender<Vec<A>>),
     Find(Sender<Result<Option<RegistryItem<A>>>>, TremorUrl),
     Publish(Sender<Result<()>>, TremorUrl, RegistryItem<A>),
     Unpublish(Sender<Result<RegistryItem<A>>>, TremorUrl),
@@ -131,7 +126,6 @@ where
             loop {
                 match rx.recv().await? {
                     Msg::List(r) => r.send(self.instance_ids()).await?,
-                    Msg::Serialize(r) => r.send(self.values()).await?,
                     Msg::Find(r, id) => {
                         let item = A::instance_id(&id)
                             .map(|id| self.find(&id).map(std::clone::Clone::clone));
@@ -197,23 +191,7 @@ impl Registries {
             connector: Registry::new(ResourceType::Connector).start(),
         }
     }
-    /// serialize the mappings of this registry
-    ///
-    /// # Errors
-    ///  * if we can't serialize the mappings
-    pub async fn serialize_mappings(&self) -> Result<crate::config::MappingMap> {
-        let (tx, rx) = bounded(1);
-        self.binding.send(Msg::Serialize(tx)).await?;
-        Ok(wait(rx.recv()).await?.map(|bindings| {
-            bindings
-                .into_iter()
-                .filter_map(|v| v.mapping)
-                .fold(HashMap::new(), |mut acc, v| {
-                    acc.extend(v);
-                    acc
-                })
-        })?)
-    }
+
     /// Finds a pipeline
     ///
     /// # Errors

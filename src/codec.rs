@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::config::Codec as CodecConfig;
-use crate::errors::{ErrorKind, Result};
-use either::Either;
+use crate::{
+    config,
+    errors::{ErrorKind, Result},
+};
 use tremor_script::Value;
 pub(crate) mod binary;
 pub(crate) mod binflux;
@@ -97,11 +98,11 @@ pub trait Codec: Send + Sync {
     fn boxed_clone(&self) -> Box<dyn Codec>;
 }
 
-/// Lookup a codec from config
+/// resolve a codec from either a codec name of a full-blown config
 ///
 /// # Errors
 ///  * if the codec doesn't exist
-pub fn lookup_with_config(config: &CodecConfig) -> Result<Box<dyn Codec>> {
+pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
     match config.name.as_str() {
         "json" => Ok(Box::new(json::Json::<json::Unsorted>::default())),
         "json-sorted" => Ok(Box::new(json::Json::<json::Sorted>::default())),
@@ -117,25 +118,6 @@ pub fn lookup_with_config(config: &CodecConfig) -> Result<Box<dyn Codec>> {
         "syslog" => Ok(Box::new(syslog::Syslog::utcnow())),
         "csv" => Ok(Box::new(csv::Csv {})),
         s => Err(ErrorKind::CodecNotFound(s.into()).into()),
-    }
-}
-
-/// lookup a codec by name
-///
-/// # Errors
-///  * if the codec doesn't exist
-pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
-    lookup_with_config(&CodecConfig::from(name))
-}
-
-/// resolve a codec from either a codec name of a full-blown config
-///
-/// # Errors
-///  * if the codec doesn't exist
-pub fn resolve(config: &Either<String, CodecConfig>) -> Result<Box<dyn Codec>> {
-    match config {
-        Either::Left(name) => lookup(name.as_str()),
-        Either::Right(config) => lookup_with_config(config),
     }
 }
 
@@ -174,18 +156,18 @@ mod test {
 
     #[test]
     fn lookup() {
-        assert!(super::lookup("json").is_ok());
-        assert!(super::lookup("json-sorted").is_ok());
-        assert!(super::lookup("msgpack").is_ok());
-        assert!(super::lookup("influx").is_ok());
-        assert!(super::lookup("binflux").is_ok());
-        assert!(super::lookup("null").is_ok());
-        assert!(super::lookup("string").is_ok());
-        assert!(super::lookup("statsd").is_ok());
-        assert!(super::lookup("yaml").is_ok());
-        assert!(super::lookup("syslog").is_ok());
+        assert!(super::resolve(&"json".into()).is_ok());
+        assert!(super::resolve(&"json-sorted".into()).is_ok());
+        assert!(super::resolve(&"msgpack".into()).is_ok());
+        assert!(super::resolve(&"influx".into()).is_ok());
+        assert!(super::resolve(&"binflux".into()).is_ok());
+        assert!(super::resolve(&"null".into()).is_ok());
+        assert!(super::resolve(&"string".into()).is_ok());
+        assert!(super::resolve(&"statsd".into()).is_ok());
+        assert!(super::resolve(&"yaml".into()).is_ok());
+        assert!(super::resolve(&"syslog".into()).is_ok());
         assert_eq!(
-            super::lookup("snot").err().unwrap().to_string(),
+            super::resolve(&"snot".into()).err().unwrap().to_string(),
             "Codec \"snot\" not found."
         )
     }

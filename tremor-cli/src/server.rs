@@ -73,6 +73,9 @@ impl ServerRun {
         if let Some(logger_config) = &self.logger_config {
             if let Err(e) =
                 log4rs::init_file(logger_config, log4rs::config::Deserializers::default())
+                    .with_context(|| {
+                        format!("Error loading logger-config from '{}'", logger_config)
+                    })
             {
                 return Err(e.into());
             }
@@ -104,6 +107,7 @@ impl ServerRun {
 
         tremor_script::RECURSION_LIMIT.store(self.recursion_limit, Ordering::Relaxed);
 
+        // TODO: Allow configuring this for offramps and pipelines
         let config = WorldConfig {
             debug_connectors: self.debug_connectors,
             ..WorldConfig::default()
@@ -116,19 +120,12 @@ impl ServerRun {
         let signal_handle = signals.handle();
         let signal_handler_task = async_std::task::spawn(handle_signals(signals, world.clone()));
 
-        let mut yaml_files = Vec::with_capacity(16);
+        let mut troy_files = Vec::with_capacity(16);
         // We process trickle files first
         for config_file in &self.artefacts {
             let kind = get_source_kind(config_file);
             match kind {
-                SourceKind::Troy => {
-                    return Err(ErrorKind::UnsupportedFileType(
-                        config_file.to_string(),
-                        kind,
-                        "troy",
-                    )
-                    .into());
-                }
+                SourceKind::Troy => troy_files.push(config_file),
                 SourceKind::Trickle => {
                     if let Err(e) = tremor_runtime::load_query_file(&world, config_file).await {
                         return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
@@ -142,13 +139,12 @@ impl ServerRun {
                     )
                     .into());
                 }
-                SourceKind::Yaml => yaml_files.push(config_file),
             };
         }
 
         // We process config files thereafter
-        for config_file in yaml_files {
-            if let Err(e) = tremor_runtime::load_cfg_file(&world, config_file).await {
+        for config_file in troy_files {
+            if let Err(e) = tremor_runtime::load_troy_file(&world, config_file).await {
                 return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
             }
         }
@@ -160,10 +156,10 @@ impl ServerRun {
             })
         } else {
             let host = self.api_host.clone();
+            let app = api_server(&world);
             eprintln!("Listening at: http://{}", host);
             info!("Listening at: http://{}", host);
 
-            let app = api_server(&world);
             async_std::task::spawn(async move {
                 if let Err(e) = app.listen(host).await {
                     error!("API Error: {}", e);

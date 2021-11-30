@@ -53,11 +53,11 @@ where
     /// Converts a troy embedded pipeline with resolved arguments to a runnable query
     /// # Errors
     ///   If the query fails to parse and convert correctly
-    pub fn from_troy(src: &str, deploy: &srs::Deploy, query: &crate::srs::Query) -> Result<Self> {
+    pub fn from_troy(src: &str, query: &crate::srs::Query) -> Result<Self> {
         let warnings = BTreeSet::new();
         let locals = 0;
         Ok(Self {
-            query: crate::srs::Query::new_from_deploy(deploy, &query.node_id, &query.node_id)?,
+            query: query.clone(),
             source: src.to_string(),
             warnings,
             locals,

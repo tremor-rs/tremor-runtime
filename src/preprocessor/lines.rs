@@ -229,18 +229,19 @@ impl Preprocessor for Lines {
 
 #[cfg(test)]
 mod test {
+    use tremor_script::literal;
+
     use super::*;
     use crate::Result;
 
     #[test]
     fn from_config() -> Result<()> {
-        let config = r#"
-        separator: "\n"
-        max_length: 12345
-        buffered: false
-        "#;
-        let raw_config = serde_yaml::from_slice(config.as_bytes()).ok();
-        let lines = Lines::from_config(&raw_config)?;
+        let config = Some(literal!({
+            "separator": "\n",
+            "max_length": 12345,
+            "buffered": false
+        }));
+        let lines = Lines::from_config(&config)?;
         assert!(!lines.is_buffered);
         assert_eq!(NonZeroUsize::new(12345), lines.max_length);
         assert_eq!(b'\n', lines.separator);
@@ -249,11 +250,10 @@ mod test {
 
     #[test]
     fn from_config_invalid_separator() -> Result<()> {
-        let config = r#"
-        separator: "abc"
-        "#;
-        let raw_config = serde_yaml::from_slice(config.as_bytes()).ok();
-        let res = Lines::from_config(&raw_config).err().unwrap();
+        let config = Some(literal!({
+        "separator": "abc"
+        }));
+        let res = Lines::from_config(&config).err().unwrap();
 
         assert_eq!("Invalid Configuration for lines preprocessor: Invalid 'separator': \"abc\", must be 1 byte.", res.to_string().as_str());
         Ok(())

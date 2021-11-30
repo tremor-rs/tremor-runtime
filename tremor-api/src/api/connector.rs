@@ -19,11 +19,10 @@ use async_std::channel::bounded;
 use tremor_runtime::connectors::{Msg, StatusReport};
 use tremor_runtime::registry::instance::InstanceState;
 
-#[derive(Serialize)]
-struct ConnectorAndInstances {
-    artefact: tremor_runtime::config::Connector,
-    instances: Vec<String>,
-}
+// struct ConnectorAndInstances {
+//     artefact: tremor_runtime::config::Connector,
+//     instances: Vec<String>,
+// }
 
 pub async fn list_artefacts(req: Request) -> Result<Response> {
     let repo = &req.state().world.repo;
@@ -33,42 +32,38 @@ pub async fn list_artefacts(req: Request) -> Result<Response> {
         .iter()
         .filter_map(|url| url.artefact().map(String::from))
         .collect();
-    reply(&req, result, StatusCode::Ok)
+    reply(&req, result, StatusCode::Ok).await
 }
 
-pub async fn publish_artefact(req: Request) -> Result<Response> {
-    let (req, data): (_, tremor_runtime::config::Connector) =
-        decode::<tremor_runtime::config::Connector>(req).await?;
-    let url = TremorUrl::from_connector_id(&data.id)?;
-    let repo = &req.state().world.repo;
-    let result = repo.publish_connector(&url, false, data).await?;
-    reply(&req, result, StatusCode::Created)
+pub async fn publish_artefact(_req: Request) -> Result<Response> {
+    unimplemented!()
 }
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let id = req.param("aid")?;
     let url = TremorUrl::from_connector_id(id)?;
     let repo = &req.state().world.repo;
-    let result = repo.unpublish_connector(&url).await?;
-    reply(&req, result, StatusCode::Ok)
+    let _result = repo.unpublish_connector(&url).await?;
+    // how to handle this?
+    reply(&req, (), StatusCode::Ok).await
 }
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
     let id = req.param("aid")?;
     let url = TremorUrl::from_connector_id(id)?;
     let repo = &req.state().world.repo;
-    let result = repo
-        .find_connector(&url)
+    repo.find_connector(&url)
         .await?
         .ok_or_else(Error::artefact_not_found)?;
-    let conn = ConnectorAndInstances {
-        artefact: result.artefact,
-        instances: result
-            .instances
-            .iter()
-            .filter_map(|instance_url| instance_url.instance().map(String::from))
-            .collect(),
-    };
+    // how to handle this?
+    // let _conn = ConnectorAndInstances {
+    //     artefact: result.artefact,
+    //     instances: result
+    //         .instances
+    //         .iter()
+    //         .filter_map(|instance_url| instance_url.instance().map(String::from))
+    //         .collect(),
+    // };
     reply(&req, conn, StatusCode::Ok)
 }
 

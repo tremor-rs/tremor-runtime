@@ -262,22 +262,19 @@ impl TestServer {
 async fn connector_ws_client_bad_config() -> Result<()> {
     setup_for_tls()?;
 
-    let connector_yaml = format!(
-        r#"
-id: my_ws_client
-type: ws_client
-codec: string
-preprocessors:
-  - lines
-config:
-  snot: "ws://127.0.0.1:8080"
-  tls:
-    cacert: "./tests/localhost.cert"
-    domain: "localhost"
-"#,
-    );
+    let defn = literal!({
+      "codec": "string",
+      "preprocessors": ["lines"],
+      "config": {
+          "snot": "ws://127.0.0.1:8080",
+          "tls": {
+              "cacert": "./tests/localhost.cert",
+              "domain": "localhost"
+          }
+      }
+    });
 
-    let harness = ConnectorHarness::new(connector_yaml).await;
+    let harness = ConnectorHarness::new("ws_client", defn).await;
     assert!(harness.is_err());
     Ok(())
 }
@@ -286,21 +283,18 @@ config:
 async fn connector_ws_server_text_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
-    let free_port = find_free_tcp_port().await.to_string();
+    let free_port = find_free_tcp_port().await;
     let server_addr = format!("0.0.0.0:{}", &free_port);
-    let connector_yaml = format!(
-        r#"
-id: my_ws_server
-type: ws_server
-codec: json
-config:
-  host: 127.0.0.1
-  port: {}
-"#,
-        free_port
-    );
 
-    let harness = ConnectorHarness::new(connector_yaml).await?;
+    let defn = literal!({
+      "codec": "json",
+      "config": {
+          "host": "127.0.0.1",
+          "port": free_port
+      }
+    });
+
+    let harness = ConnectorHarness::new("ws_server", defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of ws_server connector");
@@ -357,17 +351,14 @@ async fn connector_ws_client_binary_routing() -> Result<()> {
     let mut ts = TestServer::new("127.0.0.1", free_port);
     ts.start()?;
 
-    let ws_client_yaml = format!(
-        r#"
-id: my_ws_client
-type: ws_client
-codec: json
-config:
-  url: ws://127.0.0.1:{}
-"#,
-        free_port
-    );
-    let harness = ConnectorHarness::new(ws_client_yaml).await?;
+    let defn = literal!({
+      "codec": "json",
+      "config": {
+          "url": format!("ws://127.0.0.1:{}", free_port),
+      }
+    });
+
+    let harness = ConnectorHarness::new("ws_client", defn).await?;
     harness.start().await?;
     harness.wait_for_connected(Duration::from_secs(5)).await?;
 
@@ -415,17 +406,15 @@ async fn connector_ws_client_text_routing() -> Result<()> {
     let mut ts = TestServer::new("127.0.0.1", free_port);
     ts.start()?;
 
-    let ws_client_yaml = format!(
-        r#"
-id: my_ws_client
-type: ws_client
-codec: json
-config:
-  url: ws://127.0.0.1:{}
-"#,
-        free_port
-    );
-    let harness = ConnectorHarness::new(ws_client_yaml).await?;
+    let defn = literal!({
+      "codec": "json",
+      "config": {
+          "url": format!("ws://127.0.0.1:{}", free_port),
+      }
+    });
+
+    let harness = ConnectorHarness::new("ws_client", defn).await?;
+
     harness.start().await?;
     harness.wait_for_connected(Duration::from_secs(5)).await?;
 
@@ -474,23 +463,21 @@ async fn connector_wss_server_text_routing() -> Result<()> {
 
     let free_port = find_free_tcp_port().await;
     let _server_addr = format!("localhost:{}", &free_port);
-    let connector_yaml = format!(
-        r#"
-id: my_ws_server
-type: ws_server
-codec: json
-config:
-  host: "localhost"
-  port: {}
-  tls:
-    cert: "./tests/localhost.cert"
-    key: "./tests/localhost.key"
-    domain: "localhost"
-"#,
-        free_port
-    );
 
-    let harness = ConnectorHarness::new(connector_yaml).await?;
+    let defn = literal!({
+      "codec": "json",
+      "config": {
+          "host": "localhost",
+          "port": free_port,
+          "tls": {
+            "cert": "./tests/localhost.cert",
+            "key": "./tests/localhost.key",
+            "domain": "localhost"
+            }
+        }
+    });
+
+    let harness = ConnectorHarness::new("ws_server", defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of ws_server connector");
@@ -553,23 +540,21 @@ async fn connector_wss_server_binary_routing() -> Result<()> {
 
     let free_port = find_free_tcp_port().await;
     let _server_addr = format!("localhost:{}", &free_port);
-    let connector_yaml = format!(
-        r#"
-id: my_ws_server
-type: ws_server
-codec: json
-config:
-  host: "localhost"
-  port: {}
-  tls:
-    cert: "./tests/localhost.cert"
-    key: "./tests/localhost.key"
-    domain: "localhost"
-"#,
-        free_port
-    );
 
-    let harness = ConnectorHarness::new(connector_yaml).await?;
+    let defn = literal!({
+      "codec": "json",
+      "config": {
+          "host": "localhost",
+          "port": free_port,
+          "tls": {
+            "cert": "./tests/localhost.cert",
+            "key": "./tests/localhost.key",
+            "domain": "localhost"
+            }
+        }
+    });
+
+    let harness = ConnectorHarness::new("ws_server", defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of ws_server connector");
