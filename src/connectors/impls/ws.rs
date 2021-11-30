@@ -21,6 +21,7 @@ use async_tungstenite::tungstenite::Message;
 use async_tungstenite::WebSocketStream;
 use futures::prelude::*;
 use futures::stream::SplitSink;
+use simd_json::StaticNode;
 
 struct WsReader<S>
 where
@@ -67,11 +68,15 @@ where
         + futures::Stream<Item = std::result::Result<Message, Error>>,
 {
     async fn read(&mut self, stream: u64) -> Result<SourceReply> {
+        let mut is_binary = false;
         match self.wrapped_stream.next().await {
             Some(Ok(message)) => {
                 let data = match message {
                     Message::Text(text) => text.into_bytes(),
-                    Message::Binary(binary) => binary.clone(),
+                    Message::Binary(binary) => {
+                        is_binary = true;
+                        binary.clone()
+                    }
                     Message::Close(_) => {
                         return Ok(SourceReply::EndStream {
                             origin_uri: self.origin_uri.clone(),
@@ -81,10 +86,14 @@ where
                     }
                     _ => todo!(),
                 };
+                let mut meta = self.meta.clone();
+                if is_binary {
+                    meta.insert("binary", Value::Static(StaticNode::Bool(true)))?;
+                };
                 Ok(SourceReply::Data {
                     origin_uri: self.origin_uri.clone(),
                     stream,
-                    meta: Some(self.meta.clone()),
+                    meta: Some(meta),
                     // ALLOW: we know bytes_read is smaller than or equal buf_size
                     data,
                     port: None,
@@ -139,10 +148,22 @@ impl WsWriter<async_tls::server::TlsStream<async_std::net::TcpStream>> {
     }
 }
 
-impl WsWriter<async_tungstenite::stream::Stream<async_std::net::TcpStream, async_tls::client::TlsStream<async_std::net::TcpStream>>> {
+impl
+    WsWriter<
+        async_tungstenite::stream::Stream<
+            async_std::net::TcpStream,
+            async_tls::client::TlsStream<async_std::net::TcpStream>,
+        >,
+    >
+{
     fn new_tungstenite_client(
         stream: SplitSink<
-            WebSocketStream<async_tungstenite::stream::Stream<async_std::net::TcpStream, async_tls::client::TlsStream<async_std::net::TcpStream>>>,
+            WebSocketStream<
+                async_tungstenite::stream::Stream<
+                    async_std::net::TcpStream,
+                    async_tls::client::TlsStream<async_std::net::TcpStream>,
+                >,
+            >,
             Message,
         >,
     ) -> Self {
@@ -165,7 +186,6 @@ impl WsWriter<async_tls::client::TlsStream<async_std::net::TcpStream>> {
     }
 }
 
-
 #[async_trait::async_trait]
 impl<S> StreamWriter for WsWriter<S>
 where
@@ -175,11 +195,24 @@ where
         + std::marker::Send
         + futures::io::AsyncRead,
 {
-    async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<SinkMeta>) -> Result<()> {
+    async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<SinkMeta>) -> Result<()> {
         for chunk in data {
-            let message = std::str::from_utf8(&chunk)?;
-            let message = Message::Text(message.to_string()); // TODO support binary
-            self.wrapped_stream.send(message).await?;
+            if let Some(meta) = &meta {
+                // If metadata is set, check for a binary framing flag
+                if let Some(true) = meta.get_bool("binary") {
+                    let message = Message::Binary(chunk);
+                    self.wrapped_stream.send(message).await?;
+                } else {
+                    let message = std::str::from_utf8(&chunk)?;
+                    let message = Message::Text(message.to_string());
+                    self.wrapped_stream.send(message).await?;
+                }
+            } else {
+                // No metadata, default to text ws framing
+                let message = std::str::from_utf8(&chunk)?;
+                let message = Message::Text(message.to_string());
+                self.wrapped_stream.send(message).await?;
+            };
         }
         Ok(())
     }
