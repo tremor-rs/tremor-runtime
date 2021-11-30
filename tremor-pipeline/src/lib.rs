@@ -30,7 +30,6 @@ extern crate serde_derive;
 extern crate log;
 
 use crate::errors::{ErrorKind, Result};
-use crate::op::prelude::*;
 use beef::Cow;
 use executable_graph::NodeConfig;
 use halfbrown::HashMap;
@@ -74,7 +73,7 @@ pub(crate) type ExecPortIndexMap =
     HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
 
 /// A configuration map
-pub type ConfigMap = Option<serde_yaml::Value>;
+pub type ConfigMap = Option<tremor_value::Value<'static>>;
 
 /// A lookup function to used to look up operators
 pub type NodeLookupFn = fn(

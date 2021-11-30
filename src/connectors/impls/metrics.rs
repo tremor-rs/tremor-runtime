@@ -97,7 +97,7 @@ impl ConnectorBuilder for Builder {
     async fn from_config(
         &self,
         _id: &TremorUrl,
-        _config: &Option<serde_yaml::Value>,
+        _config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(MetricsConnector::new()))
     }
