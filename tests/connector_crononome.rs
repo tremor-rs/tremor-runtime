@@ -20,27 +20,22 @@ extern crate log;
 use connectors::ConnectorHarness;
 use std::{thread::sleep, time::Duration};
 use tremor_runtime::errors::Result;
-use value_trait::ValueAccess;
+use tremor_value::prelude::*;
 
 #[async_std::test]
 async fn connector_crononome_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
-    let connector_yaml = format!(
-        r#"
-id: my_cron
-type: crononome
-config:
-  entries:
-    - name: test
-      expr: "* * * * * * *"
-      payload: 
-        "snot badger"
-      
-"#,
-    );
+    let defn = literal!({
+    "config": {
+      "entries":[{
+        "name": "test",
+        "expr": "* * * * * * *",
+        "payload": "snot badger"
+      }]
+    }});
 
-    let harness = ConnectorHarness::new(connector_yaml).await?;
+    let harness = ConnectorHarness::new("crononome", defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'in' port of ws_server connector");

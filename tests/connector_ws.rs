@@ -283,7 +283,7 @@ async fn connector_ws_client_bad_config() -> Result<()> {
 async fn connector_ws_server_text_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
-    let free_port = find_free_tcp_port().await.to_string();
+    let free_port = find_free_tcp_port().await;
     let server_addr = format!("0.0.0.0:{}", &free_port);
 
     let defn = literal!({
