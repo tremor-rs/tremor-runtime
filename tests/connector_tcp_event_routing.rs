@@ -45,21 +45,17 @@ async fn connector_tcp_event_routing() -> Result<()> {
 
     let server_addr = format!("127.0.0.1:{}", free_port);
 
-    let connector_yaml = format!(
-        r#"
-id: my_tcp_server
-type: tcp_server
-codec: string
-preprocessors:
-  - lines
-config:
-  host: "127.0.0.1"
-  port: {}
-  buf_size: 4096
-"#,
-        free_port
-    );
-    let harness = ConnectorHarness::new(connector_yaml).await?;
+    let defn = literal!({
+      "codec": "string",
+      "preprocessors": ["lines"],
+      "config": {
+          "host": "127.0.0.1",
+          "port": free_port,
+          "buf_size": 4096
+      }
+    });
+
+    let harness = ConnectorHarness::new("tcp_server", defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of tcp_server connector");

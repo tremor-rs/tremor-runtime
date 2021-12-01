@@ -220,7 +220,7 @@ impl<'script> DeployModuleStmtRaw<'script> {
                     let stmt: ConnectorDecl<'script> = stmt.up(helper)?;
                     helper
                         .connector_decls
-                        .insert(stmt.node_id.clone(), stmt.clone());
+                        .insert(dbg!(stmt.node_id.clone()), stmt.clone());
                 }
                 DeployStmtRaw::FlowDecl(stmt) => {
                     let stmt: FlowDecl<'script> = stmt.up(helper)?;
@@ -230,7 +230,7 @@ impl<'script> DeployModuleStmtRaw<'script> {
                     let stmt: PipelineDecl<'script> = stmt.up(helper)?;
                     helper
                         .pipeline_decls
-                        .insert(stmt.node_id.clone(), stmt.clone());
+                        .insert(dbg!(stmt.node_id.clone()), stmt.clone());
                 }
                 DeployStmtRaw::DeployFlowStmt(stmt) => {
                     let stmt: DeployFlow = stmt.up(helper)?;
@@ -477,12 +477,10 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             CreateKind::Connector => {
                 if let Some(artefact) = helper.connector_decls.get(&node_id) {
                     let mut artefact = artefact.clone();
-                    dbg!(&params);
-                    dbg!(&artefact.params);
                     artefact.params.ingest_creational_with(&params)?;
-                    dbg!(&artefact.params);
                     CreateTargetDecl::Connector(artefact)
                 } else {
+                    dbg!();
                     return Err(ErrorKind::DeployArtefactNotDefined(
                         outer,
                         inner,
@@ -503,12 +501,13 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
                     // artefact.params.ingest_creational_with(&params)?;
                     CreateTargetDecl::Pipeline(artefact)
                 } else {
+                    dbg!();
                     return Err(ErrorKind::DeployArtefactNotDefined(
                         outer,
                         inner,
                         node_id.to_string(),
                         helper
-                            .connector_decls
+                            .pipeline_decls
                             .keys()
                             .map(ToString::to_string)
                             .collect(),
@@ -561,6 +560,7 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
         let decl = if let Some(artefact) = helper.flow_decls.get(&node_id) {
             artefact.clone()
         } else {
+            dbg!();
             return Err(ErrorKind::DeployArtefactNotDefined(
                 self.extent(&helper.meta),
                 self.id.extent(&helper.meta),

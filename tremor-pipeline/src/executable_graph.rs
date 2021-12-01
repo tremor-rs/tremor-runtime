@@ -614,30 +614,9 @@ mod test {
         identity::PassthroughFactory,
         prelude::{METRICS, OUT},
     };
-    use std::{
-        collections::hash_map::DefaultHasher,
-        hash::{Hash, Hasher},
-    };
     use tremor_script::prelude::*;
-    #[test]
-    fn node_conjfig_eq() {
-        let n0 = NodeConfig::from_config(&"node", ()).unwrap();
-        let n1 = NodeConfig::from_config(&"other", ()).unwrap();
-        assert_eq!(n0, n0);
-        assert_ne!(n0, n1);
-        let mut h1 = DefaultHasher::new();
-        let mut h2 = DefaultHasher::new();
-        let mut h3 = DefaultHasher::new();
-        n0.hash(&mut h1);
-        n0.hash(&mut h2);
-
-        assert_eq!(h1.finish(), h2.finish());
-        n1.hash(&mut h3);
-        assert_ne!(h2.finish(), h3.finish());
-    }
-
     fn pass(uid: u64, id: &'static str) -> OperatorNode {
-        let c = NodeConfig::from_config(&"passthrough", ()).unwrap();
+        let c = NodeConfig::from_config(&"passthrough", None).unwrap();
         OperatorNode {
             id: id.into(),
             kind: NodeKind::Operator,

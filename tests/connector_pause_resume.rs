@@ -17,17 +17,15 @@ mod connectors;
 #[macro_use]
 extern crate log;
 
-use std::time::Duration;
-use value_trait::ValueAccess;
-
 use async_std::{
     io::WriteExt,
     net::{TcpListener, TcpStream, UdpSocket},
     prelude::FutureExt,
 };
 use connectors::ConnectorHarness;
-use tremor_runtime::errors::Result;
-use tremor_runtime::registry::instance::InstanceState;
+use std::time::Duration;
+use tremor_runtime::{errors::Result, registry::instance::InstanceState};
+use tremor_value::prelude::*;
 
 #[async_std::test]
 async fn connector_udp_pause_resume() -> Result<()> {
@@ -42,21 +40,18 @@ async fn connector_udp_pause_resume() -> Result<()> {
 
     let server_addr = format!("127.0.0.1:{}", free_port);
 
-    let connector_yaml = format!(
-        r#"
-id: my_udp_server
-type: udp_server
-codec: string
-preprocessors:
-  - lines
-config:
-  host: "127.0.0.1"
-  port: {}
-  buf_size: 4096
-"#,
-        free_port
-    );
-    let harness = ConnectorHarness::new(connector_yaml).await?;
+    let defn = literal!({
+      "codec": "string",
+      "preprocessors": ["lines"],
+      "config": {
+          "host": "127.0.0.1",
+          "port": free_port,
+          "buf_size": 4096
+      }
+    });
+
+    let harness = ConnectorHarness::new("udp_server", defn).await?;
+
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of udp_server");
@@ -138,21 +133,17 @@ async fn connector_tcp_server_pause_resume() -> Result<()> {
 
     let server_addr = format!("127.0.0.1:{}", free_port);
 
-    let connector_yaml = format!(
-        r#"
-id: my_tcp_server
-type: tcp_server
-codec: string
-preprocessors:
-  - lines
-config:
-  host: "127.0.0.1"
-  port: {}
-  buf_size: 4096
-"#,
-        free_port
-    );
-    let harness = ConnectorHarness::new(connector_yaml).await?;
+    let defn = literal!({
+      "codec": "string",
+      "preprocessors": ["lines"],
+      "config": {
+          "host": "127.0.0.1",
+          "port": free_port,
+          "buf_size": 4096
+      }
+    });
+
+    let harness = ConnectorHarness::new("tcp_server", defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of tcp_server connector");

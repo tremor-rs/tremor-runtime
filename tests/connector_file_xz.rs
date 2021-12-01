@@ -33,21 +33,16 @@ async fn file_connector_xz() -> Result<()> {
         .unwrap()
         .join("data")
         .join("input.xz");
-    let connector_yaml = format!(
-        r#"
-id: my_file
-type: file
-codec: string
-preprocessors:
-  - lines
-config:
-  path: "{}"
-  mode: read
-"#,
-        input_path.display()
-    );
+    let defn = literal!({
+        "codec": "string",
+        "preprocessors": ["lines"],
+        "config": {
+            "path": input_path.display().to_string(),
+            "mode": "read"
+        }
+    });
 
-    let harness = ConnectorHarness::new(connector_yaml).await?;
+    let harness = ConnectorHarness::new("file", defn).await?;
     let out = harness.out().expect("No out pipeline");
     harness.start().await?;
     harness.wait_for_connected(Duration::from_secs(5)).await?;
