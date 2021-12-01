@@ -128,7 +128,9 @@ where
     F: Fn(&Value<'_>) -> Option<T>,
     B: SinkMetaBehaviour,
 {
-    /// constructor
+    /// constructor of a ChannelSink that is sending the event metadata to the StreamWriter
+    /// in case it needs it in the write.
+    /// This costs a clone.
     pub fn new(qsize: usize, resolver: F, reply_tx: Sender<AsyncSinkReply>) -> Self {
         let (tx, rx) = bounded(qsize);
         let streams = HashMap::with_capacity(8);

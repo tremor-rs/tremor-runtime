@@ -20,7 +20,7 @@ use either::Either;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::Display;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tremor_common::time::nanotime;
 use tremor_script::{EventPayload, ValueAndMeta};
 
@@ -52,6 +52,8 @@ use value_trait::Builder;
 
 /// The default poll interval for `try_recv` on channels in connectors
 pub const DEFAULT_POLL_INTERVAL: u64 = 10;
+/// A duration for the default poll interval
+pub const DEFAULT_POLL_DURATION: Duration = Duration::from_millis(10);
 
 #[derive(Debug)]
 /// Messages a Source can receive
@@ -598,6 +600,8 @@ where
     // this way we can explicitly resume a Cb triggered source if need be
     // but also an explicitly paused source might receive a Cb open and continue sending data :scream:
     state: SourceState,
+    pull_wait_start: Option<Instant>,
+    pull_wait: Duration,
     is_transactional: bool,
     connector_channel: Option<Sender<Msg>>,
     expected_drained: usize,
@@ -641,6 +645,8 @@ where
             pipelines_out: Vec::with_capacity(1),
             pipelines_err: Vec::with_capacity(1),
             state: SourceState::Initialized,
+            pull_wait_start: None,
+            pull_wait: DEFAULT_POLL_DURATION,
             is_transactional,
             connector_channel: None,
             expected_drained: 0,
@@ -981,7 +987,20 @@ where
 
     /// should this manager pull data from its source?
     fn should_pull_data(&mut self) -> bool {
-        self.state.should_pull_data() && !self.pipelines_out.is_empty() && self.cb_open_received
+        let needs_to_wait = if let Some(pull_wait_start) = self.pull_wait_start {
+            if pull_wait_start.elapsed() > self.pull_wait {
+                self.pull_wait_start = None;
+                false
+            } else {
+                true
+            }
+        } else {
+            false
+        };
+        !needs_to_wait
+            && self.state.should_pull_data()
+            && !self.pipelines_out.is_empty()
+            && self.cb_open_received
     }
 
     /// handle data from the source
@@ -1173,8 +1192,9 @@ where
                         self.ctx.url, self.expected_drained
                     );
                 } else {
-                    // wait for the given ms
-                    task::sleep(Duration::from_millis(wait_ms)).await;
+                    // set the timer for the given ms
+                    self.pull_wait_start = Some(Instant::now());
+                    self.pull_wait = Duration::from_millis(wait_ms);
                 }
             }
         }
@@ -1220,6 +1240,10 @@ where
                 // }
                 self.handle_data(data).await?;
             };
+            if self.pull_wait_start.is_some() {
+                // sleep for a quick 10ms in order to stay responsive
+                task::sleep(DEFAULT_POLL_DURATION.min(self.pull_wait)).await;
+            }
         }
     }
 }

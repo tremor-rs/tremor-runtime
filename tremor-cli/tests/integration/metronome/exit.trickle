@@ -1,6 +1,4 @@
 
-# make the test exit after all a single event has been received
 select {
   "exit": 0,
-  "delay": 1
 } from in into out;

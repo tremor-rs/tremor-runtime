@@ -2,4 +2,5 @@ status: 0
 name: metronome
 asserts:
   - source: out.log
-    equals_file: expected_out.json
+    contains:
+      - "\"triggered\""
