@@ -1,0 +1,2 @@
+
+select "triggered" from in into out;
