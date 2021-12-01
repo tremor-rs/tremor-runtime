@@ -32,6 +32,7 @@ use value_trait::ValueAccess;
 #[derive(Clone)]
 pub struct Exit {
     world: World,
+    done: bool,
 }
 
 #[async_trait::async_trait()]
@@ -76,25 +77,35 @@ impl Sink for Exit {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        for (value, _meta) in event.value_meta_iter() {
-            if let Some(delay) = value.get_u64(Self::DELAY) {
-                task::sleep(Duration::from_millis(delay)).await;
-            }
-            let mode = if value.get_bool(Self::GRACEFUL).unwrap_or(true) {
-                ShutdownMode::Graceful
-            } else {
-                ShutdownMode::Forceful
-            };
-            // this should stop the whole server process
-            let world = self.world.clone();
-            let url = ctx.url().clone();
-            // we spawn this out into another task, so we don't block the sink loop handling control plane messages
-            task::spawn(async move {
-                if let Err(e) = world.stop(mode).await {
-                    error!("[Sink::{}] Error stopping Tremor: {}", &url, e);
+        if !self.done {
+            if let Some((value, _meta)) = event.value_meta_iter().next() {
+                if let Some(delay) = value.get_u64(Self::DELAY) {
+                    info!(
+                        "{} Sleeping for {}ms before triggering shutdown.",
+                        ctx, delay
+                    );
+                    task::sleep(Duration::from_millis(delay)).await;
                 }
-            });
+                let mode = if value.get_bool(Self::GRACEFUL).unwrap_or(true) {
+                    ShutdownMode::Graceful
+                } else {
+                    ShutdownMode::Forceful
+                };
+                // this should stop the whole server process
+                let world = self.world.clone();
+                let url = ctx.url().clone();
+                // we spawn this out into another task, so we don't block the sink loop handling control plane messages
+                task::spawn(async move {
+                    if let Err(e) = world.stop(mode).await {
+                        error!("[Sink::{}] Error stopping Tremor: {}", &url, e);
+                    }
+                });
+                self.done = true;
+            }
+        } else {
+            debug!("{} Already exited.", ctx);
         }
+
         Ok(SinkReply::default())
     }
 }
@@ -124,6 +135,7 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(Exit {
             world: self.world.clone(),
+            done: false,
         }))
     }
 }
