@@ -18,7 +18,6 @@ use tremor_script::deploy::Deploy;
 
 use tremor_script::errors::*;
 use tremor_script::path::ModulePath;
-use tremor_script::srs::Flows;
 
 fn parse<'script>(
     module_path: &ModulePath,

@@ -50,17 +50,15 @@ pub(crate) async fn run_process(
 ) -> Result<TestReport> {
     let mut evidence = HashMap::new();
 
-    let mut artefacts = GlobWalkerBuilder::from_patterns(
-        canonicalize(test_dir)?,
-        &["*.{yaml,tremor,trickle}", "!assert.yaml", "!logger.yaml"],
-    )
-    .case_insensitive(true)
-    .sort_by(|a, b| a.file_name().cmp(b.file_name()))
-    .max_depth(1)
-    .build()
-    .map_err(|e| Error::from(format!("Unable to walk path for artefacts capture: {}", e)))?
-    .filter_map(|x| x.ok().map(|x| x.path().to_string_lossy().to_string()))
-    .peekable();
+    let mut artefacts =
+        GlobWalkerBuilder::from_patterns(canonicalize(test_dir)?, &["*.{troy,tremor,trickle}"])
+            .case_insensitive(true)
+            .sort_by(|a, b| a.file_name().cmp(b.file_name()))
+            .max_depth(1)
+            .build()
+            .map_err(|e| Error::from(format!("Unable to walk path for artefacts capture: {}", e)))?
+            .filter_map(|x| x.ok().map(|x| x.path().to_string_lossy().to_string()))
+            .peekable();
 
     // fail fast if no artefacts are provided
     if artefacts.peek().is_none() {
@@ -74,6 +72,7 @@ pub(crate) async fn run_process(
         .map(|x| (*x).to_string())
         .chain(artefacts)
         .collect();
+    dbg!(&args);
 
     let process_start = nanotime();
 

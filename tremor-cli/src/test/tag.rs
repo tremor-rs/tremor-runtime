@@ -138,12 +138,12 @@ where
     let mut base = tremor_common::file::canonicalize(base.as_ref())?;
     let other = tremor_common::file::canonicalize(other.as_ref())?;
     if let Ok(rel) = other.strip_prefix(&base) {
-        let tags_file = base.join("tags.json");
+        let tags_file = base.join("tags.yaml");
         let mut tags = TagFilter::new(vec![], vec![]);
         tags = tags.join(Some(maybe_slurp_tags(&tags_file)));
         for dirname in rel.components() {
             base = base.join(dirname.as_os_str());
-            let tags_file = base.join("tags.json");
+            let tags_file = base.join("tags.yaml");
             tags = tags.join(Some(maybe_slurp_tags(&tags_file)));
         }
 

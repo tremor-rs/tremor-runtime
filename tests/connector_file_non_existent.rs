@@ -15,14 +15,9 @@
 mod connectors;
 
 use async_std::path::Path;
-use async_std::task;
 use connectors::ConnectorHarness;
-use std::time::Duration;
 use tremor_runtime::errors::Result;
 use tremor_value::prelude::*;
-
-#[macro_use]
-extern crate log;
 
 #[async_std::test]
 async fn file_connector() -> Result<()> {
