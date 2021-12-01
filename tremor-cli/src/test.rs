@@ -134,11 +134,15 @@ async fn suite_integration(
         status::h0("Framework", "Finding integration test scenarios")?;
 
         for test in tests {
-            let (s, t) = run_integration(test.path(), config, stats).await?;
+            let mut tags = PathBuf::from(test.path());
+            tags.push("tags.yaml");
+            if tags.exists() {
+                let (s, t) = run_integration(test.path(), config, stats).await?;
 
-            stats = s;
-            if let Some(report) = t {
-                suite.push(report);
+                stats = s;
+                if let Some(report) = t {
+                    suite.push(report);
+                }
             }
         }
 
@@ -299,14 +303,12 @@ pub(crate) async fn run_cmd(matches: &ArgMatches) -> Result<()> {
         // No meta.json was found, therefore we might have the path to a
         // specific folder. Let's apply some heuristics to see if we have
         // something runnable.
-        let files = GlobWalkerBuilder::from_patterns(
-            &config.base_directory,
-            &["*.{yaml,tremor,trickle}", "!assert.yaml", "!logger.yaml"],
-        )
-        .case_insensitive(true)
-        .max_depth(1)
-        .build()?
-        .filter_map(std::result::Result::ok);
+        let files =
+            GlobWalkerBuilder::from_patterns(&config.base_directory, &["*.{troy,tremor,trickle}"])
+                .case_insensitive(true)
+                .max_depth(1)
+                .build()?
+                .filter_map(std::result::Result::ok);
 
         if files.count() >= 1 {
             let stats = stats::Stats::new();
