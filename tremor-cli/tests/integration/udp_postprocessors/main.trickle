@@ -1,2 +1,0 @@
-select event from in where event != "exit" into out;
-select event from in where event == "exit" into out/exit;
