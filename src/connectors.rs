@@ -1294,6 +1294,12 @@ pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
     world
         .register_builtin_connector_type(Box::new(impls::elastic::Builder::default()))
         .await?;
+    world
+        .register_builtin_connector_type(Box::new(impls::crononome::Builder::default()))
+        .await?;
+    world
+        .register_builtin_connector_type(Box::new(impls::metronome::Builder::default()))
+        .await?;
 
     Ok(())
 }
@@ -1308,7 +1314,7 @@ pub async fn register_debug_connector_types(world: &World) -> Result<()> {
         .register_builtin_connector_type(Box::new(impls::cb::Builder::default()))
         .await?;
     world
-        .register_builtin_connector_type(Box::new(impls::exit::Builder::new(world)))
+        .register_builtin_connector_type(Box::new(impls::file::Builder::default()))
         .await?;
     world
         .register_builtin_connector_type(Box::new(impls::bench::Builder::default()))
