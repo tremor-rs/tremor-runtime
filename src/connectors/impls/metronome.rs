@@ -53,9 +53,12 @@ impl ConnectorBuilder for Builder {
                 path: vec![config.interval.to_string()],
             };
 
+            let now = nanotime();
+            let interval_ns = config.interval * 1_000_000;
+            let next = now + interval_ns;
             Ok(Box::new(Metronome {
-                interval_ns: config.interval * 1_000_000_000,
-                next: 0,
+                interval_ns,
+                next,
                 origin_uri,
             }))
         } else {
@@ -82,7 +85,8 @@ impl Source for Metronome {
                 port: None,
             })
         } else {
-            Ok(SourceReply::Empty(self.next - now))
+            let wait_ms = (self.next - now) / 1_000_000;
+            Ok(SourceReply::Empty(wait_ms))
         }
     }
 

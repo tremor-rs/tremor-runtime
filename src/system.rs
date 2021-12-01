@@ -696,12 +696,12 @@ impl World {
         match mode {
             ShutdownMode::Graceful => {
                 // first drain all the bindings
-                if let Err(_err) = self
+                if let Err(err) = self
                     .reg
                     .drain_all_bindings(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT)
                     .await
                 {
-                    warn!("Error draining all bindings to drain.");
+                    warn!("Error draining all bindings: {}", err);
                 }
             }
             ShutdownMode::Forceful => {}
