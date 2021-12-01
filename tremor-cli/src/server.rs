@@ -43,6 +43,94 @@ impl ServerCommand {
         }
     }
 }
+async fn handle_api_request<
+    G: std::future::Future<Output = api::Result<tide::Response>>,
+    F: Fn(api::Request) -> G,
+>(
+    req: api::Request,
+    handler_func: F,
+) -> tide::Result {
+    let resource_type = api::accept(&req);
+
+    // Handle request. If any api error is returned, serialize it into a tide response
+    // as well, respecting the requested resource type. (and if there's error during
+    // this serialization, fall back to the error's conversion into tide response)
+    handler_func(req).await.or_else(|api_error| {
+        api::serialize_error(resource_type, api_error)
+            .or_else(|e| Ok(Into::<tide::Response>::into(e)))
+    })
+}
+
+fn api_server(world: &World) -> tide::Server<api::State> {
+    let mut app = tide::Server::with_state(api::State {
+        world: world.clone(),
+    });
+
+    app.at("/version")
+        .get(|r| handle_api_request(r, api::version::get));
+    app.at("/binding")
+        .get(|r| handle_api_request(r, api::binding::list_artefact))
+        .post(|r| handle_api_request(r, api::binding::publish_artefact));
+    app.at("/binding/:aid")
+        .get(|r| handle_api_request(r, api::binding::get_artefact))
+        .delete(|r| handle_api_request(r, api::binding::unpublish_artefact));
+    app.at("/binding/:aid/:sid")
+        .get(|r| handle_api_request(r, api::binding::get_instance))
+        .put(|r| handle_api_request(r, api::binding::spawn_instance))
+        .delete(|r| handle_api_request(r, api::binding::shutdown_instance));
+    app.at("/pipeline")
+        .get(|r| handle_api_request(r, api::pipeline::list_artefact))
+        .post(|r| handle_api_request(r, api::pipeline::publish_artefact));
+    app.at("/pipeline/:aid")
+        .get(|r| handle_api_request(r, api::pipeline::get_artefact))
+        .delete(|r| handle_api_request(r, api::pipeline::unpublish_artefact));
+    // connectors api
+    app.at("/connector")
+        .get(|r| handle_api_request(r, api::connector::list_artefacts))
+        .post(|r| handle_api_request(r, api::connector::publish_artefact));
+    app.at("/connector/:aid")
+        .get(|r| handle_api_request(r, api::connector::get_artefact))
+        .delete(|r| handle_api_request(r, api::connector::unpublish_artefact));
+    app.at("/connector/:aid/:sid")
+        .get(|r| handle_api_request(r, api::connector::get_instance))
+        // pause, resume
+        .patch(|r| handle_api_request(r, api::connector::patch_instance));
+
+    app
+}
+
+async fn handle_signals(signals: Signals, world: World) {
+    let mut signals = signals.fuse();
+
+    while let Some(signal) = signals.next().await {
+        info!(
+            "Received SIGNAL: {}",
+            signal_name(signal).unwrap_or(&signal.to_string())
+        );
+        match signal {
+            SIGINT | SIGTERM => {
+                if let Err(_e) = world.stop(ShutdownMode::Graceful).await {
+                    if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
+                        error!("Error handling signal {}: {}", signal, e);
+                    }
+                }
+            }
+            SIGQUIT => {
+                if let Err(_e) = world.stop(ShutdownMode::Forceful).await {
+                    if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
+                        error!("Error handling signal {}: {}", signal, e);
+                    }
+                }
+            }
+            signal => {
+                if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
+                    error!("Error handling signal {}: {}", signal, e);
+                }
+            }
+        }
+    }
+}
+
 impl ServerRun {
     pub(crate) async fn run(&self) {
         version::print();
@@ -145,6 +233,7 @@ impl ServerRun {
         // We process config files thereafter
         for config_file in troy_files {
             if let Err(e) = tremor_runtime::load_troy_file(&world, config_file).await {
+                dbg!("snot");
                 return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
             }
         }
@@ -188,93 +277,5 @@ impl ServerRun {
         signal_handler_task.cancel().await;
         warn!("Tremor stopped.");
         Ok(())
-    }
-}
-
-async fn handle_api_request<
-    G: std::future::Future<Output = api::Result<tide::Response>>,
-    F: Fn(api::Request) -> G,
->(
-    req: api::Request,
-    handler_func: F,
-) -> tide::Result {
-    let resource_type = api::accept(&req);
-
-    // Handle request. If any api error is returned, serialize it into a tide response
-    // as well, respecting the requested resource type. (and if there's error during
-    // this serialization, fall back to the error's conversion into tide response)
-    handler_func(req).await.or_else(|api_error| {
-        api::serialize_error(resource_type, api_error)
-            .or_else(|e| Ok(Into::<tide::Response>::into(e)))
-    })
-}
-
-fn api_server(world: &World) -> tide::Server<api::State> {
-    let mut app = tide::Server::with_state(api::State {
-        world: world.clone(),
-    });
-
-    app.at("/version")
-        .get(|r| handle_api_request(r, api::version::get));
-    app.at("/binding")
-        .get(|r| handle_api_request(r, api::binding::list_artefact))
-        .post(|r| handle_api_request(r, api::binding::publish_artefact));
-    app.at("/binding/:aid")
-        .get(|r| handle_api_request(r, api::binding::get_artefact))
-        .delete(|r| handle_api_request(r, api::binding::unpublish_artefact));
-    app.at("/binding/:aid/:sid")
-        .get(|r| handle_api_request(r, api::binding::get_instance))
-        .put(|r| handle_api_request(r, api::binding::spawn_instance))
-        .delete(|r| handle_api_request(r, api::binding::shutdown_instance));
-    app.at("/pipeline")
-        .get(|r| handle_api_request(r, api::pipeline::list_artefact))
-        .post(|r| handle_api_request(r, api::pipeline::publish_artefact));
-    app.at("/pipeline/:aid")
-        .get(|r| handle_api_request(r, api::pipeline::get_artefact))
-        .delete(|r| handle_api_request(r, api::pipeline::unpublish_artefact));
-    // connectors api
-    app.at("/connector")
-        .get(|r| handle_api_request(r, api::connector::list_artefacts))
-        .post(|r| handle_api_request(r, api::connector::publish_artefact));
-    app.at("/connector/:aid")
-        .get(|r| handle_api_request(r, api::connector::get_artefact))
-        .delete(|r| handle_api_request(r, api::connector::unpublish_artefact));
-    app.at("/connector/:aid/:sid")
-        .get(|r| handle_api_request(r, api::connector::get_instance))
-        // pause, resume
-        .patch(|r| handle_api_request(r, api::connector::patch_instance));
-
-    app
-}
-
-async fn handle_signals(signals: Signals, world: World) {
-    let mut signals = signals.fuse();
-
-    while let Some(signal) = signals.next().await {
-        info!(
-            "Received SIGNAL: {}",
-            signal_name(signal).unwrap_or(&signal.to_string())
-        );
-        match signal {
-            SIGINT | SIGTERM => {
-                if let Err(_e) = world.stop(ShutdownMode::Graceful).await {
-                    if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
-                        error!("Error handling signal {}: {}", signal, e);
-                    }
-                }
-            }
-            SIGQUIT => {
-                if let Err(_e) = world.stop(ShutdownMode::Forceful).await {
-                    if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
-                        error!("Error handling signal {}: {}", signal, e);
-                    }
-                }
-            }
-            signal => {
-                if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
-                    error!("Error handling signal {}: {}", signal, e);
-                }
-            }
-        }
     }
 }
