@@ -7,7 +7,7 @@
     "-p",
     "before.pid",
     "before/ws.trickle",
-    "before/config.yaml",
+    "before/config.troy",
     "before/server.yaml"
   ],
   "await": {

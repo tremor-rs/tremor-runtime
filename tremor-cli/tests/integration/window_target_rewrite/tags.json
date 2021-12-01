@@ -1,1 +1,6 @@
-["window", "target", "rewrite", "select"]
+[
+    "window",
+    "target",
+    "rewrite",
+    "select"
+]
