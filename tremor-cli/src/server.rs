@@ -200,6 +200,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         // We process config files thereafter
         for config_file in troy_files {
             if let Err(e) = tremor_runtime::load_troy_file(&world, config_file).await {
+                dbg!("snot");
                 return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
             }
         }
