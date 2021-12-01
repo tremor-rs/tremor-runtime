@@ -176,7 +176,19 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
         vec![],
         &*FN_REGISTRY.lock()?,
         &aggr_reg,
-    )?;
+    );
+    let deployable = match deployable {
+        Ok(deployable) => deployable,
+        Err(e) => {
+            let mut h = TermHighlighter::stderr();
+            if let Err(e) = Script::format_error_from_script(&src, &mut h, &e) {
+                eprintln!("Error: {}", e);
+            };
+
+            return Err(format!("failed to load trickle script: {}", file_name).into());
+        }
+    };
+
     let unit = deployable.deploy.as_flows()?;
 
     for (binding_instance, flow) in &unit.instances {

@@ -8,8 +8,7 @@
     "before.pid",
     "-n",
     "-f",
-    "before/main.trickle",
-    "before/config.yaml"
+    "before/config.troy"
   ],
   "await": {
     "wait-for-ms": [

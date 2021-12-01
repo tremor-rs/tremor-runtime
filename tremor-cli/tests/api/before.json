@@ -8,8 +8,8 @@
     "before.pid",
     "-f",
     "before/ws.trickle",
-    "before/config.yaml",
-    "before/server.yaml",
+    "before/config.troy",
+    "before/server.troy",
     "-l",
     "before/logger.yaml"
   ],
