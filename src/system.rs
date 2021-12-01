@@ -667,7 +667,7 @@ impl World {
         // register metrics connector
         let artefact = ConnectorArtefact {
             id: "system::metrics".into(),
-            binding_type: "metrics".into(),
+            connector_type: "metrics".into(),
             ..ConnectorArtefact::default()
         };
         self.repo
@@ -712,7 +712,7 @@ impl World {
         // FIXME: how to name this
         let stdout_artefact: ConnectorArtefact = ConnectorArtefact {
             id: "system::stdio".into(),
-            binding_type: "stdio".into(),
+            connector_type: "stdio".into(),
             ..ConnectorArtefact::default()
         };
         self.repo

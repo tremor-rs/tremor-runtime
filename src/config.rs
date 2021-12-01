@@ -13,12 +13,14 @@
 // limitations under the License.
 
 use crate::connectors::ConnectorType;
-use either::Either;
+use crate::Result;
+use halfbrown::HashMap;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_script::{
     ast::{ConnectStmt, Helper},
     srs::ConnectorDecl,
 };
+use tremor_value::prelude::*;
 
 pub(crate) type Id = String;
 
@@ -75,13 +77,28 @@ impl Default for PauseBehaviour {
 */
 
 /// Codec name and configuration
-#[derive(Clone, Debug)]
-pub struct Codec {
+#[derive(Clone, Debug, Default)]
+pub struct NameWithConfig {
     pub(crate) name: String,
-    pub(crate) config: tremor_pipeline::ConfigMap,
+    pub(crate) config: Option<Value<'static>>,
 }
 
-impl From<&str> for Codec {
+impl NameWithConfig {
+    fn from_value(value: &Value) -> Result<Self> {
+        if let Some(name) = value.as_str() {
+            Ok(Self::from(name))
+        } else if let Some(name) = value.get_str("name") {
+            Ok(Self {
+                name: name.to_string(),
+                config: value.get("config").map(Value::clone_static),
+            })
+        } else {
+            Err(format!("Invalid codec: {}", value).into())
+        }
+    }
+}
+
+impl From<&str> for NameWithConfig {
     fn from(name: &str) -> Self {
         Self {
             name: name.to_string(),
@@ -90,38 +107,12 @@ impl From<&str> for Codec {
     }
 }
 
-/// Pre- or Postprocessor name and config
-#[derive(Clone, Debug)]
-pub struct Processor {
-    pub(crate) name: String,
-    pub(crate) config: tremor_pipeline::ConfigMap,
-}
-
-impl From<&str> for Processor {
-    fn from(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            config: None,
-        }
-    }
-}
-
-impl From<&ProcessorOrName> for Processor {
-    fn from(p: &ProcessorOrName) -> Self {
-        match &p.inner {
-            Either::Left(name) => name.as_str().into(),
-            Either::Right(config) => config.clone(),
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub(crate) struct ProcessorOrName {
-    inner: Either<String, Processor>,
-}
-
-pub(crate) type Preprocessor = Processor;
-pub(crate) type Postprocessor = Processor;
+/// A Codec
+pub type Codec = NameWithConfig;
+/// A Preprocessor
+pub(crate) type Preprocessor = NameWithConfig;
+/// A Postprocessor
+pub(crate) type Postprocessor = NameWithConfig;
 
 /// Connector configuration - only the parts applicable to all connectors
 /// Specific parts are catched in the `config` map.
@@ -129,11 +120,11 @@ pub(crate) type Postprocessor = Processor;
 pub struct Connector {
     /// connector identifier
     pub id: Id,
-    pub(crate) binding_type: ConnectorType,
+    pub(crate) connector_type: ConnectorType,
 
     pub(crate) description: String,
 
-    pub(crate) codec: Option<Either<String, Codec>>,
+    pub(crate) codec: Option<Codec>,
 
     pub(crate) config: tremor_pipeline::ConfigMap,
 
@@ -147,11 +138,11 @@ pub struct Connector {
     ///
     /// A default builtin codec mapping is defined
     /// for msgpack, json, yaml and plaintext codecs with the common mime-types
-    pub(crate) codec_map: Option<halfbrown::HashMap<String, Either<String, Codec>>>,
+    pub(crate) codec_map: Option<HashMap<String, Codec>>,
 
     // TODO: interceptors or configurable processors
-    pub(crate) preprocessors: Option<Vec<ProcessorOrName>>,
-    pub(crate) postprocessors: Option<Vec<ProcessorOrName>>,
+    pub(crate) preprocessors: Option<Vec<Preprocessor>>,
+    pub(crate) postprocessors: Option<Vec<Postprocessor>>,
 
     pub(crate) reconnect: Reconnect,
 
@@ -162,29 +153,66 @@ pub struct Connector {
 impl Connector {
     /// FIXME
     pub fn from_decl(decl: &ConnectorDecl) -> crate::Result<Connector> {
-        // FIXME: make this proper
+        // FIXME: need some better support here
         let aggr_reg = tremor_script::registry::aggr();
         let reg = &*FN_REGISTRY.lock()?;
         let mut helper = Helper::new(reg, &aggr_reg, vec![]);
         let params = decl.params.clone();
 
         let config = params.generate_config(&mut helper)?;
-        let config = config
+        let defn = config
             .into_iter()
             .collect::<tremor_value::Value>()
             .into_static();
 
+        Connector::from_defn(decl.instance_id.clone(), decl.kind.clone().into(), defn)
+    }
+    /// FIXME
+
+    pub fn from_defn(
+        id: String,
+        connector_type: ConnectorType,
+        defn: Value<'static>,
+    ) -> crate::Result<Connector> {
+        let config = defn.get("config").cloned();
+
         Ok(Connector {
-            id: decl.instance_id.clone(),
-            binding_type: decl.kind.clone().into(),
+            id,
+            connector_type,
             description: "FIXME: placeholder description".to_string(),
-            config: Some(config),
-            codec_map: None,
-            preprocessors: None,
-            postprocessors: None,
-            reconnect: Reconnect::None,
-            metrics_interval_s: None,
-            codec: None,
+            config: config,
+            codec_map: defn
+                .get_object("codec_map")
+                .map(|o| {
+                    o.iter()
+                        .map(|(k, v)| Ok((k.to_string(), Codec::from_value(v)?)))
+                        .collect::<Result<HashMap<_, _>>>()
+                })
+                .transpose()?,
+            preprocessors: defn
+                .get_array("preprocessors")
+                .map(|o| {
+                    o.iter()
+                        .map(Preprocessor::from_value)
+                        .collect::<Result<_>>()
+                })
+                .transpose()?,
+            postprocessors: defn
+                .get_array("postprocessors")
+                .map(|o| {
+                    o.iter()
+                        .map(Preprocessor::from_value)
+                        .collect::<Result<_>>()
+                })
+                .transpose()?,
+            reconnect: defn
+                .get("reconnect")
+                .cloned()
+                .map(tremor_value::structurize)
+                .transpose()?
+                .unwrap_or_default(),
+            metrics_interval_s: defn.get_u64("metrics_interval_s"),
+            codec: defn.get("codec").map(Codec::from_value).transpose()?,
         })
     }
 }

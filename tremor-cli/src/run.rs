@@ -24,6 +24,7 @@ use tremor_common::{file, ids::OperatorIdGen, time::nanotime};
 use tremor_pipeline::{Event, EventId};
 use tremor_runtime::{
     codec::Codec,
+    config,
     postprocessor::Postprocessor,
     preprocessor::Preprocessor,
     system::{ShutdownMode, World, WorldConfig},
@@ -64,7 +65,7 @@ impl Ingress {
             Some(data) => Box::new(BufReader::new(crate::open_file(data, None)?)),
         };
 
-        let codec = tremor_runtime::codec::lookup(codec_decoder);
+        let codec = tremor_runtime::codec::resolve(&config::Codec::from(codec_decoder));
         if let Err(_e) = codec {
             eprintln!("Error Codec {} not found error.", codec_decoder);
             // ALLOW: main.rs
@@ -155,7 +156,7 @@ impl Egress {
             Some(data) => Box::new(BufWriter::new(file::create(data)?)),
         };
 
-        let codec = tremor_runtime::codec::lookup(codec_encoder);
+        let codec = tremor_runtime::codec::resolve(&config::Codec::from(codec_encoder));
         if let Err(_e) = codec {
             eprintln!("Error Codec {} not found error.", codec_encoder);
             // ALLOW: main.rs
@@ -435,9 +436,10 @@ fn run_troy_source(_matches: &ArgMatches, file_name: &str) -> Result<()> {
             ..WorldConfig::default()
         };
         let (world, _handle) = World::start(config).await.unwrap();
-        tremor_runtime::load_troy_file(&world, file_name)
-            .await
-            .unwrap();
+        if let Err(e) = tremor_runtime::load_troy_file(&world, file_name).await {
+            error!("Troy error: {}", e);
+            std::process::exit(1);
+        };
 
         async_std::task::sleep(std::time::Duration::from_millis(150_000)).await;
         world.stop(ShutdownMode::Graceful).await.unwrap();

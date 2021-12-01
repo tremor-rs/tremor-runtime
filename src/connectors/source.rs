@@ -16,7 +16,6 @@
 
 use async_std::task;
 use async_std::{channel::unbounded, future::timeout};
-use either::Either;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::Display;
@@ -25,7 +24,7 @@ use tremor_common::time::nanotime;
 use tremor_script::{EventPayload, ValueAndMeta};
 
 use crate::config::{
-    Codec as CodecConfig, Connector as ConnectorConfig, Preprocessor as PreprocessorConfig,
+    self, Codec as CodecConfig, Connector as ConnectorConfig, Preprocessor as PreprocessorConfig,
 };
 use crate::connectors::{
     metrics::SourceReporter, ConnectorContext, ConnectorType, Context, Msg, QuiescenceBeacon,
@@ -451,15 +450,11 @@ pub fn builder(
     qsize: usize,
     source_metrics_reporter: SourceReporter,
 ) -> Result<SourceManagerBuilder> {
-    let preprocessor_configs: Vec<PreprocessorConfig> = config
-        .preprocessors
-        .as_ref()
-        .map(|ps| ps.iter().map(|p| p.into()).collect())
-        .unwrap_or_else(Vec::new);
+    let preprocessor_configs = config.preprocessors.clone().unwrap_or_default();
     let codec_config = config
         .codec
         .clone()
-        .unwrap_or_else(|| Either::Left(connector_default_codec.to_string()));
+        .unwrap_or_else(|| CodecConfig::from(connector_default_codec));
     let streams = Streams::new(connector_uid, codec_config, preprocessor_configs)?;
 
     Ok(SourceManagerBuilder {
@@ -473,7 +468,7 @@ pub fn builder(
 // TODO: there is optimization potential here for reusing codec and preprocessors after a stream got ended
 struct Streams {
     uid: u64,
-    codec_config: Either<String, CodecConfig>,
+    codec_config: CodecConfig,
     preprocessor_configs: Vec<PreprocessorConfig>,
     states: BTreeMap<u64, StreamState>,
 }
@@ -482,7 +477,7 @@ impl Streams {
     /// constructor
     fn new(
         uid: u64,
-        codec_config: Either<String, CodecConfig>,
+        codec_config: config::Codec,
         preprocessor_configs: Vec<PreprocessorConfig>,
     ) -> Result<Self> {
         let default = Self::build_stream(
@@ -541,7 +536,7 @@ impl Streams {
     fn build_stream(
         connector_uid: u64,
         stream_id: u64,
-        codec_config: &Either<String, CodecConfig>,
+        codec_config: &CodecConfig,
         preprocessor_configs: &[PreprocessorConfig],
     ) -> Result<StreamState> {
         let codec = codec::resolve(codec_config)?;

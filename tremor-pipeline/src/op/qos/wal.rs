@@ -658,13 +658,12 @@ mod test {
             .prefix("tremor-pipeline-wal")
             .tempdir()?;
         let read_count = 100;
-        let c = Config {
-            read_count,
-            dir: Some(temp_dir.path().to_string_lossy().into_owned()),
-            max_elements: Some(10),
-            max_bytes: Some(1024 * 1024),
-            flush_on_evnt: None,
-        };
+        let c = Some(literal!( {
+            "read_count": read_count,
+            "dir": temp_dir.path().to_string_lossy().into_owned(),
+            "max_elements": 10,
+            "max_bytes": 1024 * 1024,
+        }));
 
         let mut v = Value::null();
         let e = Event::default();
@@ -722,13 +721,9 @@ mod test {
 
     #[test]
     fn test_invalid_config() -> Result<()> {
-        let c = Config {
-            read_count: 10,
-            dir: None,
-            max_elements: None,
-            max_bytes: None,
-            flush_on_evnt: None,
-        };
+        let c = Some(literal!( {
+            "read_count": 10
+        }));
 
         let r = WalFactory::new().from_node(1, &NodeConfig::from_config(&"wal-test-1", c)?);
         assert!(r.is_err());
