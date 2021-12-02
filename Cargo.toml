@@ -175,10 +175,8 @@ tonic = { version = "0.5.2", default-features = false, features = [
 tremor-otelapis = { version = "0.2.2" }
 
 # aws-s3
-aws-config = "0.0.26-alpha" 
-aws-sdk-s3 = "0.0.26-alpha" 
-aws-types = "0.0.26-alpha" 
-aws-endpoint = "0.0.26-alpha" 
+aws-sdk-s3 = "0.2.0" 
+aws-types = "0.2.0" 
 
 
 # gcp
