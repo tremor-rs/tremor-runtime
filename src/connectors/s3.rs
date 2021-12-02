@@ -92,7 +92,7 @@ impl ConnectorBuilder for Builder {
 
     async fn from_config(
         &self,
-        id: &TremorUrl,
+        id: &str,
         raw_config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         if let Some(config) = raw_config {
@@ -244,7 +244,6 @@ impl Connector for S3Connector {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        // FIXME: May be wise to increase channel size if you want to have multiple clients.
         let (client_sender, client_receiver) = channel::bounded(2);
 
         // set the sender and receiver for a new client
@@ -286,15 +285,11 @@ impl Connector for S3Connector {
         let client = S3Client::from_conf(s3_config.build());
 
         // Check for the existence of the bucket.
-        let exist_bucket = client
+        client
             .head_bucket()
             .bucket(self.config.bucket.clone())
             .send()
-            .await;
-
-        if exist_bucket.is_err() {
-            return Err(exist_bucket.unwrap_err().into());
-        }
+            .await?;
 
         // Send the client to the sink.
         if let Some(client_sender) = &self.client_sender {
@@ -304,7 +299,6 @@ impl Connector for S3Connector {
         Ok(true)
     }
 
-    // FIXME: text or json
     fn default_codec(&self) -> &str {
         "json"
     }
