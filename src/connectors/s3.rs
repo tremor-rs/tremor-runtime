@@ -214,9 +214,7 @@ impl Sink for S3Sink {
 
     async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
         // Commit the final upload.
-        if self.buffer.len() > 0 {
-            self.complete_multipart(ctx).await?;
-        }
+        self.complete_multipart(ctx).await?;
         Ok(())
     }
 
@@ -276,7 +274,7 @@ impl Connector for S3Connector {
                 self.config.aws_secret_access_key.clone(),
                 None,
                 None,
-                "Environment"
+                "Environment",
             ))
             .region(Region::new(self.config.aws_region.clone()));
 
@@ -313,7 +311,7 @@ impl Connector for S3Connector {
 }
 
 impl S3Sink {
-    fn get_client(&self) -> Result<&s3::Client> {
+    fn get_client(&self) -> Result<&S3Client> {
         self.client
             .as_ref()
             .ok_or_else(|| ErrorKind::S3Error("no s3 client available".to_string()).into())
@@ -375,9 +373,9 @@ impl S3Sink {
             .send()
             .await?;
 
-        let e_tag = resp
-            .e_tag
-            .ok_or(ErrorKind::S3Error("response did not have e_tag".to_string()))?;
+        let e_tag = resp.e_tag.ok_or(ErrorKind::S3Error(
+            "response did not have e_tag".to_string(),
+        ))?;
 
         // Insert into the list of parts to upload.
         self.parts.push(
