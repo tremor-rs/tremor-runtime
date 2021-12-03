@@ -624,7 +624,7 @@ impl Source for ElasticSource {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(crate) struct Builder {}
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {

@@ -35,7 +35,7 @@ pub struct Exit {
     done: bool,
 }
 
-#[async_trait::async_trait()]
+#[async_trait::async_trait]
 impl Connector for Exit {
     fn is_structured(&self) -> bool {
         true

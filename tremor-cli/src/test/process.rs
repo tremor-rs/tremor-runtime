@@ -72,7 +72,6 @@ pub(crate) async fn run_process(
         .map(|x| (*x).to_string())
         .chain(artefacts)
         .collect();
-    dbg!(&args);
 
     let process_start = nanotime();
 
