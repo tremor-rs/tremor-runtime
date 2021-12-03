@@ -660,10 +660,8 @@ where
         }
     }
 
-    fn register_aggregate_fun(&mut self, f: CustomAggregateFn<'script>) -> Result<()> {
+    fn register_aggregate_fun(&mut self, f: CustomAggregateFn<'script>) {
         self.aggregate_vec.push(f);
-
-        Ok(())
     }
 
     fn register_shadow_var(&mut self, id: &str) -> usize {

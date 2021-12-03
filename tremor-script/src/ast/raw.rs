@@ -340,7 +340,7 @@ impl<'script> ModuleRaw<'script> {
                         state: Value::null(),
                     };
 
-                    helper.register_aggregate_fun(f)?;
+                    helper.register_aggregate_fun(f);
                 }
                 // ALLOW: the gramer doesn't allow this
                 _ => unreachable!("Can't have expressions inside of modules"),

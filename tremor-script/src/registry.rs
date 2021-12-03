@@ -211,6 +211,10 @@ pub enum FunctionError {
     RecursionLimit,
     /// A generic error
     Error(Box<Error>),
+    /// Nothing was returned in an init of an aggregate function
+    NoAggregateValueInInit,
+    /// Nothing was returned in an aggregate of an aggregate function
+    NoAggregateValueInAggregate
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -303,6 +307,8 @@ impl FunctionError {
             BadType { mfa } => ErrorKind::BadType(outer, inner, mfa.m, mfa.f, mfa.a).into(),
             RecursionLimit => ErrorKind::RecursionLimit(outer, inner).into(),
             Error(e) => *e,
+            FunctionError::NoAggregateValueInInit => ErrorKind::NoAggregateValueInInit(outer, inner).into(),
+            FunctionError::NoAggregateValueInAggregate => ErrorKind::NoAggregateValueInAggregate(outer, inner).into(),
         }
     }
 }

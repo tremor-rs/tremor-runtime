@@ -57,7 +57,7 @@ pub struct RawMergeInDecl<'input>(pub Vec<IdentRaw<'input>>, pub ExprsRaw<'input
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct RawEmitDecl<'input>(pub Vec<IdentRaw<'input>>, pub ExprsRaw<'input>);
 
-pub struct AggregateFnDecl<'script> {
+pub struct FnDecl<'script> {
     /// public because lalrpop
     pub name: Ident<'script>,
     /// public because lalrpop
@@ -153,7 +153,7 @@ impl<'script> Upable<'script> for RawEmitDecl<'script> {
 }
 
 impl<'script> Upable<'script> for RawAggregateFnDecl<'script> {
-    type Target = AggregateFnDecl<'script>;
+    type Target = FnDecl<'script>;
 
     fn up<'registry>(
         self,

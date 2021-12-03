@@ -1126,13 +1126,13 @@ impl<'script> CustomAggregateFn<'script> {
             mergein_args,
             emit_args,
             name: Cow::owned(name.to_string()),
-            init_body: init_body.into_iter().map(|x| x.into_static()).collect(),
+            init_body: init_body.into_iter().map(Expr::into_static).collect(),
             aggregate_body: aggregate_body
                 .into_iter()
-                .map(|x| x.into_static())
+                .map(Expr::into_static)
                 .collect(),
-            mergein_body: mergein_body.into_iter().map(|x| x.into_static()).collect(),
-            emit_body: emit_body.into_iter().map(|x| x.into_static()).collect(),
+            mergein_body: mergein_body.into_iter().map(Expr::into_static).collect(),
+            emit_body: emit_body.into_iter().map(Expr::into_static).collect(),
             state: state.into_static(),
         }
     }

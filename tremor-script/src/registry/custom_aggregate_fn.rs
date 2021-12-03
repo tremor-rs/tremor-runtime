@@ -44,6 +44,8 @@ pub struct CustomAggregateFn<'script> {
 
 impl<'script> CustomAggregateFn<'script> {
     /// Initialize the instance of aggregate function
+    /// # Errors
+    /// Returns an error if the initialization fails, or the init function does not return a value
     pub fn init<'event>(&mut self, env: &Env<'_, 'event>) -> FResult<()>
     where
         'script: 'event,
@@ -80,7 +82,7 @@ impl<'script> CustomAggregateFn<'script> {
                 if let Cont::Cont(value) = cont {
                     self.state = value.into_owned().clone_static();
                 } else {
-                    todo!("No state returned in init! Return a proper error here.");
+                    return Err(FunctionError::NoAggregateValueInInit);
                 }
             }
         }
@@ -89,7 +91,9 @@ impl<'script> CustomAggregateFn<'script> {
     }
 
     /// Aggregate a value
-    pub fn aggregate<'event>(&mut self, args: &[&Value], env: &Env<'_, 'event>)
+    /// # Errors
+    /// Will return an error if the aggregate function does not return a value, of it errors
+    pub fn aggregate<'event>(&mut self, args: &[&Value], env: &Env<'_, 'event>) -> FResult<()>
     where
         'script: 'event,
     {
@@ -129,10 +133,12 @@ impl<'script> CustomAggregateFn<'script> {
                 if let Cont::Cont(value) = cont {
                     self.state = value.into_owned().clone_static();
                 } else {
-                    todo!("No state returned in init! Return a proper error here.");
+                    return Err(FunctionError::NoAggregateValueInAggregate);
                 }
             }
         }
+
+        Ok(())
     }
 
     /// Merge with another instance

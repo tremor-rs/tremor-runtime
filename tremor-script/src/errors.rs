@@ -186,7 +186,8 @@ impl ErrorKind {
             SubqueryUnknownPort, TailingHereDoc, TypeConflict, UnexpectedCharacter,
             UnexpectedEndOfStream, UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor,
             UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
-            UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error, ValueError,
+            UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error, ValueError, NoAggregateValueInInit,
+            NoAggregateValueInAggregate
         };
         match self {
             NoClauseHit(outer)
@@ -214,6 +215,8 @@ impl ErrorKind {
             | InvalidEmit(outer, inner)
             | InvalidRecur(outer, inner)
             | RecursionLimit(outer, inner)
+            | NoAggregateValueInInit(outer, inner)
+            | NoAggregateValueInAggregate(outer, inner)
             | InvalidConst(outer, inner)
             | InvalidMod(outer, inner)
             | InvalidFn(outer, inner)
@@ -538,6 +541,14 @@ error_chain! {
         RecursionLimit(expr: Range, inner: Range) {
             description("Recursion limit Reached")
                 display("Recursion limit Reached")
+        }
+        NoAggregateValueInInit(expr: Range, inner: Range) {
+            description("No value was emitted in init of the aggregate function")
+                display("No value was emitted in init of the aggregate function")
+        }
+        NoAggregateValueInAggregate(expr: Range, inner: Range) {
+            description("No value was emitted in aggregate of the aggregate function")
+                display("No value was emitted in aggregate of the aggregate function")
         }
 
         /*
