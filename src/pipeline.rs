@@ -99,6 +99,12 @@ impl Addr {
     pub(crate) async fn start(&self) -> Result<()> {
         self.send_mgmt(MgmtMsg::Start).await
     }
+    pub(crate) async fn pause(&self) -> Result<()> {
+        self.send_mgmt(MgmtMsg::Pause).await
+    }
+    pub(crate) async fn resume(&self) -> Result<()> {
+        self.send_mgmt(MgmtMsg::Resume).await
+    }
 }
 
 #[cfg(not(tarpaulin_include))]
@@ -140,6 +146,19 @@ pub enum OutputTarget {
     Pipeline(Box<Addr>),
     /// a connector
     Sink(connectors::sink::SinkAddr),
+}
+
+impl From<Addr> for OutputTarget {
+    fn from(p: Addr) -> Self {
+        Self::Pipeline(Box::new(p))
+    }
+}
+impl TryFrom<connectors::Addr> for OutputTarget {
+    type Error = crate::errors::Error;
+
+    fn try_from(addr: connectors::Addr) -> Result<Self> {
+        Ok(Self::Sink(addr.sink.ok_or("Connector has no sink")?))
+    }
 }
 
 /// control plane message
@@ -452,7 +471,7 @@ async fn pipeline_task(
                 target,
                 is_transactional,
             }) => {
-                info!("[Pipeline::{}] Connecting input {} to 'in'", pid, input_url);
+                info!("[Pipeline::{}] Connecting {} to port 'in'", pid, input_url);
                 inputs.insert(input_url, (is_transactional, target.into()));
             }
             M::M(MgmtMsg::ConnectOutput {
@@ -461,7 +480,7 @@ async fn pipeline_task(
                 target,
             }) => {
                 info!(
-                    "[Pipeline::{}] Connecting '{}' to {}",
+                    "[Pipeline::{}] Connecting port '{}' to {}",
                     pid, &port, &output_url
                 );
                 // notify other pipeline about a new input

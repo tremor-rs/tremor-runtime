@@ -1,0 +1,98 @@
+
+define pipeline exit
+pipeline
+  # make the test exit after all events have been sent
+  select {
+    "exit": 0,
+    "delay": 1000
+  } from in where event == "exit" into out;
+end;
+
+define pipeline main
+pipeline
+  #select event from in where event != "exit" into out;
+  select event from in into out;
+end;
+
+# onramp:
+#   - id: blaster
+#     type: blaster
+#     codec: json
+#     config:
+#       source: in.json
+#       interval: 1000000
+#       iters: 11
+define bench connector bench
+with
+  codec = "json",
+  config = {
+    "source": "in.json",
+    "interval": 1000000,
+    "iters": 11
+  }
+end;
+
+#  - id: exit
+#    type: exit
+define exit connector exit;
+
+#  - id: out_file
+#    type: file
+#    codec: json
+#    config:
+#      file: out.log
+#  - id: err_file
+#    type: file
+#    codec: json
+#    config:
+#      file: err.log
+define file connector file
+args
+  file
+with 
+  codec = "json",
+  config = {
+    "path": args.file,
+    "mode": "truncate"
+  }
+end;
+
+
+# binding:
+#   - id: "blast"
+#     links:
+#       "/onramp/blaster/{instance}/out": [ "/pipeline/main/{instance}/in", "/pipeline/exit/{instance}/in" ]
+#       "/pipeline/main/{instance}/out":  [ "/offramp/out_file/{instance}/in"]
+#       "/pipeline/main/{instance}/err":  [ "/offramp/err_file/{instance}/in"]
+#       "/pipeline/exit/{instance}/out":  [ "/offramp/exit/{instance}/in"    ]
+#       "/pipeline/exit/{instance}/err":  [ "/offramp/err_file/{instance}/in"]
+# 
+# mapping:
+#   /binding/blast/01:
+#     instance: "01"
+
+define flow main
+flow
+  create pipeline exit;
+  create pipeline main;
+  create connector bench;
+
+  create connector out_file from file
+  with
+    file = "out.log"
+  end;
+
+#  create connector err_file from file
+#  with
+#    file = "err.log"
+#  end;
+
+#  connect /connector/bench/bench to /pipeline/main/main;
+#  connect /connector/bench/bench to /pipeline/exit/exit;
+#  connect /pipeline/main/main to /connector/file/out_file;
+#  connect /pipeline/main/main/err to /connector/file/err_file;
+#  connect /pipeline/exit/exit to /connector/exit/exit;
+#  connect /pipeline/exit/exit/err to /connector/file/err_file;
+end;
+
+deploy flow main;

@@ -167,6 +167,7 @@ impl Connector for StdStreamConnector {
     fn input_ports(&self) -> &[Cow<'static, str>] {
         Self::REF_IN_PORTS
     }
+
     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         Ok(true)
     }
