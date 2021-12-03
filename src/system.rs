@@ -12,21 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod deployment;
+
 use crate::connectors::utils::metrics::METRICS_CHANNEL;
-use crate::errors::{Error, ErrorKind, Result};
+use crate::errors::{Error, Kind as ErrorKind, Result};
 use crate::registry::Registries;
 use crate::repository::{
     Artefact, BindingArtefact, ConnectorArtefact, PipelineArtefact, Repositories,
 };
-
 use crate::QSIZE;
 use async_std::channel::bounded;
 use async_std::prelude::*;
 use async_std::task::{self, JoinHandle};
+use deployment::{Deployment, DeploymentId};
 use hashbrown::HashMap;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_common::url::{ResourceType, TremorUrl};
+use tremor_script::srs::DeployFlow;
 
 pub(crate) use crate::binding;
 pub(crate) use crate::connectors;
@@ -88,24 +91,27 @@ pub enum ShutdownMode {
 }
 
 /// This is control plane
-pub enum ManagerMsg {
+pub(crate) enum ManagerMsg {
     /// msg to the pipeline manager
     Pipeline(pipeline::ManagerMsg),
     /// msg to the connector manager
     Connector(connectors::ManagerMsg),
     /// msg to the binding manager
     Binding(binding::ManagerMsg),
+    ///add a deployment
+    AddDeploy(DeploymentId, Deployment),
     /// stop this manager
     Stop,
 }
-
-pub(crate) type Sender = async_std::channel::Sender<ManagerMsg>;
+use async_std::channel::Sender as AsyncSender;
+pub(crate) type Sender = AsyncSender<ManagerMsg>;
 
 #[derive(Debug)]
 pub(crate) struct Manager {
     pub connector: connectors::ManagerSender,
     pub pipeline: pipeline::ManagerSender,
     pub binding: binding::ManagerSender,
+    deployments: HashMap<DeploymentId, Deployment>,
     pub connector_h: JoinHandle<Result<()>>,
     pub pipeline_h: JoinHandle<Result<()>>,
     pub binding_h: JoinHandle<Result<()>>,
@@ -113,7 +119,7 @@ pub(crate) struct Manager {
 }
 
 impl Manager {
-    pub fn start(self) -> (JoinHandle<Result<()>>, Sender) {
+    pub fn start(mut self) -> (JoinHandle<Result<()>>, Sender) {
         let (tx, rx) = bounded(self.qsize);
         let system_h = task::spawn(async move {
             while let Ok(msg) = rx.recv().await {
@@ -121,6 +127,9 @@ impl Manager {
                     ManagerMsg::Pipeline(msg) => self.pipeline.send(msg).await?,
                     ManagerMsg::Connector(msg) => self.connector.send(msg).await?,
                     ManagerMsg::Binding(msg) => self.binding.send(msg).await?,
+                    ManagerMsg::AddDeploy(id, deploy) => {
+                        self.deployments.insert(id, deploy);
+                    }
                     ManagerMsg::Stop => {
                         info!("Stopping Manager ...");
                         self.pipeline.send(pipeline::ManagerMsg::Stop).await?;
@@ -156,6 +165,17 @@ pub struct World {
 }
 
 impl World {
+    pub(crate) async fn start_deploy(&self, src: &str, flow: &DeployFlow) -> Result<()> {
+        let id = flow.instance_id.id().to_string();
+
+        let deploy = Deployment::start(&self.system, src, flow).await?;
+
+        self.system
+            .send(ManagerMsg::AddDeploy(DeploymentId(id), deploy))
+            .await?;
+
+        Ok(())
+    }
     /// Registers the given connector type with `type_name` and the corresponding `builder`
     ///
     /// # Errors
@@ -609,6 +629,7 @@ impl World {
         let (binding_h, binding) = binding::Manager::new(config.qsize, reg.clone()).start();
 
         let (system_h, system) = Manager {
+            deployments: HashMap::new(),
             connector,
             pipeline,
             binding,

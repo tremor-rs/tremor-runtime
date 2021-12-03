@@ -37,7 +37,7 @@ use self::sink::{SinkAddr, SinkContext, SinkMsg};
 use self::source::{SourceAddr, SourceContext, SourceMsg};
 use self::utils::quiescence::QuiescenceBeacon;
 use crate::config::Connector as ConnectorConfig;
-use crate::errors::{Error, ErrorKind, Result};
+use crate::errors::{Error, Kind as ErrorKind, Result};
 use crate::pipeline;
 use crate::registry::instance::InstanceState;
 use crate::system::World;
@@ -111,6 +111,19 @@ impl Addr {
     pub(crate) async fn stop(&self, sender: Sender<ConnectorResult<()>>) -> Result<()> {
         self.send(Msg::Stop(sender)).await
     }
+    pub(crate) async fn start(&self, sender: Sender<ConnectorResult<()>>) -> Result<()> {
+        self.send(Msg::Start(sender)).await
+    }
+    pub(crate) async fn drain(&self, sender: Sender<ConnectorResult<()>>) -> Result<()> {
+        self.send(Msg::Drain(sender)).await
+    }
+
+    pub(crate) async fn pause(&self) -> Result<()> {
+        self.send(Msg::Pause).await
+    }
+    pub(crate) async fn resume(&self) -> Result<()> {
+        self.send(Msg::Resume).await
+    }
 }
 
 /// Messages a Connector instance receives and acts upon
@@ -164,9 +177,10 @@ pub enum Msg {
     Report(Sender<StatusReport>),
 }
 
+#[derive(Debug)]
 /// result of an async operation of the connector.
 /// bears a `url` to identify the connector who finished the operation
-pub struct ConnectorResult<T> {
+pub struct ConnectorResult<T: std::fmt::Debug> {
     /// the connector url
     pub url: TremorUrl,
     /// the actual result

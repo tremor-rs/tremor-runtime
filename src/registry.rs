@@ -40,7 +40,7 @@
 
 use crate::binding::{Addr as BindingAddr, Msg as BindingMsg};
 use crate::connectors::{Addr as ConnectorAddr, ConnectorResult, Msg as ConnectorMsg};
-use crate::errors::{ErrorKind, Result};
+use crate::errors::{Kind as ErrorKind, Result};
 use crate::pipeline::MgmtMsg as PipelineMsg;
 use crate::repository::{Artefact, BindingArtefact, ConnectorArtefact, PipelineArtefact};
 use crate::{pipeline, QSIZE};

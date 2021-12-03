@@ -18,7 +18,7 @@ use crate::pipeline;
 use crate::connectors;
 use crate::system::World;
 use crate::{
-    errors::{Error, ErrorKind, Result},
+    errors::{Error, Kind as ErrorKind, Result},
     pipeline::OutputTarget,
 };
 use beef::Cow;

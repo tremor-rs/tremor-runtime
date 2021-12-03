@@ -195,6 +195,18 @@ pub struct DeployEndpoint {
 }
 
 impl DeployEndpoint {
+    /// The artefact
+    pub fn artefact(&self) -> &str {
+        &self.artefact
+    }
+    /// The instance
+    pub fn instance(&self) -> &str {
+        &self.instance
+    }
+    /// The port
+    pub fn port(&self) -> &str {
+        &self.port
+    }
     /// creates a connector instance url
     fn to_connector_instance(&self) -> TremorUrl {
         TremorUrl::from_connector_instance(&self.artefact, &self.instance)
