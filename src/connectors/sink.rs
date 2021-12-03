@@ -27,7 +27,7 @@ use crate::codec::{self, Codec};
 use crate::config::{
     Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
 };
-use crate::connectors::{ConnectorType, Context, Msg, StreamDone};
+use crate::connectors::{reconnect::Attempt, ConnectorType, Context, Msg, StreamDone};
 use crate::errors::Result;
 use crate::permge::PriorityMerge;
 use crate::pipeline;
@@ -179,6 +179,18 @@ pub trait Sink: Send {
     async fn on_start(&mut self, _ctx: &SinkContext) -> Result<()> {
         Ok(())
     }
+
+    /// Connect to the external thingy.
+    /// This function is called definitely after `on_start` has been called.
+    ///
+    /// This function might be called multiple times, check the `attempt` where you are at.
+    /// The intended result of this function is to re-establish a connection. It might reuse a working connection.
+    ///
+    /// Return `Ok(true)` if the connection could be successfully established.
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+        Ok(true)
+    }
+
     /// called when paused
     async fn on_pause(&mut self, _ctx: &SinkContext) -> Result<()> {
         Ok(())
@@ -261,20 +273,22 @@ pub enum SinkMsg {
         /// the signal event
         signal: Event,
     },
-    /// connect some pipelines to the give port
-    Connect {
+    /// link some pipelines to the give port
+    Link {
         /// the port
         port: Cow<'static, str>,
         /// the pipelines
         pipelines: Vec<(TremorUrl, pipeline::Addr)>,
     },
-    /// disconnect a pipeline
-    Disconnect {
+    /// unlink a pipeline
+    Unlink {
         /// url of the pipeline
         id: TremorUrl,
         /// the port
         port: Cow<'static, str>,
     },
+    /// Connect to the outside world and send the result back
+    Connect(Sender<Result<bool>>, Attempt),
     /// the connection to the outside world wasl ost
     ConnectionLost,
     /// connection established
@@ -537,7 +551,7 @@ where
             match msg_wrapper {
                 SinkMsgWrapper::ToSink(sink_msg) => {
                     match sink_msg {
-                        SinkMsg::Connect {
+                        SinkMsg::Link {
                             port,
                             mut pipelines,
                         } => {
@@ -548,7 +562,7 @@ where
                             );
                             self.pipelines.append(&mut pipelines);
                         }
-                        SinkMsg::Disconnect { id, port } => {
+                        SinkMsg::Unlink { id, port } => {
                             debug_assert!(
                                 port == IN,
                                 "[Sink::{}] disconnected from invalid connector sink port",
@@ -566,8 +580,18 @@ where
                         }
                         SinkMsg::Start => {
                             info!(
-                                "[Sink::{}] Ignoring Start message in {:?} state",
-                                &self.ctx.url, &self.state
+                                "{} Ignoring Start message in {:?} state",
+                                &self.ctx, &self.state
+                            );
+                        }
+                        SinkMsg::Connect(sender, attempt) => {
+                            let connect_result = self.sink.connect(&self.ctx, &attempt).await;
+                            if let Ok(true) = connect_result {
+                                info!("{} Sink connected.", &self.ctx);
+                            }
+                            self.ctx.log_err(
+                                sender.send(connect_result).await,
+                                "Error sending sink connect result",
                             );
                         }
                         SinkMsg::Resume if self.state == Paused => {
