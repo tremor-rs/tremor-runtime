@@ -27,8 +27,8 @@ use crate::config::{
     self, Codec as CodecConfig, Connector as ConnectorConfig, Preprocessor as PreprocessorConfig,
 };
 use crate::connectors::{
-    metrics::SourceReporter, ConnectorContext, ConnectorType, Context, Msg, QuiescenceBeacon,
-    StreamDone,
+    metrics::SourceReporter, reconnect::Attempt, ConnectorContext, ConnectorType, Context, Msg,
+    QuiescenceBeacon, StreamDone,
 };
 use crate::errors::{Error, Result};
 use crate::pipeline;
@@ -71,6 +71,8 @@ pub enum SourceMsg {
         /// url of the pipeline
         id: TremorUrl,
     },
+    /// Connect to the outside world and send the result back
+    Connect(Sender<Result<bool>>, Attempt),
     /// connectivity is lost in the connector
     ConnectionLost,
     /// connectivity is re-established
@@ -180,6 +182,18 @@ pub trait Source: Send {
     async fn on_start(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
+
+    /// Connect to the external thingy.
+    /// This function is called definitely after `on_start` has been called.
+    ///
+    /// This function might be called multiple times, check the `attempt` where you are at.
+    /// The intended result of this function is to re-establish a connection. It might reuse a working connection.
+    ///
+    /// Return `Ok(true)` if the connection could be successfully established.
+    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+        Ok(true)
+    }
+
     /// called when the source is explicitly paused as result of a user/operator interaction
     /// in contrast to `on_cb_close` which happens automatically depending on downstream pipeline or sink connector logic.
     async fn on_pause(&mut self, _ctx: &SourceContext) -> Result<()> {
@@ -595,6 +609,7 @@ where
     // this way we can explicitly resume a Cb triggered source if need be
     // but also an explicitly paused source might receive a Cb open and continue sending data :scream:
     state: SourceState,
+    // if set we can use .elapsed() to check agains `pull_wait` if we are done waiting
     pull_wait_start: Option<Instant>,
     pull_wait: Duration,
     is_transactional: bool,
@@ -732,6 +747,17 @@ where
                 info!(
                     "{} Ignoring Start msg in {:?} state",
                     &self.ctx, &self.state
+                );
+                Ok(Control::Continue)
+            }
+            SourceMsg::Connect(sender, attempt) => {
+                let connect_result = self.source.connect(&self.ctx, &attempt).await;
+                if let Ok(true) = connect_result {
+                    info!("{} Source connected.", &self.ctx);
+                }
+                self.ctx.log_err(
+                    sender.send(connect_result).await,
+                    "Error sending source connect result",
                 );
                 Ok(Control::Continue)
             }

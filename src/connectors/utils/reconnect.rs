@@ -14,10 +14,14 @@
 
 /// reconnect logic and execution for connectors
 use crate::config::Reconnect;
-use crate::connectors::{Addr, Connectivity, Connector, ConnectorContext, Msg};
-use crate::errors::Result;
-use async_std::channel::Sender;
+use crate::connectors::sink::SinkMsg;
+use crate::connectors::source::SourceMsg;
+use crate::connectors::{Addr, Connectivity, Connector, ConnectorContext, Context, Msg};
+use crate::errors::{Error, Result};
+use async_std::channel::{bounded, Sender};
 use async_std::task;
+use futures::future::{join3, ready, FutureExt};
+use std::convert::identity;
 use std::fmt::Display;
 use std::time::Duration;
 use tremor_common::url::TremorUrl;
@@ -75,7 +79,7 @@ impl ReconnectStrategy for SimpleBackoff {
 }
 
 /// describing the number of previous connection attempts
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct Attempt {
     overall: u64,
     success: u64,
@@ -132,7 +136,7 @@ pub(crate) struct ReconnectRuntime {
     attempt: Attempt,
     interval_ms: Option<u64>,
     strategy: Box<dyn ReconnectStrategy>,
-    sender: Sender<Msg>,
+    addr: Addr,
     connector_url: TremorUrl,
 }
 
@@ -153,17 +157,13 @@ impl ConnectionLostNotifier {
 
 impl ReconnectRuntime {
     pub(crate) fn notifier(&self) -> ConnectionLostNotifier {
-        ConnectionLostNotifier(self.sender.clone())
+        ConnectionLostNotifier(self.addr.sender.clone())
     }
     /// constructor
     pub(crate) fn new(connector_addr: &Addr, config: &Reconnect) -> Self {
-        Self::inner(
-            connector_addr.sender.clone(),
-            connector_addr.url.clone(),
-            config,
-        )
+        Self::inner(connector_addr.clone(), connector_addr.url.clone(), config)
     }
-    fn inner(sender: Sender<Msg>, connector_url: TremorUrl, config: &Reconnect) -> Self {
+    fn inner(addr: Addr, connector_url: TremorUrl, config: &Reconnect) -> Self {
         let strategy: Box<dyn ReconnectStrategy> = match config {
             Reconnect::None => Box::new(FailFast {}),
             Reconnect::Custom {
@@ -180,7 +180,7 @@ impl ReconnectRuntime {
             attempt: Attempt::default(),
             interval_ms: None,
             strategy,
-            sender,
+            addr,
             connector_url,
         }
     }
@@ -194,24 +194,48 @@ impl ReconnectRuntime {
         connector: &mut dyn Connector,
         ctx: &ConnectorContext,
     ) -> Result<(Connectivity, bool)> {
-        match connector.connect(ctx, &self.attempt).await {
-            Ok(true) => {
+        let (tx, rx) = bounded(2);
+        let source_fut = if self.addr.has_source() {
+            self.addr
+                .send_source(SourceMsg::Connect(tx.clone(), self.attempt.clone()))
+                .await?;
+            rx.recv()
+                .map(|r| r.map_err(Error::from).and_then(identity))
+                .boxed()
+        } else {
+            ready(Ok(true)).boxed()
+        };
+        let sink_fut = if self.addr.has_sink() {
+            self.addr
+                .send_sink(SinkMsg::Connect(tx, self.attempt.clone()))
+                .await?;
+            rx.recv()
+                .map(|r| r.map_err(Error::from).and_then(identity))
+                .boxed()
+        } else {
+            ready(Ok(true)).boxed()
+        };
+        let results = join3(source_fut, sink_fut, connector.connect(ctx, &self.attempt)).await;
+        match results {
+            (Ok(true), Ok(true), Ok(true)) => {
                 self.reset();
                 Ok((Connectivity::Connected, true))
             }
-            Ok(false) => {
-                let will_retry = self.update_and_retry();
-
-                Ok((Connectivity::Disconnected, will_retry))
-            }
-
-            Err(e) => {
-                error!(
-                    "[Connector::{}] Reconnect Error ({}): {}",
-                    &ctx.url, self.attempt, e
+            (source, sink, conn) => {
+                ctx.log_err(
+                    source,
+                    &format!("Error connecting the source part ({})", self.attempt),
                 );
-                let will_retry = self.update_and_retry();
+                ctx.log_err(
+                    sink,
+                    &format!("Error connecting the sink part ({})", self.attempt),
+                );
+                ctx.log_err(
+                    conn,
+                    &format!("Error connecting the connector ({})", self.attempt),
+                );
 
+                let will_retry = self.update_and_retry();
                 Ok((Connectivity::Disconnected, will_retry))
             }
         }
@@ -241,7 +265,7 @@ impl ReconnectRuntime {
             // spawn retry
             // ALLOW: we are not interested in fractions here
             let duration = Duration::from_millis(interval);
-            let sender = self.sender.clone();
+            let sender = self.addr.sender.clone();
             let url = self.connector_url.clone();
             task::spawn(async move {
                 task::sleep(duration).await;

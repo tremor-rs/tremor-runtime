@@ -603,7 +603,7 @@ impl Manager {
                             // connect to sink part
                             if let Some(sink) = connector_addr.sink.as_ref() {
                                 sink.addr
-                                    .send(SinkMsg::Connect {
+                                    .send(SinkMsg::Link {
                                         port,
                                         pipelines: pipelines_to_link,
                                     })
@@ -685,7 +685,7 @@ impl Manager {
                             match connector_addr.sink.as_ref() {
                                 Some(sink) => sink
                                     .addr
-                                    .send(SinkMsg::Disconnect { port, id })
+                                    .send(SinkMsg::Unlink { port, id })
                                     .await
                                     .map_err(Error::from),
                                 None => Err(ErrorKind::InvalidDisconnect(
