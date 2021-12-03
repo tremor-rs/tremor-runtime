@@ -21,9 +21,6 @@ use tremor_runtime::errors::Result;
 use tremor_value::literal;
 use value_trait::ValueAccess;
 
-#[macro_use]
-extern crate log;
-
 #[async_std::test]
 async fn file_connector_xz() -> Result<()> {
     let _ = env_logger::try_init();
