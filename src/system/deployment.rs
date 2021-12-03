@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{ManagerMsg, Sender};
 use crate::{
-    binding::StatusReport,
-    connectors::{self, ConnectorResult},
+    connectors::{self, ConnectorResult, KnownConnectors},
     errors::{Error, Result},
+    instance::InstanceState,
     permge::PriorityMerge,
     pipeline,
-    registry::instance::InstanceState,
 };
 use async_std::{channel::Receiver, prelude::*};
 use async_std::{
@@ -29,14 +27,24 @@ use async_std::{
 use hashbrown::HashMap;
 use std::{borrow::Borrow, collections::HashSet};
 use std::{sync::atomic::Ordering, time::Duration};
-use tremor_common::url::TremorUrl;
+use tremor_common::{
+    ids::{ConnectorIdGen, OperatorIdGen},
+    url::TremorUrl,
+};
 use tremor_script::{
     ast::{ConnectStmt, DeployEndpoint},
     srs::{ConnectorDecl, DeployFlow, Query},
 };
 
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash)]
+#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone)]
 pub(crate) struct DeploymentId(pub String);
+
+impl From<&DeployFlow> for DeploymentId {
+    fn from(f: &DeployFlow) -> Self {
+        DeploymentId(f.instance_id.id().to_string())
+    }
+}
+
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash)]
 pub(crate) struct ConnectorId(String);
 
@@ -104,25 +112,15 @@ pub(crate) struct Deployment {
 fn second<T1, T2>(t: &(T1, T2)) -> &T2 {
     &t.1
 }
-impl Deployment {
-    async fn spawn_pipeline(
-        url: TremorUrl,
-        system: &Sender,
-        config: tremor_pipeline::query::Query,
-    ) -> Result<(TremorUrl, pipeline::Addr)> {
-        let (tx, rx) = bounded(1);
-        system
-            .send(ManagerMsg::Pipeline(pipeline::ManagerMsg::Create(
-                tx,
-                Box::new(pipeline::Create {
-                    config,
-                    id: url.clone(),
-                }),
-            )))
-            .await?;
-        Ok((url, rx.recv().await??))
-    }
 
+/// Status Report for a Binding
+pub struct StatusReport {
+    /// the url of the instance this report describes
+    pub url: TremorUrl,
+    /// the current state
+    pub status: InstanceState,
+}
+impl Deployment {
     async fn link(
         connectors: &HashMap<ConnectorId, (TremorUrl, connectors::Addr)>,
         pipelines: &HashMap<PipelineId, (TremorUrl, pipeline::Addr)>,
@@ -211,25 +209,13 @@ impl Deployment {
         Ok(())
     }
 
-    async fn spawn_connector(
-        url: TremorUrl,
-        system: &Sender,
-        connector: crate::Connector,
-    ) -> Result<(TremorUrl, connectors::Addr)> {
-        // FIXME: remove this to a privaste thingy not a send receive bouncy one
-
-        let create = connectors::Create::new(url.clone(), connector);
-        let (tx, rx) = bounded(1);
-        system
-            .send(ManagerMsg::Connector(connectors::ManagerMsg::Create {
-                tx,
-                create: Box::new(create),
-            }))
-            .await?;
-        Ok((url, rx.recv().await??))
-    }
-
-    pub(crate) async fn start(system: &Sender, src: &str, flow: &DeployFlow) -> Result<Self> {
+    pub(crate) async fn start(
+        src: String,
+        flow: DeployFlow,
+        oidgen: &mut OperatorIdGen,
+        cidgen: &mut ConnectorIdGen,
+        known_connectors: &KnownConnectors,
+    ) -> Result<Self> {
         let mut pipelines = HashMap::new();
         let mut connectors = HashMap::new();
 
@@ -240,7 +226,7 @@ impl Deployment {
             // FIXME
             connectors.insert(
                 ConnectorId::from(decl),
-                Deployment::spawn_connector(url, system, connector).await?,
+                connectors::spawn(url, cidgen, known_connectors, connector).await?,
             );
         }
         for decl in &flow.decl.pipelines {
@@ -250,8 +236,8 @@ impl Deployment {
                 decl.instance_id
             ))?;
             let pipeline =
-                tremor_pipeline::query::Query(tremor_script::Query::from_troy(src, decl)?);
-            let addr = Deployment::spawn_pipeline(url, system, pipeline).await?;
+                tremor_pipeline::query::Query(tremor_script::Query::from_troy(&src, decl)?);
+            let addr = pipeline::spawn(url, pipeline, oidgen).await?;
             pipelines.insert(PipelineId::from(decl), addr);
         }
 
@@ -365,7 +351,7 @@ impl Deployment {
 
         task::spawn::<_, Result<()>>(async move {
             while let Some(wrapped) = input_channel.next().await {
-                match dbg!(wrapped) {
+                match wrapped {
                     MsgWrapper::Msg(Msg::Start) if state == InstanceState::Initialized => {
                         // start all pipelines first - order doesnt matter as connectors aren't started yet
                         for pipe in &pipelines {

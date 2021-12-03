@@ -61,10 +61,9 @@ pub mod pipeline;
 pub mod postprocessor;
 /// Offramp Postprocessors
 pub mod preprocessor;
-/// Tremor registry
-pub mod registry;
-/// The tremor repository
-pub mod repository;
+
+/// Tremor connector extensions
+pub mod connectors;
 /// Tremor runtime system
 pub mod system;
 /// Utility functions
@@ -72,24 +71,19 @@ pub mod utils;
 /// Tremor runtime version tools
 pub mod version;
 
-/// Bindings
-pub mod binding;
-/// Tremor connector extensions
-pub mod connectors;
+pub(crate) mod instance;
 
 /// Metrics instance name
 pub static mut INSTANCE: &str = "tremor";
 
-use std::path::Path;
 use std::sync::atomic::AtomicUsize;
 
 use crate::errors::{Error, Result};
 
-pub(crate) use crate::config::{Binding, Connector};
+pub(crate) use crate::config::Connector;
 use system::World;
-use tremor_common::url::TremorUrl;
 pub use tremor_pipeline::Event;
-use tremor_pipeline::{query::Query, FN_REGISTRY};
+use tremor_pipeline::FN_REGISTRY;
 use tremor_script::Script;
 use tremor_script::{deploy::Deploy, highlighter::Term as TermHighlighter};
 
@@ -99,53 +93,6 @@ pub type OpConfig = tremor_value::Value<'static>;
 lazy_static! {
     /// Default Q Size
     pub static ref QSIZE: AtomicUsize = AtomicUsize::new(128);
-}
-/// Loads a tremor query file
-/// # Errors
-/// Fails if the file can not be loaded
-pub async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
-    use std::ffi::OsStr;
-    use std::io::Read;
-    info!("Loading configuration from {}", file_name);
-    let file_id = Path::new(file_name)
-        .file_stem()
-        .unwrap_or_else(|| OsStr::new(file_name))
-        .to_string_lossy();
-    let mut file = tremor_common::file::open(&file_name)?;
-    let mut raw = String::new();
-
-    file.read_to_string(&mut raw)
-        .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
-
-    // TODO: Should ideally be const
-    let aggr_reg = tremor_script::registry::aggr();
-    let module_path = tremor_script::path::load();
-    let query = Query::parse(
-        &module_path,
-        &raw,
-        file_name,
-        vec![],
-        &*FN_REGISTRY.lock()?,
-        &aggr_reg,
-    );
-    let query = match query {
-        Ok(query) => query,
-        Err(e) => {
-            let mut h = TermHighlighter::stderr();
-            if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
-                eprintln!("Error: {}", e);
-            };
-
-            return Err(format!("failed to load trickle script: {}", file_name).into());
-        }
-    };
-    let id = query.id().unwrap_or(&file_id);
-
-    let id = TremorUrl::parse(&format!("/pipeline/{}", id))?;
-    info!("Loading {} from file {}.", id, file_name);
-    world.repo.publish_pipeline(&id, false, query).await?;
-
-    Ok(1)
 }
 
 /// Loads a config yaml file
