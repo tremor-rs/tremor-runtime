@@ -216,7 +216,7 @@ impl GroupWindow {
                         e.into_err(aggr, aggr, r, node_meta)
                     }))
                 }
-                InvocableAggregate::Tremor(ref mut x) => x.aggregate(argv1.as_slice(), &env)?,
+                InvocableAggregate::Tremor(ref mut x) => x.aggregate(argv1.as_slice(), &env).map_err(|x| x.into_err(aggr, aggr, None, node_meta))?,
             }
         }
         Ok(())

@@ -94,6 +94,7 @@ macro_rules! test_cases {
 
 test_cases!(
     custom_aggregate,
+    custom_aggregate_tilted,
     default_rule,
     dimensions,
     example_rule,
