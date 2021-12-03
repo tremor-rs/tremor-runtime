@@ -36,7 +36,7 @@ pub enum Mode {
     Write,
     /// append to the file
     Append,
-    /// truncate the file to 0 bytes and then write to it (Default)
+    /// truncate the file to 0 bytes and then write to it
     Truncate,
     /// just write to it and overwrite existing contents, do not truncate
     Overwrite,
@@ -87,7 +87,7 @@ pub struct File {
 }
 
 /// builder for file connector
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Builder {}
 
 impl Builder {}

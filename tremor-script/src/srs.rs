@@ -13,12 +13,10 @@
 // limitations under the License.
 
 use crate::{
-    ast::BaseRef,
     ast::{self, query, ConnectStmt, NodeId, NodeMetas},
     errors::{Error, Result},
     prelude::*,
 };
-use halfbrown::HashMap;
 use query::{DefinitioalArgs, DefinitioalArgsWith};
 use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
 
@@ -61,7 +59,7 @@ impl Debug for Deploy {
 ///
 pub struct Flows {
     /// Instances for this deployment unit
-    pub instances: HashMap<String, CreateStmt>,
+    pub instances: Vec<DeployFlow>,
 }
 
 /// A fully resolved deployable artefact
@@ -130,18 +128,15 @@ impl Deploy {
     ///
     pub fn as_flows(&self) -> Result<Flows> {
         use ast::deploy::DeployStmt as StmtKind;
-        let mut instances = HashMap::new();
+        let mut instances = Vec::new();
 
         for stmt in &self.script.stmts {
             if let StmtKind::DeployFlowStmt(ref stmt) = stmt {
                 let decl = FlowDecl::new_from_deploy(self, &stmt.decl.node_id)?;
-                instances.insert(
-                    stmt.fqn(),
-                    CreateStmt {
-                        instance_id: stmt.node_id.clone(),
-                        decl,
-                    },
-                );
+                instances.push(DeployFlow {
+                    instance_id: stmt.node_id.clone(),
+                    decl,
+                });
             }
         }
 
@@ -158,8 +153,8 @@ impl Deploy {
 /// This type is not itself self-referential but contains
 /// deployment atoms which may in turn be self-referential.
 ///
-#[derive(Debug)]
-pub struct CreateStmt {
+#[derive(Debug, Clone)]
+pub struct DeployFlow {
     /// Identity
     pub instance_id: NodeId,
     /// Atomic unit of deployment
@@ -251,17 +246,17 @@ pub struct Query {
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     query: ast::Query<'static>,
     /// NodeId of this declaration
-    pub node_id: NodeId,
+    pub artifact_id: NodeId,
     /// The alias
-    pub alias: String,
+    pub instance_id: String,
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
 impl Debug for Query {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Query")
-            .field("alias", &self.alias)
-            .field("node_id", &self.node_id)
+            .field("alias", &self.instance_id)
+            .field("node_id", &self.artifact_id)
             .field("query", &self.query)
             .finish()
     }
@@ -289,8 +284,8 @@ impl Query {
             query: unsafe {
                 mem::transmute::<ast::query::Query<'_>, ast::query::Query<'static>>(query)
             },
-            alias,
-            node_id,
+            instance_id: alias,
+            artifact_id: node_id,
         })
     }
 
@@ -333,8 +328,8 @@ impl Query {
         Ok(Self {
             raw,
             query: structured,
-            alias: target.to_string(),
-            node_id: NodeId::new(target.to_string(), vec![]), // FIXME TODO fix
+            instance_id: target.to_string(),
+            artifact_id: NodeId::new(target.to_string(), vec![]), // FIXME TODO fix
         })
     }
 
