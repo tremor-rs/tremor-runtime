@@ -153,7 +153,7 @@ impl Deploy {
 /// This type is not itself self-referential but contains
 /// deployment atoms which may in turn be self-referential.
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DeployFlow {
     /// Identity
     pub instance_id: NodeId,

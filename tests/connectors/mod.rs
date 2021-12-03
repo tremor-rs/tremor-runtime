@@ -35,7 +35,6 @@ use tremor_runtime::{
     connectors::{self, sink::SinkMsg, Connectivity, StatusReport},
     errors::Result,
     pipeline::{self, CfMsg},
-    registry::instance::InstanceState,
     system::{ShutdownMode, World, WorldConfig},
     Event, QSIZE,
 };
@@ -62,6 +61,7 @@ impl ConnectorHarness {
             config::Connector::from_defn(connector_type.clone(), connector_type.into(), defn)?;
         let id = TremorUrl::from_connector_instance(raw_config.id.as_str(), "test");
         let _connector_config = world.repo.publish_connector(&id, false, raw_config).await?;
+        // FIXME: woohp whoop
         let connector_addr = world.create_connector_instance(&id).await?;
         let mut pipes = HashMap::new();
 

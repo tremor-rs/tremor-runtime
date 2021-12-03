@@ -87,7 +87,7 @@ pub struct File {
 }
 
 /// builder for file connector
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Builder {}
 
 impl Builder {}

@@ -96,7 +96,7 @@ impl Connector for Cb {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(crate) struct Builder {}
 
 #[async_trait::async_trait()]
