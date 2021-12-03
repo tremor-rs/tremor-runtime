@@ -24,7 +24,7 @@ use async_std::{
 };
 use connectors::ConnectorHarness;
 use std::time::Duration;
-use tremor_runtime::{errors::Result, registry::instance::InstanceState};
+use tremor_runtime::{errors::Result, instance::InstanceState};
 use tremor_value::prelude::*;
 
 #[async_std::test]

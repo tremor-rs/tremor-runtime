@@ -193,7 +193,7 @@ impl Connector for Wal {
         "json"
     }
 }
-
+#[derive(Debug)]
 struct ThingyBuilder();
 #[async_trait::async_trait]
 impl ConnectorBuilder for ThingyBuilder {
