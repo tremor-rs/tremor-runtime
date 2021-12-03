@@ -50,7 +50,7 @@ use tremor_common::url::{
     TremorUrl,
 };
 use tremor_value::Value;
-use utils::reconnect::{Attempt, ReconnectRuntime};
+use utils::reconnect::{Attempt, ConnectionLostNotifier, ReconnectRuntime};
 use value_trait::{Builder, Mutable};
 
 /// sender for connector manager messages
@@ -190,9 +190,18 @@ impl ConnectorResult<()> {
 }
 
 /// context for a Connector or its parts
-pub trait Context: Display {
+pub trait Context: Display + Clone {
     /// provide the url of the connector
     fn url(&self) -> &TremorUrl;
+
+    /// get the quiescence beacon for checking if we should continue reading/writing
+    fn quiescence_beacon(&self) -> &QuiescenceBeacon;
+
+    /// get the notifier to signal to the runtime that we are disconnected
+    fn notifier(&self) -> &reconnect::ConnectionLostNotifier;
+
+    /// get the connector type
+    fn connector_type(&self) -> &ConnectorType;
 
     /// only log an error and swallow the result
     fn log_err<T, E, M>(&self, expr: std::result::Result<T, E>, msg: &M)
@@ -204,6 +213,16 @@ pub trait Context: Display {
             error!("{} {}: {}", self, msg, e);
         }
     }
+
+    /// enclose the given meta in the right connector namespace
+    ///
+    /// Namespace: "connector.<connector-type>"
+    #[must_use]
+    fn meta(&self, inner: Value<'static>) -> Value<'static> {
+        let mut map = Value::object_with_capacity(1);
+        map.try_insert(self.connector_type().to_string(), inner);
+        map
+    }
 }
 
 /// connector context
@@ -214,11 +233,11 @@ pub struct ConnectorContext {
     /// url of the connector
     pub url: TremorUrl,
     /// type of the connector
-    pub connector_type: ConnectorType,
+    connector_type: ConnectorType,
     /// The Quiescence Beacon
-    pub quiescence_beacon: QuiescenceBeacon,
+    quiescence_beacon: QuiescenceBeacon,
     /// Notifier
-    pub notifier: reconnect::ConnectionLostNotifier,
+    notifier: reconnect::ConnectionLostNotifier,
 }
 
 impl Display for ConnectorContext {
@@ -231,17 +250,17 @@ impl Context for ConnectorContext {
     fn url(&self) -> &TremorUrl {
         &self.url
     }
-}
 
-impl ConnectorContext {
-    /// enclose the given meta in the right connector namespace
-    ///
-    /// Namespace: "connector.<connector-type>"
-    #[must_use]
-    pub fn meta(&self, inner: Value<'static>) -> Value<'static> {
-        let mut map = Value::object_with_capacity(1);
-        map.try_insert(self.connector_type.to_string(), inner);
-        map
+    fn connector_type(&self) -> &ConnectorType {
+        &self.connector_type
+    }
+
+    fn quiescence_beacon(&self) -> &QuiescenceBeacon {
+        &self.quiescence_beacon
+    }
+
+    fn notifier(&self) -> &reconnect::ConnectionLostNotifier {
+        &self.notifier
     }
 }
 
@@ -473,6 +492,7 @@ impl Manager {
 
         let mut connectivity = Connectivity::Disconnected;
         let mut quiescence_beacon = QuiescenceBeacon::default();
+        let notifier = ConnectionLostNotifier::new(msg_tx.clone());
 
         let source_metrics_reporter = SourceReporter::new(
             url.clone(),
@@ -500,6 +520,7 @@ impl Manager {
             url: url.clone(),
             connector_type: config.connector_type.clone(),
             quiescence_beacon: quiescence_beacon.clone(),
+            notifier: notifier.clone(),
         };
 
         let sink_metrics_reporter = SinkReporter::new(
@@ -513,6 +534,8 @@ impl Manager {
             uid,
             url: url.clone(),
             connector_type: config.connector_type.clone(),
+            quiescence_beacon: quiescence_beacon.clone(),
+            notifier: notifier.clone(),
         };
         // create source instance
         let source_addr = connector.create_source(source_ctx, source_builder).await?;
@@ -529,7 +552,7 @@ impl Manager {
         };
 
         let mut reconnect: ReconnectRuntime =
-            ReconnectRuntime::new(&connector_addr, &config.reconnect);
+            ReconnectRuntime::new(&connector_addr, notifier.clone(), &config.reconnect);
         let notifier = reconnect.notifier();
 
         let ctx = ConnectorContext {
@@ -537,7 +560,7 @@ impl Manager {
             url: url.clone(),
             connector_type: config.connector_type.clone(),
             quiescence_beacon: quiescence_beacon.clone(),
-            notifier: notifier.clone(),
+            notifier: notifier,
         };
 
         let send_addr = connector_addr.clone();
@@ -603,7 +626,7 @@ impl Manager {
                             // connect to sink part
                             if let Some(sink) = connector_addr.sink.as_ref() {
                                 sink.addr
-                                    .send(SinkMsg::Connect {
+                                    .send(SinkMsg::Link {
                                         port,
                                         pipelines: pipelines_to_link,
                                     })
@@ -685,7 +708,7 @@ impl Manager {
                             match connector_addr.sink.as_ref() {
                                 Some(sink) => sink
                                     .addr
-                                    .send(SinkMsg::Disconnect { port, id })
+                                    .send(SinkMsg::Unlink { port, id })
                                     .await
                                     .map_err(Error::from),
                                 None => Err(ErrorKind::InvalidDisconnect(
@@ -1161,7 +1184,9 @@ pub trait Connector: Send {
     ///
     /// To know when to stop reading new data from the external connection, the `quiescence` beacon
     /// can be used. Call `.reading()` and `.writing()` to see if you should continue doing so, if not, just stop and rest.
-    async fn connect(&mut self, ctx: &ConnectorContext, attempt: &Attempt) -> Result<bool>;
+    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+        Ok(true)
+    }
 
     /// called once when the connector is started
     /// `connect` will be called after this for the first time, leave connection attempts in `connect`.
