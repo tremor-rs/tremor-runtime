@@ -593,7 +593,7 @@ AggregateFnDecl: RawAggregateFnDecl<'input> = {
 }
 
 AggregateFnBody: RawAggregateFnBody<'input> = {
-    <start:@L> "init" "(" ")" <init_body:Effectors> "aggregate" "(" <aggregate_args:FnArgs> ")" <aggregate_body:Effectors> "mergein" "(" <merge_args:FnArgs> ")" <merge_body:Effectors> "emit" "(" <emit_args:FnArgs> ")" <emit_body:Effectors> <end:@L> => RawAggregateFnBody{start, end, init_body, aggregate_args, aggregate_body, merge_args, merge_body, emit_args, emit_body}
+    <start:@L> "init" "(" ")" <init_body:Effectors> "aggregate" "(" <aggregate_args:FnArgs> ")" <aggregate_body:Effectors> "mergein" "(" <merge_args:FnArgs> ")" <merge_body:Effectors> "emit" "(" <emit_args:FnArgs> ")" <emit_body:Effectors> <end:@L> => RawAggregateFnBody{start, end, init: RawInitDecl(init_body), aggregate: RawAggregateDecl(aggregate_args, aggregate_body), merge: RawMergeInDecl(merge_args, merge_body), emit: RawEmitDecl(emit_args, emit_body)}
 }
 
 FnDecl: AnyFnRaw<'input> = {

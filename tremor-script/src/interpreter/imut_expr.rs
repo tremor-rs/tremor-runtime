@@ -29,7 +29,7 @@ use crate::{
     },
     lexer::Range,
     prelude::*,
-    registry::{Registry, TremorAggrFnWrapper, RECUR_REF},
+    registry::{Registry, RECUR_REF},
     stry, Object, Value,
 };
 use std::{

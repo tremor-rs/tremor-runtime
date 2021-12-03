@@ -1,11 +1,9 @@
-use crate::ast::{Exprs, LocalPath, Path, RunConsts};
+use crate::ast::Exprs;
 use crate::interpreter::{Cont, Env, LocalStack};
 use crate::prelude::{Builder, ExecOpts};
 use crate::registry::{FResult, FunctionError};
 use crate::{AggrType, Value};
 use beef::Cow;
-use halfbrown::HashMap;
-use tremor_value::Value::Object;
 
 /// public because lalrpop
 #[derive(Clone)]

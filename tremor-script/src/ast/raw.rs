@@ -329,14 +329,14 @@ impl<'script> ModuleRaw<'script> {
                 ExprRaw::AggregateFnDecl(f) => {
                     let f = f.up(helper)?;
                     let f = CustomAggregateFn {
-                        aggregate_args: f.aggregate_args.iter().map(ToString::to_string).collect(),
+                        aggregate_args: f.aggregate.0.iter().map(ToString::to_string).collect(),
                         name: f.name.id,
-                        mergein_args: f.merge_args.iter().map(ToString::to_string).collect(),
-                        mergein_body: f.merge_body,
-                        aggregate_body: f.aggregate_body,
-                        emit_args: f.emit_args.iter().map(ToString::to_string).collect(),
-                        emit_body: f.emit_body,
-                        init_body: f.init_body,
+                        mergein_args: f.merge.0.iter().map(ToString::to_string).collect(),
+                        mergein_body: f.merge.1,
+                        aggregate_body: f.aggregate.1,
+                        emit_args: f.emit.0.iter().map(ToString::to_string).collect(),
+                        emit_body: f.emit.1,
+                        init_body: f.init.0,
                         state: Value::null(),
                     };
 
