@@ -25,17 +25,20 @@ use beef::Cow;
 use halfbrown::HashMap;
 use log::{debug, info};
 use std::{sync::atomic::Ordering, time::Duration};
-use tremor_common::url::{
-    ports::{ERR, IN, OUT},
-    TremorUrl,
+use tremor_common::{
+    ids::ConnectorIdGen,
+    url::{
+        ports::{ERR, IN, OUT},
+        TremorUrl,
+    },
 };
 use tremor_pipeline::{CbAction, EventId};
 use tremor_runtime::{
     config,
-    connectors::{self, sink::SinkMsg, Connectivity, StatusReport},
+    connectors::{self, builtin_connector_types, sink::SinkMsg, Connectivity, StatusReport},
     errors::Result,
+    instance::InstanceState,
     pipeline::{self, CfMsg},
-    registry::instance::InstanceState,
     system::{ShutdownMode, World, WorldConfig},
     Event, QSIZE,
 };
@@ -56,13 +59,22 @@ impl ConnectorHarness {
         defn: Value<'static>,
         ports: Vec<Cow<'static, str>>,
     ) -> Result<Self> {
+        let mut connector_id_gen = ConnectorIdGen::new();
+        let mut known_connectors = HashMap::new();
+
+        for builder in builtin_connector_types() {
+            known_connectors.insert(builder.connector_type(), builder);
+        }
+
         let connector_type = connector_type.to_string();
+
         let (world, handle) = World::start(WorldConfig::default()).await?;
         let raw_config =
             config::Connector::from_defn(connector_type.clone(), connector_type.into(), defn)?;
         let id = TremorUrl::from_connector_instance(raw_config.id.as_str(), "test");
-        let _connector_config = world.repo.publish_connector(&id, false, raw_config).await?;
-        let connector_addr = world.create_connector_instance(&id).await?;
+        // FIXME: woohp whoop
+        let (id, connector_addr) =
+            connectors::spawn(id, &mut connector_id_gen, &known_connectors, raw_config).await?;
         let mut pipes = HashMap::new();
 
         let (link_tx, link_rx) = async_std::channel::unbounded();
@@ -108,10 +120,7 @@ impl ConnectorHarness {
     pub(crate) async fn start(&self) -> Result<()> {
         // start the connector
         let (tx, rx) = bounded(1);
-        self.world
-            .reg
-            .start_connector(&self.connector_id, tx)
-            .await?;
+        self.addr.start(tx).await?;
         let cr = rx.recv().await?;
         cr.res?;
 
@@ -134,9 +143,11 @@ impl ConnectorHarness {
     }
 
     pub(crate) async fn stop(self) -> Result<(Vec<Event>, Vec<Event>)> {
-        self.world
-            .destroy_connector_instance(&self.connector_id)
-            .await?;
+        let (tx, rx) = bounded(1);
+
+        self.addr.stop(tx).await?;
+        let cr = rx.recv().await?;
+        cr.res?;
         self.world.stop(ShutdownMode::Graceful).await?;
         //self.handle.cancel().await;
         let out_events = self

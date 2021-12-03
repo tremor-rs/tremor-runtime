@@ -450,6 +450,7 @@ where
         )
     }
 }
+pub type Kind = ErrorKind;
 
 error_chain! {
     foreign_links {

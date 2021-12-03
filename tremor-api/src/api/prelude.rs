@@ -13,6 +13,5 @@
 // limitations under the License.
 
 pub(crate) use crate::api::*;
-pub(crate) use crate::errors::Error;
 pub(crate) use http_types::StatusCode;
 pub(crate) use tide::Response;
