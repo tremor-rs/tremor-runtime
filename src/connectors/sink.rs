@@ -27,7 +27,8 @@ use crate::codec::{self, Codec};
 use crate::config::{
     Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
 };
-use crate::connectors::{reconnect::Attempt, ConnectorType, Context, Msg, StreamDone};
+use crate::connectors::utils::reconnect::{Attempt, ConnectionLostNotifier};
+use crate::connectors::{ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone};
 use crate::errors::Result;
 use crate::permge::PriorityMerge;
 use crate::pipeline;
@@ -238,6 +239,7 @@ pub trait StreamWriter: Send + Sync {
     }
 }
 /// context for the connector sink
+#[derive(Clone)]
 pub struct SinkContext {
     /// the connector unique identifier
     pub uid: u64,
@@ -245,6 +247,12 @@ pub struct SinkContext {
     pub(crate) url: TremorUrl,
     /// the connector type
     pub(crate) connector_type: ConnectorType,
+
+    /// check if we are paused or should stop reading/writing
+    pub(crate) quiescence_beacon: QuiescenceBeacon,
+
+    /// notifier the connector runtime if we lost a connection
+    pub(crate) notifier: ConnectionLostNotifier,
 }
 
 impl Display for SinkContext {
@@ -256,6 +264,18 @@ impl Display for SinkContext {
 impl Context for SinkContext {
     fn url(&self) -> &TremorUrl {
         &self.url
+    }
+
+    fn quiescence_beacon(&self) -> &QuiescenceBeacon {
+        &self.quiescence_beacon
+    }
+
+    fn notifier(&self) -> &ConnectionLostNotifier {
+        &self.notifier
+    }
+
+    fn connector_type(&self) -> &ConnectorType {
+        &self.connector_type
     }
 }
 
@@ -585,6 +605,7 @@ where
                             );
                         }
                         SinkMsg::Connect(sender, attempt) => {
+                            info!("{} Connecting...", &self.ctx);
                             let connect_result = self.sink.connect(&self.ctx, &attempt).await;
                             if let Ok(true) = connect_result {
                                 info!("{} Sink connected.", &self.ctx);

@@ -27,8 +27,9 @@ use crate::config::{
     self, Codec as CodecConfig, Connector as ConnectorConfig, Preprocessor as PreprocessorConfig,
 };
 use crate::connectors::{
-    metrics::SourceReporter, reconnect::Attempt, ConnectorContext, ConnectorType, Context, Msg,
-    QuiescenceBeacon, StreamDone,
+    metrics::SourceReporter,
+    utils::reconnect::{Attempt, ConnectionLostNotifier},
+    ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone,
 };
 use crate::errors::{Error, Result};
 use crate::pipeline;
@@ -299,30 +300,31 @@ pub struct ChannelSourceRuntime {
 
 impl ChannelSourceRuntime {
     const READ_TIMEOUT_MS: Duration = Duration::from_millis(100);
-    pub(crate) fn register_stream_reader<R>(
-        &self,
-        stream: u64,
-        ctx: &ConnectorContext,
-        mut reader: R,
-    ) where
-        R: StreamReader + 'static + std::marker::Sync,
+
+    pub(crate) fn new(sender: Sender<SourceReply>, ctx: SourceContext) -> Self {
+        Self { sender, ctx }
+    }
+    pub(crate) fn register_stream_reader<R, C>(&self, stream: u64, ctx: &C, mut reader: R)
+    where
+        R: StreamReader + std::marker::Sync + 'static,
+        C: Context + Sync + Send + 'static,
     {
         let ctx = ctx.clone();
         let tx = self.sender.clone();
         task::spawn(async move {
             if tx.send(SourceReply::StartStream(stream)).await.is_err() {
-                error!("[Connector::{}] Failed to start stream", ctx.url);
+                error!("{} Failed to start stream", &ctx);
                 return;
             };
 
-            while ctx.quiescence_beacon.continue_reading().await {
+            while ctx.quiescence_beacon().continue_reading().await {
                 let sc_data = timeout(Self::READ_TIMEOUT_MS, reader.read(stream)).await;
 
                 let sc_data = match sc_data {
                     Err(_) => continue,
                     Ok(Ok(d)) => d,
                     Ok(Err(e)) => {
-                        error!("[Connector::{}] reader error: {}", ctx.url, e);
+                        error!("{} reader error: {}", &ctx, e);
                         break;
                     }
                 };
@@ -332,8 +334,8 @@ impl ChannelSourceRuntime {
                 };
             }
             if reader.on_done(stream).await == StreamDone::ConnectorClosed {
-                if let Err(e) = ctx.notifier.notify().await {
-                    error!("[Connector::{}] Failed to notify connector: {}", ctx.url, e);
+                if let Err(e) = ctx.notifier().notify().await {
+                    error!("{} Failed to notify connector: {}", &ctx, e);
                 };
             }
         });
@@ -371,7 +373,10 @@ pub struct SourceContext {
     /// connector type
     pub(crate) connector_type: ConnectorType,
     /// The Quiescence Beacon
-    pub quiescence_beacon: QuiescenceBeacon,
+    pub(crate) quiescence_beacon: QuiescenceBeacon,
+
+    /// tool to notify the connector when the connection is lost
+    pub(crate) notifier: ConnectionLostNotifier,
 }
 
 impl Display for SourceContext {
@@ -383,6 +388,18 @@ impl Display for SourceContext {
 impl Context for SourceContext {
     fn url(&self) -> &TremorUrl {
         &self.url
+    }
+
+    fn quiescence_beacon(&self) -> &QuiescenceBeacon {
+        &self.quiescence_beacon
+    }
+
+    fn notifier(&self) -> &ConnectionLostNotifier {
+        &self.notifier
+    }
+
+    fn connector_type(&self) -> &ConnectorType {
+        &self.connector_type
     }
 }
 
@@ -751,6 +768,7 @@ where
                 Ok(Control::Continue)
             }
             SourceMsg::Connect(sender, attempt) => {
+                info!("{} Connecting...", &self.ctx);
                 let connect_result = self.source.connect(&self.ctx, &attempt).await;
                 if let Ok(true) = connect_result {
                     info!("{} Source connected.", &self.ctx);

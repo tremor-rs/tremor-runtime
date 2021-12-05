@@ -134,7 +134,9 @@ impl ConnectorHarness {
     }
 
     pub(crate) async fn stop(self) -> Result<(Vec<Event>, Vec<Event>)> {
-        self.world.destroy_connector_instance(id).await?;
+        self.world
+            .destroy_connector_instance(&self.connector_id)
+            .await?;
         self.world.stop(ShutdownMode::Graceful).await?;
         //self.handle.cancel().await;
         let out_events = self
