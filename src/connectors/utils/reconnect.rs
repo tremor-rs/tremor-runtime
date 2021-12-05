@@ -137,6 +137,7 @@ pub(crate) struct ReconnectRuntime {
     interval_ms: Option<u64>,
     strategy: Box<dyn ReconnectStrategy>,
     addr: Addr,
+    notifier: ConnectionLostNotifier,
     connector_url: TremorUrl,
 }
 
@@ -148,6 +149,10 @@ pub(crate) struct ReconnectRuntime {
 pub struct ConnectionLostNotifier(Sender<Msg>);
 
 impl ConnectionLostNotifier {
+    /// constructor
+    pub fn new(tx: Sender<Msg>) -> Self {
+        Self(tx)
+    }
     /// notify the runtime that this connector lost its connection
     pub async fn notify(&self) -> Result<()> {
         self.0.send(Msg::ConnectionLost).await?;
@@ -157,13 +162,27 @@ impl ConnectionLostNotifier {
 
 impl ReconnectRuntime {
     pub(crate) fn notifier(&self) -> ConnectionLostNotifier {
-        ConnectionLostNotifier(self.addr.sender.clone())
+        self.notifier.clone()
     }
     /// constructor
-    pub(crate) fn new(connector_addr: &Addr, config: &Reconnect) -> Self {
-        Self::inner(connector_addr.clone(), connector_addr.url.clone(), config)
+    pub(crate) fn new(
+        connector_addr: &Addr,
+        notifier: ConnectionLostNotifier,
+        config: &Reconnect,
+    ) -> Self {
+        Self::inner(
+            connector_addr.clone(),
+            connector_addr.url.clone(),
+            notifier,
+            config,
+        )
     }
-    fn inner(addr: Addr, connector_url: TremorUrl, config: &Reconnect) -> Self {
+    fn inner(
+        addr: Addr,
+        connector_url: TremorUrl,
+        notifier: ConnectionLostNotifier,
+        config: &Reconnect,
+    ) -> Self {
         let strategy: Box<dyn ReconnectStrategy> = match config {
             Reconnect::None => Box::new(FailFast {}),
             Reconnect::Custom {
@@ -181,6 +200,7 @@ impl ReconnectRuntime {
             interval_ms: None,
             strategy,
             addr,
+            notifier,
             connector_url,
         }
     }
@@ -358,9 +378,17 @@ mod tests {
     #[async_std::test]
     async fn failfast_runtime() -> Result<()> {
         let (tx, rx) = async_std::channel::bounded(1);
+        let notifier = ConnectionLostNotifier::new(tx.clone());
         let url = TremorUrl::from_connector_instance("test", "test");
+        let addr = Addr {
+            uid: 0,
+            url: url.clone(),
+            source: None,
+            sink: None,
+            sender: tx.clone(),
+        };
         let config = Reconnect::None;
-        let mut runtime = ReconnectRuntime::inner(tx, url.clone(), &config);
+        let mut runtime = ReconnectRuntime::inner(addr, url.clone(), notifier, &config);
         let mut connector = FakeConnector {
             answer: Some(false),
         };
@@ -385,13 +413,21 @@ mod tests {
     #[async_std::test]
     async fn backoff_runtime() -> Result<()> {
         let (tx, rx) = async_std::channel::bounded(1);
+        let notifier = ConnectionLostNotifier::new(tx.clone());
         let url = TremorUrl::from_connector_instance("test", "test");
+        let addr = Addr {
+            uid: 0,
+            url: url.clone(),
+            source: None,
+            sink: None,
+            sender: tx.clone(),
+        };
         let config = Reconnect::Custom {
             interval_ms: 10,
             growth_rate: 2.0,
             max_retries: Some(3),
         };
-        let mut runtime = ReconnectRuntime::inner(tx, url.clone(), &config);
+        let mut runtime = ReconnectRuntime::inner(addr, url.clone(), notifier, &config);
         let mut connector = FakeConnector {
             answer: Some(false),
         };

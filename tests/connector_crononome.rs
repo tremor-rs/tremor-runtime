@@ -14,9 +14,6 @@
 
 mod connectors;
 
-#[macro_use]
-extern crate log;
-
 use connectors::ConnectorHarness;
 use std::{thread::sleep, time::Duration};
 use tremor_runtime::errors::Result;
