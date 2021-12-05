@@ -26,7 +26,7 @@ use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
 use halfbrown::HashMap;
 use tremor_common::stry;
-use tremor_script::{srs, Value};
+use tremor_script::{ast::Helper, srs, Value};
 
 /// Configuration for a node
 #[derive(Debug, Clone, PartialOrd, Eq, Default)]
@@ -53,17 +53,14 @@ impl NodeConfig {
     }
 
     /// Creates a `NodeConfig` from a config struct
-    pub fn from_config<C, I>(id: &I, config: C) -> Result<Self>
+    pub fn from_config<I>(id: &I, config: Option<tremor_value::Value<'static>>) -> Result<Self>
     where
-        C: serde::Serialize,
         I: ToString,
     {
-        let config = serde_yaml::to_vec(&config)?;
-
         Ok(NodeConfig {
             id: id.to_string(),
             kind: NodeKind::Operator,
-            config: serde_yaml::from_slice(&config)?,
+            config,
             ..NodeConfig::default()
         })
     }
@@ -82,14 +79,14 @@ impl PartialEq for NodeConfig {
     }
 }
 
-impl std::hash::Hash for NodeConfig {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
-        self.kind.hash(state);
-        self.op_type.hash(state);
-        self.config.hash(state);
-    }
-}
+// impl std::hash::Hash for NodeConfig {
+//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+//         self.id.hash(state);
+//         self.kind.hash(state);
+//         self.op_type.hash(state);
+//         self.config.hash(state);
+//     }
+// }
 
 impl NodeConfig {
     pub(crate) fn to_op(
@@ -99,8 +96,9 @@ impl NodeConfig {
         defn: Option<&srs::Stmt>,
         node: Option<&srs::Stmt>,
         window: Option<HashMap<String, window::Impl>>,
+        helper: &mut Helper,
     ) -> Result<OperatorNode> {
-        resolver(self, uid, defn, node, window)
+        resolver(self, uid, defn, node, window, helper)
     }
 }
 
@@ -616,30 +614,9 @@ mod test {
         identity::PassthroughFactory,
         prelude::{METRICS, OUT},
     };
-    use std::{
-        collections::hash_map::DefaultHasher,
-        hash::{Hash, Hasher},
-    };
     use tremor_script::prelude::*;
-    #[test]
-    fn node_conjfig_eq() {
-        let n0 = NodeConfig::from_config(&"node", ()).unwrap();
-        let n1 = NodeConfig::from_config(&"other", ()).unwrap();
-        assert_eq!(n0, n0);
-        assert_ne!(n0, n1);
-        let mut h1 = DefaultHasher::new();
-        let mut h2 = DefaultHasher::new();
-        let mut h3 = DefaultHasher::new();
-        n0.hash(&mut h1);
-        n0.hash(&mut h2);
-
-        assert_eq!(h1.finish(), h2.finish());
-        n1.hash(&mut h3);
-        assert_ne!(h2.finish(), h3.finish());
-    }
-
     fn pass(uid: u64, id: &'static str) -> OperatorNode {
-        let c = NodeConfig::from_config(&"passthrough", ()).unwrap();
+        let c = NodeConfig::from_config(&"passthrough", None).unwrap();
         OperatorNode {
             id: id.into(),
             kind: NodeKind::Operator,

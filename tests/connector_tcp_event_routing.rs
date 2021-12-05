@@ -19,8 +19,8 @@ extern crate log;
 
 use async_std::prelude::*;
 use std::time::Duration;
+use tremor_common::url::ports::IN;
 use tremor_pipeline::{Event, EventId};
-use tremor_runtime::url::ports::IN;
 use tremor_value::{literal, Value};
 use value_trait::{Builder, ValueAccess};
 
@@ -45,21 +45,17 @@ async fn connector_tcp_event_routing() -> Result<()> {
 
     let server_addr = format!("127.0.0.1:{}", free_port);
 
-    let connector_yaml = format!(
-        r#"
-id: my_tcp_server
-type: tcp_server
-codec: string
-preprocessors:
-  - lines
-config:
-  host: "127.0.0.1"
-  port: {}
-  buf_size: 4096
-"#,
-        free_port
-    );
-    let harness = ConnectorHarness::new(connector_yaml).await?;
+    let defn = literal!({
+      "codec": "string",
+      "preprocessors": ["lines"],
+      "config": {
+          "host": "127.0.0.1",
+          "port": free_port,
+          "buf_size": 4096
+      }
+    });
+
+    let harness = ConnectorHarness::new("tcp_server", defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of tcp_server connector");
@@ -78,8 +74,7 @@ config:
         .await??;
     let (_data, meta) = event.data.parts();
 
-    let connector_meta = meta.get("connector");
-    let tcp_server_meta = connector_meta.get("tcp_server");
+    let tcp_server_meta = meta.get("tcp_server");
     assert_eq!(Some(false), tcp_server_meta.get_bool("tls"));
 
     let peer_obj = tcp_server_meta.get_object("peer").unwrap();
@@ -88,12 +83,10 @@ config:
 
     // lets send an event and route it via metadata to socket 1
     let meta = literal!({
-        "connector": {
-            "tcp_server": {
-                "peer": {
-                    "host": peer_obj.get("host").unwrap().clone_static(),
-                    "port": peer_obj.get("port").unwrap().clone_static()
-                }
+        "tcp_server": {
+            "peer": {
+                "host": peer_obj.get("host").unwrap().clone_static(),
+                "port": peer_obj.get("port").unwrap().clone_static()
             }
         }
     });

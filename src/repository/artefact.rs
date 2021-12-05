@@ -23,10 +23,10 @@ use crate::{
 };
 use beef::Cow;
 use hashbrown::HashMap;
-use std::collections::HashSet;
 use std::time::Duration;
 use tremor_common::url::{self, ResourceType, TremorUrl};
 use tremor_pipeline::query;
+use tremor_script::ast::ConnectStmt;
 pub(crate) type Id = TremorUrl;
 pub(crate) use crate::Connector as ConnectorArtefact;
 use async_std::channel::bounded;
@@ -39,13 +39,13 @@ pub struct Binding {
     /// The binding itself
     pub binding: crate::Binding,
     /// The mappings
-    pub mapping: Option<crate::config::MappingMap>,
+    pub mapping: Option<()>,
 }
 
 impl Binding {
     /// Constructor
     #[must_use]
-    pub fn new(binding: crate::Binding, mapping: Option<crate::config::MappingMap>) -> Self {
+    pub fn new(binding: crate::Binding, mapping: Option<()>) -> Self {
         Self { binding, mapping }
     }
 }
@@ -331,10 +331,6 @@ impl Artefact for ConnectorArtefact {
     }
 }
 
-impl Binding {
-    const LINKING_ERROR: &'static str = "links require the form of onramp -> pipeline or pipeline -> offramp or pipeline -> pipeline or pipeline -> onramp or offramp -> pipeline";
-}
-
 #[async_trait]
 impl Artefact for Binding {
     type SpawnResult = binding::Addr;
@@ -356,53 +352,27 @@ impl Artefact for Binding {
         &self,
         system: &World,
         id: &TremorUrl,
-        mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
+        _mappings: HashMap<Self::LinkLHS, Self::LinkRHS>,
     ) -> Result<Self::LinkResult> {
         use ResourceType::{Connector, Pipeline};
         let mut pipelines: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // pipeline -> {onramp, offramp, pipeline, connector}
         let mut connectors: Vec<(TremorUrl, TremorUrl)> = Vec::new(); // connector -> pipeline
 
         let mut res = self.clone();
-        res.binding.links.clear();
-        for (src, dsts) in self.binding.links.clone() {
-            // TODO: It should be validated ahead of time that every mapping has an instance!
-            // * is a port
-            // *  is a combination of on and offramp
-            if let Some(inst) = src.instance() {
-                let mut instance = String::new();
-                for (map_name, map_replace) in &mappings {
-                    instance = inst.replace(&format!("%7B{}%7D", map_name), map_replace);
-                }
-                let mut from = src.clone();
-                from.set_instance(&instance);
-                let mut tos: Vec<TremorUrl> = Vec::new();
-                for dst in dsts {
-                    // TODO: we should be able to replace any part of the tremor url with mapping values, not just the instance
-                    // TODO: It should be validated ahead of time that every mapping has an instance!
-                    if let Some(inst) = dst.instance() {
-                        let mut instance = String::new();
-
-                        // This is because it is an URL and we have to use escape codes
-                        for (map_name, map_replace) in &mappings {
-                            instance = inst.replace(&format!("%7B{}%7D", map_name), map_replace);
-                        }
-                        let mut to = dst.clone();
-                        to.set_instance(&instance);
-                        tos.push(to.clone());
-                        match (from.resource_type(), to.resource_type()) {
-                            (Some(Pipeline), Some(Pipeline | Connector)) => {
-                                pipelines.push((from.clone(), to));
-                            }
-
-                            // handling connectors as source
-                            (Some(Connector), Some(Pipeline)) => {
-                                connectors.push((from.clone(), to));
-                            }
-                            (_, _) => return Err(Self::LINKING_ERROR.into()),
-                        };
-                    }
-                }
-                res.binding.links.insert(from, tos);
+        for link in &self.binding.links {
+            match link {
+                ConnectStmt::ConnectorToPipeline { from, to, .. } => connectors.push((
+                    from.to_connector_instance_and_port(),
+                    to.to_pipeline_instance_and_port(),
+                )),
+                ConnectStmt::PipelineToConnector { from, to, .. } => pipelines.push((
+                    from.to_pipeline_instance_and_port(),
+                    to.to_connector_instance_and_port(),
+                )),
+                ConnectStmt::PipelineToPipeline { from, to, .. } => pipelines.push((
+                    from.to_pipeline_instance_and_port(),
+                    to.to_pipeline_instance_and_port(),
+                )),
             }
         }
 
@@ -467,7 +437,7 @@ impl Artefact for Binding {
         }
         info!("[Binding::{}] Binding successfully linked.", id);
 
-        res.mapping = Some(vec![(id.clone(), mappings)].into_iter().collect());
+        res.mapping = None; // FIXME: we don't have mappings any more Some(vec![(id.clone(), mappings)].into_iter().collect());
         Ok(res)
     }
 
@@ -481,26 +451,41 @@ impl Artefact for Binding {
         info!("Unlinking Binding {}", self.binding.id);
 
         // keep track of already handled pipelines, so we don't unlink twice and run into errors
-        let mut unlinked = HashSet::with_capacity(self.binding.links.len());
-        for (from, tos) in &self.binding.links {
-            let mut from_instance = from.clone();
-            from_instance.trim_to_instance();
-
-            if let Some(ResourceType::Pipeline) = from.resource_type() {
-                if !unlinked.contains(&from_instance) {
-                    for to in tos {
-                        let mut mappings = HashMap::new();
-                        mappings.insert(from.instance_port_required()?.to_string(), to.clone());
-                        system.unlink_pipeline(from, mappings).await?;
-                        if to.resource_type() == Some(ResourceType::Connector) {
-                            let mut mappings = HashMap::new();
-                            mappings.insert(to.instance_port_required()?.to_string(), from.clone());
-                            system.unlink_connector(to, mappings).await?;
-                        }
-                    }
-                    unlinked.insert(from_instance);
+        for link in &self.binding.links {
+            match link {
+                ConnectStmt::ConnectorToPipeline { .. } => {
+                    // FIXME: the original code had nothing here?
+                    ()
                 }
-            }
+                ConnectStmt::PipelineToConnector { from, to, .. } => {
+                    let mut mappings = HashMap::new();
+                    mappings.insert(
+                        from.to_pipeline_instance_and_port().to_string(),
+                        to.to_connector_instance_and_port(),
+                    );
+                    system
+                        .unlink_pipeline(&from.to_pipeline_instance_and_port(), mappings)
+                        .await?;
+                    let mut mappings = HashMap::new();
+                    mappings.insert(
+                        to.to_connector_instance_and_port().to_string(),
+                        from.to_pipeline_instance_and_port(),
+                    );
+                    system
+                        .unlink_pipeline(&from.to_pipeline_instance_and_port(), mappings)
+                        .await?;
+                }
+                ConnectStmt::PipelineToPipeline { from, to, .. } => {
+                    let mut mappings = HashMap::new();
+                    mappings.insert(
+                        from.to_pipeline_instance_and_port().to_string(),
+                        to.to_pipeline_instance_and_port(),
+                    );
+                    system
+                        .unlink_pipeline(&from.to_pipeline_instance_and_port(), mappings)
+                        .await?;
+                }
+            };
         }
 
         info!("Binding {} unlinked.", self.binding.id);

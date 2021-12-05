@@ -15,26 +15,25 @@
 use crate::api::prelude::*;
 use hashbrown::HashMap;
 use tremor_common::url::TremorUrl;
-use tremor_runtime::repository::{BindingArtefact, RepoWrapper};
+// use tremor_runtime::repository::{BindingArtefact, RepoWrapper};
 
-#[derive(Serialize)]
-struct BindingWrap {
-    artefact: tremor_runtime::config::Binding,
-    instances: Vec<String>,
-}
+// struct BindingWrap {
+//     artefact: tremor_runtime::config::Binding,
+//     instances: Vec<String>,
+// }
 
-impl From<RepoWrapper<BindingArtefact>> for BindingWrap {
-    fn from(wrapper: RepoWrapper<BindingArtefact>) -> Self {
-        Self {
-            artefact: wrapper.artefact.binding,
-            instances: wrapper
-                .instances
-                .iter()
-                .filter_map(|url| url.instance().map(ToString::to_string))
-                .collect(),
-        }
-    }
-}
+// impl From<RepoWrapper<BindingArtefact>> for BindingWrap {
+//     fn from(wrapper: RepoWrapper<BindingArtefact>) -> Self {
+//         Self {
+//             artefact: wrapper.artefact.binding,
+//             instances: wrapper
+//                 .instances
+//                 .iter()
+//                 .filter_map(|url| url.instance().map(ToString::to_string))
+//                 .collect(),
+//         }
+//     }
+// }
 
 pub async fn list_artefact(req: Request) -> Result<Response> {
     let repo = &req.state().world.repo;
@@ -45,19 +44,12 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
         .iter()
         .filter_map(|v| v.artefact().map(String::from))
         .collect();
-    reply(req, result, false, StatusCode::Ok).await
+    reply(req, result, StatusCode::Ok).await
 }
 
-pub async fn publish_artefact(req: Request) -> Result<Response> {
-    let (req, binding): (_, tremor_runtime::config::Binding) = decode(req).await?;
-    let url = TremorUrl::from_binding_id(&binding.id)?;
-
-    let repo = &req.state().world.repo;
-    let result = repo
-        .publish_binding(&url, false, BindingArtefact::new(binding, None))
-        .await?;
-
-    reply(req, result.binding, true, StatusCode::Created).await
+pub async fn publish_artefact(_req: Request) -> Result<Response> {
+    // FIXME: remove api for piepleins
+    unimplemented!()
 }
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
@@ -65,8 +57,8 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let url = TremorUrl::from_binding_id(id)?;
     let repo = &req.state().world.repo;
     // TODO: unbind all instances first
-    let result = repo.unpublish_binding(&url).await?;
-    reply(req, result.binding, true, StatusCode::Ok).await
+    repo.unpublish_binding(&url).await?;
+    reply(req, (), StatusCode::Ok).await
 }
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
@@ -74,27 +66,25 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
     let url = TremorUrl::from_binding_id(id)?;
 
     let repo = &req.state().world.repo;
-    let result = repo
-        .find_binding(&url)
+    repo.find_binding(&url)
         .await?
         .ok_or_else(Error::artefact_not_found)?;
 
-    let result = BindingWrap::from(result);
-    reply(req, result, false, StatusCode::Ok).await
+    reply(req, (), StatusCode::Ok).await
 }
 
 pub async fn get_instance(req: Request) -> Result<Response> {
     let a_id = req.param("aid").unwrap_or_default();
     let s_id = req.param("sid").unwrap_or_default();
-    let url = TremorUrl::from_binding_instance(a_id, s_id)?;
+    let url = TremorUrl::from_binding_instance(a_id, s_id);
 
     let registry = &req.state().world.reg;
-    let (_addr, artefact) = registry
+    let (_addr, _artefact) = registry
         .find_binding(&url)
         .await?
         .ok_or_else(Error::instance_not_found)?;
 
-    reply(req, artefact.binding, false, StatusCode::Ok).await
+    reply(req, (), StatusCode::Ok).await
 }
 
 pub async fn spawn_instance(req: Request) -> Result<Response> {
@@ -102,23 +92,22 @@ pub async fn spawn_instance(req: Request) -> Result<Response> {
 
     let a_id = req.param("aid").unwrap_or_default();
     let s_id = req.param("sid").unwrap_or_default();
-    let url = TremorUrl::from_binding_instance(a_id, s_id)?;
+    let url = TremorUrl::from_binding_instance(a_id, s_id);
     let world = &req.state().world;
 
     // link and start binding
-    let result = world.launch_binding(&url, decoded_data).await?;
+    let _result = world.launch_binding(&url, decoded_data).await?;
     world.reg.start_binding(&url).await?;
-
-    reply(req, result.binding, true, StatusCode::Created).await
+    reply(req, (), StatusCode::Created).await
 }
 
 pub async fn shutdown_instance(req: Request) -> Result<Response> {
     let a_id = req.param("aid").unwrap_or_default();
     let s_id = req.param("sid").unwrap_or_default();
-    let url = TremorUrl::from_binding_instance(a_id, s_id)?;
+    let url = TremorUrl::from_binding_instance(a_id, s_id);
 
     let world = &req.state().world;
-    let result = world.unlink_binding(&url, HashMap::new()).await?;
+    let _result = world.unlink_binding(&url, HashMap::new()).await?;
 
-    reply(req, result.binding, true, StatusCode::NoContent).await
+    reply(req, (), StatusCode::NoContent).await
 }

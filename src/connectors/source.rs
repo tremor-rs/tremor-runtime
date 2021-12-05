@@ -16,16 +16,15 @@
 
 use async_std::task;
 use async_std::{channel::unbounded, future::timeout};
-use either::Either;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::Display;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tremor_common::time::nanotime;
 use tremor_script::{EventPayload, ValueAndMeta};
 
 use crate::config::{
-    Codec as CodecConfig, Connector as ConnectorConfig, Preprocessor as PreprocessorConfig,
+    self, Codec as CodecConfig, Connector as ConnectorConfig, Preprocessor as PreprocessorConfig,
 };
 use crate::connectors::{
     metrics::SourceReporter, ConnectorContext, ConnectorType, Context, Msg, QuiescenceBeacon,
@@ -52,6 +51,8 @@ use value_trait::Builder;
 
 /// The default poll interval for `try_recv` on channels in connectors
 pub const DEFAULT_POLL_INTERVAL: u64 = 10;
+/// A duration for the default poll interval
+pub const DEFAULT_POLL_DURATION: Duration = Duration::from_millis(10);
 
 #[derive(Debug)]
 /// Messages a Source can receive
@@ -104,21 +105,27 @@ pub enum SourceReply {
         /// Port to send to, defaults to `out`
         port: Option<Cow<'static, str>>,
     },
-    // an already structured event payload
+    /// an already structured event payload
     Structured {
+        /// origin uri
         origin_uri: EventOriginUri,
+        /// payload
         payload: EventPayload,
+        /// stream id
         stream: u64,
         /// Port to send to, defaults to `out`
         port: Option<Cow<'static, str>>,
     },
-    // a bunch of separated `Vec<u8>` with optional metadata
-    // for when the source knows where boundaries are, maybe because it receives chunks already
+    /// a bunch of separated `Vec<u8>` with optional metadata
+    /// for when the source knows where boundaries are, maybe because it receives chunks already
     BatchData {
+        /// origin uri
         origin_uri: EventOriginUri,
+        /// batched raw data with optional metadata
         batch_data: Vec<(Vec<u8>, Option<Value<'static>>)>,
         /// Port to send to, defaults to `out`
         port: Option<Cow<'static, str>>,
+        /// stream id
         stream: u64,
     },
     /// A stream is opened
@@ -127,15 +134,18 @@ pub enum SourceReply {
     /// This might result in additional events being flushed from
     /// preprocessors, that is why we have `origin_uri` and `meta`
     EndStream {
+        /// origin uri
         origin_uri: EventOriginUri,
+        /// stream id
         stream_id: u64,
+        /// optional metadata
         meta: Option<Value<'static>>,
     },
     /// no new data/event, wait for the given ms
     Empty(u64),
 }
 
-// sender for source reply
+/// sender for source reply
 pub type SourceReplySender = Sender<SourceReply>;
 
 /// source part of a connector
@@ -259,6 +269,8 @@ impl ChannelSource {
 pub trait StreamReader: Send {
     /// reads from the source reader
     async fn read(&mut self, stream: u64) -> Result<SourceReply>;
+
+    /// called when the reader is finished or encountered an error
     async fn on_done(&mut self, _stream: u64) -> StreamDone {
         StreamDone::StreamClosed
     }
@@ -377,6 +389,7 @@ impl SourceAddr {
     }
 }
 
+/// Builder for the SourceManager
 #[allow(clippy::module_name_repetitions)]
 pub struct SourceManagerBuilder {
     qsize: usize,
@@ -385,10 +398,12 @@ pub struct SourceManagerBuilder {
 }
 
 impl SourceManagerBuilder {
+    /// queue size configured by the tremor runtime
     pub fn qsize(&self) -> usize {
         self.qsize
     }
 
+    /// spawn a Manager with the given source implementation
     pub fn spawn<S>(self, source: S, ctx: SourceContext) -> Result<SourceAddr>
     where
         S: Source + Send + 'static,
@@ -435,15 +450,11 @@ pub fn builder(
     qsize: usize,
     source_metrics_reporter: SourceReporter,
 ) -> Result<SourceManagerBuilder> {
-    let preprocessor_configs: Vec<PreprocessorConfig> = config
-        .preprocessors
-        .as_ref()
-        .map(|ps| ps.iter().map(|p| p.into()).collect())
-        .unwrap_or_else(Vec::new);
+    let preprocessor_configs = config.preprocessors.clone().unwrap_or_default();
     let codec_config = config
         .codec
         .clone()
-        .unwrap_or_else(|| Either::Left(connector_default_codec.to_string()));
+        .unwrap_or_else(|| CodecConfig::from(connector_default_codec));
     let streams = Streams::new(connector_uid, codec_config, preprocessor_configs)?;
 
     Ok(SourceManagerBuilder {
@@ -457,15 +468,16 @@ pub fn builder(
 // TODO: there is optimization potential here for reusing codec and preprocessors after a stream got ended
 struct Streams {
     uid: u64,
-    codec_config: Either<String, CodecConfig>,
+    codec_config: CodecConfig,
     preprocessor_configs: Vec<PreprocessorConfig>,
     states: BTreeMap<u64, StreamState>,
 }
 
 impl Streams {
+    /// constructor
     fn new(
         uid: u64,
-        codec_config: Either<String, CodecConfig>,
+        codec_config: config::Codec,
         preprocessor_configs: Vec<PreprocessorConfig>,
     ) -> Result<Self> {
         let default = Self::build_stream(
@@ -499,10 +511,12 @@ impl Streams {
         Ok(())
     }
 
+    /// end a stream
     fn end_stream(&mut self, stream_id: u64) -> Option<StreamState> {
         self.states.remove(&stream_id)
     }
 
+    /// get or create a stream
     fn get_or_create_stream(&mut self, stream_id: u64) -> Result<&mut StreamState> {
         Ok(match self.states.entry(stream_id) {
             Entry::Occupied(e) => e.into_mut(),
@@ -518,10 +532,11 @@ impl Streams {
         })
     }
 
+    /// build a stream
     fn build_stream(
         connector_uid: u64,
         stream_id: u64,
-        codec_config: &Either<String, CodecConfig>,
+        codec_config: &CodecConfig,
         preprocessor_configs: &[PreprocessorConfig],
     ) -> Result<StreamState> {
         let codec = codec::resolve(codec_config)?;
@@ -536,6 +551,7 @@ impl Streams {
     }
 }
 
+/// everything that is scoped to a single stream
 struct StreamState {
     stream_id: u64,
     idgen: EventIdGenerator,
@@ -543,6 +559,7 @@ struct StreamState {
     preprocessors: Preprocessors,
 }
 
+/// possible states of a source implementation
 #[derive(Debug, PartialEq)]
 enum SourceState {
     Initialized,
@@ -554,6 +571,7 @@ enum SourceState {
 }
 
 impl SourceState {
+    /// returns true if the runtime should pull the source for new data in this state
     fn should_pull_data(&self) -> bool {
         *self == SourceState::Running || *self == SourceState::Draining
     }
@@ -577,12 +595,16 @@ where
     // this way we can explicitly resume a Cb triggered source if need be
     // but also an explicitly paused source might receive a Cb open and continue sending data :scream:
     state: SourceState,
+    pull_wait_start: Option<Instant>,
+    pull_wait: Duration,
     is_transactional: bool,
     connector_channel: Option<Sender<Msg>>,
     expected_drained: usize,
     pull_counter: u64,
+    cb_open_received: bool,
 }
 
+/// control flow enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Control {
     Continue,
@@ -593,6 +615,7 @@ impl<S> SourceManager<S>
 where
     S: Source,
 {
+    /// constructor
     fn new(
         source: S,
         ctx: SourceContext,
@@ -617,10 +640,13 @@ where
             pipelines_out: Vec::with_capacity(1),
             pipelines_err: Vec::with_capacity(1),
             state: SourceState::Initialized,
+            pull_wait_start: None,
+            pull_wait: DEFAULT_POLL_DURATION,
             is_transactional,
             connector_channel: None,
             expected_drained: 0,
             pull_counter: 0,
+            cb_open_received: false,
         }
     }
 
@@ -635,6 +661,7 @@ where
             || self.pipelines_out.is_empty()
     }
 
+    /// Handle a control plane message
     async fn handle_control_plane_msg(&mut self, msg: SourceMsg) -> Result<Control> {
         use SourceState::{Drained, Draining, Initialized, Paused, Running, Stopped};
 
@@ -814,7 +841,9 @@ where
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Open, _id) => {
+                // FIXME: only start polling for data if we received at least 1 CbAction::Open
                 info!("[Source::{}] Circuit Breaker: Open.", self.ctx.url);
+                self.cb_open_received = true;
                 self.ctx
                     .log_err(self.source.on_cb_open(&self.ctx).await, "on_cb_open failed");
                 // avoid a race condition where the necessary start routine wasnt executed
@@ -951,6 +980,25 @@ where
         send_error
     }
 
+    /// should this manager pull data from its source?
+    fn should_pull_data(&mut self) -> bool {
+        let needs_to_wait = if let Some(pull_wait_start) = self.pull_wait_start {
+            if pull_wait_start.elapsed() > self.pull_wait {
+                self.pull_wait_start = None;
+                false
+            } else {
+                true
+            }
+        } else {
+            false
+        };
+        !needs_to_wait
+            && self.state.should_pull_data()
+            && !self.pipelines_out.is_empty()
+            && self.cb_open_received
+    }
+
+    /// handle data from the source
     async fn handle_data(&mut self, data: Result<SourceReply>) -> Result<()> {
         let data = match data {
             Ok(d) => d,
@@ -1139,8 +1187,9 @@ where
                         self.ctx.url, self.expected_drained
                     );
                 } else {
-                    // wait for the given ms
-                    task::sleep(Duration::from_millis(wait_ms)).await;
+                    // set the timer for the given ms
+                    self.pull_wait_start = Some(Instant::now());
+                    self.pull_wait = Duration::from_millis(wait_ms);
                 }
             }
         }
@@ -1178,14 +1227,15 @@ where
                 return Ok(());
             }
 
-            if self.state.should_pull_data() && !self.pipelines_out.is_empty() {
+            if self.should_pull_data() {
                 let data = self.source.pull_data(self.pull_counter, &self.ctx).await;
                 self.pull_counter += 1;
-                // if self.pull_counter % 10_000 == 0 {
-                //     dbg!(self.pull_counter);
-                // }
                 self.handle_data(data).await?;
             };
+            if self.pull_wait_start.is_some() {
+                // sleep for a quick 10ms in order to stay responsive
+                task::sleep(DEFAULT_POLL_DURATION.min(self.pull_wait)).await;
+            }
         }
     }
 }
@@ -1318,6 +1368,7 @@ fn build_last_events(
     }
 }
 
+/// create an error payload
 fn make_error(
     connector_url: &TremorUrl,
     error: &Error,
@@ -1335,6 +1386,7 @@ fn make_error(
     EventPayload::from(ValueAndMeta::from_parts(data, meta))
 }
 
+/// create an event
 fn build_event(
     stream_state: &mut StreamState,
     pull_id: u64,

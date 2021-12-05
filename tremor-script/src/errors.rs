@@ -218,7 +218,7 @@ impl ErrorKind {
             | InvalidConst(outer, inner)
             | InvalidMod(outer, inner)
             | InvalidFn(outer, inner)
-            | AssignToConst(outer, inner, _)
+            | AssignToConst(outer, inner)
             | DoubleConst(outer, inner, _)
             | DoubleStream(outer, inner, _)
             | DoublePipelineStmt(outer, inner, _)
@@ -255,7 +255,7 @@ impl ErrorKind {
             | Generic(outer, inner, _)
             | AggrInAggr(outer, inner)
             | NotConstant(outer, inner)
-            | DeployArtefactNotDefined(outer, inner, _)
+            | DeployArtefactNotDefined(outer, inner, _, _)
             | DeployArgNotSpecified(outer, inner, _)
             | DeployRequiredArgDoesNotResolve(outer, inner, _) => (Some(*outer), Some(*inner)),
             // Special cases
@@ -717,9 +717,9 @@ error_chain! {
             description("Can't create a query twice")
                 display("Can't create the pipeline `{}` twice", name)
         }
-        AssignToConst(expr: Range, inner: Range, name: String) {
-            description("Can't assign to a constant")
-                display("Can't assign to the `{}` constant", name)
+        AssignToConst(expr: Range, inner: Range) {
+            description("Can't assign to a constant expression")
+                display("Can't assign to a constant expression")
         }
         /*
          * Emit & Drop
@@ -839,9 +839,9 @@ error_chain! {
         /*
          * Troy statements
          */
-        DeployArtefactNotDefined(stmt: Range, inner: Range, name: String) {
+        DeployArtefactNotDefined(stmt: Range, inner: Range, name: String, options: Vec<String>) {
             description("Deployment artefact is not defined")
-                display("Artefact used in `from` is not defined or not found: {}", name)
+                display("Artefact `{}` is not defined or not found, the following are defined: {}", name, options.join(", "))
         }
         DeployArgNotSpecified(stmt: Range, inner: Range, name: String) {
             description("Deployment artefact has unknown argument")
@@ -943,7 +943,7 @@ pub fn query_guard_not_bool_err<O: BaseExpr, I: BaseExpr>(
     got: &Value,
     meta: &NodeMetas,
 ) -> Error {
-    error_type_conflict_mult_err(stmt, inner, got.value_type(), vec![ValueType::Bool], meta)
+    err_type_conflict_mult(stmt, inner, got.value_type(), vec![ValueType::Bool], meta)
 }
 
 /// A bad thing happened for which no specialized hygienic error handling strategy is defined
@@ -975,12 +975,10 @@ pub(crate) fn error_type_conflict_mult<T, O: BaseExpr, I: BaseExpr>(
     expected: Vec<ValueType>,
     meta: &NodeMetas,
 ) -> Result<T> {
-    Err(error_type_conflict_mult_err(
-        outer, inner, got, expected, meta,
-    ))
+    Err(err_type_conflict_mult(outer, inner, got, expected, meta))
 }
 
-pub(crate) fn error_type_conflict_mult_err<O: BaseExpr, I: BaseExpr>(
+pub(crate) fn err_type_conflict_mult<O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
     got: ValueType,
@@ -1029,7 +1027,7 @@ pub(crate) fn err_need_obj<O: BaseExpr, I: BaseExpr>(
     got: ValueType,
     meta: &NodeMetas,
 ) -> Error {
-    error_type_conflict_mult_err(outer, inner, got, vec![ValueType::Object], meta)
+    err_type_conflict_mult(outer, inner, got, vec![ValueType::Object], meta)
 }
 
 pub(crate) fn error_need_arr<T, O: BaseExpr, I: BaseExpr>(
@@ -1056,7 +1054,16 @@ pub(crate) fn error_need_int<T, O: BaseExpr, I: BaseExpr>(
     got: ValueType,
     meta: &NodeMetas,
 ) -> Result<T> {
-    error_type_conflict_mult(outer, inner, got, vec![ValueType::I64], meta)
+    Err(err_need_int(outer, inner, got, meta))
+}
+
+pub(crate) fn err_need_int<O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    got: ValueType,
+    meta: &NodeMetas,
+) -> Error {
+    err_type_conflict_mult(outer, inner, got, vec![ValueType::I64], meta)
 }
 
 pub(crate) fn error_type_conflict<T, O: BaseExpr, I: BaseExpr>(
@@ -1085,10 +1092,17 @@ pub(crate) fn error_invalid_unary<T, O: BaseExpr, I: BaseExpr>(
     val: &Value,
     meta: &NodeMetas,
 ) -> Result<T> {
-    Err(
-        ErrorKind::InvalidUnary(outer.extent(meta), inner.extent(meta), op, val.value_type())
-            .into(),
-    )
+    Err(err_invalid_unary(outer, inner, op, val, meta))
+}
+
+pub(crate) fn err_invalid_unary<O: BaseExpr, I: BaseExpr>(
+    outer: &O,
+    inner: &I,
+    op: ast::UnaryOpKind,
+    val: &Value,
+    meta: &NodeMetas,
+) -> Error {
+    ErrorKind::InvalidUnary(outer.extent(meta), inner.extent(meta), op, val.value_type()).into()
 }
 
 pub(crate) fn error_invalid_binary<T, O: BaseExpr, I: BaseExpr>(
@@ -1195,14 +1209,10 @@ pub(crate) fn error_invalid_assign_target<T, O: BaseExpr>(
 
     Err(ErrorKind::InvalidAssign(inner.expand_lines(2), inner).into())
 }
-pub(crate) fn error_assign_to_const<T, O: BaseExpr>(
-    outer: &O,
-    name: String,
-    meta: &NodeMetas,
-) -> Result<T> {
+pub(crate) fn error_assign_to_const<T, O: BaseExpr>(outer: &O, meta: &NodeMetas) -> Result<T> {
     let inner: Range = outer.extent(meta);
 
-    Err(ErrorKind::AssignToConst(inner.expand_lines(2), inner, name).into())
+    Err(ErrorKind::AssignToConst(inner.expand_lines(2), inner).into())
 }
 pub(crate) fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr>(
     outer: &O,

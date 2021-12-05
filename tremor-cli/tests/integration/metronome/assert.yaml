@@ -1,0 +1,6 @@
+status: 0
+name: metronome
+asserts:
+  - source: out.log
+    contains:
+      - "\"triggered\""

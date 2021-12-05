@@ -139,7 +139,6 @@ impl Connector for UdpClient {
     ) -> Result<Option<SinkAddr>> {
         let sink =
             ChannelSink::new_no_meta(builder.qsize(), resolve_connection_meta, builder.reply_tx());
-        // FIXME: rename sender
         self.sink_runtime = Some(sink.runtime());
         let addr = builder.spawn(sink, ctx)?;
         Ok(Some(addr))

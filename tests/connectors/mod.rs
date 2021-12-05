@@ -16,26 +16,30 @@
 // which it shouldn't
 #![allow(dead_code)]
 
-use async_std::channel::bounded;
-use async_std::channel::Receiver;
-use async_std::task::JoinHandle;
+use async_std::{
+    channel::{bounded, Receiver},
+    prelude::FutureExt,
+    task::JoinHandle,
+};
 use beef::Cow;
 use halfbrown::HashMap;
-use std::sync::atomic::Ordering;
-use std::time::Duration;
-use tremor_runtime::connectors;
-use tremor_runtime::connectors::sink::SinkMsg;
-use tremor_runtime::connectors::{Connectivity, StatusReport};
-use tremor_runtime::errors::Result;
-use tremor_runtime::pipeline;
-use tremor_runtime::registry::instance::InstanceState;
-use tremor_runtime::system::ShutdownMode;
-use tremor_runtime::system::World;
-use tremor_runtime::url::ports::{ERR, IN, OUT};
-use tremor_runtime::url::TremorUrl;
-use tremor_runtime::Event;
-use tremor_runtime::QSIZE;
-use tremor_runtime::{config, system::WorldConfig};
+use log::{debug, info};
+use std::{sync::atomic::Ordering, time::Duration};
+use tremor_common::url::{
+    ports::{ERR, IN, OUT},
+    TremorUrl,
+};
+use tremor_pipeline::{CbAction, EventId};
+use tremor_runtime::{
+    config,
+    connectors::{self, sink::SinkMsg, Connectivity, StatusReport},
+    errors::Result,
+    pipeline::{self, CfMsg},
+    registry::instance::InstanceState,
+    system::{ShutdownMode, World, WorldConfig},
+    Event, QSIZE,
+};
+use tremor_script::Value;
 
 pub(crate) struct ConnectorHarness {
     connector_id: TremorUrl,
@@ -47,13 +51,16 @@ pub(crate) struct ConnectorHarness {
 }
 
 impl ConnectorHarness {
-    pub(crate) async fn new_with_ports(
-        config: String,
+    pub(crate) async fn new_with_ports<T: ToString>(
+        connector_type: T,
+        defn: Value<'static>,
         ports: Vec<Cow<'static, str>>,
     ) -> Result<Self> {
+        let connector_type = connector_type.to_string();
         let (world, handle) = World::start(WorldConfig::default()).await?;
-        let raw_config = serde_yaml::from_slice::<config::Connector>(config.as_bytes())?;
-        let id = TremorUrl::from_connector_instance(raw_config.id.as_str(), "test")?;
+        let raw_config =
+            config::Connector::from_defn(connector_type.clone(), connector_type.into(), defn)?;
+        let id = TremorUrl::from_connector_instance(raw_config.id.as_str(), "test");
         let _connector_config = world.repo.publish_connector(&id, false, raw_config).await?;
         let connector_addr = world.create_connector_instance(&id).await?;
         let mut pipes = HashMap::new();
@@ -64,7 +71,7 @@ impl ConnectorHarness {
             let pipeline_id = TremorUrl::from_pipeline_instance(
                 format!("TEST__{}_pipeline", port).as_str(),
                 "01",
-            )?
+            )
             .with_port(&IN);
             let pipeline = TestPipeline::new(pipeline_id.clone());
             connector_addr
@@ -94,13 +101,28 @@ impl ConnectorHarness {
             pipes,
         })
     }
-    pub(crate) async fn new(config: String) -> Result<Self> {
-        Self::new_with_ports(config, vec![IN, OUT, ERR]).await
+    pub(crate) async fn new<T: ToString>(connector_type: T, defn: Value<'static>) -> Result<Self> {
+        Self::new_with_ports(connector_type, defn, vec![IN, OUT, ERR]).await
     }
 
     pub(crate) async fn start(&self) -> Result<()> {
         // start the connector
-        self.world.reg.start_connector(&self.connector_id).await
+        let (tx, rx) = bounded(1);
+        self.world
+            .reg
+            .start_connector(&self.connector_id, tx)
+            .await?;
+        let cr = rx.recv().await?;
+        cr.res?;
+
+        // send a CBAction::open to the connector, so it starts pulling data
+        self.addr
+            .send_source(connectors::source::SourceMsg::Cb(
+                CbAction::Open,
+                EventId::default(),
+            ))
+            .await?;
+        Ok(())
     }
 
     pub(crate) async fn pause(&self) -> Result<()> {
@@ -186,6 +208,12 @@ impl ConnectorHarness {
     {
         self.pipes.get(&port.into())
     }
+
+    /// get the out pipeline - if any
+    pub(crate) fn in_port(&self) -> Option<&TestPipeline> {
+        self.get_pipe(IN)
+    }
+
     /// get the out pipeline - if any
     pub(crate) fn out(&self) -> Option<&TestPipeline> {
         self.get_pipe(OUT)
@@ -223,6 +251,20 @@ impl TestPipeline {
         }
     }
 
+    pub(crate) fn get_contraflow_events(&self) -> Result<Vec<Event>> {
+        let mut events = Vec::with_capacity(self.rx.len());
+        while let Ok(CfMsg::Insight(event)) = self.rx_cf.try_recv() {
+            events.push(event);
+        }
+        Ok(events)
+    }
+
+    pub(crate) async fn get_contraflow(&self) -> Result<Event> {
+        match self.rx_cf.recv().await? {
+            CfMsg::Insight(event) => Ok(event),
+        }
+    }
+
     // get all currently available events from the pipeline
     pub(crate) fn get_events(&self) -> Result<Vec<Event>> {
         let mut events = Vec::with_capacity(self.rx.len());
@@ -242,7 +284,7 @@ impl TestPipeline {
     /// get a single event from the pipeline
     pub(crate) async fn get_event(&self) -> Result<Event> {
         loop {
-            match *self.rx.recv().await? {
+            match *self.rx.recv().timeout(Duration::from_secs(2)).await?? {
                 pipeline::Msg::Event { event, .. } => break Ok(event),
                 // filter out signals
                 pipeline::Msg::Signal(signal) => {

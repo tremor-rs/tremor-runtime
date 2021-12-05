@@ -144,11 +144,8 @@ mod tests {
     {
         let pat: String = pattern.to_string();
         let raw: String = raw.to_string();
-        dbg!(pat.clone());
-        dbg!(raw.clone());
         let codec = Pattern::new(&pat).expect("bad pattern");
         let decoded = codec.matches(raw.as_bytes());
-        dbg!(&decoded);
         decoded
             .map(|j| {
                 assert_eq!(j, json);

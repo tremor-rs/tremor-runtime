@@ -43,7 +43,7 @@ pub mod stats;
 pub mod tag;
 mod unit;
 
-fn suite_bench(
+async fn suite_bench(
     root: &Path,
     config: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
@@ -60,7 +60,7 @@ fn suite_bench(
         status::h0("Framework", "Finding benchmark test scenarios")?;
 
         for bench in benches {
-            let (s, t) = run_bench(bench.path(), config, stats)?;
+            let (s, t) = run_bench(bench.path(), config, stats).await?;
 
             stats = s;
             if let Some(report) = t {
@@ -74,7 +74,7 @@ fn suite_bench(
     }
 }
 
-fn run_bench(
+async fn run_bench(
     root: &Path,
     config: &TestConfig,
     mut stats: stats::Stats,
@@ -93,7 +93,8 @@ fn run_bench(
             config.base_directory.as_path(),
             &cwd.join(root),
             &tags,
-        )?;
+        )
+        .await?;
 
         // Restore cwd
         file::set_current_dir(&cwd)?;
@@ -116,7 +117,7 @@ fn run_bench(
     }
 }
 
-fn suite_integration(
+async fn suite_integration(
     root: &Path,
     config: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
@@ -133,11 +134,15 @@ fn suite_integration(
         status::h0("Framework", "Finding integration test scenarios")?;
 
         for test in tests {
-            let (s, t) = run_integration(test.path(), config, stats)?;
+            let mut tags = PathBuf::from(test.path());
+            tags.push("tags.yaml");
+            if tags.exists() {
+                let (s, t) = run_integration(test.path(), config, stats).await?;
 
-            stats = s;
-            if let Some(report) = t {
-                suite.push(report);
+                stats = s;
+                if let Some(report) = t {
+                    suite.push(report);
+                }
             }
         }
 
@@ -149,7 +154,7 @@ fn suite_integration(
     }
 }
 
-fn run_integration(
+async fn run_integration(
     root: &Path,
     config: &TestConfig,
     mut stats: stats::Stats,
@@ -170,7 +175,7 @@ fn run_integration(
         status::tags(&tags, Some(&matched), Some(&config.excludes))?;
 
         // Run integration tests
-        let test_report = process::run_process("integration", base, root, &tags)?;
+        let test_report = process::run_process("integration", base, root, &tags).await?;
 
         // Restore cwd
         file::set_current_dir(&cwd)?;
@@ -242,7 +247,7 @@ impl TestConfig {
 }
 
 #[allow(clippy::too_many_lines)]
-pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
+pub(crate) async fn run_cmd(matches: &ArgMatches) -> Result<()> {
     env_logger::init();
 
     let kind: test::Kind = matches.value_of("MODE").unwrap_or_default().try_into()?;
@@ -298,14 +303,12 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
         // No meta.json was found, therefore we might have the path to a
         // specific folder. Let's apply some heuristics to see if we have
         // something runnable.
-        let files = GlobWalkerBuilder::from_patterns(
-            &config.base_directory,
-            &["*.{yaml,tremor,trickle}", "!assert.yaml", "!logger.yaml"],
-        )
-        .case_insensitive(true)
-        .max_depth(1)
-        .build()?
-        .filter_map(std::result::Result::ok);
+        let files =
+            GlobWalkerBuilder::from_patterns(&config.base_directory, &["*.{troy,tremor,trickle}"])
+                .case_insensitive(true)
+                .max_depth(1)
+                .build()?
+                .filter_map(std::result::Result::ok);
 
         if files.count() >= 1 {
             let stats = stats::Stats::new();
@@ -314,7 +317,7 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
             config.meta.kind = kind;
             let test_report = match config.meta.kind {
                 Kind::Bench => {
-                    let (s, t) = run_bench(PathBuf::from(path).as_path(), &config, stats)?;
+                    let (s, t) = run_bench(PathBuf::from(path).as_path(), &config, stats).await?;
                     match t {
                         Some(x) => {
                             bench_stats.merge(&s);
@@ -328,7 +331,8 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
                     }
                 }
                 Kind::Integration => {
-                    let (s, t) = run_integration(PathBuf::from(path).as_path(), &config, stats)?;
+                    let (s, t) =
+                        run_integration(PathBuf::from(path).as_path(), &config, stats).await?;
                     match t {
                         Some(x) => {
                             integration_stats.merge(&s);
@@ -344,7 +348,8 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
                 // Command tests are their own beast, one singular folder might
                 // well result in many tests run
                 Kind::Command => {
-                    let (s, t) = command::suite_command(PathBuf::from(path).as_path(), &config)?;
+                    let (s, t) =
+                        command::suite_command(PathBuf::from(path).as_path(), &config).await?;
                     cmd_stats.merge(&s);
                     t
                 }
@@ -385,17 +390,17 @@ pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
 
                 let test_reports = match config.meta.kind {
                     Kind::Bench => {
-                        let (s, t) = suite_bench(root, &config)?;
+                        let (s, t) = suite_bench(root, &config).await?;
                         bench_stats.merge(&s);
                         t
                     }
                     Kind::Integration => {
-                        let (s, t) = suite_integration(root, &config)?;
+                        let (s, t) = suite_integration(root, &config).await?;
                         integration_stats.merge(&s);
                         t
                     }
                     Kind::Command => {
-                        let (s, t) = suite_command(root, &config)?;
+                        let (s, t) = suite_command(root, &config).await?;
                         cmd_stats.merge(&s);
                         t
                     }

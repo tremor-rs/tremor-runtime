@@ -69,7 +69,7 @@ impl Select {
             .collect();
         let select = srs::Select::try_new_from_stmt(stmt)?;
         let event_id_gen = EventIdGenerator::new(operator_uid);
-        if let ast::Stmt::Select(SelectStmt { aggregates, .. }) = stmt.suffix() {
+        if let ast::Stmt::SelectStmt(SelectStmt { aggregates, .. }) = stmt.suffix() {
             let windows_itr = windows.iter();
             let dflt_group = Group {
                 value: Value::const_null(),
@@ -127,6 +127,7 @@ pub(crate) fn execute_select_and_having(
         ctx.opts,
         env,
         &result,
+        event_meta,
         ctx.local_stack,
         ctx.node_meta,
     ));
@@ -239,7 +240,7 @@ impl Operator for Select {
 
                 let guard = &select.maybe_where;
                 let e = env(&ctx, consts.run(), node_meta, *recursion_limit);
-                let w_guard = run_guard(select, guard, opts, &e, data, &locals, node_meta);
+                let w_guard = run_guard(select, guard, opts, &e, data, meta, &locals, node_meta);
                 if !stry!(w_guard) {
                     return Ok(Res::None);
                 };
@@ -258,7 +259,7 @@ impl Operator for Select {
                     let e = env(&ctx, consts.run(), node_meta, *recursion_limit);
                     let value = stry!(select.target.run(opts, &e, data, &NULL, meta, &locals));
                     let h_guard = &select.maybe_having;
-                    let h_guard = run_guard(select, h_guard, opts, &e, &value, &locals, node_meta);
+                    let h_guard = run_guard(select, h_guard, opts, &e, &value, meta, &locals, node_meta);
                     return if stry!(h_guard) {
                         *data = value.into_owned();
                         Ok(Res::Event)
@@ -460,12 +461,13 @@ fn run_guard(
     guard: &Option<ImutExpr>,
     opts: ExecOpts,
     env: &Env,
-    result: &Value,
+    data: &Value,
+    meta: &Value,
     local_stack: &LocalStack,
     node_meta: &NodeMetas,
 ) -> TSResult<bool> {
     if let Some(guard) = guard {
-        let test = stry!(guard.run(opts, env, result, &NULL, &NULL, local_stack));
+        let test = stry!(guard.run(opts, env, data, &NULL, meta, local_stack));
         test.as_bool().ok_or_else(|| {
             tremor_script::errors::query_guard_not_bool_err(select, guard, &test, node_meta)
         })

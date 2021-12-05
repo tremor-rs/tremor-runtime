@@ -15,7 +15,10 @@
 mod cmp;
 /// Conversions from other types to the value type
 pub mod from;
+
 mod serialize;
+/// a static value newtype workaround for rust quirks
+pub mod r#static;
 
 use crate::{Error, Result};
 use beef::Cow;
@@ -30,6 +33,7 @@ use std::{
 };
 
 pub use crate::serde::to_value;
+pub use r#static::StaticValue;
 
 /// Representation of a JSON object
 pub type Object<'value> = HashMap<Cow<'value, str>, Value<'value>>;
@@ -1379,11 +1383,8 @@ mod test {
             } else if v1 < v2 {
                prop_assert!(v2 > v1);
             } else if v1 == v2 {
-                dbg!(v1 == v2, v2 == v1);
                 prop_assert!(v2 == v1);
             } else {
-                dbg!(v1 == v2, v2 == v1);
-                dbg!(v1.cmp(&v2), v2.cmp(&v1));
                 prop_assert!(false)
             };
         }

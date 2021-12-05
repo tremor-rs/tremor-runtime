@@ -26,7 +26,7 @@ use async_std::{
 };
 use tremor_common::time::nanotime;
 
-use super::channel_sink::{NoMeta, SinkMeta, SinkMetaBehaviour};
+use super::channel_sink::{NoMeta, SinkMeta, SinkMetaBehaviour, WithMeta};
 use super::{AsyncSinkReply, ContraflowData, EventSerializer, Sink, SinkContext, StreamWriter};
 
 /// simple Sink implementation that is handling only a single stream
@@ -41,23 +41,18 @@ where
 }
 
 impl SingleStreamSink<NoMeta> {
-    /// constructs a sink that needs no metadata
+    /// Constructs a new single stream sink with metadata support redacted
     pub fn new_no_meta(qsize: usize, reply_tx: Sender<AsyncSinkReply>) -> Self {
         SingleStreamSink::new(qsize, reply_tx)
     }
 }
 
-// impl SingleStreamSink<WithMeta> {
-//     pub fn new_with_meta(qsize: usize, reply_tx: Sender<AsyncSinkReply>) -> Self {
-//         let (tx, rx) = bounded(qsize);
-//         Self {
-//             tx,
-//             rx,
-//             reply_tx,
-//             _b: PhantomData::default(),
-//         }
-//     }
-// }
+impl SingleStreamSink<WithMeta> {
+    /// Constructs a new single stream sink with metadata support enabled
+    pub fn new_with_meta(qsize: usize, reply_tx: Sender<AsyncSinkReply>) -> Self {
+        SingleStreamSink::new(qsize, reply_tx)
+    }
+}
 
 impl<B> SingleStreamSink<B>
 where

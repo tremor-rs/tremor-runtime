@@ -110,7 +110,6 @@ impl Source for WalSource {
 
     async fn ack(&mut self, _stream_id: u64, pull_id: u64) -> Result<()> {
         // FIXME: this is a dirty hack until we can define the pull_id for a connector
-        // FIXME: we should allow returning errors
         if let Some(id) = self.pull_id_map.remove(&pull_id) {
             self.wal.lock().await.ack(id).await?;
         }
@@ -118,7 +117,6 @@ impl Source for WalSource {
     }
 
     async fn fail(&mut self, _stream_id: u64, _pull_id: u64) -> Result<()> {
-        // FIXME: we should allow returning errors
         self.wal.lock().await.revert().await?;
         Ok(())
     }

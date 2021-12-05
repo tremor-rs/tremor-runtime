@@ -175,19 +175,12 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     let signal_handler_task = async_std::task::spawn(handle_signals(signals, world.clone()));
 
     if let Some(config_files) = matches.values_of("artefacts") {
-        let mut yaml_files = Vec::with_capacity(16);
+        let mut troy_files = Vec::with_capacity(16);
         // We process trickle files first
         for config_file in config_files {
             let kind = get_source_kind(config_file);
             match kind {
-                SourceKind::Troy => {
-                    return Err(ErrorKind::UnsupportedFileType(
-                        config_file.to_string(),
-                        kind,
-                        "troy",
-                    )
-                    .into());
-                }
+                SourceKind::Troy => troy_files.push(config_file),
                 SourceKind::Trickle => {
                     if let Err(e) = tremor_runtime::load_query_file(&world, config_file).await {
                         return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
@@ -201,13 +194,13 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
                     )
                     .into());
                 }
-                SourceKind::Yaml => yaml_files.push(config_file),
             };
         }
 
         // We process config files thereafter
-        for config_file in yaml_files {
-            if let Err(e) = tremor_runtime::load_cfg_file(&world, config_file).await {
+        for config_file in troy_files {
+            if let Err(e) = tremor_runtime::load_troy_file(&world, config_file).await {
+                dbg!("snot");
                 return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
             }
         }

@@ -24,7 +24,7 @@ use std::{collections::HashMap, path::Path};
 use test::tag;
 use tremor_common::time::nanotime;
 use tremor_script::ast::base_expr::BaseExpr;
-use tremor_script::ast::{Expr, ImutExpr, ImutExprInt, Invoke, List, Record};
+use tremor_script::ast::{Expr, ImutExpr, Invoke, List, Record};
 use tremor_script::ctx::EventContext;
 use tremor_script::highlighter::{Dumb as DumbHighlighter, Highlighter, Term as TermHighlighter};
 use tremor_script::interpreter::{AggrType, Env, ExecOpts, LocalStack};
@@ -50,7 +50,7 @@ fn eval_suite_entrypoint(
 
     let spec = suite_spec
         .get_field_expr("tests")
-        .and_then(ImutExprInt::as_list)
+        .and_then(ImutExpr::as_list)
         .ok_or("Missing suite tests")?;
 
     if let Ok((s, mut e)) = eval_suite_tests(env, local, script, spec, tags, config) {
@@ -68,7 +68,7 @@ fn eval_suite_entrypoint(
     Ok((stats, elements))
 }
 
-fn eval(expr: &ImutExprInt, env: &Env, local: &LocalStack) -> Result<Value<'static>> {
+fn eval(expr: &ImutExpr, env: &Env, local: &LocalStack) -> Result<Value<'static>> {
     let state = Value::object();
     let meta = Value::object();
     let event = Value::object();
@@ -91,7 +91,7 @@ fn eval_suite_tests(
 
     let ll = suite_spec.exprs.len();
     for (idx, item) in suite_spec.exprs.iter().enumerate() {
-        if let ImutExprInt::Invoke1(Invoke {
+        if let ImutExpr::Invoke1(Invoke {
             module, fun, args, ..
         }) = item
         {
@@ -100,7 +100,7 @@ fn eval_suite_tests(
             }
             let spec = args
                 .first()
-                .and_then(ImutExprInt::as_record)
+                .and_then(ImutExpr::as_record)
                 .ok_or_else(|| Error::from("Invalid test specification"))?;
 
             let mut found_tags = Vec::new();
@@ -245,7 +245,7 @@ pub(crate) fn run_suite(
                     // A Test suite
                     let spec = args
                         .first()
-                        .and_then(ImutExprInt::as_record)
+                        .and_then(ImutExpr::as_record)
                         .ok_or_else(|| Error::from("Invalid test specification"))?;
 
                     let mut found_tags = Vec::new();
@@ -255,43 +255,46 @@ pub(crate) fn run_suite(
                             let inner_tags = tags.iter().map(|x| (*x).to_string());
                             found_tags.extend(inner_tags);
                         }
-                    } else if let Some(tags) = spec.get_literal("tags").and_then(Value::as_array) {
-                        let inner_tags = tags.iter().map(|x| (*x).to_string());
-                        found_tags.extend(inner_tags);
+
+                        let suite_tags = scenario_tags.join(Some(found_tags));
+                        let suite_name = spec
+                            .get_literal("name")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default();
+
+                        // TODO revisit tags in unit tests
+                        if let (_matched, true) = config.matches(&suite_tags) {
+                            status::h1("  Suite", suite_name)?;
+                            status::tagsx(
+                                "      ",
+                                &suite_tags,
+                                Some(&config.includes),
+                                Some(&config.excludes),
+                            )?;
+                            let (test_stats, mut test_reports) = eval_suite_entrypoint(
+                                &env,
+                                &local,
+                                &raw,
+                                spec,
+                                &suite_tags,
+                                config,
+                            )?;
+
+                            stats.merge(&test_stats);
+                            elements.append(&mut test_reports);
+                        }
+                        suites.insert(
+                            suite_name.to_string(),
+                            TestSuite {
+                                name: suite_name.to_string(),
+                                description: suite_name.to_string(),
+                                elements,
+                                evidence: None,
+                                stats,
+                                duration: 0,
+                            },
+                        );
                     }
-
-                    let suite_tags = scenario_tags.join(Some(found_tags));
-                    let suite_name = spec
-                        .get_literal("name")
-                        .and_then(Value::as_str)
-                        .unwrap_or_default();
-
-                    // TODO revisit tags in unit tests
-                    if let (_matched, true) = config.matches(&suite_tags) {
-                        status::h1("  Suite", suite_name)?;
-                        status::tagsx(
-                            "      ",
-                            &suite_tags,
-                            Some(&config.includes),
-                            Some(&config.excludes),
-                        )?;
-                        let (test_stats, mut test_reports) =
-                            eval_suite_entrypoint(&env, &local, &raw, spec, &suite_tags, config)?;
-
-                        stats.merge(&test_stats);
-                        elements.append(&mut test_reports);
-                    }
-                    suites.insert(
-                        suite_name.to_string(),
-                        TestSuite {
-                            name: suite_name.to_string(),
-                            description: suite_name.to_string(),
-                            elements,
-                            evidence: None,
-                            stats,
-                            duration: 0,
-                        },
-                    );
                 }
             }
         }

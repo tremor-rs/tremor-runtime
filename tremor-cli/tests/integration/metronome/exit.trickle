@@ -1,0 +1,4 @@
+
+select {
+  "exit": 0,
+} from in into out;

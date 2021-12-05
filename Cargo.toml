@@ -110,12 +110,13 @@ tokio-postgres = "0.7"
 lapin = "1.8.1"
 
 # elasticsearch
-elastic = "0.21.0-pre.5"
+elasticsearch = { version = "=7.14.0-alpha.1", features = ["rustls-tls"] }
 
 # ws
-async-tungstenite = { version = "0.16.0", features = ["async-std-runtime"] }
+async-tungstenite = { version = "0.16.0", features = ["async-std-runtime", "async-tls"] }
+tungstenite = { version = "0.16.0", features = ["rustls" ] }
 
-# for tcp
+# for tcp & ws
 async-tls = "0.11"
 rustls = "0.19"
 rustls-native-certs = "0.5"
@@ -132,7 +133,6 @@ rdkafka-sys = { version = "4.1.0", features = [
   "cmake-build",
   "libz-static",
 ] } # tracking the version rdkafka depends on
-rental = "0.5"
 smol = "1.2.5"
 
 # crononome
@@ -194,6 +194,9 @@ pretty_assertions = "1.0.0"
 proptest = "1.0"
 regex = "1"
 test-case = "1.2"
+testcontainers = "0.12"
+signal-hook = "0.3"
+signal-hook-async-std = "0.2"
 
 [features]
 default = []
@@ -201,6 +204,9 @@ default = []
 # support for 128bit numbers in tremor-value
 128bit = ["tremor-value/128bit"]
 bert = ["tremor-pipeline/bert"]
+
+integration = ["es-integration"]
+es-integration = []
 
 [patch.crates-io]
 rust-bert = { git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989' }

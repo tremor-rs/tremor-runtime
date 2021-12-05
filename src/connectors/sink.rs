@@ -20,6 +20,9 @@ pub mod channel_sink;
 /// Providing a `Sink` implementation for connectors handling only a single Stream
 pub mod single_stream_sink;
 
+/// Utility for limiting concurrency (by sending CB::Close messages when a maximum concurrency value is reached)
+pub(crate) mod concurrency_cap;
+
 use crate::codec::{self, Codec};
 use crate::config::{
     Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
@@ -34,7 +37,6 @@ use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task;
 use beef::Cow;
 pub use channel_sink::{ChannelSink, ChannelSinkRuntime};
-use either::Either;
 pub use single_stream_sink::{SingleStreamSink, SingleStreamSinkRuntime};
 use std::borrow::Borrow;
 use std::collections::btree_map::Entry;
@@ -149,7 +151,6 @@ pub enum AsyncSinkReply {
 #[async_trait::async_trait]
 pub trait Sink: Send {
     /// called when receiving an event
-    /// FIXME: Why are we returning a Vec but the elements don't allow to correlate what was acked
     async fn on_event(
         &mut self,
         input: &str,
@@ -220,7 +221,7 @@ pub trait StreamWriter: Send + Sync {
     /// write the given data out to the stream
     async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<SinkMeta>) -> Result<()>;
     /// handle the stream being done, by error or
-    async fn on_done(&self, _stream: u64) -> Result<StreamDone> {
+    async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
         Ok(StreamDone::StreamClosed)
     }
 }
@@ -363,11 +364,7 @@ pub(crate) fn builder(
     metrics_reporter: SinkReporter,
 ) -> Result<SinkManagerBuilder> {
     // resolve codec and processors
-    let postprocessor_configs: Vec<PostprocessorConfig> = config
-        .postprocessors
-        .as_ref()
-        .map(|ps| ps.iter().map(|p| p.into()).collect())
-        .unwrap_or_else(Vec::new);
+    let postprocessor_configs = config.postprocessors.clone().unwrap_or_default();
     let serializer = EventSerializer::build(
         config.codec.clone(),
         connector_default_codec,
@@ -393,7 +390,7 @@ pub struct EventSerializer {
     codec: Box<dyn Codec>,
     postprocessors: Postprocessors,
     // creation templates for stream handling
-    codec_config: Either<String, CodecConfig>,
+    codec_config: CodecConfig,
     postprocessor_configs: Vec<PostprocessorConfig>,
     // stream data
     // TODO: clear out state from codec, postprocessors and enable reuse
@@ -402,11 +399,11 @@ pub struct EventSerializer {
 
 impl EventSerializer {
     fn build(
-        codec_config: Option<Either<String, CodecConfig>>,
+        codec_config: Option<CodecConfig>,
         default_codec: &str,
         postprocessor_configs: Vec<PostprocessorConfig>,
     ) -> Result<Self> {
-        let codec_config = codec_config.unwrap_or_else(|| Either::Left(default_codec.to_string()));
+        let codec_config = codec_config.unwrap_or_else(|| CodecConfig::from(default_codec));
         let codec = codec::resolve(&codec_config)?;
         let postprocessors = make_postprocessors(postprocessor_configs.as_slice())?;
         Ok(Self {
@@ -843,7 +840,17 @@ impl From<&Event> for ContraflowData {
         ContraflowData {
             event_id: event.id.clone(),
             ingest_ns: event.ingest_ns,
-            op_meta: event.op_meta.clone(), // TODO: mem::swap here?
+            op_meta: event.op_meta.clone(),
+        }
+    }
+}
+
+impl From<Event> for ContraflowData {
+    fn from(event: Event) -> Self {
+        ContraflowData {
+            event_id: event.id,
+            ingest_ns: event.ingest_ns,
+            op_meta: event.op_meta,
         }
     }
 }

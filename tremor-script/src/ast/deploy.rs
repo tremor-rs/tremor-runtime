@@ -15,14 +15,12 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
-use self::raw::CreateKind;
+use tremor_common::url::TremorUrl;
 
-use super::{node_id::BaseRef, raw::BaseExpr};
+use super::{node_id::BaseRef, raw::BaseExpr, DefinitioalArgs, DefinitioalArgsWith};
 use super::{node_id::NodeId, PipelineDecl};
 use super::{Docs, HashMap, Value};
-pub use crate::ast::deploy::raw::DeployKind;
 use crate::{impl_expr_mid, impl_fqn};
-use tremor_common::url::TremorUrl;
 
 pub(crate) mod raw;
 
@@ -34,14 +32,12 @@ pub struct Deploy<'script> {
     pub config: HashMap<String, Value<'script>>,
     /// Statements
     pub stmts: DeployStmts<'script>,
-    /// Definitions
-    pub definitions: HashMap<NodeId, DeployStmt<'script>>,
     /// Flow Definitions
-    pub flows: HashMap<NodeId, FlowDecl<'script>>,
-    // /// Connector Definitions
-    // pub connectors: HashMap<NodeId, ConnectorDecl<'script>>,
-    // /// Pipeline Definitions
-    // pub pipelines: HashMap<NodeId, PipelineDecl<'script>>,
+    pub flow_decls: HashMap<NodeId, FlowDecl<'script>>,
+    /// Connector Definitions
+    pub connector_decls: HashMap<NodeId, ConnectorDecl<'script>>,
+    /// Pipeline Definitions
+    pub pipeline_decls: HashMap<NodeId, PipelineDecl<'script>>,
     #[serde(skip)]
     /// Documentation comments
     pub docs: Docs,
@@ -101,7 +97,7 @@ pub struct ConnectorDecl<'script> {
     /// Identifer for the connector
     pub node_id: NodeId,
     /// Resolved argument defaults
-    pub params: HashMap<String, Value<'script>>,
+    pub params: DefinitioalArgsWith<'script>,
     /// Internal / intrinsic builtin name
     pub builtin_kind: String,
     /// Documentation comments
@@ -115,19 +111,110 @@ type DeployStmts<'script> = Vec<DeployStmt<'script>>;
 
 /// A deployment link
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct DeployLink {
-    /// The instance we're connecting to
-    pub from: DeployEndpoint,
-    /// The instance being connected
-    pub to: DeployEndpoint,
+pub enum ConnectStmt {
+    /// Connector to Pipeline connection
+    ConnectorToPipeline {
+        /// Metadata ID
+        mid: usize,
+        /// The instance we're connecting to
+        from: DeployEndpoint,
+        /// The instance being connected
+        to: DeployEndpoint,
+    },
+    /// Pipeline to connector connection
+    PipelineToConnector {
+        /// Metadata ID
+        mid: usize,
+        /// The instance we're connecting to
+        from: DeployEndpoint,
+        /// The instance being connected
+        to: DeployEndpoint,
+    },
+    /// Pipeline to Pipeline connection
+    PipelineToPipeline {
+        /// Metadata ID
+        mid: usize,
+        /// The instance we're connecting to
+        from: DeployEndpoint,
+        /// The instance being connected
+        to: DeployEndpoint,
+    },
 }
+
+impl ConnectStmt {
+    /// Tries to cast the connect statement into a sink connector
+    pub fn as_sink_connector_url(&self) -> Option<TremorUrl> {
+        if let ConnectStmt::PipelineToConnector { to, .. } = self {
+            Some(TremorUrl::from_connector_instance(
+                &to.artefact,
+                &to.instance,
+            ))
+        } else {
+            None
+        }
+    }
+    /// Tries to cast the connect statement into a source connector
+    pub fn as_source_connector_url(&self) -> Option<TremorUrl> {
+        if let ConnectStmt::ConnectorToPipeline { from, .. } = self {
+            Some(TremorUrl::from_connector_instance(
+                &from.artefact,
+                &from.instance,
+            ))
+        } else {
+            None
+        }
+    }
+    /// Tries to cast the connect statement into a vector of pipeline urls
+    pub fn as_pipeline_urls(&self) -> Vec<TremorUrl> {
+        match self {
+            ConnectStmt::ConnectorToPipeline { to, .. } => vec![TremorUrl::from_pipeline_instance(
+                &to.artefact,
+                &to.instance,
+            )],
+            ConnectStmt::PipelineToConnector { from, .. } => {
+                vec![TremorUrl::from_pipeline_instance(
+                    &from.artefact,
+                    &from.instance,
+                )]
+            }
+            ConnectStmt::PipelineToPipeline { from, to, .. } => vec![
+                TremorUrl::from_pipeline_instance(&from.artefact, &from.instance),
+                TremorUrl::from_pipeline_instance(&to.artefact, &to.instance),
+            ],
+        }
+    }
+}
+
 /// A deployment endpoint
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
-pub enum DeployEndpoint {
-    /// Refers to a builtin or pre-existing deployed artefact instance
-    System(TremorUrl),
+pub struct DeployEndpoint {
+    artefact: String,
+    instance: String,
     /// Refers to a local artefact being deployed in a troy definition
-    Troy(String, Option<String>),
+    port: String,
+}
+
+impl DeployEndpoint {
+    /// creates a connector instance url
+    fn to_connector_instance(&self) -> TremorUrl {
+        TremorUrl::from_connector_instance(&self.artefact, &self.instance)
+    }
+    /// creates a connector instance url
+    pub fn to_connector_instance_and_port(&self) -> TremorUrl {
+        let mut r = self.to_connector_instance();
+        r.set_port(&self.port);
+        r
+    }
+    /// creates a connector instance url
+    fn to_pipeline_instance(&self) -> TremorUrl {
+        TremorUrl::from_pipeline_instance(&self.artefact, &self.instance)
+    }
+    /// creates a connector instance url
+    pub fn to_pipeline_instance_and_port(&self) -> TremorUrl {
+        let mut r = self.to_pipeline_instance();
+        r.set_port(&self.port);
+        r
+    }
 }
 
 /// A flow declaration
@@ -137,11 +224,11 @@ pub struct FlowDecl<'script> {
     /// Identifer for the connector
     pub node_id: NodeId,
     /// Resolved argument defaults
-    pub params: HashMap<String, Value<'script>>,
+    pub params: DefinitioalArgs<'script>,
     /// Links between artefacts in the flow
-    pub links: Vec<DeployLink>,
+    pub connections: Vec<ConnectStmt>,
     /// Deployment atoms
-    pub atoms: Vec<CreateStmt<'script>>,
+    pub creates: Vec<CreateStmt<'script>>,
     /// Documentation comments
     #[serde(skip)]
     pub docs: Option<String>,
@@ -149,6 +236,14 @@ pub struct FlowDecl<'script> {
 impl_expr_mid!(FlowDecl);
 impl_fqn!(FlowDecl);
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+/// A connect target
+pub enum CreateTargetDecl<'script> {
+    /// A connector
+    Connector(ConnectorDecl<'script>),
+    /// A Pipeline
+    Pipeline(PipelineDecl<'script>),
+}
 /// A create statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CreateStmt<'script> {
@@ -160,12 +255,7 @@ pub struct CreateStmt<'script> {
     /// Target for creation
     pub node_id: NodeId,
     /// Atomic unit of deployment
-    pub atom: DeployStmt<'script>,
-    /// The type of this connector
-    pub kind: CreateKind,
-    /// Documentation comments
-    #[serde(skip)]
-    pub docs: Option<String>,
+    pub decl: CreateTargetDecl<'script>,
 }
 impl_expr_mid!(CreateStmt);
 impl_fqn!(CreateStmt);
@@ -181,9 +271,7 @@ pub struct DeployFlow<'script> {
     /// Target for creation
     pub node_id: NodeId,
     /// Atomic unit of deployment
-    pub atom: DeployStmt<'script>,
-    /// The type of this connector
-    pub kind: DeployKind,
+    pub decl: FlowDecl<'script>,
     /// Documentation comments
     #[serde(skip)]
     pub docs: Option<String>,

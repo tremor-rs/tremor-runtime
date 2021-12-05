@@ -46,3 +46,10 @@ impl<'script, U: Upable<'script>> Upable<'script> for Option<U> {
         self.map(|v| v.up(helper)).transpose()
     }
 }
+
+impl<'script, U1: Upable<'script>, U2: Upable<'script>> Upable<'script> for (U1, U2) {
+    type Target = (U1::Target, U2::Target);
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        Ok((self.0.up(helper)?, self.1.up(helper)?))
+    }
+}

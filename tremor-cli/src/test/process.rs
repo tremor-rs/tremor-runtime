@@ -22,10 +22,16 @@ use super::tag;
 use crate::errors::{Error, Result};
 use crate::report;
 use crate::util::slurp_string;
+use async_std::prelude::*;
+use async_std::sync::Arc;
 use globwalk::GlobWalkerBuilder;
+use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
+use signal_hook_async_std::Signals;
 use std::collections::HashMap;
 use std::path::Path;
-use std::process::ExitStatus;
+use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use tremor_common::{file::canonicalize, time::nanotime};
 
 /// run the process
@@ -33,7 +39,7 @@ use tremor_common::{file::canonicalize, time::nanotime};
 /// `tests_root_dir`: the base path in which we discovered this test.
 /// `test_dir`: directory of the current test
 #[allow(clippy::too_many_lines)]
-pub(crate) fn run_process(
+pub(crate) async fn run_process(
     kind: &str,
     _tests_root_dir: &Path,
     test_dir: &Path,
@@ -41,17 +47,15 @@ pub(crate) fn run_process(
 ) -> Result<report::TestReport> {
     let mut evidence = HashMap::new();
 
-    let mut artefacts = GlobWalkerBuilder::from_patterns(
-        canonicalize(test_dir)?,
-        &["*.{yaml,tremor,trickle}", "!assert.yaml", "!logger.yaml"],
-    )
-    .case_insensitive(true)
-    .sort_by(|a, b| a.file_name().cmp(b.file_name()))
-    .max_depth(1)
-    .build()
-    .map_err(|e| Error::from(format!("Unable to walk path for artefacts capture: {}", e)))?
-    .filter_map(|x| x.ok().map(|x| x.path().to_string_lossy().to_string()))
-    .peekable();
+    let mut artefacts =
+        GlobWalkerBuilder::from_patterns(canonicalize(test_dir)?, &["*.{troy,tremor,trickle}"])
+            .case_insensitive(true)
+            .sort_by(|a, b| a.file_name().cmp(b.file_name()))
+            .max_depth(1)
+            .build()
+            .map_err(|e| Error::from(format!("Unable to walk path for artefacts capture: {}", e)))?
+            .filter_map(|x| x.ok().map(|x| x.path().to_string_lossy().to_string()))
+            .peekable();
 
     // fail fast if no artefacts are provided
     if artefacts.peek().is_none() {
@@ -65,11 +69,38 @@ pub(crate) fn run_process(
         .map(|x| (*x).to_string())
         .chain(artefacts)
         .collect();
+    dbg!(&args);
 
     let process_start = nanotime();
 
     let mut before = before::BeforeController::new(test_dir);
-    let before_process = before.spawn()?;
+    let before_process = before.spawn().await?;
+
+    // register signal handler - to ensure we run `after` even if we do a Ctrl-C
+    let run_after = Arc::new(AtomicBool::new(true));
+    async fn handle_signals(
+        signals: Signals,
+        test_dir: PathBuf,
+        run_after: Arc<AtomicBool>,
+    ) -> Result<()> {
+        let mut signals = signals.fuse();
+
+        while let Some(signal) = signals.next().await {
+            if run_after.load(Ordering::Acquire) {
+                let mut after = after::AfterController::new(&test_dir);
+                after.spawn().await?;
+            }
+            signal_hook::low_level::emulate_default_handler(signal)?;
+        }
+        Ok(())
+    }
+    let signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
+    let _signal_handle = signals.handle();
+    let _signal_handler_task = async_std::task::spawn(handle_signals(
+        signals,
+        test_dir.to_path_buf(),
+        run_after.clone(),
+    ));
 
     let test_dir_buf = test_dir.to_path_buf();
 
@@ -80,35 +111,27 @@ pub(crate) fn run_process(
         std::env::var("RUST_LOG").unwrap_or(String::from("info")),
     );
 
-    let mut process = job::TargetProcess::new_in_dir(job::which("tremor")?, &args, &env, test_dir)?;
-    let process_status = process.wait_with_output()?;
-
+    let binary = job::which("tremor")?;
+    let mut process = job::TargetProcess::new_in_dir(binary, &args, &env, test_dir)?;
     let fg_out_file = test_dir_buf.join("fg.out.log");
     let fg_err_file = test_dir_buf.join("fg.err.log");
-    let fg = std::thread::spawn(move || -> Result<ExitStatus> {
-        let fg_out_file = test_dir_buf.join("fg.out.log");
-        let fg_err_file = test_dir_buf.join("fg.err.log");
-        process.tail(&fg_out_file, &fg_err_file)?;
-        process.wait_with_output()
-    });
+    let fg = process.tail(&fg_out_file, &fg_err_file).await?;
+    info!("{} exited with {}", process, fg);
 
-    std::thread::spawn(move || {
-        if let Err(e) = before.capture(before_process) {
+    async_std::task::spawn(async move {
+        if let Err(e) = before.capture(before_process).await {
             eprintln!("Failed to capture input from before thread: {}", e);
         };
     });
-
-    match fg.join() {
-        Ok(_) => (),
-        Err(_) => return Err("Failed to join test foreground thread/process error".into()),
-    };
 
     before::update_evidence(test_dir, &mut evidence)?;
 
     // As our primary process is finished, check for after hooks
     let mut after = after::AfterController::new(test_dir);
-    after.spawn()?;
+    after.spawn().await?;
     after::update_evidence(test_dir, &mut evidence)?;
+    run_after.store(false, Ordering::Release);
+
     // Assertions
     let assert_path = test_dir.join("assert.yaml");
     let report = if (&assert_path).is_file() {
@@ -116,7 +139,7 @@ pub(crate) fn run_process(
         Some(assert::process(
             &fg_out_file,
             &fg_err_file,
-            process_status.code(),
+            fg.code(),
             &assert_yaml,
         )?)
     } else {
@@ -156,7 +179,7 @@ pub(crate) fn run_process(
         status::text("      ", &slurp_string(&fg_out_file)?)?;
         let mut report = HashMap::new();
         let elapsed = nanotime() - process_start;
-        if process_status.success() {
+        if fg.success() {
             stats.pass();
         } else {
             // TODO It would be nicer if there was something like a status::err() that would print

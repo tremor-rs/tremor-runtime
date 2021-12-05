@@ -31,7 +31,7 @@ binding:
       # (not relying on this only right now, since the asserts for this test
       # don't pass consistently with this only currently)
       "/connector/in/{instance}/err": ["/pipeline/system::passthrough/{instance}/in"]
-      "/pipeline/system::passthrough/{instance}/out": ["/connector/system::stderr/system/in"]
+      "/pipeline/system::passthrough/{instance}/out": ["/connector/system::stdio/system/in"]
 
 mapping:
   /binding/test/1:

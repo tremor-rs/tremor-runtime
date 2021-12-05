@@ -1,0 +1,5 @@
+status: 0
+name: crononome
+asserts:
+  - source: out.log
+    equals_file: expected_out.json

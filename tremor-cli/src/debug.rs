@@ -107,7 +107,6 @@ where
                 Deploy::highlight_script_with(&opts.raw, h, !opts.raw_output)?;
             }
         }
-        SourceKind::Yaml => error!("Unsupported: yaml"),
         SourceKind::Unsupported(Some(t)) => error!("Unsupported: {}", t),
         SourceKind::Unsupported(None) => error!("Unsupported: no file type"),
     }
@@ -289,7 +288,7 @@ where
                 }
             };
         }
-        SourceKind::Unsupported(_) | SourceKind::Yaml => {
+        SourceKind::Unsupported(_) => {
             eprintln!("Unsupported");
         }
     };

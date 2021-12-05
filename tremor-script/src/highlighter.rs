@@ -505,7 +505,7 @@ pub trait Highlighter {
                     )
                 } else {
                     // multi-line token, use only the last lines content for addressing
-                    (1, end.column() - 1)
+                    (1, end.column().saturating_sub(1))
                 };
 
                 // write token if given

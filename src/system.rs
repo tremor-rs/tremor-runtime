@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::config::{BindingVec, Config, MappingMap};
 use crate::connectors::utils::metrics::METRICS_CHANNEL;
 use crate::errors::{Error, ErrorKind, Result};
 use crate::registry::Registries;
@@ -22,17 +21,12 @@ use crate::repository::{
 
 use crate::QSIZE;
 use async_std::channel::bounded;
-use async_std::io::prelude::*;
-use async_std::path::Path;
 use async_std::prelude::*;
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use tremor_common::asy::file;
-use tremor_common::time::nanotime;
 use tremor_common::url::{ResourceType, TremorUrl};
-use tremor_value::literal;
 
 pub(crate) use crate::binding;
 pub(crate) use crate::connectors;
@@ -600,54 +594,6 @@ impl World {
         Err(ErrorKind::ArtefactNotFound(id.to_string()).into())
     }
 
-    /// Turns the running system into a config
-    ///
-    /// # Errors
-    ///  * If the systems configuration can't be stored
-    pub async fn to_config(&self) -> Result<Config> {
-        let binding: BindingVec = self
-            .repo
-            .serialize_bindings()
-            .await?
-            .into_iter()
-            .map(|b| b.binding)
-            .collect();
-        let mapping: MappingMap = self.reg.serialize_mappings().await?;
-        let config = crate::config::Config {
-            connector: vec![],
-            binding,
-            mapping,
-        };
-        Ok(config)
-    }
-
-    /// Saves the current config
-    ///
-    /// # Errors
-    ///  * if the config can't be saved
-    pub async fn save_config(&self) -> Result<String> {
-        if let Some(storage_directory) = &self.storage_directory {
-            let config = self.to_config().await?;
-            let path = Path::new(storage_directory);
-            let file_name = format!("config_{}.yaml", nanotime());
-            let mut file_path = path.to_path_buf();
-            file_path.push(Path::new(&file_name));
-            info!(
-                "Serializing configuration to file {}",
-                file_path.to_string_lossy()
-            );
-            let mut f = file::create(&file_path).await?;
-            f.write_all(&serde_yaml::to_vec(&config)?).await?;
-            // lets really sync this!
-            f.sync_all().await?;
-            f.sync_all().await?;
-            f.sync_all().await?;
-            Ok(file_path.to_string_lossy().to_string())
-        } else {
-            Ok("".to_string())
-        }
-    }
-
     /// Starts the runtime system
     ///
     /// # Errors
@@ -696,12 +642,12 @@ impl World {
         match mode {
             ShutdownMode::Graceful => {
                 // first drain all the bindings
-                if let Err(_err) = self
+                if let Err(err) = self
                     .reg
                     .drain_all_bindings(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT)
                     .await
                 {
-                    warn!("Error draining all bindings to drain.");
+                    warn!("Error draining all bindings: {}", err);
                 }
             }
             ShutdownMode::Forceful => {}
@@ -719,12 +665,11 @@ impl World {
     #[allow(clippy::too_many_lines)]
     async fn register_system(&mut self) -> Result<()> {
         // register metrics connector
-        let artefact: ConnectorArtefact = serde_yaml::from_str(
-            r#"
-id: system::metrics
-type: metrics
-            "#,
-        )?;
+        let artefact = ConnectorArtefact {
+            id: "system::metrics".into(),
+            connector_type: "metrics".into(),
+            ..ConnectorArtefact::default()
+        };
         self.repo
             .publish_connector(&METRICS_CONNECTOR, true, artefact)
             .await?;
@@ -735,20 +680,29 @@ type: metrics
             .ok_or_else(|| Error::from("Failed to initialize system::metrics connector."))?;
         // we need to make sure the metrics connector is consuming metrics events
         // before anything else is started, so we don't fill up the metrics_channel and thus lose messages
-        self.reg.start_connector(&METRICS_CONNECTOR).await?;
+        let (tx, rx) = bounded(1);
+        self.reg.start_connector(&METRICS_CONNECTOR, tx).await?;
+        async_std::task::spawn(async move {
+            if let Ok(res) = rx.recv().await {
+                if let Err(e) = res.res {
+                    error!("[Connector::metrics] {} connector failed: {}", res.url, e);
+                } else {
+                    info!("[Connector::metrics] {} connector started.", res.url);
+                }
+            }
+        });
 
         let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
         let aggr_reg = tremor_script::aggr_registry();
 
         // register passthrough pipeline
-        let artefact_passthrough = tremor_pipeline::query::Query::parse_with_args(
+        let artefact_passthrough = tremor_pipeline::query::Query::parse(
             module_path,
             "#!config id = \"system::passthrough\"\nselect event from in into out;",
             "<passthrough>",
             Vec::new(),
             &*tremor_pipeline::FN_REGISTRY.lock()?,
             &aggr_reg,
-            &literal!({}), // TODO add support for runtime args once troy+connectors branches have merged
         )?;
         self.repo
             .publish_pipeline(&PASSTHROUGH_PIPELINE, true, artefact_passthrough)
@@ -756,12 +710,11 @@ type: metrics
 
         // Register stdout connector - do not start yet
         // FIXME: how to name this
-        let stdout_artefact: ConnectorArtefact = serde_yaml::from_str(
-            r#"
-id: system::stdio
-type: stdio
-            "#,
-        )?;
+        let stdout_artefact: ConnectorArtefact = ConnectorArtefact {
+            id: "system::stdio".into(),
+            connector_type: "stdio".into(),
+            ..ConnectorArtefact::default()
+        };
         self.repo
             .publish_connector(&STDIO_CONNECTOR, true, stdout_artefact)
             .await?;

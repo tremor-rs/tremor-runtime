@@ -30,7 +30,6 @@ extern crate serde_derive;
 extern crate log;
 
 use crate::errors::{ErrorKind, Result};
-use crate::op::prelude::*;
 use beef::Cow;
 use executable_graph::NodeConfig;
 use halfbrown::HashMap;
@@ -44,7 +43,7 @@ use std::fmt::Display;
 use std::iter::Iterator;
 use std::str::FromStr;
 use std::{fmt, sync::Mutex};
-use tremor_script::prelude::*;
+use tremor_script::{ast::Helper, prelude::*};
 
 /// Pipeline Errors
 pub mod errors;
@@ -74,7 +73,7 @@ pub(crate) type ExecPortIndexMap =
     HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
 
 /// A configuration map
-pub type ConfigMap = Option<serde_yaml::Value>;
+pub type ConfigMap = Option<tremor_value::Value<'static>>;
 
 /// A lookup function to used to look up operators
 pub type NodeLookupFn = fn(
@@ -83,6 +82,7 @@ pub type NodeLookupFn = fn(
     defn: Option<&tremor_script::srs::Stmt>,
     node: Option<&tremor_script::srs::Stmt>,
     windows: Option<HashMap<String, window::Impl>>,
+    helper: &mut Helper,
 ) -> Result<OperatorNode>;
 
 /// Stringified numeric key

@@ -2,6 +2,6 @@ Error:
     1 | const a = {"snot": "badger"};
     2 | 
     3 | let a.snot = event;
-      |     ^^^^^^^^^^^^^^ Can't assign to the `a` constant
+      |     ^^^^^^^^^^^^^^ Can't assign to a constant expression
     4 | 
     5 | a

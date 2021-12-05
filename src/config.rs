@@ -13,32 +13,21 @@
 // limitations under the License.
 
 use crate::connectors::ConnectorType;
-use either::Either;
-use hashbrown::HashMap;
-use tremor_common::url::TremorUrl;
+use crate::Result;
+use halfbrown::HashMap;
+use tremor_pipeline::FN_REGISTRY;
+use tremor_script::{
+    ast::{ConnectStmt, Helper},
+    srs::ConnectorDecl,
+};
+use tremor_value::prelude::*;
 
 pub(crate) type Id = String;
-pub(crate) type ConnectorVec = Vec<Connector>;
-pub(crate) type BindingVec = Vec<Binding>;
-pub(crate) type BindingMap = HashMap<TremorUrl, Vec<TremorUrl>>;
-pub(crate) type MappingMap = HashMap<TremorUrl, HashMap<String, String>>;
-
-/// A full tremor config
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Config {
-    #[serde(default = "Default::default")]
-    pub(crate) connector: ConnectorVec,
-    #[serde(default = "Default::default")]
-    pub(crate) binding: Vec<Binding>,
-    #[serde(default = "Default::default")]
-    pub(crate) mapping: MappingMap,
-}
 
 /// possible reconnect strategies for controlling if and how to reconnect
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", deny_unknown_fields)]
-pub enum Reconnect {
+pub(crate) enum Reconnect {
     /// do not reconnect
     None,
     // TODO: RandomizedBackoff
@@ -47,11 +36,17 @@ pub enum Reconnect {
         /// start interval to wait after a failing connect attempt
         interval_ms: u64,
         /// growth rate for consecutive connect attempts, will be added to interval_ms
+        #[serde(default = "default_growth_rate")]
         growth_rate: f64,
         //TODO: randomized: bool
         /// maximum number of retries to execute
+        #[serde(default = "Default::default")]
         max_retries: Option<u64>,
     },
+}
+
+fn default_growth_rate() -> f64 {
+    1.2
 }
 
 impl Default for Reconnect {
@@ -82,15 +77,28 @@ impl Default for PauseBehaviour {
 */
 
 /// Codec name and configuration
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Codec {
+#[derive(Clone, Debug, Default)]
+pub struct NameWithConfig {
     pub(crate) name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) config: tremor_pipeline::ConfigMap,
+    pub(crate) config: Option<Value<'static>>,
 }
 
-impl From<&str> for Codec {
+impl NameWithConfig {
+    fn from_value(value: &Value) -> Result<Self> {
+        if let Some(name) = value.as_str() {
+            Ok(Self::from(name))
+        } else if let Some(name) = value.get_str("name") {
+            Ok(Self {
+                name: name.to_string(),
+                config: value.get("config").map(Value::clone_static),
+            })
+        } else {
+            Err(format!("Invalid codec: {}", value).into())
+        }
+    }
+}
+
+impl From<&str> for NameWithConfig {
     fn from(name: &str) -> Self {
         Self {
             name: name.to_string(),
@@ -99,64 +107,25 @@ impl From<&str> for Codec {
     }
 }
 
-/// Pre- or Postprocessor name and config
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Processor {
-    pub(crate) name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) config: tremor_pipeline::ConfigMap,
-}
-
-impl From<&str> for Processor {
-    fn from(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            config: None,
-        }
-    }
-}
-
-impl From<&ProcessorOrName> for Processor {
-    fn from(p: &ProcessorOrName) -> Self {
-        match &p.inner {
-            Either::Left(name) => name.as_str().into(),
-            Either::Right(config) => config.clone(),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(transparent)]
-pub(crate) struct ProcessorOrName {
-    #[serde(with = "either::serde_untagged")]
-    inner: Either<String, Processor>,
-}
-
-pub(crate) type Preprocessor = Processor;
-pub(crate) type Postprocessor = Processor;
+/// A Codec
+pub type Codec = NameWithConfig;
+/// A Preprocessor
+pub(crate) type Preprocessor = NameWithConfig;
+/// A Postprocessor
+pub(crate) type Postprocessor = NameWithConfig;
 
 /// Connector configuration - only the parts applicable to all connectors
 /// Specific parts are catched in the `config` map.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Default)]
 pub struct Connector {
     /// connector identifier
     pub id: Id,
-    #[serde(rename = "type")]
-    pub(crate) binding_type: ConnectorType,
+    pub(crate) connector_type: ConnectorType,
 
-    #[serde(default = "Default::default")]
     pub(crate) description: String,
 
-    #[serde(
-        with = "either::serde_untagged_optional",
-        skip_serializing_if = "Option::is_none",
-        default = "Default::default"
-    )]
-    pub(crate) codec: Option<Either<String, Codec>>,
+    pub(crate) codec: Option<Codec>,
 
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) config: tremor_pipeline::ConfigMap,
 
     /// mapping from mime-type to codec used to handle requests/responses
@@ -169,35 +138,94 @@ pub struct Connector {
     ///
     /// A default builtin codec mapping is defined
     /// for msgpack, json, yaml and plaintext codecs with the common mime-types
-    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) codec_map: Option<halfbrown::HashMap<String, Either<String, Codec>>>,
+    pub(crate) codec_map: Option<HashMap<String, Codec>>,
 
     // TODO: interceptors or configurable processors
-    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) preprocessors: Option<Vec<ProcessorOrName>>,
-    #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
-    pub(crate) postprocessors: Option<Vec<ProcessorOrName>>,
+    pub(crate) preprocessors: Option<Vec<Preprocessor>>,
+    pub(crate) postprocessors: Option<Vec<Postprocessor>>,
 
-    #[serde(default)]
     pub(crate) reconnect: Reconnect,
 
-    //#[serde(default)]
     //pub(crate) on_pause: PauseBehaviour,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) metrics_interval_s: Option<u64>,
 }
 
+impl Connector {
+    /// FIXME
+    pub fn from_decl(decl: &ConnectorDecl) -> crate::Result<Connector> {
+        // FIXME: need some better support here
+        let aggr_reg = tremor_script::registry::aggr();
+        let reg = &*FN_REGISTRY.lock()?;
+        let mut helper = Helper::new(reg, &aggr_reg, vec![]);
+        let params = decl.params.clone();
+
+        let config = params.generate_config(&mut helper)?;
+        let defn = config
+            .into_iter()
+            .collect::<tremor_value::Value>()
+            .into_static();
+
+        Connector::from_defn(decl.instance_id.clone(), decl.kind.clone().into(), defn)
+    }
+    /// FIXME
+
+    pub fn from_defn(
+        id: String,
+        connector_type: ConnectorType,
+        defn: Value<'static>,
+    ) -> crate::Result<Connector> {
+        let config = defn.get("config").cloned();
+
+        Ok(Connector {
+            id,
+            connector_type,
+            description: "FIXME: placeholder description".to_string(),
+            config: config,
+            codec_map: defn
+                .get_object("codec_map")
+                .map(|o| {
+                    o.iter()
+                        .map(|(k, v)| Ok((k.to_string(), Codec::from_value(v)?)))
+                        .collect::<Result<HashMap<_, _>>>()
+                })
+                .transpose()?,
+            preprocessors: defn
+                .get_array("preprocessors")
+                .map(|o| {
+                    o.iter()
+                        .map(Preprocessor::from_value)
+                        .collect::<Result<_>>()
+                })
+                .transpose()?,
+            postprocessors: defn
+                .get_array("postprocessors")
+                .map(|o| {
+                    o.iter()
+                        .map(Preprocessor::from_value)
+                        .collect::<Result<_>>()
+                })
+                .transpose()?,
+            reconnect: defn
+                .get("reconnect")
+                .cloned()
+                .map(tremor_value::structurize)
+                .transpose()?
+                .unwrap_or_default(),
+            metrics_interval_s: defn.get_u64("metrics_interval_s"),
+            codec: defn.get("codec").map(Codec::from_value).transpose()?,
+        })
+    }
+}
+
 /// Configuration for a Binding
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug)]
 pub struct Binding {
     /// ID of the binding
     pub id: Id,
-    #[serde(default = "Default::default")]
     /// Description
     pub description: String,
     /// Binding map
-    pub links: BindingMap, // is this right? this should be url to url?
+    pub links: Vec<ConnectStmt>, // is this right? this should be url to url?
 }
 
 #[cfg(test)]

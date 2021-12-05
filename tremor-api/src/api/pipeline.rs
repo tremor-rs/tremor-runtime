@@ -15,7 +15,6 @@
 use tremor_pipeline::{query::Query, FN_REGISTRY};
 
 use crate::api::prelude::*;
-use tremor_value::literal;
 
 #[derive(Serialize)]
 struct PipelineWrap {
@@ -32,7 +31,7 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
         .iter()
         .filter_map(|v| v.artefact().map(String::from))
         .collect();
-    reply(req, result, false, StatusCode::Ok).await
+    reply(req, result, StatusCode::Ok).await
 }
 
 pub async fn publish_artefact(mut req: Request) -> Result<Response> {
@@ -41,14 +40,13 @@ pub async fn publish_artefact(mut req: Request) -> Result<Response> {
             let body = req.body_string().await?;
             let aggr_reg = tremor_script::registry::aggr();
             let module_path = tremor_script::path::load();
-            let query = Query::parse_with_args(
+            let query = Query::parse(
                 &module_path,
                 &body,
                 "<API>",
                 vec![],
                 &*FN_REGISTRY.lock()?,
                 &aggr_reg,
-                &literal!({}), // TODO add deployment time args support when connectors branch is merged
             )?;
 
             let id = query.id().ok_or_else(|| {
@@ -64,7 +62,7 @@ pub async fn publish_artefact(mut req: Request) -> Result<Response> {
                 .publish_pipeline(&url, false, query)
                 .await
                 .map(|result| result.source().to_string())?;
-            reply_trickle_flat(req, result, true, StatusCode::Created).await
+            reply_trickle_flat(req, result, StatusCode::Created).await
         }
         Some(_) | None => Err(Error::new(
             StatusCode::UnsupportedMediaType,
@@ -76,13 +74,8 @@ pub async fn publish_artefact(mut req: Request) -> Result<Response> {
 pub async fn reply_trickle_flat(
     req: Request,
     result_in: String,
-    persist: bool,
     ok_code: StatusCode,
 ) -> Result<Response> {
-    if persist {
-        let world = &req.state().world;
-        world.save_config().await?;
-    }
     match accept(&req) {
         ResourceType::Json | ResourceType::Yaml => serialize(accept(&req), &result_in, ok_code),
         ResourceType::Trickle => {
@@ -98,13 +91,8 @@ pub async fn reply_trickle_instanced(
     req: Request,
     mut result_in: String,
     instances: Vec<String>,
-    persist: bool,
     ok_code: StatusCode,
 ) -> Result<Response> {
-    if persist {
-        let world = &req.state().world;
-        world.save_config().await?;
-    }
     match accept(&req) {
         ResourceType::Json | ResourceType::Yaml => serialize(accept(&req), &result_in, ok_code),
         ResourceType::Trickle => {
@@ -127,7 +115,7 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
         .unpublish_pipeline(&url)
         .await
         .map(|result| result.source().to_string())?;
-    reply_trickle_flat(req, result, true, StatusCode::Ok).await
+    reply_trickle_flat(req, result, StatusCode::Ok).await
 }
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
@@ -147,7 +135,6 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
             .iter()
             .filter_map(|v| v.instance().map(String::from))
             .collect(),
-        false,
         StatusCode::Ok,
     )
     .await

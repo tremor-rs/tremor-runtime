@@ -18,7 +18,7 @@ use tremor_script::deploy::Deploy;
 
 use tremor_script::errors::*;
 use tremor_script::path::ModulePath;
-use tremor_script::srs::UnitOfDeployment;
+use tremor_script::srs::Flows;
 
 fn parse<'script>(
     module_path: &ModulePath,
@@ -40,8 +40,6 @@ macro_rules! test_cases {
             $(
                 #[test]
                 fn $file() -> Result<()> {
-
-                    // tremor_runtime::functions::load()?;
                     let deploy_dir = concat!("tests/deploys/", stringify!($file), "/").to_string();
                     let deploy_file = concat!("tests/deploys/", stringify!($file), "/deploy.troy");
                     let module_path = ModulePath { mounts: vec![deploy_dir, "tremor-script/lib/".to_string()] };
@@ -51,8 +49,8 @@ macro_rules! test_cases {
                     let mut contents = String::new();
                     file.read_to_string(&mut contents)?;
 
-                    match parse(&module_path, deploy_file, &contents)?.deploy.as_deployment_unit() {
-                        Ok(UnitOfDeployment { .. }) => (),
+                    match parse(&module_path, deploy_file, &contents)?.as_deployment_unit() {
+                        Ok(_) => (),
                         _otherwise => {
                             println!("Expected valid deployment file, compile phase, but got an unexpected error");
                             assert!(false);
@@ -70,6 +68,6 @@ test_cases!(
     pipeline_identity,
     pipeline_args,
     pipeline_with,
-    // pipeline_overalls, TODO: Work through args and config
+    pipeline_overalls, // TODO: Work through args and config
     doc_comments,
 );
