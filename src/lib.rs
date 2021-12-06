@@ -71,7 +71,8 @@ pub mod utils;
 /// Tremor runtime version tools
 pub mod version;
 
-pub(crate) mod instance;
+/// Instance management
+pub mod instance;
 
 /// Metrics instance name
 pub static mut INSTANCE: &str = "tremor";

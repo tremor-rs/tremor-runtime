@@ -10,8 +10,7 @@ end;
 
 define pipeline main
 pipeline
-  #select event from in where event != "exit" into out;
-  select event from in into out;
+  select event from in where event != "exit" into out;
 end;
 
 # onramp:
@@ -28,7 +27,7 @@ with
   config = {
     "source": "in.json",
     "interval": 1000000,
-    "iters": 11
+    "iters": 1
   }
 end;
 
@@ -54,7 +53,8 @@ with
   config = {
     "path": args.file,
     "mode": "truncate"
-  }
+  },
+  postprocessors = ["lines"]
 end;
 
 
@@ -76,23 +76,24 @@ flow
   create pipeline exit;
   create pipeline main;
   create connector bench;
+  create connector exit;
 
   create connector out_file from file
   with
     file = "out.log"
   end;
 
-#  create connector err_file from file
-#  with
-#    file = "err.log"
-#  end;
+  create connector err_file from file
+  with
+    file = "err.log"
+  end;
 
-#  connect /connector/bench/bench to /pipeline/main/main;
-#  connect /connector/bench/bench to /pipeline/exit/exit;
-#  connect /pipeline/main/main to /connector/file/out_file;
-#  connect /pipeline/main/main/err to /connector/file/err_file;
-#  connect /pipeline/exit/exit to /connector/exit/exit;
-#  connect /pipeline/exit/exit/err to /connector/file/err_file;
+  connect /connector/bench/bench to /pipeline/main/main;
+  connect /connector/bench/bench to /pipeline/exit/exit;
+  connect /pipeline/main/main to /connector/file/out_file;
+  connect /pipeline/main/main/err to /connector/file/err_file;
+  connect /pipeline/exit/exit to /connector/exit/exit;
+  connect /pipeline/exit/exit/err to /connector/file/err_file;
 end;
 
 deploy flow main;
