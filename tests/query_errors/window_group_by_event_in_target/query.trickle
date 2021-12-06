@@ -1,6 +1,6 @@
 use std::string;
 
-define tumbling window my_window
+define window my_window from tumbling
 with
   interval = 1000
 end;

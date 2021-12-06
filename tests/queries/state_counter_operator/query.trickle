@@ -1,4 +1,4 @@
-define generic::counter operator my_counter;
+define operator my_counter from generic::counter;
 
 create operator my_counter;
 
