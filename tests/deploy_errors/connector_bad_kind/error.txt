@@ -1,5 +1,5 @@
 Error: 
-    1 | define 1 + 2 + 3 connector empty
-      |        ^ Found the token `1` but expected one of `<ident>`, `flow`, `pipeline`
-    2 | end;
-    3 |
+    1 | define connector empty from 1 + 2 + 3;
+      |                             ^ Found the token `1` but expected `<ident>`
+    2 | 
+    3 | deploy fake

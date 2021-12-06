@@ -1,5 +1,5 @@
 
-define debug::history operator history 
+define operator history from debug::history
 args
   op = "op-value"
 with
