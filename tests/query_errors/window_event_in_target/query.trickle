@@ -1,6 +1,6 @@
 use std::math;
 
-define tumbling window my_win
+define window my_win from tumbling
 with
   size = 2
 end;

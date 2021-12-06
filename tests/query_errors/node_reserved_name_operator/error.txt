@@ -1,5 +1,5 @@
 Error: 
-    1 | define generic::counter operator counter;
+    1 | define operator counter from generic::counter;
     2 | create operator metrics from counter;
       | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Name `metrics` is reserved for built-in nodes, please use another name.
     3 | 

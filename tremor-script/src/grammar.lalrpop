@@ -164,8 +164,6 @@ DeployStmts: DeployStmtsRaw<'input> = {
 }
 
 
-
-
 DeployStmt: DeployStmtRaw<'input> = {
     DeployModuleStmt => DeployStmtRaw::ModuleStmt(<>),
     DefinePipeline => DeployStmtRaw::PipelineDecl(<>),
@@ -249,7 +247,7 @@ DeployModuleStmts: DeployStmtsRaw<'input> = {
 
  DefineConnector: DeployStmtRaw<'input> =  {
     // Connectors - these define connectors for deployment
-    <start:@L> <docs:DocComment> "define" <kind:ConnectorKind> "connector" <id:Ident> <params:ArgsWithEnd?> <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, params: params.unwrap_or_default(), docs }),
+    <start:@L> <docs:DocComment> "define" "connector" <id:Ident> "from" <kind:ConnectorKind> <params:ArgsWithEnd?> <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, params: params.unwrap_or_default(), docs }),
  }
 
 DefineFlow: DeployStmtRaw<'input> = {
@@ -336,13 +334,13 @@ Stmt: StmtRaw<'input> = {
 //// DEFINEs
 
 DefineWindow: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" <kind:WindowKind> "window" <id:Ident> <params:CreationWith> <script:EmbeddedScriptImut> "end" <end:@L> => {
+    <doc:DocComment> <start:@L> "define" "window" <id:Ident> "from"  <kind:WindowKind> <params:CreationWith> <script:EmbeddedScriptImut> "end" <end:@L> => {
         StmtRaw::WindowDecl(WindowDeclRaw { start, end, id: id.to_string(), kind, params, script, doc })
     }
 }
 
 DefineOperator: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:ArgsWithEnd?> <end:@L> =>  {
+    <doc:DocComment> <start:@L> "define" "operator" <id:Ident> "from" <kind:OperatorKind> <params:ArgsWithEnd?> <end:@L> =>  {
         StmtRaw::OperatorDecl(Box::new(OperatorDeclRaw { start, end, kind, id: id.to_string(), params: params.unwrap_or_default(), doc }))
     }
 }
