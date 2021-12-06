@@ -1,4 +1,4 @@
-define tumbling window by_two
+define window by_two from tumbling
 with
   # Since we count each event by two, we set a size of 4
   size = 4

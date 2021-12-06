@@ -1,4 +1,4 @@
-define tumbling window by_2
+define window by_2 from tumbling
 with
   size = 2
 end;

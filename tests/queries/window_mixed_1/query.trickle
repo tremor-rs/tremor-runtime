@@ -1,15 +1,15 @@
-define tumbling window four_nanos
+define window four_nanos from tumbling
 with
   # the events have to sets of groups that alternate,
   # a window of interval 4, since we emit an event per nanosecond,
   # should contain 2 events for group 1 and two for group 2
   interval = 4
 end;
-define tumbling window two_size
+define window two_size from tumbling
 with
   size = 2 
 end;
-define tumbling window nine_nanos
+define window nine_nanos from tumbling
 with
   interval = 8 # 
 end;

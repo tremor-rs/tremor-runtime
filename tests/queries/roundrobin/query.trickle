@@ -1,4 +1,4 @@
-define qos::roundrobin operator roundrobin
+define operator roundrobin from qos::roundrobin
 with
   outputs = ["one", "two", "three"]
 end;
