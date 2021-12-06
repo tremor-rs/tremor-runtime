@@ -1,4 +1,4 @@
-define generic::counter operator counter;
+define operator counter from generic::counter;
 create operator metrics from counter;
 
 select event from in into metrics;

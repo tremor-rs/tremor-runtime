@@ -1,5 +1,4 @@
-define connector empty
-end;
+define connector empty;
 
 deploy fake
 script
