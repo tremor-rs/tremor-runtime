@@ -15,6 +15,13 @@
 use crate::prelude::*;
 use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
 
+use abi_stable::{
+    rvec,
+    std_types::{RArc, RVec},
+    StableAbi,
+};
+use tremor_value::value::from::cow_beef_to_sabi;
+
 /*
 =========================================================================
 */
@@ -35,9 +42,15 @@ use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
 ///
 #[derive(Clone, Default)]
 pub struct EventPayload {
-    /// The vector of raw input values
-    raw: Vec<Arc<Pin<Vec<u8>>>>,
-    data: ValueAndMeta<'static>,
+    /// The vector of raw input values.
+    ///
+    /// Note that this is a self-referential struct, and thus the data it points
+    /// to cannot be modified. This makes it impossible to convert
+    /// `EventPayload` to `PdkEventPayload`. The only solution is to make `raw`
+    /// use types from `abi_stable` even if it's not really `StableAbi` nor
+    /// `repr(C)` (the `ValueAndMeta` type can't be `repr(C)` for now).
+    pub(crate) raw: RVec<RArc<Pin<RVec<u8>>>>,
+    pub(crate) data: ValueAndMeta<'static>,
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
@@ -79,12 +92,13 @@ impl EventPayload {
     where
         F: for<'head> FnOnce(&'head mut [u8]) -> ValueAndMeta<'head>,
     {
+        let raw = RVec::from(raw);
         let mut raw = Pin::new(raw);
         let data = f(raw.as_mut().get_mut());
         // This is where the magic happens
         // ALLOW: this is sound since we implement a self referential struct
         let structured = unsafe { mem::transmute::<ValueAndMeta<'_>, ValueAndMeta<'static>>(data) };
-        let raw = vec![Arc::new(raw)];
+        let raw = rvec![RArc::new(raw)];
         Self {
             raw,
             data: structured,
@@ -106,12 +120,13 @@ impl EventPayload {
     where
         F: for<'head> FnOnce(&'head mut [u8]) -> std::result::Result<ValueAndMeta<'head>, E>,
     {
+        let raw = RVec::from(raw);
         let mut raw = Pin::new(raw);
         let data = f(raw.as_mut().get_mut())?;
         // This is where the magic happens
         // ALLOW: this is sound since we implement a self referential struct
         let structured = unsafe { mem::transmute::<ValueAndMeta<'_>, ValueAndMeta<'static>>(data) };
-        let raw = vec![Arc::new(raw)];
+        let raw = rvec![RArc::new(raw)];
         Ok(Self {
             raw,
             data: structured,
@@ -262,7 +277,7 @@ where
 {
     fn from(vm: T) -> Self {
         Self {
-            raw: Vec::new(),
+            raw: RVec::new(),
             data: vm.into(),
         }
     }

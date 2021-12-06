@@ -1,0 +1,36 @@
+[package]
+name = "metronome"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+# This way, the shared object will be saved with an unique name, such as
+# `libconnector_metronome.so`.
+name = "connector_metronome"
+# This is required so that the library is compiled as a shared library. See:
+#
+# * https://doc.rust-lang.org/cargo/reference/cargo-targets.html#the-crate-type-field
+# * https://doc.rust-lang.org/reference/linkage.html
+crate-type = ["cdylib"]
+
+[dependencies]
+# FIXME: plugins should be able to *only* depend on `tremor-pdk`
+tremor-script = { version = "0.11.4", path = "../../../tremor-script" }
+tremor-pipeline = { version = "0.11.4", path = "../../../tremor-pipeline" }
+tremor-common = { version = "0.11.4", path = "../../../tremor-common" }
+tremor-value = { version = "0.3.2", path = "../../../tremor-value" }
+tremor-runtime = { version = "0.11.4", path = "../../../" }
+
+abi_stable = { version = "0.10", default-features = false }
+# FIXME: clean up after https://github.com/oxalica/async-ffi/pull/10 is merged
+async-ffi = { version = "0.3", features = ["sabi"], git = "https://github.com/marioortizmanero/async-ffi.git", branch = "sabi" }
+serde = { version = "1.0", features = ["derive"] }
+
+[patch.crates-io]
+# FIXME: update to crates.io when this is added to a new version:
+# https://github.com/rodrimati1992/abi_stable_crates/pull/68
+# https://github.com/rodrimati1992/abi_stable_crates/pull/70
+abi_stable = { git = "https://github.com/marioortizmanero/abi_stable_crates.git", branch = "rvec-append" }
+# FIXME: update to crates.io when this is added to a new version:
+# https://github.com/simd-lite/simd-json-derive/pull/9
+simd-json-derive = { git = "https://github.com/marioortizmanero/simd-json-derive.git", branch = "abi-stable" }
