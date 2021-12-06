@@ -103,20 +103,24 @@ impl Addr {
         self.sink.is_some()
     }
 
-    pub(crate) async fn stop(&self, sender: Sender<ConnectorResult<()>>) -> Result<()> {
+    /// stops the connector
+    pub async fn stop(&self, sender: Sender<ConnectorResult<()>>) -> Result<()> {
         self.send(Msg::Stop(sender)).await
     }
-    pub(crate) async fn start(&self, sender: Sender<ConnectorResult<()>>) -> Result<()> {
+    /// starts the connector
+    pub async fn start(&self, sender: Sender<ConnectorResult<()>>) -> Result<()> {
         self.send(Msg::Start(sender)).await
     }
-    pub(crate) async fn drain(&self, sender: Sender<ConnectorResult<()>>) -> Result<()> {
+    /// drains the connector
+    pub async fn drain(&self, sender: Sender<ConnectorResult<()>>) -> Result<()> {
         self.send(Msg::Drain(sender)).await
     }
-
-    pub(crate) async fn pause(&self) -> Result<()> {
+    /// pauses the connector
+    pub async fn pause(&self) -> Result<()> {
         self.send(Msg::Pause).await
     }
-    pub(crate) async fn resume(&self) -> Result<()> {
+    /// resumes the connector
+    pub async fn resume(&self) -> Result<()> {
         self.send(Msg::Resume).await
     }
 }
@@ -328,9 +332,11 @@ pub enum StreamDone {
     ConnectorClosed,
 }
 
-pub(crate) type KnownConnectors = HashMap<ConnectorType, Box<dyn ConnectorBuilder + 'static>>;
+/// Lookup table for known connectors
+pub type KnownConnectors = HashMap<ConnectorType, Box<dyn ConnectorBuilder + 'static>>;
 
-pub(crate) async fn spawn(
+/// Spawns a connector
+pub async fn spawn(
     url: TremorUrl,
     connector_id_gen: &mut ConnectorIdGen,
     known_connectors: &KnownConnectors,
@@ -362,6 +368,7 @@ async fn connector_task(
 
     let mut connectivity = Connectivity::Disconnected;
     let mut quiescence_beacon = QuiescenceBeacon::default();
+    let notifier = ConnectionLostNotifier::new(msg_tx.clone());
 
     let source_metrics_reporter =
         SourceReporter::new(url.clone(), METRICS_CHANNEL.tx(), config.metrics_interval_s);
@@ -381,6 +388,7 @@ async fn connector_task(
         url: url.clone(),
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
+        notifier: notifier.clone(),
     };
 
     let sink_metrics_reporter =
@@ -390,6 +398,8 @@ async fn connector_task(
         uid,
         url: url.clone(),
         connector_type: config.connector_type.clone(),
+        quiescence_beacon: quiescence_beacon.clone(),
+        notifier: notifier.clone(),
     };
     // create source instance
     let source_addr = connector.create_source(source_ctx, source_builder).await?;
@@ -405,7 +415,8 @@ async fn connector_task(
         sink: sink_addr,
     };
 
-    let mut reconnect: ReconnectRuntime = ReconnectRuntime::new(&connector_addr, &config.reconnect);
+    let mut reconnect: ReconnectRuntime =
+        ReconnectRuntime::new(&connector_addr, notifier.clone(), &config.reconnect);
     let notifier = reconnect.notifier();
 
     let ctx = ConnectorContext {
@@ -413,7 +424,7 @@ async fn connector_task(
         url: url.clone(),
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
-        notifier: notifier.clone(),
+        notifier: notifier,
     };
 
     let send_addr = connector_addr.clone();
@@ -477,7 +488,7 @@ async fn connector_task(
                         // connect to sink part
                         if let Some(sink) = connector_addr.sink.as_ref() {
                             sink.addr
-                                .send(SinkMsg::Connect {
+                                .send(SinkMsg::Link {
                                     port,
                                     pipelines: pipelines_to_link,
                                 })
@@ -490,41 +501,17 @@ async fn connector_task(
                             )
                             .into())
                         }
-                        let res = if connector.is_valid_input_port(&port) {
-                            // connect to sink part
-                            if let Some(sink) = connector_addr.sink.as_ref() {
-                                sink.addr
-                                    .send(SinkMsg::Link {
-                                        port,
-                                        pipelines: pipelines_to_link,
-                                    })
-                                    .await
-                                    .map_err(|e| e.into())
-                            } else {
-                                Err(ErrorKind::InvalidConnect(
-                                    connector_addr.url.to_string(),
-                                    port.clone(),
-                                )
-                                .into())
-                            }
-                        } else if connector.is_valid_output_port(&port) {
-                            // connect to source part
-                            if let Some(source) = connector_addr.source.as_ref() {
-                                source
-                                    .addr
-                                    .send(SourceMsg::Link {
-                                        port,
-                                        pipelines: pipelines_to_link,
-                                    })
-                                    .await
-                                    .map_err(|e| e.into())
-                            } else {
-                                Err(ErrorKind::InvalidConnect(
-                                    connector_addr.url.to_string(),
-                                    port.clone(),
-                                )
-                                .into())
-                            }
+                    } else if connector.is_valid_output_port(&port) {
+                        // connect to source part
+                        if let Some(source) = connector_addr.source.as_ref() {
+                            source
+                                .addr
+                                .send(SourceMsg::Link {
+                                    port,
+                                    pipelines: pipelines_to_link,
+                                })
+                                .await
+                                .map_err(|e| e.into())
                         } else {
                             Err(ErrorKind::InvalidConnect(
                                 connector_addr.url.to_string(),
@@ -549,51 +536,17 @@ async fn connector_task(
                             &connector_addr.url, e
                         );
                     }
-                    Msg::Unlink { port, id, tx } => {
-                        let delete =
-                            connected_pipelines
-                                .get_mut(&port)
-                                .map_or(false, |port_pipes| {
-                                    port_pipes.retain(|(url, _)| url != &id);
-                                    port_pipes.is_empty()
-                                });
-                        // make sure we can simply use `is_empty` for checking for emptiness
-                        if delete {
-                            connected_pipelines.remove(&port);
-                        }
-                        let res: Result<()> = if port.eq_ignore_ascii_case(IN.as_ref()) {
-                            // disconnect from source part
-                            match connector_addr.source.as_ref() {
-                                Some(source) => source
-                                    .addr
-                                    .send(SourceMsg::Unlink { port, id })
-                                    .await
-                                    .map_err(Error::from),
-                                None => Err(ErrorKind::InvalidDisconnect(
-                                    connector_addr.url.to_string(),
-                                    id.to_string(),
-                                    port.clone(),
-                                )
-                                .into()),
-                            }
-                        } else {
-                            // disconnect from sink part
-                            match connector_addr.sink.as_ref() {
-                                Some(sink) => sink
-                                    .addr
-                                    .send(SinkMsg::Unlink { port, id })
-                                    .await
-                                    .map_err(Error::from),
-                                None => Err(ErrorKind::InvalidDisconnect(
-                                    connector_addr.url.to_string(),
-                                    id.to_string(),
-                                    port.clone(),
-                                )
-                                .into()),
-                            }
-                        };
-                        // TODO: work out more fine grained "empty" semantics
-                        tx.send(res.map(|_| connected_pipelines.is_empty())).await?;
+                }
+                Msg::Unlink { port, id, tx } => {
+                    let delete = connected_pipelines
+                        .get_mut(&port)
+                        .map_or(false, |port_pipes| {
+                            port_pipes.retain(|(url, _)| url != &id);
+                            port_pipes.is_empty()
+                        });
+                    // make sure we can simply use `is_empty` for checking for emptiness
+                    if delete {
+                        connected_pipelines.remove(&port);
                     }
                     let res: Result<()> = if port.eq_ignore_ascii_case(IN.as_ref()) {
                         // disconnect from source part
@@ -615,7 +568,7 @@ async fn connector_task(
                         match connector_addr.sink.as_ref() {
                             Some(sink) => sink
                                 .addr
-                                .send(SinkMsg::Disconnect { port, id })
+                                .send(SinkMsg::Unlink { port, id })
                                 .await
                                 .map_err(Error::from),
                             None => Err(ErrorKind::InvalidDisconnect(
@@ -918,6 +871,7 @@ async fn connector_task(
     });
     Ok(send_addr)
 }
+
 #[derive(Debug, PartialEq)]
 enum DrainState {
     None,
@@ -1163,81 +1117,53 @@ pub trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
     ) -> Result<Box<dyn Connector>>;
 }
 
-/// registering builtin connector types
-///
-/// # Errors
-///  * If a builtin connector couldn't be registered
+/// builtin connector types
 #[cfg(not(tarpaulin_include))]
-pub async fn register_builtin_connector_types(world: &World) -> Result<()> {
-    world
-        .register_builtin_connector_type(Box::new(impls::file::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::metrics::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::stdio::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::tcp::client::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::tcp::server::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::udp::client::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::udp::server::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::kv::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::metronome::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::wal::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::dns::client::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::discord::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::ws::client::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::ws::server::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::exit::Builder::new(world)))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::elastic::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::crononome::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::metronome::Builder::default()))
-        .await?;
-
-    Ok(())
+pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
+    vec![
+        Box::new(impls::file::Builder::default()),
+        Box::new(impls::metrics::Builder::default()),
+        Box::new(impls::stdio::Builder::default()),
+        Box::new(impls::tcp::client::Builder::default()),
+        Box::new(impls::tcp::server::Builder::default()),
+        Box::new(impls::udp::client::Builder::default()),
+        Box::new(impls::udp::server::Builder::default()),
+        Box::new(impls::kv::Builder::default()),
+        Box::new(impls::metronome::Builder::default()),
+        Box::new(impls::wal::Builder::default()),
+        Box::new(impls::dns::client::Builder::default()),
+        Box::new(impls::discord::Builder::default()),
+        Box::new(impls::ws::client::Builder::default()),
+        Box::new(impls::ws::server::Builder::default()),
+        Box::new(impls::elastic::Builder::default()),
+        Box::new(impls::crononome::Builder::default()),
+    ]
 }
 
-/// registering builtin connector types
+/// debug connector types
+#[cfg(not(tarpaulin_include))]
+pub fn debug_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
+    vec![
+        Box::new(impls::cb::Builder::default()),
+        Box::new(impls::bench::Builder::default()),
+    ]
+}
+
+/// registering builtin and debug connector types
 ///
 /// # Errors
 ///  * If a builtin connector couldn't be registered
 #[cfg(not(tarpaulin_include))]
-pub async fn register_debug_connector_types(world: &World) -> Result<()> {
+pub async fn register_builtin_connector_types(world: &World, debug: bool) -> Result<()> {
+    for builder in builtin_connector_types() {
+        world.register_builtin_connector_type(builder).await?;
+    }
+    if debug {
+        for builder in debug_connector_types() {
+            world.register_builtin_connector_type(builder).await?;
+        }
+    }
     world
-        .register_builtin_connector_type(Box::new(impls::cb::Builder::default()))
-        .await?;
-    world
-        .register_builtin_connector_type(Box::new(impls::bench::Builder::default()))
-        .await?;
-    Ok(())
+        .register_builtin_connector_type(Box::new(impls::exit::Builder::new(world)))
+        .await
 }

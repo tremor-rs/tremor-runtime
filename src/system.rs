@@ -14,7 +14,7 @@
 
 mod deployment;
 
-use crate::connectors::ConnectorBuilder;
+use crate::connectors::{self, ConnectorBuilder};
 use crate::errors::Result;
 use crate::QSIZE;
 use async_std::channel::bounded;
@@ -25,8 +25,6 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
 use tremor_script::srs::DeployFlow;
-
-pub(crate) use crate::connectors;
 
 /// Configuration for the runtime
 pub struct WorldConfig {
@@ -131,9 +129,16 @@ impl Manager {
                     ManagerMsg::Stop => {
                         info!("Stopping Manager ...");
 
-                        for _deployment in self.deployments {
-                            // FIXME: stop
+                        let mut rxs = Vec::with_capacity(self.deployments.len());
+                        for (_, deployment) in self.deployments {
+                            let (tx, rx) = bounded(1);
+                            deployment.stop(tx).await?;
+                            rxs.push(rx);
                         }
+                        for rx in rxs {
+                            rx.recv().await??;
+                        }
+
                         break;
                     }
                 }
@@ -199,10 +204,7 @@ impl World {
             storage_directory: config.storage_directory,
         };
 
-        crate::connectors::register_builtin_connector_types(&world).await?;
-        if config.debug_connectors {
-            crate::connectors::register_debug_connector_types(&world).await?;
-        }
+        connectors::register_builtin_connector_types(&world, config.debug_connectors).await?;
         Ok((world, system_h))
     }
 
@@ -212,9 +214,7 @@ impl World {
     ///  * if the system failed to stop
     pub async fn stop(&self, mode: ShutdownMode) -> Result<()> {
         match mode {
-            ShutdownMode::Graceful => {
-                todo!("FIXME: relaly fix me by shutting down the deployments")
-            }
+            ShutdownMode::Graceful => self.system.send(ManagerMsg::Stop).await?,
             ShutdownMode::Forceful => {}
         }
         // if let Err(e) = self
