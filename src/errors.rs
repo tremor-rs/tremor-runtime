@@ -126,6 +126,7 @@ impl PartialEq for Error {
         false
     }
 }
+pub type Kind = ErrorKind;
 
 error_chain! {
     links {

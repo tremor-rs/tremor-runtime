@@ -19,9 +19,6 @@ use connectors::ConnectorHarness;
 use tremor_runtime::errors::Result;
 use tremor_value::prelude::*;
 
-#[macro_use]
-extern crate log;
-
 #[async_std::test]
 async fn file_connector() -> Result<()> {
     let _ = env_logger::try_init();

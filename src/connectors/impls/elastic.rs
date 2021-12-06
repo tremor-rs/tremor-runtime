@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
-use crate::errors::{Error, ErrorKind, Result};
+use crate::errors::{Error, Kind as ErrorKind, Result};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::*;
 use elasticsearch::cluster::ClusterHealthParts;
@@ -624,7 +624,7 @@ impl Source for ElasticSource {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(crate) struct Builder {}
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {

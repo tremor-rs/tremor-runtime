@@ -1,4 +1,4 @@
-define grouper::bucket operator bucket;
+define operator bucket from  grouper::bucket;
 
 define script badger
 args

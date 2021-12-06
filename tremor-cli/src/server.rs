@@ -53,33 +53,6 @@ fn api_server(world: &World) -> tide::Server<api::State> {
 
     app.at("/version")
         .get(|r| handle_api_request(r, api::version::get));
-    app.at("/binding")
-        .get(|r| handle_api_request(r, api::binding::list_artefact))
-        .post(|r| handle_api_request(r, api::binding::publish_artefact));
-    app.at("/binding/:aid")
-        .get(|r| handle_api_request(r, api::binding::get_artefact))
-        .delete(|r| handle_api_request(r, api::binding::unpublish_artefact));
-    app.at("/binding/:aid/:sid")
-        .get(|r| handle_api_request(r, api::binding::get_instance))
-        .put(|r| handle_api_request(r, api::binding::spawn_instance))
-        .delete(|r| handle_api_request(r, api::binding::shutdown_instance));
-    app.at("/pipeline")
-        .get(|r| handle_api_request(r, api::pipeline::list_artefact))
-        .post(|r| handle_api_request(r, api::pipeline::publish_artefact));
-    app.at("/pipeline/:aid")
-        .get(|r| handle_api_request(r, api::pipeline::get_artefact))
-        .delete(|r| handle_api_request(r, api::pipeline::unpublish_artefact));
-    // connectors api
-    app.at("/connector")
-        .get(|r| handle_api_request(r, api::connector::list_artefacts))
-        .post(|r| handle_api_request(r, api::connector::publish_artefact));
-    app.at("/connector/:aid")
-        .get(|r| handle_api_request(r, api::connector::get_artefact))
-        .delete(|r| handle_api_request(r, api::connector::unpublish_artefact));
-    app.at("/connector/:aid/:sid")
-        .get(|r| handle_api_request(r, api::connector::get_instance))
-        // pause, resume
-        .patch(|r| handle_api_request(r, api::connector::patch_instance));
 
     app
 }
@@ -179,28 +152,18 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
         // We process trickle files first
         for config_file in config_files {
             let kind = get_source_kind(config_file);
-            match kind {
-                SourceKind::Troy => troy_files.push(config_file),
-                SourceKind::Trickle => {
-                    if let Err(e) = tremor_runtime::load_query_file(&world, config_file).await {
-                        return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
-                    }
-                }
-                SourceKind::Tremor | SourceKind::Json | SourceKind::Unsupported(_) => {
-                    return Err(ErrorKind::UnsupportedFileType(
-                        config_file.to_string(),
-                        kind,
-                        "yaml",
-                    )
-                    .into());
-                }
+            if kind == SourceKind::Troy {
+                troy_files.push(config_file)
+            } else {
+                return Err(
+                    ErrorKind::UnsupportedFileType(config_file.to_string(), kind, "troy").into(),
+                );
             };
         }
 
         // We process config files thereafter
         for config_file in troy_files {
             if let Err(e) = tremor_runtime::load_troy_file(&world, config_file).await {
-                dbg!("snot");
                 return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
             }
         }
