@@ -253,7 +253,7 @@ fn test_tick(ns: u64) -> Event {
 fn select_single_win_with_script_on_signal() -> Result<()> {
     let mut select = select_stmt_from_query(
         r#"
-        define tumbling window window1
+        define window window1 from tumbling
         with
             interval = 5
         script
@@ -311,7 +311,7 @@ fn select_single_win_with_script_on_signal() -> Result<()> {
 fn select_single_win_on_signal() -> Result<()> {
     let mut select = select_stmt_from_query(
         r#"
-        define tumbling window window1
+        define window window1 from tumbling
         with
             interval = 2
         end;
@@ -361,11 +361,11 @@ fn select_single_win_on_signal() -> Result<()> {
 fn select_multiple_wins_on_signal() -> Result<()> {
     let mut select = select_stmt_from_query(
         r#"
-        define tumbling window window1
+        define window window1 from tumbling
         with
             interval = 100
         end;
-        define tumbling window window2
+        define window window2 from tumbling
         with
             size = 2
         end;
@@ -426,7 +426,7 @@ fn select_multiple_wins_on_signal() -> Result<()> {
 fn test_transactional_single_window() -> Result<()> {
     let mut op = select_stmt_from_query(
         r#"
-            define tumbling window w2
+            define window w2 from tumbling
             with
               size = 2
             end;
@@ -470,11 +470,11 @@ fn test_transactional_single_window() -> Result<()> {
 fn test_transactional_multiple_windows() -> Result<()> {
     let mut op = select_stmt_from_query(
         r#"
-            define tumbling window w2_1
+            define window w2_1 from tumbling
             with
               size = 2
             end;
-            define tumbling window w2_2
+            define window w2_2 from tumbling
             with
               size = 2
             end;
@@ -541,11 +541,11 @@ fn count_tilt() -> Result<()> {
     // Windows are 15s and 30s
     let mut op = select_stmt_from_query(
         r#"
-        define tumbling window w15s
+        define window w15s from tumbling
         with
           interval = 15 * 1000000000
         end;
-        define tumbling window w30s
+        define window w30s from tumbling
         with
           interval = 30 * 1000000000
         end;
@@ -845,7 +845,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
         &module_path,
         "bar",
         r#"
-            define tumbling window my_window
+            define window my_window from tumbling
             with
                 interval = 1000000000 # 1 second
             script
