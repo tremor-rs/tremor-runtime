@@ -1,41 +1,27 @@
 use std::array; 
 
-define blaster connector ingress
+define connector bench from bench
 args
-  type = "blaster",
-  id =  "ingress",
-  description = "redundant",
   codec = "json",
-  `config` = {
-    "source": "../../../../demo/data/data.json.xz"
-  }
-end;
-
-define blackhole connector egress
-args
-  type = "blackhole",
-  id =  "egress",
-  codec = "json",
-  description = "redundant",
-  `config` = {
+  config = {
+    "source": "../../../../demo/data/data.json.xz",
     "stop_after_secs": 100,
     "significant_figures": 2,
     "warmup_secs": 10,
-  },
+  }
 end;
 
-define pipeline passthrough
+define pipeline main
 pipeline
- # use std::array;
   define script runtime
   script
     use std::array;
     match event.application of
-      case "app1" => let $class = "applog_app1",  let $rate = 1250, let $dimension = event.application, emit event
-      case "app2" => let $class = "applog_app1",  let $rate = 2500, let $dimension = event.application, emit event
-      case "app3" => let $class = "applog_app1",  let $rate = 18750, let $dimension = event.application, emit event
-      case "app4" => let $class = "applog_app1",  let $rate = 750, let $dimension = event.application, emit event
-      case "app5" => let $class = "applog_app1",  let $rate = 18750, let $dimension = event.application, emit event
+      case "app1" => let $class = "applog_app1", let $rate = 1250, let $dimension = event.application, emit event
+      case "app2" => let $class = "applog_app1", let $rate = 2500, let $dimension = event.application, emit event
+      case "app3" => let $class = "applog_app1", let $rate = 18750, let $dimension = event.application, emit event
+      case "app4" => let $class = "applog_app1", let $rate = 750, let $dimension = event.application, emit event
+      case "app5" => let $class = "applog_app1", let $rate = 18750, let $dimension = event.application, emit event
       default => null
     end;
     match event.index_type of
@@ -57,7 +43,7 @@ pipeline
     event
   end;
 
-  define grouper::bucket operator grouper;
+  define operator grouper from grouper::bucket;
 
   create script runtime;
   create operator grouper;
@@ -68,14 +54,19 @@ pipeline
   select event from grouper/overflow into out;
 end;
 
-deploy ingress;
-deploy passthrough;
-deploy egress;
+
 
 define flow wiring
 links
-  connect "/onramp/ingress/01/out" to "/pipeline/passthrough/01/in";
-  connect "/pipeline/passthrough/01/out" to "/offramp/egress/01/in";
+  create pipeline main;
+  create connector bench;
+
+  #         | what we measure |
+  # bench ->        main       -> bench
+
+
+  connect /connector/bench/bench/out to /pipeline/main/main/in;
+  connect /pipeline/main/main/out to /connector/bench/bench/in;
 end;
 
 deploy wiring;
