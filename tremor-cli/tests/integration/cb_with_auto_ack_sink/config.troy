@@ -1,0 +1,28 @@
+define flow main
+flow
+  use troy::pipelines;
+
+  define connector cb_in from cb
+  with
+    codec = "json",
+    preprocessors = ["lines"],
+    config = {
+      "path": "in.json",
+      "timeout": 2000 # 2 seconds
+    }
+  end;
+
+  define connector stdio from stdio
+  with
+    postprocessors = ["lines"]
+  end;
+
+  create connector cb_in;
+  create connector stdio;
+  create pipeline passthrough from pipelines::passthrough;
+ 
+  connect /connector/cb_in/cb_in/out to /pipeline/passthrough/passthrough/in;
+  connect /pipeline/passthrough/passthrough/out to /connector/stdio/stdio/in;
+end;
+
+deploy flow main;
