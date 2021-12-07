@@ -18,8 +18,8 @@ use super::{
     error_generic, error_no_consts, error_no_locals,
     node_id::NodeId,
     visitors::{ArgsRewriter, ConstFolder},
-    AggrRegistry, EventPath, HashMap, Helper, Ident, ImutExpr, InvokeAggrFn, Location, NodeMetas,
-    Path, Registry, Result, Script, Serialize, Stmts, Upable, Value,
+    EventPath, HashMap, Helper, Ident, ImutExpr, InvokeAggrFn, Location, NodeMetas, Path, Result,
+    Script, Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
 use crate::ast::{eq::AstEq, walkers::ImutExprWalker};

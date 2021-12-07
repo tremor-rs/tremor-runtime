@@ -22,10 +22,10 @@ use super::{
     ArgsExprs, CreationalWith, DefinitioalArgs, DefinitioalArgsWith, WithExprs,
 };
 use super::{
-    error_generic, error_no_consts, error_no_locals, AggrRegistry, BaseExpr, GroupBy, HashMap,
-    Helper, Location, NodeMetas, OperatorCreate, OperatorDecl, OperatorKind, PipelineCreate,
-    PipelineDecl, Query, Registry, Result, ScriptCreate, ScriptDecl, Select, SelectStmt, Serialize,
-    Stmt, StreamStmt, Upable, Value, WindowDecl, WindowKind,
+    error_generic, error_no_consts, error_no_locals, BaseExpr, GroupBy, HashMap, Helper, Location,
+    NodeMetas, OperatorCreate, OperatorDecl, OperatorKind, PipelineCreate, PipelineDecl, Query,
+    Result, ScriptCreate, ScriptDecl, Select, SelectStmt, Serialize, Stmt, StreamStmt, Upable,
+    Value, WindowDecl, WindowKind,
 };
 use crate::{ast::InvokeAggrFn, impl_expr};
 use crate::{
@@ -56,7 +56,7 @@ impl<'script> QueryRaw<'script> {
         for stmt_raw in self.stmts {
             match stmt_raw {
                 StmtRaw::ModuleStmt(m) => {
-                    m.define(helper.reg, helper.aggr_reg, &mut vec![], &mut helper)?;
+                    m.define(&mut helper)?;
                 }
                 StmtRaw::PipelineCreate(sq_stmt_raw) => {
                     let create_stmt_index = stmts.len();
@@ -412,7 +412,7 @@ impl<'script> PipelineCreateRaw<'script> {
         for stmt in pipeline_stmts {
             match stmt {
                 StmtRaw::ModuleStmt(m) => {
-                    m.define(helper.reg, helper.aggr_reg, &mut vec![], &mut helper)?;
+                    m.define(&mut helper)?;
                 }
                 StmtRaw::PipelineCreate(mut s) => {
                     let unmangled_id = s.id.clone();
@@ -561,16 +561,13 @@ impl<'script> ModuleStmtRaw<'script> {
     const BAD_STMT: &'static str = "Unsupported statement type inside of query module";
     pub(crate) fn define<'registry>(
         self,
-        reg: &'registry Registry,
-        aggr_reg: &'registry AggrRegistry,
-        consts: &mut Vec<Value<'script>>,
         mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<()> {
         helper.module.push(self.name.to_string());
         for e in self.stmts {
             match e {
                 StmtRaw::ModuleStmt(m) => {
-                    m.define(reg, aggr_reg, consts, helper)?;
+                    m.define(helper)?;
                 }
                 StmtRaw::Expr(e) => {
                     // We create a 'fake' tremor script module to define
