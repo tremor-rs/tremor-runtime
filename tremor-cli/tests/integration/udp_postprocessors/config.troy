@@ -40,8 +40,4 @@ flow
   connect /pipeline/main/main/exit to /connector/exit/exit/in;
 end;
 
-#mapping:
-#  /binding/main/1:
-#    instance: "1"
-
 deploy flow main;
