@@ -33,8 +33,8 @@ use petgraph::algo::is_cyclic_directed;
 use tremor_common::ids::OperatorIdGen;
 use tremor_script::{
     ast::{
-        self, BaseExpr, CompilationUnit, Helper, Ident, NodeMetas, PipelineStmt, SelectType, Stmt,
-        WindowDecl, WindowKind,
+        self, BaseExpr, CompilationUnit, Helper, Ident, NodeMetas, PipelineCreate, SelectType,
+        Stmt, WindowDecl, WindowKind,
     },
     errors::{
         pipeline_stmt_duplicate_name_err, pipeline_unknown_port_err, query_node_duplicate_name_err,
@@ -183,7 +183,7 @@ impl Query {
         let mut inputs = HashMap::new();
         let mut outputs: Vec<petgraph::graph::NodeIndex> = Vec::new();
         // Used to rewrite `pipeline/port` to `internal_stream`
-        let mut subqueries: HashMap<String, PipelineStmt> = HashMap::new();
+        let mut subqueries: HashMap<String, PipelineCreate> = HashMap::new();
 
         let metric_interval = query
             .config
@@ -428,7 +428,7 @@ impl Query {
                 | Stmt::ScriptDecl(_)
                 | Stmt::OperatorDecl(_)
                 | Stmt::PipelineDecl(_) => {}
-                Stmt::PipelineStmt(s) => {
+                Stmt::PipelineCreate(s) => {
                     // FIXME NOTE - This should really be using the node id with module
                     if subqueries.contains_key(&s.id) {
                         return Err(pipeline_stmt_duplicate_name_err(
@@ -441,7 +441,7 @@ impl Query {
                     }
                     subqueries.insert(s.id.to_string(), s.clone());
                 }
-                Stmt::OperatorStmt(o) => {
+                Stmt::OperatorCreate(o) => {
                     if nodes.contains_key(&common_cow(o.node_id.id())) {
                         let error_func = if has_builtin_node_name(&common_cow(o.node_id.id())) {
                             query_node_reserved_name_err
@@ -453,7 +453,7 @@ impl Query {
                         );
                     }
 
-                    let fqon = o.node_id.target_fqn(&o.target);
+                    let fqon = o.target.fqn();
 
                     let node = NodeConfig {
                         id: o.node_id.id().to_string(),
@@ -470,7 +470,7 @@ impl Query {
                                 .get(&fqon)
                                 .ok_or("operator not found")?
                                 .clone();
-                            if let Some(Stmt::OperatorStmt(o)) = query.stmts.get(i) {
+                            if let Some(Stmt::OperatorCreate(o)) = query.stmts.get(i) {
                                 decl.params.ingest_creational_with(&o.params)?;
                             };
                             let inner_stmt = Stmt::OperatorDecl(decl);
@@ -491,7 +491,7 @@ impl Query {
                     nodes.insert(common_cow(o.node_id.id()), id);
                     outputs.push(id);
                 }
-                Stmt::ScriptStmt(o) => {
+                Stmt::ScriptCreate(o) => {
                     if nodes.contains_key(&common_cow(o.node_id.id())) {
                         let error_func = if has_builtin_node_name(&common_cow(o.node_id.id())) {
                             query_node_reserved_name_err
@@ -503,7 +503,7 @@ impl Query {
                         );
                     }
 
-                    let fqn = o.node_id.target_fqn(&o.target);
+                    let fqn = o.target.fqn();
 
                     let stmt_srs =
                         srs::Stmt::try_new_from_query::<Error, _>(&self.0.query, |query| {
@@ -758,10 +758,10 @@ fn select(
                         .windows
                         .iter()
                         .map(|w| {
-                            let fqwn = w.fqwn();
+                            let fqwn = w.id.fqn();
                             Ok(windows
                                 .get(&fqwn)
-                                .map(|imp| (w.id.clone(), imp.clone()))
+                                .map(|imp| (w.id.id().to_string(), imp.clone()))
                                 .ok_or_else(|| {
                                     ErrorKind::BadOpConfig(format!("Unknown window: {}", &fqwn))
                                 })?)

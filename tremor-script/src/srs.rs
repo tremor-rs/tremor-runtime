@@ -329,7 +329,7 @@ impl Query {
             raw,
             query: structured,
             instance_id: target.to_string(),
-            artifact_id: NodeId::new(target.to_string(), vec![]), // FIXME TODO fix
+            artifact_id: NodeId::new(target.to_string(), &[]), // FIXME TODO fix
         })
     }
 
@@ -617,7 +617,7 @@ impl FlowDecl {
                     // FIXME: wire up args
                     connector_decls.push(ConnectorDecl::new_from_deploy(
                         origin,
-                        stmt.alias.clone(),
+                        stmt.node_id.id.clone(),
                         &instance,
                     )?);
                 }
@@ -625,7 +625,7 @@ impl FlowDecl {
                     // FIXME: wire up args
                     pipeline_decls.push(Query::new_from_deploy(
                         origin,
-                        stmt.alias.clone(),
+                        stmt.node_id.id.clone(),
                         &instance,
                     )?);
                 }
@@ -708,7 +708,7 @@ impl ScriptDecl {
         // that the join_f fails
         self.raw.extend_from_slice(&stmt.raw);
 
-        if let query::Stmt::ScriptStmt(instance) = &stmt.structured {
+        if let query::Stmt::ScriptCreate(instance) = &stmt.structured {
             for (name, value) in &instance.params.with.0 {
                 let value = value.try_as_lit(meta)?;
 
