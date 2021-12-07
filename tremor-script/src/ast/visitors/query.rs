@@ -269,51 +269,51 @@ pub trait Visitor<'script> {
         Ok(())
     }
 
-    /// visit a `OperatorStmt`
+    /// visit a `OperatorCreate`
     ///
     /// # Errors
     /// if the walker function fails
-    fn visit_operator_stmt(&mut self, _stmt: &mut OperatorStmt<'script>) -> Result<VisitRes> {
+    fn visit_operator_stmt(&mut self, _stmt: &mut OperatorCreate<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
-    /// leave a `OperatorStmt`
+    /// leave a `OperatorCreate`
     ///
     /// # Errors
     /// if the walker function fails
-    fn leave_operator_stmt(&mut self, _stmt: &mut OperatorStmt<'script>) -> Result<()> {
+    fn leave_operator_stmt(&mut self, _stmt: &mut OperatorCreate<'script>) -> Result<()> {
         Ok(())
     }
 
-    /// visit a `ScriptStmt`
+    /// visit a `ScriptCreate`
     ///
     /// # Errors
     /// if the walker function fails
-    fn visit_script_stmt(&mut self, _stmt: &mut ScriptStmt<'script>) -> Result<VisitRes> {
+    fn visit_script_stmt(&mut self, _stmt: &mut ScriptCreate<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
-    /// leave a `ScriptStmt`
+    /// leave a `ScriptCreate`
     ///
     /// # Errors
     /// if the walker function fails
-    fn leave_script_stmt(&mut self, _stmt: &mut ScriptStmt<'script>) -> Result<()> {
+    fn leave_script_stmt(&mut self, _stmt: &mut ScriptCreate<'script>) -> Result<()> {
         Ok(())
     }
 
-    /// visit a `PipelineStmt`
+    /// visit a `PipelineCreate`
     ///
     /// # Errors
     /// if the walker function fails
-    fn visit_pipeline_stmt(&mut self, _stmt: &mut PipelineStmt) -> Result<VisitRes> {
+    fn visit_pipeline_stmt(&mut self, _stmt: &mut PipelineCreate) -> Result<VisitRes> {
         Ok(Walk)
     }
 
-    /// leave a `PipelineStmt`
+    /// leave a `PipelineCreate`
     ///
     /// # Errors
     /// if the walker function fails
-    fn leave_pipeline_stmt(&mut self, _stmt: &mut PipelineStmt) -> Result<()> {
+    fn leave_pipeline_stmt(&mut self, _stmt: &mut PipelineCreate) -> Result<()> {
         Ok(())
     }
 
