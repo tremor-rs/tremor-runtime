@@ -1,7 +1,7 @@
 Error: 
-    3 |   badger = "snot",
-    4 | pipeline
-    5 |    dark horse
-      |    ^^^^ Found the token `dark` but expected one of `<doc-comment>`, `create`, `define`, `mod`, `select`
-    6 | end;
-    7 |
+    5 |     badger = "snot",
+    6 |   pipeline
+    7 |     dark horse
+      |     ^^^^ Found the token `dark` but expected one of `<doc-comment>`, `create`, `define`, `mod`, `select`
+    8 |   end;
+    9 | end;
