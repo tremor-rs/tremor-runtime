@@ -20,9 +20,9 @@ pub(crate) use crate::ast::{
     ClausePreCondition, Comprehension, Consts, CreationalWith, DefaultCase, DefinitioalArgs,
     DefinitioalArgsWith, EmitExpr, EventPath, Expr, ExprPath, Field, FnDecl, GroupBy, Helper,
     Ident, IfElse, ImutExpr, Invoke, InvokeAggr, List, Literal, LocalPath, Match, Merge,
-    MetadataPath, NodeMetas, OperatorDecl, OperatorStmt, Patch, PatchOperation, Path, Pattern,
-    PipelineDecl, PipelineStmt, PredicateClause, PredicatePattern, Query, Record, RecordPattern,
-    Recur, ReservedPath, Script, ScriptDecl, ScriptStmt, Segment, Select, SelectStmt, StatePath,
+    MetadataPath, NodeMetas, OperatorCreate, OperatorDecl, Patch, PatchOperation, Path, Pattern,
+    PipelineCreate, PipelineDecl, PredicateClause, PredicatePattern, Query, Record, RecordPattern,
+    Recur, ReservedPath, Script, ScriptCreate, ScriptDecl, Segment, Select, SelectStmt, StatePath,
     Stmt, StrLitElement, StreamStmt, StringLit, TestExpr, TuplePattern, UnaryExpr, WindowDecl,
     WithExpr,
 };

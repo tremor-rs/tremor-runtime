@@ -15,7 +15,7 @@
 // Note: We ignore the is_* functions for coverage as they effectively are
 // only lists
 
-use crate::errors::{Error, ErrorKind, Result, ResultExt, UnfinishedToken};
+use crate::errors::{Error, Kind as ErrorKind, Result, ResultExt, UnfinishedToken};
 #[cfg_attr(feature = "cargo-clippy", allow(clippy::all, clippy::unwrap_used))]
 use crate::parser::g::__ToTriple;
 use crate::path::ModulePath;
@@ -1014,6 +1014,14 @@ impl<'input> Preprocessor {
             }
         }
 
+        file.set_extension("troy");
+        if let Some(path) = module_path.resolve(&file) {
+            if path.is_file() {
+                let cu = include_stack.push(path.as_os_str())?;
+                return Ok((cu, path));
+            }
+        }
+
         file.set_extension("trickle");
         if let Some(path) = module_path.resolve(&file) {
             if path.is_file() {
@@ -1023,7 +1031,6 @@ impl<'input> Preprocessor {
         }
 
         file.set_extension("tremor");
-
         if let Some(path) = module_path.resolve(&file) {
             if path.is_file() {
                 let cu = include_stack.push(path.as_os_str())?;

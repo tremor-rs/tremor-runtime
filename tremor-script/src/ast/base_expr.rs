@@ -477,12 +477,12 @@ impl<'script> BaseExpr for StmtRaw<'script> {
     fn s(&self, meta: &NodeMetas) -> Location {
         match self {
             StmtRaw::ModuleStmt(s) => s.start,
-            StmtRaw::OperatorStmt(s) => s.start,
+            StmtRaw::OperatorCreate(s) => s.start,
             StmtRaw::OperatorDecl(s) => s.start,
-            StmtRaw::ScriptStmt(s) => s.start,
+            StmtRaw::ScriptCreate(s) => s.start,
             StmtRaw::ScriptDecl(s) => s.start,
             StmtRaw::PipelineDecl(s) => s.start,
-            StmtRaw::PipelineStmt(s) => s.start,
+            StmtRaw::PipelineCreate(s) => s.start,
             StmtRaw::SelectStmt(s) => s.start,
             StmtRaw::StreamStmt(s) => s.start,
             StmtRaw::WindowDecl(s) => s.start,
@@ -492,12 +492,12 @@ impl<'script> BaseExpr for StmtRaw<'script> {
     fn e(&self, meta: &NodeMetas) -> Location {
         match self {
             StmtRaw::ModuleStmt(e) => e.end,
-            StmtRaw::OperatorStmt(e) => e.end,
+            StmtRaw::OperatorCreate(e) => e.end,
             StmtRaw::OperatorDecl(e) => e.end,
-            StmtRaw::ScriptStmt(e) => e.end,
+            StmtRaw::ScriptCreate(e) => e.end,
             StmtRaw::ScriptDecl(e) => e.end,
             StmtRaw::PipelineDecl(e) => e.end,
-            StmtRaw::PipelineStmt(e) => e.end,
+            StmtRaw::PipelineCreate(e) => e.end,
             StmtRaw::SelectStmt(e) => e.end,
             StmtRaw::StreamStmt(e) => e.end,
             StmtRaw::WindowDecl(e) => e.end,

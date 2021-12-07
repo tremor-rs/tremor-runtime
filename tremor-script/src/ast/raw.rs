@@ -31,7 +31,8 @@ use crate::{
         StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr, UnaryOpKind,
     },
     errors::{
-        err_generic, error_generic, error_missing_effector, error_oops, Error, ErrorKind, Result,
+        err_generic, error_generic, error_missing_effector, error_oops, Error, Kind as ErrorKind,
+        Result,
     },
     impl_expr, impl_expr_exraw,
     pos::{Location, Range},
@@ -374,6 +375,12 @@ pub struct IdentRaw<'script> {
 }
 impl_expr!(IdentRaw);
 
+impl<'script> ToString for IdentRaw<'script> {
+    fn to_string(&self) -> String {
+        self.id.to_string()
+    }
+}
+
 impl<'script> From<&'script str> for IdentRaw<'script> {
     fn from(id: &'script str) -> Self {
         IdentRaw {
@@ -381,11 +388,6 @@ impl<'script> From<&'script str> for IdentRaw<'script> {
             end: Location::default(),
             id: id.into(),
         }
-    }
-}
-impl<'script> ToString for IdentRaw<'script> {
-    fn to_string(&self) -> String {
-        self.id.to_string()
     }
 }
 
