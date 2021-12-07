@@ -1,6 +1,4 @@
-define connector empty;
-
-deploy fake
-script
-  { nope = "yes" }
+define flow error
+flow
+  define connector empty;
 end;

@@ -165,17 +165,15 @@ DeployStmts: DeployStmtsRaw<'input> = {
 
 
 DeployStmt: DeployStmtRaw<'input> = {
-    DeployModuleStmt => DeployStmtRaw::ModuleStmt(<>),
-    DefinePipeline => DeployStmtRaw::PipelineDecl(<>),
-    DefineConnector => <>,
-    DefineFlow => <>,
-    DeployDeployStmt => <>,
+    DeployModuleStmt => DeployStmtRaw::Module(<>),
+    DefineFlow => DeployStmtRaw::FlowDecl(<>),
+    DeployFlowStmt => DeployStmtRaw::DeployFlow(<>),
 }
 
-DeployDeployStmt: DeployStmtRaw<'input> = {
+DeployFlowStmt: DeployFlowRaw<'input> = {
     // FIXME: we don't need a deploy kind here once troy is merged
-    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id, target, params, docs }),
-    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id: id.clone(), target: id.into(), params, docs }),
+    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployFlowRaw { start, end, id, target, params, docs },
+    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> <params:CreationWithEnd> <end:@L> => DeployFlowRaw { start, end, id: id.clone(), target: id.into(), params, docs },
 }
 
 ConnectorKind: IdentRaw<'input> = {
@@ -183,12 +181,8 @@ ConnectorKind: IdentRaw<'input> = {
 }
 
 
-DeployModuleStmt: DeployModuleStmtRaw<'input> = {
-    <start:@L> "mod" <name:Ident> "with" <docs:ModComment> <stmts:DeployModuleStmts> "end" <end:@L> => DeployModuleStmtRaw{name, start, end, stmts, docs},
-}
-
-WithFlowStmts: FlowStmtsRaw<'input> = {
-    "flow" <links:FlowStmts> => <>,
+DeployModuleStmt: DeployModuleRaw<'input> = {
+    <start:@L> "mod" <name:Ident> "with" <docs:ModComment> <stmts:DeployModuleStmts> "end" <end:@L> => DeployModuleRaw{name, start, end, stmts, docs},
 }
 
 FlowStmts: FlowStmtsRaw<'input> = {
@@ -200,7 +194,7 @@ FlowStmts: FlowStmtsRaw<'input> = {
 }
 
 FlowStmts_: FlowStmtsRaw<'input> = {
-    <Sep<FlowStmts_, DeployLink, ";">> => <>
+    <Sep<FlowStmts_, FlowStmtInner, ";">> => <>
 }
 
 CreateKind: CreateKind = {
@@ -209,11 +203,17 @@ CreateKind: CreateKind = {
 }
 
 
-DeployLink: FlowStmtRaw<'input> = {
+FlowStmtInner: FlowStmtRaw<'input> = {
+    <module:DeployModuleStmt> => FlowStmtRaw::Module(<>),
+    <define:Define> => define,
     <create:Create> => FlowStmtRaw::Create(create),
     <connect:Connect> => FlowStmtRaw::Connect(connect),
 }
 
+Define: FlowStmtRaw<'input> =  {
+    DefinePipeline => FlowStmtRaw::PipelineDecl(<>),
+    DefineConnector => FlowStmtRaw::ConnectorDecl(<>),
+}
 Create: CreateStmtRaw<'input> = {
     <start:@L> "create" <kind:CreateKind> <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => CreateStmtRaw { start, end, id, target, params, kind },
     <start:@L> "create" <kind:CreateKind> <id:Ident> <params:CreationWithEnd> <end:@L> => CreateStmtRaw { start, end, id: id.clone(),  target: id.into(), params, kind },
@@ -236,7 +236,7 @@ ConnectTo: DeployEndpointRaw<'input> = {
 }
 
 /// List of expressions at the root of the script
-DeployModuleStmts: DeployStmtsRaw<'input> = {
+DeployModuleStmts: DeployModuleStmtsRaw<'input> = {
      <stmt:DeployModuleInnerStmt> ";" <list:DeployModuleStmts> => {
         let mut list = list;
         list.insert(0,stmt);
@@ -245,26 +245,26 @@ DeployModuleStmts: DeployStmtsRaw<'input> = {
      <item:DeployModuleInnerStmt> ";"? => vec![item],
  }
 
- DefineConnector: DeployStmtRaw<'input> =  {
+ DefineConnector: ConnectorDeclRaw<'input> =  {
     // Connectors - these define connectors for deployment
-    <start:@L> <docs:DocComment> "define" "connector" <id:Ident> "from" <kind:ConnectorKind> <params:ArgsWithEnd?> <end:@L> => DeployStmtRaw::ConnectorDecl(ConnectorDeclRaw { start, end, id: id.to_string(), kind, params: params.unwrap_or_default(), docs }),
+    <start:@L> <docs:DocComment> "define" "connector" <id:Ident> "from" <kind:ConnectorKind> <params:ArgsWithEnd?> <end:@L> => ConnectorDeclRaw { start, end, id: id.to_string(), kind, params: params.unwrap_or_default(), docs },
  }
 
-DefineFlow: DeployStmtRaw<'input> = {
+DefineFlow: FlowDeclRaw<'input> = {
     // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
-    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> <atoms:WithFlowStmts> "end" <end:@L> => DeployStmtRaw::FlowDecl(FlowDeclRaw { start, end, id: id.to_string(), params, atoms, docs }),
+    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> "flow" <atoms:FlowStmts> "end" <end:@L> => FlowDeclRaw { start, end, id: id.to_string(), params, atoms, docs },
 }
 
  // In case we need to limit the content of deploy stmt
-DeployModuleInnerStmt: DeployStmtRaw<'input> = {
-    DeployModuleStmt => DeployStmtRaw::ModuleStmt(<>),
-    DefinePipeline => DeployStmtRaw::PipelineDecl(<>),
-    DefineConnector => <>,
-    DefineFlow => <>,
+DeployModuleInnerStmt: DeployModuleStmtRaw<'input> = {
+    DeployModuleStmt => DeployModuleStmtRaw::Module(<>),
+    DefinePipeline => DeployModuleStmtRaw::PipelineDecl(<>),
+    DefineConnector => DeployModuleStmtRaw::ConnectorDecl(<>),
+    // TODO:    DefineFlow => DeployModuleStmtRaw::FlowDecl(<>),
     // Allow imports of tremor-script definitions
-    Const => DeployStmtRaw::Expr(Box::new(<>)),
-    FnDecl => DeployStmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
-    Intrinsic => DeployStmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
+    Const => DeployModuleStmtRaw::Expr(Box::new(<>)),
+    FnDecl => DeployModuleStmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
+    Intrinsic => DeployModuleStmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
 }
 
 ////////////////////////////// Trickle statements //////////////////////////////
