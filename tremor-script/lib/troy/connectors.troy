@@ -1,0 +1,10 @@
+
+## The exit connector, when getting a event it will terminate the preprocessors
+define connector exit from exit;
+
+## The metrics connector that can be used to receive metrics
+define connector metrics from metrics;
+
+## The stdio connector ro acces stdin, stdout and stderror.
+## To write data to stderr use the port `stderr`, data send to `in` or `stdout` is written to `stdout`.
+define connector stdio from stdio;
