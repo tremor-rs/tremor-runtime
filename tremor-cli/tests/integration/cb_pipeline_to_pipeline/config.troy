@@ -1,0 +1,25 @@
+
+define flow main
+flow
+  use troy::pipelines;
+  define connector cb_check from cb
+  with
+    codec = "json",
+    preprocessors = ["lines"],
+    config = {
+      "path": "in.json",
+      "timeout": 1000
+    }
+  end;
+
+  create pipeline main1 from pipelines::passthrough;
+  create pipeline main2 from pipelines::passthrough;
+  create connector cb_check;
+
+  connect /connector/cb_check/cb_check/out to /pipeline/main1/main1/in;
+  connect /pipeline/main1/main1/out to /pipeline/main2/main2/in;
+  connect /pipeline/main2/main2/out to /connector/cb_check/cb_check/in;
+end;
+
+deploy flow main;
+
