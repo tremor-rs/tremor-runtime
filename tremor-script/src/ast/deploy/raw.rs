@@ -516,7 +516,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
                 }
             }
             CreateKind::Pipeline => {
-                if let Some(artefact) = helper.pipeline_decls.get(&node_id) {
+                if let Some(artefact) = helper.pipeline_decls.get(&target) {
                     // FIXME: do we need to ingest args?
                     let artefact = artefact.clone();
                     // artefact.params.ingest_creational_with(&params)?;

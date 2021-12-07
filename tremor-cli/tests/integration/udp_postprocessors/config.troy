@@ -1,67 +1,39 @@
-define pipeline main
-into out, exit
-pipeline
-  select event from in where event != "exit" into out;
-  select event from in where event == "exit" into out/exit;
-end;
 
-#  - id: in
-#    type: file
-#    codec: json
-#    preprocessors:
-#      - lines
-#    config:
-#      path: "in.json"
-#      mode: read
-define file connector in
-with
-  codec = "json",
-  preprocessors = ["lines"],
-  config = {
-      "path": "in.json",
-      "mode": "read"
-  }
-end;
-
-#  - id: udp-out
-#    type: udp_client
-#    codec: yaml
-#    postprocessors:
-#      - base64
-#    config:
-#      host: "127.0.0.1"
-#      port: 4242
-define udp_client connector `udp-out`
-with
-  codec = "yaml",
-  postprocessors = ["base64"],
-  config = {
-    "host": "127.0.0.1",
-    "port": 4242
-  }
-end;
-
-#  - id: exit
-#    type: exit
-define exit connector exit;
-
-
-# binding:
-#   - id: main
-#     links:
-#       "/connector/in/{instance}/out":
-#         ["/pipeline/main/{instance}/in"]
-#       "/pipeline/main/{instance}/out":
-#         ["/connector/udp-out/{instance}/in"]
-#       "/pipeline/main/{instance}/exit":
-#         ["/connector/exit/{instance}/in"]
-# 
 define flow main
 flow
+  use troy::connectors;
+
+  define pipeline main
+  into out, exit
+  pipeline
+    select event from in where event != "exit" into out;
+    select event from in where event == "exit" into out/exit;
+  end;
+
+  define connector in from file
+  with
+    codec = "json",
+    preprocessors = ["lines"],
+    config = {
+        "path": "in.json",
+        "mode": "read"
+    }
+  end;
+
+  define connector `udp-out` from udp_client
+  with
+    codec = "yaml",
+    postprocessors = ["base64"],
+    config = {
+      "host": "127.0.0.1",
+      "port": 4242
+    }
+  end;
+  
   create pipeline main;
   create connector in;
   create connector `udp-out`;
-  create connector exit;
+  create connector exit from connectors::exit;
 
   connect /connector/in/in/out to /pipeline/main/main/in;
   connect /pipeline/main/main/out to /connector/`udp-out`/`udp-out`/in;
