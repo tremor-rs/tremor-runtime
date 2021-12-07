@@ -1,8 +1,9 @@
-define pipeline passthrough
-args
-  badger = "snot",
-pipeline
-   dark horse
+define flow Error
+flow
+  define pipeline passthrough
+  args
+    badger = "snot",
+  pipeline
+    dark horse
+  end;
 end;
-
-deploy passthrough

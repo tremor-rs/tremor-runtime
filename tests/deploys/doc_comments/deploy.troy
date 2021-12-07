@@ -1,10 +1,12 @@
-###
-### This is a top level document comment
-###
+mod outer with
+  ###
+  ### This is a top level document comment
+  ###
 
-define pipeline passthrough
-args
-  snot = "badger"
-pipeline
-  select args.snot from in into out;
-end;
+  define pipeline passthrough
+  args
+    snot = "badger"
+  pipeline
+    select args.snot from in into out;
+  end;
+end
