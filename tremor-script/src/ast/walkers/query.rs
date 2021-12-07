@@ -217,11 +217,11 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
         self.leave_stream_stmt(stmt)
     }
 
-    /// walks a `OperatorStmt`
+    /// walks a `OperatorCreate`
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_operator_stmt(&mut self, stmt: &mut OperatorStmt<'script>) -> Result<()> {
+    fn walk_operator_stmt(&mut self, stmt: &mut OperatorCreate<'script>) -> Result<()> {
         stop!(
             self.visit_operator_stmt(stmt),
             self.leave_operator_stmt(stmt)
@@ -230,21 +230,21 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
         self.leave_operator_stmt(stmt)
     }
 
-    /// walks a `ScriptStmt`
+    /// walks a `ScriptCreate`
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_script_stmt(&mut self, stmt: &mut ScriptStmt<'script>) -> Result<()> {
+    fn walk_script_stmt(&mut self, stmt: &mut ScriptCreate<'script>) -> Result<()> {
         stop!(self.visit_script_stmt(stmt), self.leave_script_stmt(stmt));
         self.walk_creational_with(&mut stmt.params)?;
         self.leave_script_stmt(stmt)
     }
 
-    /// walks a `PipelineStmt`
+    /// walks a `PipelineCreate`
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_pipeline_stmt(&mut self, stmt: &mut PipelineStmt) -> Result<()> {
+    fn walk_pipeline_stmt(&mut self, stmt: &mut PipelineCreate) -> Result<()> {
         stop!(
             self.visit_pipeline_stmt(stmt),
             self.leave_pipeline_stmt(stmt)
@@ -275,9 +275,9 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
             Stmt::ScriptDecl(d) => self.walk_script_decl(d.as_mut())?,
             Stmt::PipelineDecl(d) => self.walk_pipeline_decl(d.as_mut())?,
             Stmt::StreamStmt(s) => self.walk_stream_stmt(s)?,
-            Stmt::OperatorStmt(s) => self.walk_operator_stmt(s)?,
-            Stmt::ScriptStmt(s) => self.walk_script_stmt(s)?,
-            Stmt::PipelineStmt(s) => self.walk_pipeline_stmt(s)?,
+            Stmt::OperatorCreate(s) => self.walk_operator_stmt(s)?,
+            Stmt::ScriptCreate(s) => self.walk_script_stmt(s)?,
+            Stmt::PipelineCreate(s) => self.walk_pipeline_stmt(s)?,
             Stmt::SelectStmt(s) => self.walk_select_stmt(s)?,
         }
         self.leave_stmt(stmt)

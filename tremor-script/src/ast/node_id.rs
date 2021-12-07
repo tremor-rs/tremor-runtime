@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use super::raw::IdentRaw;
+
 // Copyright 2020-2021, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,16 +20,45 @@ use std::fmt::Display;
 #[derive(Clone, Debug, PartialEq, Serialize, Hash, Eq)]
 pub struct NodeId {
     /// The ID of the Node
-    id: String,
+    pub(crate) id: String,
     /// The module of the Node
-    module: Vec<String>,
+    pub(crate) module: Vec<String>,
+}
+
+impl<T: ToString> From<&T> for NodeId {
+    fn from(id: &T) -> Self {
+        Self {
+            id: id.to_string(),
+            module: vec![],
+        }
+    }
+}
+
+impl<'script> From<IdentRaw<'script>> for NodeId {
+    fn from(id: IdentRaw<'script>) -> Self {
+        Self {
+            id: id.id.to_string(),
+            module: vec![],
+        }
+    }
 }
 
 impl NodeId {
+    /// Creates a new NodeId with a given module prefix
+    #[must_use]
+    pub fn with_prefix(mut self, prefix: &[String]) -> Self {
+        let mut module = prefix.to_vec();
+        module.append(&mut self.module);
+        self.module = module;
+        self
+    }
     /// Create a new `NodeId` from an ID and Module list.
     #[must_use]
-    pub fn new(id: String, module: Vec<String>) -> Self {
-        Self { id, module }
+    pub fn new<T: ToString>(id: T, module: &[String]) -> Self {
+        Self {
+            id: id.to_string(),
+            module: module.to_vec(),
+        }
     }
 
     /// The node's id.
@@ -101,14 +132,11 @@ mod test {
 
     #[test]
     fn fqn() {
-        let no_module = NodeId::new("foo".to_string(), vec![]);
+        let no_module = NodeId::new("foo".to_string(), &[]);
         assert_eq!(no_module.fqn(), "foo");
         assert!(no_module.module().is_empty());
 
-        let with_module = NodeId::new(
-            "foo".to_string(),
-            vec!["bar".to_string(), "baz".to_string()],
-        );
+        let with_module = NodeId::new("foo".to_string(), &["bar".to_string(), "baz".to_string()]);
         assert_eq!(with_module.fqn(), "bar::baz::foo");
         assert_eq!(with_module.module(), &["bar", "baz"]);
 

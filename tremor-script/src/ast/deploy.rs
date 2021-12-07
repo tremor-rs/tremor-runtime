@@ -233,7 +233,7 @@ impl DeployEndpoint {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FlowDecl<'script> {
     pub(crate) mid: usize,
-    /// Identifer for the connector
+    /// Identifer for the flow
     pub node_id: NodeId,
     /// Resolved argument defaults
     pub params: DefinitioalArgs<'script>,
@@ -260,11 +260,9 @@ pub enum CreateTargetDecl<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CreateStmt<'script> {
     pub(crate) mid: usize,
-    /// Alias or identify for this create statement
-    pub alias: String,
     /// Target of the artefact definition being deployed
-    pub target: String,
-    /// Target for creation
+    pub target: NodeId,
+    /// The name of the created entity
     pub node_id: NodeId,
     /// Atomic unit of deployment
     pub decl: CreateTargetDecl<'script>,
@@ -276,10 +274,8 @@ impl_fqn!(CreateStmt);
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DeployFlow<'script> {
     pub(crate) mid: usize,
-    /// Alias or identify for this create statement
-    pub alias: String,
     /// Target of the artefact definition being deployed
-    pub target: String,
+    pub target: NodeId,
     /// Target for creation
     pub node_id: NodeId,
     /// Atomic unit of deployment
