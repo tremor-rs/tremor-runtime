@@ -1,4 +1,6 @@
-define pipeline identity
-pipeline
-  select event from in into out;
-end;
+mod test with
+  define pipeline identity
+  pipeline
+    select event from in into out;
+  end;
+end
