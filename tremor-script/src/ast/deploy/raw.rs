@@ -33,8 +33,7 @@ use crate::ast::{
     raw::{ExprRaw, IdentRaw, ModuleRaw},
     walkers::ImutExprWalker,
 };
-use crate::errors::ErrorKind;
-use crate::errors::Result;
+use crate::errors::{Kind as ErrorKind, Result};
 use crate::impl_expr;
 use crate::pos::Location;
 use crate::AggrType;
@@ -263,7 +262,7 @@ impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             params: self.params.up(helper)?,
             builtin_kind: self.kind.to_string(),
-            node_id: NodeId::new(self.id, helper.module.clone()),
+            node_id: NodeId::new(self.id, &helper.module),
             docs: self
                 .docs
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
@@ -409,7 +408,7 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
             .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
         let params = self.params.up(helper)?;
         helper.module.pop();
-        let node_id = NodeId::new(self.id.clone(), helper.module.clone());
+        let node_id = NodeId::new(&self.id, &helper.module);
 
         let flow_decl = FlowDecl {
             mid,
@@ -452,10 +451,9 @@ pub struct CreateStmtRaw<'script> {
     pub(crate) id: IdentRaw<'script>,
     pub(crate) params: CreationalWithRaw<'script>,
     /// Id of the definition
-    pub target: IdentRaw<'script>,
+    pub target: NodeId,
     /// Module of the definition
     pub(crate) kind: CreateKind,
-    pub(crate) module: Vec<IdentRaw<'script>>,
 }
 impl_expr!(CreateStmtRaw);
 
@@ -464,18 +462,14 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // TODO check that names across pipeline/flow/connector definitions are unique or else hygienic error
 
-        let target_module = self
-            .module
-            .iter()
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>();
-        let node_id = NodeId::new(self.target.to_string(), target_module);
+        let node_id = NodeId::new(&self.id.id, &helper.module);
+        let target = self.target.clone().with_prefix(&helper.module);
         let outer = self.extent(&helper.meta);
         let inner = self.id.extent(&helper.meta);
         let params = self.params.up(helper)?;
         let decl = match self.kind {
             CreateKind::Connector => {
-                if let Some(artefact) = helper.connector_decls.get(&node_id) {
+                if let Some(artefact) = helper.connector_decls.get(&target) {
                     let mut artefact = artefact.clone();
                     artefact.params.ingest_creational_with(&params)?;
                     CreateTargetDecl::Connector(artefact)
@@ -484,7 +478,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
                     return Err(ErrorKind::DeployArtefactNotDefined(
                         outer,
                         inner,
-                        node_id.to_string(),
+                        target.to_string(),
                         helper
                             .connector_decls
                             .keys()
@@ -505,7 +499,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
                     return Err(ErrorKind::DeployArtefactNotDefined(
                         outer,
                         inner,
-                        node_id.to_string(),
+                        target.to_string(),
                         helper
                             .pipeline_decls
                             .keys()
@@ -520,8 +514,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         let create_stmt = CreateStmt {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             node_id: node_id.clone(),
-            alias: self.id.to_string(),
-            target: self.target.to_string(),
+            target,
             decl,
         };
         // helper.instances.insert(node_id, create_stmt.clone());
@@ -538,9 +531,7 @@ pub struct DeployFlowRaw<'script> {
     pub(crate) id: IdentRaw<'script>,
     pub(crate) params: CreationalWithRaw<'script>,
     /// Id of the definition
-    pub target: IdentRaw<'script>,
-    /// Module of the definition - FIXME: we don't need the deploy kind here once it's merged
-    pub(crate) module: Vec<IdentRaw<'script>>,
+    pub target: NodeId,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
 impl_expr!(DeployFlowRaw);
@@ -550,21 +541,17 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // TODO check that names across pipeline/flow/connector definitions are unique or else hygienic error
 
-        let target_module = self
-            .module
-            .iter()
-            .map(|x| format!("{}", x.id))
-            .collect::<Vec<String>>();
-        let node_id = NodeId::new(self.target.to_string(), target_module);
+        let node_id = NodeId::new(&self.id.id, &helper.module);
+        let target = self.target.clone().with_prefix(&helper.module);
 
-        let decl = if let Some(artefact) = helper.flow_decls.get(&node_id) {
+        let decl = if let Some(artefact) = helper.flow_decls.get(&target) {
             artefact.clone()
         } else {
             dbg!();
             return Err(ErrorKind::DeployArtefactNotDefined(
                 self.extent(&helper.meta),
                 self.id.extent(&helper.meta),
-                node_id.to_string(),
+                target.to_string(),
                 helper.flow_decls.keys().map(ToString::to_string).collect(),
             )
             .into());
@@ -572,9 +559,8 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
 
         let create_stmt = DeployFlow {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            node_id: node_id.clone(),
-            alias: self.id.to_string(),
-            target: self.target.to_string(),
+            node_id,
+            target: self.target,
             decl,
             docs: self
                 .docs

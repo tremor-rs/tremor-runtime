@@ -60,11 +60,11 @@ pub enum Stmt<'script> {
     /// A stream
     StreamStmt(StreamStmt),
     /// An operator creation
-    OperatorStmt(OperatorStmt<'script>),
+    OperatorCreate(OperatorCreate<'script>),
     /// A script creation
-    ScriptStmt(ScriptStmt<'script>),
+    ScriptCreate(ScriptCreate<'script>),
     /// An pipeline creation
-    PipelineStmt(PipelineStmt),
+    PipelineCreate(PipelineCreate),
     /// A select statement
     SelectStmt(SelectStmt<'script>),
 }
@@ -78,9 +78,9 @@ impl<'script> BaseExpr for Stmt<'script> {
             Stmt::OperatorDecl(s) => s.mid(),
             Stmt::ScriptDecl(s) => s.mid(),
             Stmt::PipelineDecl(s) => s.mid(),
-            Stmt::PipelineStmt(s) => s.mid(),
-            Stmt::OperatorStmt(s) => s.mid(),
-            Stmt::ScriptStmt(s) => s.mid(),
+            Stmt::PipelineCreate(s) => s.mid(),
+            Stmt::OperatorCreate(s) => s.mid(),
+            Stmt::ScriptCreate(s) => s.mid(),
             Stmt::SelectStmt(s) => s.mid(),
         }
     }
@@ -183,17 +183,17 @@ impl_fqn!(OperatorDecl);
 
 /// An operator creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct OperatorStmt<'script> {
+pub struct OperatorCreate<'script> {
     /// The ID and Module of the Operator
     pub node_id: NodeId,
     /// metadata id
     pub(crate) mid: usize,
     /// Target of the operator
-    pub target: String,
+    pub target: NodeId,
     /// parameters of the instance
     pub params: CreationalWith<'script>,
 }
-impl_expr_mid!(OperatorStmt);
+impl_expr_mid!(OperatorCreate);
 
 /// A script declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -211,17 +211,17 @@ impl_fqn!(ScriptDecl);
 
 /// A script creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ScriptStmt<'script> {
+pub struct ScriptCreate<'script> {
     /// The ID and Module of the Script
     pub node_id: NodeId,
     /// metadata id
     pub(crate) mid: usize,
     /// Target of the script
-    pub target: String,
+    pub target: NodeId,
     /// Parameters of the script statement
     pub params: CreationalWith<'script>,
 }
-impl_expr_mid!(ScriptStmt);
+impl_expr_mid!(ScriptCreate);
 
 /// A pipeline declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -252,7 +252,7 @@ impl_fqn!(PipelineDecl);
 
 /// A pipeline creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct PipelineStmt {
+pub struct PipelineCreate {
     pub(crate) mid: usize,
     /// Module of the pipeline
     pub module: Vec<String>,
@@ -261,7 +261,7 @@ pub struct PipelineStmt {
     /// Map of pipeline ports and internal stream id
     pub port_stream_map: HashMap<String, String>,
 }
-impl BaseExpr for PipelineStmt {
+impl BaseExpr for PipelineCreate {
     fn mid(&self) -> usize {
         self.mid
     }
@@ -322,7 +322,7 @@ pub struct Select<'script> {
     /// Group-By clause
     pub maybe_group_by: Option<GroupBy<'script>>,
     /// Window
-    pub windows: Vec<WindowDefnRaw<'script>>,
+    pub windows: Vec<WindowDefnRaw>,
 }
 impl_expr_mid!(Select);
 

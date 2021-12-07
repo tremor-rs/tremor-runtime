@@ -175,11 +175,11 @@ impl ErrorKind {
             BadArrayIndex, BadType, BinaryDrop, BinaryEmit, CantSetArgsConst, CantSetGroupConst,
             CantSetWindowConst, Common, DecreasingRange, DeployArgNotSpecified,
             DeployArtefactNotDefined, DeployRequiredArgDoesNotResolve, DoubleConst,
-            DoublePipelineStmt, DoubleStream, EmptyInterpolation, EmptyScript, ExtraToken, Generic,
-            Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst, InvalidDrop,
-            InvalidEmit, InvalidExtractor, InvalidFloatLiteral, InvalidFn, InvalidHexLiteral,
-            InvalidIntLiteral, InvalidMod, InvalidRecur, InvalidToken, InvalidUnary,
-            InvalidUtf8Sequence, Io, JsonError, MergeTypeConflict, MissingEffectors,
+            DoublePipelineCreate, DoubleStream, EmptyInterpolation, EmptyScript, ExtraToken,
+            Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst,
+            InvalidDrop, InvalidEmit, InvalidExtractor, InvalidFloatLiteral, InvalidFn,
+            InvalidHexLiteral, InvalidIntLiteral, InvalidMod, InvalidRecur, InvalidToken,
+            InvalidUnary, InvalidUtf8Sequence, Io, JsonError, MergeTypeConflict, MissingEffectors,
             MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed,
             NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
             ParseIntError, ParserError, PatchKeyExists, PipelineUnknownPort, PreprocessorError,
@@ -221,7 +221,7 @@ impl ErrorKind {
             | AssignToConst(outer, inner)
             | DoubleConst(outer, inner, _)
             | DoubleStream(outer, inner, _)
-            | DoublePipelineStmt(outer, inner, _)
+            | DoublePipelineCreate(outer, inner, _)
             | InvalidExtractor(outer, inner, _, _, _)
             | InvalidFloatLiteral(outer, inner, _)
             | InvalidHexLiteral(outer, inner, _)
@@ -714,7 +714,7 @@ error_chain! {
             description("Can't declare a stream twice")
                 display("Can't declare the stream `{}` twice", name)
         }
-        DoublePipelineStmt(expr: Range, inner: Range, name: String) {
+        DoublePipelineCreate(expr: Range, inner: Range, name: String) {
             description("Can't create a query twice")
                 display("Can't create the pipeline `{}` twice", name)
         }
@@ -888,7 +888,7 @@ pub fn pipeline_stmt_duplicate_name_err<S: BaseExpr, I: BaseExpr>(
     meta: &NodeMetas,
 ) -> Error {
     let name = meta.name(stmt.mid()).map_or(name, |s| s.into());
-    ErrorKind::DoublePipelineStmt(stmt.extent(meta), inner.extent(meta), name).into()
+    ErrorKind::DoublePipelineCreate(stmt.extent(meta), inner.extent(meta), name).into()
 }
 
 /// Creates a pipeline unknown port error
