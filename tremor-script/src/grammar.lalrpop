@@ -15,7 +15,7 @@
 use crate::ast::raw::*;
 use crate::ast::deploy::raw::*;
 use crate::ast::query::raw::*;
-use crate::ast::{BinOpKind, UnaryOpKind};
+use crate::ast::{BinOpKind, UnaryOpKind, NodeId};
 use crate::lexer::Token;
 use crate::pos::Location;
 use crate::Value;
@@ -114,9 +114,9 @@ WithExpr: (IdentRaw<'input>, ImutExprRaw<'input>) = {
 }
 
 /// Module target
-ModularTarget: (Vec<IdentRaw<'input>>, IdentRaw<'input>) = {
-    <target:Ident> => (vec![], target),
-    <m:ModPath> "::" <target:Ident> => (m, target),
+ModularTarget: NodeId = {
+    <Ident> => NodeId::from(<>),
+    <m:ModPath> "::" <target:Ident> => NodeId{id: target.to_string(), module: m.iter().map(ToString::to_string).collect()},
 }
 
 /// Comments
@@ -174,8 +174,8 @@ DeployStmt: DeployStmtRaw<'input> = {
 
 DeployDeployStmt: DeployStmtRaw<'input> = {
     // FIXME: we don't need a deploy kind here once troy is merged
-    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id, module: target.0, target: target.1, params, docs }),
-    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id: id.clone(),  module: vec![], target: id, params, docs }),
+    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id, target, params, docs }),
+    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> <params:CreationWithEnd> <end:@L> => DeployStmtRaw::DeployFlowStmt(DeployFlowRaw { start, end, id: id.clone(), target: id.into(), params, docs }),
 }
 
 ConnectorKind: IdentRaw<'input> = {
@@ -215,8 +215,8 @@ DeployLink: FlowStmtRaw<'input> = {
 }
 
 Create: CreateStmtRaw<'input> = {
-    <start:@L> "create" <kind:CreateKind> <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => CreateStmtRaw { start, end, id, module: target.0, target: target.1, params, kind },
-    <start:@L> "create" <kind:CreateKind> <id:Ident> <params:CreationWithEnd> <end:@L> => CreateStmtRaw { start, end, id: id.clone(),  module: vec![], target: id, params, kind },
+    <start:@L> "create" <kind:CreateKind> <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => CreateStmtRaw { start, end, id, target, params, kind },
+    <start:@L> "create" <kind:CreateKind> <id:Ident> <params:CreationWithEnd> <end:@L> => CreateStmtRaw { start, end, id: id.clone(),  target: id.into(), params, kind },
 
 }
 
@@ -360,33 +360,33 @@ DefinePipeline: PipelineDeclRaw<'input> = {
 //// CREATEs
 CreateScript: StmtRaw<'input> = {
     <start:@L> "create" "script" <id:Ident> <params:CreationWithEnd> <end:@L> => {
-        StmtRaw::ScriptStmt(ScriptStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params })
+        StmtRaw::ScriptCreate(ScriptCreateRaw { start, end, id: id.to_string(), target: id.into(), params })
     },
 
     // With ModulartTarget
     <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
-        StmtRaw::ScriptStmt(ScriptStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params })
+        StmtRaw::ScriptCreate(ScriptCreateRaw { start, end, id: id.to_string(), target, params })
     }
 }
 
 CreateOperator: StmtRaw<'input> = {
     <start:@L> "create" "operator" <id:Ident> <params:CreationWithEnd> <end:@L> => {
-        StmtRaw::OperatorStmt(OperatorStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params })
+        StmtRaw::OperatorCreate(OperatorCreateRaw { start, end, id: id.to_string(), target: id.into(), params })
     },
 
     // With ModulartTarget
     <start:@L> "create" "operator" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
-        StmtRaw::OperatorStmt(OperatorStmtRaw { start, end, id: id.to_string(), module: target.0, target: target.1.id.to_string(), params })
+        StmtRaw::OperatorCreate(OperatorCreateRaw { start, end, id: id.to_string(), target, params })
     }
 }
 
 CreatePipeline: StmtRaw<'input> = {
     <start:@L> "create" "pipeline" <id:Ident> <params:CreationWithEnd> <end:@L>  => {
-        StmtRaw::PipelineStmt(PipelineStmtRaw { start, end, module: vec![], id: id.to_string(), target: id.to_string(), params })
+        StmtRaw::PipelineCreate(PipelineCreateRaw { start, end, id: id.to_string(), target: id.into(), params })
     },
     // With ModulartTarget
     <start:@L> "create" "pipeline" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
-        StmtRaw::PipelineStmt(PipelineStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params })
+        StmtRaw::PipelineCreate(PipelineCreateRaw { start, end, id: id.to_string(), target, params })
     }
 }
 
@@ -404,11 +404,11 @@ WindowKind: WindowKind = {
     "tumbling" => WindowKind::Tumbling,
 }
     
-WindowClause: Option<Vec<WindowDefnRaw<'input>>> = {
+WindowClause: Option<Vec<WindowDefnRaw>> = {
     (<WindowDefn>)? => <>,
 }
 
-Windows: Vec<WindowDefnRaw<'input>> = {
+Windows: Vec<WindowDefnRaw> = {
     <fields:Windows_> => {
         let mut fields = fields;
         fields.reverse();
@@ -416,15 +416,15 @@ Windows: Vec<WindowDefnRaw<'input>> = {
     },
 }
 
-Windows_: Vec<WindowDefnRaw<'input>> = {
+Windows_: Vec<WindowDefnRaw> = {
     <Sep<Windows_, Window, ",">> => <>
 }
 
-Window: WindowDefnRaw<'input> = {
-    <start:@L> <target:ModularTarget> <end:@L> => WindowDefnRaw { start, end, module: target.0, id: target.1.to_string() },
+Window: WindowDefnRaw = {
+    <start:@L> <id:ModularTarget> <end:@L> => WindowDefnRaw { start, end, id},
 }
 
-WindowDefn: Vec<WindowDefnRaw<'input>>  = {
+WindowDefn: Vec<WindowDefnRaw>  = {
     "[" <windows:Windows> "]" => windows
 }
 
@@ -480,10 +480,10 @@ EmbeddedScript: ScriptRaw<'input> = {
 }
 
 Pipeline: StmtsRaw<'input> = {
-    "pipeline" <inner_stmts:PipelineStmtInner> "end" => inner_stmts,
+    "pipeline" <inner_stmts:PipelineCreateInner> "end" => inner_stmts,
 }
 
-PipelineStmtInner : StmtsRaw<'input> = {
+PipelineCreateInner : StmtsRaw<'input> = {
     <stmt:Stmt> ";" <list:Stmts> => {
         let mut list = list;
         list.insert(0,stmt);
@@ -675,11 +675,14 @@ ComplexExprImut: ImutExprRaw<'input> = {
 Intrinsic: AnyFnRaw<'input> = {
     <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "("  ")" "as" <imod:ModularTarget>  <end:@L> => {
         let invoce_args = vec![];
+        let mut imod = imod;
+        let mut module = vec!["core".to_string()];
+        module.append(&mut imod.module);
         let invoke = InvokeRaw{
             start,
             end,
-            module: vec!["core".into(), imod.0.iter().map(|i|i.id.to_string()).collect::<Vec<String>>().join("::")],
-            fun: imod.1.id.to_string(),
+            module,
+            fun: imod.id,
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
@@ -691,11 +694,15 @@ Intrinsic: AnyFnRaw<'input> = {
                 PathRaw::Local(
                     LocalPathRaw{start: a.start, end: a.end, segments: vec![SegmentRaw::from_id(a.clone())]}
                 ))).collect();
+        let mut imod = imod;
+        let mut module = vec!["core".to_string()];
+        module.append(&mut imod.module);
+        
         let invoke = InvokeRaw{
             start,
             end,
-            module: vec!["core".into(), imod.0.iter().map(|i|i.id.to_string()).collect::<Vec<String>>().join("::")],
-            fun: imod.1.id.to_string(),
+            module,
+            fun: imod.id,
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
@@ -707,11 +714,14 @@ Intrinsic: AnyFnRaw<'input> = {
                 PathRaw::Local(
                     LocalPathRaw{start: a.start, end: a.end, segments: vec![SegmentRaw::from_id(a.clone())]}
                 ))).collect();
+        let mut imod = imod;
+        let mut module = vec!["core".to_string()];
+        module.append(&mut imod.module);
         let invoke = InvokeRaw{
             start,
             end,
-            module: vec!["core".into(), imod.0.iter().map(|i|i.id.to_string()).collect::<Vec<String>>().join("::")],
-            fun: imod.1.id.to_string(),
+            module,
+            fun: imod.id,
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
@@ -720,11 +730,14 @@ Intrinsic: AnyFnRaw<'input> = {
     <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" "." "." "." ")" "as" <imod:ModularTarget> <end:@L> => {
         let args = vec![];
         let invoce_args = vec![];
+        let mut imod = imod;
+        let mut module = vec!["core".to_string()];
+        module.append(&mut imod.module);
         let invoke = InvokeRaw{
             start,
             end,
-            module: vec!["core".into(), imod.0.iter().map(|i|i.id.to_string()).collect::<Vec<String>>().join("::")],
-            fun: imod.1.id.to_string(),
+            module,
+            fun: imod.id,
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
