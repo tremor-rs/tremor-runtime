@@ -54,12 +54,12 @@ flow
     file = "err.log"
   end;
 
-  connect /connector/bench/bench to /pipeline/main/main;
-  connect /connector/bench/bench to /pipeline/exit/exit;
-  connect /pipeline/main/main to /connector/file/out_file;
-  connect /pipeline/main/main/err to /connector/file/err_file;
-  connect /pipeline/exit/exit to /connector/exit/exit;
-  connect /pipeline/exit/exit/err to /connector/file/err_file;
+  connect /connector/bench to /pipeline/main;
+  connect /connector/bench to /pipeline/exit;
+  connect /pipeline/main to /connector/out_file;
+  connect /pipeline/main/err to /connector/err_file;
+  connect /pipeline/exit to /connector/exit;
+  connect /pipeline/exit/err to /connector/err_file;
 end;
 
 deploy flow main;

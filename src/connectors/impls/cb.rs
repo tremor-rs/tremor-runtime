@@ -80,7 +80,7 @@ impl Connector for Cb {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = CbSource::from_config(&self.config, source_context.url()).await?;
+        let source = CbSource::from_config(&self.config, source_context.alias()).await?;
         let source_addr = builder.spawn(source, source_context)?;
         Ok(Some(source_addr))
     }
@@ -107,14 +107,14 @@ impl ConnectorBuilder for Builder {
 
     async fn from_config(
         &self,
-        id: &TremorUrl,
+        alias: &str,
         config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         if let Some(raw) = config {
             let config = Config::new(raw)?;
             Ok(Box::new(Cb { config }))
         } else {
-            Err(ErrorKind::MissingConfiguration(id.to_instance().to_string()).into())
+            Err(ErrorKind::MissingConfiguration(alias.to_string()).into())
         }
     }
 }
@@ -135,7 +135,7 @@ impl Sink for CbSink {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        for (value, meta) in event.value_meta_iter() {
+        for (value, meta) in dbg!(event).value_meta_iter() {
             if let Some(cb) = meta.get(Self::CB).or_else(|| value.get(Self::CB)) {
                 let cb_cmds = if let Some(array) = cb.as_array() {
                     array
@@ -214,7 +214,7 @@ struct CbSource {
 }
 
 impl CbSource {
-    async fn from_config(config: &Config, url: &TremorUrl) -> Result<Self> {
+    async fn from_config(config: &Config, alias: &str) -> Result<Self> {
         if let Some(path) = config.path.as_ref() {
             let file = open(path).await?;
             Ok(Self {
@@ -232,10 +232,11 @@ impl CbSource {
                 },
             })
         } else {
-            Err(
-                ErrorKind::InvalidConfiguration(url.to_string(), String::from("Missing path key."))
-                    .into(),
+            Err(ErrorKind::InvalidConfiguration(
+                alias.to_string(),
+                String::from("Missing path key."),
             )
+            .into())
         }
     }
 }
@@ -243,6 +244,7 @@ impl CbSource {
 #[async_trait::async_trait()]
 impl Source for CbSource {
     async fn pull_data(&mut self, pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+        dbg!();
         let bytes_read = self.file.read(&mut self.buf).await?;
         if bytes_read == 0 {
             let wait = 100_u64;

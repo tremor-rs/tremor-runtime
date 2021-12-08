@@ -98,11 +98,7 @@ impl ConnectorBuilder for Builder {
         "file".into()
     }
 
-    async fn from_config(
-        &self,
-        id: &TremorUrl,
-        config: &Option<OpConfig>,
-    ) -> Result<Box<dyn Connector>> {
+    async fn from_config(&self, id: &str, config: &Option<OpConfig>) -> Result<Box<dyn Connector>> {
         if let Some(raw_config) = config {
             let config = Config::new(raw_config)?;
             let origin_uri = EventOriginUri {
@@ -118,7 +114,7 @@ impl ConnectorBuilder for Builder {
                 sink_runtime: None,
             }))
         } else {
-            Err(ErrorKind::MissingConfiguration(id.to_instance().to_string()).into())
+            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
     }
 }
@@ -169,7 +165,7 @@ impl Connector for File {
             };
             let write_file =
                 file::open_with(&self.config.path, &mut mode.as_open_options()).await?;
-            let writer = FileWriter::new(write_file, ctx.url.clone());
+            let writer = FileWriter::new(write_file, ctx.alias.clone());
             sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, writer);
         }
         // SOURCE PART: open file for reading
@@ -186,7 +182,7 @@ impl Connector for File {
                 let reader = FileReader::xz(
                     read_file,
                     self.config.chunk_size,
-                    ctx.url.clone(),
+                    ctx.alias.clone(),
                     self.origin_uri.clone(),
                     meta,
                 );
@@ -195,7 +191,7 @@ impl Connector for File {
                 let reader = FileReader::new(
                     read_file,
                     self.config.chunk_size,
-                    ctx.url.clone(),
+                    ctx.alias.clone(),
                     self.origin_uri.clone(),
                     meta,
                 );
@@ -218,7 +214,7 @@ where
     reader: R,
     underlying_file: FSFile,
     buf: Vec<u8>,
-    url: TremorUrl,
+    alias: String,
     origin_uri: EventOriginUri,
     meta: Value<'static>,
 }
@@ -227,7 +223,7 @@ impl FileReader<FSFile> {
     fn new(
         file: FSFile,
         chunk_size: usize,
-        url: TremorUrl,
+        alias: String,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
     ) -> Self {
@@ -235,7 +231,7 @@ impl FileReader<FSFile> {
             reader: file.clone(),
             underlying_file: file,
             buf: vec![0; chunk_size],
-            url,
+            alias,
             origin_uri,
             meta,
         }
@@ -246,7 +242,7 @@ impl FileReader<XzDecoder<BufReader<FSFile>>> {
     fn xz(
         file: FSFile,
         chunk_size: usize,
-        url: TremorUrl,
+        alias: String,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
     ) -> Self {
@@ -254,7 +250,7 @@ impl FileReader<XzDecoder<BufReader<FSFile>>> {
             reader: XzDecoder::new(BufReader::new(file.clone())),
             underlying_file: file,
             buf: vec![0; chunk_size],
-            url,
+            alias,
             origin_uri,
             meta,
         }
@@ -269,7 +265,7 @@ where
     async fn read(&mut self, stream: u64) -> Result<SourceReply> {
         let bytes_read = self.reader.read(&mut self.buf).await?;
         Ok(if bytes_read == 0 {
-            trace!("[Connector::{}] EOF", &self.url);
+            trace!("[Connector::{}] EOF", &self.alias);
             SourceReply::EndStream {
                 origin_uri: self.origin_uri.clone(),
                 stream_id: stream,
@@ -288,7 +284,7 @@ where
 
     async fn on_done(&mut self, _stream: u64) -> StreamDone {
         if let Err(e) = self.underlying_file.close().await {
-            error!("[Connector::{}] Error closing file: {}", &self.url, e);
+            error!("[Connector::{}] Error closing file: {}", &self.alias, e);
         }
         // we do not use ConnectorClosed - as we don't want to trigger a reconnect
         // which would read the whole file again
@@ -298,12 +294,12 @@ where
 
 struct FileWriter {
     file: FSFile,
-    url: TremorUrl,
+    alias: String,
 }
 
 impl FileWriter {
-    fn new(file: FSFile, url: TremorUrl) -> Self {
-        Self { file, url }
+    fn new(file: FSFile, alias: String) -> Self {
+        Self { file, alias }
     }
 }
 
@@ -319,7 +315,7 @@ impl StreamWriter for FileWriter {
 
     async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
         if let Err(e) = self.file.sync_all().await {
-            error!("[Connector::{}] Error flushing file: {}", &self.url, e);
+            error!("[Connector::{}] Error flushing file: {}", &self.alias, e);
         }
         // if we cannot write to the given file anymore
         // something wen't really wrong, a reconnect might help here
