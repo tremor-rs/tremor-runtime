@@ -14,7 +14,6 @@
 
 pub(crate) mod client;
 pub(crate) mod server;
-pub(crate) mod simple_server;
 
 use crate::connectors::prelude::*;
 use async_std::net::TcpStream;
