@@ -44,9 +44,9 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use tremor_common::time::nanotime;
-use tremor_common::url::{ports::IN, TremorUrl};
+use tremor_common::url::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
-use tremor_script::EventPayload;
+use tremor_script::{ast::DeployEndpoint, EventPayload};
 
 use tremor_value::Value;
 
@@ -244,7 +244,7 @@ pub struct SinkContext {
     /// the connector unique identifier
     pub uid: u64,
     /// the connector url
-    pub(crate) url: TremorUrl,
+    pub(crate) alias: String,
     /// the connector type
     pub(crate) connector_type: ConnectorType,
 
@@ -257,13 +257,13 @@ pub struct SinkContext {
 
 impl Display for SinkContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Sink::{}]", &self.url)
+        write!(f, "[Sink::{}]", &self.alias)
     }
 }
 
 impl Context for SinkContext {
-    fn url(&self) -> &TremorUrl {
-        &self.url
+    fn alias(&self) -> &str {
+        &self.alias
     }
 
     fn quiescence_beacon(&self) -> &QuiescenceBeacon {
@@ -298,12 +298,12 @@ pub enum SinkMsg {
         /// the port
         port: Cow<'static, str>,
         /// the pipelines
-        pipelines: Vec<(TremorUrl, pipeline::Addr)>,
+        pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
     },
     /// unlink a pipeline
     Unlink {
         /// url of the pipeline
-        id: TremorUrl,
+        id: DeployEndpoint,
         /// the port
         port: Cow<'static, str>,
     },
@@ -378,7 +378,7 @@ impl SinkManagerBuilder {
         S: Sink + Send + 'static,
     {
         let qsize = self.qsize;
-        let name = ctx.url.short_id("c-sink"); // connector sink
+        let name = ctx.alias.clone(); //FIXME .short_id("c-sink"); // connector sink
         let (sink_tx, sink_rx) = bounded(qsize);
         let manager = SinkManager::new(sink, ctx, self, sink_rx);
         // spawn manager task
@@ -525,7 +525,7 @@ where
     /// tracking which operators incoming events visited
     merged_operator_meta: OpMeta,
     // pipelines connected to IN port
-    pipelines: Vec<(TremorUrl, pipeline::Addr)>,
+    pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
     // set of connector ids we received start signals from
     starts_received: HashSet<u64>,
     // set of connector ids we received drain signals from
@@ -578,7 +578,7 @@ where
                             debug_assert!(
                                 port == IN,
                                 "[Sink::{}] connected to invalid connector sink port",
-                                &self.ctx.url
+                                &self.ctx.alias
                             );
                             self.pipelines.append(&mut pipelines);
                         }
@@ -586,7 +586,7 @@ where
                             debug_assert!(
                                 port == IN,
                                 "[Sink::{}] disconnected from invalid connector sink port",
-                                &self.ctx.url
+                                &self.ctx.alias
                             );
                             self.pipelines.retain(|(url, _)| url != &id);
                         }
@@ -625,7 +625,7 @@ where
                         SinkMsg::Resume => {
                             info!(
                                 "[Sink::{}] Ignoring Resume message in {:?} state",
-                                &self.ctx.url, &self.state
+                                &self.ctx.alias, &self.state
                             );
                         }
                         SinkMsg::Pause if self.state == Running => {
@@ -638,11 +638,11 @@ where
                         SinkMsg::Pause => {
                             info!(
                                 "[Sink::{}] Ignoring Pause message in {:?} state",
-                                &self.ctx.url, &self.state
+                                &self.ctx.alias, &self.state
                             );
                         }
                         SinkMsg::Stop(sender) => {
-                            info!("[Sink::{}] Stopping...", &self.ctx.url);
+                            info!("[Sink::{}] Stopping...", &self.ctx.alias);
                             self.state = Stopped;
                             self.ctx.log_err(
                                 sender.send(self.sink.on_stop(&self.ctx).await).await,
@@ -654,40 +654,40 @@ where
                         SinkMsg::Drain(_sender) if self.state == Draining => {
                             info!(
                                 "[Sink::{}] Ignoring Drain message in {:?} state",
-                                &self.ctx.url, &self.state
+                                &self.ctx.alias, &self.state
                             );
                         }
                         SinkMsg::Drain(sender) if self.state == Drained => {
                             debug!(
                                 "[Sink::{}] Received Drain msg while already being drained.",
-                                &self.ctx.url
+                                &self.ctx.alias
                             );
                             if sender.send(Msg::SinkDrained).await.is_err() {
                                 error!(
                                     "[Sink::{}] Error sending SinkDrained message.",
-                                    &self.ctx.url
+                                    &self.ctx.alias
                                 );
                             }
                         }
                         SinkMsg::Drain(sender) => {
                             // send message back if we already received Drain signal from all input pipelines
-                            debug!("[Sink::{}] Draining...", &self.ctx.url);
+                            debug!("[Sink::{}] Draining...", &self.ctx.alias);
                             self.state = Draining;
                             self.drain_channel = Some(sender);
                             if self.drains_received.is_superset(&self.starts_received) {
                                 // we are all drained
-                                debug!("[Sink::{}] Drained.", &self.ctx.url);
+                                debug!("[Sink::{}] Drained.", &self.ctx.alias);
                                 self.state = Drained;
                                 if let Some(sender) = self.drain_channel.take() {
                                     if sender.send(Msg::SinkDrained).await.is_err() {
                                         error!(
                                             "[Sink::{}] Error sending SinkDrained message",
-                                            &self.ctx.url
+                                            &self.ctx.alias
                                         );
                                     }
                                 }
                             } else {
-                                debug!("[Sink::{}] Not all drains received yet, waiting for drains from: {:?}", &self.ctx.url, self.starts_received.difference(&self.drains_received).collect::<Vec<_>>());
+                                debug!("[Sink::{}] Not all drains received yet, waiting for drains from: {:?}", &self.ctx.alias, self.starts_received.difference(&self.drains_received).collect::<Vec<_>>());
                             }
                         }
                         SinkMsg::ConnectionEstablished => {
@@ -697,7 +697,7 @@ where
                             );
                             let cf = Event::cb_open(nanotime(), self.merged_operator_meta.clone());
                             // send CB restore to all pipes
-                            send_contraflow(&self.pipelines, &self.ctx.url, cf).await;
+                            send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
                         }
                         SinkMsg::ConnectionLost => {
                             // clean out all pending stream data from EventSerializer - we assume all streams closed at this point
@@ -708,7 +708,7 @@ where
                             );
                             // send CB trigger to all pipes
                             let cf = Event::cb_close(nanotime(), self.merged_operator_meta.clone());
-                            send_contraflow(&self.pipelines, &self.ctx.url, cf).await;
+                            send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
                         }
                         SinkMsg::Event { event, port } => {
                             let cf_builder = ContraflowData::from(&event);
@@ -742,7 +742,7 @@ where
                                         duration,
                                         cf_builder,
                                         &self.pipelines,
-                                        &self.ctx.url,
+                                        &self.ctx.alias,
                                         transactional && self.sink.auto_ack(),
                                     )
                                     .await;
@@ -752,7 +752,7 @@ where
                                     // TODO: error logging? This could fill the logs quickly. Rather emit a metrics event with the logging info?
                                     if transactional {
                                         let cf = cf_builder.into_fail();
-                                        send_contraflow(&self.pipelines, &self.ctx.url, cf).await;
+                                        send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
                                     }
                                 }
                             };
@@ -763,19 +763,19 @@ where
                                 Some(SignalKind::Drain(source_uid)) => {
                                     debug!(
                                         "[Sink::{}] Drain signal received from {}",
-                                        &self.ctx.url, source_uid
+                                        &self.ctx.alias, source_uid
                                     );
                                     // account for all received drains per source
                                     self.drains_received.insert(source_uid);
                                     // check if all "reachable sources" did send a `Drain` signal
                                     if self.drains_received.is_superset(&self.starts_received) {
-                                        debug!("[Sink::{}] Sink Drained.", &self.ctx.url);
+                                        debug!("[Sink::{}] Sink Drained.", &self.ctx.alias);
                                         self.state = Drained;
                                         if let Some(sender) = self.drain_channel.take() {
                                             if sender.send(Msg::SinkDrained).await.is_err() {
                                                 error!(
                                                     "[Sink::{}] Error sending SinkDrained message",
-                                                    &self.ctx.url
+                                                    &self.ctx.alias
                                                 );
                                             }
                                         }
@@ -784,12 +784,12 @@ where
                                     // send a cb Drained contraflow message back
                                     let cf = ContraflowData::from(&signal)
                                         .into_cb(CbAction::Drained(source_uid));
-                                    send_contraflow(&self.pipelines, &self.ctx.url, cf).await;
+                                    send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
                                 }
                                 Some(SignalKind::Start(source_uid)) => {
                                     debug!(
                                         "[Sink::{}] Received Start signal from {}",
-                                        &self.ctx.url, source_uid
+                                        &self.ctx.alias, source_uid
                                     );
                                     self.starts_received.insert(source_uid);
                                 }
@@ -810,7 +810,7 @@ where
                                         duration,
                                         cf_builder,
                                         &self.pipelines,
-                                        &self.ctx.url,
+                                        &self.ctx.alias,
                                         false,
                                     )
                                     .await;
@@ -819,7 +819,7 @@ where
                                     // logging here is ok, as this is mostly limited to ticks (every 100ms)
                                     error!(
                                         "[Connector::{}] Error handling signal: {}",
-                                        &self.ctx.url, e
+                                        &self.ctx.alias, e
                                     );
                                 }
                             }
@@ -842,12 +842,12 @@ where
                             Event::insight(cb, data.event_id, data.ingest_ns, data.op_meta)
                         }
                     };
-                    send_contraflow(&self.pipelines, &self.ctx.url, cf).await;
+                    send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
                 }
             }
         }
         // sink has been stopped
-        info!("[Sink::{}] Terminating Sink Task.", &self.ctx.url);
+        info!("[Sink::{}] Terminating Sink Task.", &self.ctx.alias);
         Ok(())
     }
 }
@@ -902,8 +902,8 @@ impl From<Event> for ContraflowData {
 
 /// send contraflow back to pipelines
 async fn send_contraflow(
-    pipelines: &[(TremorUrl, pipeline::Addr)],
-    connector_url: &TremorUrl,
+    pipelines: &[(DeployEndpoint, pipeline::Addr)],
+    connector_url: &str,
     contraflow: Event,
 ) {
     if let Some(((last_url, last_addr), rest)) = pipelines.split_last() {
@@ -928,8 +928,8 @@ async fn handle_replies(
     reply: SinkReply,
     duration: u64,
     cf_builder: ContraflowData,
-    pipelines: &[(TremorUrl, pipeline::Addr)],
-    connector_url: &TremorUrl,
+    pipelines: &[(DeployEndpoint, pipeline::Addr)],
+    connector_url: &str,
     send_auto_ack: bool,
 ) {
     if reply.cb != CbAction::None {

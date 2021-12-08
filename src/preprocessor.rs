@@ -22,7 +22,6 @@ use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::buf::Buf;
 use bytes::BytesMut;
 use std::str;
-use tremor_common::url::TremorUrl;
 
 use std::io::{self, Read};
 
@@ -119,7 +118,7 @@ pub fn preprocess(
     preprocessors: &mut [Box<dyn Preprocessor>],
     ingest_ns: &mut u64,
     data: Vec<u8>,
-    instance_id: &TremorUrl,
+    alias: &str,
 ) -> Result<Vec<Vec<u8>>> {
     let mut data = vec![data];
     let mut data1 = Vec::new();
@@ -129,7 +128,7 @@ pub fn preprocess(
             match pp.process(ingest_ns, d) {
                 Ok(mut r) => data1.append(&mut r),
                 Err(e) => {
-                    error!("[{}] Preprocessor [{}] error: {}", instance_id, i, e);
+                    error!("[{}] Preprocessor [{}] error: {}", alias, i, e);
                     return Err(e);
                 }
             }
@@ -146,7 +145,7 @@ pub fn preprocess(
 /// * If a preprocessor failed
 pub fn finish(
     preprocessors: &mut [Box<dyn Preprocessor>],
-    instance_id: &TremorUrl,
+    instance_id: &str,
 ) -> Result<Vec<Vec<u8>>> {
     let mut data = vec![vec![]];
     let mut data1 = Vec::new();
@@ -647,7 +646,7 @@ mod test {
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         let wire = post_p.process(0, 0, &data)?;
         let (start, end) = wire[0].split_at(7);
-        let id = TremorUrl::from_connector_instance("snot", "00");
+        let id = String::from("test");
         let mut pps: Vec<Box<dyn Preprocessor>> = vec![Box::new(pre_p)];
         let recv = preprocess(pps.as_mut_slice(), &mut it, start.to_vec(), &id)?;
         assert!(recv.is_empty());

@@ -15,8 +15,6 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
-use tremor_common::url::TremorUrl;
-
 use super::{node_id::BaseRef, raw::BaseExpr, DefinitioalArgs, DefinitioalArgsWith};
 use super::{node_id::NodeId, PipelineDecl};
 use super::{Docs, HashMap, Value};
@@ -141,91 +139,39 @@ pub enum ConnectStmt {
     },
 }
 
-impl ConnectStmt {
-    /// Tries to cast the connect statement into a sink connector
-    pub fn as_sink_connector_url(&self) -> Option<TremorUrl> {
-        if let ConnectStmt::PipelineToConnector { to, .. } = self {
-            Some(TremorUrl::from_connector_instance(
-                &to.artefact,
-                &to.instance,
-            ))
-        } else {
-            None
-        }
-    }
-    /// Tries to cast the connect statement into a source connector
-    pub fn as_source_connector_url(&self) -> Option<TremorUrl> {
-        if let ConnectStmt::ConnectorToPipeline { from, .. } = self {
-            Some(TremorUrl::from_connector_instance(
-                &from.artefact,
-                &from.instance,
-            ))
-        } else {
-            None
-        }
-    }
-    /// Tries to cast the connect statement into a vector of pipeline urls
-    pub fn as_pipeline_urls(&self) -> Vec<TremorUrl> {
-        match self {
-            ConnectStmt::ConnectorToPipeline { to, .. } => vec![TremorUrl::from_pipeline_instance(
-                &to.artefact,
-                &to.instance,
-            )],
-            ConnectStmt::PipelineToConnector { from, .. } => {
-                vec![TremorUrl::from_pipeline_instance(
-                    &from.artefact,
-                    &from.instance,
-                )]
-            }
-            ConnectStmt::PipelineToPipeline { from, to, .. } => vec![
-                TremorUrl::from_pipeline_instance(&from.artefact, &from.instance),
-                TremorUrl::from_pipeline_instance(&to.artefact, &to.instance),
-            ],
-        }
-    }
-}
-
 /// A deployment endpoint
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 pub struct DeployEndpoint {
-    artefact: String,
-    instance: String,
+    alias: String,
     /// Refers to a local artefact being deployed in a troy definition
     port: String,
 }
 
-impl DeployEndpoint {
-    /// The artefact
-    pub fn artefact(&self) -> &str {
-        &self.artefact
+impl std::fmt::Display for DeployEndpoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}/{}", self.alias, self.port)
     }
-    /// The instance
-    pub fn instance(&self) -> &str {
-        &self.instance
+}
+
+impl DeployEndpoint {
+    /// Creates a new endpoint
+    pub fn new<A, P>(alias: A, port: P) -> Self
+    where
+        A: ToString,
+        P: ToString,
+    {
+        Self {
+            alias: alias.to_string(),
+            port: port.to_string(),
+        }
+    }
+    /// The artefact
+    pub fn alias(&self) -> &str {
+        &self.alias
     }
     /// The port
     pub fn port(&self) -> &str {
         &self.port
-    }
-    /// creates a connector instance url
-    fn to_connector_instance(&self) -> TremorUrl {
-        TremorUrl::from_connector_instance(&self.artefact, &self.instance)
-    }
-    /// creates a connector instance url
-    pub fn to_connector_instance_and_port(&self) -> TremorUrl {
-        let mut r = self.to_connector_instance();
-        r.set_port(&self.port);
-        r
-    }
-    /// creates a connector instance url
-    fn to_pipeline_instance(&self) -> TremorUrl {
-        TremorUrl::from_pipeline_instance(&self.artefact, &self.instance)
-    }
-    /// creates a connector instance url
-    pub fn to_pipeline_instance_and_port(&self) -> TremorUrl {
-        let mut r = self.to_pipeline_instance();
-        r.set_port(&self.port);
-        r
     }
 }
 

@@ -27,10 +27,7 @@ use async_std::{
 use hashbrown::HashMap;
 use std::{borrow::Borrow, collections::HashSet};
 use std::{sync::atomic::Ordering, time::Duration};
-use tremor_common::{
-    ids::{ConnectorIdGen, OperatorIdGen},
-    url::TremorUrl,
-};
+use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
 use tremor_script::{
     ast::{ConnectStmt, DeployEndpoint},
     srs::{ConnectorDecl, DeployFlow, Query},
@@ -50,7 +47,7 @@ pub(crate) struct ConnectorId(String);
 
 impl From<&DeployEndpoint> for ConnectorId {
     fn from(e: &DeployEndpoint) -> Self {
-        ConnectorId(e.instance().to_string())
+        ConnectorId(e.alias().to_string())
     }
 }
 
@@ -69,7 +66,7 @@ impl Borrow<str> for ConnectorId {
 pub(crate) struct PipelineId(pub String);
 impl From<&DeployEndpoint> for PipelineId {
     fn from(e: &DeployEndpoint) -> Self {
-        PipelineId(e.instance().to_string())
+        PipelineId(e.alias().to_string())
     }
 }
 
@@ -110,14 +107,10 @@ pub(crate) struct Deployment {
     addr: Addr,
 }
 
-fn second<T1, T2>(t: &(T1, T2)) -> &T2 {
-    &t.1
-}
-
 /// Status Report for a Binding
 pub struct StatusReport {
     /// the url of the instance this report describes
-    pub url: TremorUrl,
+    pub alias: String,
     /// the current state
     pub status: InstanceState,
 }
@@ -145,24 +138,23 @@ impl Deployment {
         let mut connectors = HashMap::new();
 
         for decl in &flow.decl.connectors {
-            let url = TremorUrl::from_connector_instance(decl.artefact_id.id(), &decl.instance_id);
-
             let connector = crate::Connector::from_decl(decl)?;
             // FIXME
             connectors.insert(
                 ConnectorId::from(decl),
-                connectors::spawn(url, cidgen, known_connectors, connector).await?,
+                connectors::spawn(
+                    decl.instance_id.clone(),
+                    cidgen,
+                    known_connectors,
+                    connector,
+                )
+                .await?,
             );
         }
         for decl in &flow.decl.pipelines {
-            let url = TremorUrl::parse(&format!(
-                "/pipeline/{}/{}",
-                decl.artifact_id.clone(),
-                decl.instance_id
-            ))?;
             let pipeline =
                 tremor_pipeline::query::Query(tremor_script::Query::from_troy(&src, decl)?);
-            let addr = pipeline::spawn(url, pipeline, oidgen).await?;
+            let addr = pipeline::spawn(decl.instance_id.clone(), pipeline, oidgen).await?;
             pipelines.insert(PipelineId::from(decl), addr);
         }
 
@@ -171,7 +163,13 @@ impl Deployment {
             link(&connectors, &pipelines, connect).await?;
         }
 
-        let addr = spawn_task(pipelines, connectors, &flow.decl.links).await?;
+        let addr = spawn_task(
+            flow.instance_id.id().to_string(),
+            pipelines,
+            connectors,
+            &flow.decl.links,
+        )
+        .await?;
 
         addr.send(Msg::Start).await?;
 
@@ -185,19 +183,19 @@ impl Deployment {
 }
 
 async fn link(
-    connectors: &HashMap<ConnectorId, (TremorUrl, connectors::Addr)>,
-    pipelines: &HashMap<PipelineId, (TremorUrl, pipeline::Addr)>,
+    connectors: &HashMap<ConnectorId, connectors::Addr>,
+    pipelines: &HashMap<PipelineId, pipeline::Addr>,
     link: &ConnectStmt,
 ) -> Result<()> {
     match link {
         ConnectStmt::ConnectorToPipeline { from, to, .. } => {
-            let (_, connector) = connectors
-                .get(from.instance())
-                .ok_or(format!("FIXME: connector {} not found", from.artefact()))?;
+            let connector = connectors
+                .get(from.alias())
+                .ok_or(format!("FIXME: connector {} not found", from.alias()))?;
 
-            let (output_url, pipeline) = pipelines
-                .get(to.instance())
-                .ok_or(format!("FIXME: pipeline {} not found", to.artefact()))?
+            let pipeline = pipelines
+                .get(to.alias())
+                .ok_or(format!("FIXME: pipeline {} not found", to.alias()))?
                 .clone();
 
             // this is some odd stuff to have here
@@ -207,7 +205,7 @@ async fn link(
 
             let msg = connectors::Msg::Link {
                 port: from.port().to_string().into(),
-                pipelines: vec![(output_url.with_port(to.port()), pipeline)],
+                pipelines: vec![(to.clone(), pipeline)],
                 result_tx: tx.clone(),
             };
             connector
@@ -218,19 +216,19 @@ async fn link(
             // FIXME: move the connecto message from connector to pipeline here
         }
         ConnectStmt::PipelineToConnector { from, to, .. } => {
-            let (input_url, pipeline) = pipelines
-                .get(from.instance())
-                .ok_or(format!("FIXME: pipeline {} not found", from.artefact()))?;
+            let pipeline = pipelines
+                .get(from.alias())
+                .ok_or(format!("FIXME: pipeline {} not found", from.alias()))?;
 
-            let (output_url, connector) = connectors
-                .get(to.instance())
-                .ok_or(format!("FIXME: connector {} not found", to.artefact()))?
+            let connector = connectors
+                .get(to.alias())
+                .ok_or(format!("FIXME: connector {} not found", to.alias()))?
                 .clone();
 
             // first link the pipeline to the connector
             let msg = crate::pipeline::MgmtMsg::ConnectOutput {
                 port: from.port().to_string().into(),
-                output_url: output_url.with_port(to.port()),
+                endpoint: to.clone(),
                 target: connector.clone().try_into()?,
             };
             pipeline
@@ -246,7 +244,7 @@ async fn link(
 
             let msg = connectors::Msg::Link {
                 port: to.port().to_string().into(),
-                pipelines: vec![(input_url.clone().with_port(from.port()), pipeline.clone())],
+                pipelines: vec![(from.clone(), pipeline.clone())],
                 result_tx: tx.clone(),
             };
             connector
@@ -256,15 +254,15 @@ async fn link(
             rx.recv().timeout(timeout).await???;
         }
         ConnectStmt::PipelineToPipeline { from, to, .. } => {
-            let (_, from_pipeline) = pipelines
-                .get(from.instance())
-                .ok_or(format!("FIXME: pipeline {} not found", from.artefact()))?;
-            let (output_url, to_pipeline) = pipelines
-                .get(to.instance())
-                .ok_or(format!("FIXME: pipeline {} not found", from.artefact()))?;
+            let from_pipeline = pipelines
+                .get(from.alias())
+                .ok_or(format!("FIXME: pipeline {} not found", from.alias()))?;
+            let to_pipeline = pipelines
+                .get(to.alias())
+                .ok_or(format!("FIXME: pipeline {} not found", from.alias()))?;
             let msg = crate::pipeline::MgmtMsg::ConnectOutput {
                 port: from.port().to_string().into(),
-                output_url: output_url.clone().with_port(to.port()),
+                endpoint: to.clone(),
                 target: to_pipeline.clone().into(),
             };
             from_pipeline
@@ -279,12 +277,11 @@ async fn link(
 /// task handling each binding instance control plane
 #[allow(clippy::too_many_lines)]
 async fn spawn_task(
-    pipelines: HashMap<PipelineId, (TremorUrl, pipeline::Addr)>,
-    connectors: HashMap<ConnectorId, (TremorUrl, connectors::Addr)>,
+    alias: String,
+    pipelines: HashMap<PipelineId, pipeline::Addr>,
+    connectors: HashMap<ConnectorId, connectors::Addr>,
     links: &[ConnectStmt],
 ) -> Result<Addr> {
-    let url = TremorUrl::parse("tremor://localhost/binding/FIXME/FIXME/FIXME")
-        .expect("FIXME! really, please fix meeeee!"); // FIXME: figure out identification and url scheme for bindings
     let (msg_tx, msg_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
     let (drain_tx, drain_rx) = unbounded();
     let (stop_tx, stop_rx) = unbounded();
@@ -330,21 +327,21 @@ async fn spawn_task(
         })
         .collect();
 
-    let pipelines: Vec<_> = pipelines.values().map(second).cloned().collect();
+    let pipelines: Vec<_> = pipelines.values().cloned().collect();
 
     let start_points: Vec<_> = source_connectors
         .difference(&sink_connectors)
-        .map(|p| connectors.get(p).map(second).unwrap())
+        .map(|p| connectors.get(p).unwrap())
         .cloned()
         .collect();
     let mixed_pickles: Vec<_> = sink_connectors
         .intersection(&source_connectors)
-        .map(|p| connectors.get(p).map(second).unwrap())
+        .map(|p| connectors.get(p).unwrap())
         .cloned()
         .collect();
     let end_points: Vec<_> = sink_connectors
         .difference(&source_connectors)
-        .map(|p| connectors.get(p).map(second).unwrap())
+        .map(|p| connectors.get(p).unwrap())
         .cloned()
         .collect();
 
@@ -398,11 +395,11 @@ async fn spawn_task(
                 MsgWrapper::Msg(Msg::Start) => {
                     info!(
                         "[Flow::{}] Ignoring Start message. Current state: {}",
-                        &url, &state
+                        &alias, &state
                     );
                 }
                 MsgWrapper::Msg(Msg::Pause) if state == InstanceState::Running => {
-                    info!("[Flow::{}] Pausing...", &url);
+                    info!("[Flow::{}] Pausing...", &alias);
                     for source in &start_points {
                         source.pause().await?;
                     }
@@ -419,11 +416,11 @@ async fn spawn_task(
                 MsgWrapper::Msg(Msg::Pause) => {
                     info!(
                         "[Flow::{}] Ignoring Pause message. Current state: {}",
-                        &url, &state
+                        &alias, &state
                     );
                 }
                 MsgWrapper::Msg(Msg::Resume) if state == InstanceState::Paused => {
-                    info!("[Flow::{}] Resuming...", &url);
+                    info!("[Flow::{}] Resuming...", &alias);
 
                     for pipeline in &pipelines {
                         pipeline.resume().await?;
@@ -442,17 +439,17 @@ async fn spawn_task(
                 MsgWrapper::Msg(Msg::Resume) => {
                     info!(
                         "[Flow::{}] Ignoring Resume message. Current state: {}",
-                        &url, &state
+                        &alias, &state
                     );
                 }
                 MsgWrapper::Msg(Msg::Drain(_sender)) if state == InstanceState::Draining => {
                     info!(
                         "[Flow::{}] Ignoring Drain message. Current state: {}",
-                        &url, &state
+                        &alias, &state
                     );
                 }
                 MsgWrapper::Msg(Msg::Drain(sender)) => {
-                    info!("[Flow::{}] Draining...", &url);
+                    info!("[Flow::{}] Draining...", &alias);
                     drain_senders.push(sender);
 
                     // QUIESCENCE
@@ -466,7 +463,7 @@ async fn spawn_task(
                         if let Err(e) = start_point.drain(drain_tx.clone()).await {
                             error!(
                                 "[Flow::{}] Error starting Draining Connector {:?}: {}",
-                                &url, start_point, e
+                                &alias, start_point, e
                             );
                         } else {
                             expected_drains += 1;
@@ -477,7 +474,7 @@ async fn spawn_task(
                         if let Err(e) = mixed_pickle.drain(drain_tx.clone()).await {
                             error!(
                                 "[Flow::{}] Error starting Draining Connector {:?}: {}",
-                                &url, mixed_pickle, e
+                                &alias, mixed_pickle, e
                             );
                         } else {
                             expected_drains += 1;
@@ -488,7 +485,7 @@ async fn spawn_task(
                         if let Err(e) = end_point.drain(drain_tx.clone()).await {
                             error!(
                                 "[Flow::{}] Error starting Draining Connector {:?}: {}",
-                                &url, end_point, e
+                                &alias, end_point, e
                             );
                         } else {
                             expected_drains += 1;
@@ -496,7 +493,7 @@ async fn spawn_task(
                     }
                 }
                 MsgWrapper::Msg(Msg::Stop(sender)) => {
-                    info!("[Flow::{}] Stopping...", &url);
+                    info!("[Flow::{}] Stopping...", &alias);
                     stop_senders.push(sender);
 
                     for connector in end_points
@@ -507,7 +504,7 @@ async fn spawn_task(
                         if let Err(e) = connector.stop(stop_tx.clone()).await {
                             error!(
                                 "[Flow::{}] Error stopping connector {:?}: {}",
-                                &url, connector, e
+                                &alias, connector, e
                             );
                         } else {
                             expected_stops += 1;
@@ -517,7 +514,7 @@ async fn spawn_task(
                         if let Err(e) = pipeline.stop().await {
                             error!(
                                 "[Flow::{}] Error stopping pipeline {:?}: {}",
-                                &url, pipeline, e
+                                &alias, pipeline, e
                             );
                         }
                     }
@@ -525,49 +522,49 @@ async fn spawn_task(
                 MsgWrapper::Msg(Msg::Report(sender)) => {
                     // TODO: aggregate states of all containing instances
                     let report = StatusReport {
-                        url: url.clone(),
-                        status: state.clone(),
+                        alias: alias.clone(),
+                        status: state,
                     };
                     if let Err(e) = sender.send(report).await {
-                        error!("[Flow::{}] Error sending status report: {}", &url, e);
+                        error!("[Flow::{}] Error sending status report: {}", &alias, e);
                     }
                 }
                 MsgWrapper::DrainResult(conn_res) => {
-                    info!("[Flow::{}] Connector {} drained.", &url, &conn_res.url);
+                    info!("[Flow::{}] Connector {} drained.", &alias, &conn_res.alias);
                     if let Err(e) = conn_res.res {
                         error!(
                             "[Flow::{}] Error during Draining in Connector {}: {}",
-                            &url, &conn_res.url, e
+                            &alias, &conn_res.alias, e
                         );
                     }
                     let old = expected_drains;
                     expected_drains = expected_drains.saturating_sub(1);
                     if expected_drains == 0 && old > 0 {
-                        info!("[Flow::{}] All connectors are drained.", &url);
+                        info!("[Flow::{}] All connectors are drained.", &alias);
                         // upon last drain
                         for drain_sender in drain_senders.drain(..) {
                             if let Err(_) = drain_sender.send(Ok(())).await {
-                                error!("[Flow::{}] Error sending successful Drain result", &url);
+                                error!("[Flow::{}] Error sending successful Drain result", &alias);
                             }
                         }
                     }
                 }
                 MsgWrapper::StopResult(conn_res) => {
-                    info!("[Flow::{}] Connector {} stopped.", &url, &conn_res.url);
+                    info!("[Flow::{}] Connector {} stopped.", &alias, &conn_res.alias);
                     if let Err(e) = conn_res.res {
                         error!(
                             "[Flow::{}] Error during Draining in Connector {}: {}",
-                            &url, &conn_res.url, e
+                            &alias, &conn_res.alias, e
                         );
                     }
                     let old = expected_stops;
                     expected_stops = expected_stops.saturating_sub(1);
                     if expected_stops == 0 && old > 0 {
-                        info!("[Flow::{}] All connectors are stopped.", &url);
+                        info!("[Flow::{}] All connectors are stopped.", &alias);
                         // upon last stop
                         for stop_sender in stop_senders.drain(..) {
                             if let Err(_) = stop_sender.send(Ok(())).await {
-                                error!("[Flow::{}] Error sending successful Stop result", &url);
+                                error!("[Flow::{}] Error sending successful Stop result", &alias);
                             }
                         }
                         break;
@@ -575,7 +572,7 @@ async fn spawn_task(
                 }
             }
         }
-        info!("[Flow::{}] Binding Stopped.", &url);
+        info!("[Flow::{}] Binding Stopped.", &alias);
         Ok(())
     });
     Ok(addr)

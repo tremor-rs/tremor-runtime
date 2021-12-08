@@ -63,7 +63,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn from_config(
         &self,
-        _id: &TremorUrl,
+        _id: &str,
         config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         if let Some(raw_config) = config {
@@ -166,7 +166,7 @@ impl Connector for TcpClient {
                 read,
                 stream.clone(),
                 vec![0; buf_size],
-                ctx.url.clone(),
+                ctx.alias.clone(),
                 origin_uri.clone(),
                 meta,
             );
@@ -189,7 +189,7 @@ impl Connector for TcpClient {
             let reader = TcpReader::new(
                 stream.clone(),
                 vec![0; buf_size],
-                ctx.url.clone(),
+                ctx.alias.clone(),
                 origin_uri.clone(),
                 meta,
             );

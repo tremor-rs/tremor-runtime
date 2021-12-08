@@ -233,13 +233,13 @@ impl<'script> DeployModuleRaw<'script> {
                     let stmt: ConnectorDecl<'script> = stmt.up(helper)?;
                     helper
                         .connector_decls
-                        .insert(dbg!(stmt.node_id.clone()), stmt.clone());
+                        .insert(stmt.node_id.clone(), stmt.clone());
                 }
                 DeployModuleStmtRaw::PipelineDecl(stmt) => {
                     let stmt: PipelineDecl<'script> = stmt.up(helper)?;
                     helper
                         .pipeline_decls
-                        .insert(dbg!(stmt.node_id.clone()), stmt.clone());
+                        .insert(stmt.node_id.clone(), stmt.clone());
                 }
             }
         }
@@ -282,9 +282,7 @@ impl<'script> Upable<'script> for ConnectorDeclRaw<'script> {
 /// we're forced to make this pub because of lalrpop
 pub struct DeployEndpointRaw<'script> {
     /// we're forced to make this pub because of lalrpop
-    pub artefact: IdentRaw<'script>,
-    /// we're forced to make this pub because of lalrpop
-    pub instance: IdentRaw<'script>,
+    pub alias: IdentRaw<'script>,
     /// we're forced to make this pub because of lalrpop
     pub port: IdentRaw<'script>,
 }
@@ -293,8 +291,7 @@ impl<'script> Upable<'script> for DeployEndpointRaw<'script> {
     type Target = DeployEndpoint;
     fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(DeployEndpoint {
-            artefact: self.artefact.to_string(),
-            instance: self.instance.to_string(),
+            alias: self.alias.to_string(),
             port: self.port.to_string(),
         })
     }
@@ -407,13 +404,13 @@ impl<'script> Upable<'script> for FlowDeclRaw<'script> {
                     let stmt: ConnectorDecl<'script> = stmt.up(helper)?;
                     helper
                         .connector_decls
-                        .insert(dbg!(stmt.node_id.clone()), stmt.clone());
+                        .insert(stmt.node_id.clone(), stmt.clone());
                 }
                 FlowStmtRaw::PipelineDecl(stmt) => {
                     let stmt: PipelineDecl<'script> = stmt.up(helper)?;
                     helper
                         .pipeline_decls
-                        .insert(dbg!(stmt.node_id.clone()), stmt.clone());
+                        .insert(stmt.node_id.clone(), stmt.clone());
                 }
                 FlowStmtRaw::Connect(connect) => {
                     connections.push(connect.up(helper)?);
@@ -501,7 +498,6 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
                     artefact.params.ingest_creational_with(&params)?;
                     CreateTargetDecl::Connector(artefact)
                 } else {
-                    dbg!();
                     return Err(ErrorKind::DeployArtefactNotDefined(
                         outer,
                         inner,
@@ -522,7 +518,6 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
                     // artefact.params.ingest_creational_with(&params)?;
                     CreateTargetDecl::Pipeline(artefact)
                 } else {
-                    dbg!();
                     return Err(ErrorKind::DeployArtefactNotDefined(
                         outer,
                         inner,
@@ -574,7 +569,6 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
         let decl = if let Some(artefact) = helper.flow_decls.get(&target) {
             artefact.clone()
         } else {
-            dbg!();
             return Err(ErrorKind::DeployArtefactNotDefined(
                 self.extent(&helper.meta),
                 self.id.extent(&helper.meta),
