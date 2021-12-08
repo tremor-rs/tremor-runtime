@@ -45,11 +45,7 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "discord".into()
     }
-    async fn from_config(
-        &self,
-        id: &TremorUrl,
-        config: &Option<OpConfig>,
-    ) -> Result<Box<dyn Connector>> {
+    async fn from_config(&self, id: &str, config: &Option<OpConfig>) -> Result<Box<dyn Connector>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
 
@@ -60,7 +56,7 @@ impl ConnectorBuilder for Builder {
                 path: vec![],
             };
             Ok(Box::new(Discord {
-                onramp_id: id.clone(),
+                onramp_id: id.to_string(),
                 origin_uri,
                 config,
                 client: None,
@@ -75,7 +71,7 @@ impl ConnectorBuilder for Builder {
 pub struct Discord {
     pub config: Config,
     origin_uri: EventOriginUri,
-    onramp_id: TremorUrl,
+    onramp_id: String,
     client: Option<(Sender<Value<'static>>, Receiver<Value<'static>>)>,
 }
 impl std::fmt::Debug for Discord {

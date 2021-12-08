@@ -21,7 +21,7 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::time::{Duration, Instant};
 use tremor_common::time::nanotime;
-use tremor_script::{EventPayload, ValueAndMeta};
+use tremor_script::{ast::DeployEndpoint, EventPayload, ValueAndMeta};
 
 use crate::config::{
     self, Codec as CodecConfig, Connector as ConnectorConfig, Preprocessor as PreprocessorConfig,
@@ -40,10 +40,7 @@ use crate::{
 };
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use beef::Cow;
-use tremor_common::url::{
-    ports::{ERR, OUT},
-    TremorUrl,
-};
+use tremor_common::url::ports::{ERR, OUT};
 use tremor_pipeline::{
     CbAction, Event, EventId, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
 };
@@ -63,14 +60,14 @@ pub enum SourceMsg {
         /// port
         port: Cow<'static, str>,
         /// pipelines to connect
-        pipelines: Vec<(TremorUrl, pipeline::Addr)>,
+        pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
     },
     /// disconnect a pipeline from a port
     Unlink {
         /// port
         port: Cow<'static, str>,
         /// url of the pipeline
-        id: TremorUrl,
+        id: DeployEndpoint,
     },
     /// Connect to the outside world and send the result back
     Connect(Sender<Result<bool>>, Attempt),
@@ -367,8 +364,8 @@ impl Source for ChannelSource {
 pub struct SourceContext {
     /// connector uid
     pub uid: u64,
-    /// connector url
-    pub(crate) url: TremorUrl,
+    /// connector alias
+    pub(crate) alias: String,
 
     /// connector type
     pub(crate) connector_type: ConnectorType,
@@ -381,13 +378,13 @@ pub struct SourceContext {
 
 impl Display for SourceContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Source::{}]", &self.url)
+        write!(f, "[Source::{}]", &self.alias)
     }
 }
 
 impl Context for SourceContext {
-    fn url(&self) -> &TremorUrl {
-        &self.url
+    fn alias(&self) -> &str {
+        &self.alias
     }
 
     fn quiescence_beacon(&self) -> &QuiescenceBeacon {
@@ -460,7 +457,7 @@ impl SourceManagerBuilder {
         // the pipeline is waiting for the source to process contraflow and the source waits for
         // the pipeline to process forward flow.
 
-        let name = ctx.url.short_id("c-src"); // connector source
+        let name = ctx.alias.clone(); // FIXME: .short_id("c-src"); // connector source
         let (source_tx, source_rx) = unbounded();
         let source_addr = SourceAddr { addr: source_tx };
         let manager = SourceManager::new(source, ctx, self, source_rx, source_addr.clone());
@@ -618,8 +615,8 @@ where
     ctx: SourceContext,
     rx: Receiver<SourceMsg>,
     addr: SourceAddr,
-    pipelines_out: Vec<(TremorUrl, pipeline::Addr)>,
-    pipelines_err: Vec<(TremorUrl, pipeline::Addr)>,
+    pipelines_out: Vec<(DeployEndpoint, pipeline::Addr)>,
+    pipelines_err: Vec<(DeployEndpoint, pipeline::Addr)>,
     streams: Streams,
     metrics_reporter: SourceReporter,
     // `Paused` is used for both explicitly pausing and CB close/open
@@ -713,7 +710,7 @@ where
                 for (pipeline_url, p) in &pipelines {
                     self.ctx.log_err(
                         p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
-                            input_url: self.ctx.url.clone(),
+                            endpoint: DeployEndpoint::new(self.ctx.alias.clone(), port.to_string()),
                             target: InputTarget::Source(self.addr.clone()),
                             is_transactional: self.is_transactional,
                         })
@@ -732,7 +729,7 @@ where
                 } else {
                     error!(
                         "[Source::{}] Tried to disconnect from an invalid port: {}",
-                        &self.ctx.url, &port
+                        &self.ctx.alias, &port
                     );
                     return Ok(Control::Continue);
                 };
@@ -755,7 +752,7 @@ where
                 if let Err(e) = self.send_signal(Event::signal_start(self.ctx.uid)).await {
                     error!(
                         "[Source::{}] Error sending start signal: {}",
-                        &self.ctx.url, e
+                        &self.ctx.alias, e
                     );
                 }
                 Ok(Control::Continue)
@@ -788,13 +785,13 @@ where
             SourceMsg::Resume => {
                 info!(
                     "[Source::{}] Ignoring Resume msg in {:?} state",
-                    &self.ctx.url, &self.state
+                    &self.ctx.alias, &self.state
                 );
                 Ok(Control::Continue)
             }
             SourceMsg::Pause if self.state == Running => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
-                info!("[Source::{}] Paused.", self.ctx.url);
+                info!("[Source::{}] Paused.", self.ctx.alias);
                 self.state = Paused;
                 self.ctx
                     .log_err(self.source.on_pause(&self.ctx).await, "on_pause failed");
@@ -803,7 +800,7 @@ where
             SourceMsg::Pause => {
                 info!(
                     "[Source::{}] Ignoring Pause msg in {:?} state",
-                    &self.ctx.url, &self.state
+                    &self.ctx.alias, &self.state
                 );
                 Ok(Control::Continue)
             }
@@ -819,7 +816,7 @@ where
             SourceMsg::Drain(_sender) if self.state == Draining => {
                 info!(
                     "[Source::{}] Ignoring incoming Drain message in {:?} state",
-                    &self.ctx.url, &self.state
+                    &self.ctx.alias, &self.state
                 );
                 Ok(Control::Continue)
             }
@@ -827,7 +824,7 @@ where
                 if sender.send(Msg::SourceDrained).await.is_err() {
                     error!(
                         "[Source::{}] Error sending SourceDrained message",
-                        &self.ctx.url
+                        &self.ctx.alias
                     );
                 }
                 Ok(Control::Continue)
@@ -878,7 +875,7 @@ where
             }
             SourceMsg::Cb(CbAction::Close, _id) => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
-                info!("[Source::{}] Circuit Breaker: Close.", self.ctx.url);
+                info!("[Source::{}] Circuit Breaker: Close.", self.ctx.alias);
                 let res = self.source.on_cb_close(&self.ctx).await;
                 self.ctx.log_err(res, "on_cb_close failed");
                 self.state = Paused;
@@ -886,7 +883,7 @@ where
             }
             SourceMsg::Cb(CbAction::Open, _id) => {
                 // FIXME: only start polling for data if we received at least 1 CbAction::Open
-                info!("[Source::{}] Circuit Breaker: Open.", self.ctx.url);
+                info!("[Source::{}] Circuit Breaker: Open.", self.ctx.alias);
                 self.cb_open_received = true;
                 self.ctx
                     .log_err(self.source.on_cb_open(&self.ctx).await, "on_cb_open failed");
@@ -898,26 +895,26 @@ where
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Drained(uid), _id) => {
-                debug!("[Source::{}] Drained request for {}", self.ctx.url, uid);
+                debug!("[Source::{}] Drained request for {}", self.ctx.alias, uid);
                 // only account for Drained CF which we caused
                 // as CF is sent back the DAG to all destinations
                 if uid == self.ctx.uid {
                     self.expected_drained = self.expected_drained.saturating_sub(1);
                     debug!(
                         "[Source::{}] Drained this is us! we still have {} drains to go",
-                        self.ctx.url, self.expected_drained
+                        self.ctx.alias, self.expected_drained
                     );
                     if self.expected_drained == 0 {
                         // we received 1 drain CB event per connected pipeline (hopefully)
                         if let Some(connector_channel) = self.connector_channel.as_ref() {
                             debug!(
                                 "[Source::{}] Drain completed, sending data now!",
-                                self.ctx.url
+                                self.ctx.alias
                             );
                             if connector_channel.send(Msg::SourceDrained).await.is_err() {
                                 error!(
                                     "[Source::{}] Error sending SourceDrained message to Connector",
-                                    &self.ctx.url
+                                    &self.ctx.alias
                                 );
                             }
                         }
@@ -952,7 +949,7 @@ where
             } else {
                 error!(
                     "[Source::{}] Trying to send event to invalid port: {}",
-                    &self.ctx.url, &port
+                    &self.ctx.alias, &port
                 );
                 continue;
             };
@@ -965,50 +962,32 @@ where
 
             if let Some((last, pipelines)) = pipelines.split_last_mut() {
                 for (pipe_url, addr) in pipelines {
-                    if let Some(input) = pipe_url.instance_port() {
-                        if let Err(e) = addr
-                            .send(Box::new(pipeline::Msg::Event {
-                                input: input.to_string().into(),
-                                event: event.clone(),
-                            }))
-                            .await
-                        {
-                            error!(
-                                "[Source::{}] Failed to send event {} to pipeline {}: {}",
-                                &self.ctx.url, &event.id, &pipe_url, e
-                            );
-                            send_error = true;
-                        }
-                    } else {
-                        // INVALID pipeline URL - this should not happen
+                    if let Err(e) = addr
+                        .send(Box::new(pipeline::Msg::Event {
+                            input: pipe_url.port().to_string().into(),
+                            event: event.clone(),
+                        }))
+                        .await
+                    {
                         error!(
-                            "[Source::{}] Cannot send event to invalid Pipeline URL: {}",
-                            &self.ctx.url, &pipe_url
+                            "[Source::{}] Failed to send event {} to pipeline {}: {}",
+                            &self.ctx.alias, &event.id, &pipe_url, e
                         );
                         send_error = true;
                     }
                 }
 
-                if let Some(input) = last.0.instance_port() {
-                    if let Err(e) = last
-                        .1
-                        .send(Box::new(pipeline::Msg::Event {
-                            input: input.to_string().into(),
-                            event,
-                        }))
-                        .await
-                    {
-                        error!(
-                            "[Source::{}] Failed to send event to pipeline {}: {}",
-                            &self.ctx.url, &last.0, e
-                        );
-                        send_error = true;
-                    }
-                } else {
-                    // INVALID pipeline URL - this should not happen
+                if let Err(e) = last
+                    .1
+                    .send(Box::new(pipeline::Msg::Event {
+                        input: last.0.port().to_string().into(),
+                        event,
+                    }))
+                    .await
+                {
                     error!(
-                        "[Source::{}] Cannot send event to invalid Pipeline URL: {}",
-                        &self.ctx.url, &last.0
+                        "[Source::{}] Failed to send event to pipeline {}: {}",
+                        &self.ctx.alias, &last.0, e
                     );
                     send_error = true;
                 }
@@ -1064,7 +1043,7 @@ where
                 let mut ingest_ns = nanotime();
                 let stream_state = self.streams.get_or_create_stream(stream)?; // we fail if we cannot create a stream (due to misconfigured codec, preprocessors, ...) (should not happen)
                 let results = build_events(
-                    &self.ctx.url,
+                    &self.ctx.alias,
                     stream_state,
                     &mut ingest_ns,
                     self.pull_counter,
@@ -1082,7 +1061,7 @@ where
                     {
                         error!(
                             "[Source::{}] Error on no events callback: {}",
-                            &self.ctx.url, e
+                            &self.ctx.alias, e
                         );
                     }
                 } else {
@@ -1103,7 +1082,7 @@ where
             } => {
                 let mut ingest_ns = nanotime();
                 let stream_state = self.streams.get_or_create_stream(stream)?; // we only error here due to misconfigured codec etc
-                let connector_url = &self.ctx.url;
+                let connector_url = &self.ctx.alias;
 
                 let mut results = Vec::with_capacity(batch_data.len()); // assuming 1:1 mapping
                 for (data, meta) in batch_data {
@@ -1128,7 +1107,7 @@ where
                     {
                         error!(
                             "[Source::{}] Error on no events callback: {}",
-                            &self.ctx.url, e
+                            &self.ctx.alias, e
                         );
                     }
                 } else {
@@ -1166,7 +1145,10 @@ where
                 }
             }
             SourceReply::StartStream(stream_id) => {
-                debug!("[Source::{}] Starting stream {}", &self.ctx.url, stream_id);
+                debug!(
+                    "[Source::{}] Starting stream {}",
+                    &self.ctx.alias, stream_id
+                );
                 self.streams.start_stream(stream_id)?; // failing here only due to misconfig, in that case, bail out, #yolo
             }
             SourceReply::EndStream {
@@ -1174,11 +1156,11 @@ where
                 meta,
                 stream_id,
             } => {
-                debug!("[Source::{}] Ending stream {}", &self.ctx.url, stream_id);
+                debug!("[Source::{}] Ending stream {}", &self.ctx.alias, stream_id);
                 let mut ingest_ns = nanotime();
                 if let Some(mut stream_state) = self.streams.end_stream(stream_id) {
                     let results = build_last_events(
-                        &self.ctx.url,
+                        &self.ctx.alias,
                         &mut stream_state,
                         &mut ingest_ns,
                         self.pull_counter,
@@ -1195,7 +1177,7 @@ where
                         {
                             error!(
                                 "[Source::{}] Error on no events callback: {}",
-                                &self.ctx.url, e
+                                &self.ctx.alias, e
                             );
                         }
                     } else {
@@ -1218,7 +1200,7 @@ where
                     if let Err(e) = self.send_signal(signal).await {
                         error!(
                             "[Source::{}] Error sending DRAIN signal: {}",
-                            &self.ctx.url, e
+                            &self.ctx.alias, e
                         );
                     }
                     // if we get a disconnect in between we might never receive every drain CB
@@ -1228,7 +1210,7 @@ where
                     self.expected_drained = self.pipelines_err.len() + self.pipelines_out.len();
                     debug!(
                         "[Source::{}] We are looking to drain {} connections.",
-                        self.ctx.url, self.expected_drained
+                        self.ctx.alias, self.expected_drained
                     );
                 } else {
                     // set the timer for the given ms
@@ -1267,7 +1249,7 @@ where
             // FIXME: change reply from true/false to something descriptive like enum {Stop Continue} or the rust controlflow thingy
             if self.control_plane().await? == Control::Terminate {
                 // source has been stopped, lets stop running here
-                debug!("[Source::{}] Terminating source task...", self.ctx.url);
+                debug!("[Source::{}] Terminating source task...", self.ctx.alias);
                 return Ok(());
             }
 
@@ -1290,7 +1272,7 @@ where
 /// preprocessor or codec errors are turned into events to the ERR port of the source/connector
 #[allow(clippy::too_many_arguments)]
 fn build_events(
-    url: &TremorUrl,
+    alias: &str,
     stream_state: &mut StreamState,
     ingest_ns: &mut u64,
     pull_id: u64,
@@ -1304,7 +1286,7 @@ fn build_events(
         stream_state.preprocessors.as_mut_slice(),
         ingest_ns,
         data,
-        url,
+        alias,
     ) {
         Ok(processed) => {
             let mut res = Vec::with_capacity(processed.len());
@@ -1322,7 +1304,7 @@ fn build_events(
                 let (port, payload) = match line_value {
                     Ok(decoded) => (port.unwrap_or(&OUT).clone(), decoded),
                     Err(None) => continue,
-                    Err(Some(e)) => (ERR, make_error(url, &e, stream_state.stream_id, pull_id)),
+                    Err(Some(e)) => (ERR, make_error(alias, &e, stream_state.stream_id, pull_id)),
                 };
                 let event = build_event(
                     stream_state,
@@ -1338,7 +1320,7 @@ fn build_events(
         }
         Err(e) => {
             // preprocessor error
-            let err_payload = make_error(url, &e, stream_state.stream_id, pull_id);
+            let err_payload = make_error(alias, &e, stream_state.stream_id, pull_id);
             let event = build_event(
                 stream_state,
                 pull_id,
@@ -1356,7 +1338,7 @@ fn build_events(
 /// preprocessor or codec errors are turned into events to the ERR port of the source/connector
 #[allow(clippy::too_many_arguments)]
 fn build_last_events(
-    url: &TremorUrl,
+    alias: &str,
     stream_state: &mut StreamState,
     ingest_ns: &mut u64,
     pull_id: u64,
@@ -1365,7 +1347,7 @@ fn build_last_events(
     meta: &Value<'static>,
     is_transactional: bool,
 ) -> Vec<(Cow<'static, str>, Event)> {
-    match finish(stream_state.preprocessors.as_mut_slice(), url) {
+    match finish(stream_state.preprocessors.as_mut_slice(), alias) {
         Ok(processed) => {
             let mut res = Vec::with_capacity(processed.len());
             for chunk in processed {
@@ -1382,7 +1364,7 @@ fn build_last_events(
                 let (port, payload) = match line_value {
                     Ok(decoded) => (port.unwrap_or(&OUT).clone(), decoded),
                     Err(None) => continue,
-                    Err(Some(e)) => (ERR, make_error(url, &e, stream_state.stream_id, pull_id)),
+                    Err(Some(e)) => (ERR, make_error(alias, &e, stream_state.stream_id, pull_id)),
                 };
                 let event = build_event(
                     stream_state,
@@ -1398,7 +1380,7 @@ fn build_last_events(
         }
         Err(e) => {
             // preprocessor error
-            let err_payload = make_error(url, &e, stream_state.stream_id, pull_id);
+            let err_payload = make_error(alias, &e, stream_state.stream_id, pull_id);
             let event = build_event(
                 stream_state,
                 pull_id,
@@ -1413,16 +1395,11 @@ fn build_last_events(
 }
 
 /// create an error payload
-fn make_error(
-    connector_url: &TremorUrl,
-    error: &Error,
-    stream_id: u64,
-    pull_id: u64,
-) -> EventPayload {
+fn make_error(connector_alias: &str, error: &Error, stream_id: u64, pull_id: u64) -> EventPayload {
     let e_string = error.to_string();
     let data = literal!({
         "error": e_string.clone(),
-        "source": connector_url.to_string(),
+        "source": connector_alias.to_string(),
         "stream_id": stream_id,
         "pull_id": pull_id
     });

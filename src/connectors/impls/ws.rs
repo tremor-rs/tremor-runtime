@@ -31,8 +31,6 @@ where
         + futures::Stream<Item = std::result::Result<Message, Error>>,
 {
     wrapped_stream: S,
-    #[allow(dead_code)]
-    deploy_url: TremorUrl,
     origin_uri: EventOriginUri,
     meta: Value<'static>,
 }
@@ -44,15 +42,9 @@ where
         + std::marker::Send
         + futures::Stream<Item = std::result::Result<Message, Error>>,
 {
-    fn new(
-        stream: S,
-        deploy_url: TremorUrl,
-        origin_uri: EventOriginUri,
-        meta: Value<'static>,
-    ) -> Self {
+    fn new(stream: S, origin_uri: EventOriginUri, meta: Value<'static>) -> Self {
         Self {
             wrapped_stream: stream,
-            deploy_url,
             origin_uri,
             meta,
         }

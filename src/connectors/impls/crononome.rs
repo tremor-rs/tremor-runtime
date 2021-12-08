@@ -33,7 +33,7 @@ pub struct Crononome {
     config: Option<Value<'static>>,
     origin_uri: EventOriginUri,
     cq: ChronomicQueue,
-    deploy_id: TremorUrl,
+    deploy_id: String,
 }
 
 #[derive(Debug, Default)]
@@ -47,7 +47,7 @@ impl ConnectorBuilder for Builder {
 
     async fn from_config(
         &self,
-        id: &TremorUrl,
+        id: &str,
         raw_config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         if let Some(raw) = raw_config {
@@ -80,7 +80,7 @@ impl ConnectorBuilder for Builder {
             Ok(Box::new(Crononome {
                 origin_uri,
                 config: payload,
-                deploy_id: id.clone(),
+                deploy_id: id.to_string(),
                 cq,
             }))
         } else {

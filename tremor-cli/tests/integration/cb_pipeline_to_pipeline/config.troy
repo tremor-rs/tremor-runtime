@@ -16,9 +16,9 @@ flow
   create pipeline main2 from pipelines::passthrough;
   create connector cb_check;
 
-  connect /connector/cb_check/cb_check/out to /pipeline/main1/main1/in;
-  connect /pipeline/main1/main1/out to /pipeline/main2/main2/in;
-  connect /pipeline/main2/main2/out to /connector/cb_check/cb_check/in;
+  connect /connector/cb_check/out to /pipeline/main1/in;
+  connect /pipeline/main1/out to /pipeline/main2/in;
+  connect /pipeline/main2/out to /connector/cb_check/in;
 end;
 
 deploy flow main;
