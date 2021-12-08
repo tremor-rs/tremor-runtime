@@ -17,7 +17,7 @@ use crate::{
     errors::{Error, Result},
     instance::InstanceState,
     permge::PriorityMerge,
-    pipeline,
+    pipeline::{self, InputTarget},
 };
 use async_std::{channel::Receiver, prelude::*};
 use async_std::{
@@ -260,13 +260,25 @@ async fn link(
             let to_pipeline = pipelines
                 .get(to.alias())
                 .ok_or(format!("FIXME: pipeline {} not found", from.alias()))?;
-            let msg = crate::pipeline::MgmtMsg::ConnectOutput {
+            let msg_from = crate::pipeline::MgmtMsg::ConnectOutput {
                 port: from.port().to_string().into(),
                 endpoint: to.clone(),
                 target: to_pipeline.clone().into(),
             };
+
+            let msg_to = crate::pipeline::MgmtMsg::ConnectInput {
+                endpoint: from.clone(),
+                target: InputTarget::Pipeline(Box::new(from_pipeline.clone())),
+                is_transactional: true,
+            };
+
             from_pipeline
-                .send_mgmt(msg)
+                .send_mgmt(msg_from)
+                .await
+                .map_err(|e| -> Error { format!("Could not send to pipeline: {}", e).into() })?;
+
+            to_pipeline
+                .send_mgmt(msg_to)
                 .await
                 .map_err(|e| -> Error { format!("Could not send to pipeline: {}", e).into() })?;
         }
