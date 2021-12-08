@@ -41,7 +41,7 @@ impl ConnectorBuilder for Builder {
 
     async fn from_config(
         &self,
-        _id: &TremorUrl,
+        _id: &str,
         raw_config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         if let Some(raw) = raw_config {

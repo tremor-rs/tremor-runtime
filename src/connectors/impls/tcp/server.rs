@@ -56,7 +56,7 @@ impl From<SocketAddr> for ConnectionMeta {
 
 #[allow(clippy::module_name_repetitions)]
 pub struct TcpServer {
-    url: TremorUrl,
+    alias: String,
     config: Config,
     accept_task: Option<JoinHandle<Result<()>>>,
     sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
@@ -74,7 +74,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn from_config(
         &self,
-        id: &TremorUrl,
+        id: &str,
         raw_config: &Option<OpConfig>,
     ) -> crate::errors::Result<Box<dyn Connector>> {
         if let Some(raw_config) = raw_config {
@@ -86,7 +86,7 @@ impl ConnectorBuilder for Builder {
                 None
             };
             Ok(Box::new(TcpServer {
-                url: id.clone(),
+                alias: id.to_string(),
                 config,
                 accept_task: None,  // not yet started
                 sink_runtime: None, // replaced in create_sink()
@@ -148,7 +148,7 @@ impl Connector for TcpServer {
     #[allow(clippy::too_many_lines)]
     async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         let path = vec![self.config.port.to_string()];
-        let accept_url = self.url.clone();
+        let accept_url = self.alias.clone();
 
         let source_runtime = self
             .source_runtime
@@ -209,7 +209,7 @@ impl Connector for TcpServer {
                         tls_read_stream,
                         stream.clone(),
                         vec![0; buf_size],
-                        ctx.url.clone(),
+                        ctx.alias.clone(),
                         origin_uri.clone(),
                         meta,
                     );
@@ -232,7 +232,7 @@ impl Connector for TcpServer {
                     let tcp_reader = TcpReader::new(
                         stream.clone(),
                         vec![0; buf_size],
-                        ctx.url.clone(),
+                        ctx.alias.clone(),
                         origin_uri.clone(),
                         meta,
                     );

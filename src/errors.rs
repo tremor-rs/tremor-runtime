@@ -187,60 +187,14 @@ error_chain! {
             description("Unknown operator")
                 display("Unknown operator: {}::{}", n, o)
         }
-        UnknownOnrampType(t: String) {
-            description("Unknown onramp type")
-                display("Unknown onramp type {}", t)
-        }
-        UnknownOfframpType(t: String) {
-            description("Unknown offramp type")
-                display("Unknown offramp type {}", t)
-        }
-        UnknownConnector(n: String) {
-            description("Unknown connector")
-                display("Unknown connector {}", n)
-        }
         UnknownConnectorType(t: String) {
             description("Unknown connector type")
                 display("Unknown connector type {}", t)
         }
-        ArtefactNotFound(id: String) {
-            description("The artefact was not found")
-                display("The artefact was not found: {}", id)
-        }
-        InstanceNotFound(artefact: String, id: String) {
-            description("Instance not found")
-                display("The {} instance {} not found", artefact, id)
-        }
+
         CodecNotFound(name: String) {
             description("Codec not found")
                 display("Codec \"{}\" not found.", name)
-        }
-        PublishFailedAlreadyExists(key: String) {
-            description("The published artefact already exists")
-                display("The published {} already exists.", key)
-        }
-
-        UnpublishFailedDoesNotExist(key: String) {
-            description("The unpublished artefact does not exist")
-                display("The unpublished {} does not exist.", key)
-        }
-        UnpublishFailedNonZeroInstances(key: String) {
-            description("The artefact has non-zero instances and cannot be unpublished")
-                display("Cannot unpublish artefact {} which has non-zero instances.", key)
-        }
-        UnpublishFailedSystemArtefact(key: String) {
-            description("The artefact is a system artefact and cannot be unpublished")
-                display("Cannot unpublish system artefact {}.", key)
-        }
-
-        InstanceAlreadyExists(key: String) {
-            description("An instance with the same id already exists")
-                display("An instance with the id {} already exists.", key)
-        }
-
-        BindFailedKeyNotExists(key: String) {
-            description("Failed to bind non existand artefact")
-                display("Failed to bind non existand {}.", key)
         }
 
         NotCSVSerializableValue(value: String) {
@@ -289,10 +243,6 @@ error_chain! {
             description("Data can't be decompressed")
                 display("The data did not contain a known magic header to identify a supported compression")
         }
-        NoSocket {
-            description("No socket available")
-                display("No socket available")
-        }
         KvError(s: String) {
             description("KV error")
                 display("{}", s)
@@ -305,10 +255,7 @@ error_chain! {
             description("Invalid Tremor URL")
                 display("Invalid Tremor URL {}: {}", invalid_url, msg)
         }
-        InvalidInstanceUrl(url: String) {
-            description("Invalid artefact instance URL")
-                 display("Invalid artefact instance URL: {}", url)
-        }
+
         MissingConfiguration(s: String) {
             description("Missing Configuration")
                 display("Missing Configuration for {}", s)
@@ -328,10 +275,6 @@ error_chain! {
         InvalidMetricsData {
             description("Invalid Metrics data")
                 display("Invalid Metrics data")
-        }
-        InvalidEventData(context: String, reason: String) {
-            description("Invalid Event data")
-                display("[{}] Invalid Event data: {}", context, reason)
         }
     }
 }

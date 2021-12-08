@@ -46,7 +46,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn from_config(
         &self,
-        _id: &TremorUrl,
+        _id: &str,
         config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         if let Some(config) = config {
@@ -202,7 +202,7 @@ impl ConnectorBuilder for ThingyBuilder {
     }
     async fn from_config(
         &self,
-        _id: &TremorUrl,
+        _id: &str,
         config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         if let Some(config) = config {

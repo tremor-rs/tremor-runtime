@@ -144,32 +144,9 @@ impl From<PoisonError<MutexGuard<'_, tremor_script::Registry>>> for Error {
 impl From<TremorError> for Error {
     fn from(e: TremorError) -> Self {
         match e.0 {
-            ErrorKind::UnpublishFailedNonZeroInstances(_) => Error::new(
-                StatusCode::Conflict,
-                "Resource still has active instances".into(),
-            ),
-            ErrorKind::ArtefactNotFound(url) => {
-                Error::new(StatusCode::NotFound, format!("Artefact not found {}", url))
-            }
-            ErrorKind::InstanceNotFound(artefact, url) => Error::new(
-                StatusCode::NotFound,
-                format!("{} instance not found {}", artefact, url),
-            ),
             ErrorKind::InvalidTremorUrl(msg, url) => Error::new(
                 StatusCode::BadRequest,
                 format!("Invalid Tremor Url: {} : {}", url, msg),
-            ),
-            ErrorKind::InvalidInstanceUrl(url) => Error::new(
-                StatusCode::BadRequest,
-                format!("Invalid instance Url: {}", url),
-            ),
-            ErrorKind::PublishFailedAlreadyExists(_) => Error::new(
-                StatusCode::Conflict,
-                "A resource with the requested ID already exists".into(),
-            ),
-            ErrorKind::UnpublishFailedSystemArtefact(_) => Error::new(
-                StatusCode::Forbidden,
-                "System artefacts cannot be unpublished".into(),
             ),
             _e => Error::new(
                 StatusCode::InternalServerError,
