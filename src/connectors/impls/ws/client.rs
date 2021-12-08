@@ -157,7 +157,7 @@ impl Connector for WsClient {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = ChannelSource::new(source_context.clone(), builder.qsize());
+        let source = ChannelSource::new(builder.qsize());
         self.source_runtime = Some(source.runtime());
         let addr = builder.spawn(source, source_context)?;
         Ok(Some(addr))

@@ -143,7 +143,7 @@ impl Connector for WsServer {
         ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = ChannelSource::new(ctx.clone(), builder.qsize());
+        let source = ChannelSource::new(builder.qsize());
         self.source_runtime = Some(source.runtime());
         let addr = builder.spawn(source, ctx)?;
 
