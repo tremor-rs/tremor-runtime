@@ -61,7 +61,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn from_config(
         &self,
-        _id: &TremorUrl,
+        _id: &str,
         _raw_config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(StdStreamConnector {}))

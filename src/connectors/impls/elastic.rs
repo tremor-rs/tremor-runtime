@@ -632,11 +632,7 @@ impl ConnectorBuilder for Builder {
         "elastic".into()
     }
 
-    async fn from_config(
-        &self,
-        id: &TremorUrl,
-        config: &Option<OpConfig>,
-    ) -> Result<Box<dyn Connector>> {
+    async fn from_config(&self, id: &str, config: &Option<OpConfig>) -> Result<Box<dyn Connector>> {
         if let Some(raw_config) = config {
             let config = Config::new(raw_config)?;
             if config.nodes.is_empty() {

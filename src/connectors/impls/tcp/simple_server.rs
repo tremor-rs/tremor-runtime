@@ -74,7 +74,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn from_config(
         &self,
-        _id: &TremorUrl,
+        _id: &str,
         raw_config: &Option<OpConfig>,
     ) -> crate::errors::Result<Box<dyn Connector>> {
         if let Some(raw_config) = raw_config {
@@ -231,7 +231,7 @@ impl Source for TcpServerSource {
                         tls_read_stream,
                         stream.clone(),
                         vec![0; buf_size],
-                        ctx.url.clone(),
+                        ctx.alias.clone(),
                         origin_uri.clone(),
                         meta,
                     );
@@ -254,7 +254,7 @@ impl Source for TcpServerSource {
                     let tcp_reader = TcpReader::new(
                         stream.clone(),
                         vec![0; buf_size],
-                        ctx.url.clone(),
+                        ctx.alias.clone(),
                         origin_uri.clone(),
                         meta,
                     );
