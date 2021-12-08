@@ -28,14 +28,6 @@ pub struct Config {
 
 impl ConfigImpl for Config {}
 
-#[derive(Clone, Debug)]
-pub struct Crononome {
-    config: Option<Value<'static>>,
-    origin_uri: EventOriginUri,
-    cq: ChronomicQueue,
-    deploy_id: String,
-}
-
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
@@ -59,84 +51,37 @@ impl ConnectorBuilder for Builder {
             } else {
                 None
             };
-            let origin_uri = EventOriginUri {
-                scheme: "tremor-crononome".to_string(),
-                host: hostname(),
-                port: None,
-                path: vec![],
+
+            let entries = if let Some(Value::Array(entries)) = &payload {
+                entries
+                    .iter()
+                    .cloned()
+                    .map(CronEntryInt::try_from)
+                    .collect::<Result<Vec<CronEntryInt>>>()?
+            } else {
+                return Err(ErrorKind::InvalidConfiguration(
+                    id.to_string(),
+                    "missing `entries` array".to_string(),
+                )
+                .into());
             };
 
-            // One time configuration of the cq with periodic cron
-            // schedule
-            let mut cq = ChronomicQueue::default();
-            if let Some(Value::Array(entries)) = &payload {
-                for entry in entries {
-                    let entry = entry.clone();
-                    let entry = CronEntryInt::try_from(entry)?;
-                    cq.enqueue(&entry);
-                }
-            }
-
-            Ok(Box::new(Crononome {
-                origin_uri,
-                config: payload,
-                deploy_id: id.to_string(),
-                cq,
-            }))
+            Ok(Box::new(Crononome { entries }))
         } else {
-            Err(ErrorKind::MissingConfiguration(String::from("crononome")).into())
+            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
     }
 }
 
-#[async_trait::async_trait()]
-impl Source for Crononome {
-    async fn pull_data(&mut self, pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        if let Some(trigger) = self.cq.next() {
-            let mut origin_uri = self.origin_uri.clone();
-            origin_uri.path.push(trigger.0.clone());
-
-            let mut data: Value<'static> = Value::object_with_capacity(4);
-            data.insert("onramp", "crononome")?; // TODO connector
-            data.insert("ingest_ns", nanotime())?;
-            data.insert("id", pull_id)?;
-            let mut tr: Value<'static> = Value::object_with_capacity(2);
-            tr.insert("name", trigger.0)?;
-            if let Some(payload) = trigger.1 {
-                tr.insert("payload", payload)?;
-            }
-            data.insert("trigger", tr)?;
-            Ok(SourceReply::Structured {
-                origin_uri,
-                payload: data.into(),
-                stream: DEFAULT_STREAM_ID,
-                port: None,
-            })
-        } else {
-            Ok(SourceReply::Empty(100))
-        }
-    }
-
-    fn is_transactional(&self) -> bool {
-        false
-    }
+#[derive(Clone, Debug)]
+pub struct Crononome {
+    entries: Vec<CronEntryInt>,
 }
 
 #[async_trait::async_trait()]
 impl Connector for Crononome {
     fn is_structured(&self) -> bool {
         true
-    }
-
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        if let Some(Value::Array(entries)) = &self.config {
-            for entry in entries {
-                let entry = entry.clone();
-                let entry = CronEntryInt::try_from(entry)?;
-                self.cq.enqueue(&entry);
-            }
-        }
-        Ok(true)
     }
 
     fn default_codec(&self) -> &str {
@@ -148,12 +93,70 @@ impl Connector for Crononome {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        // TODO NOTE The spawn here uses `self.clone()` which is
-        // very confusing as any initialized state will be lost
-        // on the clone which - depending on the implementation of
-        // the connector - is going to be very confusing for the
-        // connector writer.
-        //
-        builder.spawn(self.clone(), source_context).map(Some)
+        let source = CrononomeSource::new(self.entries.clone());
+        builder.spawn(source, source_context).map(Some)
+    }
+}
+struct CrononomeSource {
+    entries: Vec<CronEntryInt>,
+    cq: ChronomicQueue,
+    origin_uri: EventOriginUri,
+}
+
+impl CrononomeSource {
+    fn new(entries: Vec<CronEntryInt>) -> Self {
+        Self {
+            entries,
+            cq: ChronomicQueue::default(),
+            origin_uri: EventOriginUri {
+                scheme: "tremor-crononome".to_string(),
+                host: hostname(),
+                port: None,
+                path: vec![],
+            },
+        }
+    }
+}
+#[async_trait::async_trait()]
+impl Source for CrononomeSource {
+    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+        self.cq = ChronomicQueue::default(); // create a new queue to avoid duplication in case of reconnect
+        for entry in &self.entries {
+            self.cq.enqueue(entry);
+        }
+        Ok(true)
+    }
+    async fn pull_data(&mut self, pull_id: u64, ctx: &SourceContext) -> Result<SourceReply> {
+        if let Some(trigger) = self.cq.next() {
+            let mut origin_uri = self.origin_uri.clone();
+            origin_uri.path.push(trigger.0.clone());
+
+            let mut tr: Value<'static> = Value::object_with_capacity(2);
+            tr.try_insert("name", trigger.0.clone());
+            if let Some(payload) = trigger.1 {
+                tr.try_insert("payload", payload);
+            }
+            let data = literal!({
+                "connector": "crononome",
+                "ingest_ns": nanotime(),
+                "id": pull_id,
+                "trigger": tr
+            });
+            let meta = ctx.meta(literal!({
+                "trigger": trigger.0
+            }));
+            Ok(SourceReply::Structured {
+                origin_uri,
+                payload: (data, meta).into(),
+                stream: DEFAULT_STREAM_ID,
+                port: None,
+            })
+        } else {
+            Ok(SourceReply::Empty(100))
+        }
+    }
+
+    fn is_transactional(&self) -> bool {
+        false
     }
 }
