@@ -27,10 +27,7 @@ use log::{debug, info};
 use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::{
     ids::ConnectorIdGen,
-    url::{
-        ports::{ERR, IN, OUT},
-        TremorUrl,
-    },
+    url::ports::{ERR, IN, OUT},
 };
 use tremor_pipeline::{CbAction, EventId};
 use tremor_runtime::{
@@ -42,10 +39,10 @@ use tremor_runtime::{
     system::{ShutdownMode, World, WorldConfig},
     Event, QSIZE,
 };
-use tremor_script::Value;
+use tremor_script::{ast::DeployEndpoint, Value};
 
 pub(crate) struct ConnectorHarness {
-    connector_id: TremorUrl,
+    connector_id: String,
     world: World,
     handle: JoinHandle<Result<()>>,
     //config: config::Connector,
@@ -71,21 +68,22 @@ impl ConnectorHarness {
         let (world, handle) = World::start(WorldConfig::default()).await?;
         let raw_config =
             config::Connector::from_defn(connector_type.clone(), connector_type.into(), defn)?;
-        let id = TremorUrl::from_connector_instance(raw_config.id.as_str(), "test");
+        let id = String::from("test");
         // FIXME: woohp whoop
-        let (id, connector_addr) =
-            connectors::spawn(id, &mut connector_id_gen, &known_connectors, raw_config).await?;
+        let connector_addr = connectors::spawn(
+            id.clone(),
+            &mut connector_id_gen,
+            &known_connectors,
+            raw_config,
+        )
+        .await?;
         let mut pipes = HashMap::new();
 
         let (link_tx, link_rx) = async_std::channel::unbounded();
         for port in ports {
             // try to connect a fake pipeline outbound
-            let pipeline_id = TremorUrl::from_pipeline_instance(
-                format!("TEST__{}_pipeline", port).as_str(),
-                "01",
-            )
-            .with_port(&IN);
-            let pipeline = TestPipeline::new(pipeline_id.clone());
+            let pipeline_id = DeployEndpoint::new(format!("TEST__{}_pipeline", port), IN);
+            let pipeline = TestPipeline::new(pipeline_id.alias().to_string());
             connector_addr
                 .send(connectors::Msg::Link {
                     port: port.clone(),
@@ -251,12 +249,12 @@ pub(crate) struct TestPipeline {
 }
 
 impl TestPipeline {
-    pub(crate) fn new(id: TremorUrl) -> Self {
+    pub(crate) fn new(alias: String) -> Self {
         let qsize = QSIZE.load(Ordering::Relaxed);
         let (tx, rx) = bounded(qsize);
         let (tx_cf, rx_cf) = bounded(qsize);
         let (tx_mgmt, rx_mgmt) = bounded(qsize);
-        let addr = pipeline::Addr::new(tx, tx_cf, tx_mgmt, id);
+        let addr = pipeline::Addr::new(tx, tx_cf, tx_mgmt, alias);
         Self {
             rx,
             rx_cf,

@@ -30,7 +30,7 @@ where
     wrapped_stream: S,
     underlying_stream: TcpStream,
     buffer: Vec<u8>,
-    url: TremorUrl,
+    alias: String,
     origin_uri: EventOriginUri,
     meta: Value<'static>,
 }
@@ -39,7 +39,7 @@ impl TcpReader<TcpStream> {
     fn new(
         stream: TcpStream,
         buffer: Vec<u8>,
-        url: TremorUrl,
+        alias: String,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
     ) -> Self {
@@ -47,7 +47,7 @@ impl TcpReader<TcpStream> {
             wrapped_stream: stream.clone(),
             underlying_stream: stream,
             buffer,
-            url,
+            alias,
             origin_uri,
             meta,
         }
@@ -59,7 +59,7 @@ impl TcpReader<ReadHalf<async_tls::server::TlsStream<TcpStream>>> {
         stream: ReadHalf<async_tls::server::TlsStream<TcpStream>>,
         underlying_stream: TcpStream,
         buffer: Vec<u8>,
-        url: TremorUrl,
+        alias: String,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
     ) -> Self {
@@ -67,7 +67,7 @@ impl TcpReader<ReadHalf<async_tls::server::TlsStream<TcpStream>>> {
             wrapped_stream: stream,
             underlying_stream,
             buffer,
-            url,
+            alias,
             origin_uri,
             meta,
         }
@@ -79,7 +79,7 @@ impl TcpReader<ReadHalf<async_tls::client::TlsStream<TcpStream>>> {
         stream: ReadHalf<async_tls::client::TlsStream<TcpStream>>,
         underlying_stream: TcpStream,
         buffer: Vec<u8>,
-        url: TremorUrl,
+        alias: String,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
     ) -> Self {
@@ -87,7 +87,7 @@ impl TcpReader<ReadHalf<async_tls::client::TlsStream<TcpStream>>> {
             wrapped_stream: stream,
             underlying_stream,
             buffer,
-            url,
+            alias,
             origin_uri,
             meta,
         }
@@ -103,14 +103,14 @@ where
         let bytes_read = self.wrapped_stream.read(&mut self.buffer).await?;
         if bytes_read == 0 {
             // EOF
-            trace!("[Connector::{}] EOF", &self.url);
+            trace!("[Connector::{}] EOF", &self.alias);
             return Ok(SourceReply::EndStream {
                 origin_uri: self.origin_uri.clone(),
                 meta: Some(self.meta.clone()),
                 stream_id: stream,
             });
         }
-        debug!("[Connector::{}] read {} bytes", &self.url, bytes_read);
+        debug!("[Connector::{}] read {} bytes", &self.alias, bytes_read);
 
         // FIXME: meta needs to be wrapped in <RESOURCE_TYPE>.<ARTEFACT> by the source manager
         // this is only the connector specific part, without the path mentioned above
@@ -129,7 +129,7 @@ where
         if let Err(e) = self.underlying_stream.shutdown(std::net::Shutdown::Read) {
             warn!(
                 "[Connector::{}] Error shutting down reading half of stream {}: {}",
-                &self.url, stream, e
+                &self.alias, stream, e
             );
         }
         StreamDone::StreamClosed

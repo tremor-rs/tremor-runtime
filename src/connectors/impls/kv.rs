@@ -168,7 +168,7 @@ pub struct Config {
 impl ConfigImpl for Config {}
 
 pub struct Kv {
-    sink_url: TremorUrl,
+    sink_id: String,
     event_origin_uri: EventOriginUri,
     config: Config,
     rx: Receiver<KvMesssage>,
@@ -183,11 +183,7 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "kv".into()
     }
-    async fn from_config(
-        &self,
-        id: &TremorUrl,
-        config: &Option<OpConfig>,
-    ) -> Result<Box<dyn Connector>> {
+    async fn from_config(&self, id: &str, config: &Option<OpConfig>) -> Result<Box<dyn Connector>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
 
@@ -199,7 +195,7 @@ impl ConnectorBuilder for Builder {
             };
             let (tx, rx) = bounded(128);
             Ok(Box::new(Kv {
-                sink_url: id.clone(),
+                sink_id: id.to_string(),
                 event_origin_uri,
                 config,
                 tx,
@@ -218,7 +214,7 @@ struct KvSink {
     db: Db,
     idgen: EventIdGenerator,
     codec: Json<Sorted>,
-    url: TremorUrl,
+    alias: String,
 }
 
 struct KvSource {
@@ -355,7 +351,7 @@ impl Sink for KvSink {
 
                         let e = (data, meta).into();
                         if let Err(e) = self.tx.send((OUT, e)).await {
-                            error!("[Sink::{}], Faild to send to source: {}", self.url, e);
+                            error!("[Sink::{}], Faild to send to source: {}", self.alias, e);
                         };
                     }
                 }
@@ -372,7 +368,7 @@ impl Sink for KvSink {
                     }
                     let e = ((), meta).into();
                     if let Err(e) = self.tx.send((ERR, e)).await {
-                        error!("[Sink::{}], Faild to send to source: {}", self.url, e);
+                        error!("[Sink::{}], Faild to send to source: {}", self.alias, e);
                     };
 
                     r = SinkReply::FAIL;
@@ -417,7 +413,7 @@ impl Connector for Kv {
             tx: self.tx.clone(),
             idgen,
             codec,
-            url: self.sink_url.clone(),
+            alias: self.sink_id.clone(),
         };
         builder.spawn(s, sink_context).map(Some)
     }

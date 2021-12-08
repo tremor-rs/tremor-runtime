@@ -228,11 +228,11 @@ Connect: ConnectStmtRaw<'input> = {
 }
 
 ConnectFrom: DeployEndpointRaw<'input> = {
-     "/" <artefact:Ident> "/" <instance:Ident> <port:MaybePort> => DeployEndpointRaw{artefact, instance, port: port.unwrap_or_else(|| "out".into())},
+     "/" <alias:Ident> <port:MaybePort> => DeployEndpointRaw{alias, port: port.unwrap_or_else(|| "out".into())},
 }
 
 ConnectTo: DeployEndpointRaw<'input> = {
-    "/" <artefact:Ident> "/" <instance:Ident> <port:MaybePort> => DeployEndpointRaw{artefact, instance, port: port.unwrap_or_else(|| "in".into())},
+    "/" <alias:Ident> <port:MaybePort> => DeployEndpointRaw{alias, port: port.unwrap_or_else(|| "in".into())},
 }
 
 /// List of expressions at the root of the script

@@ -24,7 +24,6 @@ use futures::future::{join3, ready, FutureExt};
 use std::convert::identity;
 use std::fmt::Display;
 use std::time::Duration;
-use tremor_common::url::TremorUrl;
 
 #[derive(Debug, PartialEq, Clone)]
 enum ShouldRetry {
@@ -138,7 +137,7 @@ pub(crate) struct ReconnectRuntime {
     strategy: Box<dyn ReconnectStrategy>,
     addr: Addr,
     notifier: ConnectionLostNotifier,
-    connector_url: TremorUrl,
+    alias: String,
 }
 
 /// Notifier that connector implementations
@@ -172,14 +171,14 @@ impl ReconnectRuntime {
     ) -> Self {
         Self::inner(
             connector_addr.clone(),
-            connector_addr.url.clone(),
+            connector_addr.alias.clone(),
             notifier,
             config,
         )
     }
     fn inner(
         addr: Addr,
-        connector_url: TremorUrl,
+        alias: String,
         notifier: ConnectionLostNotifier,
         config: &Reconnect,
     ) -> Self {
@@ -201,7 +200,7 @@ impl ReconnectRuntime {
             strategy,
             addr,
             notifier,
-            connector_url,
+            alias,
         }
     }
 
@@ -268,17 +267,14 @@ impl ReconnectRuntime {
         self.attempt.on_failure();
         // check if we can retry according to strategy
         if let ShouldRetry::No(msg) = self.strategy.should_retry(&self.attempt) {
-            warn!(
-                "[Connector::{}] Not reconnecting: {}",
-                &self.connector_url, msg
-            );
+            warn!("[Connector::{}] Not reconnecting: {}", &self.alias, msg);
             false
         } else {
             // compute next interval
             let interval = self.strategy.next_interval(self.interval_ms, &self.attempt);
             info!(
                 "[Connector::{}] Reconnecting after {} ms",
-                &self.connector_url, interval
+                &self.alias, interval
             );
             self.interval_ms = Some(interval);
 
@@ -286,7 +282,7 @@ impl ReconnectRuntime {
             // ALLOW: we are not interested in fractions here
             let duration = Duration::from_millis(interval);
             let sender = self.addr.sender.clone();
-            let url = self.connector_url.clone();
+            let url = self.alias.clone();
             task::spawn(async move {
                 task::sleep(duration).await;
                 if sender.send(Msg::Reconnect).await.is_err() {
@@ -379,23 +375,23 @@ mod tests {
     async fn failfast_runtime() -> Result<()> {
         let (tx, rx) = async_std::channel::bounded(1);
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let url = TremorUrl::from_connector_instance("test", "test");
+        let alias = String::from("test");
         let addr = Addr {
             uid: 0,
-            url: url.clone(),
+            alias: alias.clone(),
             source: None,
             sink: None,
             sender: tx.clone(),
         };
         let config = Reconnect::None;
-        let mut runtime = ReconnectRuntime::inner(addr, url.clone(), notifier, &config);
+        let mut runtime = ReconnectRuntime::inner(addr, alias.clone(), notifier, &config);
         let mut connector = FakeConnector {
             answer: Some(false),
         };
         let qb = QuiescenceBeacon::default();
         let ctx = ConnectorContext {
             uid: 1,
-            url,
+            alias,
             connector_type: "fake".into(),
             quiescence_beacon: qb,
             notifier: runtime.notifier(),
@@ -414,10 +410,10 @@ mod tests {
     async fn backoff_runtime() -> Result<()> {
         let (tx, rx) = async_std::channel::bounded(1);
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let url = TremorUrl::from_connector_instance("test", "test");
+        let alias = String::from("test");
         let addr = Addr {
             uid: 0,
-            url: url.clone(),
+            alias: alias.clone(),
             source: None,
             sink: None,
             sender: tx.clone(),
@@ -427,14 +423,14 @@ mod tests {
             growth_rate: 2.0,
             max_retries: Some(3),
         };
-        let mut runtime = ReconnectRuntime::inner(addr, url.clone(), notifier, &config);
+        let mut runtime = ReconnectRuntime::inner(addr, alias.clone(), notifier, &config);
         let mut connector = FakeConnector {
             answer: Some(false),
         };
         let qb = QuiescenceBeacon::default();
         let ctx = ConnectorContext {
             uid: 1,
-            url,
+            alias,
             connector_type: "fake".into(),
             quiescence_beacon: qb,
             notifier: runtime.notifier(),

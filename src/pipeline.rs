@@ -23,14 +23,14 @@ use async_std::task;
 use beef::Cow;
 use std::time::Duration;
 use std::{fmt, sync::atomic::Ordering};
-use tremor_common::url::TremorUrl;
 use tremor_common::{ids::OperatorIdGen, time::nanotime};
 use tremor_pipeline::errors::ErrorKind as PipelineErrorKind;
 use tremor_pipeline::{CbAction, Event, ExecutableGraph, SignalKind};
+use tremor_script::ast::DeployEndpoint;
 
 const TICK_MS: u64 = 100;
-type Inputs = halfbrown::HashMap<TremorUrl, (bool, InputTarget)>;
-type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(TremorUrl, OutputTarget)>>;
+type Inputs = halfbrown::HashMap<DeployEndpoint, (bool, InputTarget)>;
+type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(DeployEndpoint, OutputTarget)>>;
 type Eventset = Vec<(Cow<'static, str>, Event)>;
 /// Address for a pipeline
 #[derive(Clone)]
@@ -38,7 +38,7 @@ pub struct Addr {
     addr: Sender<Box<Msg>>,
     cf_addr: Sender<CfMsg>,
     mgmt_addr: Sender<MgmtMsg>,
-    id: TremorUrl,
+    alias: String,
 }
 
 impl Addr {
@@ -48,13 +48,13 @@ impl Addr {
         addr: Sender<Box<Msg>>,
         cf_addr: Sender<CfMsg>,
         mgmt_addr: Sender<MgmtMsg>,
-        id: TremorUrl,
+        alias: String,
     ) -> Self {
         Self {
             addr,
             cf_addr,
             mgmt_addr,
-            id,
+            alias,
         }
     }
 
@@ -74,8 +74,8 @@ impl Addr {
     /// pipeline instance id
     #[cfg(not(tarpaulin_include))]
     #[must_use]
-    pub fn id(&self) -> &TremorUrl {
-        &self.id
+    pub fn id(&self) -> &str {
+        &self.alias
     }
 
     pub(crate) async fn send_insight(&self, event: Event) -> Result<()> {
@@ -109,7 +109,7 @@ impl Addr {
 #[cfg(not(tarpaulin_include))]
 impl fmt::Debug for Addr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Pipeline({})", self.id)
+        write!(f, "Pipeline({})", self.alias)
     }
 }
 
@@ -161,10 +161,10 @@ impl TryFrom<connectors::Addr> for OutputTarget {
 }
 
 pub(crate) async fn spawn(
-    id: TremorUrl,
+    alias: String,
     config: tremor_pipeline::query::Query,
     operator_id_gen: &mut OperatorIdGen,
-) -> Result<(TremorUrl, Addr)> {
+) -> Result<Addr> {
     let qsize = crate::QSIZE.load(Ordering::Relaxed);
     let pipeline = config.to_pipe(operator_id_gen)?;
 
@@ -190,18 +190,18 @@ pub(crate) async fn spawn(
 
     task::spawn(tick(tx.clone()));
 
-    let addr = Addr::new(tx, cf_tx, mgmt_tx, id.clone());
+    let addr = Addr::new(tx, cf_tx, mgmt_tx, alias.clone());
     task::Builder::new()
-        .name(format!("pipeline-{}", id.clone()))
+        .name(format!("pipeline-{}", alias.clone()))
         .spawn(pipeline_task(
-            id.clone(),
+            alias.clone(),
             pipeline,
             addr.clone(),
             rx,
             cf_rx,
             mgmt_rx,
         ))?;
-    Ok((id, addr))
+    Ok(addr)
 }
 
 /// control plane message
@@ -210,7 +210,7 @@ pub enum MgmtMsg {
     /// input can only ever be connected to the `in` port, so no need to include it here
     ConnectInput {
         /// url of the input to connect
-        input_url: TremorUrl,
+        endpoint: DeployEndpoint,
         /// the target that connects to the `in` port
         target: InputTarget,
         /// should we send insights to this input
@@ -221,14 +221,14 @@ pub enum MgmtMsg {
         /// the port to connect to
         port: Cow<'static, str>,
         /// the url of the output instance
-        output_url: TremorUrl,
+        endpoint: DeployEndpoint,
         /// the actual target addr
         target: OutputTarget,
     },
     /// disconnect an output
-    DisconnectOutput(Cow<'static, str>, TremorUrl),
+    DisconnectOutput(Cow<'static, str>, DeployEndpoint),
     /// disconnect an input
-    DisconnectInput(TremorUrl),
+    DisconnectInput(DeployEndpoint),
 
     /// FIXME: messages for transitioning from one state to the other
     /// start the pipeline
@@ -311,10 +311,10 @@ async fn send_events(eventset: &mut Eventset, dests: &mut Dests) -> Result<()> {
         if let Some(destinations) = dests.get_mut(&output) {
             if let Some((last, rest)) = destinations.split_last_mut() {
                 for (id, dest) in rest {
-                    let port = id.instance_port_required()?.to_string().into();
+                    let port = id.port().to_string().into();
                     dest.send_event(port, event.clone()).await?;
                 }
-                let last_port = last.0.instance_port_required()?.to_string().into();
+                let last_port = last.0.port().to_string().into();
                 last.1.send_event(last_port, event).await?;
             }
         };
@@ -323,16 +323,16 @@ async fn send_events(eventset: &mut Eventset, dests: &mut Dests) -> Result<()> {
 }
 
 #[inline]
-async fn send_signal(own_id: &TremorUrl, signal: Event, dests: &mut Dests) -> Result<()> {
+async fn send_signal(own_id: &str, signal: Event, dests: &mut Dests) -> Result<()> {
     let mut destinations = dests.values_mut().flatten();
     let first = destinations.next();
     for (id, dest) in destinations {
-        if id != own_id {
+        if id.alias() != own_id {
             dest.send_signal(signal.clone()).await?;
         }
     }
     if let Some((id, dest)) = first {
-        if id != own_id {
+        if id.alias() != own_id {
             dest.send_signal(signal).await?;
         }
     }
@@ -408,16 +408,14 @@ fn maybe_send(r: Result<()>) {
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn pipeline_task(
-    id: TremorUrl,
+    alias: String,
     mut pipeline: ExecutableGraph,
     addr: Addr,
     rx: Receiver<Box<Msg>>,
     cf_rx: Receiver<CfMsg>,
     mgmt_rx: Receiver<MgmtMsg>,
 ) -> Result<()> {
-    let mut pid = id.clone();
-    pid.trim_to_instance();
-    pipeline.id = pid.to_string();
+    pipeline.id = alias.clone();
 
     let mut dests: Dests = halfbrown::HashMap::new();
     let mut inputs: Inputs = halfbrown::HashMap::new();
@@ -425,7 +423,7 @@ pub(crate) async fn pipeline_task(
 
     let mut state: InstanceState = InstanceState::Initialized;
 
-    info!("[Pipeline:{}] Starting Pipeline.", id);
+    info!("[Pipeline::{}] Starting Pipeline.", alias);
 
     let ff = rx.map(|e| M::F(*e));
     let cf = cf_rx.map(M::C);
@@ -479,29 +477,29 @@ pub(crate) async fn pipeline_task(
                     } else {
                         format!(" {:?}", e)
                     };
-                    error!("[Pipeline::{}] Error handling signal:{}", pid, err_str);
+                    error!("[Pipeline::{}] Error handling signal:{}", alias, err_str);
                 } else {
-                    maybe_send(send_signal(&id, signal, &mut dests).await);
+                    maybe_send(send_signal(&alias, signal, &mut dests).await);
                     handle_insights(&mut pipeline, &inputs).await;
                     maybe_send(send_events(&mut eventset, &mut dests).await);
                 }
             }
             M::M(MgmtMsg::ConnectInput {
-                input_url,
+                endpoint,
                 target,
                 is_transactional,
             }) => {
-                info!("[Pipeline::{}] Connecting {} to port 'in'", pid, input_url);
-                inputs.insert(input_url, (is_transactional, target.into()));
+                info!("[Pipeline::{}] Connecting {} to port 'in'", alias, endpoint);
+                inputs.insert(endpoint, (is_transactional, target.into()));
             }
             M::M(MgmtMsg::ConnectOutput {
                 port,
-                output_url,
+                endpoint,
                 target,
             }) => {
                 info!(
                     "[Pipeline::{}] Connecting port '{}' to {}",
-                    pid, &port, &output_url
+                    alias, &port, &endpoint
                 );
                 // notify other pipeline about a new input
                 if let OutputTarget::Pipeline(pipe) = &target {
@@ -509,10 +507,10 @@ pub(crate) async fn pipeline_task(
                     // as this will create a nasty circle filling up queues.
                     // In general this does not avoid cycles via more complex constructs.
                     //
-                    if !pid.same_instance_as(&output_url) {
+                    if alias == endpoint.alias() {
                         if let Err(e) = pipe
                             .send_mgmt(MgmtMsg::ConnectInput {
-                                input_url: pid.clone(),
+                                endpoint: DeployEndpoint::new(alias.to_string(), port.to_string()),
                                 target: InputTarget::Pipeline(Box::new(addr.clone())),
                                 is_transactional: true,
                             })
@@ -520,22 +518,22 @@ pub(crate) async fn pipeline_task(
                         {
                             error!(
                                 "[Pipeline::{}] Error connecting input pipeline {}: {}",
-                                pid, &output_url, e
+                                alias, &endpoint, e
                             );
                         }
                     }
                 }
 
                 if let Some(output_dests) = dests.get_mut(&port) {
-                    output_dests.push((output_url, target.into()));
+                    output_dests.push((endpoint, target.into()));
                 } else {
-                    dests.insert(port, vec![(output_url, target.into())]);
+                    dests.insert(port, vec![(endpoint, target.into())]);
                 }
             }
             M::M(MgmtMsg::DisconnectOutput(port, to_delete)) => {
                 info!(
                     "[Pipeline::{}] Disconnecting {} from '{}'",
-                    pid, &to_delete, &port
+                    alias, &to_delete, &port
                 );
 
                 let mut remove = false;
@@ -544,12 +542,16 @@ pub(crate) async fn pipeline_task(
                         if let (delete_url, OutputTarget::Pipeline(pipe)) =
                             output_vec.swap_remove(index)
                         {
-                            if let Err(e) =
-                                pipe.send_mgmt(MgmtMsg::DisconnectInput(id.clone())).await
+                            if let Err(e) = pipe
+                                .send_mgmt(MgmtMsg::DisconnectInput(DeployEndpoint::new(
+                                    alias.to_string(),
+                                    port.to_string(),
+                                )))
+                                .await
                             {
                                 error!(
                                     "[Pipeline::{}] Error disconnecting input pipeline {}: {}",
-                                    pid, &delete_url, e
+                                    alias, &delete_url, e
                                 );
                             }
                         }
@@ -561,7 +563,10 @@ pub(crate) async fn pipeline_task(
                 }
             }
             M::M(MgmtMsg::DisconnectInput(input_url)) => {
-                info!("[Pipeline::{}] Disconnecting {} from 'in'", pid, &input_url);
+                info!(
+                    "[Pipeline::{}] Disconnecting {} from 'in'",
+                    alias, &input_url
+                );
                 inputs.remove(&input_url);
             }
             M::M(MgmtMsg::Start) if state == InstanceState::Initialized => {
@@ -571,7 +576,7 @@ pub(crate) async fn pipeline_task(
             M::M(MgmtMsg::Start) => {
                 info!(
                     "[Pipeline::{}] Ignoring Start Msg. Current state: {}",
-                    &pid, &state
+                    alias, &state
                 );
             }
             M::M(MgmtMsg::Pause) if state == InstanceState::Running => {
@@ -581,7 +586,7 @@ pub(crate) async fn pipeline_task(
             M::M(MgmtMsg::Pause) => {
                 info!(
                     "[Pipeline::{}] Ignoring Pause Msg. Current state: {}",
-                    &pid, &state
+                    alias, &state
                 );
             }
             M::M(MgmtMsg::Resume) if state == InstanceState::Paused => {
@@ -591,11 +596,11 @@ pub(crate) async fn pipeline_task(
             M::M(MgmtMsg::Resume) => {
                 info!(
                     "[Pipeline::{}] Ignoring Resume Msg. Current state: {}",
-                    &pid, &state
+                    alias, &state
                 );
             }
             M::M(MgmtMsg::Stop) => {
-                info!("[Pipeline::{}] Stopping...", &pid);
+                info!("[Pipeline::{}] Stopping...", alias);
                 break;
             }
             #[cfg(test)]
@@ -603,13 +608,13 @@ pub(crate) async fn pipeline_task(
                 if let Err(e) = sender.send(()).await {
                     error!(
                         "[Pipeline::{}] Error responding to echo message: {}",
-                        pid, e
+                        alias, e
                     );
                 }
             }
         }
     }
 
-    info!("[Pipeline:{}] Stopped.", id);
+    info!("[Pipeline::{}] Stopped.", alias);
     Ok(())
 }
