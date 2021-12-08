@@ -276,7 +276,7 @@ impl Source for CbSource {
             } else {
                 self.finished = true;
                 Ok(SourceReply::EndStream {
-                    stream_id: DEFAULT_STREAM_ID,
+                    stream: DEFAULT_STREAM_ID,
                     origin_uri: self.origin_uri.clone(),
                     meta: None,
                 })

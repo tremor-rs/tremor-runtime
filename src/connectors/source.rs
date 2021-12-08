@@ -137,7 +137,7 @@ pub enum SourceReply {
         /// origin uri
         origin_uri: EventOriginUri,
         /// stream id
-        stream_id: u64,
+        stream: u64,
         /// optional metadata
         meta: Option<Value<'static>>,
     },
@@ -256,14 +256,18 @@ pub trait Source: Send {
 pub struct ChannelSource {
     rx: Receiver<SourceReply>,
     tx: SourceReplySender,
-    ctx: SourceContext,
 }
 
 impl ChannelSource {
     /// constructor
-    pub fn new(ctx: SourceContext, qsize: usize) -> Self {
+    pub fn new(qsize: usize) -> Self {
         let (tx, rx) = bounded(qsize);
-        Self { rx, tx, ctx }
+        Self { rx, tx }
+    }
+
+    /// construct a `ChannelSource` from a given channel (`Sender` and `Receiver`)
+    pub fn from_channel(tx: Sender<SourceReply>, rx: Receiver<SourceReply>) -> Self {
+        Self { tx, rx }
     }
 
     /// get the sender for the source
@@ -271,7 +275,6 @@ impl ChannelSource {
     pub fn runtime(&self) -> ChannelSourceRuntime {
         ChannelSourceRuntime {
             sender: self.tx.clone(),
-            ctx: self.ctx.clone(),
         }
     }
 }
@@ -292,14 +295,13 @@ pub trait StreamReader: Send {
 #[derive(Clone)]
 pub struct ChannelSourceRuntime {
     sender: Sender<SourceReply>,
-    ctx: SourceContext,
 }
 
 impl ChannelSourceRuntime {
     const READ_TIMEOUT_MS: Duration = Duration::from_millis(100);
 
-    pub(crate) fn new(sender: Sender<SourceReply>, ctx: SourceContext) -> Self {
-        Self { sender, ctx }
+    pub(crate) fn new(sender: Sender<SourceReply>) -> Self {
+        Self { sender }
     }
     pub(crate) fn register_stream_reader<R, C>(&self, stream: u64, ctx: &C, mut reader: R)
     where
@@ -1154,7 +1156,7 @@ where
             SourceReply::EndStream {
                 origin_uri,
                 meta,
-                stream_id,
+                stream: stream_id,
             } => {
                 debug!("[Source::{}] Ending stream {}", &self.ctx.alias, stream_id);
                 let mut ingest_ns = nanotime();
@@ -1255,8 +1257,8 @@ where
 
             if self.should_pull_data() {
                 let data = self.source.pull_data(self.pull_counter, &self.ctx).await;
-                self.pull_counter += 1;
                 self.handle_data(data).await?;
+                self.pull_counter += 1;
             };
             if self.pull_wait_start.is_some() {
                 // sleep for a quick 10ms in order to stay responsive

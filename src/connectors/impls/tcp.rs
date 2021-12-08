@@ -14,7 +14,6 @@
 
 pub(crate) mod client;
 pub(crate) mod server;
-pub(crate) mod simple_server;
 
 use crate::connectors::prelude::*;
 use async_std::net::TcpStream;
@@ -107,7 +106,7 @@ where
             return Ok(SourceReply::EndStream {
                 origin_uri: self.origin_uri.clone(),
                 meta: Some(self.meta.clone()),
-                stream_id: stream,
+                stream,
             });
         }
         debug!("[Connector::{}] read {} bytes", &self.alias, bytes_read);
@@ -155,17 +154,6 @@ impl TcpWriter<TcpStream> {
 impl TcpWriter<WriteHalf<async_tls::server::TlsStream<TcpStream>>> {
     fn tls_server(
         tls_stream: WriteHalf<async_tls::server::TlsStream<TcpStream>>,
-        underlying_stream: TcpStream,
-    ) -> Self {
-        Self {
-            wrapped_stream: tls_stream,
-            underlying_stream,
-        }
-    }
-}
-impl TcpWriter<WriteHalf<async_tls::client::TlsStream<TcpStream>>> {
-    fn tls_client(
-        tls_stream: WriteHalf<async_tls::client::TlsStream<TcpStream>>,
         underlying_stream: TcpStream,
     ) -> Self {
         Self {
