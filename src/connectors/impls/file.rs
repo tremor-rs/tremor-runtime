@@ -142,7 +142,7 @@ impl Connector for File {
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         Ok(if self.config.mode == Mode::Read {
-            let source = ChannelSource::new(source_context.clone(), builder.qsize());
+            let source = ChannelSource::new(builder.qsize());
             self.source_runtime = Some(source.runtime());
             let addr = builder.spawn(source, source_context)?;
             Some(addr)
@@ -268,7 +268,7 @@ where
             trace!("[Connector::{}] EOF", &self.alias);
             SourceReply::EndStream {
                 origin_uri: self.origin_uri.clone(),
-                stream_id: stream,
+                stream,
                 meta: Some(self.meta.clone()),
             }
         } else {

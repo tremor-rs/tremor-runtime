@@ -23,13 +23,6 @@ pub struct Config {
 
 impl ConfigImpl for Config {}
 
-#[derive(Clone, Debug)]
-pub struct Metronome {
-    interval_ns: u64,
-    next: u64,
-    origin_uri: EventOriginUri,
-}
-
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
@@ -53,12 +46,9 @@ impl ConnectorBuilder for Builder {
                 path: vec![config.interval.to_string()],
             };
 
-            let now = nanotime();
             let interval_ns = config.interval * 1_000_000;
-            let next = now + interval_ns;
             Ok(Box::new(Metronome {
                 interval_ns,
-                next,
                 origin_uri,
             }))
         } else {
@@ -67,8 +57,54 @@ impl ConnectorBuilder for Builder {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct Metronome {
+    interval_ns: u64,
+    origin_uri: EventOriginUri,
+}
+
 #[async_trait::async_trait()]
-impl Source for Metronome {
+impl Connector for Metronome {
+    fn is_structured(&self) -> bool {
+        true
+    }
+
+    fn default_codec(&self) -> &str {
+        "json"
+    }
+
+    async fn create_source(
+        &mut self,
+        source_context: SourceContext,
+        builder: SourceManagerBuilder,
+    ) -> Result<Option<SourceAddr>> {
+        let source = MetronomeSource::new(self.interval_ns, self.origin_uri.clone());
+        builder.spawn(source, source_context).map(Some)
+    }
+}
+
+struct MetronomeSource {
+    interval_ns: u64,
+    next: u64,
+    origin_uri: EventOriginUri,
+}
+
+impl MetronomeSource {
+    fn new(interval_ns: u64, origin_uri: EventOriginUri) -> Self {
+        Self {
+            interval_ns,
+            next: nanotime() + interval_ns, // dummy placeholer
+            origin_uri,
+        }
+    }
+}
+
+#[async_trait::async_trait()]
+impl Source for MetronomeSource {
+    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+        self.next = nanotime() + self.interval_ns;
+        Ok(true)
+    }
     async fn pull_data(&mut self, pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
         let now = nanotime();
         if self.next < now {
@@ -92,27 +128,5 @@ impl Source for Metronome {
 
     fn is_transactional(&self) -> bool {
         false
-    }
-}
-#[async_trait::async_trait()]
-impl Connector for Metronome {
-    fn is_structured(&self) -> bool {
-        true
-    }
-
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(true)
-    }
-
-    fn default_codec(&self) -> &str {
-        "json"
-    }
-
-    async fn create_source(
-        &mut self,
-        source_context: SourceContext,
-        builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
-        builder.spawn(self.clone(), source_context).map(Some)
     }
 }
