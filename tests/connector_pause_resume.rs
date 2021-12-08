@@ -75,16 +75,16 @@ async fn connector_udp_pause_resume() -> Result<()> {
     harness
         .wait_for_state(InstanceState::Paused, Duration::from_secs(5))
         .await?;
+    // make sure the udp_server source got out of its last pull_data call and now knows it should pause
+    async_std::task::sleep(Duration::from_millis(100)).await;
     // send some more data
     let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
     socket.send(data2.as_bytes()).await?;
 
     // ensure nothing is received (pause is actually doing the right thing)
-    assert!(
-        async_std::future::timeout(Duration::from_millis(500), out_pipeline.get_event())
-            .await
-            .is_err()
-    );
+    let timeout_err =
+        async_std::future::timeout(Duration::from_millis(500), out_pipeline.get_event()).await;
+    assert!(timeout_err.is_err(), "Didnt expect: {:?}", &timeout_err);
     // resume connector
     harness.resume().await?;
     harness

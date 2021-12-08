@@ -86,19 +86,31 @@ impl SinkReply {
         cb: CbAction::None,
     };
 
+    /// Decide according to the given flag if we return an ack or a none
+    pub fn ack_or_none(needs_ack: bool) -> Self {
+        if needs_ack {
+            Self::ACK
+        } else {
+            Self::NONE
+        }
+    }
+
+    /// Decide according to the given flag if we return a fail or a none
+    pub fn fail_or_none(needs_fail: bool) -> Self {
+        if needs_fail {
+            Self::FAIL
+        } else {
+            Self::NONE
+        }
+    }
+
     /// Acknowledges
     pub fn ack() -> Self {
-        SinkReply {
-            ack: SinkAck::Ack,
-            ..SinkReply::default()
-        }
+        Self::ACK
     }
     /// Fails
     pub fn fail() -> Self {
-        SinkReply {
-            ack: SinkAck::Fail,
-            ..SinkReply::default()
-        }
+        Self::FAIL
     }
 }
 impl From<bool> for SinkReply {
@@ -233,7 +245,9 @@ pub trait Sink: Send {
 pub trait StreamWriter: Send + Sync {
     /// write the given data out to the stream
     async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<SinkMeta>) -> Result<()>;
-    /// handle the stream being done, by error or
+    /// handle the stream being done, by error or regular end of stream
+    /// This controls the reaction of the runtime:
+    /// Should the connector be considered disconnected now? Or is this just one stream amongst many?
     async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
         Ok(StreamDone::StreamClosed)
     }

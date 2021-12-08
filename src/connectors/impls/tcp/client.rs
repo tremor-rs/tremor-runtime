@@ -12,20 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! TCP Client connector - maintains a connection to the configured upstream host
+//! TCP Client connector - maintains one connection to the configured upstream host
+//!
+//! The sink received events from the runtime and writes it to the TCP or TLS stream.
+//! Data received from the TCP or TLS connection is forwarded to the source of this connector.
 #![allow(clippy::module_name_repetitions)]
 
-use super::{TcpReader, TcpWriter};
+use super::TcpReader;
 use crate::connectors::prelude::*;
 use crate::connectors::utils::tls::{tls_client_connector, TLSClientConfig};
+use async_std::channel::{bounded, Receiver, Sender};
 use async_std::net::TcpStream;
+use async_std::prelude::*;
 use async_tls::TlsConnector;
 use either::Either;
 use futures::io::AsyncReadExt;
 
 const URL_SCHEME: &str = "tremor-tcp-client";
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     host: String,
@@ -49,8 +54,8 @@ pub struct TcpClient {
     config: Config,
     tls_connector: Option<TlsConnector>,
     tls_domain: Option<String>,
-    source_runtime: Option<ChannelSourceRuntime>,
-    sink_runtime: Option<SingleStreamSinkRuntime>,
+    source_tx: Sender<SourceReply>,
+    source_rx: Receiver<SourceReply>,
 }
 
 #[derive(Debug, Default)]
@@ -82,12 +87,13 @@ impl ConnectorBuilder for Builder {
                 ),
                 Some(Either::Right(false)) | None => (None, None),
             };
+            let (source_tx, source_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
             Ok(Box::new(TcpClient {
                 config,
                 tls_connector,
                 tls_domain,
-                source_runtime: None,
-                sink_runtime: None,
+                source_tx,
+                source_rx,
             }))
         } else {
             Err(ErrorKind::MissingConfiguration(String::from("TcpClient")).into())
@@ -102,10 +108,18 @@ impl Connector for TcpClient {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = SingleStreamSink::new_no_meta(builder.qsize(), builder.reply_tx());
-        self.sink_runtime = Some(sink.runtime());
-        let addr = builder.spawn(sink, sink_context)?;
-        Ok(Some(addr))
+        if let Some(tls_connector) = self.tls_connector.as_ref() {
+            let sink = TcpClientSink::tls(
+                tls_connector.clone(),
+                self.tls_domain.clone(),
+                self.config.clone(),
+                self.source_tx.clone(),
+            );
+            builder.spawn(sink, sink_context).map(Some)
+        } else {
+            let sink = TcpClientSink::plain(self.config.clone(), self.source_tx.clone());
+            builder.spawn(sink, sink_context).map(Some)
+        }
     }
 
     async fn create_source(
@@ -113,22 +127,84 @@ impl Connector for TcpClient {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = ChannelSource::new(source_context.clone(), builder.qsize());
-        self.source_runtime = Some(source.runtime());
-        let addr = builder.spawn(source, source_context)?;
-        Ok(Some(addr))
+        // this source is wired up to the ending channel that is forwarding data received from the TCP (or TLS) connection
+        let source = ChannelSource::from_channel(self.source_tx.clone(), self.source_rx.clone());
+        builder.spawn(source, source_context).map(Some)
     }
 
-    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+    fn default_codec(&self) -> &str {
+        "json"
+    }
+}
+
+/// TCP/TLS client sink implementation
+struct TcpClientSink {
+    tls_connector: Option<TlsConnector>,
+    tls_domain: Option<String>,
+    config: Config,
+    wrapped_stream: Option<
+        Box<
+            dyn futures::io::AsyncWrite
+                + std::marker::Unpin
+                + std::marker::Send
+                + std::marker::Sync,
+        >,
+    >,
+    tcp_stream: Option<TcpStream>,
+    source_runtime: ChannelSourceRuntime,
+}
+
+impl TcpClientSink {
+    fn plain(config: Config, source_tx: Sender<SourceReply>) -> Self {
+        let source_runtime = ChannelSourceRuntime::new(source_tx);
+        Self {
+            tls_connector: None,
+            tls_domain: None,
+            config,
+            wrapped_stream: None,
+            tcp_stream: None,
+            source_runtime,
+        }
+    }
+    fn tls(
+        tls_connector: TlsConnector,
+        tls_domain: Option<String>,
+        config: Config,
+        source_tx: Sender<SourceReply>,
+    ) -> Self {
+        let source_runtime = ChannelSourceRuntime::new(source_tx);
+        Self {
+            tls_connector: Some(tls_connector),
+            tls_domain,
+            config,
+            wrapped_stream: None,
+            tcp_stream: None,
+            source_runtime,
+        }
+    }
+}
+
+impl TcpClientSink {
+    /// writing to the client socket
+    async fn write<'event>(&mut self, data: Vec<Vec<u8>>) -> Result<()> {
+        let stream = self
+            .wrapped_stream
+            .as_mut()
+            .ok_or_else(|| Error::from("No TCP Stream available"))?; // TODO: create proper error
+        for chunk in data {
+            let slice: &[u8] = chunk.as_slice();
+            stream.write_all(slice).await?;
+        }
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait()]
+impl Sink for TcpClientSink {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let buf_size = self.config.buf_size;
-        let source_runtime = self
-            .source_runtime
-            .as_ref()
-            .ok_or("Source runtime not initialized")?;
-        let sink_runtime = self
-            .sink_runtime
-            .as_ref()
-            .ok_or("Sink runtime not initialized")?;
+
+        // connect TCP stream
         let stream = TcpStream::connect((self.config.host.as_str(), self.config.port)).await?;
         let local_addr = stream.local_addr()?;
         if let Some(ttl) = self.config.ttl {
@@ -143,7 +219,7 @@ impl Connector for TcpClient {
             path: vec![local_addr.port().to_string()], // local port
         };
         if let Some(tls_connector) = self.tls_connector.as_ref() {
-            // ~~~ T L S ~~~
+            // TLS
             let tls_stream = tls_connector
                 .connect(
                     self.tls_domain
@@ -155,26 +231,25 @@ impl Connector for TcpClient {
             let (read, write) = tls_stream.split();
             let meta = ctx.meta(literal!({
                 "tls": true,
-                // TODO: what to put into meta here?
                 "peer": {
                     "host": self.config.host.clone(),
                     "port": self.config.port
                 }
             }));
+            // register writer
+            self.wrapped_stream = Some(Box::new(write));
+            self.tcp_stream = Some(stream.clone());
             // register reader
             let tls_reader = TcpReader::tls_client(
                 read,
-                stream.clone(),
+                stream,
                 vec![0; buf_size],
                 ctx.alias.clone(),
                 origin_uri.clone(),
                 meta,
             );
-            source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, tls_reader);
-
-            // register writer
-            let tls_writer = TcpWriter::tls_client(write, stream);
-            sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, tls_writer);
+            self.source_runtime
+                .register_stream_reader(DEFAULT_STREAM_ID, ctx, tls_reader);
         } else {
             // plain TCP
             let meta = ctx.meta(literal!({
@@ -185,23 +260,64 @@ impl Connector for TcpClient {
                     "port": self.config.port
                 }
             }));
-            // register reader
+            // register writer
+            self.wrapped_stream = Some(Box::new(stream.clone()));
+            self.tcp_stream = Some(stream.clone());
+
+            // register reader for receiving from the connection via the source
             let reader = TcpReader::new(
-                stream.clone(),
+                stream,
                 vec![0; buf_size],
                 ctx.alias.clone(),
                 origin_uri.clone(),
                 meta,
             );
-            source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
-            // register writer
-            let writer = TcpWriter::new(stream);
-            sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, writer);
+            self.source_runtime
+                .register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
         }
         Ok(true)
     }
 
-    fn default_codec(&self) -> &str {
-        "json"
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        event: tremor_pipeline::Event,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+        _start: u64,
+    ) -> Result<SinkReply> {
+        let ingest_ns = event.ingest_ns;
+        for value in event.value_iter() {
+            let data = serializer.serialize(value, ingest_ns)?;
+            if let Err(e) = self.write(data).await {
+                error!(
+                    "{} Error sending data: {}. Initiating Reconnect...",
+                    ctx, &e
+                );
+                // TODO: figure upon which errors to actually reconnect
+                self.tcp_stream = None;
+                self.wrapped_stream = None;
+                ctx.notifier().notify().await?;
+                return Err(e);
+            }
+        }
+        Ok(SinkReply::NONE)
+    }
+
+    /// when writing is done
+    async fn on_stop(&mut self, _ctx: &SinkContext) -> Result<()> {
+        if let Some(stream) = self.tcp_stream.as_ref() {
+            // ignore error here
+            let _ = stream.shutdown(std::net::Shutdown::Write);
+        }
+        Ok(())
+    }
+
+    fn auto_ack(&self) -> bool {
+        true
+    }
+
+    fn asynchronous(&self) -> bool {
+        false
     }
 }

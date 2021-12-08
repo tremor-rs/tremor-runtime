@@ -72,7 +72,7 @@ where
                     Message::Close(_) => {
                         return Ok(SourceReply::EndStream {
                             origin_uri: self.origin_uri.clone(),
-                            stream_id: stream,
+                            stream,
                             meta: Some(self.meta.clone()),
                         })
                     }
@@ -93,7 +93,7 @@ where
             }
             Some(Err(_)) | None => Ok(SourceReply::EndStream {
                 origin_uri: self.origin_uri.clone(),
-                stream_id: stream,
+                stream,
                 meta: Some(self.meta.clone()),
             }),
         }
