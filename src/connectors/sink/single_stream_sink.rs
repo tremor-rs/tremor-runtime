@@ -16,14 +16,13 @@
 //!
 //! With some shenanigans removed, compared to `ChannelSink`.
 
-use std::marker::PhantomData;
-
 use crate::connectors::{sink::SinkReply, ConnectorContext, StreamDone};
 use crate::errors::Result;
 use async_std::{
     channel::{bounded, Receiver, Sender},
     task,
 };
+use std::marker::PhantomData;
 use tremor_common::time::nanotime;
 
 use super::channel_sink::{NoMeta, SinkMeta, SinkMetaBehaviour, WithMeta};

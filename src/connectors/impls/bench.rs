@@ -219,7 +219,7 @@ impl Source for Blaster {
             self.finished = true;
             return Ok(SourceReply::EndStream {
                 origin_uri: self.origin_uri.clone(),
-                stream_id: DEFAULT_STREAM_ID,
+                stream: DEFAULT_STREAM_ID,
                 meta: None,
             });
         };

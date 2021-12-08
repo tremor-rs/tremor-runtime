@@ -15,6 +15,7 @@ use super::{TcpReader, TcpWriter};
 use crate::connectors::prelude::*;
 use crate::connectors::sink::channel_sink::ChannelSinkMsg;
 use crate::connectors::utils::tls::{load_server_config, TLSServerConfig};
+use crate::errors::Kind as ErrorKind;
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use async_std::net::TcpListener;
 use async_std::task::{self, JoinHandle};
@@ -93,7 +94,7 @@ impl ConnectorBuilder for Builder {
                 sink_rx,
             }))
         } else {
-            Err(crate::errors::ErrorKind::MissingConfiguration(id.to_string())).into())
+            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
     }
 }
@@ -122,7 +123,6 @@ impl Connector for TcpServer {
             self.config.clone(),
             self.tls_server_config.clone(),
             sink_runtime,
-            ctx.clone(),
         );
         builder.spawn(source, ctx).map(Some)
     }
@@ -161,10 +161,9 @@ impl TcpServerSource {
         config: Config,
         tls_server_config: Option<ServerConfig>,
         sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
-        ctx: SourceContext,
     ) -> Self {
         let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-        let runtime = ChannelSourceRuntime::new(tx, ctx.clone());
+        let runtime = ChannelSourceRuntime::new(tx);
         Self {
             config,
             tls_server_config,

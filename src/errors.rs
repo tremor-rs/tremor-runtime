@@ -274,5 +274,9 @@ error_chain! {
             description("Invalid Metrics data")
                 display("Invalid Metrics data")
         }
+        NoSocket {
+            description("No socket available")
+                display("No socket available. Probably not connected yet.")
+        }
     }
 }
