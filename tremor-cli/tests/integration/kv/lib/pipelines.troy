@@ -1,0 +1,72 @@
+define pipeline in
+pipeline
+    define script process
+    script
+    use std::json;
+    let $kv = event[0].kv;
+    let event = event[1];
+    let $correlation = json::encode(event);
+    event
+    end;
+
+    create script process;
+
+    define script diverge
+    script
+        # direct some events to batch, some not
+        let port = match $ of
+            case %{ batch == true } => emit event => "batch"
+            default => emit event => "out"
+        end;
+    end;
+
+    create script diverge;
+
+    define operator batch from generic::batch with
+    count = 2
+    end;
+    create operator batch;
+
+    select event from in into process;
+
+    select event from process into diverge;
+    select event from process/err into out/err;
+
+    select event from diverge/batch into batch;
+    select event from batch into out;
+
+    select event from diverge/out into out;
+end;
+
+define pipeline out
+into out, exit
+pipeline
+    use std::string;
+
+    mod helpers with
+        use std::string;
+        # checks if the event is the successful response of a put command for the key "exit" with the value "exit"
+        fn is_put_exit(payload, meta) with
+            let meta_ok = match meta of
+              case %{kv ~= %{op == "put", ok == string::into_binary("exit")}} => true
+              default => false
+            end;
+            meta_ok and payload == "exit"
+        end;
+    end;
+
+    select {
+        "event": event,
+        "meta": match $ of
+                case %{kv ~= %{present ok}} => patch $ of merge "kv" => {"ok": string::from_utf8_lossy($kv.ok)} end
+                case _ => $
+            end
+    } from in where !helpers::is_put_exit(event, $) into out;
+
+    select event from in where helpers::is_put_exit(event, $) into out/exit;
+end;
+
+define pipeline err
+pipeline
+    select {"error": true, "meta": $, "event": event} from in into out;
+end
