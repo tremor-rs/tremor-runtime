@@ -312,7 +312,7 @@ impl<'script> PipelineCreateRaw<'script> {
         &self,
         decl_params: &DefinitioalArgs<'script>,
         stmt_params: CreationalWith<'script>,
-        helper: &Helper<'script, 'registry>,
+        helper: &mut Helper<'script, 'registry>,
     ) -> Result<Value<'script>> {
         let mut stmt_params: HashMap<_, _> = stmt_params
             .with

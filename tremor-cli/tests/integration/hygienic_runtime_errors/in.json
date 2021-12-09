@@ -1,0 +1,7 @@
+{"foo_select":{"foo_having": true, "foo_script": true},"foo_where":true,"foo_group":true}
+{"foo_select":{"foo_having": true},"foo_where":true,"foo_group":true}
+{"foo_where":true,"foo_group":true}
+{"foo_select":{"foo_script":true,"foo_having": true},"foo_group":true}
+{"foo_select":{"foo_script":true,"foo_having": true},"foo_where":true}
+{"foo_select":{"foo_script":true},"foo_where":true,"foo_group":true}
+"exit"

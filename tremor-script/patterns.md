@@ -1,3 +1,17 @@
+# seperation
+
+Tremor uses two seperators `,` and `;`. The pattern when which is used is as following:
+
+## commands
+
+Commands are separated with a `;`. This can be seen in top-level troy, trickle, and tremor script, in `patch`, `match`, and `for`.
+
+## data
+
+Data is seperated by `,` this can be seen in arrays and records as well as in the window declerators for select and the with and args part of troy and trickle defines and creates
+
+
+# order of arguments in commands
 A general pattern that repeats in troy/trickle/tremor-script is:
 
 ```
