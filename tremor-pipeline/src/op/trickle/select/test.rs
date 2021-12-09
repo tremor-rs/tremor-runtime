@@ -194,7 +194,7 @@ fn test_count() -> Result<()> {
 }
 
 fn select_stmt_from_query(query_str: &str) -> Result<Select> {
-    let meta = NodeMetas::default();
+    let mut meta = NodeMetas::default();
     let reg = tremor_script::registry();
     let aggr_reg = tremor_script::aggr_registry();
     let module_path = tremor_script::path::load();
@@ -224,7 +224,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
         .map(|(i, window_decl)| {
             let fake_consts = Consts::default();
             let mut f = ConstFolder {
-                meta: &meta,
+                meta: &mut meta,
                 reg: &reg,
                 consts: &fake_consts,
             };

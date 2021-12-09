@@ -897,7 +897,10 @@ where
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Drained(uid), _id) => {
-                debug!("[Source::{}] Drained request for {}", self.ctx.alias, uid);
+                debug!(
+                    "[Source::{}] Drained contraflow message for {}",
+                    self.ctx.alias, uid
+                );
                 // only account for Drained CF which we caused
                 // as CF is sent back the DAG to all destinations
                 if uid == self.ctx.uid {
@@ -931,6 +934,7 @@ where
     /// send a signal to all connected pipelines
     async fn send_signal(&mut self, signal: Event) -> Result<()> {
         for (_url, addr) in self.pipelines_out.iter().chain(self.pipelines_err.iter()) {
+            debug!("Send signal {:?} to {}", signal.kind, &_url);
             addr.send(Box::new(pipeline::Msg::Signal(signal.clone())))
                 .await?;
         }
@@ -1198,12 +1202,10 @@ where
                     // this source has been fully drained
                     self.state = SourceState::Drained;
                     // send Drain signal
+                    debug!("{} Sending DRAIN Signal.", &self.ctx);
                     let signal = Event::signal_drain(self.ctx.uid);
                     if let Err(e) = self.send_signal(signal).await {
-                        error!(
-                            "[Source::{}] Error sending DRAIN signal: {}",
-                            &self.ctx.alias, e
-                        );
+                        error!("{} Error sending DRAIN signal: {}", &self.ctx, e);
                     }
                     // if we get a disconnect in between we might never receive every drain CB
                     // but we will stop everything forcefully after a certain timeout at some point anyways
