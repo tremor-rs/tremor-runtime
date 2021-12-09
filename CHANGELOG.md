@@ -76,12 +76,13 @@
 - tremor-script: Add more details about Unicode in the documentation of the `string` module
 - Fix `hdr` and `dds` aggregation function losing events when aggregating > 8192 events
 
-### Breaking CHhanges
+### Breaking Changes
 
 - changed naming for `record` object to avoid keywords like `select` and `merge`. New names are `record.extract` and `record.combine`.
 - command seperators are now unified, both `patch`, `match` and `for` now use `;` the same way the rest of the language does
 - in all definitial statements `args` now specifies interface arguments that are overwritable in the correspanding `create` statement, while `with` specifies non overwritable configuration in both `define` and `create` statements - this unifiers the use of `with`  and `args` between trickle and troy
 - file connector no longer splits by lines - it now requires a preconnector
+- define for both troy and trickle now follow the same principle of `define <type> <alias> from <source>`
 
 ## 0.11.4
 

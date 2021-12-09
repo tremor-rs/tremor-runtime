@@ -1,2 +1,0 @@
-
-select event.trigger from in into out;

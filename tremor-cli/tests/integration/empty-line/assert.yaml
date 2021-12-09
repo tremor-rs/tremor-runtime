@@ -1,5 +1,5 @@
 status: 0
 name: Empty lines in file onramp should be ignored / handled gracefully
 asserts:
-  - source: events.log
+  - source: out.log
     equals_file: expected.json
