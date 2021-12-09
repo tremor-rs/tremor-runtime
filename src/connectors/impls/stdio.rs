@@ -168,10 +168,6 @@ impl Connector for StdStreamConnector {
         Self::REF_IN_PORTS
     }
 
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(true)
-    }
-
     /// create sink if we have a stdout or stderr stream
     async fn create_sink(
         &mut self,
