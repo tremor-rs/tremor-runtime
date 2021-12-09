@@ -586,14 +586,14 @@ where
     for segment in path.segments() {
         match segment {
             // Next segment is an identifier: lookup the identifier on `current`, if it's an object
-            Segment::Id { mid, key, .. } => {
+            Segment::Id { key, .. } => {
                 subrange = None;
 
                 current = stry!(key.lookup(current).ok_or_else(|| {
                     current.as_object().map_or_else(
                         || err_need_obj(outer, segment, current.value_type(), env.meta),
                         |o| {
-                            let key = env.meta.name_dflt(*mid).to_string();
+                            let key = key.key().to_string();
                             let options = o.keys().map(ToString::to_string).collect();
                             error_bad_key_err(
                                 outer, segment, //&Expr::dummy(*start, *end),
