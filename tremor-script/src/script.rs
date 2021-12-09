@@ -100,7 +100,7 @@ impl Script {
                 let mut helper = Helper::new(reg, &fake_aggr_reg, include_stack.cus.clone());
                 // helper.consts.args = args.clone_static();
                 let mut screw_rust = script_raw.up_script(&mut helper)?;
-                ConstFolder::new(&helper).walk_script(&mut screw_rust)?;
+                ConstFolder::new(&mut helper).walk_script(&mut screw_rust)?;
                 std::mem::swap(&mut warnings, &mut helper.warnings);
                 Ok(screw_rust)
             })?;
