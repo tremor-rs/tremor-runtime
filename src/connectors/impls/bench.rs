@@ -164,10 +164,6 @@ pub struct Bench {
 
 #[async_trait::async_trait]
 impl Connector for Bench {
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(true)
-    }
-
     async fn create_source(
         &mut self,
         source_context: SourceContext,
