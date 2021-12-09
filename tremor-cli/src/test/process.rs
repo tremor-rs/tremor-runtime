@@ -44,7 +44,7 @@ use tremor_common::{file::canonicalize, time::nanotime};
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn run_process(
     kind: &str,
-    _tests_root_dir: &Path,
+    tests_root_dir: &Path,
     test_dir: &Path,
     _by_tag: &tag::TagFilter,
 ) -> Result<TestReport> {
@@ -112,6 +112,14 @@ pub(crate) async fn run_process(
         String::from("RUST_LOG"),
         std::env::var("RUST_LOG").unwrap_or(String::from("info")),
     );
+    let tremor_path = std::env::var("TREMOR_PATH").unwrap_or_default();
+    let test_lib = format!("{}/lib", tests_root_dir.to_string_lossy());
+    let tremor_path = if tremor_path == "" {
+        test_lib
+    } else {
+        format!("{}:{}", tremor_path, test_lib)
+    };
+    env.insert(String::from("TREMOR_PATH"), tremor_path);
 
     let binary = job::which("tremor")?;
     let mut process = job::TargetProcess::new_in_dir(binary, &args, &env, test_dir)?;
