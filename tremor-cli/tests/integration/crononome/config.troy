@@ -1,0 +1,42 @@
+
+
+define flow main
+flow
+  use troy::connectors;
+  use integration;
+  define connector crononome from crononome
+  with
+    config = {
+      "entries": [{
+        "name": "test",
+        "expr": "* * * * * *",
+        "payload": {"snot": "badger"}
+      }]
+    }
+  end;
+
+  define pipeline main
+  pipeline 
+    select event.trigger from in into out;
+  end;
+
+  define pipeline exit
+  pipeline 
+    select {
+      "exit": 0,
+      "delay": 1
+    } from in into out;
+  end;
+
+  create connector file from integration::write_file;
+  create connector crononome;
+  create connector exit from connectors::exit;
+  create pipeline main;
+  create pipeline exit;
+
+  connect /connector/crononome to /pipeline/main;
+  connect /connector/crononome to /pipeline/exit;
+  connect /pipeline/main to /connector/file;
+  connect /pipeline/exit to /connector/exit;
+end;
+deploy flow main;
