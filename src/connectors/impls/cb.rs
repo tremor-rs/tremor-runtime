@@ -71,10 +71,6 @@ impl Connector for Cb {
         "json"
     }
 
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(true)
-    }
-
     async fn create_source(
         &mut self,
         source_context: SourceContext,
