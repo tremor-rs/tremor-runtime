@@ -2,20 +2,7 @@
 define flow main
 flow
   use troy::connectors;
-
-  define pipeline exit
-  pipeline
-    # make the test exit after all events have been sent
-    select {
-      "exit": 0,
-      "delay": 1000
-    } from in where event == "exit" into out;
-  end;
-
-  define pipeline main
-  pipeline
-    select event from in where event != "exit" into out;
-  end;
+  use integration;
 
   define connector bench from bench
   with
@@ -27,39 +14,20 @@ flow
     }
   end;
 
-  define connector file from file
-  args
-    file
-  with 
-    codec = "json",
-    config = {
-      "path": args.file,
-      "mode": "truncate"
-    },
-    postprocessors = ["lines"]
-  end;
-
-  create pipeline exit;
-  create pipeline main;
+  create pipeline main from integration::out_or_exit;
   create connector bench;
   create connector exit from connectors::exit;
 
-  create connector out_file from file
-  with
-    file = "out.log"
-  end;
+  create connector out_file from integration::write_file;
 
-  create connector err_file from file
+  create connector err_file from integration::write_file
   with
     file = "err.log"
   end;
 
   connect /connector/bench to /pipeline/main;
-  connect /connector/bench to /pipeline/exit;
   connect /pipeline/main to /connector/out_file;
-  connect /pipeline/main/err to /connector/err_file;
-  connect /pipeline/exit to /connector/exit;
-  connect /pipeline/exit/err to /connector/err_file;
+  connect /pipeline/main/exit to /connector/exit;
 end;
 
 deploy flow main;

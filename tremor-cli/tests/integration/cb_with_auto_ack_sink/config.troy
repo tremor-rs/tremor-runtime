@@ -1,6 +1,7 @@
 define flow main
 flow
   use troy::pipelines;
+  use troy::connectors;
 
   define connector cb_in from cb
   with

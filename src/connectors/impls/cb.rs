@@ -135,7 +135,7 @@ impl Sink for CbSink {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        for (value, meta) in dbg!(event).value_meta_iter() {
+        for (value, meta) in event.value_meta_iter() {
             if let Some(cb) = meta.get(Self::CB).or_else(|| value.get(Self::CB)) {
                 let cb_cmds = if let Some(array) = cb.as_array() {
                     array
@@ -244,7 +244,6 @@ impl CbSource {
 #[async_trait::async_trait()]
 impl Source for CbSource {
     async fn pull_data(&mut self, pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        dbg!();
         let bytes_read = self.file.read(&mut self.buf).await?;
         if bytes_read == 0 {
             let wait = 100_u64;

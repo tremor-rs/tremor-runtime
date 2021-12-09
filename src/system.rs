@@ -74,6 +74,8 @@ pub(crate) enum ManagerMsg {
     },
     /// stop this manager
     Stop,
+    /// Do the draining
+    Drain,
 }
 use async_std::channel::Sender as AsyncSender;
 
@@ -133,6 +135,21 @@ impl Manager {
                         for (_, deployment) in self.deployments {
                             let (tx, rx) = bounded(1);
                             deployment.stop(tx).await?;
+                            rxs.push(rx);
+                        }
+                        for rx in rxs {
+                            rx.recv().await??;
+                        }
+
+                        break;
+                    }
+                    ManagerMsg::Drain => {
+                        info!("Draining connectors ...");
+
+                        let mut rxs = Vec::with_capacity(self.deployments.len());
+                        for (_, deployment) in self.deployments {
+                            let (tx, rx) = bounded(1);
+                            deployment.drain(tx).await?;
                             rxs.push(rx);
                         }
                         for rx in rxs {
@@ -214,16 +231,12 @@ impl World {
     ///  * if the system failed to stop
     pub async fn stop(&self, mode: ShutdownMode) -> Result<()> {
         match mode {
-            ShutdownMode::Graceful => self.system.send(ManagerMsg::Stop).await?,
+            ShutdownMode::Graceful => self.system.send(ManagerMsg::Drain).await?,
             ShutdownMode::Forceful => {}
         }
-        // if let Err(e) = self
-        //     .reg
-        //     .stop_all_bindings(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT)
-        //     .await
-        // {
-        //     error!("Error stopping all bindings: {}", e);
-        // }
+        if let Err(e) = self.system.send(ManagerMsg::Stop).await {
+            error!("Error stopping all bindings: {}", e);
+        }
         Ok(self.system.send(ManagerMsg::Stop).await?)
     }
 }
