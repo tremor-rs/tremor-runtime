@@ -127,6 +127,9 @@ impl Source for CrononomeSource {
         Ok(true)
     }
     async fn pull_data(&mut self, pull_id: u64, ctx: &SourceContext) -> Result<SourceReply> {
+        if !ctx.quiescence_beacon().continue_reading().await {
+            return Ok(SourceReply::Empty(100));
+        }
         if let Some(trigger) = self.cq.next() {
             let mut origin_uri = self.origin_uri.clone();
             origin_uri.path.push(trigger.0.clone());
