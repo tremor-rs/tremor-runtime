@@ -2,13 +2,8 @@
 define flow main
 flow
   use troy::connectors;
+  use integration;
 
-  define pipeline main
-  into out, exit
-  pipeline
-    select event from in where event != "exit" into out;
-    select event from in where event == "exit" into out/exit;
-  end;
 
   define connector in from file
   with
@@ -30,7 +25,7 @@ flow
     }
   end;
   
-  create pipeline main;
+  create pipeline main from integration::out_or_exit;
   create connector in;
   create connector `udp-out`;
   create connector exit from connectors::exit;

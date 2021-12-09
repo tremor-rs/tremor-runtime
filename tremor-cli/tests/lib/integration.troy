@@ -1,0 +1,33 @@
+define connector write_file from file
+args
+file = "out.log"
+with 
+codec = "json-sorted",
+config = {
+    "path": args.file,
+    "mode": "truncate"
+},
+postprocessors = ["lines"]
+end;
+
+define connector read_file from file
+args
+file = "in.json"
+with 
+codec = "json",
+config = {
+    "path": args.file,
+    "mode": "read"
+},
+preprocessors = ["lines"]
+end;
+
+define pipeline out_or_exit
+into out, exit
+pipeline
+    select event from in where event != "exit" into out/out;
+    select {
+      "exit": 0,
+      "delay": 1
+    } from in where event == "exit" into out/exit;
+end;

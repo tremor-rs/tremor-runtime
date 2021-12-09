@@ -118,6 +118,9 @@ impl Deployment {
     pub(crate) async fn stop(&self, tx: async_std::channel::Sender<Result<()>>) -> Result<()> {
         self.addr.send(Msg::Stop(tx)).await.map_err(Error::from)
     }
+    pub(crate) async fn drain(&self, tx: async_std::channel::Sender<Result<()>>) -> Result<()> {
+        self.addr.send(Msg::Drain(tx)).await.map_err(Error::from)
+    }
 
     // pub(crate) async fn pause(&self) -> Result<()> {
     //     self.addr.send(Msg::Pause).await.map_err(Error::from)

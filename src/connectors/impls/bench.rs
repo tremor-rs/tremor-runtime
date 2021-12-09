@@ -180,6 +180,7 @@ impl Connector for Bench {
             iterations: self.config.iters,
             interval_ns: self.config.interval.map(Duration::from_nanos),
             finished: false,
+            did_sleep: false,
         };
         builder.spawn(s, source_context).map(Some)
     }
@@ -206,15 +207,28 @@ struct Blaster {
     iterations: Option<usize>,
     interval_ns: Option<Duration>,
     finished: bool,
+    did_sleep: bool,
 }
 
 #[async_trait::async_trait]
 impl Source for Blaster {
     async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        // TODO better sleep perhaps
-        if let Some(interval) = self.interval_ns {
-            async_std::task::sleep(interval).await;
+        if self.finished {
+            return Ok(SourceReply::Empty(100));
         }
+        if !self.did_sleep {
+            // TODO better sleep perhaps
+            if let Some(interval) = self.interval_ns {
+                let ns = interval % 1000000;
+                let ms = interval / 1000000;
+                async_std::task::sleep(ns).await;
+                if ms > 0 {
+                    self.did_sleep = true;
+                    return Ok(SourceReply::Empty(ms));
+                }
+            }
+        }
+        self.did_sleep = false;
         if Some(self.acc.iterations) == self.iterations {
             self.finished = true;
             return Ok(SourceReply::EndStream {
@@ -223,17 +237,14 @@ impl Source for Blaster {
                 meta: None,
             });
         };
-        if self.finished {
-            Ok(SourceReply::Empty(100))
-        } else {
-            Ok(SourceReply::Data {
-                origin_uri: self.origin_uri.clone(),
-                data: self.acc.next(),
-                meta: None,
-                stream: DEFAULT_STREAM_ID,
-                port: None,
-            })
-        }
+
+        Ok(SourceReply::Data {
+            origin_uri: self.origin_uri.clone(),
+            data: self.acc.next(),
+            meta: None,
+            stream: DEFAULT_STREAM_ID,
+            port: None,
+        })
     }
 
     fn is_transactional(&self) -> bool {
