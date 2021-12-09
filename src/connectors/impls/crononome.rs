@@ -155,7 +155,7 @@ impl Source for CrononomeSource {
                 port: None,
             })
         } else {
-            Ok(SourceReply::Empty(100))
+            Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
         }
     }
 

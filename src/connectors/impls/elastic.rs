@@ -13,13 +13,11 @@
 // limitations under the License.
 
 use std::fmt::Display;
-use std::time::Duration;
 
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
 use crate::errors::{Error, Kind as ErrorKind, Result};
 use async_std::channel::{bounded, Receiver, Sender};
-use async_std::prelude::*;
 use elasticsearch::cluster::ClusterHealthParts;
 use elasticsearch::http::response::Response;
 use elasticsearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
@@ -52,6 +50,47 @@ fn default_concurrency() -> usize {
     DEFAULT_CONCURRENCY
 }
 
+#[derive(Default, Debug)]
+pub(crate) struct Builder {}
+#[async_trait::async_trait()]
+impl ConnectorBuilder for Builder {
+    fn connector_type(&self) -> ConnectorType {
+        "elastic".into()
+    }
+
+    async fn from_config(&self, id: &str, config: &Option<OpConfig>) -> Result<Box<dyn Connector>> {
+        if let Some(raw_config) = config {
+            let config = Config::new(raw_config)?;
+            if config.nodes.is_empty() {
+                Err(
+                    ErrorKind::InvalidConfiguration(id.to_string(), "empty nodes provided".into())
+                        .into(),
+                )
+            } else {
+                let node_urls = config
+                    .nodes
+                    .into_iter()
+                    .map(|s| {
+                        Url::parse(s.as_str()).map_err(|e| {
+                            ErrorKind::InvalidConfiguration(id.to_string(), e.to_string()).into()
+                        })
+                    })
+                    .collect::<Result<Vec<Url>>>()?;
+                let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+                Ok(Box::new(Elastic {
+                    node_urls,
+                    max_concurrency: config.concurrency,
+                    include_payload: config.include_payload_in_response,
+                    response_tx,
+                    response_rx,
+                }))
+            }
+        } else {
+            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
+        }
+    }
+}
+
 /// the elasticsearch connector - for sending stuff to elasticsearch
 struct Elastic {
     node_urls: Vec<Url>,
@@ -59,8 +98,6 @@ struct Elastic {
     include_payload: bool,
     response_tx: Sender<SourceReply>,
     response_rx: Receiver<SourceReply>,
-    clients_tx: Sender<Vec<ElasticClient>>,
-    clients_rx: Receiver<Vec<ElasticClient>>,
 }
 
 #[async_trait::async_trait()]
@@ -77,9 +114,8 @@ impl Connector for Elastic {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = ElasticSource {
-            rx: self.response_rx.clone(),
-        };
+        let source =
+            ChannelSource::from_channel(self.response_tx.clone(), self.response_rx.clone());
         builder.spawn(source, source_context).map(Some)
     }
 
@@ -89,38 +125,13 @@ impl Connector for Elastic {
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = ElasticSink::new(
-            self.clients_rx.clone(),
+            self.node_urls.clone(),
             self.response_tx.clone(),
             builder.reply_tx(),
             self.max_concurrency,
             self.include_payload,
         );
         builder.spawn(sink, sink_context).map(Some)
-    }
-
-    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        let mut clients = Vec::with_capacity(self.node_urls.len());
-        for node in &self.node_urls {
-            let conn_pool = SingleNodeConnectionPool::new(node.clone());
-            let transport = TransportBuilder::new(conn_pool).build()?;
-            let client = Elasticsearch::new(transport);
-            // we use the cluster health endpoint, as the ping endpoint is not reliable
-            let res = client
-                .cluster()
-                .health(ClusterHealthParts::None)
-                .send()
-                .await?;
-            let json = res.json::<StaticValue>().await?.into_value();
-            let cluster_name = json.get_str("cluster_name").unwrap_or("").to_string();
-            info!(
-                "{} Connected to Elasticsearch cluster: {} via node: {}",
-                ctx, cluster_name, node
-            );
-            let es_client = ElasticClient::new(client, node.clone(), cluster_name);
-            clients.push(es_client);
-        }
-        self.clients_tx.send(clients).await?;
-        Ok(true)
     }
 }
 
@@ -178,8 +189,8 @@ impl ElasticClients {
 }
 
 struct ElasticSink {
+    node_urls: Vec<Url>,
     clients: ElasticClients,
-    clients_rx: Receiver<Vec<ElasticClient>>,
     response_tx: Sender<SourceReply>,
     reply_tx: Sender<AsyncSinkReply>,
     concurrency_cap: ConcurrencyCap,
@@ -189,15 +200,15 @@ struct ElasticSink {
 
 impl ElasticSink {
     fn new(
-        clients_rx: Receiver<Vec<ElasticClient>>,
+        node_urls: Vec<Url>,
         response_tx: Sender<SourceReply>,
         reply_tx: Sender<AsyncSinkReply>,
         max_in_flight_requests: usize,
         include_payload: bool,
     ) -> Self {
         Self {
+            node_urls,
             clients: ElasticClients::new(vec![]),
-            clients_rx,
             response_tx,
             reply_tx: reply_tx.clone(),
             concurrency_cap: ConcurrencyCap::new(max_in_flight_requests, reply_tx),
@@ -214,6 +225,30 @@ impl ElasticSink {
 
 #[async_trait::async_trait()]
 impl Sink for ElasticSink {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+        let mut clients = Vec::with_capacity(self.node_urls.len());
+        for node in &self.node_urls {
+            let conn_pool = SingleNodeConnectionPool::new(node.clone());
+            let transport = TransportBuilder::new(conn_pool).build()?;
+            let client = Elasticsearch::new(transport);
+            // we use the cluster health endpoint, as the ping endpoint is not reliable
+            let res = client
+                .cluster()
+                .health(ClusterHealthParts::None)
+                .send()
+                .await?;
+            let json = res.json::<StaticValue>().await?.into_value();
+            let cluster_name = json.get_str("cluster_name").unwrap_or("").to_string();
+            info!(
+                "{} Connected to Elasticsearch cluster: {} via node: {}",
+                ctx, cluster_name, node
+            );
+            let es_client = ElasticClient::new(client, node.clone(), cluster_name);
+            clients.push(es_client);
+        }
+        self.clients = ElasticClients::new(clients);
+        Ok(true)
+    }
     async fn on_event(
         &mut self,
         _input: &str,
@@ -222,15 +257,11 @@ impl Sink for ElasticSink {
         _serializer: &mut EventSerializer,
         start: u64,
     ) -> Result<SinkReply> {
-        if let Ok(new_clients) = self.clients_rx.try_recv() {
-            info!("{} Received new clients", ctx);
-            self.clients = ElasticClients::new(new_clients);
-        }
         // if we exceed the maximum concurrency here, we issue a CB close, but carry on anyhow
         let guard = self.concurrency_cap.inc_for(&event).await?;
 
         if let Some(client) = self.clients.next() {
-            info!("{} sending event [{}] to {}", ctx, event.id, client.url);
+            debug!("{} sending event [{}] to {}", ctx, event.id, client.url);
 
             // create task for awaiting the sending and handling the response
             let response_tx = self.response_tx.clone();
@@ -239,7 +270,11 @@ impl Sink for ElasticSink {
             let mut origin_uri = self.origin_uri.clone();
             origin_uri.host = client.cluster_name;
             async_std::task::Builder::new()
-                .name(format!("Elasticsearch Connector #{}", guard.num()))
+                .name(format!(
+                    "Elasticsearch Connector {}#{}",
+                    ctx.alias(),
+                    guard.num()
+                ))
                 .spawn::<_, Result<()>>(async move {
                     // build bulk request (we can't do that in a separate function)
                     let mut ops = BulkOperations::new();
@@ -278,8 +313,8 @@ impl Sink for ElasticSink {
                                             e,
                                             event,
                                             &origin_uri,
-                                            response_tx,
-                                            reply_tx,
+                                            &response_tx,
+                                            &reply_tx,
                                             include_payload,
                                         )
                                         .await;
@@ -303,8 +338,8 @@ impl Sink for ElasticSink {
                                         e,
                                         event,
                                         &origin_uri,
-                                        response_tx,
-                                        reply_tx,
+                                        &response_tx,
+                                        &reply_tx,
                                         include_payload,
                                     )
                                     .await;
@@ -328,8 +363,8 @@ impl Sink for ElasticSink {
                                         e,
                                         event,
                                         &origin_uri,
-                                        response_tx,
-                                        reply_tx,
+                                        &response_tx,
+                                        &reply_tx,
                                         include_payload,
                                     )
                                     .await;
@@ -346,8 +381,8 @@ impl Sink for ElasticSink {
                                     e,
                                     event,
                                     &origin_uri,
-                                    response_tx,
-                                    reply_tx,
+                                    &response_tx,
+                                    &reply_tx,
                                     include_payload,
                                 )
                                 .await;
@@ -377,8 +412,8 @@ impl Sink for ElasticSink {
                                     )),
                                     event,
                                     &origin_uri,
-                                    response_tx,
-                                    reply_tx,
+                                    &response_tx,
+                                    &reply_tx,
                                     include_payload,
                                 )
                                 .await;
@@ -418,8 +453,8 @@ impl Sink for ElasticSink {
                                         e,
                                         event,
                                         &origin_uri,
-                                        response_tx,
-                                        reply_tx,
+                                        &response_tx,
+                                        &reply_tx,
                                         include_payload,
                                     )
                                     .await;
@@ -431,8 +466,8 @@ impl Sink for ElasticSink {
                                 e,
                                 event,
                                 &origin_uri,
-                                response_tx,
-                                reply_tx,
+                                &response_tx,
+                                &reply_tx,
                                 include_payload,
                             )
                             .await;
@@ -443,23 +478,17 @@ impl Sink for ElasticSink {
             Ok(SinkReply::NONE)
         } else {
             error!("{} No elasticsearch client available.", &ctx);
-            // FIXME: build and send error response
-            Ok(SinkReply::FAIL)
+            handle_error(
+                Error::from("No elasticsearch client available."),
+                event,
+                &self.origin_uri,
+                &self.response_tx,
+                &self.reply_tx,
+                self.include_payload,
+            )
+            .await?;
+            Ok(SinkReply::NONE)
         }
-    }
-
-    async fn on_signal(
-        &mut self,
-        _signal: Event,
-        ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
-        // check for a client refresh
-        if let Ok(new_clients) = self.clients_rx.try_recv() {
-            info!("{} Received new clients", ctx);
-            self.clients = ElasticClients::new(new_clients);
-        }
-        Ok(SinkReply::default())
     }
 
     fn auto_ack(&self) -> bool {
@@ -562,8 +591,8 @@ async fn handle_error<E>(
     e: E,
     event: Event,
     elastic_origin_uri: &EventOriginUri,
-    response_tx: Sender<SourceReply>,
-    reply_tx: Sender<AsyncSinkReply>,
+    response_tx: &Sender<SourceReply>,
+    reply_tx: &Sender<AsyncSinkReply>,
     include_payload: bool,
 ) -> Result<()>
 where
@@ -600,74 +629,7 @@ where
     Ok(())
 }
 
-/// time to wait for an answer before handing control back to the source manager
-const SOURCE_RECV_TIMEOUT: Duration = Duration::from_millis(100);
-
-/// Very simple source that just listens to a channel for new `SourceReply` messages.
-/// Fed by the sink
-struct ElasticSource {
-    rx: Receiver<SourceReply>,
-}
-
-#[async_trait::async_trait()]
-impl Source for ElasticSource {
-    async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        match self.rx.recv().timeout(SOURCE_RECV_TIMEOUT).await {
-            Ok(Ok(source_reply)) => Ok(source_reply),
-            Ok(Err(e)) => Err(e.into()),
-            Err(_) => Ok(SourceReply::Empty(10)),
-        }
-    }
-    fn is_transactional(&self) -> bool {
-        // we just send out responses or errors via the source, so no transactionality needed
-        false
-    }
-}
-
-#[derive(Default, Debug)]
-pub(crate) struct Builder {}
-#[async_trait::async_trait()]
-impl ConnectorBuilder for Builder {
-    fn connector_type(&self) -> ConnectorType {
-        "elastic".into()
-    }
-
-    async fn from_config(&self, id: &str, config: &Option<OpConfig>) -> Result<Box<dyn Connector>> {
-        if let Some(raw_config) = config {
-            let config = Config::new(raw_config)?;
-            if config.nodes.is_empty() {
-                Err(
-                    ErrorKind::InvalidConfiguration(id.to_string(), "empty nodes provided".into())
-                        .into(),
-                )
-            } else {
-                let node_urls = config
-                    .nodes
-                    .into_iter()
-                    .map(|s| {
-                        Url::parse(s.as_str()).map_err(|e| {
-                            ErrorKind::InvalidConfiguration(id.to_string(), e.to_string()).into()
-                        })
-                    })
-                    .collect::<Result<Vec<Url>>>()?;
-                let (clients_tx, clients_rx) = bounded(128);
-                let (response_tx, response_rx) = bounded(128);
-                Ok(Box::new(Elastic {
-                    node_urls,
-                    max_concurrency: config.concurrency,
-                    include_payload: config.include_payload_in_response,
-                    clients_tx,
-                    clients_rx,
-                    response_tx,
-                    response_rx,
-                }))
-            }
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
-        }
-    }
-}
-
+// struct encapsulating elasticsearch connector metadata extraction
 struct ESMeta<'a, 'value> {
     meta: Option<&'a Value<'value>>,
 }
