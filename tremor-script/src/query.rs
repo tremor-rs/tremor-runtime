@@ -117,7 +117,7 @@ where
                         crate::parser::g::QueryParser::new().parse(filtered_tokens)?;
                     let mut query = script_stage_1.up_script(&mut helper)?;
 
-                    ConstFolder::new(&helper).walk_query(&mut query)?;
+                    ConstFolder::new(&mut helper).walk_query(&mut query)?;
 
                     std::mem::swap(&mut warnings, &mut helper.warnings);
                     locals = helper.locals.len();

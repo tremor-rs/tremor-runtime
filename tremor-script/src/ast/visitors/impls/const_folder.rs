@@ -33,7 +33,7 @@ where
     'script: 'run,
 {
     /// Node Metadata
-    pub meta: &'run NodeMetas,
+    pub meta: &'run mut NodeMetas,
     /// Function Registry
     pub reg: &'run Registry,
     /// Constants
@@ -314,6 +314,7 @@ where
                 if expr.as_lit().map(Value::is_str).unwrap_or_default() =>
             {
                 if let Some(Value::String(key)) = expr.into_lit() {
+                    self.meta.set_name(mid, &key)?;
                     let key = KnownKey::from(key);
                     Segment::Id { key, mid }
                 } else {
@@ -396,15 +397,15 @@ where
     'script: 'run,
 {
     pub(crate) fn reduce_to_val(
-        helper: &'run Helper<'script, '_>,
+        helper: &'run mut Helper<'script, '_>,
         mut expr: ImutExpr<'script>,
     ) -> Result<Value<'script>> {
         ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut expr)?;
         expr.try_into_lit(&helper.meta)
     }
-    pub(crate) fn new(helper: &'run Helper<'script, '_>) -> Self {
+    pub(crate) fn new(helper: &'run mut Helper<'script, '_>) -> Self {
         ConstFolder {
-            meta: &helper.meta,
+            meta: &mut helper.meta,
             reg: &helper.reg,
             consts: &helper.consts,
         }
