@@ -113,7 +113,11 @@ pub(crate) async fn run_process(
         std::env::var("RUST_LOG").unwrap_or(String::from("info")),
     );
     let tremor_path = std::env::var("TREMOR_PATH").unwrap_or_default();
-    let test_lib = format!("{}/lib", tests_root_dir.to_string_lossy());
+    let test_lib = format!(
+        "{}/lib:{}/lib",
+        tests_root_dir.to_string_lossy(),
+        test_dir.to_string_lossy()
+    );
     let tremor_path = if tremor_path == "" {
         test_lib
     } else {
