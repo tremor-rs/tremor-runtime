@@ -168,11 +168,7 @@ impl<'script> NodeMetas {
         });
         mid
     }
-    pub(crate) fn set_name(&mut self, idx: usize, name: &str) -> Result<()> {
-        let node = self.nodes.get_mut(idx).ok_or("Metadata node not found")?;
-        node.name = Some(name.to_string());
-        Ok(())
-    }
+
     pub(crate) fn start(&self, idx: usize) -> Option<Location> {
         self.nodes.get(idx).map(|v| v.start)
     }
