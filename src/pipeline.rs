@@ -327,12 +327,14 @@ async fn send_signal(own_id: &str, signal: Event, dests: &mut Dests) -> Result<(
     let mut destinations = dests.values_mut().flatten();
     let first = destinations.next();
     for (id, dest) in destinations {
-        if id.alias() != own_id {
+        // if we are connected to ourselves we should not forward signals
+        if matches!(dest, OutputTarget::Sink(_)) || id.alias() != own_id {
             dest.send_signal(signal.clone()).await?;
         }
     }
     if let Some((id, dest)) = first {
-        if id.alias() != own_id {
+        // if we are connected to ourselves we should not forward signals
+        if matches!(dest, OutputTarget::Sink(_)) || id.alias() != own_id {
             dest.send_signal(signal).await?;
         }
     }
