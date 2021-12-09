@@ -18,7 +18,7 @@ use crate::{
         Invoke, InvokeAggr, Literal, LocalPath, Match, Merge, NodeMetas, Patch, Path, Recur,
         ReservedPath, Segment, UnaryExpr,
     },
-    errors::ErrorKind,
+    errors::Kind as ErrorKind,
     errors::{
         error_bad_key, error_decreasing_range, error_invalid_unary, error_need_obj, error_need_str,
         error_no_clause_hit, error_oops, error_oops_err, Result,
