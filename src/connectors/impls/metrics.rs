@@ -159,7 +159,7 @@ impl MetricsSource {
 
 #[async_trait::async_trait()]
 impl Source for MetricsSource {
-    async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         match self.rx.try_recv() {
             Ok(msg) => Ok(SourceReply::Structured {
                 payload: msg.payload,
