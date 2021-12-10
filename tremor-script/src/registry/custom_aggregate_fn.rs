@@ -143,8 +143,8 @@ impl<'script> CustomAggregateFn<'script> {
 
     /// Merge with another instance
     pub fn merge<'event>(&mut self, other: &CustomAggregateFn, env: &Env<'_, 'event>) -> FResult<()>
-        where
-            'script: 'event
+    where
+        'script: 'event,
     {
         dbg!(&self.state, &other.state);
         let mut body_iter = self.mergein_body.iter().peekable();
@@ -153,7 +153,9 @@ impl<'script> CustomAggregateFn<'script> {
         let mut no_event = Value::null();
         let mut local_stack = LocalStack::with_size(2);
         local_stack.values.insert(0, Some(self.state.clone()));
-        local_stack.values.insert(1, Some(other.state.clone_static()));
+        local_stack
+            .values
+            .insert(1, Some(other.state.clone_static()));
 
         let env = Env {
             context: env.context,
@@ -202,9 +204,7 @@ impl<'script> CustomAggregateFn<'script> {
         let mut state = Value::null().into_static();
         let mut no_event = Value::null();
 
-        local_stack
-            .values
-            .insert(0, Some(self.state.clone()));
+        local_stack.values.insert(0, Some(self.state.clone()));
 
         let env = Env {
             context: env.context,

@@ -1127,10 +1127,7 @@ impl<'script> CustomAggregateFn<'script> {
             emit_args,
             name: Cow::owned(name.to_string()),
             init_body: init_body.into_iter().map(Expr::into_static).collect(),
-            aggregate_body: aggregate_body
-                .into_iter()
-                .map(Expr::into_static)
-                .collect(),
+            aggregate_body: aggregate_body.into_iter().map(Expr::into_static).collect(),
             mergein_body: mergein_body.into_iter().map(Expr::into_static).collect(),
             emit_body: emit_body.into_iter().map(Expr::into_static).collect(),
             state: state.into_static(),

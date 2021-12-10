@@ -216,14 +216,21 @@ impl GroupWindow {
                         e.into_err(aggr, aggr, r, node_meta)
                     }))
                 }
-                InvocableAggregate::Tremor(ref mut x) => x.aggregate(argv1.as_slice(), &env).map_err(|x| x.into_err(aggr, aggr, None, node_meta))?,
+                InvocableAggregate::Tremor(ref mut x) => x
+                    .aggregate(argv1.as_slice(), &env)
+                    .map_err(|x| x.into_err(aggr, aggr, None, node_meta))?,
             }
         }
         Ok(())
     }
 
     /// Merge data from the privious tilt frame / window into this one
-    fn merge(&mut self, ctx: &SelectCtx, prev: &AggrSlice<'static>, consts:RunConsts) -> Result<()> {
+    fn merge(
+        &mut self,
+        ctx: &SelectCtx,
+        prev: &AggrSlice<'static>,
+        consts: RunConsts,
+    ) -> Result<()> {
         // Track the parents id's and transactionality
         self.id.track(&ctx.event_id);
         self.transactional |= ctx.transactional;
@@ -253,7 +260,7 @@ impl GroupWindow {
                             let r: Option<&Registry> = None;
                             e.into_err(prev, prev, r, ctx.node_meta)
                         })?
-                    },
+                    }
                 },
             };
         }
