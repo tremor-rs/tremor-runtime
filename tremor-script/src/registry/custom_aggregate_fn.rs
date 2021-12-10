@@ -142,6 +142,8 @@ impl<'script> CustomAggregateFn<'script> {
     }
 
     /// Merge with another instance
+    /// # Errors
+    /// Return an error if the execution of the script fails or if there's no value returned
     pub fn merge<'event>(&mut self, other: &CustomAggregateFn, env: &Env<'_, 'event>) -> FResult<()>
     where
         'script: 'event,
