@@ -277,7 +277,7 @@ impl Source for TcpServerSource {
         Ok(true)
     }
 
-    async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         match self.connection_rx.try_recv() {
             Ok(reply) => Ok(reply),
             Err(TryRecvError::Empty) => {

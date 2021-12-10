@@ -239,7 +239,7 @@ impl CbSource {
 
 #[async_trait::async_trait()]
 impl Source for CbSource {
-    async fn pull_data(&mut self, pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         let bytes_read = self.file.read(&mut self.buf).await?;
         if bytes_read == 0 {
             let wait = 100_u64;
@@ -278,7 +278,7 @@ impl Source for CbSource {
             }
         } else {
             self.num_sent += 1;
-            self.last_sent = self.last_sent.max(pull_id);
+            self.last_sent = self.last_sent.max(*pull_id);
             let data = self.buf[0..bytes_read].to_vec();
             Ok(SourceReply::Data {
                 data,

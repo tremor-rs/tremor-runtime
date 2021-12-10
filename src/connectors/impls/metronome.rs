@@ -105,14 +105,14 @@ impl Source for MetronomeSource {
         self.next = nanotime() + self.interval_ns;
         Ok(true)
     }
-    async fn pull_data(&mut self, pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         let now = nanotime();
         if self.next < now {
             self.next = now + self.interval_ns;
             let data = literal!({
                 "onramp": "metronome",
                 "ingest_ns": now,
-                "id": pull_id
+                "id": *pull_id
             });
             Ok(SourceReply::Structured {
                 origin_uri: self.origin_uri.clone(),

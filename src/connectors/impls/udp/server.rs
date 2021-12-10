@@ -109,7 +109,7 @@ impl Source for UdpServerSource {
         Ok(true)
     }
 
-    async fn pull_data(&mut self, _pull_id: u64, ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, _pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
         let socket = self
             .listener
             .as_ref()

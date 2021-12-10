@@ -208,7 +208,7 @@ struct Blaster {
 
 #[async_trait::async_trait]
 impl Source for Blaster {
-    async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         if self.finished {
             return Ok(SourceReply::Empty(100));
         }
