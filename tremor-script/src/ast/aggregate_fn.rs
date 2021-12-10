@@ -21,7 +21,7 @@ use halfbrown::HashMap;
 use serde::Serialize;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct RawAggregateFnDecl<'input> {
+pub struct AggrFnDeclRaw<'input> {
     /// public because lalrpop
     pub start: Location,
     /// public because lalrpop
@@ -29,33 +29,33 @@ pub struct RawAggregateFnDecl<'input> {
     /// public because lalrpop
     pub name: IdentRaw<'input>,
     /// public because lalrpop
-    pub body: RawAggregateFnBody<'input>,
+    pub body: AggrFnBodyRaw<'input>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct RawAggregateFnBody<'input> {
+pub struct AggrFnBodyRaw<'input> {
     /// public because lalrpop
     pub start: Location,
     /// public because lalrpop
     pub end: Location,
     /// public because lalrpop
-    pub init: RawInitDecl<'input>,
+    pub init: InitDeclRaw<'input>,
     /// public because lalrpop
-    pub aggregate: RawAggregateDecl<'input>,
+    pub aggregate: AggregateDeclRaw<'input>,
     /// public because lalrpop
-    pub merge: RawMergeInDecl<'input>,
+    pub merge: MergeInDeclRaw<'input>,
     /// public because lalrpop
-    pub emit: RawEmitDecl<'input>,
+    pub emit: EmitDeclRaw<'input>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct RawInitDecl<'input>(pub ExprsRaw<'input>);
+pub struct InitDeclRaw<'input>(pub ExprsRaw<'input>);
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct RawAggregateDecl<'input>(pub Vec<IdentRaw<'input>>, pub ExprsRaw<'input>);
+pub struct AggregateDeclRaw<'input>(pub Vec<IdentRaw<'input>>, pub ExprsRaw<'input>);
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct RawMergeInDecl<'input>(pub Vec<IdentRaw<'input>>, pub ExprsRaw<'input>);
+pub struct MergeInDeclRaw<'input>(pub Vec<IdentRaw<'input>>, pub ExprsRaw<'input>);
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct RawEmitDecl<'input>(pub Vec<IdentRaw<'input>>, pub ExprsRaw<'input>);
+pub struct EmitDeclRaw<'input>(pub Vec<IdentRaw<'input>>, pub ExprsRaw<'input>);
 
 pub struct FnDecl<'script> {
     /// public because lalrpop
@@ -75,7 +75,7 @@ pub struct AggregateDecl<'script>(pub Vec<Ident<'script>>, pub Exprs<'script>);
 pub struct MergeInDecl<'script>(pub Vec<Ident<'script>>, pub Exprs<'script>);
 pub struct EmitDecl<'script>(pub Vec<Ident<'script>>, pub Exprs<'script>);
 
-impl<'script> Upable<'script> for RawInitDecl<'script> {
+impl<'script> Upable<'script> for InitDeclRaw<'script> {
     type Target = InitDecl<'script>;
 
     fn up<'registry>(
@@ -86,14 +86,14 @@ impl<'script> Upable<'script> for RawInitDecl<'script> {
     }
 }
 
-impl<'script> Upable<'script> for RawAggregateDecl<'script> {
+impl<'script> Upable<'script> for AggregateDeclRaw<'script> {
     type Target = AggregateDecl<'script>;
 
     fn up<'registry>(
         self,
         helper: &mut Helper<'script, 'registry>,
     ) -> crate::ast::visitors::prelude::Result<Self::Target> {
-        let RawAggregateDecl(args, body) = self;
+        let AggregateDeclRaw(args, body) = self;
         let args: Vec<Ident> = args.up(helper)?;
 
         let mut locals = HashMap::new();
@@ -106,14 +106,14 @@ impl<'script> Upable<'script> for RawAggregateDecl<'script> {
     }
 }
 
-impl<'script> Upable<'script> for RawMergeInDecl<'script> {
+impl<'script> Upable<'script> for MergeInDeclRaw<'script> {
     type Target = MergeInDecl<'script>;
 
     fn up<'registry>(
         self,
         helper: &mut Helper<'script, 'registry>,
     ) -> crate::ast::visitors::prelude::Result<Self::Target> {
-        let RawMergeInDecl(args, body) = self;
+        let MergeInDeclRaw(args, body) = self;
         let args: Vec<Ident> = args.up(helper)?;
 
         let mut locals = HashMap::new();
@@ -125,14 +125,14 @@ impl<'script> Upable<'script> for RawMergeInDecl<'script> {
     }
 }
 
-impl<'script> Upable<'script> for RawEmitDecl<'script> {
+impl<'script> Upable<'script> for EmitDeclRaw<'script> {
     type Target = EmitDecl<'script>;
 
     fn up<'registry>(
         self,
         helper: &mut Helper<'script, 'registry>,
     ) -> crate::ast::visitors::prelude::Result<Self::Target> {
-        let RawEmitDecl(args, body) = self;
+        let EmitDeclRaw(args, body) = self;
         let args: Vec<Ident> = args.up(helper)?;
 
         let mut locals = HashMap::new();
@@ -144,7 +144,7 @@ impl<'script> Upable<'script> for RawEmitDecl<'script> {
     }
 }
 
-impl<'script> Upable<'script> for RawAggregateFnDecl<'script> {
+impl<'script> Upable<'script> for AggrFnDeclRaw<'script> {
     type Target = FnDecl<'script>;
 
     fn up<'registry>(
@@ -161,13 +161,13 @@ impl<'script> Upable<'script> for RawAggregateFnDecl<'script> {
     }
 }
 
-impl BaseExpr for RawAggregateFnDecl<'_> {
+impl BaseExpr for AggrFnDeclRaw<'_> {
     fn mid(&self) -> usize {
         self.end.absolute() - self.start.absolute()
     }
 }
 
-impl BaseExpr for RawAggregateFnBody<'_> {
+impl BaseExpr for AggrFnBodyRaw<'_> {
     fn mid(&self) -> usize {
         self.end.absolute() - self.start.absolute()
     }

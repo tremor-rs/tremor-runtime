@@ -588,12 +588,12 @@ ModuleExpr: ExprRaw<'input> = {
     Module => ExprRaw::Module(<>),
 }
 
-AggregateFnDecl: RawAggregateFnDecl<'input> = {
-    <doc:DocComment> <start:@L> "aggregate" <name:Ident> "of" <body:AggregateFnBody> "end" <end:@L> => RawAggregateFnDecl{start, end, name, body}
+AggregateFnDecl: AggrFnDeclRaw<'input> = {
+    <doc:DocComment> <start:@L> "aggregate" <name:Ident> "of" <body:AggregateFnBody> "end" <end:@L> => AggrFnDeclRaw{start, end, name, body}
 }
 
-AggregateFnBody: RawAggregateFnBody<'input> = {
-    <start:@L> "init" "(" ")" <init_body:Effectors> "aggregate" "(" <aggregate_args:FnArgs> ")" <aggregate_body:Effectors> "mergein" "(" <merge_args:FnArgs> ")" <merge_body:Effectors> "emit" "(" <emit_args:FnArgs> ")" <emit_body:Effectors> <end:@L> => RawAggregateFnBody{start, end, init: RawInitDecl(init_body), aggregate: RawAggregateDecl(aggregate_args, aggregate_body), merge: RawMergeInDecl(merge_args, merge_body), emit: RawEmitDecl(emit_args, emit_body)}
+AggregateFnBody: AggrFnBodyRaw<'input> = {
+    <start:@L> "init" "(" ")" <init_body:Effectors> "aggregate" "(" <aggregate_args:FnArgs> ")" <aggregate_body:Effectors> "mergein" "(" <merge_args:FnArgs> ")" <merge_body:Effectors> "emit" "(" <emit_args:FnArgs> ")" <emit_body:Effectors> <end:@L> => AggrFnBodyRaw{start, end, init: InitDeclRaw(init_body), aggregate: AggregateDeclRaw(aggregate_args, aggregate_body), merge: MergeInDeclRaw(merge_args, merge_body), emit: EmitDeclRaw(emit_args, emit_body)}
 }
 
 FnDecl: AnyFnRaw<'input> = {

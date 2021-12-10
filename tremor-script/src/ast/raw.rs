@@ -16,7 +16,7 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
-use crate::ast::aggregate_fn::RawAggregateFnDecl;
+use crate::ast::aggregate_fn::AggrFnDeclRaw;
 use crate::ast::InvocableAggregate;
 use crate::{
     ast::{
@@ -601,7 +601,7 @@ pub enum ExprRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Imut(ImutExprRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    AggregateFnDecl(RawAggregateFnDecl<'script>),
+    AggregateFnDecl(AggrFnDeclRaw<'script>),
 }
 impl<'script> ExpressionRaw<'script> for ExprRaw<'script> {}
 
