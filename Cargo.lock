@@ -5409,7 +5409,7 @@ dependencies = [
  "rand 0.8.4",
  "serde",
  "serde_json",
- "sha2 0.9.8",
+ "sha2 0.9.9",
 ]
 
 [[package]]
@@ -5897,7 +5897,6 @@ name = "tremor-api"
 version = "0.11.4"
 dependencies = [
  "async-std",
- "hashbrown 0.11.2",
  "http-types",
  "serde",
  "serde_derive",
@@ -5908,7 +5907,6 @@ dependencies = [
  "tremor-pipeline",
  "tremor-runtime",
  "tremor-script",
- "tremor-value",
 ]
 
 [[package]]
@@ -5929,7 +5927,6 @@ dependencies = [
  "futures",
  "globwalk",
  "halfbrown",
- "hashbrown 0.11.2",
  "http-types",
  "lalrpop",
  "lazy_static",
