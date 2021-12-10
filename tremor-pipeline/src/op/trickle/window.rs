@@ -223,7 +223,7 @@ impl GroupWindow {
     }
 
     /// Merge data from the privious tilt frame / window into this one
-    fn merge(&mut self, ctx: &SelectCtx, prev: &AggrSlice<'static>) -> Result<()> {
+    fn merge(&mut self, ctx: &SelectCtx, prev: &AggrSlice<'static>, consts:RunConsts) -> Result<()> {
         // Track the parents id's and transactionality
         self.id.track(&ctx.event_id);
         self.transactional |= ctx.transactional;
@@ -240,7 +240,20 @@ impl GroupWindow {
                 },
                 InvocableAggregate::Tremor(ref mut x) => match prev.invocable {
                     InvocableAggregate::Intrinsic(_) => unreachable!(), // fixme don't panic, return an Err
-                    InvocableAggregate::Tremor(ref y) => x.merge(y),
+                    InvocableAggregate::Tremor(ref y) => {
+                        let env = Env {
+                            context: ctx.ctx,
+                            consts,
+                            aggrs: &NO_AGGRS,
+                            meta: ctx.node_meta,
+                            recursion_limit: ctx.recursion_limit,
+                        };
+
+                        x.merge(y, &env).map_err(|e| {
+                            let r: Option<&Registry> = None;
+                            e.into_err(prev, prev, r, ctx.node_meta)
+                        })?
+                    },
                 },
             };
         }
@@ -277,7 +290,7 @@ impl GroupWindow {
                 // We are not a top level window so we merge the previos
                 // window data
                 if had_data {
-                    stry!(self.merge(ctx, prev));
+                    stry!(self.merge(ctx, prev, consts));
                 };
             } else {
                 // We are a root level window so we accumulate the event data
@@ -345,7 +358,7 @@ impl GroupWindow {
             // event data
             if let Some((had_data, prev)) = prev {
                 if had_data {
-                    stry!(self.merge(ctx, prev));
+                    stry!(self.merge(ctx, prev, consts));
                 };
             } else {
                 stry!(self.accumulate(ctx, consts, data));

@@ -108,7 +108,7 @@ impl<'script> CustomAggregateFn<'script> {
 
         let env = Env {
             context: env.context,
-            consts: env.consts.with_new_args(&args), // fixme .with_new_args
+            consts: env.consts,
             aggrs: &[],
             meta: env.meta,
             recursion_limit: env.recursion_limit,
@@ -142,8 +142,52 @@ impl<'script> CustomAggregateFn<'script> {
     }
 
     /// Merge with another instance
-    pub fn merge(&mut self, _other: &CustomAggregateFn) {
-        todo!("Implement merge")
+    pub fn merge<'event>(&mut self, other: &CustomAggregateFn, env: &Env<'_, 'event>) -> FResult<()>
+        where
+            'script: 'event
+    {
+        dbg!(&self.state, &other.state);
+        let mut body_iter = self.mergein_body.iter().peekable();
+        let mut no_meta = Value::null();
+        let mut state = Value::null().into_static();
+        let mut no_event = Value::null();
+        let mut local_stack = LocalStack::with_size(2);
+        local_stack.values.insert(0, Some(self.state.clone()));
+        local_stack.values.insert(1, Some(other.state.clone_static()));
+
+        let env = Env {
+            context: env.context,
+            consts: env.consts,
+            aggrs: &[],
+            meta: env.meta,
+            recursion_limit: env.recursion_limit,
+        };
+
+        while let Some(expr) = body_iter.next() {
+            let cont = expr
+                .run(
+                    ExecOpts {
+                        result_needed: true,
+                        aggr: AggrType::Tick,
+                    },
+                    &env,
+                    &mut no_event,
+                    &mut state,
+                    &mut no_meta,
+                    &mut local_stack,
+                )
+                .expect("FIXME");
+
+            if body_iter.peek().is_none() {
+                if let Cont::Cont(value) = cont {
+                    self.state = value.into_owned().clone_static();
+                } else {
+                    return Err(FunctionError::NoAggregateValueInAggregate);
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Emit the state
@@ -160,7 +204,7 @@ impl<'script> CustomAggregateFn<'script> {
 
         local_stack
             .values
-            .insert(0, Some(dbg!(&self.state).clone()));
+            .insert(0, Some(self.state.clone()));
 
         let env = Env {
             context: env.context,
