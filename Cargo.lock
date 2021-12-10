@@ -2264,7 +2264,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
 dependencies = [
  "ahash 0.7.6",
- "serde",
 ]
 
 [[package]]
@@ -5948,7 +5947,6 @@ name = "tremor-api"
 version = "0.11.4"
 dependencies = [
  "async-std",
- "hashbrown 0.12.0",
  "http-types",
  "serde",
  "serde_derive",
@@ -5959,7 +5957,6 @@ dependencies = [
  "tremor-pipeline",
  "tremor-runtime",
  "tremor-script",
- "tremor-value",
 ]
 
 [[package]]
@@ -5980,7 +5977,6 @@ dependencies = [
  "futures",
  "globwalk",
  "halfbrown",
- "hashbrown 0.11.2",
  "http-types",
  "lalrpop",
  "lazy_static",

@@ -27,7 +27,7 @@ impl<'script> GroupByExprExtractor<'script> {
     }
 
     pub(crate) fn extract_expressions(&mut self, group_by: &GroupBy<'script>) {
-        self.walk_group_by(&group_by);
+        self.walk_group_by(group_by);
     }
 }
 
