@@ -1,10 +1,10 @@
 mod m with
     aggregate ag of
         init ( ) =>
-            ""
+            7 + []
 
         aggregate(st, x) =>
-            st + x + []
+            st + x
 
         mergein(st, x) =>
             st + x
