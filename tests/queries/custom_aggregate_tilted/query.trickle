@@ -3,6 +3,11 @@ with
   size = 2
 end;
 
+define tumbling window by_three
+with
+  size = 3
+end;
+
 mod m with
     aggregate collect_joined of
         init() =>
@@ -19,4 +24,4 @@ mod m with
     end
 end;
 
-select aggr::win::collect_flattened(event) from in[by_two] into out;
+select aggr::win::collect_flattened(event) from in[by_two, by_three] into out;
