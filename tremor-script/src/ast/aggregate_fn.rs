@@ -94,12 +94,10 @@ impl<'script> Upable<'script> for RawAggregateDecl<'script> {
         helper: &mut Helper<'script, 'registry>,
     ) -> crate::ast::visitors::prelude::Result<Self::Target> {
         let RawAggregateDecl(args, body) = self;
-        let args: Vec<Ident> = args
-            .into_iter()
-            .map(|x| x.up(helper).expect("booo booo"))
-            .collect();
+        let args: Vec<Ident> = args.up(helper)?;
 
         let mut locals = HashMap::new();
+
         for (i, arg_name) in args.iter().enumerate() {
             locals.insert(arg_name.to_string(), i);
         }
