@@ -91,7 +91,7 @@ impl StdStreamSource {
 #[async_trait::async_trait()]
 impl Source for StdStreamSource {
     #[allow(clippy::option_if_let_else)]
-    async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         let stdin = if let Some(stdin) = &mut self.stdin {
             stdin
         } else {

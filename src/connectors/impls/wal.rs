@@ -19,7 +19,6 @@ use crate::connectors::prelude::*;
 use async_std::sync::Mutex;
 
 use simd_json_derive::{Deserialize, Serialize};
-use tremor_pipeline::EventIdGenerator;
 
 #[derive(serde::Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -73,7 +72,6 @@ impl ConnectorBuilder for Builder {
 struct WalSource {
     origin_uri: EventOriginUri,
     wal: Arc<Mutex<qwal::Wal>>,
-    pull_id_map: HashMap<u64, u64>, // FIXME: this is terrible :(
 }
 
 struct Payload(Event);
@@ -92,11 +90,10 @@ impl qwal::Entry for Payload {
 
 #[async_trait::async_trait]
 impl Source for WalSource {
-    async fn pull_data(&mut self, pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         if let Some((id, event)) = self.wal.lock().await.pop::<Payload>().await? {
-            // FIXME: this is a dirty hack untill we can define the pull_id / event ID
-            // if this is the only place we might not want to change this however
-            self.pull_id_map.insert(pull_id, id);
+            // the wal is creating its own ids, we take over here
+            *pull_id = id;
             Ok(SourceReply::Structured {
                 origin_uri: self.origin_uri.clone(),
                 payload: event.data,
@@ -109,10 +106,7 @@ impl Source for WalSource {
     }
 
     async fn ack(&mut self, _stream_id: u64, pull_id: u64) -> Result<()> {
-        // FIXME: this is a dirty hack until we can define the pull_id for a connector
-        if let Some(id) = self.pull_id_map.remove(&pull_id) {
-            self.wal.lock().await.ack(id).await?;
-        }
+        self.wal.lock().await.ack(pull_id).await?;
         Ok(())
     }
 
@@ -157,7 +151,6 @@ impl Connector for Wal {
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let s = WalSource {
-            pull_id_map: HashMap::new(),
             wal: self.wal.clone(),
             origin_uri: self.event_origin_uri.clone(),
         };
@@ -169,8 +162,6 @@ impl Connector for Wal {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let _idgen = EventIdGenerator::default();
-
         let s = WalSink {
             wal: self.wal.clone(),
         };
@@ -186,9 +177,6 @@ impl Connector for Wal {
         Ok(())
     }
 
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(true)
-    }
     fn default_codec(&self) -> &str {
         "json"
     }
@@ -309,8 +297,8 @@ impl WalThingy {
 
 #[async_trait::async_trait]
 impl Source for Arc<Mutex<WalThingy>> {
-    async fn pull_data(&mut self, pull_id: u64, ctx: &SourceContext) -> Result<SourceReply> {
-        self.lock().await.pull_data(pull_id, ctx).await
+    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+        self.lock().await.pull_data(*pull_id, ctx).await
     }
 
     async fn ack(&mut self, stream_id: u64, pull_id: u64) -> Result<()> {

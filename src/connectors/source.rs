@@ -153,7 +153,10 @@ pub type SourceReplySender = Sender<SourceReply>;
 pub trait Source: Send {
     /// Pulls an event from the source if one exists
     /// `idgen` is passed in so the source can inspect what event id it would get if it was producing 1 event from the pulled data
-    async fn pull_data(&mut self, pull_id: u64, ctx: &SourceContext) -> Result<SourceReply>;
+    ///
+    /// The `pull_id` is assigned a unique value per call to this function. This number is tracked across events and sent back in `ack` and `fail`.
+    /// Source implementations can manipulate this number, but need to guarantee that it is unique per stream.
+    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply>;
     /// This callback is called when the data provided from
     /// pull_event did not create any events, this is needed for
     /// linked sources that require a 1:1 mapping between requests
@@ -343,7 +346,7 @@ impl ChannelSourceRuntime {
 
 #[async_trait::async_trait()]
 impl Source for ChannelSource {
-    async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         match self.rx.try_recv() {
             Ok(reply) => Ok(reply),
             Err(TryRecvError::Empty) => {
@@ -1027,7 +1030,7 @@ where
     }
 
     /// handle data from the source
-    async fn handle_data(&mut self, data: Result<SourceReply>) -> Result<()> {
+    async fn handle_data(&mut self, data: Result<SourceReply>, pull_id: u64) -> Result<()> {
         let data = match data {
             Ok(d) => d,
             Err(e) => {
@@ -1051,7 +1054,7 @@ where
                     &self.ctx.alias,
                     stream_state,
                     &mut ingest_ns,
-                    self.pull_counter,
+                    pull_id,
                     origin_uri,
                     port.as_ref(),
                     data,
@@ -1059,11 +1062,7 @@ where
                     self.is_transactional,
                 );
                 if results.is_empty() {
-                    if let Err(e) = self
-                        .source
-                        .on_no_events(self.pull_counter, stream, &self.ctx)
-                        .await
-                    {
+                    if let Err(e) = self.source.on_no_events(pull_id, stream, &self.ctx).await {
                         error!(
                             "[Source::{}] Error on no events callback: {}",
                             &self.ctx.alias, e
@@ -1073,7 +1072,7 @@ where
                     let error = self.route_events(results).await;
                     if error {
                         self.ctx.log_err(
-                            self.source.fail(stream, self.pull_counter).await,
+                            self.source.fail(stream, pull_id).await,
                             "fail upon error sending events from data source reply failed",
                         );
                     }
@@ -1095,7 +1094,7 @@ where
                         connector_url,
                         stream_state,
                         &mut ingest_ns,
-                        self.pull_counter,
+                        pull_id,
                         origin_uri.clone(), // TODO: use split_last on batch_data to avoid last clone
                         port.as_ref(),
                         data,
@@ -1105,11 +1104,7 @@ where
                     results.append(&mut events);
                 }
                 if results.is_empty() {
-                    if let Err(e) = self
-                        .source
-                        .on_no_events(self.pull_counter, stream, &self.ctx)
-                        .await
-                    {
+                    if let Err(e) = self.source.on_no_events(pull_id, stream, &self.ctx).await {
                         error!(
                             "[Source::{}] Error on no events callback: {}",
                             &self.ctx.alias, e
@@ -1119,7 +1114,7 @@ where
                     let error = self.route_events(results).await;
                     if error {
                         self.ctx.log_err(
-                            self.source.fail(stream, self.pull_counter).await,
+                            self.source.fail(stream, pull_id).await,
                             "fail upon error sending events from batched data source reply failed",
                         );
                     }
@@ -1135,7 +1130,7 @@ where
                 let stream_state = self.streams.get_or_create_stream(stream)?;
                 let event = build_event(
                     stream_state,
-                    self.pull_counter,
+                    pull_id,
                     ingest_ns,
                     payload,
                     origin_uri,
@@ -1144,7 +1139,7 @@ where
                 let error = self.route_events(vec![(port.unwrap_or(OUT), event)]).await;
                 if error {
                     self.ctx.log_err(
-                        self.source.fail(stream, self.pull_counter).await,
+                        self.source.fail(stream, pull_id).await,
                         "fail upon error sending events from structured data source reply failed",
                     );
                 }
@@ -1168,7 +1163,7 @@ where
                         &self.ctx.alias,
                         &mut stream_state,
                         &mut ingest_ns,
-                        self.pull_counter,
+                        pull_id,
                         origin_uri,
                         None,
                         &meta.unwrap_or_else(Value::object),
@@ -1177,7 +1172,7 @@ where
                     if results.is_empty() {
                         if let Err(e) = self
                             .source
-                            .on_no_events(self.pull_counter, stream_id, &self.ctx)
+                            .on_no_events(pull_id, stream_id, &self.ctx)
                             .await
                         {
                             error!(
@@ -1189,7 +1184,7 @@ where
                         let error = self.route_events(results).await;
                         if error {
                             self.ctx.log_err(
-                                self.source.fail(stream_id, self.pull_counter).await,
+                                self.source.fail(stream_id, pull_id).await,
                                 "fail upon error sending events from endstream source reply failed",
                             );
                         }
@@ -1257,8 +1252,9 @@ where
             }
 
             if self.should_pull_data() {
-                let data = self.source.pull_data(self.pull_counter, &self.ctx).await;
-                self.handle_data(data).await?;
+                let mut pull_id = self.pull_counter;
+                let data = self.source.pull_data(&mut pull_id, &self.ctx).await;
+                self.handle_data(data, pull_id).await?;
                 self.pull_counter += 1;
             };
             if self.pull_wait_start.is_some() {
