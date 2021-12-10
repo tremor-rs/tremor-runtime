@@ -514,9 +514,10 @@ where
             }
             segments.next();
         }
-        subrange.map_or_else(
-            || Ok((value, segments.collect())),
-            |arr| Ok((Value::from(arr.to_vec()), segments.collect())),
-        )
+        if let Some(arr) = subrange {
+            Ok((Value::from(arr.to_vec()), segments.collect()))
+        } else {
+            Ok((value, segments.collect()))
+        }
     }
 }
