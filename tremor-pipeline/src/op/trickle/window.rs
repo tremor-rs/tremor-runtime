@@ -247,32 +247,30 @@ impl GroupWindow {
         self.holds_data = true;
         // Ingest the data
         for (this, prev) in self.aggrs.iter_mut().zip(prev.iter()) {
-            match this.invocable {
-                InvocableAggregate::Intrinsic(ref mut x) => match prev.invocable {
-                    InvocableAggregate::Intrinsic(ref y) => stry!(x.merge(y).map_err(|e| {
+            match (&mut this.invocable, &prev.invocable) {
+                (
+                    InvocableAggregate::Intrinsic(ref mut x),
+                    InvocableAggregate::Intrinsic(ref y),
+                ) => stry!(x.merge(y).map_err(|e| {
+                    let r: Option<&Registry> = None;
+                    e.into_err(prev, prev, r, ctx.node_meta)
+                })),
+                (InvocableAggregate::Tremor(ref mut x), InvocableAggregate::Tremor(ref y)) => {
+                    let env = Env {
+                        context: ctx.ctx,
+                        consts,
+                        aggrs: &NO_AGGRS,
+                        meta: ctx.node_meta,
+                        recursion_limit: ctx.recursion_limit,
+                    };
+
+                    x.merge(y, &env).map_err(|e| {
                         let r: Option<&Registry> = None;
                         e.into_err(prev, prev, r, ctx.node_meta)
-                    })),
-                    InvocableAggregate::Tremor(_) => unreachable!(), // fixme don't panic, return an Err
-                },
-                InvocableAggregate::Tremor(ref mut x) => match prev.invocable {
-                    InvocableAggregate::Intrinsic(_) => unreachable!(), // fixme don't panic, return an Err
-                    InvocableAggregate::Tremor(ref y) => {
-                        let env = Env {
-                            context: ctx.ctx,
-                            consts,
-                            aggrs: &NO_AGGRS,
-                            meta: ctx.node_meta,
-                            recursion_limit: ctx.recursion_limit,
-                        };
-
-                        x.merge(y, &env).map_err(|e| {
-                            let r: Option<&Registry> = None;
-                            e.into_err(prev, prev, r, ctx.node_meta)
-                        })?;
-                    }
-                },
-            };
+                    })?;
+                }
+                _ => return Err(tremor_script::errors::ErrorKind::AggregateTypeMismatch.into()),
+            }
         }
         Ok(())
     }

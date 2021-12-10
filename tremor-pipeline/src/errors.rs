@@ -93,7 +93,6 @@ error_chain! {
             description("Invalid input stream name.")
             display("Invalid input stream name '{}' for pipeline '{}'.", stream_name, pipeline)
         }
-
     }
 }
 

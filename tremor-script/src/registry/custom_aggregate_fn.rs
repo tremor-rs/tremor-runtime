@@ -98,13 +98,14 @@ impl<'script> CustomAggregateFn<'script> {
         'script: 'event,
     {
         let mut body_iter = self.aggregate_body.iter().peekable();
-        let args = Value::Array(args.iter().map(|v| v.clone_static()).collect());
         let mut no_meta = Value::null();
         let mut state = Value::null().into_static();
         let mut no_event = Value::null();
         let mut local_stack = LocalStack::with_size(2);
         local_stack.values.insert(0, Some(self.state.clone()));
-        local_stack.values.insert(1, Some(args[0].clone()));
+        local_stack
+            .values
+            .insert(1, args.get(0).map(|x| (*x).clone()));
 
         let env = Env {
             context: env.context,
@@ -115,19 +116,17 @@ impl<'script> CustomAggregateFn<'script> {
         };
 
         while let Some(expr) = body_iter.next() {
-            let cont = expr
-                .run(
-                    ExecOpts {
-                        result_needed: true,
-                        aggr: AggrType::Tick,
-                    },
-                    &env,
-                    &mut no_event,
-                    &mut state,
-                    &mut no_meta,
-                    &mut local_stack,
-                )
-                .expect("FIXME");
+            let cont = expr.run(
+                ExecOpts {
+                    result_needed: true,
+                    aggr: AggrType::Tick,
+                },
+                &env,
+                &mut no_event,
+                &mut state,
+                &mut no_meta,
+                &mut local_stack,
+            )?;
 
             if body_iter.peek().is_none() {
                 if let Cont::Cont(value) = cont {
@@ -148,7 +147,6 @@ impl<'script> CustomAggregateFn<'script> {
     where
         'script: 'event,
     {
-        dbg!(&self.state, &other.state);
         let mut body_iter = self.mergein_body.iter().peekable();
         let mut no_meta = Value::null();
         let mut state = Value::null().into_static();
@@ -168,19 +166,17 @@ impl<'script> CustomAggregateFn<'script> {
         };
 
         while let Some(expr) = body_iter.next() {
-            let cont = expr
-                .run(
-                    ExecOpts {
-                        result_needed: true,
-                        aggr: AggrType::Tick,
-                    },
-                    &env,
-                    &mut no_event,
-                    &mut state,
-                    &mut no_meta,
-                    &mut local_stack,
-                )
-                .expect("FIXME");
+            let cont = expr.run(
+                ExecOpts {
+                    result_needed: true,
+                    aggr: AggrType::Tick,
+                },
+                &env,
+                &mut no_event,
+                &mut state,
+                &mut no_meta,
+                &mut local_stack,
+            )?;
 
             if body_iter.peek().is_none() {
                 if let Cont::Cont(value) = cont {

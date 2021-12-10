@@ -170,20 +170,21 @@ impl ErrorKind {
     #[allow(clippy::too_many_lines)]
     pub(crate) fn expr(&self) -> ErrorLocation {
         use ErrorKind::{
-            AccessError, AggrInAggr, ArrayOutOfRange, AssignIntoArray, AssignToConst,
-            BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity,
-            BadArrayIndex, BadType, BinaryDrop, BinaryEmit, CantSetArgsConst, CantSetGroupConst,
-            CantSetWindowConst, Common, DecreasingRange, DoubleConst, DoubleStream,
-            DoubleSubqueryStmt, EmptyInterpolation, EmptyScript, ExtraToken, Generic, Grok,
-            InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst, InvalidDrop, InvalidEmit,
-            InvalidExtractor, InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidIntLiteral,
-            InvalidMod, InvalidRecur, InvalidToken, InvalidUnary, InvalidUtf8Sequence, Io,
-            JsonError, MergeTypeConflict, MissingEffectors, MissingFunction, MissingModule,
-            ModuleNotFound, Msg, NoAggregateValueInAggregate, NoAggregateValueInInit, NoClauseHit,
-            NoConstsAllowed, NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant,
-            NotFound, Oops, ParseIntError, ParserError, PatchKeyExists, PreprocessorError,
-            QueryNodeDuplicateName, QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit,
-            RuntimeError, SubqueryUnknownPort, TailingHereDoc, TypeConflict, UnexpectedCharacter,
+            AccessError, AggrInAggr, AggregateTypeMismatch, ArrayOutOfRange, AssignIntoArray,
+            AssignToConst, BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, BadAccessInState,
+            BadArity, BadArrayIndex, BadType, BinaryDrop, BinaryEmit, CantSetArgsConst,
+            CantSetGroupConst, CantSetWindowConst, Common, DecreasingRange, DoubleConst,
+            DoubleStream, DoubleSubqueryStmt, EmptyInterpolation, EmptyScript, ExtraToken, Generic,
+            Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst, InvalidDrop,
+            InvalidEmit, InvalidExtractor, InvalidFloatLiteral, InvalidFn, InvalidHexLiteral,
+            InvalidIntLiteral, InvalidMod, InvalidRecur, InvalidToken, InvalidUnary,
+            InvalidUtf8Sequence, Io, JsonError, MergeTypeConflict, MissingEffectors,
+            MissingFunction, MissingModule, ModuleNotFound, Msg, NoAggregateValueInAggregate,
+            NoAggregateValueInInit, NoClauseHit, NoConstsAllowed, NoEventReferencesAllowed,
+            NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops, ParseIntError,
+            ParserError, PatchKeyExists, PreprocessorError, QueryNodeDuplicateName,
+            QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit, RuntimeError,
+            SubqueryUnknownPort, TailingHereDoc, TypeConflict, UnexpectedCharacter,
             UnexpectedEndOfStream, UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor,
             UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
             UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error, ValueError,
@@ -275,6 +276,7 @@ impl ErrorKind {
             | CantSetWindowConst
             | CantSetArgsConst
             | CantSetGroupConst
+            | AggregateTypeMismatch
             | Self::__Nonexhaustive { .. } => (Some(Range::default()), None),
         }
     }
@@ -548,6 +550,11 @@ error_chain! {
         NoAggregateValueInAggregate(expr: Range, inner: Range) {
             description("No value was emitted in aggregate of the aggregate function")
                 display("No value was emitted in aggregate of the aggregate function")
+        }
+
+        AggregateTypeMismatch {
+            description("There was a mismatch in aggregate types in window function. This is an internal error."),
+                display("There was a mismatch in aggregate types in window function. This is an internal error."),
         }
 
         /*
