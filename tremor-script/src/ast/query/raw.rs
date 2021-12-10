@@ -842,7 +842,7 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
             mid: helper.add_meta(self.start, self.end),
             from: (from.0.up(helper)?, from.1.up(helper)?),
             into: (into.0.up(helper)?, into.1.up(helper)?),
-            target: target,
+            target,
             maybe_where,
             maybe_having,
             maybe_group_by,

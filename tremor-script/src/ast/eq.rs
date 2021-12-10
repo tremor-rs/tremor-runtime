@@ -512,13 +512,16 @@ impl<'script> AstEq for Path<'script> {
             (Self::Meta(m1), Self::Meta(m2)) => m1.ast_eq(m2),
             (Self::Reserved(r1), Self::Reserved(r2)) => r1.ast_eq(r2),
             (Self::Expr(e1), Self::Expr(e2)) => e1.ast_eq(e2),
-            (Self::Const(_), _)
-            | (Self::Local(_), _)
-            | (Self::Event(_), _)
-            | (Self::State(_), _)
-            | (Self::Meta(_), _)
-            | (Self::Reserved(_), _)
-            | (Self::Expr(_), _) => false,
+            (
+                Self::Const(_)
+                | Self::Local(_)
+                | Self::Event(_)
+                | Self::State(_)
+                | Self::Meta(_)
+                | Self::Reserved(_)
+                | Self::Expr(_),
+                _,
+            ) => false,
         }
     }
 }
@@ -566,11 +569,14 @@ impl<'script> AstEq for Segment<'script> {
                     start: s2, end: e2, ..
                 },
             ) => s1 == s2 && e1 == e2,
-            (Self::Id { .. }, _)
-            | (Self::Idx { .. }, _)
-            | (Self::Element { .. }, _)
-            | (Self::Range { .. }, _)
-            | (Self::RangeExpr { .. }, _) => false,
+            (
+                Self::Id { .. }
+                | Self::Idx { .. }
+                | Self::Element { .. }
+                | Self::Range { .. }
+                | Self::RangeExpr { .. },
+                _,
+            ) => false,
         }
     }
 }
@@ -939,7 +945,7 @@ mod tests {
             case %{ snot == "muh" } => "argh"
             case %{ snot == 1 } => "argh"
             case %{ snot == 2 } => "argh"
-            case %{ snot == 3 } => "argh"            
+            case %{ snot == 3 } => "argh"
             default => "not_null"
         end)
         "#,

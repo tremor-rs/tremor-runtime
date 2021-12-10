@@ -69,7 +69,6 @@ shell-words = "1.1"
 tch = { version = "*", optional = true }
 termcolor = "1.1"
 beef = { version = "0.5", features = ["impl_serde"] }
-hashbrown = { version = "0.11", features = ["serde"] } # FIXME REMOVE
 
 [[bin]]
 name = "tremor"

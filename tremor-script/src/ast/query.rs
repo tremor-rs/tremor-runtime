@@ -417,7 +417,7 @@ impl<'script> DefinitioalArgsWith<'script> {
                 .iter_mut()
                 .find(|(arg_key, _)| arg_key.id == k.id)
             {
-                *arg_v = Some(v.clone())
+                *arg_v = Some(v.clone());
             } else {
                 // FIXME: better error
                 return Err(format!("unknown key: {}", k).into());
@@ -432,6 +432,9 @@ impl<'script> DefinitioalArgsWith<'script> {
     }
 
     /// Generates the config
+    ///
+    /// # Errors
+    ///   * If the config could not be generated
     pub fn generate_config<'registry>(
         &self,
         helper: &mut Helper<'script, 'registry>,
