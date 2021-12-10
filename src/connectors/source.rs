@@ -934,7 +934,6 @@ where
     /// send a signal to all connected pipelines
     async fn send_signal(&mut self, signal: Event) -> Result<()> {
         for (_url, addr) in self.pipelines_out.iter().chain(self.pipelines_err.iter()) {
-            debug!("Send signal {:?} to {}", signal.kind, &_url);
             addr.send(Box::new(pipeline::Msg::Signal(signal.clone())))
                 .await?;
         }
