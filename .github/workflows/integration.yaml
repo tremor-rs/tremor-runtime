@@ -26,7 +26,7 @@ jobs:
             target_feature: "+avx,+avx2,+sse4.2"
 
     env:
-      TREMOR_PATH: "${{ github.workspace }}/tremor-script/lib"
+      TREMOR_PATH: "${{ github.workspace }}/tremor-script/lib:${{ github.workspace }}/tremor-cli/tests/lib"
       RUSTFLAGS: -D warnings -C target-feature=${{ matrix.target_feature }}
 
     runs-on: ${{ matrix.os }}
