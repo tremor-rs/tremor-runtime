@@ -49,7 +49,7 @@ pub(crate) trait GroupByVisitor<'script> {
             GroupBy::Expr { expr, .. } | GroupBy::Each { expr, .. } => self.visit_expr(expr),
             GroupBy::Set { items, .. } => {
                 for inner_group_by in items {
-                    self.walk_group_by(&inner_group_by);
+                    self.walk_group_by(inner_group_by);
                 }
             }
         }
@@ -139,7 +139,7 @@ mod tests {
               case a = %(42, _, ...) => let event = a
               default => let a = 7; let b = 9; event + a + b
             end;
-            match $meta.foo of          
+            match $meta.foo of
               case 1 => let event = a
               case _ => null
             end;

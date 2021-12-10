@@ -63,6 +63,7 @@ impl<'script, 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script>
 where
     'script: 'run,
 {
+    #[allow(clippy::too_many_lines)]
     fn leave_expr(&mut self, e: &mut ImutExpr<'script>) -> Result<()> {
         use ImutExpr::Literal as Lit;
         let mut buf = Lit(Literal {
@@ -72,39 +73,38 @@ where
         std::mem::swap(&mut buf, e);
         *e = match buf {
             // Datatyes
-            ImutExpr::Record(Record { mid,base, fields }) if fields.is_empty() => {
-                Lit(Literal{ value: base.into(), mid })
-            }
-            e@ ImutExpr::Record(_) => e,
+            ImutExpr::Record(Record { mid, base, fields }) if fields.is_empty() => Lit(Literal {
+                value: base.into(),
+                mid,
+            }),
+            e @ ImutExpr::Record(_) => e,
 
             ImutExpr::List(List { exprs, mid }) if exprs.iter().all(ImutExpr::is_lit) => {
-                let value = exprs.into_iter().filter_map(ImutExpr::into_lit).collect::<Vec<_>>().into();
-                Lit(Literal{mid, value})
+                let value = exprs
+                    .into_iter()
+                    .filter_map(ImutExpr::into_lit)
+                    .collect::<Vec<_>>()
+                    .into();
+                Lit(Literal { mid, value })
             }
-            e@ ImutExpr::List(_) => e,
+            e @ ImutExpr::List(_) => e,
 
-            ImutExpr::Bytes(Bytes{mid, value}) if value.iter().all(BytesPart::is_lit)=> {
+            ImutExpr::Bytes(Bytes { mid, value }) if value.iter().all(BytesPart::is_lit) => {
                 let mut bytes: Vec<u8> = Vec::with_capacity(value.len());
-                let outer = e.extent(&self.meta);
+                let outer = e.extent(self.meta);
                 let mut used = 0;
                 let mut buf = 0;
 
-                for (value,  data_type,endianess,bits, inner) in value.into_iter().filter_map(|part|{
-                    let inner = part.extent(&self.meta);
-                    let value = part.data.into_lit()?;
-                    Some((value,part.data_type,part.endianess,part.bits, inner))
-                }) {
+                for (value, data_type, endianess, bits, inner) in
+                    value.into_iter().filter_map(|part| {
+                        let inner = part.extent(self.meta);
+                        let value = part.data.into_lit()?;
+                        Some((value, part.data_type, part.endianess, part.bits, inner))
+                    })
+                {
                     extend_bytes_from_value(
-                        &outer,
-                        &inner,
-                        &self.meta,
-                        data_type,
-                        endianess,
-                        bits,
-                        &mut buf,
-                        &mut used,
-                        &mut bytes,
-                        &value,
+                        &outer, &inner, self.meta, data_type, endianess, bits, &mut buf, &mut used,
+                        &mut bytes, &value,
                     )?;
                 }
                 if used > 0 {
@@ -114,21 +114,22 @@ where
                     mid,
                     value: Value::Bytes(bytes.into()),
                 })
-            },
-            e@ ImutExpr::Bytes(_) => e,
+            }
+            e @ ImutExpr::Bytes(_) => e,
 
             // Operations
             ImutExpr::Binary(b) => {
                 if let BinExpr {
-                        mid,
-                        kind,
-                        lhs: Lit(Literal{value: lhs, ..}),
-                        rhs: Lit(Literal{value: rhs, ..}),
-
-                        ..
-                } = b.as_ref()  {
-                    let value = exec_binary(b.as_ref(), b.as_ref(), &self.meta, *kind, lhs, rhs)?.into_owned();
-                    Lit(Literal{mid: *mid, value})
+                    mid,
+                    kind,
+                    lhs: Lit(Literal { value: lhs, .. }),
+                    rhs: Lit(Literal { value: rhs, .. }),
+                    ..
+                } = b.as_ref()
+                {
+                    let value = exec_binary(b.as_ref(), b.as_ref(), self.meta, *kind, lhs, rhs)?
+                        .into_owned();
+                    Lit(Literal { mid: *mid, value })
                 } else {
                     ImutExpr::Binary(b)
                 }
@@ -137,87 +138,103 @@ where
             ImutExpr::Unary(b) => {
                 if let UnaryExpr {
                     kind,
-                    expr: Lit(Literal{value, ..}),
-                    mid
-                } = b.as_ref()  {
-                    let value = exec_unary(*kind, value).ok_or_else(|| {
-                        let inner = b.extent(&self.meta);
-                        let outer = b.extent(&self.meta);
-                        err_invalid_unary(&outer, &inner, *kind, value, &self.meta)
-                    })?.into_owned();
-                    Lit(Literal{mid: *mid, value})
+                    expr: Lit(Literal { value, .. }),
+                    mid,
+                } = b.as_ref()
+                {
+                    let value = exec_unary(*kind, value)
+                        .ok_or_else(|| {
+                            let inner = b.extent(self.meta);
+                            let outer = b.extent(self.meta);
+                            err_invalid_unary(&outer, &inner, *kind, value, self.meta)
+                        })?
+                        .into_owned();
+                    Lit(Literal { mid: *mid, value })
                 } else {
                     ImutExpr::Unary(b)
                 }
             }
-            ImutExpr::String(StringLit { mid, elements }) if elements.iter().all(StrLitElement::is_lit)  => {
-                let value = elements.iter().filter_map(StrLitElement::as_str).collect::<Vec<_>>().join("").into();
-                Lit(Literal{mid, value})
-            },
-            e @ ImutExpr::String(_)  => e,
+            ImutExpr::String(StringLit { mid, elements })
+                if elements.iter().all(StrLitElement::is_lit) =>
+            {
+                let value = elements
+                    .iter()
+                    .filter_map(StrLitElement::as_str)
+                    .collect::<Vec<_>>()
+                    .join("")
+                    .into();
+                Lit(Literal { mid, value })
+            }
+            e @ ImutExpr::String(_) => e,
 
-            e @ ImutExpr::Patch(_) => e, // TODO
-            e @ ImutExpr::Match(_) => e, // TODO
+            e @ ImutExpr::Patch(_) => e,         // TODO
+            e @ ImutExpr::Match(_) => e,         // TODO
             e @ ImutExpr::Comprehension(_) => e, // TODO
-            e @ ImutExpr::Merge(_) => e, // TODO
-            e @ ImutExpr::Local { .. } => e, // TODO
-            e @ ImutExpr::Present { .. } => e, // TODO
+            e @ ImutExpr::Merge(_) => e,         // TODO
+            e @ ImutExpr::Local { .. } => e,     // TODO
+            e @ ImutExpr::Present { .. } => e,   // TODO
 
-            ImutExpr::Path(Path::Expr(ExprPath{expr, segments, mid, var})) if expr.is_lit() => {
+            ImutExpr::Path(Path::Expr(ExprPath {
+                expr,
+                segments,
+                mid,
+                var,
+            })) if expr.is_lit() => {
                 let value = expr.try_into_lit(self.meta)?;
                 let outer = e.extent(self.meta);
                 let (value, segments) = self.reduce_path(outer, value, segments)?;
-                let lit = ImutExpr::Literal(Literal {
-                    value,
-                    mid: mid,
-                });
+                let lit = ImutExpr::Literal(Literal { mid, value });
                 if segments.is_empty() {
                     lit
                 } else {
-                    ImutExpr::Path(Path::Expr(ExprPath{expr: Box::new(lit), segments, mid, var}))
+                    ImutExpr::Path(Path::Expr(ExprPath {
+                        expr: Box::new(lit),
+                        segments,
+                        mid,
+                        var,
+                    }))
                 }
             }
-            e@ ImutExpr::Path(_)  => e,
+            e @ ImutExpr::Path(_) => e,
 
-            ImutExpr::Invoke(i)  |
-            ImutExpr::Invoke1(i) |
-            ImutExpr::Invoke2(i) |
-            ImutExpr::Invoke3(i) if i.invocable.is_const() && i.args.iter().all(ImutExpr::is_lit) => {
-                let ex = i.extent(&self.meta);
+            ImutExpr::Invoke(i)
+            | ImutExpr::Invoke1(i)
+            | ImutExpr::Invoke2(i)
+            | ImutExpr::Invoke3(i)
+                if i.invocable.is_const() && i.args.iter().all(ImutExpr::is_lit) =>
+            {
+                let ex = i.extent(self.meta);
 
-                let args: Vec<Value<'script>> = i
-                .args
-                .into_iter()
-                .filter_map(ImutExpr::into_lit)
-                .collect();
+                let args: Vec<Value<'script>> =
+                    i.args.into_iter().filter_map(ImutExpr::into_lit).collect();
                 let args2: Vec<&Value<'script>> = args.iter().collect();
                 let env = Env {
                     context: &EventContext::default(),
                     consts: NO_CONSTS.run(),
                     aggrs: &NO_AGGRS,
-                    meta: &self.meta,
+                    meta: self.meta,
                     recursion_limit: crate::recursion_limit(),
                 };
 
                 let v = i
                     .invocable
                     .invoke(&env, &args2)
-                    .map_err(|e| e.into_err(&ex, &ex, Some(self.reg), &self.meta))?;
+                    .map_err(|e| e.into_err(&ex, &ex, Some(self.reg), self.meta))?;
                 ImutExpr::Literal(Literal {
                     value: v,
                     mid: i.mid,
                 })
-            },
+            }
 
-            e @ ImutExpr::Invoke(_) |
-            e @ ImutExpr::Invoke1(_) |
-            e @ ImutExpr::Invoke2(_) |
-            e @ ImutExpr::Invoke3(_) => e,
-            // TODO section
-
-            e@ ImutExpr::Literal(_) | // This already is a literal
-            e@ ImutExpr::InvokeAggr(_) | // Aggregates are by definition non const
-            e@ ImutExpr::Recur(_) => e,
+            e
+            @
+            (ImutExpr::Invoke(_)
+            | ImutExpr::Invoke1(_)
+            | ImutExpr::Invoke2(_)
+            | ImutExpr::Invoke3(_)
+            | ImutExpr::Literal(_)
+            | ImutExpr::InvokeAggr(_)
+            | ImutExpr::Recur(_)) => e,
         };
         Ok(())
     }
@@ -261,7 +278,7 @@ where
     }
 
     /// Reduce path segments by:
-    /// 1) ranges, if both start and end are known turn RangeExpr's into Ranges with the correct
+    /// 1) ranges, if both start and end are known turn `RangeExpr`'s into Ranges with the correct
     ///    start & end
     /// 2) Element lookups, if the expressionis a literal string, becomes a key lookup
     /// 2) Element lookups, if the expressionis a literal usize, becomes a idx lookup
@@ -339,7 +356,7 @@ where
                     other => *string = StrLitElement::Lit(other.json_string()?.into()),
                 }
             }
-            other => *string = other,
+            other @ StrLitElement::Expr(_) => *string = other,
         }
         Ok(())
     }
@@ -405,7 +422,7 @@ where
     pub(crate) fn new(helper: &'run Helper<'script, '_>) -> Self {
         ConstFolder {
             meta: &helper.meta,
-            reg: &helper.reg,
+            reg: helper.reg,
             consts: &helper.consts,
         }
     }
@@ -423,7 +440,7 @@ where
             match segment {
                 Segment::Id { key, mid } => {
                     if !value.is_object() {
-                        return error_need_obj(&outer, segment, value.value_type(), &self.meta);
+                        return error_need_obj(&outer, segment, value.value_type(), self.meta);
                     }
                     if subrange.is_some() {
                         return Err("We can't index a name into a subrange.".into());
@@ -442,7 +459,7 @@ where
                                 .as_object()
                                 .map(|o| o.keys().map(ToString::to_string).collect::<Vec<_>>())
                                 .unwrap_or_default(),
-                            &self.meta,
+                            self.meta,
                         );
                     }
                 }
@@ -461,11 +478,11 @@ where
                                 &fake_path(mid),
                                 r,
                                 l,
-                                &self.meta,
+                                self.meta,
                             );
                         }
                     } else {
-                        return error_need_arr(&outer, segment, value.value_type(), &self.meta);
+                        return error_need_arr(&outer, segment, value.value_type(), self.meta);
                     }
                 }
                 Segment::Range { start, end, mid } => {
@@ -482,12 +499,12 @@ where
                                 &fake_path(mid),
                                 r,
                                 l,
-                                &self.meta,
+                                self.meta,
                             );
                         }
                         subrange = array.get(start..end);
                     } else {
-                        return error_need_arr(&outer, segment, value.value_type(), &self.meta);
+                        return error_need_arr(&outer, segment, value.value_type(), self.meta);
                     }
                 }
 
@@ -497,10 +514,9 @@ where
             }
             segments.next();
         }
-        if let Some(arr) = subrange {
-            Ok((Value::from(arr.to_vec()), segments.collect()))
-        } else {
-            Ok((value, segments.collect()))
-        }
+        subrange.map_or_else(
+            || Ok((value, segments.collect())),
+            |arr| Ok((Value::from(arr.to_vec()), segments.collect())),
+        )
     }
 }
