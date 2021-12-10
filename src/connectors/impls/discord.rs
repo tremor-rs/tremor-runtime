@@ -190,7 +190,7 @@ struct DiscordSource {
 #[async_trait::async_trait()]
 impl Source for DiscordSource {
     #[allow(clippy::option_if_let_else)]
-    async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         match self.rx.try_recv() {
             Ok(data) => Ok(SourceReply::Structured {
                 origin_uri: self.origin_uri.clone(),

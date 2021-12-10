@@ -126,7 +126,7 @@ impl Source for CrononomeSource {
         }
         Ok(true)
     }
-    async fn pull_data(&mut self, pull_id: u64, ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
         if !ctx.quiescence_beacon().continue_reading().await {
             return Ok(SourceReply::Empty(100));
         }
@@ -142,7 +142,7 @@ impl Source for CrononomeSource {
             let data = literal!({
                 "connector": "crononome",
                 "ingest_ns": nanotime(),
-                "id": pull_id,
+                "id": *pull_id,
                 "trigger": tr
             });
             let meta = ctx.meta(literal!({
