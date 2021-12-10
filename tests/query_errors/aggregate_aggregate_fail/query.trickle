@@ -1,0 +1,17 @@
+mod m with
+    aggregate ag of
+        init ( ) =>
+            "z" + []
+
+        aggregate(st, x) =>
+            st + x
+
+        mergein(st, x) =>
+            st + x
+
+        emit(st) =>
+            st
+    end
+end;
+
+select m::ag(event) from in into out;
