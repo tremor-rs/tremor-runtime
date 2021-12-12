@@ -138,6 +138,7 @@ impl<'script> NodeMetas {
             cus,
         }
     }
+
     pub(crate) fn add_meta(&mut self, mut start: Location, mut end: Location, cu: usize) -> usize {
         let mid = self.nodes.len();
         start.set_cu(cu);
@@ -1106,7 +1107,10 @@ impl<'script> ImutExpr<'script> {
             None
         }
     }
-    pub(crate) fn try_into_value(mut self, helper: &Helper<'script, '_>) -> Result<Value<'script>> {
+    pub(crate) fn try_into_value(
+        mut self,
+        helper: &mut Helper<'script, '_>,
+    ) -> Result<Value<'script>> {
         ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut self)?;
 
         if let ImutExpr::Literal(Literal { value: v, .. }) = self {

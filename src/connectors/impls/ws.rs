@@ -31,8 +31,6 @@ where
         + futures::Stream<Item = std::result::Result<Message, Error>>,
 {
     wrapped_stream: S,
-    #[allow(dead_code)]
-    deploy_url: TremorUrl,
     origin_uri: EventOriginUri,
     meta: Value<'static>,
 }
@@ -44,15 +42,9 @@ where
         + std::marker::Send
         + futures::Stream<Item = std::result::Result<Message, Error>>,
 {
-    fn new(
-        stream: S,
-        deploy_url: TremorUrl,
-        origin_uri: EventOriginUri,
-        meta: Value<'static>,
-    ) -> Self {
+    fn new(stream: S, origin_uri: EventOriginUri, meta: Value<'static>) -> Self {
         Self {
             wrapped_stream: stream,
-            deploy_url,
             origin_uri,
             meta,
         }
@@ -80,7 +72,7 @@ where
                     Message::Close(_) => {
                         return Ok(SourceReply::EndStream {
                             origin_uri: self.origin_uri.clone(),
-                            stream_id: stream,
+                            stream,
                             meta: Some(self.meta.clone()),
                         })
                     }
@@ -101,7 +93,7 @@ where
             }
             Some(Err(_)) | None => Ok(SourceReply::EndStream {
                 origin_uri: self.origin_uri.clone(),
-                stream_id: stream,
+                stream,
                 meta: Some(self.meta.clone()),
             }),
         }

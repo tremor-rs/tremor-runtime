@@ -18,7 +18,7 @@ use crate::{
         Invoke, InvokeAggr, Literal, LocalPath, Match, Merge, NodeMetas, Patch, Path, Recur,
         ReservedPath, Segment, UnaryExpr,
     },
-    errors::ErrorKind,
+    errors::Kind as ErrorKind,
     errors::{
         error_bad_key, error_decreasing_range, error_invalid_unary, error_need_obj, error_need_str,
         error_no_clause_hit, error_oops, error_oops_err, Result,
@@ -67,8 +67,10 @@ impl<'script> ImutExpr<'script> {
     }
 
     /// Checks if the expression is a literal expression
+    ///
+    /// # Errors
+    ///   * If this is not a literal
     #[inline]
-    #[must_use]
     pub fn try_into_lit(self, meta: &NodeMetas) -> Result<Value<'script>> {
         // FIXME: Better error
         match self {
@@ -92,8 +94,10 @@ impl<'script> ImutExpr<'script> {
         }
     }
     /// Checks if the expression is a literal expression
+    ///
+    /// # Errors
+    ///   * If this is not a literal
     #[inline]
-    #[must_use]
     pub fn try_as_lit(&self, meta: &NodeMetas) -> Result<&Value<'script>> {
         // FIXME: Better error
         self.as_lit().ok_or_else(|| {
@@ -503,6 +507,7 @@ impl<'script> ImutExpr<'script> {
     }
 
     // TODO: Quite some overlap with `interpreter::resolve` (and some with `expr::assign`)
+    #[allow(clippy::too_many_lines)]
     fn present<'run, 'event>(
         &'run self,
         opts: ExecOpts,

@@ -71,16 +71,12 @@ impl Connector for Cb {
         "json"
     }
 
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(true)
-    }
-
     async fn create_source(
         &mut self,
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = CbSource::from_config(&self.config, source_context.url()).await?;
+        let source = CbSource::from_config(&self.config, source_context.alias()).await?;
         let source_addr = builder.spawn(source, source_context)?;
         Ok(Some(source_addr))
     }
@@ -107,14 +103,14 @@ impl ConnectorBuilder for Builder {
 
     async fn from_config(
         &self,
-        id: &TremorUrl,
+        alias: &str,
         config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         if let Some(raw) = config {
             let config = Config::new(raw)?;
             Ok(Box::new(Cb { config }))
         } else {
-            Err(ErrorKind::MissingConfiguration(id.to_instance().to_string()).into())
+            Err(ErrorKind::MissingConfiguration(alias.to_string()).into())
         }
     }
 }
@@ -214,7 +210,7 @@ struct CbSource {
 }
 
 impl CbSource {
-    async fn from_config(config: &Config, url: &TremorUrl) -> Result<Self> {
+    async fn from_config(config: &Config, alias: &str) -> Result<Self> {
         if let Some(path) = config.path.as_ref() {
             let file = open(path).await?;
             Ok(Self {
@@ -232,10 +228,11 @@ impl CbSource {
                 },
             })
         } else {
-            Err(
-                ErrorKind::InvalidConfiguration(url.to_string(), String::from("Missing path key."))
-                    .into(),
+            Err(ErrorKind::InvalidConfiguration(
+                alias.to_string(),
+                String::from("Missing path key."),
             )
+            .into())
         }
     }
 }
@@ -274,7 +271,7 @@ impl Source for CbSource {
             } else {
                 self.finished = true;
                 Ok(SourceReply::EndStream {
-                    stream_id: DEFAULT_STREAM_ID,
+                    stream: DEFAULT_STREAM_ID,
                     origin_uri: self.origin_uri.clone(),
                     meta: None,
                 })

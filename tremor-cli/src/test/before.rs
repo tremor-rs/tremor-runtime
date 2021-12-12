@@ -153,10 +153,10 @@ fn default_min_await_secs() -> u64 {
 
 pub(crate) fn load_before(path: &Path) -> Result<Before> {
     let mut tags_data = slurp_string(path)?;
-    match simd_json::from_str(&mut tags_data) {
+    match serde_yaml::from_str(&mut tags_data) {
         Ok(s) => Ok(s),
         Err(e) => Err(Error::from(format!(
-            "Invalid `before.json` in path `{}`: {}",
+            "Invalid `before.yaml` in path `{}`: {}",
             path.to_string_lossy(),
             e
         ))),
@@ -177,7 +177,7 @@ impl BeforeController {
 
     pub(crate) async fn spawn(&mut self) -> Result<Option<TargetProcess>> {
         let root = &self.base;
-        let before_path = root.join("before.json");
+        let before_path = root.join("before.yaml");
         if before_path.exists() {
             let before_json = load_before(&before_path);
             match before_json {

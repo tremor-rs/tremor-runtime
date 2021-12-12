@@ -17,7 +17,8 @@ mod deployment;
 use crate::connectors::{self, ConnectorBuilder};
 use crate::errors::Result;
 use crate::QSIZE;
-use async_std::channel::bounded;
+use async_std::channel::{bounded, Sender};
+use async_std::prelude::*;
 use async_std::task::{self, JoinHandle};
 use deployment::{Deployment, DeploymentId};
 use hashbrown::HashMap;
@@ -72,13 +73,15 @@ pub(crate) enum ManagerMsg {
         /// the builder
         builder: Box<dyn ConnectorBuilder>,
     },
+    /// Initiate the Quiescence process
+    Drain(Sender<Result<()>>),
     /// stop this manager
     Stop,
 }
 use async_std::channel::Sender as AsyncSender;
 
 use self::connectors::{ConnectorType, KnownConnectors};
-pub(crate) type Sender = AsyncSender<ManagerMsg>;
+pub(crate) type ManagerSender = AsyncSender<ManagerMsg>;
 
 #[derive(Debug)]
 pub(crate) struct Manager {
@@ -90,7 +93,7 @@ pub(crate) struct Manager {
 }
 
 impl Manager {
-    pub fn start(mut self) -> (JoinHandle<Result<()>>, Sender) {
+    pub fn start(mut self) -> (JoinHandle<Result<()>>, ManagerSender) {
         let (tx, rx) = bounded(self.qsize);
         let system_h = task::spawn(async move {
             while let Ok(msg) = rx.recv().await {
@@ -128,18 +131,58 @@ impl Manager {
                     }
                     ManagerMsg::Stop => {
                         info!("Stopping Manager ...");
-
-                        let mut rxs = Vec::with_capacity(self.deployments.len());
-                        for (_, deployment) in self.deployments {
-                            let (tx, rx) = bounded(1);
-                            deployment.stop(tx).await?;
-                            rxs.push(rx);
+                        let num_deployments = self.deployments.len();
+                        if num_deployments > 0 {
+                            // send stop to each deployment
+                            let (tx, rx) = bounded(self.deployments.len());
+                            let mut expected_stops = self.deployments.len();
+                            for (_, deployment) in self.deployments {
+                                deployment.stop(tx.clone()).await?;
+                            }
+                            let h = task::spawn::<_, Result<()>>(async move {
+                                while expected_stops > 0 {
+                                    let res = rx.recv().await?;
+                                    if let Err(e) = res {
+                                        error!("Error during Stopping: {}", e);
+                                    }
+                                    expected_stops = expected_stops.saturating_sub(1);
+                                }
+                                Ok(())
+                            });
+                            h.timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT).await??;
                         }
-                        for rx in rxs {
-                            rx.recv().await??;
-                        }
-
                         break;
+                    }
+                    ManagerMsg::Drain(sender) => {
+                        let num_deployments = self.deployments.len();
+                        if num_deployments == 0 {
+                            sender.send(Ok(())).await?;
+                        } else {
+                            info!("Draining all Flows ...");
+                            let (tx, rx) = bounded(num_deployments);
+                            for (_, deployment) in &self.deployments {
+                                deployment.drain(tx.clone()).await?;
+                            }
+
+                            task::spawn::<_, Result<()>>(async move {
+                                let rx_futures =
+                                    std::iter::repeat_with(|| rx.recv()).take(num_deployments);
+                                for result in futures::future::join_all(rx_futures).await {
+                                    match result {
+                                        Err(_) => {
+                                            error!("Error receiving from Draining process.");
+                                        }
+                                        Ok(Err(e)) => {
+                                            error!("Error during Draining: {}", e);
+                                        }
+                                        Ok(Ok(())) => {}
+                                    }
+                                }
+                                info!("Flows drained.");
+                                sender.send(Ok(())).await?;
+                                Ok(())
+                            });
+                        }
                     }
                 }
             }
@@ -153,7 +196,7 @@ impl Manager {
 /// Tremor runtime
 #[derive(Clone, Debug)]
 pub struct World {
-    pub(crate) system: Sender,
+    pub(crate) system: ManagerSender,
     storage_directory: Option<String>,
 }
 
@@ -208,22 +251,38 @@ impl World {
         Ok((world, system_h))
     }
 
+    /// Drain the runtime
+    ///
+    /// # Errors
+    ///  * if the system failed to drain
+    pub async fn drain(&self, timeout: Duration) -> Result<()> {
+        let (tx, rx) = bounded(1);
+        self.system.send(ManagerMsg::Drain(tx)).await?;
+        match rx.recv().timeout(timeout).await {
+            Err(_) => {
+                warn!("Timeout draining all Flows after {}s", timeout.as_secs());
+                Ok(())
+            }
+            Ok(res) => res?,
+        }
+    }
+
     /// Stop the runtime
     ///
     /// # Errors
     ///  * if the system failed to stop
     pub async fn stop(&self, mode: ShutdownMode) -> Result<()> {
         match mode {
-            ShutdownMode::Graceful => self.system.send(ManagerMsg::Stop).await?,
+            ShutdownMode::Graceful => {
+                if let Err(e) = self.drain(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT).await {
+                    error!("Error draining all Flows: {}", e);
+                }
+            }
             ShutdownMode::Forceful => {}
         }
-        // if let Err(e) = self
-        //     .reg
-        //     .stop_all_bindings(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT)
-        //     .await
-        // {
-        //     error!("Error stopping all bindings: {}", e);
-        // }
+        if let Err(e) = self.system.send(ManagerMsg::Stop).await {
+            error!("Error stopping all Flows: {}", e);
+        }
         Ok(self.system.send(ManagerMsg::Stop).await?)
     }
 }

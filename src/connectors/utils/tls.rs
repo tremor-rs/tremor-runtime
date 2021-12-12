@@ -35,7 +35,7 @@ pub struct TLSServerConfig {
     key: PathBuf,
 }
 
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Debug, Default, Clone)]
 pub struct TLSClientConfig {
     pub(crate) cafile: Option<PathBuf>,
     pub(crate) domain: Option<String>,

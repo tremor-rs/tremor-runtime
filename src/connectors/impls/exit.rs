@@ -40,9 +40,6 @@ impl Connector for Exit {
     fn is_structured(&self) -> bool {
         true
     }
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(true)
-    }
 
     async fn create_sink(
         &mut self,
@@ -93,11 +90,11 @@ impl Sink for Exit {
                 };
                 // this should stop the whole server process
                 let world = self.world.clone();
-                let url = ctx.url().clone();
+                let alias = ctx.alias().to_string();
                 // we spawn this out into another task, so we don't block the sink loop handling control plane messages
                 task::spawn(async move {
                     if let Err(e) = world.stop(mode).await {
-                        error!("[Sink::{}] Error stopping Tremor: {}", &url, e);
+                        error!("[Sink::{}] Error stopping Tremor: {}", &alias, e);
                     }
                 });
                 self.done = true;
@@ -130,7 +127,7 @@ impl ConnectorBuilder for Builder {
 
     async fn from_config(
         &self,
-        _id: &TremorUrl,
+        _id: &str,
         _config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(Exit {

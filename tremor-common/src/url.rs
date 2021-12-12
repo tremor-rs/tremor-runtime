@@ -113,6 +113,7 @@ macro_rules! from_instance_id {
         ///
         /// # Errors
         /// . * If the given ids are invalid
+        #[must_use]
         pub fn $name(artefact_id: &str, instance_id: &str) -> Self {
             Self::from_instance($resource_type, artefact_id, instance_id)
         }
@@ -158,6 +159,7 @@ impl TremorUrl {
     ///
     /// # Errors
     ///  * if the passed ids aren't valid
+    #[must_use]
     pub fn from_instance(
         resource_type: ResourceType,
         artefact_id: &str,

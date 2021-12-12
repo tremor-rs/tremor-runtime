@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::time::Duration;
+
 ///! The UDP server will close the udp spcket on stop
 use crate::connectors::prelude::*;
 use async_std::net::UdpSocket;
+use async_std::prelude::*;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -22,7 +25,7 @@ pub struct Config {
     /// The port to listen on.
     pub port: u16,
     pub host: String,
-    // TCP: receive buffer size
+    // UDP: receive buffer size
     #[serde(default = "default_buf_size")]
     buf_size: usize,
 }
@@ -31,8 +34,6 @@ impl ConfigImpl for Config {}
 
 struct UdpServer {
     config: Config,
-    origin_uri: EventOriginUri,
-    src_runtime: Option<ChannelSourceRuntime>,
 }
 
 #[derive(Debug, Default)]
@@ -45,77 +46,20 @@ impl ConnectorBuilder for Builder {
     }
     async fn from_config(
         &self,
-        _id: &TremorUrl,
+        id: &str,
         raw_config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         if let Some(raw) = raw_config {
             let config = Config::new(raw)?;
-            let origin_uri = EventOriginUri {
-                scheme: "udp-server".to_string(),
-                host: config.host.clone(),
-                port: Some(config.port),
-                path: vec![],
-            };
-            Ok(Box::new(UdpServer {
-                config,
-                origin_uri,
-                src_runtime: None,
-            }))
+            Ok(Box::new(UdpServer { config }))
         } else {
-            Err(ErrorKind::MissingConfiguration(String::from("udp-server")).into())
+            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
-    }
-}
-
-struct UdpReader {
-    socket: UdpSocket,
-    buffer: Vec<u8>,
-    origin_uri: EventOriginUri,
-}
-
-#[async_trait::async_trait]
-impl StreamReader for UdpReader {
-    async fn read(&mut self, stream: u64) -> Result<SourceReply> {
-        let bytes_read = self.socket.recv(&mut self.buffer).await?;
-        if bytes_read == 0 {
-            Ok(SourceReply::EndStream {
-                origin_uri: self.origin_uri.clone(),
-                meta: None,
-                stream_id: stream,
-            })
-        } else {
-            Ok(SourceReply::Data {
-                origin_uri: self.origin_uri.clone(),
-                stream,
-                meta: None,
-                // ALLOW: we know bytes_read is smaller than or equal buf_size
-                data: self.buffer[0..bytes_read].to_vec(),
-                port: None,
-            })
-        }
-    }
-
-    async fn on_done(&mut self, _stream: u64) -> StreamDone {
-        StreamDone::ConnectorClosed
     }
 }
 
 #[async_trait::async_trait()]
 impl Connector for UdpServer {
-    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        let reader = UdpReader {
-            socket: UdpSocket::bind((self.config.host.as_str(), self.config.port)).await?,
-            origin_uri: self.origin_uri.clone(),
-            buffer: vec![0_u8; self.config.buf_size],
-        };
-        self.src_runtime
-            .as_ref()
-            .ok_or("source channel not initialized")?
-            .register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
-
-        Ok(true)
-    }
-
     fn default_codec(&self) -> &str {
         "json"
     }
@@ -125,9 +69,88 @@ impl Connector for UdpServer {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = ChannelSource::new(source_context.clone(), builder.qsize());
-        self.src_runtime = Some(source.runtime());
-        let addr = builder.spawn(source, source_context)?;
-        Ok(Some(addr))
+        let source = UdpServerSource::new(self.config.clone());
+        builder.spawn(source, source_context).map(Some)
+    }
+}
+
+struct UdpServerSource {
+    config: Config,
+    origin_uri: EventOriginUri,
+    listener: Option<UdpSocket>,
+    buffer: Vec<u8>,
+}
+
+impl UdpServerSource {
+    const READ_TIMEOUT: Duration = Duration::from_millis(100);
+
+    fn new(config: Config) -> Self {
+        let buffer = vec![0; config.buf_size];
+        let origin_uri = EventOriginUri {
+            scheme: "udp-server".to_string(),
+            host: config.host.clone(),
+            port: Some(config.port),
+            path: vec![],
+        };
+        Self {
+            config,
+            origin_uri,
+            listener: None,
+            buffer,
+        }
+    }
+}
+
+#[async_trait::async_trait]
+impl Source for UdpServerSource {
+    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+        let listener = UdpSocket::bind((self.config.host.as_str(), self.config.port)).await?;
+        self.listener = Some(listener);
+        Ok(true)
+    }
+
+    async fn pull_data(&mut self, _pull_id: u64, ctx: &SourceContext) -> Result<SourceReply> {
+        let socket = self
+            .listener
+            .as_ref()
+            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
+        match socket
+            .recv(&mut self.buffer)
+            .timeout(Self::READ_TIMEOUT)
+            .await
+        {
+            Ok(Ok(bytes_read)) => {
+                if bytes_read == 0 {
+                    Ok(SourceReply::EndStream {
+                        origin_uri: self.origin_uri.clone(),
+                        meta: None,
+                        stream: DEFAULT_STREAM_ID,
+                    })
+                } else {
+                    Ok(SourceReply::Data {
+                        origin_uri: self.origin_uri.clone(),
+                        stream: DEFAULT_STREAM_ID,
+                        meta: None,
+                        // ALLOW: we know bytes_read is smaller than or equal buf_size
+                        data: self.buffer[0..bytes_read].to_vec(),
+                        port: None,
+                    })
+                }
+            }
+            Ok(Err(e)) => {
+                error!(
+                    "{} Error receiving from socket: {}. Initiating reconnect...",
+                    ctx, &e
+                );
+                self.listener = None;
+                ctx.notifier().notify().await?;
+                return Err(e.into());
+            }
+            Err(_) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
+        }
+    }
+
+    fn is_transactional(&self) -> bool {
+        false
     }
 }

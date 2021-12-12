@@ -174,6 +174,11 @@ tonic = { version = "0.5.2", default-features = false, features = [
 ] }
 tremor-otelapis = { version = "0.2.2" }
 
+# aws-s3
+aws-sdk-s3 = "0.2.0" 
+aws-types = "0.2.0" 
+
+
 # gcp
 googapis = { version = "0.5", default-features = false, features = [
   "google-pubsub-v1",
@@ -211,6 +216,9 @@ es-integration = []
 [patch.crates-io]
 rust-bert = { git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989' }
 rust_tokenizers = { git = 'https://github.com/mfelsche/rust-tokenizers.git', rev = '5a7860d' }
+# FIXME: remove when unexpected breakage in `AlignedBuf` is fixed either
+# upstream or in the connectors branch.
+simd-json = { git = "https://github.com/simd-lite/simd-json.git", tag = "v0.4.8" }
 
 # for use during debian packaging, via cargo-deb
 # https://github.com/mmstick/cargo-deb#packagemetadatadeb-options

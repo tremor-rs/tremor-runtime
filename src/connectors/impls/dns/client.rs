@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::connectors::prelude::*;
-use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
+use async_std::channel::{bounded, Receiver, Sender};
 use async_std_resolver::{
     lookup::Lookup,
     proto::{
@@ -22,16 +22,7 @@ use async_std_resolver::{
     },
     resolver_from_system_conf, AsyncStdResolver,
 };
-use beef::Cow;
 use std::boxed::Box;
-
-type DnsMesssage = (Cow<'static, str>, EventPayload);
-
-pub struct DnsClient {
-    tx: Sender<DnsMesssage>,
-    rx: Receiver<DnsMesssage>,
-    origin_uri: EventOriginUri,
-}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -44,18 +35,156 @@ impl ConnectorBuilder for Builder {
 
     async fn from_config(
         &self,
-        _id: &TremorUrl,
+        _id: &str,
         _raw_config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         let (tx, rx) = bounded(128);
+        Ok(Box::new(DnsClient { tx, rx }))
+    }
+}
+
+pub struct DnsClient {
+    tx: Sender<SourceReply>,
+    rx: Receiver<SourceReply>,
+}
+
+#[async_trait::async_trait()]
+impl Connector for DnsClient {
+    fn is_structured(&self) -> bool {
+        true
+    }
+    fn default_codec(&self) -> &str {
+        "json"
+    }
+
+    async fn create_source(
+        &mut self,
+        source_context: SourceContext,
+        builder: SourceManagerBuilder,
+    ) -> Result<Option<SourceAddr>> {
+        // this is a dumb source that is simply forwarding `SourceReply`s it receives from the sink
+        let source = ChannelSource::from_channel(self.tx.clone(), self.rx.clone());
+        builder.spawn(source, source_context).map(Some)
+    }
+
+    async fn create_sink(
+        &mut self,
+        sink_context: SinkContext,
+        builder: SinkManagerBuilder,
+    ) -> Result<Option<SinkAddr>> {
+        // issues DNS queries and forwards the responses to the source
+        let s = DnsSink::new(self.tx.clone());
+        builder.spawn(s, sink_context).map(Some)
+    }
+}
+
+struct DnsSink {
+    // for forwarding DNS responses
+    tx: Sender<SourceReply>,
+    resolver: Option<AsyncStdResolver>,
+    origin_uri: EventOriginUri,
+}
+
+impl DnsSink {
+    fn new(tx: Sender<SourceReply>) -> Self {
         let origin_uri = EventOriginUri {
             scheme: "tremor-dns".to_string(),
-            host: "localhost".to_string(),
+            host: hostname(),
             port: None,
             path: Vec::new(),
         };
+        Self {
+            tx,
+            resolver: None,
+            origin_uri,
+        }
+    }
+    async fn query<'event>(
+        &self,
+        name: &str,
+        record_type: Option<RecordType>,
+        correlation: Option<&Value<'event>>,
+    ) -> Result<EventPayload> {
+        // check if we have a resolver
+        let resolver = self
+            .resolver
+            .as_ref()
+            .ok_or_else(|| Error::from("No DNS resolver available"))?;
 
-        Ok(Box::new(DnsClient { tx, rx, origin_uri }))
+        let data = if let Some(record_type) = record_type {
+            // type lookup
+            lookup_to_value(
+                &resolver
+                    .lookup(name, record_type, DnsRequestOptions::default())
+                    .await?,
+            )
+        } else {
+            // generic lookup
+            lookup_to_value(resolver.lookup_ip(name).await?.as_lookup())
+        };
+        let meta = correlation
+            .map(|c| literal!({ "correlation": c.clone_static() }))
+            .unwrap_or_else(|| Value::object());
+        let e = (data, meta).into();
+
+        Ok(e)
+    }
+}
+#[async_trait::async_trait]
+impl Sink for DnsSink {
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+        self.resolver = Some(resolver_from_system_conf().await?);
+        Ok(true)
+    }
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        event: Event,
+        ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+        _start: u64,
+    ) -> Result<SinkReply> {
+        for (_, m) in event.value_meta_iter() {
+            // verify incoming request and extract DNS query params
+            let dns_meta = m.get("dns");
+            let lookup = dns_meta.get("lookup").ok_or("Invalid DNS request")?;
+            let name = lookup
+                .as_str()
+                .or_else(|| lookup.get_str("name"))
+                .ok_or("Invalid DNS request: `dns.lookup` missing")?;
+            let record_type = lookup.get_str("type").map(str_to_record_type).transpose()?;
+            // issue DNS query
+            let (port, payload) = match self.query(name, record_type, m.get("correlation")).await {
+                Ok(payload) => (OUT, payload),
+                Err(err) => {
+                    error!("{} DNS Error: {}", &ctx, err);
+                    // TODO: check for errors that require a reconnect
+                    let data = literal!({
+                        "request": m.get("dns").map(Value::clone_static).unwrap_or_default(),
+                        "error": format!("{}", err),
+                    });
+                    let meta = m
+                        .get("correlation")
+                        .map(|c| literal!({ "correlation": c.clone_static() }))
+                        .unwrap_or_else(|| Value::object());
+
+                    let error_e = (data, meta).into();
+                    (ERR, error_e)
+                }
+            };
+            let source_reply = SourceReply::Structured {
+                origin_uri: self.origin_uri.clone(),
+                payload,
+                stream: DEFAULT_STREAM_ID,
+                port: Some(port),
+            };
+            self.tx.send(source_reply).await?
+        }
+        Ok(SinkReply::NONE)
+    }
+
+    fn auto_ack(&self) -> bool {
+        true
     }
 }
 
@@ -122,149 +251,4 @@ fn lookup_to_value(l: &Lookup) -> Value<'static> {
             Some(v)
         })
         .collect()
-}
-
-struct DnsSource {
-    rx: Receiver<DnsMesssage>,
-    origin_uri: EventOriginUri,
-}
-
-#[async_trait::async_trait()]
-impl Source for DnsSource {
-    fn is_transactional(&self) -> bool {
-        false
-    }
-    async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        match self.rx.try_recv() {
-            Ok((port, payload)) => Ok(SourceReply::Structured {
-                origin_uri: self.origin_uri.clone(),
-                stream: 0,
-                payload,
-                port: Some(port),
-            }),
-            Err(TryRecvError::Empty) => {
-                // TODO: configure pull interval in connector config?
-                Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
-            }
-            Err(e) => Err(e.into()),
-        }
-    }
-}
-
-struct DnsSink {
-    tx: Sender<DnsMesssage>,
-    resolver: AsyncStdResolver,
-}
-
-impl DnsSink {
-    async fn query<'event>(
-        &self,
-        request: Option<&Value<'event>>,
-        correlation: Option<&Value<'event>>,
-    ) -> Result<EventPayload> {
-        let lookup = request.ok_or("Invalid DNS request")?;
-        let name = lookup
-            .as_str()
-            .or_else(|| lookup.get_str("name"))
-            .ok_or("Invaliud DNS request: `dns.lookup` missing")?;
-
-        let data = if let Some(record_type) =
-            lookup.get_str("type").map(str_to_record_type).transpose()?
-        {
-            // type lookup
-            lookup_to_value(
-                &self
-                    .resolver
-                    .lookup(name, record_type, DnsRequestOptions::default())
-                    .await?,
-            )
-        } else {
-            // generic lookup
-            lookup_to_value(self.resolver.lookup_ip(name).await?.as_lookup())
-        };
-        let meta = correlation
-            .map(|c| literal!({ "correlation": c.clone_static() }))
-            .unwrap_or_else(|| Value::object());
-        let e = (data, meta).into();
-
-        Ok(e)
-    }
-}
-#[async_trait::async_trait]
-impl Sink for DnsSink {
-    async fn on_event(
-        &mut self,
-        _input: &str,
-        event: Event,
-        _ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
-        _start: u64,
-    ) -> Result<SinkReply> {
-        for (_, m) in event.value_meta_iter() {
-            match self
-                .query(m.get("dns").get("lookup"), m.get("correlation"))
-                .await
-            {
-                Ok(e) => self.tx.send((OUT, e)).await?,
-                Err(err) => {
-                    error!("DNS Error: {}", err);
-                    let data = literal!({
-                        "request": m.get("dns").map(Value::clone_static).unwrap_or_default(),
-                        "error": format!("{}", err),
-                    });
-                    let meta = m
-                        .get("correlation")
-                        .map(|c| literal!({ "correlation": c.clone_static() }))
-                        .unwrap_or_else(|| Value::object());
-
-                    let error_e = (data, meta).into();
-
-                    self.tx.send((ERR, error_e)).await?;
-                }
-            }
-        }
-        Ok(SinkReply::default())
-    }
-
-    fn auto_ack(&self) -> bool {
-        true
-    }
-}
-#[async_trait::async_trait()]
-impl Connector for DnsClient {
-    fn is_structured(&self) -> bool {
-        true
-    }
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(true)
-    }
-
-    fn default_codec(&self) -> &str {
-        "json"
-    }
-
-    async fn create_source(
-        &mut self,
-        source_context: SourceContext,
-        builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
-        let s = DnsSource {
-            rx: self.rx.clone(),
-            origin_uri: self.origin_uri.clone(),
-        };
-        builder.spawn(s, source_context).map(Some)
-    }
-
-    async fn create_sink(
-        &mut self,
-        sink_context: SinkContext,
-        builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
-        let resolver = resolver_from_system_conf().await?;
-        let s = DnsSink {
-            resolver,
-            tx: self.tx.clone(),
-        };
-        builder.spawn(s, sink_context).map(Some)
-    }
 }

@@ -1,6 +1,7 @@
 define flow main
 flow
   use troy::pipelines;
+  use troy::connectors;
 
   define connector cb_in from cb
   with
@@ -21,8 +22,8 @@ flow
   create connector stdio;
   create pipeline passthrough from pipelines::passthrough;
  
-  connect /connector/cb_in/cb_in/out to /pipeline/passthrough/passthrough/in;
-  connect /pipeline/passthrough/passthrough/out to /connector/stdio/stdio/in;
+  connect /connector/cb_in/out to /pipeline/passthrough/in;
+  connect /pipeline/passthrough/out to /connector/stdio/in;
 end;
 
 deploy flow main;

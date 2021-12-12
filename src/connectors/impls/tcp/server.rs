@@ -13,7 +13,10 @@
 // limitations under the License.
 use super::{TcpReader, TcpWriter};
 use crate::connectors::prelude::*;
+use crate::connectors::sink::channel_sink::ChannelSinkMsg;
 use crate::connectors::utils::tls::{load_server_config, TLSServerConfig};
+use crate::errors::Kind as ErrorKind;
+use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use async_std::net::TcpListener;
 use async_std::task::{self, JoinHandle};
 use async_tls::TlsAcceptor;
@@ -25,7 +28,7 @@ use std::sync::Arc;
 
 const URL_SCHEME: &str = "tremor-tcp-server";
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     // kept as a str, so it is re-resolved upon each connect
@@ -56,12 +59,10 @@ impl From<SocketAddr> for ConnectionMeta {
 
 #[allow(clippy::module_name_repetitions)]
 pub struct TcpServer {
-    url: TremorUrl,
     config: Config,
-    accept_task: Option<JoinHandle<Result<()>>>,
-    sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
-    source_runtime: Option<ChannelSourceRuntime>,
     tls_server_config: Option<ServerConfig>,
+    sink_tx: Sender<ChannelSinkMsg<ConnectionMeta>>,
+    sink_rx: Receiver<ChannelSinkMsg<ConnectionMeta>>,
 }
 
 #[derive(Debug, Default)]
@@ -74,7 +75,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn from_config(
         &self,
-        id: &TremorUrl,
+        id: &str,
         raw_config: &Option<OpConfig>,
     ) -> crate::errors::Result<Box<dyn Connector>> {
         if let Some(raw_config) = raw_config {
@@ -85,16 +86,15 @@ impl ConnectorBuilder for Builder {
             } else {
                 None
             };
+            let (sink_tx, sink_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
             Ok(Box::new(TcpServer {
-                url: id.clone(),
                 config,
-                accept_task: None,  // not yet started
-                sink_runtime: None, // replaced in create_sink()
-                source_runtime: None,
                 tls_server_config,
+                sink_tx,
+                sink_rx,
             }))
         } else {
-            Err(crate::errors::ErrorKind::MissingConfiguration(String::from("TcpServer")).into())
+            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
     }
 }
@@ -113,24 +113,18 @@ fn resolve_connection_meta(meta: &Value) -> Option<ConnectionMeta> {
 
 #[async_trait::async_trait()]
 impl Connector for TcpServer {
-    async fn on_stop(&mut self, _ctx: &ConnectorContext) -> Result<()> {
-        if let Some(accept_task) = self.accept_task.take() {
-            // stop acceptin' new connections
-            accept_task.cancel().await;
-        }
-        Ok(())
-    }
-
     async fn create_source(
         &mut self,
         ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = ChannelSource::new(ctx.clone(), builder.qsize());
-        self.source_runtime = Some(source.runtime());
-        let addr = builder.spawn(source, ctx)?;
-
-        Ok(Some(addr))
+        let sink_runtime = ChannelSinkRuntime::new(self.sink_tx.clone());
+        let source = TcpServerSource::new(
+            self.config.clone(),
+            self.tls_server_config.clone(),
+            sink_runtime,
+        );
+        builder.spawn(source, ctx).map(Some)
     }
 
     async fn create_sink(
@@ -138,26 +132,54 @@ impl Connector for TcpServer {
         ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink =
-            ChannelSink::new_no_meta(builder.qsize(), resolve_connection_meta, builder.reply_tx());
-        self.sink_runtime = Some(sink.runtime());
-        let addr = builder.spawn(sink, ctx)?;
-        Ok(Some(addr))
+        // we use this constructor as we need the sink channel already when creating the source
+        let sink = ChannelSink::from_channel_no_meta(
+            resolve_connection_meta,
+            builder.reply_tx(),
+            self.sink_tx.clone(),
+            self.sink_rx.clone(),
+        );
+        builder.spawn(sink, ctx).map(Some)
     }
 
-    #[allow(clippy::too_many_lines)]
-    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        let path = vec![self.config.port.to_string()];
-        let accept_url = self.url.clone();
+    fn default_codec(&self) -> &str {
+        "json"
+    }
+}
 
-        let source_runtime = self
-            .source_runtime
-            .clone()
-            .ok_or("Source runtime not initialized")?;
-        let sink_runtime = self
-            .sink_runtime
-            .clone()
-            .ok_or("sink runtime not initialized")?;
+struct TcpServerSource {
+    config: Config,
+    tls_server_config: Option<ServerConfig>,
+    accept_task: Option<JoinHandle<Result<()>>>,
+    connection_rx: Receiver<SourceReply>,
+    runtime: ChannelSourceRuntime,
+    sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
+}
+
+impl TcpServerSource {
+    fn new(
+        config: Config,
+        tls_server_config: Option<ServerConfig>,
+        sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
+    ) -> Self {
+        let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        let runtime = ChannelSourceRuntime::new(tx);
+        Self {
+            config,
+            tls_server_config,
+            accept_task: None,
+            connection_rx: rx,
+            runtime,
+            sink_runtime,
+        }
+    }
+}
+#[async_trait::async_trait()]
+impl Source for TcpServerSource {
+    #[allow(clippy::too_many_lines)]
+    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+        let path = vec![self.config.port.to_string()];
+        let accept_ctx = ctx.clone();
         let buf_size = self.config.buf_size;
 
         // cancel last accept task if necessary, this will drop the previous listener
@@ -170,17 +192,16 @@ impl Connector for TcpServer {
         let ctx = ctx.clone();
         let tls_server_config = self.tls_server_config.clone();
 
+        let runtime = self.runtime.clone();
+        let sink_runtime = self.sink_runtime.clone();
         // accept task
         self.accept_task = Some(task::spawn(async move {
             let mut stream_id_gen = StreamIdGen::default();
             while let (true, Ok((stream, peer_addr))) = (
-                ctx.quiescence_beacon.continue_reading().await,
+                ctx.quiescence_beacon().continue_reading().await,
                 listener.accept().await,
             ) {
-                debug!(
-                    "[Connector::{}] new connection from {}",
-                    &accept_url, peer_addr
-                );
+                debug!("{} new connection from {}", &accept_ctx, peer_addr);
                 let stream_id: u64 = stream_id_gen.next_stream_id();
                 let connection_meta: ConnectionMeta = peer_addr.into();
                 // Async<T> allows us to read in one thread and write in another concurrently - see its documentation
@@ -209,11 +230,11 @@ impl Connector for TcpServer {
                         tls_read_stream,
                         stream.clone(),
                         vec![0; buf_size],
-                        ctx.url.clone(),
+                        ctx.alias.clone(),
                         origin_uri.clone(),
                         meta,
                     );
-                    source_runtime.register_stream_reader(stream_id, &ctx, tls_reader);
+                    runtime.register_stream_reader(stream_id, &ctx, tls_reader);
 
                     sink_runtime.register_stream_writer(
                         stream_id,
@@ -232,11 +253,11 @@ impl Connector for TcpServer {
                     let tcp_reader = TcpReader::new(
                         stream.clone(),
                         vec![0; buf_size],
-                        ctx.url.clone(),
+                        ctx.alias.clone(),
                         origin_uri.clone(),
                         meta,
                     );
-                    source_runtime.register_stream_reader(stream_id, &ctx, tcp_reader);
+                    runtime.register_stream_reader(stream_id, &ctx, tcp_reader);
 
                     sink_runtime.register_stream_writer(
                         stream_id,
@@ -249,14 +270,33 @@ impl Connector for TcpServer {
 
             // notify connector task about disconnect
             // of the listening socket
-            ctx.notifier.notify().await?;
+            ctx.notifier().notify().await?;
             Ok(())
         }));
 
         Ok(true)
     }
 
-    fn default_codec(&self) -> &str {
-        "json"
+    async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+        match self.connection_rx.try_recv() {
+            Ok(reply) => Ok(reply),
+            Err(TryRecvError::Empty) => {
+                // TODO: configure pull interval in connector config?
+                Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
+            }
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
+        if let Some(accept_task) = self.accept_task.take() {
+            // stop acceptin' new connections
+            accept_task.cancel().await;
+        }
+        Ok(())
+    }
+
+    fn is_transactional(&self) -> bool {
+        false
     }
 }

@@ -71,11 +71,7 @@ pub(crate) struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
-    async fn from_config(
-        &self,
-        id: &TremorUrl,
-        config: &Option<OpConfig>,
-    ) -> Result<Box<dyn Connector>> {
+    async fn from_config(&self, id: &str, config: &Option<OpConfig>) -> Result<Box<dyn Connector>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let mut source_data_file = file::open(&config.source)?;
@@ -125,7 +121,7 @@ impl ConnectorBuilder for Builder {
                     iterations: 0,
                 },
                 origin_uri,
-                onramp_id: id.clone(),
+                onramp_id: id.to_string(),
             }))
         } else {
             Err("Missing config for blaster onramp".into())
@@ -160,7 +156,7 @@ impl Acc {
 #[derive(Clone)]
 pub struct Bench {
     pub config: Config,
-    onramp_id: TremorUrl,
+    onramp_id: String,
     data: Vec<u8>,
     acc: Acc,
     origin_uri: EventOriginUri,
@@ -168,10 +164,6 @@ pub struct Bench {
 
 #[async_trait::async_trait]
 impl Connector for Bench {
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(true)
-    }
-
     async fn create_source(
         &mut self,
         source_context: SourceContext,
@@ -184,6 +176,7 @@ impl Connector for Bench {
             iterations: self.config.iters,
             interval_ns: self.config.interval.map(Duration::from_nanos),
             finished: false,
+            did_sleep: false,
         };
         builder.spawn(s, source_context).map(Some)
     }
@@ -210,34 +203,45 @@ struct Blaster {
     iterations: Option<usize>,
     interval_ns: Option<Duration>,
     finished: bool,
+    did_sleep: bool,
 }
 
 #[async_trait::async_trait]
 impl Source for Blaster {
     async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        // TODO better sleep perhaps
-        if let Some(interval) = self.interval_ns {
-            async_std::task::sleep(interval).await;
+        if self.finished {
+            return Ok(SourceReply::Empty(100));
         }
+        if !self.did_sleep {
+            // TODO better sleep perhaps
+            if let Some(interval) = self.interval_ns {
+                let interval = interval.as_nanos();
+                let ns = (interval % 1000000) as u64;
+                let ms = (interval / 1000000) as u64;
+                async_std::task::sleep(Duration::from_nanos(ns)).await;
+                if ms > 0 {
+                    self.did_sleep = true;
+                    return Ok(SourceReply::Empty(ms));
+                }
+            }
+        }
+        self.did_sleep = false;
         if Some(self.acc.iterations) == self.iterations {
             self.finished = true;
             return Ok(SourceReply::EndStream {
                 origin_uri: self.origin_uri.clone(),
-                stream_id: DEFAULT_STREAM_ID,
+                stream: DEFAULT_STREAM_ID,
                 meta: None,
             });
         };
-        if self.finished {
-            Ok(SourceReply::Empty(100))
-        } else {
-            Ok(SourceReply::Data {
-                origin_uri: self.origin_uri.clone(),
-                data: self.acc.next(),
-                meta: None,
-                stream: DEFAULT_STREAM_ID,
-                port: None,
-            })
-        }
+
+        Ok(SourceReply::Data {
+            origin_uri: self.origin_uri.clone(),
+            data: self.acc.next(),
+            meta: None,
+            stream: DEFAULT_STREAM_ID,
+            port: None,
+        })
     }
 
     fn is_transactional(&self) -> bool {

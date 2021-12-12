@@ -57,7 +57,7 @@ impl From<SocketAddr> for ConnectionMeta {
 
 #[allow(clippy::module_name_repetitions)]
 pub struct WsServer {
-    url: TremorUrl,
+    alias: String,
     config: Config,
     accept_task: Option<JoinHandle<Result<()>>>,
     sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
@@ -75,7 +75,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn from_config(
         &self,
-        id: &TremorUrl,
+        id: &str,
         raw_config: &Option<OpConfig>,
     ) -> crate::errors::Result<Box<dyn Connector>> {
         if let Some(raw_config) = raw_config {
@@ -88,7 +88,7 @@ impl ConnectorBuilder for Builder {
             };
 
             Ok(Box::new(WsServer {
-                url: id.clone(),
+                alias: id.to_string(),
                 config,
                 accept_task: None,  // not yet started
                 sink_runtime: None, // replaced in create_sink()
@@ -143,7 +143,7 @@ impl Connector for WsServer {
         ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = ChannelSource::new(ctx.clone(), builder.qsize());
+        let source = ChannelSource::new(builder.qsize());
         self.source_runtime = Some(source.runtime());
         let addr = builder.spawn(source, ctx)?;
 
@@ -169,7 +169,7 @@ impl Connector for WsServer {
     #[allow(clippy::too_many_lines)]
     async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         let path = vec![self.config.port.to_string()];
-        let accept_url = self.url.clone();
+        let accept_url = self.alias.clone();
 
         let source_runtime = self
             .source_runtime
@@ -232,8 +232,7 @@ impl Connector for WsServer {
                         ws_writer,
                     );
 
-                    let ws_reader =
-                        WsReader::new(ws_read, ctx.url.clone(), origin_uri.clone(), meta);
+                    let ws_reader = WsReader::new(ws_read, origin_uri.clone(), meta);
                     source_runtime.register_stream_reader(stream_id, &ctx, ws_reader);
                 } else {
                     let ws_stream = accept_async(tcp_stream).await?;
@@ -245,8 +244,7 @@ impl Connector for WsServer {
                     let (ws_write, ws_read) = ws_stream.split();
 
                     let meta = ctx.meta(WsServer::meta(peer_addr, false));
-                    let ws_reader =
-                        WsReader::new(ws_read, ctx.url.clone(), origin_uri.clone(), meta);
+                    let ws_reader = WsReader::new(ws_read, origin_uri.clone(), meta);
 
                     let ws_writer = WsWriter::new(ws_write);
                     source_runtime.register_stream_reader(stream_id, &ctx, ws_reader);

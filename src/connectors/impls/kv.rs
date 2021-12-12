@@ -20,8 +20,8 @@ use crate::{
     },
     connectors::prelude::*,
 };
-use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
-use beef::Cow;
+use async_std::channel::{bounded, Receiver, Sender};
+use async_std::path::PathBuf;
 use serde::Deserialize;
 use sled::{CompareAndSwapError, Db, IVec};
 use std::{boxed::Box, convert::TryFrom};
@@ -167,14 +167,6 @@ pub struct Config {
 
 impl ConfigImpl for Config {}
 
-pub struct Kv {
-    sink_url: TremorUrl,
-    event_origin_uri: EventOriginUri,
-    config: Config,
-    rx: Receiver<KvMesssage>,
-    tx: Sender<KvMesssage>,
-}
-
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
@@ -183,69 +175,86 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "kv".into()
     }
-    async fn from_config(
-        &self,
-        id: &TremorUrl,
-        config: &Option<OpConfig>,
-    ) -> Result<Box<dyn Connector>> {
+    async fn from_config(&self, id: &str, config: &Option<OpConfig>) -> Result<Box<dyn Connector>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
+            if !PathBuf::from(&config.dir).is_dir().await {
+                return Err(ErrorKind::InvalidConfiguration(
+                    id.to_string(),
+                    "Invalid `dir`. Not a directory or not accessible.".to_string(),
+                )
+                .into());
+            }
 
-            let event_origin_uri = EventOriginUri {
-                scheme: "tremor-kv".to_string(),
-                host: "localhost".to_string(),
-                port: None,
-                path: config.dir.split('/').map(ToString::to_string).collect(),
-            };
-            let (tx, rx) = bounded(128);
-            Ok(Box::new(Kv {
-                sink_url: id.clone(),
-                event_origin_uri,
-                config,
-                tx,
-                rx,
-            }))
+            let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+            Ok(Box::new(Kv { config, tx, rx }))
         } else {
             Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
     }
 }
 
-type KvMesssage = (Cow<'static, str>, EventPayload);
+/// Key value store connector
+///
+/// Receiving commands via its sink and emitting responses to those commands via its source.
+pub struct Kv {
+    config: Config,
+    rx: Receiver<SourceReply>,
+    tx: Sender<SourceReply>,
+}
+
+#[async_trait::async_trait]
+impl Connector for Kv {
+    fn is_structured(&self) -> bool {
+        true
+    }
+
+    async fn create_source(
+        &mut self,
+        source_context: SourceContext,
+        builder: SourceManagerBuilder,
+    ) -> Result<Option<SourceAddr>> {
+        let source = ChannelSource::from_channel(self.tx.clone(), self.rx.clone());
+        builder.spawn(source, source_context).map(Some)
+    }
+
+    async fn create_sink(
+        &mut self,
+        sink_context: SinkContext,
+        builder: SinkManagerBuilder,
+    ) -> Result<Option<SinkAddr>> {
+        let db = sled::open(&self.config.dir)?;
+        let codec = Json::default();
+        let origin_uri = EventOriginUri {
+            scheme: "tremor-kv".to_string(),
+            host: hostname(),
+            port: None,
+            path: self
+                .config
+                .dir
+                .split('/')
+                .map(ToString::to_string)
+                .collect(),
+        };
+        let s = KvSink {
+            db,
+            tx: self.tx.clone(),
+            codec,
+            origin_uri,
+        };
+        builder.spawn(s, sink_context).map(Some)
+    }
+
+    fn default_codec(&self) -> &str {
+        "json-sorted"
+    }
+}
 
 struct KvSink {
-    tx: Sender<KvMesssage>,
     db: Db,
-    idgen: EventIdGenerator,
+    tx: Sender<SourceReply>,
     codec: Json<Sorted>,
-    url: TremorUrl,
-}
-
-struct KvSource {
-    rx: Receiver<KvMesssage>,
     origin_uri: EventOriginUri,
-}
-
-#[async_trait::async_trait()]
-impl Source for KvSource {
-    fn is_transactional(&self) -> bool {
-        false
-    }
-    async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        match self.rx.try_recv() {
-            Ok((port, payload)) => Ok(SourceReply::Structured {
-                origin_uri: self.origin_uri.clone(),
-                stream: 0,
-                payload,
-                port: Some(port),
-            }),
-            Err(TryRecvError::Empty) => {
-                // TODO: configure pull interval in connector config?
-                Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
-            }
-            Err(e) => Err(e.into()),
-        }
-    }
 }
 
 impl KvSink {
@@ -325,7 +334,7 @@ impl Sink for KvSink {
         &mut self,
         _input: &str,
         event: Event,
-        _ctx: &SinkContext,
+        ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
@@ -346,23 +355,22 @@ impl Sink for KvSink {
             match executed {
                 Ok(res) => {
                     for (data, mut meta) in res {
-                        let mut id = self.idgen.next_id();
-                        id.track(&event.id);
-
                         if let Some(correlation) = correlation {
                             meta.try_insert("correlation", correlation.clone_static());
                         }
-
-                        let e = (data, meta).into();
-                        if let Err(e) = self.tx.send((OUT, e)).await {
-                            error!("[Sink::{}], Faild to send to source: {}", self.url, e);
+                        let reply = SourceReply::Structured {
+                            origin_uri: self.origin_uri.clone(),
+                            payload: (data, meta).into(),
+                            stream: DEFAULT_STREAM_ID,
+                            port: Some(OUT),
+                        };
+                        if let Err(e) = self.tx.send(reply).await {
+                            error!("{}, Failed to send to source: {}", &ctx, e);
                         };
                     }
                 }
                 Err((op, key, e)) => {
                     // send ERR response and log err
-                    let mut id = self.idgen.next_id();
-                    id.track(&event.id);
                     let mut meta = literal!({
                         "error": e.to_string(),
                         "kv": op.map(|op| literal!({ "op": op, "key": key }))
@@ -370,9 +378,14 @@ impl Sink for KvSink {
                     if let Some(correlation) = correlation {
                         meta.try_insert("correlation", correlation.clone_static());
                     }
-                    let e = ((), meta).into();
-                    if let Err(e) = self.tx.send((ERR, e)).await {
-                        error!("[Sink::{}], Faild to send to source: {}", self.url, e);
+                    let reply = SourceReply::Structured {
+                        origin_uri: self.origin_uri.clone(),
+                        payload: ((), meta).into(),
+                        stream: DEFAULT_STREAM_ID,
+                        port: Some(ERR),
+                    };
+                    if let Err(e) = self.tx.send(reply).await {
+                        error!("{}, Failed to send to source: {}", &ctx, e);
                     };
 
                     r = SinkReply::FAIL;
@@ -383,50 +396,5 @@ impl Sink for KvSink {
     }
     fn auto_ack(&self) -> bool {
         false
-    }
-}
-
-#[async_trait::async_trait]
-impl Connector for Kv {
-    fn is_structured(&self) -> bool {
-        true
-    }
-
-    async fn create_source(
-        &mut self,
-        source_context: SourceContext,
-        builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
-        let s = KvSource {
-            rx: self.rx.clone(),
-            origin_uri: self.event_origin_uri.clone(),
-        };
-        builder.spawn(s, source_context).map(Some)
-    }
-
-    async fn create_sink(
-        &mut self,
-        sink_context: SinkContext,
-        builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
-        let db = sled::open(&self.config.dir)?;
-        let idgen = EventIdGenerator::default();
-        let codec = Json::default();
-        let s = KvSink {
-            db,
-            tx: self.tx.clone(),
-            idgen,
-            codec,
-            url: self.sink_url.clone(),
-        };
-        builder.spawn(s, sink_context).map(Some)
-    }
-
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(true)
-    }
-
-    fn default_codec(&self) -> &str {
-        "json-sorted"
     }
 }

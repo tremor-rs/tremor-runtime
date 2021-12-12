@@ -312,7 +312,7 @@ impl<'script> PipelineCreateRaw<'script> {
         &self,
         decl_params: &DefinitioalArgs<'script>,
         stmt_params: CreationalWith<'script>,
-        helper: &Helper<'script, 'registry>,
+        helper: &mut Helper<'script, 'registry>,
     ) -> Result<Value<'script>> {
         let mut stmt_params: HashMap<_, _> = stmt_params
             .with
@@ -842,7 +842,7 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
             mid: helper.add_meta(self.start, self.end),
             from: (from.0.up(helper)?, from.1.up(helper)?),
             into: (into.0.up(helper)?, into.1.up(helper)?),
-            target: target,
+            target,
             maybe_where,
             maybe_having,
             maybe_group_by,

@@ -16,14 +16,13 @@
 //!
 //! With some shenanigans removed, compared to `ChannelSink`.
 
-use std::marker::PhantomData;
-
 use crate::connectors::{sink::SinkReply, ConnectorContext, StreamDone};
 use crate::errors::Result;
 use async_std::{
     channel::{bounded, Receiver, Sender},
     task,
 };
+use std::marker::PhantomData;
 use tremor_common::time::nanotime;
 
 use super::channel_sink::{NoMeta, SinkMeta, SinkMetaBehaviour, WithMeta};
@@ -127,7 +126,7 @@ impl SingleStreamSinkRuntime {
                     if let Err(e) = reply_tx.send(reply).await {
                         error!(
                             "[Connector::{}] Error sending async sink reply: {}",
-                            ctx.url, e
+                            ctx.alias, e
                         );
                     }
                 };
@@ -140,7 +139,7 @@ impl SingleStreamSinkRuntime {
             if let Some(e) = error {
                 error!(
                     "[Connector::{}] Error shutting down write half of stream {}: {}",
-                    ctx.url, stream, e
+                    ctx.alias, stream, e
                 );
             }
             Result::Ok(())
@@ -185,7 +184,7 @@ where
                     start,
                 };
                 if self.tx.send(sink_data).await.is_err() {
-                    error!("[Sink::{}] Error sending to closed stream: 0", &ctx.url);
+                    error!("[Sink::{}] Error sending to closed stream: 0", &ctx.alias);
                     return Ok(SinkReply::FAIL);
                 }
             }
@@ -203,7 +202,7 @@ where
                 start,
             };
             if self.tx.send(sink_data).await.is_err() {
-                error!("[Sink::{}] Error sending to closed stream: 0", &ctx.url);
+                error!("[Sink::{}] Error sending to closed stream: 0", &ctx.alias);
                 Ok(SinkReply::FAIL)
             } else {
                 Ok(SinkReply::NONE)

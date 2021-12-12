@@ -40,10 +40,10 @@ impl After {
 
 pub(crate) fn load_after(path: &Path) -> Result<After> {
     let mut tags_data = slurp_string(path)?;
-    match simd_json::from_str(&mut tags_data) {
+    match serde_yaml::from_str(&mut tags_data) {
         Ok(s) => Ok(s),
         Err(_not_well_formed) => Err(Error::from(format!(
-            "Unable to load `after.json` from path: {}",
+            "Unable to load `after.yaml` from path: {}",
             path.display()
         ))),
     }
@@ -62,7 +62,7 @@ impl AfterController {
 
     pub(crate) async fn spawn(&mut self) -> Result<()> {
         let root = &self.base;
-        let after_path = root.join("after.json");
+        let after_path = root.join("after.yaml");
         // This is optional
         if (&after_path).is_file() {
             let after_json = load_after(&after_path)?;

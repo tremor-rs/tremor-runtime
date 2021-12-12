@@ -3,13 +3,13 @@ name: Runtime errors should emit hygienic errors if possible
 asserts:
   - source: fg.err.log
     contains:
-      - "10 | select event.foo_select from in"
-      - "   |              ^^^^^^^^^^ Trying to access a non existing event key `foo_select`"
-      - "11 | where event.foo_where == true"
-      - "   |             ^^^^^^^^^ Trying to access a non existing event key `foo_where`"
-      - "12 | group by event.foo_group"
-      - "   |                ^^^^^^^^^ Trying to access a non existing event key `foo_group`"
-      - "13 | into runtime having event[\"foo_having\"] == true;"
-      - "   |                           ^^^^^^^^^^^^ Trying to access a non existing event key `foo_having`"
-  - source: events.log
+       - "select event.foo_select"
+       - "             ^^^^^^^^^^ Trying to access a non existing event key `foo_select`"
+       - "    where event.foo_where == true"
+       - "                ^^^^^^^^^ Trying to access a non existing event key `foo_where`"
+       - "  group by event.foo_group"
+       - "                 ^^^^^^^^^ Trying to access a non existing event key `foo_group`"
+       - "    having event[\"foo_having\"] == true;"
+       - "                 ^^^^^^^^^^^^ Trying to access a non existing event key `foo_having`"
+  - source: out.log
     equals_file: "expected.json"

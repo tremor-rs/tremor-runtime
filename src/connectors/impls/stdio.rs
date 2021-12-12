@@ -61,7 +61,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn from_config(
         &self,
-        _id: &TremorUrl,
+        _id: &str,
         _raw_config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(StdStreamConnector {}))
@@ -166,10 +166,6 @@ impl Sink for StdStreamSink {
 impl Connector for StdStreamConnector {
     fn input_ports(&self) -> &[Cow<'static, str>] {
         Self::REF_IN_PORTS
-    }
-
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(true)
     }
 
     /// create sink if we have a stdout or stderr stream

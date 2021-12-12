@@ -13,6 +13,8 @@
 // limitations under the License.
 // use crate::connectors::prelude::*;
 
+//! UDP Client
+
 use crate::connectors::prelude::*;
 use async_std::net::UdpSocket;
 
@@ -33,8 +35,9 @@ impl Default for Host {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    /// Host to use as source
+    /// Host to connect to
     host: String,
+    /// port to connect to
     port: u16,
     #[serde(default = "Host::default")]
     bind: Host,
@@ -44,7 +47,6 @@ impl ConfigImpl for Config {}
 
 struct UdpClient {
     config: Config,
-    sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
 }
 
 #[derive(Debug, Default)]
@@ -57,40 +59,16 @@ impl ConnectorBuilder for Builder {
     }
     async fn from_config(
         &self,
-        _id: &TremorUrl,
+        _id: &str,
         raw_config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         if let Some(config) = raw_config {
             let config: Config = Config::new(config)?;
-            Ok(Box::new(UdpClient {
-                config,
-                sink_runtime: None,
-            }))
+            Ok(Box::new(UdpClient { config }))
         } else {
             Err(ErrorKind::MissingConfiguration(String::from("udp-client")).into())
         }
     }
-}
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-struct ConnectionMeta {
-    host: String,
-    port: u16,
-}
-
-fn resolve_connection_meta(meta: &Value) -> Option<ConnectionMeta> {
-    meta.get_u16("port")
-        .zip(meta.get_str("host"))
-        .map(|(port, host)| -> ConnectionMeta {
-            ConnectionMeta {
-                host: host.to_string(),
-                port,
-            }
-        })
-}
-
-struct UdpWriter {
-    socket: UdpSocket,
 }
 
 // FIXME: We do not handle destination changes via metadata
@@ -101,33 +79,8 @@ struct UdpWriter {
 // questions and we need to come up with a good answer that isn't throwing out
 // unexpected behaviour - so far we've none
 
-#[async_trait::async_trait]
-impl StreamWriter for UdpWriter {
-    async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<SinkMeta>) -> Result<()> {
-        for data in data {
-            self.socket.send(&data).await?;
-        }
-        Ok(())
-    }
-}
-
 #[async_trait::async_trait()]
 impl Connector for UdpClient {
-    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        let runtime = self
-            .sink_runtime
-            .as_mut()
-            .ok_or("sink runtime not started")?;
-        let socket =
-            UdpSocket::bind((self.config.bind.host.as_str(), self.config.bind.port)).await?;
-        socket
-            .connect((self.config.host.as_str(), self.config.port))
-            .await?;
-        runtime.register_stream_writer(DEFAULT_STREAM_ID, None, ctx, UdpWriter { socket });
-
-        Ok(true)
-    }
-
     fn default_codec(&self) -> &str {
         "json"
     }
@@ -137,10 +90,65 @@ impl Connector for UdpClient {
         ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink =
-            ChannelSink::new_no_meta(builder.qsize(), resolve_connection_meta, builder.reply_tx());
-        self.sink_runtime = Some(sink.runtime());
-        let addr = builder.spawn(sink, ctx)?;
-        Ok(Some(addr))
+        let sink = UdpClientSink {
+            config: self.config.clone(),
+            socket: None,
+        };
+        builder.spawn(sink, ctx).map(Some)
+    }
+}
+
+struct UdpClientSink {
+    config: Config,
+    socket: Option<UdpSocket>,
+}
+
+impl UdpClientSink {
+    async fn send_event(socket: &UdpSocket, data: Vec<Vec<u8>>) -> Result<()> {
+        for chunk in data {
+            socket.send(chunk.as_slice()).await?;
+        }
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait()]
+impl Sink for UdpClientSink {
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+        let socket =
+            UdpSocket::bind((self.config.bind.host.as_str(), self.config.bind.port)).await?;
+        socket
+            .connect((self.config.host.as_str(), self.config.port))
+            .await?;
+        self.socket = Some(socket);
+        Ok(true)
+    }
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        event: Event,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+        _start: u64,
+    ) -> Result<SinkReply> {
+        let socket = self
+            .socket
+            .as_ref()
+            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
+        for value in event.value_iter() {
+            let data = serializer.serialize(value, event.ingest_ns)?;
+            if let Err(e) = Self::send_event(socket, data).await {
+                error!("{} UDP Error: {}. Initiating Reconnect...", &ctx, &e);
+                // TODO: upon which errors to actually trigger a reconnect?
+                self.socket = None;
+                ctx.notifier().notify().await?;
+                return Err(e);
+            }
+        }
+        Ok(SinkReply::NONE)
+    }
+
+    fn auto_ack(&self) -> bool {
+        true
     }
 }

@@ -119,7 +119,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn from_config(
         &self,
-        _id: &TremorUrl,
+        _id: &str,
         config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         if let Some(raw_config) = config {
@@ -157,7 +157,7 @@ impl Connector for WsClient {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = ChannelSource::new(source_context.clone(), builder.qsize());
+        let source = ChannelSource::new(builder.qsize());
         self.source_runtime = Some(source.runtime());
         let addr = builder.spawn(source, source_context)?;
         Ok(Some(addr))
@@ -198,7 +198,7 @@ impl Connector for WsClient {
                 let (writer, reader) = ws_stream.split();
                 let meta = ctx.meta(WsClient::meta(peer_addr, false));
 
-                let ws_reader = WsReader::new(reader, ctx.url.clone(), origin_uri.clone(), meta);
+                let ws_reader = WsReader::new(reader, origin_uri.clone(), meta);
                 source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
                 let ws_writer = WsWriter::new_tungstenite_client(writer);
                 sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer);
@@ -218,7 +218,7 @@ impl Connector for WsClient {
                 };
                 let (writer, reader) = ws_stream.split();
                 let meta = ctx.meta(WsClient::meta(peer_addr, false));
-                let ws_reader = WsReader::new(reader, ctx.url.clone(), origin_uri.clone(), meta);
+                let ws_reader = WsReader::new(reader, origin_uri.clone(), meta);
                 source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
                 let ws_writer = WsWriter::new_tls_client(writer);
                 sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer);
