@@ -80,9 +80,6 @@ impl ConfigImpl for Config {}
 /// file connector
 pub struct File {
     config: Config,
-    origin_uri: EventOriginUri,
-    source_runtime: Option<ChannelSourceRuntime>,
-    sink_runtime: Option<SingleStreamSinkRuntime>,
 }
 
 /// builder for file connector
@@ -100,18 +97,7 @@ impl ConnectorBuilder for Builder {
     async fn from_config(&self, id: &str, config: &Option<OpConfig>) -> Result<Box<dyn Connector>> {
         if let Some(raw_config) = config {
             let config = Config::new(raw_config)?;
-            let origin_uri = EventOriginUri {
-                scheme: URL_SCHEME.to_string(),
-                host: hostname(),
-                port: None,
-                path: vec![config.path.display().to_string()],
-            };
-            Ok(Box::new(File {
-                config,
-                origin_uri,
-                source_runtime: None,
-                sink_runtime: None,
-            }))
+            Ok(Box::new(File { config }))
         } else {
             Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
@@ -125,14 +111,12 @@ impl Connector for File {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        Ok(if self.config.mode == Mode::Read {
-            None
+        if self.config.mode == Mode::Read {
+            Ok(None)
         } else {
-            let sink = SingleStreamSink::new_no_meta(builder.qsize(), builder.reply_tx());
-            self.sink_runtime = Some(sink.runtime());
-            let addr = builder.spawn(sink, sink_context)?;
-            Some(addr)
-        })
+            let sink = FileSink::new(self.config.clone());
+            builder.spawn(sink, sink_context).map(Some)
+        }
     }
 
     async fn create_source(
@@ -140,16 +124,15 @@ impl Connector for File {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        Ok(if self.config.mode == Mode::Read {
-            let source = ChannelSource::new(builder.qsize());
-            self.source_runtime = Some(source.runtime());
-            let addr = builder.spawn(source, source_context)?;
-            Some(addr)
+        if self.config.mode == Mode::Read {
+            let source = FileSource::new(self.config.clone());
+            builder.spawn(source, source_context).map(Some)
         } else {
-            None
-        })
+            Ok(None)
+        }
     }
 
+    /*
     async fn connect(&mut self, ctx: &ConnectorContext, attempt: &Attempt) -> Result<bool> {
         // SINK PART: open write file
         if let Some(sink_runtime) = self.sink_runtime.as_ref() {
@@ -199,127 +182,179 @@ impl Connector for File {
         }
 
         Ok(true)
-    }
+    }*/
 
     fn default_codec(&self) -> &str {
         "json"
     }
 }
 
-struct FileReader<R>
-where
-    R: AsyncRead + Send + Unpin,
-{
-    reader: R,
-    underlying_file: FSFile,
+struct FileSource {
+    config: Config,
+    reader: Option<Box<dyn AsyncRead + Send + Sync + Unpin>>,
+    underlying_file: Option<FSFile>,
     buf: Vec<u8>,
-    alias: String,
     origin_uri: EventOriginUri,
     meta: Value<'static>,
+    eof: bool,
 }
 
-impl FileReader<FSFile> {
-    fn new(
-        file: FSFile,
-        chunk_size: usize,
-        alias: String,
-        origin_uri: EventOriginUri,
-        meta: Value<'static>,
-    ) -> Self {
+impl FileSource {
+    fn new(config: Config) -> Self {
+        let buf = vec![0; config.chunk_size];
+        let origin_uri = EventOriginUri {
+            scheme: URL_SCHEME.to_string(),
+            host: hostname(),
+            port: None,
+            path: vec![config.path.display().to_string()],
+        };
         Self {
-            reader: file.clone(),
-            underlying_file: file,
-            buf: vec![0; chunk_size],
-            alias,
+            config,
+            reader: None,
+            underlying_file: None,
+            buf,
             origin_uri,
-            meta,
-        }
-    }
-}
-
-impl FileReader<XzDecoder<BufReader<FSFile>>> {
-    fn xz(
-        file: FSFile,
-        chunk_size: usize,
-        alias: String,
-        origin_uri: EventOriginUri,
-        meta: Value<'static>,
-    ) -> Self {
-        Self {
-            reader: XzDecoder::new(BufReader::new(file.clone())),
-            underlying_file: file,
-            buf: vec![0; chunk_size],
-            alias,
-            origin_uri,
-            meta,
+            meta: Value::null(), // dummy value, will be overwritten in connect
+            eof: false,
         }
     }
 }
 
 #[async_trait::async_trait]
-impl<R> StreamReader for FileReader<R>
-where
-    R: AsyncRead + Send + Unpin,
-{
-    async fn read(&mut self, stream: u64) -> Result<SourceReply> {
-        let bytes_read = self.reader.read(&mut self.buf).await?;
-        Ok(if bytes_read == 0 {
-            trace!("[Connector::{}] EOF", &self.alias);
-            SourceReply::EndStream {
-                origin_uri: self.origin_uri.clone(),
-                stream,
-                meta: Some(self.meta.clone()),
-            }
+impl Source for FileSource {
+    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+        self.meta = ctx.meta(literal!({
+            "path": self.config.path.display().to_string()
+        }));
+        let read_file =
+            file::open_with(&self.config.path, &mut self.config.mode.as_open_options()).await?;
+        // TODO: instead of looking for an extension
+        // check the magic bytes at the beginning of the file to determine the compression applied
+        if let Some("xz") = self.config.path.extension().and_then(OsStr::to_str) {
+            self.reader = Some(Box::new(XzDecoder::new(BufReader::new(read_file.clone()))));
+            self.underlying_file = Some(read_file);
         } else {
-            SourceReply::Data {
-                origin_uri: self.origin_uri.clone(),
-                stream,
-                meta: Some(self.meta.clone()),
-                data: self.buf[0..bytes_read].to_vec(),
-                port: None,
+            self.reader = Some(Box::new(read_file.clone()));
+            self.underlying_file = Some(read_file);
+        };
+        Ok(true)
+    }
+    async fn pull_data(&mut self, _pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+        let reply = if self.eof {
+            SourceReply::Empty(DEFAULT_POLL_INTERVAL)
+        } else {
+            let reader = self
+                .reader
+                .as_mut()
+                .ok_or_else(|| Error::from("No file available."))?;
+            let bytes_read = reader.read(&mut self.buf).await?;
+            if bytes_read == 0 {
+                self.eof = true;
+                debug!("{} EOF", &ctx);
+                SourceReply::EndStream {
+                    origin_uri: self.origin_uri.clone(),
+                    stream: DEFAULT_STREAM_ID,
+                    meta: Some(self.meta.clone()),
+                }
+            } else {
+                SourceReply::Data {
+                    origin_uri: self.origin_uri.clone(),
+                    stream: DEFAULT_STREAM_ID,
+                    meta: Some(self.meta.clone()),
+                    // ALLOW: with the read above we ensure that this access is valid, unless async_std is broken
+                    data: self.buf[0..bytes_read].to_vec(),
+                    port: Some(OUT),
+                }
             }
-        })
+        };
+        Ok(reply)
     }
 
-    async fn on_done(&mut self, _stream: u64) -> StreamDone {
-        if let Err(e) = self.underlying_file.close().await {
-            error!("[Connector::{}] Error closing file: {}", &self.alias, e);
+    async fn on_stop(&mut self, ctx: &SourceContext) -> Result<()> {
+        if let Some(mut file) = self.underlying_file.take() {
+            if let Err(e) = file.close().await {
+                error!("{} Error closing file: {}", &ctx, e);
+            }
         }
-        // we do not use ConnectorClosed - as we don't want to trigger a reconnect
-        // which would read the whole file again
-        StreamDone::StreamClosed
-    }
-}
-
-struct FileWriter {
-    file: FSFile,
-    alias: String,
-}
-
-impl FileWriter {
-    fn new(file: FSFile, alias: String) -> Self {
-        Self { file, alias }
-    }
-}
-
-#[async_trait::async_trait]
-impl StreamWriter for FileWriter {
-    async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<SinkMeta>) -> Result<()> {
-        for chunk in data {
-            self.file.write_all(&chunk).await?;
-        }
-        self.file.flush().await?;
         Ok(())
     }
 
-    async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
-        if let Err(e) = self.file.sync_all().await {
-            error!("[Connector::{}] Error flushing file: {}", &self.alias, e);
+    fn is_transactional(&self) -> bool {
+        // TODO: we could make the file source transactional
+        // by recording the current position into the file after every read
+        false
+    }
+
+    fn asynchronous(&self) -> bool {
+        false
+    }
+}
+
+struct FileSink {
+    config: Config,
+    file: Option<FSFile>,
+}
+
+impl FileSink {
+    fn new(config: Config) -> Self {
+        Self { config, file: None }
+    }
+}
+
+#[async_trait::async_trait]
+impl Sink for FileSink {
+    async fn connect(&mut self, _ctx: &SinkContext, attempt: &Attempt) -> Result<bool> {
+        let mode = if attempt.is_first() || attempt.success() == 0 {
+            &self.config.mode
+        } else {
+            // if we have already opened the file successfully once
+            // we should not truncate it again or overwrite, but indeed append
+            // otherwise the reconnect logic will lead to unwanted effects
+            // e.g. if a simple write failed temporarily
+            &Mode::Append
+        };
+        let file = file::open_with(&self.config.path, &mut mode.as_open_options()).await?;
+        self.file = Some(file);
+        Ok(true)
+    }
+
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        event: Event,
+        _ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+        _start: u64,
+    ) -> Result<SinkReply> {
+        let file = self
+            .file
+            .as_mut()
+            .ok_or_else(|| Error::from("No file available."))?;
+        let ingest_ns = event.ingest_ns;
+        for value in event.value_iter() {
+            let data = serializer.serialize(value, ingest_ns)?;
+            for chunk in data {
+                file.write_all(&chunk).await?;
+            }
+            file.flush().await?;
         }
-        // if we cannot write to the given file anymore
-        // something wen't really wrong, a reconnect might help here
-        // this wont lead to overwriting stuff or re-truncating a file or so
-        // as we always use `Append` in that case
-        Ok(StreamDone::ConnectorClosed)
+        Ok(SinkReply::NONE)
+    }
+
+    fn auto_ack(&self) -> bool {
+        true
+    }
+
+    fn asynchronous(&self) -> bool {
+        false
+    }
+
+    async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
+        if let Some(file) = self.file.take() {
+            if let Err(e) = file.sync_all().await {
+                error!("{} Error flushing file: {}", &ctx, e);
+            }
+        }
+        Ok(())
     }
 }
