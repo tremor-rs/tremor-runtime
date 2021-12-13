@@ -733,15 +733,16 @@ fn select(
     let node = node.ok_or_else(|| {
         ErrorKind::MissingOpConfig("trickle operators require a statement".into())
     })?;
-    let select_type = match node.suffix() {
-        tremor_script::ast::Stmt::SelectStmt(ref select) => select.complexity(),
-        _ => {
-            return Err(ErrorKind::PipelineError(
-                "Trying to turn a non select into a select operator".into(),
-            )
-            .into())
-        }
+    let select = if let tremor_script::ast::Stmt::SelectStmt(ref select) = node.suffix() {
+        select
+    } else {
+        return Err(ErrorKind::PipelineError(
+            "Trying to turn a non select into a select operator".into(),
+        )
+        .into());
     };
+
+    let select_type = select.complexity();
     match select_type {
         SelectType::Passthrough => {
             let op = PassthroughFactory::new_boxed();
@@ -752,24 +753,24 @@ fn select(
             let windows = windows.ok_or_else(|| {
                 ErrorKind::MissingOpConfig("select operators require a window mapping".into())
             })?;
-            let windows: Result<Vec<(String, window::Impl)>> =
-                if let tremor_script::ast::Stmt::SelectStmt(s) = node.suffix() {
-                    s.stmt
-                        .windows
-                        .iter()
-                        .map(|w| {
-                            let fqwn = w.id.fqn();
-                            Ok(windows
-                                .get(&fqwn)
-                                .map(|imp| (w.id.id().to_string(), imp.clone()))
-                                .ok_or_else(|| {
-                                    ErrorKind::BadOpConfig(format!("Unknown window: {}", &fqwn))
-                                })?)
-                        })
-                        .collect()
-                } else {
-                    Err("Declared as select but isn't a select".into())
-                };
+            let windows: Result<Vec<(String, window::Impl)>> = select
+                .stmt
+                .windows
+                .iter()
+                .map(|w| {
+                    let fqwn = w.id.fqn();
+                    Ok(windows
+                        .get(&fqwn)
+                        .map(|imp| (w.id.id().to_string(), imp.clone()))
+                        .ok_or_else(|| {
+                            ErrorKind::BadOpConfig(format!(
+                                "Unknown window: {} available: {}",
+                                &fqwn,
+                                windows.keys().cloned().collect::<Vec<_>>().join(", ")
+                            ))
+                        })?)
+                })
+                .collect();
 
             Ok(Box::new(Select::with_stmt(
                 operator_uid,
