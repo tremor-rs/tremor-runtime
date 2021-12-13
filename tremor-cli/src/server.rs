@@ -105,27 +105,6 @@ async fn handle_signals(signals: Signals, world: World) {
 }
 
 impl ServerRun {
-    pub(crate) async fn run(&self) {
-        version::print();
-        if let Err(ref e) = self.run_dun().await {
-            match e {
-                Error(ErrorKind::AnyhowError(anyhow_e), _) => {
-                    log_and_print_error!("{:?}", anyhow_e);
-                }
-                e => {
-                    log_and_print_error!("Error: {}", e);
-                    for e in e.iter().skip(1) {
-                        eprintln!("Caused by: {}", e);
-                    }
-                }
-            }
-            log_and_print_error!("We are SHUTTING DOWN due to errors during initialization!");
-
-            // ALLOW: main.rs
-            ::std::process::exit(1);
-        }
-    }
-
     #[cfg(not(tarpaulin_include))]
     pub(crate) async fn run_dun(&self) -> Result<()> {
         use tremor_runtime::system::WorldConfig;
@@ -240,5 +219,26 @@ impl ServerRun {
         signal_handler_task.cancel().await;
         warn!("Tremor stopped.");
         Ok(())
+    }
+
+    pub(crate) async fn run(&self) {
+        version::print();
+        if let Err(ref e) = self.run_dun().await {
+            match e {
+                Error(ErrorKind::AnyhowError(anyhow_e), _) => {
+                    log_and_print_error!("{:?}", anyhow_e);
+                }
+                e => {
+                    log_and_print_error!("Error: {}", e);
+                    for e in e.iter().skip(1) {
+                        eprintln!("Caused by: {}", e);
+                    }
+                }
+            }
+            log_and_print_error!("We are SHUTTING DOWN due to errors during initialization!");
+
+            // ALLOW: main.rs
+            ::std::process::exit(1);
+        }
     }
 }
