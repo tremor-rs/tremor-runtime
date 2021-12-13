@@ -18,7 +18,7 @@ use std::borrow::Cow as SCow;
 use tremor_common::stry;
 use tremor_script::{
     self,
-    ast::{AggrSlice, Aggregates, Consts, NodeMetas, RunConsts, Select, WindowDecl},
+    ast::{AggrSlice, Aggregates, Consts, NodeMetas, RunConsts, Select, WindowDefinition},
     errors::Result,
     interpreter::{Env, LocalStack},
     prelude::*,
@@ -494,15 +494,15 @@ pub struct TumblingOnTime {
     pub(crate) max_groups: usize,
     /// How long a window lasts (how many ns we accumulate)
     pub(crate) interval: u64,
-    pub(crate) script: Option<WindowDecl<'static>>,
+    pub(crate) script: Option<WindowDefinition<'static>>,
 }
 impl TumblingOnTime {
     pub(crate) fn reset(&mut self) {
         self.next_window = None;
     }
 
-    pub fn from_stmt(interval: u64, max_groups: usize, script: Option<&WindowDecl>) -> Self {
-        let script = script.cloned().map(WindowDecl::into_static);
+    pub fn from_stmt(interval: u64, max_groups: usize, script: Option<&WindowDefinition>) -> Self {
+        let script = script.cloned().map(WindowDefinition::into_static);
         Self {
             next_window: None,
             max_groups,
@@ -580,7 +580,7 @@ pub struct TumblingOnNumber {
     max_groups: usize,
     size: u64,
     next_eviction: u64,
-    script: Option<WindowDecl<'static>>,
+    script: Option<WindowDefinition<'static>>,
 }
 
 impl TumblingOnNumber {
@@ -588,8 +588,8 @@ impl TumblingOnNumber {
         self.next_eviction = 0;
         self.count = 0;
     }
-    pub fn from_stmt(size: u64, max_groups: usize, script: Option<&WindowDecl>) -> Self {
-        let script = script.cloned().map(WindowDecl::into_static);
+    pub fn from_stmt(size: u64, max_groups: usize, script: Option<&WindowDefinition>) -> Self {
+        let script = script.cloned().map(WindowDefinition::into_static);
 
         Self {
             max_groups,

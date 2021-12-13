@@ -14,18 +14,21 @@
 
 pub use crate::ast::base_expr::BaseExpr;
 pub(crate) use crate::ast::eq::AstEq;
-pub(crate) use crate::ast::walkers::{ExprWalker, ImutExprWalker, QueryWalker};
+pub(crate) use crate::ast::walkers::{DeployWalker, ExprWalker, ImutExprWalker, QueryWalker};
 pub(crate) use crate::ast::{
     ArgsExpr, ArrayPattern, ArrayPredicatePattern, BinExpr, Bytes, BytesPart, ClauseGroup,
-    ClausePreCondition, Comprehension, Consts, CreationalWith, DefaultCase, DefinitioalArgs,
-    DefinitioalArgsWith, EmitExpr, EventPath, Expr, ExprPath, Field, FnDecl, GroupBy, Helper,
-    Ident, IfElse, ImutExpr, Invoke, InvokeAggr, List, Literal, LocalPath, Match, Merge,
-    MetadataPath, NodeMetas, OperatorCreate, OperatorDecl, Patch, PatchOperation, Path, Pattern,
-    PipelineCreate, PipelineDecl, PredicateClause, PredicatePattern, Query, Record, RecordPattern,
-    Recur, ReservedPath, Script, ScriptCreate, ScriptDecl, Segment, Select, SelectStmt, StatePath,
-    Stmt, StrLitElement, StreamStmt, StringLit, TestExpr, TuplePattern, UnaryExpr, WindowDecl,
-    WithExpr,
+    ClausePreCondition, Comprehension, ConnectStmt, ConnectorDefinition, Consts, CreateStmt,
+    CreateTargetDefinition, CreationalWith, DefaultCase, DefinitioalArgs, DefinitioalArgsWith,
+    DeployEndpoint, EmitExpr, EventPath, Expr, ExprPath, Field, FlowDefinition, FnDecl, GroupBy,
+    Helper, Ident, IfElse, ImutExpr, Invoke, InvokeAggr, List, Literal, LocalPath, Match, Merge,
+    MetadataPath, NodeMetas, OperatorCreate, OperatorDefinition, Patch, PatchOperation, Path,
+    Pattern, PipelineCreate, PipelineDefinition, PredicateClause, PredicatePattern, Query, Record,
+    RecordPattern, Recur, ReservedPath, Script, ScriptCreate, ScriptDefinition, Segment, Select,
+    SelectStmt, StatePath, Stmt, StrLitElement, StreamStmt, StringLit, TestExpr, TuplePattern,
+    UnaryExpr, WindowDefinition, WithExpr,
 };
 
-pub(crate) use super::{ExprVisitor, GroupByVisitor, ImutExprVisitor, QueryVisitor, VisitRes};
+pub(crate) use super::{
+    DeployVisitor, ExprVisitor, GroupByVisitor, ImutExprVisitor, QueryVisitor, VisitRes,
+};
 pub(crate) use crate::errors::Result;

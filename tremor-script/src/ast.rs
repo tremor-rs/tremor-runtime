@@ -501,14 +501,14 @@ where
     is_in_aggr: bool,
     // Troy
     instances: HashMap<NodeId, DeployFlow<'script>>,
-    flow_decls: HashMap<NodeId, FlowDecl<'script>>,
-    connector_decls: HashMap<NodeId, ConnectorDecl<'script>>,
-    pipeline_decls: HashMap<NodeId, PipelineDecl<'script>>,
+    flow_decls: HashMap<NodeId, FlowDefinition<'script>>,
+    connector_decls: HashMap<NodeId, ConnectorDefinition<'script>>,
+    pipeline_decls: HashMap<NodeId, PipelineDefinition<'script>>,
     // Trickle
-    queries: HashMap<String, PipelineDecl<'script>>,
-    windows: HashMap<String, WindowDecl<'script>>,
-    scripts: HashMap<String, ScriptDecl<'script>>,
-    operators: HashMap<String, OperatorDecl<'script>>,
+    queries: HashMap<String, PipelineDefinition<'script>>,
+    windows: HashMap<String, WindowDefinition<'script>>,
+    scripts: HashMap<String, ScriptDefinition<'script>>,
+    operators: HashMap<String, OperatorDefinition<'script>>,
     /// Aggregates
     pub aggregates: Vec<InvokeAggrFn<'script>>,
     /// Warnings
@@ -707,7 +707,7 @@ pub struct Script<'script> {
     pub consts: Consts<'script>,
     /// Aggregate functions
     pub aggregates: Vec<InvokeAggrFn<'script>>,
-    windows: HashMap<String, WindowDecl<'script>>,
+    windows: HashMap<String, WindowDefinition<'script>>,
     functions: Vec<CustomFn<'script>>,
     /// Locals
     pub locals: usize,

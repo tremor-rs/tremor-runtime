@@ -15,13 +15,13 @@
 mod deployment;
 
 use crate::connectors::{self, ConnectorBuilder};
-use crate::errors::Result;
+use crate::errors::{Error, Kind as ErrorKind, Result};
 use crate::QSIZE;
 use async_std::channel::{bounded, Sender};
 use async_std::prelude::*;
 use async_std::task::{self, JoinHandle};
 use deployment::{Deployment, DeploymentId};
-use hashbrown::HashMap;
+use hashbrown::{hash_map::Entry, HashMap};
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
@@ -63,6 +63,8 @@ pub(crate) enum ManagerMsg {
         src: String,
         /// deploy flow
         flow: DeployFlow,
+        /// result sender
+        sender: Sender<Result<()>>
     },
     RegisterConnectorType {
         /// the type of connector
@@ -110,44 +112,34 @@ impl Manager {
                             );
                         }
                     }
-                    ManagerMsg::StartDeploy { src, flow } => {
+                    ManagerMsg::StartDeploy { src, flow, sender } => {
                         let id = DeploymentId::from(&flow);
-
-                        let res = Deployment::start(
-                            src.clone(),
-                            flow,
-                            &mut self.operator_id_gen,
-                            &mut self.connector_id_gen,
-                            &self.known_connectors,
-                        )
-                        .await;
-                        match res {
-                            Ok(deploy) => {
-                                if self.deployments.insert(id.clone(), deploy).is_some() {
-                                    error!("FIXME: error on duplicate deployments: {:?}", id)
-                                }
+                        let res = match self.deployments.entry(id.clone()) {
+                            Entry::Occupied(_occupied) => {
+                                Err(ErrorKind::DuplicateFlow(id.0.clone()).into())      
                             }
-                            Err(e) => {
-                                error!("Failed to start deployment: {}", e);
-
-                                match e.0 {
-                                    crate::errors::ErrorKind::Script(e)
-                                    | crate::errors::ErrorKind::Pipeline(
-                                        tremor_pipeline::errors::ErrorKind::Script(e),
-                                    ) => {
-                                        let mut h = crate::TermHighlighter::stderr();
-                                        tremor_script::query::Query::format_error_from_script(
-                                            &src,
-                                            &mut h,
-                                            &tremor_script::errors::Error::from(e),
-                                        )?;
-                                        h.finalize()?;
+                            Entry::Vacant(vacant) => {
+                                let res = Deployment::start(
+                                    src.clone(),
+                                    flow,
+                                    &mut self.operator_id_gen,
+                                    &mut self.connector_id_gen,
+                                    &self.known_connectors,
+                                )
+                                .await;
+                                match res {
+                                    Ok(deploy) => {
+                                        vacant.insert(deploy);
+                                        Ok(())
                                     }
-                                    e => {
-                                        dbg!(e);
+                                    Err(e) => {
+                                        Err(e)
                                     }
                                 }
                             }
+                        };
+                        if sender.send(res).await.is_err() {
+                            error!("Error sending StartDeploy Err Result");
                         }
                     }
                     ManagerMsg::Stop => {
@@ -221,15 +213,39 @@ pub struct World {
 }
 
 impl World {
+    /// Instantiate a flow from
     pub(crate) async fn start_deploy(&self, src: &str, flow: &DeployFlow) -> Result<()> {
+        let (tx, rx) = bounded(1);
         self.system
             .send(ManagerMsg::StartDeploy {
                 src: src.to_string(),
                 flow: flow.clone(),
+                sender: tx
             })
             .await?;
-
-        Ok(())
+        if let Err(e) = rx.recv().await? {
+            let err_str = match e {
+                Error(ErrorKind::Script(e)
+                | ErrorKind::Pipeline(
+                    tremor_pipeline::errors::ErrorKind::Script(e)), _) => {
+                    let mut h = crate::ToStringHighlighter::new();
+                    tremor_script::query::Query::format_error_from_script(
+                        &src,
+                        &mut h,
+                        &tremor_script::errors::Error::from(e),
+                    )?;
+                    h.finalize()?;
+                    h.to_string()
+                }
+                err => {
+                    err.to_string()
+                }
+            };
+            error!("Error starting deployment of flow {}: {}", flow.instance_id.id(), &err_str);
+            Err(ErrorKind::DeployFlowError(flow.instance_id.id().to_string(), err_str).into())
+        } else {
+            Ok(())
+        }
     }
     /// Registers the given connector type with `type_name` and the corresponding `builder`
     ///

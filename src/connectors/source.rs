@@ -834,12 +834,7 @@ where
                 Ok(Control::Continue)
             }
             SourceMsg::Drain(sender) if self.state == Drained => {
-                if sender.send(Msg::SourceDrained).await.is_err() {
-                    error!(
-                        "[Source::{}] Error sending SourceDrained message",
-                        &self.ctx.alias
-                    );
-                }
+                self.ctx.log_err(sender.send(Msg::SourceDrained).await, "Error sending SourceDrained message");
                 Ok(Control::Continue)
             }
             SourceMsg::Drain(drained_sender) => {
@@ -852,7 +847,11 @@ where
                         "sending SourceDrained message failed",
                     );
                     self.state = Drained;
+                } else if !self.is_asynchronous {
+                    // non-asynchronous sources are considered immediately drained
+                    self.on_fully_drained().await?;
                 } else {
+                    info!("{} Draining...", &self.ctx);
                     self.connector_channel = Some(drained_sender);
                     self.state = Draining;
                 }
@@ -1213,23 +1212,7 @@ where
             }
             SourceReply::Empty(wait_ms) => {
                 if self.state == SourceState::Draining {
-                    // this source has been fully drained
-                    self.state = SourceState::Drained;
-                    // send Drain signal
-                    debug!("{} Sending DRAIN Signal.", &self.ctx);
-                    let signal = Event::signal_drain(self.ctx.uid);
-                    if let Err(e) = self.send_signal(signal).await {
-                        error!("{} Error sending DRAIN signal: {}", &self.ctx, e);
-                    }
-                    // if we get a disconnect in between we might never receive every drain CB
-                    // but we will stop everything forcefully after a certain timeout at some point anyways
-                    // TODO: account for all connector uids that sent some Cb to us upon startup or so, to get the real number to wait for
-                    // otherwise there are cases (branching etc. where quiescence also would be too quick)
-                    self.expected_drained = self.pipelines_err.len() + self.pipelines_out.len();
-                    debug!(
-                        "[Source::{}] We are looking to drain {} connections.",
-                        self.ctx.alias, self.expected_drained
-                    );
+                    self.on_fully_drained().await?;
                 } else {
                     // set the timer for the given ms
                     self.pull_wait_start = Some(Instant::now());
@@ -1237,6 +1220,27 @@ where
                 }
             }
         }
+        Ok(())
+    }
+
+    async fn on_fully_drained(&mut self) -> Result<()> {
+        // this source has been fully drained
+        self.state = SourceState::Drained;
+        // send Drain signal
+        debug!("{} Sending DRAIN Signal.", &self.ctx);
+        let signal = Event::signal_drain(self.ctx.uid);
+        if let Err(e) = self.send_signal(signal).await {
+            error!("{} Error sending DRAIN signal: {}", &self.ctx, e);
+        }
+        // if we get a disconnect in between we might never receive every drain CB
+        // but we will stop everything forcefully after a certain timeout at some point anyways
+        // TODO: account for all connector uids that sent some Cb to us upon startup or so, to get the real number to wait for
+        // otherwise there are cases (branching etc. where quiescence also would be too quick)
+        self.expected_drained = self.pipelines_err.len() + self.pipelines_out.len();
+        debug!(
+            "{} We are waiting for {} Drained contraflow messages.",
+            &self.ctx, self.expected_drained
+        );
         Ok(())
     }
 

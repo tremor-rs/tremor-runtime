@@ -286,7 +286,9 @@ impl Source for FileSource {
     }
 
     fn asynchronous(&self) -> bool {
-        false
+        // this one is special, in that we want it to
+        // read until EOF before we consider this drained
+        true
     }
 }
 

@@ -23,9 +23,9 @@ use super::{
 };
 use super::{
     error_generic, error_no_consts, error_no_locals, BaseExpr, GroupBy, HashMap, Helper, Location,
-    NodeMetas, OperatorCreate, OperatorDecl, OperatorKind, PipelineCreate, PipelineDecl, Query,
-    Result, ScriptCreate, ScriptDecl, Select, SelectStmt, Serialize, Stmt, StreamStmt, Upable,
-    Value, WindowDecl, WindowKind,
+    NodeMetas, OperatorCreate, OperatorDefinition, OperatorKind, PipelineCreate,
+    PipelineDefinition, Query, Result, ScriptCreate, ScriptDefinition, Select, SelectStmt,
+    Serialize, Stmt, StreamStmt, Upable, Value, WindowDefinition, WindowKind,
 };
 use crate::{ast::InvokeAggrFn, impl_expr};
 use crate::{
@@ -45,6 +45,7 @@ use std::iter::FromIterator;
 pub struct QueryRaw<'script> {
     pub(crate) config: ConfigRaw<'script>,
     pub(crate) stmts: StmtsRaw<'script>,
+    pub(crate) params: DefinitioalArgsRaw<'script>,
 }
 impl<'script> QueryRaw<'script> {
     pub(crate) fn up_script<'registry>(
@@ -52,28 +53,29 @@ impl<'script> QueryRaw<'script> {
         mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<Query<'script>> {
         let mut stmts = vec![];
+        let params = self.params.up(helper)?;
+        let args = params.render(&helper.meta)?;
 
         for stmt_raw in self.stmts {
             match stmt_raw {
                 StmtRaw::ModuleStmt(m) => {
                     m.define(&mut helper)?;
                 }
+                // A subquert that is going to be inlined
                 StmtRaw::PipelineCreate(sq_stmt_raw) => {
                     let create_stmt_index = stmts.len();
                     // Inlines all statements inside the subq inside `stmts`
                     // and returns the pipeline stmt
-                    let sq_stmt = sq_stmt_raw.inline(&mut stmts, &mut helper, None)?;
+                    let sq_stmt = sq_stmt_raw.inline(&mut stmts, &mut helper, Some(&args))?;
 
                     // Insert the pipeline stmt *before* the inlined stmts.
                     // In case of duplicate subqs, this makes sure dupe subq err
                     // is triggered before dupe err from any of the inlined stmt
                     stmts.insert(create_stmt_index, Stmt::PipelineCreate(sq_stmt));
                 }
-                other => {
-                    let mut stmt = other.up(&mut helper)?;
-                    ConstFolder::new(helper).walk_stmt(&mut stmt)?;
 
-                    stmts.push(stmt);
+                other => {
+                    stmts.push(other.up(&mut helper)?);
                 }
             }
         }
@@ -87,6 +89,7 @@ impl<'script> QueryRaw<'script> {
         }
 
         Ok(Query {
+            params,
             config,
             stmts,
             node_meta: helper.meta.clone(),
@@ -102,15 +105,15 @@ impl<'script> QueryRaw<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum StmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
-    WindowDecl(WindowDeclRaw<'script>),
+    WindowDefinition(WindowDefinitionRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    OperatorDecl(Box<OperatorDeclRaw<'script>>),
+    OperatorDefinition(Box<OperatorDefinitionRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
-    ScriptDecl(ScriptDeclRaw<'script>),
+    ScriptDefinition(ScriptDefinitionRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    PipelineDecl(PipelineDeclRaw<'script>),
+    PipelineDefinition(PipelineDefinitionRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    PipelineCreate(PipelineCreateRaw<'script>),
+    PipelineCreate(PipelineInlineRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     StreamStmt(StreamStmtRaw),
     /// we're forced to make this pub because of lalrpop
@@ -155,23 +158,25 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 }))
             }
             StmtRaw::StreamStmt(stmt) => Ok(Stmt::StreamStmt(stmt.up(helper)?)),
-            StmtRaw::OperatorDecl(stmt) => {
-                let stmt: OperatorDecl<'script> = stmt.up(helper)?;
+            StmtRaw::OperatorDefinition(stmt) => {
+                let stmt: OperatorDefinition<'script> = stmt.up(helper)?;
                 helper.operators.insert(stmt.fqn(), stmt.clone());
-                Ok(Stmt::OperatorDecl(stmt))
+                Ok(Stmt::OperatorDefinition(stmt))
             }
             StmtRaw::OperatorCreate(stmt) => Ok(Stmt::OperatorCreate(stmt.up(helper)?)),
-            StmtRaw::ScriptDecl(stmt) => {
-                let stmt: ScriptDecl<'script> = stmt.up(helper)?;
+            StmtRaw::ScriptDefinition(stmt) => {
+                let stmt: ScriptDefinition<'script> = stmt.up(helper)?;
                 helper.scripts.insert(stmt.fqn(), stmt.clone());
-                Ok(Stmt::ScriptDecl(Box::new(stmt)))
+                Ok(Stmt::ScriptDefinition(Box::new(stmt)))
             }
             StmtRaw::ScriptCreate(stmt) => Ok(Stmt::ScriptCreate(stmt.up(helper)?)),
-            StmtRaw::PipelineDecl(stmt) => Ok(Stmt::PipelineDecl(Box::new(stmt.up(helper)?))),
-            StmtRaw::WindowDecl(stmt) => {
-                let stmt: WindowDecl<'script> = stmt.up(helper)?;
+            StmtRaw::PipelineDefinition(stmt) => {
+                Ok(Stmt::PipelineDefinition(Box::new(stmt.up(helper)?)))
+            }
+            StmtRaw::WindowDefinition(stmt) => {
+                let stmt: WindowDefinition<'script> = stmt.up(helper)?;
                 helper.windows.insert(stmt.fqn(), stmt.clone());
-                Ok(Stmt::WindowDecl(Box::new(stmt)))
+                Ok(Stmt::WindowDefinition(Box::new(stmt)))
             }
             StmtRaw::ModuleStmt(ref m) => error_generic(m, m, &Self::BAD_MODULE, &helper.meta),
             StmtRaw::PipelineCreate(ref sq) => error_generic(sq, sq, &Self::BAD_SUBQ, &helper.meta),
@@ -182,7 +187,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct OperatorDeclRaw<'script> {
+pub struct OperatorDefinitionRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) kind: OperatorKindRaw,
@@ -191,10 +196,10 @@ pub struct OperatorDeclRaw<'script> {
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
 
-impl<'script> Upable<'script> for OperatorDeclRaw<'script> {
-    type Target = OperatorDecl<'script>;
+impl<'script> Upable<'script> for OperatorDefinitionRaw<'script> {
+    type Target = OperatorDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let operator_decl = OperatorDecl {
+        let operator_decl = OperatorDefinition {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, &helper.module),
             kind: self.kind.up(helper)?,
@@ -210,7 +215,7 @@ impl<'script> Upable<'script> for OperatorDeclRaw<'script> {
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Debug, PartialEq, Serialize, Clone)]
-pub struct PipelineDeclRaw<'script> {
+pub struct PipelineDefinitionRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
@@ -220,9 +225,9 @@ pub struct PipelineDeclRaw<'script> {
     pub(crate) into: Option<Vec<IdentRaw<'script>>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
-impl_expr!(PipelineDeclRaw);
+impl_expr!(PipelineDefinitionRaw);
 
-impl<'script> PipelineDeclRaw<'script> {
+impl<'script> PipelineDefinitionRaw<'script> {
     const STREAM_PORT_CONFILCT: &'static str = "Streams cannot share names with from/into ports";
     fn dflt_in_ports<'ident>() -> Vec<Ident<'ident>> {
         vec!["in".into()]
@@ -232,17 +237,12 @@ impl<'script> PipelineDeclRaw<'script> {
     }
 }
 
-impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
-    type Target = PipelineDecl<'script>;
+impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
+    type Target = PipelineDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         helper.module.push(self.id.clone());
 
-        let query = QueryRaw {
-            config: vec![],
-            stmts: self.pipeline.clone(),
-        }
-        .up_script(helper)
-        .ok();
+        let query = None;
 
         let from = self.from.up(helper)?.unwrap_or_else(Self::dflt_in_ports);
         let into = self.into.up(helper)?.unwrap_or_else(Self::dflt_out_ports);
@@ -270,7 +270,7 @@ impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
         helper.module.pop();
         let params = self.params.up(helper)?;
 
-        let pipeline_decl = PipelineDecl {
+        let pipeline_decl = PipelineDefinition {
             mid,
             node_id: NodeId::new(self.id, &helper.module),
             params,
@@ -294,16 +294,16 @@ impl<'script> Upable<'script> for PipelineDeclRaw<'script> {
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct PipelineCreateRaw<'script> {
+pub struct PipelineInlineRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) target: NodeId,
     pub(crate) params: CreationalWithRaw<'script>,
 }
-impl_expr!(PipelineCreateRaw);
+impl_expr!(PipelineInlineRaw);
 
-impl<'script> PipelineCreateRaw<'script> {
+impl<'script> PipelineInlineRaw<'script> {
     fn mangle_id(&self, id: &str) -> String {
         format!("__PIP__id:{}_alias:{}", self.id, id)
     }
@@ -357,14 +357,9 @@ impl<'script> PipelineCreateRaw<'script> {
         mut helper: &mut Helper<'script, 'registry>,
         args: Option<&Value<'script>>,
     ) -> Result<PipelineCreate> {
+        let target = self.target.clone().with_prefix(&helper.module);
         // Calculate the fully qualified name for the pipeline declaration.
-        let fq_pipeline_defn = self.target.fqn();
-        // if self.module.is_empty() {
-
-        // } else {
-        //     let module: Vec<String> = self.module.iter().map(ToString::to_string).collect();
-        //     format!("{}::{}", module.join("::"), self.target.clone())
-        // };
+        let fq_pipeline_defn = target.fqn();
 
         let pipeline_decl = helper.queries.get(&fq_pipeline_defn).ok_or_else(|| {
             err_generic(
@@ -418,9 +413,6 @@ impl<'script> PipelineCreateRaw<'script> {
                     let unmangled_id = s.id.clone();
                     s.id = self.mangle_id(&s.id);
 
-                    // Create a IdentRaw because we need to insert it
-                    // before .inline()-ing the stmt.
-                    s.target.module.insert(0, subq_module.clone());
                     let s_up = s.inline(&mut query_stmts, &mut helper, Some(&subq_args))?;
                     if let Some(meta) = helper.meta.nodes.get_mut(s_up.mid) {
                         meta.name = Some(unmangled_id);
@@ -472,12 +464,6 @@ impl<'script> PipelineCreateRaw<'script> {
                     s.from.0.id = Cow::owned(self.mangle_id(&s.from.0.id.to_string()));
                     s.into.0.id = Cow::owned(self.mangle_id(&s.into.0.id.to_string()));
 
-                    if let Some(windows) = &mut s.windows {
-                        for window in windows {
-                            window.id.module.insert(0, subq_module.clone());
-                        }
-                    }
-
                     let mut select_up = StmtRaw::SelectStmt(s).up(&mut helper)?;
 
                     if let Stmt::SelectStmt(s) = &mut select_up {
@@ -506,29 +492,29 @@ impl<'script> PipelineCreateRaw<'script> {
                     }
                     query_stmts.push(select_up);
                 }
-                StmtRaw::ScriptDecl(d) => {
+                StmtRaw::ScriptDefinition(d) => {
                     let mut d = d.up(&mut helper)?;
                     d.params.substitute_args(&subq_args, helper)?;
                     // We overwrite the original script with the substituted one
                     helper.scripts.insert(d.node_id.fqn(), d.clone());
-                    query_stmts.push(Stmt::ScriptDecl(Box::new(d)));
+                    query_stmts.push(Stmt::ScriptDefinition(Box::new(d)));
                 }
-                StmtRaw::OperatorDecl(d) => {
+                StmtRaw::OperatorDefinition(d) => {
                     let mut d = d.up(&mut helper)?;
                     d.params.substitute_args(&subq_args, &mut helper)?;
                     // We overwrite the original script with the substituted one
                     helper.operators.insert(d.node_id.fqn(), d.clone());
-                    query_stmts.push(Stmt::OperatorDecl(d));
+                    query_stmts.push(Stmt::OperatorDefinition(d));
                 }
-                StmtRaw::PipelineDecl(d) => {
+                StmtRaw::PipelineDefinition(d) => {
                     let mut d = d.up(&mut helper)?;
                     d.params.substitute_args(&subq_args, &mut helper)?;
-                    query_stmts.push(Stmt::PipelineDecl(Box::new(d)));
+                    query_stmts.push(Stmt::PipelineDefinition(Box::new(d)));
                 }
-                StmtRaw::WindowDecl(d) => {
+                StmtRaw::WindowDefinition(d) => {
                     let mut d = d.up(&mut helper)?;
                     d.params.substitute_args(&subq_args, &mut helper)?;
-                    query_stmts.push(Stmt::WindowDecl(Box::new(d)));
+                    query_stmts.push(Stmt::WindowDefinition(Box::new(d)));
                 }
                 StmtRaw::Expr(e) => {
                     query_stmts.push(StmtRaw::Expr(e).up(&mut helper)?);
@@ -588,19 +574,19 @@ impl<'script> ModuleStmtRaw<'script> {
                         helper.module.push(old);
                     }
                 }
-                StmtRaw::WindowDecl(stmt) => {
+                StmtRaw::WindowDefinition(stmt) => {
                     let w = stmt.up(&mut helper)?;
                     helper.windows.insert(w.fqn(), w);
                 }
-                StmtRaw::ScriptDecl(stmt) => {
+                StmtRaw::ScriptDefinition(stmt) => {
                     let s = stmt.up(&mut helper)?;
                     helper.scripts.insert(s.fqn(), s);
                 }
-                StmtRaw::PipelineDecl(stmt) => {
+                StmtRaw::PipelineDefinition(stmt) => {
                     let o = stmt.up(&mut helper)?;
                     helper.queries.insert(o.fqn(), o);
                 }
-                StmtRaw::OperatorDecl(stmt) => {
+                StmtRaw::OperatorDefinition(stmt) => {
                     let o = stmt.up(&mut helper)?;
                     helper.operators.insert(o.fqn(), o);
                 }
@@ -640,7 +626,7 @@ impl<'script> Upable<'script> for OperatorCreateRaw<'script> {
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ScriptDeclRaw<'script> {
+pub struct ScriptDefinitionRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
@@ -649,8 +635,8 @@ pub struct ScriptDeclRaw<'script> {
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
 
-impl<'script> Upable<'script> for ScriptDeclRaw<'script> {
-    type Target = ScriptDecl<'script>;
+impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
+    type Target = ScriptDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // NOTE As we can have module aliases and/or nested modules within script definitions
         // that are private to or inline with the script - multiple script definitions in the
@@ -671,7 +657,7 @@ impl<'script> Upable<'script> for ScriptDeclRaw<'script> {
         let params = params.up(helper)?;
         let node_id = NodeId::new(&self.id, &helper.module);
 
-        let script_decl = ScriptDecl {
+        let script_decl = ScriptDefinition {
             mid,
             node_id,
             params,
@@ -711,7 +697,7 @@ impl<'script> Upable<'script> for ScriptCreateRaw<'script> {
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct WindowDeclRaw<'script> {
+pub struct WindowDefinitionRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
@@ -723,14 +709,14 @@ pub struct WindowDeclRaw<'script> {
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
 
-impl<'script> Upable<'script> for WindowDeclRaw<'script> {
-    type Target = WindowDecl<'script>;
+impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
+    type Target = WindowDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let maybe_script = self.script.map(|s| s.up_script(helper)).transpose()?;
 
         // warn params if `emit_empty_windows` is defined, but neither `max_groups` nor `evicition_period` is defined
 
-        let window_decl = WindowDecl {
+        let window_decl = WindowDefinition {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, &helper.module),
             kind: self.kind,

@@ -15,16 +15,22 @@
 pub(crate) mod prelude;
 use prelude::*;
 
-mod expr;
+/// Deploy
+pub mod deploy;
+/// Expr
+pub mod expr;
 mod impls;
-mod imut_expr;
-mod query;
+/// ImutExpr
+pub mod imut_expr;
+/// Query
+pub mod query;
 
 pub(crate) use impls::args_rewriter::ArgsRewriter;
 pub use impls::const_folder::ConstFolder;
 pub(crate) use impls::group_by_extractor::GroupByExprExtractor;
 pub(crate) use impls::target_event_ref::TargetEventRef;
 
+pub(crate) use deploy::Visitor as DeployVisitor;
 pub(crate) use expr::Visitor as ExprVisitor;
 pub(crate) use imut_expr::Visitor as ImutExprVisitor;
 pub(crate) use query::Visitor as QueryVisitor;

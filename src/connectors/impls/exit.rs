@@ -78,7 +78,7 @@ impl Sink for Exit {
             if let Some((value, _meta)) = event.value_meta_iter().next() {
                 if let Some(delay) = value.get_u64(Self::DELAY) {
                     info!(
-                        "{} Sleeping for {}ms before triggering shutdown.",
+                        "{} Sleeping for {}ns before triggering shutdown.",
                         ctx, delay
                     );
                     task::sleep(Duration::from_nanos(delay)).await;

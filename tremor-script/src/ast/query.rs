@@ -14,15 +14,22 @@
 
 pub(crate) mod raw;
 
+use self::raw::{ArgsExprsRaw, DefinitioalArgsRaw, QueryRaw};
+
 use super::{
     error_generic, error_no_consts, error_no_locals,
     node_id::NodeId,
+    raw::{IdentRaw, ImutExprRaw, LiteralRaw},
     visitors::{ArgsRewriter, ConstFolder},
+    walkers::QueryWalker,
     EventPath, HashMap, Helper, Ident, ImutExpr, InvokeAggrFn, Location, NodeMetas, Path, Result,
     Script, Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
-use crate::ast::{eq::AstEq, walkers::ImutExprWalker};
+use crate::{
+    ast::{eq::AstEq, walkers::ImutExprWalker},
+    errors::Error,
+};
 use crate::{impl_expr_mid, impl_fqn};
 use raw::WindowDefnRaw;
 use simd_json::{Builder, Mutable};
@@ -37,26 +44,28 @@ pub struct Query<'script> {
     /// Query Node Metadata
     pub node_meta: NodeMetas,
     /// Window declarations
-    pub windows: HashMap<String, WindowDecl<'script>>,
+    pub windows: HashMap<String, WindowDefinition<'script>>,
     /// Script declarations
-    pub scripts: HashMap<String, ScriptDecl<'script>>,
+    pub scripts: HashMap<String, ScriptDefinition<'script>>,
     /// Operators declarations
-    pub operators: HashMap<String, OperatorDecl<'script>>,
+    pub operators: HashMap<String, OperatorDefinition<'script>>,
     /// Query Constants
     pub consts: Consts<'script>,
+    /// Params if this is a modular query
+    pub params: DefinitioalArgs<'script>,
 }
 
 /// Query statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Stmt<'script> {
     /// A window declaration
-    WindowDecl(Box<WindowDecl<'script>>),
+    WindowDefinition(Box<WindowDefinition<'script>>),
     /// An operator declaration
-    OperatorDecl(OperatorDecl<'script>),
+    OperatorDefinition(OperatorDefinition<'script>),
     /// A script declaration
-    ScriptDecl(Box<ScriptDecl<'script>>),
+    ScriptDefinition(Box<ScriptDefinition<'script>>),
     /// An pipeline declaration
-    PipelineDecl(Box<PipelineDecl<'script>>),
+    PipelineDefinition(Box<PipelineDefinition<'script>>),
     /// A stream
     StreamStmt(StreamStmt),
     /// An operator creation
@@ -73,11 +82,11 @@ pub enum Stmt<'script> {
 impl<'script> BaseExpr for Stmt<'script> {
     fn mid(&self) -> usize {
         match self {
-            Stmt::WindowDecl(s) => s.mid(),
+            Stmt::WindowDefinition(s) => s.mid(),
             Stmt::StreamStmt(s) => s.mid(),
-            Stmt::OperatorDecl(s) => s.mid(),
-            Stmt::ScriptDecl(s) => s.mid(),
-            Stmt::PipelineDecl(s) => s.mid(),
+            Stmt::OperatorDefinition(s) => s.mid(),
+            Stmt::ScriptDefinition(s) => s.mid(),
+            Stmt::PipelineDefinition(s) => s.mid(),
             Stmt::PipelineCreate(s) => s.mid(),
             Stmt::OperatorCreate(s) => s.mid(),
             Stmt::ScriptCreate(s) => s.mid(),
@@ -168,7 +177,7 @@ impl BaseExpr for OperatorKind {
 
 /// An operator declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct OperatorDecl<'script> {
+pub struct OperatorDefinition<'script> {
     /// The ID and Module of the Operator
     pub node_id: NodeId,
     /// metadata id
@@ -178,8 +187,8 @@ pub struct OperatorDecl<'script> {
     /// Parameters for the operator
     pub params: DefinitioalArgsWith<'script>,
 }
-impl_expr_mid!(OperatorDecl);
-impl_fqn!(OperatorDecl);
+impl_expr_mid!(OperatorDefinition);
+impl_fqn!(OperatorDefinition);
 
 /// An operator creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -197,7 +206,7 @@ impl_expr_mid!(OperatorCreate);
 
 /// A script declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ScriptDecl<'script> {
+pub struct ScriptDefinition<'script> {
     pub(crate) mid: usize,
     /// The ID and Module of the Script
     pub node_id: NodeId,
@@ -206,8 +215,8 @@ pub struct ScriptDecl<'script> {
     /// The script itself
     pub script: Script<'script>,
 }
-impl_expr_mid!(ScriptDecl);
-impl_fqn!(ScriptDecl);
+impl_expr_mid!(ScriptDefinition);
+impl_fqn!(ScriptDefinition);
 
 /// A script creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -225,7 +234,7 @@ impl_expr_mid!(ScriptCreate);
 
 /// A pipeline declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct PipelineDecl<'script> {
+pub struct PipelineDefinition<'script> {
     /// The ID and Module of the SubqueryDecl
     pub node_id: NodeId,
     /// metadata id
@@ -242,13 +251,76 @@ pub struct PipelineDecl<'script> {
     pub query: Option<Query<'script>>,
 }
 
-impl<'script> PipelineDecl<'script> {
-    pub(crate) fn to_query<'registry>(&self) -> Result<Query<'script>> {
-        Ok(self.query.clone().ok_or("not a toplevel query")?)
+impl<'script> PipelineDefinition<'script> {
+    pub(crate) fn to_query(&self) -> Result<Query<'script>> {
+        Ok(self
+            .query
+            .clone()
+            .ok_or(format!("not a toplevel query: {}", &self.node_id.id()))?)
+    }
+
+    pub(crate) fn apply_args<'registry>(
+        &mut self,
+        args_in: &Value<'script>,
+        helper: &mut Helper<'script, 'registry>,
+    ) -> Result<()> {
+        dbg!();
+        let mut params = self.params.clone();
+        params.substitute_args(args_in, helper)?;
+        let args = ArgsExprsRaw(
+            params
+                .args
+                .0
+                .into_iter()
+                .map(|(k, v)| {
+                    Ok((
+                        IdentRaw {
+                            start: k.s(&helper.meta),
+                            end: k.e(&helper.meta),
+                            id: k.id,
+                        },
+                        v.map(|v| -> Result<_> {
+                            let start = v.s(&helper.meta);
+                            let end = v.e(&helper.meta);
+                            let value = v.try_into_lit(&helper.meta)?;
+                            Ok(ImutExprRaw::Literal(LiteralRaw { start, end, value }))
+                        })
+                        .transpose()?,
+                    ))
+                })
+                .collect::<Result<_>>()?,
+        );
+        let params = DefinitioalArgsRaw { args };
+        let mut query = QueryRaw {
+            config: vec![],
+            stmts: self.raw_stmts.clone(),
+            params,
+        }
+        .up_script(helper)?;
+        for stmt in &mut query.stmts {
+            match stmt {
+                // definitions do not need to be updated
+                Stmt::WindowDefinition(_)
+                | Stmt::OperatorDefinition(_)
+                | Stmt::ScriptDefinition(_)
+                | Stmt::PipelineDefinition(_)
+                | Stmt::StreamStmt(_) => (),
+                Stmt::PipelineCreate(_) => unreachable!(),
+                Stmt::OperatorCreate(op) => op.params.substitute_args(&args_in, helper)?,
+                Stmt::ScriptCreate(script) => script.params.substitute_args(&args_in, helper)?,
+                Stmt::SelectStmt(select) => {
+                    ArgsRewriter::new(args_in.clone(), helper).walk_select(select.stmt.as_mut())?;
+                }
+            }
+            ConstFolder::new(&helper).walk_stmt(stmt)?;
+        }
+        self.query = Some(query);
+        dbg!();
+        Ok(())
     }
 }
-impl_expr_mid!(PipelineDecl);
-impl_fqn!(PipelineDecl);
+impl_expr_mid!(PipelineDefinition);
+impl_fqn!(PipelineDefinition);
 
 /// A pipeline creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -278,7 +350,7 @@ pub enum WindowKind {
 
 /// A window declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct WindowDecl<'script> {
+pub struct WindowDefinition<'script> {
     /// ID and Module of the Window
     pub node_id: NodeId,
     /// metadata id
@@ -290,10 +362,10 @@ pub struct WindowDecl<'script> {
     /// The script of the window
     pub script: Option<Script<'script>>,
 }
-impl_expr_mid!(WindowDecl);
-impl_fqn!(WindowDecl);
+impl_expr_mid!(WindowDefinition);
+impl_fqn!(WindowDefinition);
 
-impl<'script> WindowDecl<'script> {
+impl<'script> WindowDefinition<'script> {
     /// `emit_empty_windows` setting
     pub const EMIT_EMPTY_WINDOWS: &'static str = "emit_empty_windows";
     /// `max_groups` setting
@@ -438,7 +510,7 @@ impl<'script> DefinitioalArgsWith<'script> {
     pub fn generate_config<'registry>(
         &self,
         helper: &mut Helper<'script, 'registry>,
-    ) -> Result<HashMap<String, Value<'script>>> {
+    ) -> Result<Value<'script>> {
         let args = self
             .args
             .0
@@ -498,12 +570,58 @@ pub struct DefinitioalArgs<'script> {
 }
 
 impl<'script> DefinitioalArgs<'script> {
+    /// Combines the definitional args and with block along with the creational with block
+    /// here the following happens:
+    /// 1) The creational with is merged into the definitial with, overwriting defaults
+    /// 2) We check if all mandatory fiends defined in the creational-args are set
+    /// 3) we incoperate the merged args into the creational with - this results in the final map
+    /// in the with section
+    pub fn ingest_creational_with(&mut self, creational: &CreationalWith<'script>) -> Result<()> {
+        // Ingest creational `with` into definitional `args` and error if `with` contains
+        // a unknown key
+        for (k, v) in &creational.with.0 {
+            if let Some((_, arg_v)) = self
+                .args
+                .0
+                .iter_mut()
+                .find(|(arg_key, _)| arg_key.id == k.id)
+            {
+                *arg_v = Some(v.clone());
+            } else {
+                // FIXME: better error
+                return Err(format!("unknown key: {}", k).into());
+            }
+        }
+
+        if let Some((k, _)) = self.args.0.iter_mut().find(|(_, v)| v.is_none()) {
+            Err(format!("missing key: {}", k).into())
+        } else {
+            Ok(())
+        }
+    }
+
     pub(crate) fn substitute_args<'registry>(
         &mut self,
         args: &Value<'script>,
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<()> {
         self.args.substitute_args(args, helper)
+    }
+
+    /// Renders a with clause into a k/v pair
+    pub fn render(&self, meta: &NodeMetas) -> Result<Value<'script>> {
+        let mut res = Value::object();
+        for (k, v) in self.args.0.iter() {
+            // FIXME: hygenic error
+            res.insert(
+                k.id.clone(),
+                v.clone()
+                    .ok_or_else(|| Error::from(format!("missing key: {}", k)))?
+                    .try_into_lit(meta)?
+                    .clone(),
+            )?;
+        }
+        Ok(res)
     }
 }
 
@@ -526,7 +644,6 @@ impl<'script> WithExprs<'script> {
             .map(|(name, mut value_expr)| {
                 ArgsRewriter::new(args.clone(), helper).rewrite_expr(&mut value_expr)?;
                 ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut value_expr)?;
-
                 Ok((name, value_expr))
             })
             .collect::<Result<_>>()?;
