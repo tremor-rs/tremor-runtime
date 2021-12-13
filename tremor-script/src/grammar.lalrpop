@@ -166,7 +166,7 @@ DeployStmts: DeployStmtsRaw<'input> = {
 
 DeployStmt: DeployStmtRaw<'input> = {
     DeployModuleStmt => DeployStmtRaw::Module(<>),
-    DefineFlow => DeployStmtRaw::FlowDecl(<>),
+    DefineFlow => DeployStmtRaw::FlowDefinition(<>),
     DeployFlowStmt => DeployStmtRaw::DeployFlow(<>),
 }
 
@@ -211,8 +211,8 @@ FlowStmtInner: FlowStmtRaw<'input> = {
 }
 
 Define: FlowStmtRaw<'input> =  {
-    DefinePipeline => FlowStmtRaw::PipelineDecl(<>),
-    DefineConnector => FlowStmtRaw::ConnectorDecl(<>),
+    DefinePipeline => FlowStmtRaw::PipelineDefinition(<>),
+    DefineConnector => FlowStmtRaw::ConnectorDefinition(<>),
 }
 Create: CreateStmtRaw<'input> = {
     <start:@L> "create" <kind:CreateKind> <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => CreateStmtRaw { start, end, id, target, params, kind },
@@ -245,22 +245,21 @@ DeployModuleStmts: DeployModuleStmtsRaw<'input> = {
      <item:DeployModuleInnerStmt> ";"? => vec![item],
  }
 
- DefineConnector: ConnectorDeclRaw<'input> =  {
+ DefineConnector: ConnectorDefinitionRaw<'input> =  {
     // Connectors - these define connectors for deployment
-    <start:@L> <docs:DocComment> "define" "connector" <id:Ident> "from" <kind:ConnectorKind> <params:ArgsWithEnd?> <end:@L> => ConnectorDeclRaw { start, end, id: id.to_string(), kind, params: params.unwrap_or_default(), docs },
+    <start:@L> <docs:DocComment> "define" "connector" <id:Ident> "from" <kind:ConnectorKind> <params:ArgsWithEnd?> <end:@L> => ConnectorDefinitionRaw { start, end, id: id.to_string(), kind, params: params.unwrap_or_default(), docs },
  }
 
-DefineFlow: FlowDeclRaw<'input> = {
+DefineFlow: FlowDefinitionRaw<'input> = {
     // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
-    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> "flow" <atoms:FlowStmts> "end" <end:@L> => FlowDeclRaw { start, end, id: id.to_string(), params, atoms, docs },
+    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> "flow" <atoms:FlowStmts> "end" <end:@L> => FlowDefinitionRaw { start, end, id: id.to_string(), params, atoms, docs },
 }
 
  // In case we need to limit the content of deploy stmt
 DeployModuleInnerStmt: DeployModuleStmtRaw<'input> = {
     DeployModuleStmt => DeployModuleStmtRaw::Module(<>),
-    DefinePipeline => DeployModuleStmtRaw::PipelineDecl(<>),
-    DefineConnector => DeployModuleStmtRaw::ConnectorDecl(<>),
-    // TODO:    DefineFlow => DeployModuleStmtRaw::FlowDecl(<>),
+    DefinePipeline => DeployModuleStmtRaw::PipelineDefinition(<>),
+    DefineConnector => DeployModuleStmtRaw::ConnectorDefinition(<>),
     // Allow imports of tremor-script definitions
     Const => DeployModuleStmtRaw::Expr(Box::new(<>)),
     FnDecl => DeployModuleStmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
@@ -272,8 +271,8 @@ DeployModuleInnerStmt: DeployModuleStmtRaw<'input> = {
 
 /// Root
 pub(crate) Query : QueryRaw<'input> = {
-    <config:ConfigDirectives> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: config, stmts},
-    <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: vec![], stmts},
+    <config:ConfigDirectives> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: config, stmts, params: DefinitioalArgsRaw::default()},
+    <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: vec![], stmts, params: DefinitioalArgsRaw::default()},
 }
 
 ModuleStmt: ModuleStmtRaw<'input> = {
@@ -297,7 +296,7 @@ ModuleInnerStmt: StmtRaw<'input> = {
     DefineWindow => <>,
     DefineOperator => <>,
     DefineScript => <>,
-    DefinePipeline => StmtRaw::PipelineDecl(<>),
+    DefinePipeline => StmtRaw::PipelineDefinition(<>),
 
     // Allow imports of tremor-script definitions
     Const => StmtRaw::Expr(Box::new(<>)),
@@ -321,7 +320,7 @@ Stmt: StmtRaw<'input> = {
     DefineWindow => <>,
     DefineOperator => <>,
     DefineScript => <>,
-    DefinePipeline => StmtRaw::PipelineDecl(<>),
+    DefinePipeline => StmtRaw::PipelineDefinition(<>),
     
     CreateOperator => <>,
     CreateScript => <>,
@@ -335,25 +334,25 @@ Stmt: StmtRaw<'input> = {
 
 DefineWindow: StmtRaw<'input> = {
     <doc:DocComment> <start:@L> "define" "window" <id:Ident> "from"  <kind:WindowKind> <params:CreationWith> <script:EmbeddedScriptImut> "end" <end:@L> => {
-        StmtRaw::WindowDecl(WindowDeclRaw { start, end, id: id.to_string(), kind, params, script, doc })
+        StmtRaw::WindowDefinition(WindowDefinitionRaw { start, end, id: id.to_string(), kind, params, script, doc })
     }
 }
 
 DefineOperator: StmtRaw<'input> = {
     <doc:DocComment> <start:@L> "define" "operator" <id:Ident> "from" <kind:OperatorKind> <params:ArgsWithEnd?> <end:@L> =>  {
-        StmtRaw::OperatorDecl(Box::new(OperatorDeclRaw { start, end, kind, id: id.to_string(), params: params.unwrap_or_default(), doc }))
+        StmtRaw::OperatorDefinition(Box::new(OperatorDefinitionRaw { start, end, kind, id: id.to_string(), params: params.unwrap_or_default(), doc }))
     }
 }
 
 DefineScript: StmtRaw<'input> = {
     <doc:DocComment> <start:@L> "define" "script" <id:Ident> <params:DefinitionArgs> <script:EmbeddedScript> <end:@L> => {
-        StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.to_string(), script, params, doc })
+        StmtRaw::ScriptDefinition(ScriptDefinitionRaw { start, end, id: id.to_string(), script, params, doc })
     }
 }
 
-DefinePipeline: PipelineDeclRaw<'input> = {
+DefinePipeline: PipelineDefinitionRaw<'input> = {
     <doc:DocComment> <start:@L> "define" "pipeline" <id:Ident> <from:("from" <Ports>)?> <into:("into" <Ports>)?> <params:DefinitionArgs> <pipeline:Pipeline> <end:@L> => {
-        PipelineDeclRaw { start, end, id: id.to_string(), pipeline, params, from, into, doc }
+        PipelineDefinitionRaw { start, end, id: id.to_string(), pipeline, params, from, into, doc }
     }
 }
 
@@ -382,11 +381,11 @@ CreateOperator: StmtRaw<'input> = {
 
 CreatePipeline: StmtRaw<'input> = {
     <start:@L> "create" "pipeline" <id:Ident> <params:CreationWithEnd> <end:@L>  => {
-        StmtRaw::PipelineCreate(PipelineCreateRaw { start, end, id: id.to_string(), target: id.into(), params })
+        StmtRaw::PipelineCreate(PipelineInlineRaw { start, end, id: id.to_string(), target: id.into(), params })
     },
     // With ModulartTarget
     <start:@L> "create" "pipeline" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
-        StmtRaw::PipelineCreate(PipelineCreateRaw { start, end, id: id.to_string(), target, params })
+        StmtRaw::PipelineCreate(PipelineInlineRaw { start, end, id: id.to_string(), target, params })
     }
 }
 

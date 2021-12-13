@@ -21,7 +21,9 @@ use crate::EventId;
 
 use super::*;
 
-use tremor_script::ast::{visitors::ConstFolder, walkers::QueryWalker, Stmt, WindowDecl};
+use tremor_script::ast::{
+    visitors::ConstFolder, walkers::QueryWalker, DefinitioalArgs, Stmt, WindowDefinition,
+};
 use tremor_script::{ast::Consts, Value};
 use tremor_script::{
     ast::{self, Ident, Literal},
@@ -63,6 +65,7 @@ fn test_query(stmt: ast::Stmt) -> ast::Query {
         scripts: HashMap::new(),
         operators: HashMap::new(),
         config: HashMap::new(),
+        params: DefinitioalArgs::default(),
         consts,
     }
 }
@@ -202,12 +205,12 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
     let query =
         tremor_script::query::Query::parse(&module_path, "fake", query_str, cus, &reg, &aggr_reg)
             .map_err(tremor_script::errors::CompilerError::error)?;
-    let mut window_decls: Vec<WindowDecl<'_>> = query
+    let mut window_decls: Vec<WindowDefinition<'_>> = query
         .suffix()
         .stmts
         .iter()
         .filter_map(|stmt| match stmt {
-            Stmt::WindowDecl(wd) => Some(wd.as_ref().clone()),
+            Stmt::WindowDefinition(wd) => Some(wd.as_ref().clone()),
             _ => None,
         })
         .collect();
@@ -597,7 +600,7 @@ fn select_nowin_nogrp_nowhr_nohav() -> Result<()> {
 
     let stmt_ast = test_select_stmt(stmt_ast);
     let script = "fake".to_string();
-    let query = srs::Query::try_new::<Error, _>("target".into(), script, |_| {
+    let query = srs::QueryInstance::try_new::<Error, _>("target".into(), script, |_| {
         Ok(test_query(stmt_ast.clone()))
     })?;
 
@@ -625,7 +628,7 @@ fn select_nowin_nogrp_whrt_nohav() -> Result<()> {
 
     let stmt_ast = test_select_stmt(stmt_ast);
     let script = "fake".to_string();
-    let query = srs::Query::try_new::<Error, _>("target".into(), script, |_| {
+    let query = srs::QueryInstance::try_new::<Error, _>("target".into(), script, |_| {
         Ok(test_query(stmt_ast.clone()))
     })?;
 
@@ -653,7 +656,7 @@ fn select_nowin_nogrp_whrf_nohav() -> Result<()> {
         value: Value::from(false),
     }));
     let stmt_ast = test_select_stmt(stmt_ast);
-    let query = srs::Query::try_new::<Error, _>("target".into(), script, |_| {
+    let query = srs::QueryInstance::try_new::<Error, _>("target".into(), script, |_| {
         Ok(test_query(stmt_ast.clone()))
     })?;
 
@@ -676,7 +679,7 @@ fn select_nowin_nogrp_whrbad_nohav() -> Result<()> {
 
     let stmt_ast = test_select_stmt(stmt_ast);
     let script = "fake".to_string();
-    let query = srs::Query::try_new::<Error, _>("target".into(), script, |_| {
+    let query = srs::QueryInstance::try_new::<Error, _>("target".into(), script, |_| {
         Ok(test_query(stmt_ast.clone()))
     })?;
 
@@ -704,7 +707,7 @@ fn select_nowin_nogrp_whrt_havt() -> Result<()> {
 
     let stmt_ast = test_select_stmt(stmt_ast);
     let script = "fake".to_string();
-    let query = srs::Query::try_new::<Error, _>("target".into(), script, |_| {
+    let query = srs::QueryInstance::try_new::<Error, _>("target".into(), script, |_| {
         Ok(test_query(stmt_ast.clone()))
     })?;
 
@@ -737,7 +740,7 @@ fn select_nowin_nogrp_whrt_havf() -> Result<()> {
 
     let stmt_ast = test_select_stmt(stmt_ast);
     let script = "fake".to_string();
-    let query = srs::Query::try_new::<Error, _>("target".into(), script, |_| {
+    let query = srs::QueryInstance::try_new::<Error, _>("target".into(), script, |_| {
         Ok(test_query(stmt_ast.clone()))
     })?;
 
@@ -780,7 +783,7 @@ fn select_nowin_nogrp_whrt_havbad() -> Result<()> {
 
     let stmt_ast = test_select_stmt(stmt_ast);
     let script = "fake".to_string();
-    let query = srs::Query::try_new::<Error, _>("target".into(), script, |_| {
+    let query = srs::QueryInstance::try_new::<Error, _>("target".into(), script, |_| {
         Ok(test_query(stmt_ast.clone()))
     })?;
 
@@ -857,7 +860,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
     )
     .map_err(|ce| ce.error)?;
     let window_decl = match q.query.suffix().stmts.first() {
-        Some(Stmt::WindowDecl(decl)) => decl.as_ref(),
+        Some(Stmt::WindowDefinition(decl)) => decl.as_ref(),
         other => return Err(format!("Didnt get a window decl, got: {:?}", other).into()),
     };
     let mut params = halfbrown::HashMap::with_capacity(1);

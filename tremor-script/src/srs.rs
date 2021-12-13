@@ -66,11 +66,11 @@ pub struct Flows {
 #[derive(Clone, Debug, PartialEq)]
 pub enum AtomOfDeployment {
     /// A deployable pipeline instance
-    Pipeline(String, Query),
+    Pipeline(String, QueryInstance),
     /// A deployable connector instance
-    Connector(ConnectorDecl),
+    Connector(ConnectorDefinition),
     /// A deployable flow instance
-    Flow(FlowDecl),
+    Flow(FlowDefinition),
 }
 
 impl Deploy {
@@ -132,7 +132,8 @@ impl Deploy {
 
         for stmt in &self.script.stmts {
             if let StmtKind::DeployFlowStmt(ref stmt) = stmt {
-                let decl = FlowDecl::new_from_deploy(self, &stmt.decl.node_id)?;
+                let decl =
+                    FlowDefinition::new_from_flow_definition(self, &stmt.node_id, &stmt.decl)?;
                 instances.push(DeployFlow {
                     instance_id: stmt.node_id.clone(),
                     decl,
@@ -158,7 +159,7 @@ pub struct DeployFlow {
     /// Identity
     pub instance_id: NodeId,
     /// Atomic unit of deployment
-    pub decl: FlowDecl,
+    pub decl: FlowDefinition,
 }
 
 /*
@@ -241,7 +242,7 @@ impl Script {
 ///
 
 #[derive(Clone, PartialEq)]
-pub struct Query {
+pub struct QueryInstance {
     /// The vector of raw input values
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     query: ast::Query<'static>,
@@ -252,7 +253,7 @@ pub struct Query {
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
-impl Debug for Query {
+impl Debug for QueryInstance {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Query")
             .field("alias", &self.instance_id)
@@ -262,7 +263,7 @@ impl Debug for Query {
     }
 }
 
-impl Query {
+impl QueryInstance {
     /// Creates a new Query with a pre-existing query sourced from a troy
     /// deployment where the query is embedded in pipeline statements
     /// # Errors
@@ -270,7 +271,7 @@ impl Query {
     pub fn new_from_deploy(
         origin: &Deploy,
         alias: String,
-        pipeline: &ast::PipelineDecl<'static>,
+        pipeline: &ast::PipelineDefinition<'static>,
     ) -> Result<Self> {
         let node_id = pipeline.node_id.clone();
         let query = pipeline.to_query()?;
@@ -497,7 +498,7 @@ impl Stmt {
     ///
     /// # Errors
     /// if query `f` errors
-    pub fn try_new_from_query<E, F>(other: &Query, f: F) -> std::result::Result<Self, E>
+    pub fn try_new_from_query<E, F>(other: &QueryInstance, f: F) -> std::result::Result<Self, E>
     where
         F: for<'head> FnOnce(&'head ast::Query) -> std::result::Result<ast::Stmt<'head>, E>,
     {
@@ -518,7 +519,7 @@ impl Stmt {
 
 /// A connector declaration
 #[derive(Clone, PartialEq)]
-pub struct ConnectorDecl {
+pub struct ConnectorDefinition {
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     /// The local alias of this connector
     pub instance_id: String,
@@ -531,7 +532,7 @@ pub struct ConnectorDecl {
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
-impl Debug for ConnectorDecl {
+impl Debug for ConnectorDefinition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ConnectorDecl")
             .field("instance_id", &self.instance_id)
@@ -542,7 +543,7 @@ impl Debug for ConnectorDecl {
     }
 }
 
-impl ConnectorDecl {
+impl ConnectorDefinition {
     /// Creates a new `ConnectorDecl` with a pre-existing connector sourced from a troy
     /// deployment
     /// # Errors
@@ -550,7 +551,7 @@ impl ConnectorDecl {
     pub fn new_from_deploy(
         origin: &Deploy,
         alias: String,
-        connector: &ast::ConnectorDecl<'static>,
+        connector: &ast::ConnectorDefinition<'static>,
     ) -> Result<Self> {
         let artefact_id = connector.node_id.clone();
         // This remains safe since we capture the original raw
@@ -574,7 +575,7 @@ impl ConnectorDecl {
 
 /// A flow declaration
 #[derive(Clone, PartialEq)]
-pub struct FlowDecl {
+pub struct FlowDefinition {
     /// The identity of this connector
     pub node_id: NodeId,
     raw: Vec<Arc<Pin<Vec<u8>>>>,
@@ -583,47 +584,44 @@ pub struct FlowDecl {
     /// Link specifications
     pub links: Vec<ConnectStmt>,
     /// pipeleines
-    pub pipelines: Vec<Query>,
+    pub pipelines: Vec<QueryInstance>,
     /// connectors
-    pub connectors: Vec<ConnectorDecl>,
+    pub connectors: Vec<ConnectorDefinition>,
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
-impl Debug for FlowDecl {
+impl Debug for FlowDefinition {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.node_id.fmt(f)
     }
 }
 
-impl FlowDecl {
-    /// Creates a new `FlowDecl` with a pre-existing connector sourced from a troy
+impl FlowDefinition {
+    /// Creates a new `Definition` with a pre-existing connector sourced from a troy
     /// deployment
     /// # Errors
     /// If the self-referential struct cannot be created safely from the deployment provided
-    pub fn new_from_deploy(origin: &Deploy, id: &NodeId) -> Result<Self> {
-        let flow = origin
-            .script
-            .flow_decls
-            .values()
-            .find(|flow| id == &flow.node_id)
-            .ok_or_else(|| Error::from(format!("Invalid flow for deployment {}", &id).as_str()))?;
-
+    pub fn new_from_flow_definition(
+        origin: &Deploy,
+        id: &NodeId,
+        flow: &ast::FlowDefinition<'static>,
+    ) -> Result<Self> {
         let mut pipeline_decls = Vec::new();
         let mut connector_decls = Vec::new();
 
         for stmt in &flow.creates {
-            match &stmt.decl {
-                ast::CreateTargetDecl::Connector(instance) => {
+            match &stmt.defn {
+                ast::CreateTargetDefinition::Connector(instance) => {
                     // FIXME: wire up args
-                    connector_decls.push(ConnectorDecl::new_from_deploy(
+                    connector_decls.push(ConnectorDefinition::new_from_deploy(
                         origin,
                         stmt.node_id.id.clone(),
                         instance,
                     )?);
                 }
-                ast::CreateTargetDecl::Pipeline(instance) => {
+                ast::CreateTargetDefinition::Pipeline(instance) => {
                     // FIXME: wire up args
-                    pipeline_decls.push(Query::new_from_deploy(
+                    pipeline_decls.push(QueryInstance::new_from_deploy(
                         origin,
                         stmt.node_id.id.clone(),
                         instance,
@@ -655,7 +653,7 @@ impl FlowDecl {
 #[derive(Clone)]
 pub struct ScriptDecl {
     raw: Vec<Arc<Pin<Vec<u8>>>>,
-    script: ast::ScriptDecl<'static>,
+    script: ast::ScriptDefinition<'static>,
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
@@ -679,7 +677,7 @@ impl ScriptDecl {
         let raw = decl.raw.clone();
 
         let mut script = match &decl.structured {
-            query::Stmt::ScriptDecl(script) => *script.clone(),
+            query::Stmt::ScriptDefinition(script) => *script.clone(),
             _other => return Err("Trying to turn a non script into a script operator".into()),
         };
         script.script.consts.args = Value::object();
@@ -1038,7 +1036,7 @@ impl EventPayload {
     where
         F: for<'iref, 'head> FnOnce(
             &'iref mut ValueAndMeta<'head>,
-            &'iref ast::ScriptDecl<'head>,
+            &'iref ast::ScriptDefinition<'head>,
         ) -> R,
         R: ,
     {
