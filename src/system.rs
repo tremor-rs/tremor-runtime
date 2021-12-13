@@ -66,6 +66,8 @@ pub(crate) enum ManagerMsg {
         src: String,
         /// deploy flow
         flow: DeployFlow,
+        /// result sender
+        sender: Sender<Result<()>>
     },
     RegisterConnectorType {
         /// the type of connector
@@ -113,7 +115,7 @@ impl Manager {
                             );
                         }
                     }
-                    ManagerMsg::StartDeploy { src, flow } => {
+                    ManagerMsg::StartDeploy { src, flow, sender } => {
                         let id = DeploymentId::from(&flow);
 
                         let res = Deployment::start(
@@ -129,26 +131,33 @@ impl Manager {
                                 if self.deployments.insert(id.clone(), deploy).is_some() {
                                     error!("FIXME: error on duplicate deployments: {:?}", id)
                                 }
+                                if sender.send(Ok(())).await.is_err() {
+                                    error!("Error sending StartDeploy OK Result.");
+                                }
                             }
                             Err(e) => {
-                                error!("Failed to start deployment: {}", e);
 
-                                match e.0 {
+                                let err_str = match e.0 {
                                     crate::errors::ErrorKind::Script(e)
                                     | crate::errors::ErrorKind::Pipeline(
                                         tremor_pipeline::errors::ErrorKind::Script(e),
                                     ) => {
-                                        let mut h = crate::TermHighlighter::stderr();
+                                        let mut h = crate::ToStringHighlighter::new();
                                         tremor_script::query::Query::format_error_from_script(
                                             &src,
                                             &mut h,
                                             &tremor_script::errors::Error::from(e),
                                         )?;
                                         h.finalize()?;
+                                        h.to_string()
                                     }
                                     e => {
-                                        dbg!(e);
+                                        e.to_string()
                                     }
+                                };
+                                error!("Failed to start deployment: {}", err_str);
+                                if sender.send(Err(e)).await.is_err() {
+                                    error!("Error sending StartDeploy Err Result");
                                 }
                             }
                         }
@@ -225,15 +234,17 @@ pub struct World {
 }
 
 impl World {
+    /// Instantiate a flow from
     pub(crate) async fn start_deploy(&self, src: &str, flow: &DeployFlow) -> Result<()> {
+        let (tx, rx) = bounded(1);
         self.system
             .send(ManagerMsg::StartDeploy {
                 src: src.to_string(),
                 flow: flow.clone(),
+                sender: tx
             })
             .await?;
-
-        Ok(())
+        rx.recv().await?
     }
     /// Registers the given connector type with `type_name` and the corresponding `builder`
     ///

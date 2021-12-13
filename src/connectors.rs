@@ -763,7 +763,6 @@ async fn connector_task(
 
                     // notify connector that it should stop reading - so no more new events arrive at its source part
                     quiescence_beacon.stop_reading();
-                    // FIXME: add stop_writing()
                     // let connector stop emitting anything to its source part - if possible here
                     ctx.log_err(connector.on_drain(&ctx).await, "Error during on_drain");
                     connector_state = InstanceState::Draining;

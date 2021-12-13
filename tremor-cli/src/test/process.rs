@@ -127,13 +127,14 @@ pub(crate) async fn run_process(
     };
     env.insert(String::from("TREMOR_PATH"), tremor_path);
 
+
     let binary = job::which("tremor")?;
     let mut process = job::TargetProcess::new_in_dir(binary, &args, &env, test_dir)?;
     info!("Starting {} ...", &process);
     let fg_out_file = test_dir_buf.join("fg.out.log");
     let fg_err_file = test_dir_buf.join("fg.err.log");
     let fg = process.tail(&fg_out_file, &fg_err_file).await?;
-    info!("{} exited with {}", process, fg);
+    info!("Process exited with {}", fg);
 
     before::update_evidence(test_dir, &mut evidence)?;
 

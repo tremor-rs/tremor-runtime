@@ -212,8 +212,8 @@ impl TargetProcess {
         if self.process.kill().is_err() {
             // Do nothing
         };
-        stdout_handle.cancel().await;
-        stderr_handle.cancel().await;
+        let _ = stdout_handle.await;
+        let _ = stderr_handle.await;
         Ok(exit_status)
     }
 }
