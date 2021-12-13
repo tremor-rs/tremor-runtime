@@ -441,6 +441,7 @@ impl ExecutableGraph {
         {
             let mut tags = HashMap::with_capacity(8);
             tags.insert("pipeline".into(), common_cow(&self.id).into());
+            // FIXME: send them to the metrics connector
             self.enqueue_metrics("events", tags, event.ingest_ns);
             self.last_metrics = event.ingest_ns;
         }

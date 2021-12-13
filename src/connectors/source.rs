@@ -14,8 +14,13 @@
 
 #![allow(clippy::module_name_repetitions)]
 
+/// A simple source that is fed with `SourceReply` via a channel.
+pub mod channel_source;
+
+pub use channel_source::{ChannelSource, ChannelSourceRuntime};
+
+use async_std::channel::unbounded;
 use async_std::task;
-use async_std::{channel::unbounded, future::timeout};
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::Display;
@@ -38,7 +43,7 @@ use crate::{
     codec::{self, Codec},
     pipeline::InputTarget,
 };
-use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
+use async_std::channel::{Receiver, Sender};
 use beef::Cow;
 use tremor_common::url::ports::{ERR, OUT};
 use tremor_pipeline::{
@@ -141,6 +146,8 @@ pub enum SourceReply {
         /// optional metadata
         meta: Option<Value<'static>>,
     },
+    /// Stream Failed, resources related to that stream should be cleaned up
+    StreamFail(u64),
     /// no new data/event, wait for the given ms
     Empty(u64),
 }
@@ -152,10 +159,13 @@ pub type SourceReplySender = Sender<SourceReply>;
 #[async_trait::async_trait]
 pub trait Source: Send {
     /// Pulls an event from the source if one exists
-    /// `idgen` is passed in so the source can inspect what event id it would get if it was producing 1 event from the pulled data
+    /// the `pull_id` identifies the number of the call to `pull_data` and is passed in so
+    /// sources can keep track of which event stems from which call of `pull_data` and so can
+    /// form a connection between source-specific units and events when receiving `ack`/`fail` notifications.
     ///
-    /// The `pull_id` is assigned a unique value per call to this function. This number is tracked across events and sent back in `ack` and `fail`.
-    /// Source implementations can manipulate this number, but need to guarantee that it is unique per stream.
+    /// `pull_id` can be modified, but users need to beware that it needs to remain unique per event stream. The modified `pull_id`
+    /// will be used in the `EventId` and will be passed backl into the `ack`/`fail` methods. This allows sources to encode
+    /// information into the `pull_id` to keep track of internal state.
     async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply>;
     /// This callback is called when the data provided from
     /// pull_event did not create any events, this is needed for
@@ -257,38 +267,6 @@ pub trait Source: Send {
     fn asynchronous(&self) -> bool;
 }
 
-/// A source that receives `SourceReply` messages via a channel.
-/// It does not handle acks/fails.
-///
-/// Connector implementations handling their stuff in a separate task can use the
-/// channel obtained by `ChannelSource::sender()` to send `SourceReply`s to the
-/// runtime.
-pub struct ChannelSource {
-    rx: Receiver<SourceReply>,
-    tx: SourceReplySender,
-}
-
-impl ChannelSource {
-    /// constructor
-    pub fn new(qsize: usize) -> Self {
-        let (tx, rx) = bounded(qsize);
-        Self { rx, tx }
-    }
-
-    /// construct a `ChannelSource` from a given channel (`Sender` and `Receiver`)
-    pub fn from_channel(tx: Sender<SourceReply>, rx: Receiver<SourceReply>) -> Self {
-        Self { tx, rx }
-    }
-
-    /// get the sender for the source
-    /// FIXME: change the name
-    pub fn runtime(&self) -> ChannelSourceRuntime {
-        ChannelSourceRuntime {
-            sender: self.tx.clone(),
-        }
-    }
-}
-
 ///
 #[async_trait::async_trait]
 pub trait StreamReader: Send {
@@ -298,80 +276,6 @@ pub trait StreamReader: Send {
     /// called when the reader is finished or encountered an error
     async fn on_done(&mut self, _stream: u64) -> StreamDone {
         StreamDone::StreamClosed
-    }
-}
-
-/// FIXME: this needs renaming and docs
-#[derive(Clone)]
-pub struct ChannelSourceRuntime {
-    sender: Sender<SourceReply>,
-}
-
-impl ChannelSourceRuntime {
-    const READ_TIMEOUT_MS: Duration = Duration::from_millis(100);
-
-    pub(crate) fn new(sender: Sender<SourceReply>) -> Self {
-        Self { sender }
-    }
-    pub(crate) fn register_stream_reader<R, C>(&self, stream: u64, ctx: &C, mut reader: R)
-    where
-        R: StreamReader + std::marker::Sync + 'static,
-        C: Context + Sync + Send + 'static,
-    {
-        let ctx = ctx.clone();
-        let tx = self.sender.clone();
-        task::spawn(async move {
-            if tx.send(SourceReply::StartStream(stream)).await.is_err() {
-                error!("{} Failed to start stream", &ctx);
-                return;
-            };
-
-            while ctx.quiescence_beacon().continue_reading().await {
-                let sc_data = timeout(Self::READ_TIMEOUT_MS, reader.read(stream)).await;
-
-                let sc_data = match sc_data {
-                    Err(_) => continue,
-                    Ok(Ok(d)) => d,
-                    Ok(Err(e)) => {
-                        error!("{} reader error: {}", &ctx, e);
-                        break;
-                    }
-                };
-                let last = matches!(&sc_data, SourceReply::EndStream { .. });
-                if tx.send(sc_data).await.is_err() || last {
-                    break;
-                };
-            }
-            if reader.on_done(stream).await == StreamDone::ConnectorClosed {
-                if let Err(e) = ctx.notifier().notify().await {
-                    error!("{} Failed to notify connector: {}", &ctx, e);
-                };
-            }
-        });
-    }
-}
-
-#[async_trait::async_trait()]
-impl Source for ChannelSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        match self.rx.try_recv() {
-            Ok(reply) => Ok(reply),
-            Err(TryRecvError::Empty) => {
-                // TODO: configure pull interval in connector config?
-                Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
-            }
-            Err(e) => Err(e.into()),
-        }
-    }
-
-    /// this source is not handling acks/fails
-    fn is_transactional(&self) -> bool {
-        false
-    }
-
-    /// we receive data from somehwere behind a channel, definitely asynchronous
-    fn asynchronous(&self) -> bool {
-        true
     }
 }
 
@@ -1209,6 +1113,10 @@ where
                         }
                     }
                 }
+            }
+            SourceReply::StreamFail(stream_id) => {
+                // clean out stream state
+                self.streams.end_stream(stream_id);
             }
             SourceReply::Empty(wait_ms) => {
                 if self.state == SourceState::Draining {
