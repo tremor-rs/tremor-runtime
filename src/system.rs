@@ -113,18 +113,24 @@ impl Manager {
                     ManagerMsg::StartDeploy { src, flow } => {
                         let id = DeploymentId::from(&flow);
 
-                        let deploy = Deployment::start(
+                        let res = Deployment::start(
                             src,
                             flow,
                             &mut self.operator_id_gen,
                             &mut self.connector_id_gen,
                             &self.known_connectors,
                         )
-                        .await?;
-
-                        if self.deployments.insert(id.clone(), deploy).is_some() {
-                            error!("FIXME: error on duplicate deployments: {:?}", id)
-                        };
+                        .await;
+                        match res {
+                            Ok(deploy) => {
+                                if self.deployments.insert(id.clone(), deploy).is_some() {
+                                    error!("FIXME: error on duplicate deployments: {:?}", id)
+                                }
+                            }
+                            Err(e) => {
+                                error!("Failed to start deployment: {}", e)
+                            }
+                        }
                     }
                     ManagerMsg::Stop => {
                         info!("Stopping Manager ...");
