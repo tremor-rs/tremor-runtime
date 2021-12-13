@@ -1,7 +1,7 @@
 status: 0
 name: Test string codec
 asserts:
-  - source: events.log
+  - source: out.log
     equals_file: expected.json
     contains:
       - |
