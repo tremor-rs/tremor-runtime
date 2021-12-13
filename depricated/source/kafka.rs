@@ -80,8 +80,6 @@ pub struct Config {
     /// This should not be used when you expect persistent errors (e.g. if the message content is malformed and will lead to repeated errors)
     #[serde(default = "default_retry_failed_events")]
     pub retry_failed_events: bool,
-    #[serde(default = "default_check_topic_metadata")]
-    pub check_topic_metadata: bool,
 
     /// Optional rdkafka configuration
     ///
@@ -101,10 +99,6 @@ fn default_retry_failed_events() -> bool {
     true
 }
 
-/// defaults to `true` to keep backwards compatibility
-fn default_check_topic_metadata() -> bool {
-    false
-}
 
 impl ConfigImpl for Config {}
 

@@ -65,9 +65,9 @@ impl SourceReporter {
         if let Some(interval) = self.flush_interval_ns {
             if timestamp >= self.last_flush_ns + interval {
                 let payload_out =
-                    make_metrics_payload(timestamp, OUT, self.metrics_out, &self.alias);
+                    make_event_count_metrics_payload(timestamp, OUT, self.metrics_out, &self.alias);
                 let payload_err =
-                    make_metrics_payload(timestamp, ERR, self.metrics_err, &self.alias);
+                    make_event_count_metrics_payload(timestamp, ERR, self.metrics_err, &self.alias);
                 send(&self.tx, payload_out, &self.alias);
                 send(&self.tx, payload_err, &self.alias);
                 self.last_flush_ns = timestamp;
@@ -112,7 +112,8 @@ impl SinkReporter {
     pub(crate) fn periodic_flush(&mut self, timestamp: u64) -> Option<u64> {
         if let Some(interval) = self.flush_interval_ns {
             if timestamp >= self.last_flush_ns + interval {
-                let payload = make_metrics_payload(timestamp, IN, self.metrics_in, &self.alias);
+                let payload =
+                    make_event_count_metrics_payload(timestamp, IN, self.metrics_in, &self.alias);
                 send(&self.tx, payload, &self.alias);
                 self.last_flush_ns = timestamp;
                 return Some(timestamp);
@@ -141,17 +142,20 @@ pub(crate) fn send(tx: &MetricsSender, metric: EventPayload, alias: &str) {
 }
 
 #[must_use]
-fn make_metrics_payload(
+fn make_event_count_metrics_payload(
     timestamp: u64,
     port: Cow<'static, str>,
     count: u64,
     artefact_id: &str,
 ) -> EventPayload {
     let mut tags: HashMap<Cow<'static, str>, Value<'static>> = HashMap::with_capacity(2);
-    tags.insert_nocheck(Cow::from("ramp"), artefact_id.to_string().into());
+    tags.insert_nocheck(Cow::from("connector"), artefact_id.to_string().into());
     tags.insert_nocheck(Cow::from("port"), port.into());
 
-    let value = tremor_pipeline::influx_value(Cow::from("ramp_events"), tags, count, timestamp);
+    let value =
+        tremor_pipeline::influx_value(Cow::from("connector_events"), tags, count, timestamp);
     // full metrics payload
     (value, Value::object()).into()
 }
+
+// TODO: add convenience functions for creating custom metrics payloads
