@@ -1,0 +1,34 @@
+
+define flow main
+flow
+  use troy::connectors;
+  use integration;
+
+  define pipeline rewrite
+  pipeline
+    define script runtime
+    script
+      let $ = {"new": "data"};
+      $
+    end;
+
+    create script runtime;
+
+    select event from in into runtime;
+    select event from runtime into out;
+    select event from runtime/err into out;
+  end;
+
+  create pipeline rewrite;
+  create pipeline main from integration::out_or_exit;
+  create connector in from integration::read_file;
+  create connector out from integration::write_file;
+  create connector exit from connectors::exit;
+
+  connect /connector/in to /pipeline/main;
+  connect /pipeline/main/exit to /connector/exit;
+  connect /pipeline/main to /pipeline/rewrite;
+  connect /pipeline/rewrite to /connector/out;
+
+end;
+deploy flow main;
