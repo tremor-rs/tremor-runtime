@@ -16,7 +16,7 @@ mod custom_fn;
 pub use self::custom_fn::CustomFn;
 pub(crate) use self::custom_fn::{RECUR_PTR, RECUR_REF};
 use crate::ast::{BaseExpr, NodeMetas};
-use crate::errors::{best_hint, Error, ErrorKind, Result};
+use crate::errors::{best_hint, Error, Kind as ErrorKind, Result};
 use crate::utils::hostname as get_hostname;
 use crate::Value;
 use crate::{tremor_fn, EventContext};

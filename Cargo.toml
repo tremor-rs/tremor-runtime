@@ -120,7 +120,10 @@ lapin = { version = "1.9.0", features = [
 elasticsearch = { version = "=7.14.0-alpha.1", features = ["rustls-tls"] }
 
 # ws
-async-tungstenite = { version = "0.16.1", features = ["async-std-runtime"] }
+async-tungstenite = { version = "0.16.1", features = [
+  "async-std-runtime",
+  "async-tls",
+] }
 tungstenite = { version = "0.16.0", features = ["rustls"] }
 
 # for tcp & ws
@@ -132,11 +135,11 @@ rustls-native-certs = "0.5"
 async-std-resolver = "0.20"
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
-rdkafka = { version = "0.27", features = [
+rdkafka = { version = "0.28", features = [
   "cmake-build",
   "libz-static",
 ], default-features = false }
-rdkafka-sys = { version = "4.1.0", features = [
+rdkafka-sys = { version = "4.2.0", features = [
   "cmake-build",
   "libz-static",
 ] } # tracking the version rdkafka depends on
@@ -178,8 +181,8 @@ tonic = { version = "0.5.2", default-features = false, features = [
 tremor-otelapis = { version = "0.2.2" }
 
 # aws-s3
-aws-sdk-s3 = "0.2.0" 
-aws-types = "0.2.0" 
+aws-sdk-s3 = "0.2.0"
+aws-types = "0.2.0"
 
 
 # gcp
