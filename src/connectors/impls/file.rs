@@ -322,7 +322,7 @@ impl Sink for FileSink {
         &mut self,
         _input: &str,
         event: Event,
-        _ctx: &SinkContext,
+        ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
@@ -334,9 +334,19 @@ impl Sink for FileSink {
         for value in event.value_iter() {
             let data = serializer.serialize(value, ingest_ns)?;
             for chunk in data {
-                file.write_all(&chunk).await?;
+                if let Err(e) = file.write_all(&chunk).await {
+                    error!("{} Error writing to file: {}", &ctx, &e);
+                    self.file = None;
+                    ctx.notifier().notify().await?;
+                    return Err(e.into());
+                }
             }
-            file.flush().await?;
+            if let Err(e) = file.flush().await {
+                error!("{} Error flushing file: {}", &ctx, &e);
+                self.file = None;
+                ctx.notifier().notify().await?;
+                return Err(e.into());
+            }
         }
         Ok(SinkReply::NONE)
     }
