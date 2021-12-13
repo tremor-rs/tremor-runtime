@@ -3,5 +3,4 @@ name: Crash on unknown connector type
 asserts:
   - source: STDERR
     contains:
-      - |
-        Connector Type 'bad_connector' unknown
+      - Unknown connector type bad_connector
