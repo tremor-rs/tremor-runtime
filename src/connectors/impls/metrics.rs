@@ -175,6 +175,10 @@ impl Source for MetricsSource {
     fn is_transactional(&self) -> bool {
         false
     }
+
+    fn asynchronous(&self) -> bool {
+        true
+    }
 }
 
 pub(crate) struct MetricsSink {
