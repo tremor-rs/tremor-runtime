@@ -183,6 +183,24 @@ pub trait Sink: Send {
     }
 
     /// Pull metrics from the sink
+    ///
+    /// The expected format is:
+    ///
+    /// ```js
+    /// {
+    ///     "measurement": <name>,
+    ///     "tags": {
+    ///         "connector": <connector-url>,
+    ///         ...
+    ///     },
+    ///     "fields": {
+    ///         "name": <measurement-value>,
+    ///         ...
+    ///     },
+    ///     "timestamp": <timestamp in ns>
+    /// }
+    /// ```
+    ///
     fn metrics(&mut self, _timestamp: u64) -> Vec<EventPayload> {
         vec![]
     }

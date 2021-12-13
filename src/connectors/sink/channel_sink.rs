@@ -104,7 +104,8 @@ where
     T: Hash + Eq + Send + 'static,
     F: Fn(&Value<'_>) -> Option<T>,
 {
-    /// Construct a new instance of a channel sink that redacts metadata
+    /// constructor of a ChannelSink that is not sending the event metadata to the StreamWriter
+    /// and by that saves an expensive clone()
     pub fn new_no_meta(qsize: usize, resolver: F, reply_tx: Sender<AsyncSinkReply>) -> Self {
         let (tx, rx) = bounded(qsize);
         ChannelSink::new(resolver, reply_tx, tx, rx)
