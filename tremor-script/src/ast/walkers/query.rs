@@ -29,7 +29,7 @@ macro_rules! stop {
 /// You do not need to traverse further down. This is done by the provided `walk_*` methods.
 /// The walk_* methods implement walking the expression tree, those do not need to be changed.
 pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
-    /// walks a `Script`
+    /// walks a `GroupBy`
     ///
     /// # Errors
     /// if the walker function fails
@@ -86,7 +86,7 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_window_decl(&mut self, decl: &mut WindowDecl<'script>) -> Result<()> {
+    fn walk_window_decl(&mut self, decl: &mut WindowDefinition<'script>) -> Result<()> {
         stop!(self.visit_window_decl(decl), self.leave_window_decl(decl));
         self.walk_creational_with(&mut decl.params)?;
         if let Some(script) = decl.script.as_mut() {
@@ -174,7 +174,7 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_operator_decl(&mut self, decl: &mut OperatorDecl<'script>) -> Result<()> {
+    fn walk_operator_decl(&mut self, decl: &mut OperatorDefinition<'script>) -> Result<()> {
         stop!(
             self.visit_operator_decl(decl),
             self.leave_operator_decl(decl)
@@ -187,7 +187,7 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_script_decl(&mut self, decl: &mut ScriptDecl<'script>) -> Result<()> {
+    fn walk_script_decl(&mut self, decl: &mut ScriptDefinition<'script>) -> Result<()> {
         stop!(self.visit_script_decl(decl), self.leave_script_decl(decl));
         self.walk_definitinal_args(&mut decl.params)?;
         self.walk_script(&mut decl.script)?;
@@ -198,14 +198,14 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_pipeline_decl(&mut self, decl: &mut PipelineDecl<'script>) -> Result<()> {
+    fn walk_pipeline_definition(&mut self, decl: &mut PipelineDefinition<'script>) -> Result<()> {
         stop!(
-            self.visit_pipeline_decl(decl),
-            self.leave_pipeline_decl(decl)
+            self.visit_pipeline_definition(decl),
+            self.leave_pipeline_definition(decl)
         );
         self.walk_definitinal_args(&mut decl.params)?;
         // FIXME: we only have raw things here, we'll for now ignore it, this needs refactoring
-        self.leave_pipeline_decl(decl)
+        self.leave_pipeline_definition(decl)
     }
 
     /// walks a `StreamStmt`
@@ -270,10 +270,10 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     fn walk_stmt(&mut self, stmt: &mut Stmt<'script>) -> Result<()> {
         stop!(self.visit_stmt(stmt), self.leave_stmt(stmt));
         match stmt {
-            Stmt::WindowDecl(d) => self.walk_window_decl(d.as_mut())?,
-            Stmt::OperatorDecl(d) => self.walk_operator_decl(d)?,
-            Stmt::ScriptDecl(d) => self.walk_script_decl(d.as_mut())?,
-            Stmt::PipelineDecl(d) => self.walk_pipeline_decl(d.as_mut())?,
+            Stmt::WindowDefinition(d) => self.walk_window_decl(d.as_mut())?,
+            Stmt::OperatorDefinition(d) => self.walk_operator_decl(d)?,
+            Stmt::ScriptDefinition(d) => self.walk_script_decl(d.as_mut())?,
+            Stmt::PipelineDefinition(d) => self.walk_pipeline_definition(d.as_mut())?,
             Stmt::StreamStmt(s) => self.walk_stream_stmt(s)?,
             Stmt::OperatorCreate(s) => self.walk_operator_stmt(s)?,
             Stmt::ScriptCreate(s) => self.walk_script_stmt(s)?,

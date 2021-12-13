@@ -30,7 +30,7 @@ use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
 use tremor_script::{
     ast::{ConnectStmt, DeployEndpoint},
-    srs::{ConnectorDecl, DeployFlow, Query},
+    srs::{ConnectorDefinition, DeployFlow, QueryInstance},
 };
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone)]
@@ -51,8 +51,8 @@ impl From<&DeployEndpoint> for ConnectorId {
     }
 }
 
-impl From<&ConnectorDecl> for ConnectorId {
-    fn from(e: &ConnectorDecl) -> Self {
+impl From<&ConnectorDefinition> for ConnectorId {
+    fn from(e: &ConnectorDefinition) -> Self {
         ConnectorId(e.instance_id.clone())
     }
 }
@@ -70,8 +70,8 @@ impl From<&DeployEndpoint> for PipelineId {
     }
 }
 
-impl From<&Query> for PipelineId {
-    fn from(e: &Query) -> Self {
+impl From<&QueryInstance> for PipelineId {
+    fn from(e: &QueryInstance) -> Self {
         PipelineId(e.instance_id.clone())
     }
 }

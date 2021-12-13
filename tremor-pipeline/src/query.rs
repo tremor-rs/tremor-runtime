@@ -34,7 +34,7 @@ use tremor_common::ids::OperatorIdGen;
 use tremor_script::{
     ast::{
         self, BaseExpr, CompilationUnit, Helper, Ident, NodeMetas, PipelineCreate, SelectType,
-        Stmt, WindowDecl, WindowKind,
+        Stmt, WindowDefinition, WindowKind,
     },
     errors::{
         pipeline_stmt_duplicate_name_err, pipeline_unknown_port_err, query_node_duplicate_name_err,
@@ -87,7 +87,7 @@ fn resolve_output_port(port: &(Ident, Ident), meta: &NodeMetas) -> OutputPort {
     }
 }
 
-pub(crate) fn window_decl_to_impl(d: &WindowDecl, meta: &NodeMetas) -> Result<window::Impl> {
+pub(crate) fn window_decl_to_impl(d: &WindowDefinition, meta: &NodeMetas) -> Result<window::Impl> {
     use op::trickle::window::{TumblingOnNumber, TumblingOnTime};
     match &d.kind {
         WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
@@ -95,13 +95,13 @@ pub(crate) fn window_decl_to_impl(d: &WindowDecl, meta: &NodeMetas) -> Result<wi
             let script = if d.script.is_some() { Some(d) } else { None };
             let with = d.params.render(meta)?;
             let max_groups = with
-                .get(WindowDecl::MAX_GROUPS)
+                .get(WindowDefinition::MAX_GROUPS)
                 .and_then(Value::as_usize)
                 .unwrap_or(window::Impl::DEFAULT_MAX_GROUPS);
 
             match (
-                with.get(WindowDecl::INTERVAL).and_then(Value::as_u64),
-                with.get(WindowDecl::SIZE).and_then(Value::as_u64),
+                with.get(WindowDefinition::INTERVAL).and_then(Value::as_u64),
+                with.get(WindowDefinition::SIZE).and_then(Value::as_u64),
             ) {
                 (Some(interval), None) => Ok(window::Impl::from(TumblingOnTime::from_stmt(
                     interval, max_groups, script,
@@ -424,10 +424,10 @@ impl Query {
                     pipe_ops.insert(id, op);
                     outputs.push(id);
                 }
-                Stmt::WindowDecl(_)
-                | Stmt::ScriptDecl(_)
-                | Stmt::OperatorDecl(_)
-                | Stmt::PipelineDecl(_) => {}
+                Stmt::WindowDefinition(_)
+                | Stmt::ScriptDefinition(_)
+                | Stmt::OperatorDefinition(_)
+                | Stmt::PipelineDefinition(_) => {}
                 Stmt::PipelineCreate(s) => {
                     // FIXME NOTE - This should really be using the node id with module
                     if subqueries.contains_key(&s.id) {
@@ -473,7 +473,7 @@ impl Query {
                             if let Some(Stmt::OperatorCreate(o)) = query.stmts.get(i) {
                                 decl.params.ingest_creational_with(&o.params)?;
                             };
-                            let inner_stmt = Stmt::OperatorDecl(decl);
+                            let inner_stmt = Stmt::OperatorDefinition(decl);
 
                             Ok(inner_stmt)
                         })?;
@@ -524,10 +524,10 @@ impl Query {
                                     )
                                 })?
                                 .clone();
-                            let inner_stmt = Stmt::ScriptDecl(Box::new(decl));
+                            let inner_stmt = Stmt::ScriptDefinition(Box::new(decl));
                             Ok(inner_stmt)
                         })?;
-                    let label = if let Stmt::ScriptDecl(s) = stmt_srs.suffix() {
+                    let label = if let Stmt::ScriptDefinition(s) = stmt_srs.suffix() {
                         let e = s.extent(&query.node_meta);
                         let mut h = Dumb::new();
                         // We're trimming the code so no spaces are at the end then adding a newline

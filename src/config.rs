@@ -19,7 +19,7 @@ use simd_json::ValueType;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_script::{
     ast::{ConnectStmt, Helper},
-    srs::ConnectorDecl,
+    srs::ConnectorDefinition,
 };
 use tremor_value::prelude::*;
 
@@ -153,18 +153,14 @@ pub struct Connector {
 
 impl Connector {
     /// FIXME
-    pub fn from_decl(decl: &ConnectorDecl) -> crate::Result<Connector> {
+    pub fn from_decl(decl: &ConnectorDefinition) -> crate::Result<Connector> {
         // FIXME: need some better support here
         let aggr_reg = tremor_script::registry::aggr();
         let reg = &*FN_REGISTRY.lock()?;
         let mut helper = Helper::new(reg, &aggr_reg, vec![]);
         let params = decl.params.clone();
 
-        let config = params.generate_config(&mut helper)?;
-        let defn = config
-            .into_iter()
-            .collect::<tremor_value::Value>()
-            .into_static();
+        let defn = params.generate_config(&mut helper)?;
 
         Connector::from_defn(decl.instance_id.clone(), decl.kind.clone().into(), defn)
     }

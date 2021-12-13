@@ -52,10 +52,12 @@ fn fake_path(mid: &usize) -> Path {
         mid: *mid,
     })
 }
+impl<'run, 'script> DeployWalker<'script> for ConstFolder<'run, 'script> {}
 impl<'run, 'script> QueryWalker<'script> for ConstFolder<'run, 'script> {}
 impl<'run, 'script> ExprWalker<'script> for ConstFolder<'run, 'script> {}
 impl<'run, 'script> ImutExprWalker<'script> for ConstFolder<'run, 'script> where 'script: 'run {}
 
+impl<'run, 'script> DeployVisitor<'script> for ConstFolder<'run, 'script> where 'script: 'run {}
 impl<'run, 'script> QueryVisitor<'script> for ConstFolder<'run, 'script> where 'script: 'run {}
 impl<'run, 'script> ExprVisitor<'script> for ConstFolder<'run, 'script> where 'script: 'run {}
 
