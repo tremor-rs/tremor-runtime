@@ -1,0 +1,14 @@
+define flow main
+flow
+  use integration;
+  create connector exit from integration::exit;
+  create connector out from integration::write_file;
+  create connector in from integration::read_file;
+  create pipeline main from integration::out_or_exit;
+
+  connect /connector/in to /pipeline/main;
+  connect /pipeline/main to /connector/out;
+  connect /pipeline/main/exit to /connector/exit;
+  
+end;
+deploy flow main;
