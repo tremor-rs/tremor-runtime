@@ -162,4 +162,8 @@ impl Source for CrononomeSource {
     fn is_transactional(&self) -> bool {
         false
     }
+
+    fn asynchronous(&self) -> bool {
+        false
+    }
 }

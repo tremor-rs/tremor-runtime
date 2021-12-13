@@ -48,7 +48,11 @@ impl QuiescenceBeacon {
     const MAX_LISTENERS: usize = 2;
 
     /// returns `true` if consumers should continue reading
-    /// doesn't return until the beacon is unpaused
+    /// If the connector is paused, it awaits until it is resumed.
+    ///
+    /// Use this function in asynchronous tasks consuming from external resources to check
+    /// whether it should still read from the external resource. This will also pause external consumption if the
+    /// connector is paused.
     pub async fn continue_reading(&self) -> bool {
         loop {
             match self.0.state.load(Ordering::Acquire) {
@@ -63,8 +67,8 @@ impl QuiescenceBeacon {
         }
     }
 
-    /// returns `true` if consumers should continue writing.
-    ///
+    /// Returns `true` if consumers should continue writing.
+    /// If the connector is paused, it awaits until it is resumed.
     pub async fn continue_writing(&self) -> bool {
         loop {
             match self.0.state.load(Ordering::Acquire) {
