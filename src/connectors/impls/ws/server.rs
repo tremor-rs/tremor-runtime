@@ -168,6 +168,7 @@ impl Connector for WsServer {
 
     #[allow(clippy::too_many_lines)]
     async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+        // TODO: this can be simplified as the connect can be moved into the source
         let path = vec![self.config.port.to_string()];
         let accept_url = self.alias.clone();
 
