@@ -1,0 +1,17 @@
+define flow main
+flow
+  define pipeline main
+  pipeline
+    define script runtime
+    script
+      42bad {{
+    end;
+
+    create script runtime;
+
+    select event from in into runtime;
+    select event from runtime into out;
+  end;
+  create pipeline main;
+end;
+deploy flow main;

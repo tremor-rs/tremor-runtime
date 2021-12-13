@@ -1,7 +1,7 @@
 status: 0
 name: Query exit with non zero status code
 asserts:
-  - source: events.log
+  - source: out.log
     equals_file: expected.json
     contains:
       - You are trying to assign to a value that isn't valid

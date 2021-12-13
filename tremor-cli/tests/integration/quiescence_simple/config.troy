@@ -1,0 +1,27 @@
+define flow main
+flow
+  use integration;
+  use troy::pipelines;
+  use troy::connectors;
+
+  create connector in from integration::read_file;
+  create connector out from integration::write_file;
+  create connector exit from connectors::exit;
+  create connector stdio from connectors::tty;
+  create pipeline main from integration::out_or_exit;
+  create pipeline passthrough from pipelines::passthrough;
+  create pipeline debug from pipelines::passthrough;
+
+    connect /connector/in to /pipeline/main;
+    # error debugging
+    connect /connector/in to /pipeline/debug;
+    connect /pipeline/debug to /connector/stdio;
+    # connect main pipeline to next one
+    connect /pipeline/main to /pipeline/passthrough;
+    # connect main pipeline to exit connector
+    connect /pipeline/main to /connector/exit;
+    # connect next pipeline to out connector
+    connect /pipeline/passthrough to /connector/out;
+
+end;
+deploy flow main;
