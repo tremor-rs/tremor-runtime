@@ -1,8 +1,8 @@
 #!/bin/bash
 
-echo "If a pid file exists, hard kill"
+echo "If a pid file exists, quiesce"
 if test -f before.pid; then
-    kill -9 $( cat before.pid )
+    kill -QUIT $( cat before.pid )
     # Remove pid file
     rm -f before.pid
 fi
