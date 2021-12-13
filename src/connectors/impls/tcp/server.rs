@@ -299,4 +299,8 @@ impl Source for TcpServerSource {
     fn is_transactional(&self) -> bool {
         false
     }
+
+    fn asynchronous(&self) -> bool {
+        true
+    }
 }

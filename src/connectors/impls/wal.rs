@@ -118,6 +118,10 @@ impl Source for WalSource {
     fn is_transactional(&self) -> bool {
         true
     }
+
+    fn asynchronous(&self) -> bool {
+        false
+    }
 }
 
 struct WalSink {
@@ -311,6 +315,10 @@ impl Source for Arc<Mutex<WalThingy>> {
 
     fn is_transactional(&self) -> bool {
         true
+    }
+
+    fn asynchronous(&self) -> bool {
+        false
     }
 }
 

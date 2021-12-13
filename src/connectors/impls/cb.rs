@@ -331,4 +331,8 @@ impl Source for CbSource {
     fn is_transactional(&self) -> bool {
         true
     }
+
+    fn asynchronous(&self) -> bool {
+        false
+    }
 }

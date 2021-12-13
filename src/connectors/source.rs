@@ -248,6 +248,13 @@ pub trait Source: Send {
 
     /// Is this source transactional or can acks/fails be ignored
     fn is_transactional(&self) -> bool;
+
+    /// if true events are consumed from an external resource asynchronously
+    /// and not directly in the call to `pull_data`, but in another task.
+    ///
+    /// This distinction is important for the runtime to handle pausing/resuming
+    /// and quiescence correctly.
+    fn asynchronous(&self) -> bool;
 }
 
 /// A source that receives `SourceReply` messages via a channel.
@@ -360,6 +367,11 @@ impl Source for ChannelSource {
     /// this source is not handling acks/fails
     fn is_transactional(&self) -> bool {
         false
+    }
+
+    /// we receive data from somehwere behind a channel, definitely asynchronous
+    fn asynchronous(&self) -> bool {
+        true
     }
 }
 
@@ -603,13 +615,6 @@ enum SourceState {
     Stopped,
 }
 
-impl SourceState {
-    /// returns true if the runtime should pull the source for new data in this state
-    fn should_pull_data(&self) -> bool {
-        *self == SourceState::Running || *self == SourceState::Draining
-    }
-}
-
 /// entity driving the source task
 /// and keeping the source state around
 pub(crate) struct SourceManager<S>
@@ -632,6 +637,7 @@ where
     pull_wait_start: Option<Instant>,
     pull_wait: Duration,
     is_transactional: bool,
+    is_asynchronous: bool,
     connector_channel: Option<Sender<Msg>>,
     expected_drained: usize,
     pull_counter: u64,
@@ -663,6 +669,7 @@ where
             ..
         } = builder;
         let is_transactional = source.is_transactional();
+        let is_asynchronous = source.asynchronous();
 
         Self {
             source,
@@ -677,6 +684,7 @@ where
             pull_wait_start: None,
             pull_wait: DEFAULT_POLL_DURATION,
             is_transactional,
+            is_asynchronous,
             connector_channel: None,
             expected_drained: 0,
             pull_counter: 0,
@@ -1013,6 +1021,8 @@ where
 
     /// should this manager pull data from its source?
     fn should_pull_data(&mut self) -> bool {
+        // this check implements the waiting that is induced by a source returning `SourceReply::Empty(wait_ms)`.
+        // We stop pulling data until the wait time has elapsed, but we don't sleep this entire time.
         let needs_to_wait = if let Some(pull_wait_start) = self.pull_wait_start {
             if pull_wait_start.elapsed() > self.pull_wait {
                 self.pull_wait_start = None;
@@ -1023,10 +1033,20 @@ where
         } else {
             false
         };
+
+        // asynchronous sources need to be drained from their asynchronous task which consumes from
+        // the external resource, we pull data from it until we receive a `SourceReply::Empty`.
+        // synchronous sources (polling the external resource directly in `Source::pull_data`) should not be called anymore
+        // when being drained, they can be considered flushed in that case. There is no more lingering data.
+        let state_should_pull = self.state == SourceState::Running
+            || (self.state == SourceState::Draining && self.is_asynchronous);
+
+        // combine all the conditions
         !needs_to_wait
-            && self.state.should_pull_data()
-            && !self.pipelines_out.is_empty()
-            && self.cb_open_received
+            && state_should_pull
+            && !self.pipelines_out.is_empty() // we have pipelines connected
+            && self.cb_open_received // we did receive at least 1 `CbAction::Open` from 1 of those connected pipelines
+                                     // so we know the downstream side is ready to receive something
     }
 
     /// handle data from the source
