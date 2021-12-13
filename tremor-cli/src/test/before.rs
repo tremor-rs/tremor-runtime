@@ -57,6 +57,7 @@ impl Before {
             job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &current_working_dir)?;
         debug!("Spawning before: {}", self.cmdline());
         self.block_on(&mut process, base).await?;
+        debug!("Before process ready.");
         Ok(Some(process))
     }
 
@@ -204,7 +205,8 @@ impl BeforeController {
         let bg_out_file = root.join("bg.out.log");
         let bg_err_file = root.join("bg.err.log");
         if let Some(mut process) = process {
-            process.tail(&bg_out_file, &bg_err_file).await?;
+            let status = process.tail(&bg_out_file, &bg_err_file).await?;
+            info!("Before process exited with: {:?}", status);
         };
         Ok(())
     }

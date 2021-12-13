@@ -74,6 +74,11 @@ pub(crate) async fn run_process(
 
     let mut before = before::BeforeController::new(test_dir);
     let before_process = before.spawn().await?;
+    async_std::task::spawn(async move {
+        if let Err(e) = before.capture(before_process).await {
+            eprintln!("Failed to capture input from before thread: {}", e);
+        };
+    });
 
     // register signal handler - to ensure we run `after` even if we do a Ctrl-C
     let run_after = Arc::new(AtomicBool::new(true));
@@ -124,16 +129,11 @@ pub(crate) async fn run_process(
 
     let binary = job::which("tremor")?;
     let mut process = job::TargetProcess::new_in_dir(binary, &args, &env, test_dir)?;
+    info!("Starting {} ...", &process);
     let fg_out_file = test_dir_buf.join("fg.out.log");
     let fg_err_file = test_dir_buf.join("fg.err.log");
     let fg = process.tail(&fg_out_file, &fg_err_file).await?;
     info!("{} exited with {}", process, fg);
-
-    async_std::task::spawn(async move {
-        if let Err(e) = before.capture(before_process).await {
-            eprintln!("Failed to capture input from before thread: {}", e);
-        };
-    });
 
     before::update_evidence(test_dir, &mut evidence)?;
 
