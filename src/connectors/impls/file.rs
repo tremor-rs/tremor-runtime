@@ -31,8 +31,7 @@ const URL_SCHEME: &str = "tremor-file";
 pub enum Mode {
     /// read from file
     Read,
-    /// Default write mode - equivalent to `truncate`
-    /// only here because it has such a nice name
+    /// equivalent to `truncate` only here because it has such a nice name
     Write,
     /// append to the file
     Append,

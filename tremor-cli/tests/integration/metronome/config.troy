@@ -1,0 +1,36 @@
+define flow main
+flow
+  use troy::connectors;
+  use integration;
+
+  define connector metronome from metronome
+  with
+    config = {"interval": 500}
+  end;
+  
+  define pipeline main
+  pipeline
+    select "triggered" from in into out;
+  end;
+
+  define pipeline exit
+  pipeline    
+    select {
+      "exit": 0,
+    } from in into out;
+  end;
+
+
+  create connector exit from connectors::exit;
+  create connector file from integration::write_file;
+  create connector metronome;
+  create pipeline main;
+  create pipeline exit;
+
+
+  connect /connector/metronome to /pipeline/main;
+  connect /connector/metronome to /pipeline/exit;
+  connect /pipeline/main to /connector/file;
+  connect /pipeline/exit to /connector/exit;
+end;
+deploy flow main;
