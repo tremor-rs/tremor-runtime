@@ -1,69 +1,41 @@
-define pipeline main
-into out, exit
-pipeline
-  select event from in where event != "quit" into out;
-  select { "done": true } from in where event == "quit" into out;
-  select { "exit": 0, "delay": 10000 } from in where event == "quit" into out/exit;
-end;
 
-# connector:
-#   - id: udp-in
-#     type: udp_server
-#     codec: string
-#     config:
-#       host: "127.0.0.1"
-#       port: 4242
-define udp_server connector `udp-in`
-with
-  codec = "string",
-  config = { 
-    "host": "127.0.0.1",
-    "port": 4242
-  }
-end;
-
-#   - id: out
-#     type: file
-#     codec: string
-#     preprocessors:
-#       - lines
-#     config:
-#       path: "gen.log"
-#       mode: "truncate"
-define file connector out
-with
-  codec = "string",
-  preprocessors = ["lines"],
-  config = {
-    "path": "gen.log",
-    "mode": "truncate"
-  }
-end;
-
-#  - id: exit
-#    type: exit
-define exit connector exit;
-
-# binding:
-#   - id: main
-#     links:
-#       "/connector/udp-in/{instance}/out": ["/pipeline/main/{instance}/in"]
-#       "/pipeline/main/{instance}/out": ["/connector/out/{instance}/in", "/connector/system::stdout/{instance}/in" ]
-#       "/pipeline/main/{instance}/exit": ["/connector/exit/{instance}/in" ]
 define flow main
 flow
-  create pipeline main;
-  create connector `udp-in`;
-  create connector out;
-  create connector exit;
 
-  connect /connector/`udp-in`/`udp-in`/out to /pipeline/main/main/in;
-  connect /pipeline/main/main/out to /connector/out/out/in;
-  connect /pipeline/main/main/out to /connector/`system::stdout`/system/in;
-  connect /pipeline/main/main/exit to /connector/exit/out/in;
+  use troy::connectors;
+  use integration;
+  
+
+  define connector `udp-in` from udp_server
+  with
+    codec = "string",
+    config = { 
+      "host": "127.0.0.1",
+      "port": 4242
+    }
+  end;
+
+  define connector out from file
+  with
+    codec = "string",
+    postprocessors = ["lines"],
+    config = {
+      "path": "../gen.log",
+      "mode": "truncate"
+    }
+  end;
+
+
+  create pipeline main from integration::out_or_exit;
+  create connector `udp-in`;
+  create connector debug from connectors::stdio;
+  create connector exit from connectors::exit;
+  create connector out;
+
+  connect /connector/`udp-in` to /pipeline/main/in;
+  connect /pipeline/main/out to /connector/out;
+  connect /pipeline/main/out to /connector/debug;
+  connect /pipeline/main/exit to /connector/exit/in;
 end;
 
-# mapping:
-#   /binding/main/1:
-#     instance: "1"
 deploy flow main;
