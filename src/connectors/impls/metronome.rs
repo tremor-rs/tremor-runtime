@@ -129,4 +129,8 @@ impl Source for MetronomeSource {
     fn is_transactional(&self) -> bool {
         false
     }
+
+    fn asynchronous(&self) -> bool {
+        false
+    }
 }
