@@ -5,10 +5,13 @@
     "server",
     "run",
     "-p",
-    "before.pid",
+    "../before.pid",
     "-n",
-    "before/config.troy"
+    "./config.troy"
   ],
+  "env": {
+    "RUST_LOG": "info"
+  },
   "await": {
     "wait-for-ms": [
       "2000"
