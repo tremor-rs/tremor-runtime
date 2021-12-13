@@ -667,7 +667,7 @@ dependencies = [
  "http-body 0.4.4",
  "hyper 0.14.16",
  "hyper-rustls 0.22.1",
- "pin-project 1.0.8",
+ "pin-project 1.0.10",
  "tokio 1.15.0",
  "tower",
  "tracing",
@@ -737,7 +737,7 @@ version = "0.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "969717af8b7eb7424b67fce3f3c8539b0cf72322f909a30d7ea9e8c5ed2bf929"
 dependencies = [
- "pin-project-lite 0.2.7",
+ "pin-project-lite 0.2.8",
  "tokio 1.15.0",
 ]
 
@@ -758,8 +758,8 @@ dependencies = [
  "hyper 0.14.16",
  "hyper-rustls 0.22.1",
  "lazy_static",
- "pin-project 1.0.8",
- "pin-project-lite 0.2.7",
+ "pin-project 1.0.10",
+ "pin-project-lite 0.2.8",
  "tokio 1.15.0",
  "tower",
  "tracing",
@@ -791,7 +791,7 @@ dependencies = [
  "http-body 0.4.4",
  "hyper 0.14.16",
  "percent-encoding",
- "pin-project 1.0.8",
+ "pin-project 1.0.10",
  "tokio 1.15.0",
  "tokio-util 0.6.9",
  "tracing",
@@ -807,7 +807,7 @@ dependencies = [
  "bytes 1.1.0",
  "http",
  "http-body 0.4.4",
- "pin-project 1.0.8",
+ "pin-project 1.0.10",
  "tower",
  "tracing",
 ]
@@ -2762,7 +2762,7 @@ dependencies = [
  "hyper 0.14.16",
  "log",
  "rustls 0.19.1",
- "rustls-native-certs",
+ "rustls-native-certs 0.5.0",
  "tokio 1.15.0",
  "tokio-rustls 0.22.0",
  "webpki 0.21.4",
