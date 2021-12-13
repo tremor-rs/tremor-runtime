@@ -551,7 +551,7 @@ async fn connector_wss_server_text_routing() -> Result<()> {
     // Send from ws server to client and check received event
     //
     let meta = literal!({
-            "ws_server": {
+        "ws_server": {
             "peer": {
                 "host": peer_obj.get("host").unwrap().clone_static(),
                 "port": c1.port()?,

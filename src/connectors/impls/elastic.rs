@@ -25,6 +25,7 @@ use elasticsearch::http::Url;
 use elasticsearch::params::Refresh;
 use elasticsearch::{BulkDeleteOperation, BulkOperation, BulkOperations, BulkParts, Elasticsearch};
 use tremor_common::time::nanotime;
+use tremor_script::utils::sorted_serialize;
 use tremor_value::value::StaticValue;
 use value_trait::Mutable;
 
@@ -33,6 +34,9 @@ use value_trait::Mutable;
 pub struct Config {
     /// list of elasticsearch cluster nodes
     pub nodes: Vec<String>,
+
+    /// index to write events to, can be overwritten by metadata `$elastic["_index"]`
+    pub index: Option<String>,
 
     /// maximum number of parallel in-flight requests before this connector is considered fully saturated
     #[serde(default = "default_concurrency")]
@@ -69,7 +73,7 @@ impl ConnectorBuilder for Builder {
             } else {
                 let node_urls = config
                     .nodes
-                    .into_iter()
+                    .iter()
                     .map(|s| {
                         Url::parse(s.as_str()).map_err(|e| {
                             ErrorKind::InvalidConfiguration(id.to_string(), e.to_string()).into()
@@ -79,8 +83,7 @@ impl ConnectorBuilder for Builder {
                 let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
                 Ok(Box::new(Elastic {
                     node_urls,
-                    max_concurrency: config.concurrency,
-                    include_payload: config.include_payload_in_response,
+                    config,
                     response_tx,
                     response_rx,
                 }))
@@ -94,8 +97,7 @@ impl ConnectorBuilder for Builder {
 /// the elasticsearch connector - for sending stuff to elasticsearch
 struct Elastic {
     node_urls: Vec<Url>,
-    max_concurrency: usize,
-    include_payload: bool,
+    config: Config,
     response_tx: Sender<SourceReply>,
     response_rx: Receiver<SourceReply>,
 }
@@ -128,8 +130,7 @@ impl Connector for Elastic {
             self.node_urls.clone(),
             self.response_tx.clone(),
             builder.reply_tx(),
-            self.max_concurrency,
-            self.include_payload,
+            &self.config,
         );
         builder.spawn(sink, sink_context).map(Some)
     }
@@ -195,6 +196,7 @@ struct ElasticSink {
     reply_tx: Sender<AsyncSinkReply>,
     concurrency_cap: ConcurrencyCap,
     include_payload: bool,
+    default_index: Option<String>,
     origin_uri: EventOriginUri,
 }
 
@@ -203,16 +205,16 @@ impl ElasticSink {
         node_urls: Vec<Url>,
         response_tx: Sender<SourceReply>,
         reply_tx: Sender<AsyncSinkReply>,
-        max_in_flight_requests: usize,
-        include_payload: bool,
+        config: &Config,
     ) -> Self {
         Self {
             node_urls,
             clients: ElasticClients::new(vec![]),
             response_tx,
             reply_tx: reply_tx.clone(),
-            concurrency_cap: ConcurrencyCap::new(max_in_flight_requests, reply_tx),
-            include_payload,
+            concurrency_cap: ConcurrencyCap::new(config.concurrency, reply_tx),
+            include_payload: config.include_payload_in_response,
+            default_index: config.index.clone(),
             origin_uri: EventOriginUri {
                 scheme: String::from("elastic"),
                 host: String::from("dummy"), // will be replaced in `on_event`
@@ -249,6 +251,13 @@ impl Sink for ElasticSink {
         self.clients = ElasticClients::new(clients);
         Ok(true)
     }
+
+    fn metrics(&mut self, _timestamp: u64) -> Vec<EventPayload> {
+        // TODO: use the /_cluster/stats/nodes/ or /<index>/_stats/_all and expose them here
+        // TODO: which are the important metrics to expose?
+        vec![]
+    }
+
     async fn on_event(
         &mut self,
         _input: &str,
@@ -269,6 +278,7 @@ impl Sink for ElasticSink {
             let include_payload = self.include_payload;
             let mut origin_uri = self.origin_uri.clone();
             origin_uri.host = client.cluster_name;
+            let default_index = self.default_index.clone();
             async_std::task::Builder::new()
                 .name(format!(
                     "Elasticsearch Connector {}#{}",
@@ -280,7 +290,9 @@ impl Sink for ElasticSink {
                     let mut ops = BulkOperations::new();
                     // per request options - extract from event metadata (ignoring batched)
                     let event_es_meta = ESMeta::new(event.data.suffix().meta());
-                    let index = event_es_meta.get_index();
+                    let index = event_es_meta
+                        .get_index()
+                        .or_else(|| default_index.as_ref().map(|s| s.as_str()));
                     let doc_type = event_es_meta.get_type();
                     let routing = event_es_meta.get_routing();
                     let refresh = event_es_meta.get_refresh();
@@ -574,7 +586,10 @@ async fn handle_response(
             response_tx.send(source_reply).await?;
         }
     } else {
-        // FIXME: return error, invalid
+        return Err(Error::from(format!(
+            "Invalid Response from ES: No \"items\" or not an array: {}",
+            sorted_serialize(&response)?
+        )));
     }
     // ack the event
     let duration = nanotime() - start;
@@ -629,7 +644,6 @@ where
     Ok(())
 }
 
-// struct encapsulating elasticsearch connector metadata extraction
 struct ESMeta<'a, 'value> {
     meta: Option<&'a Value<'value>>,
 }
