@@ -815,7 +815,15 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
         } else {
             vec![]
         };
-        let windows = self.windows.unwrap_or_default();
+        let windows: Vec<_> = self
+            .windows
+            .unwrap_or_default()
+            .into_iter()
+            .map(|mut w| {
+                w.id = w.id.with_prefix(&helper.module);
+                w
+            })
+            .collect();
         if !windows.is_empty() {
             // if we have windows we need to forbid free event references in the target if they are not
             // inside an aggregate function or can be rewritten to a group reference

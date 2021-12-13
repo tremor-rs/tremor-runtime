@@ -192,7 +192,7 @@ impl Connector {
 
         // TODO: can we get hygenic errors here?
         validate_type(&defn, "codec_map", ValueType::Object)?;
-        dbg!(validate_type(&defn, "preprocessors", ValueType::Array)?);
+        validate_type(&defn, "preprocessors", ValueType::Array)?;
         validate_type(&defn, "postprocessors", ValueType::Array)?;
         validate_type(&defn, "metrics_interval_s", ValueType::U64)?;
 
