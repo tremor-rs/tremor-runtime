@@ -292,5 +292,13 @@ error_chain! {
             description("No socket available")
                 display("No socket available. Probably not connected yet.")
         }
+        DeployFlowError(flow: String, err: String) {
+            description("Error deploying Flow")
+                display("Error deploying Flow {}: {}", flow, err)
+        }
+        DuplicateFlow(flow: String) {
+            description("Duplicate Flow")
+                display("Flow with id \"{}\" is already deployed.", flow)
+        }
     }
 }

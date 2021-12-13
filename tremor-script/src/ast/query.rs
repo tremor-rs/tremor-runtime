@@ -244,7 +244,7 @@ pub struct PipelineDecl<'script> {
 
 impl<'script> PipelineDecl<'script> {
     pub(crate) fn to_query<'registry>(&self) -> Result<Query<'script>> {
-        Ok(self.query.clone().ok_or("not a toplevel query")?)
+        Ok(self.query.clone().ok_or(format!("not a toplevel query: {}", &self.node_id.id()))?)
     }
 }
 impl_expr_mid!(PipelineDecl);
