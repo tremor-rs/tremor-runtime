@@ -104,10 +104,6 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
     use std::io::Read;
     info!("Loading troy from {}", file_name);
 
-    // let file_id = Path::new(file_name)
-    //     .file_stem()
-    //     .unwrap_or_else(|| OsStr::new(file_name))
-    //     .to_string_lossy();
     let mut file = tremor_common::file::open(&file_name)?;
     let mut src = String::new();
 
@@ -139,58 +135,7 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
     let unit = deployable.deploy.as_flows()?;
 
     for flow in &unit.instances {
-        // let binding_instance = flow.instance_id.fqn();
-        // let binding_url = TremorUrl::from_binding_instance(&file_id, &binding_instance);
-
-        // let flow_decls = &flow.decl;
-
-        // for connector in &flow.decl.connectors {
-        //     handle_troy_connector(&world, connector).await?;
-        // }
-        // for pipeline in &flow.decl.pipelines {
-        //     handle_troy_pipeline(&world, &src, pipeline).await?;
-        // }
-
-        // let binding = BindingArtefact {
-        //     binding: Binding {
-        //         id: binding_instance.to_string(),
-        //         description: "Troy managed binding".to_string(),
-        //         links: flow_decls.links.clone(),
-        //     },
-        //     mapping: None,
-        // };
-        // world
-        //     .repo
-        //     .publish_binding(&binding_url, false, binding)
-        //     .await?;
-        // let kv = hashbrown::HashMap::new();
-        // world.launch_binding(&binding_url, kv).await?;
         world.start_deploy(&src, flow).await?;
     }
     Ok(unit.instances.len())
 }
-
-// async fn handle_troy_connector(world: &World, decl: &srs::ConnectorDecl) -> Result<()> {
-//     let url = TremorUrl::from_connector_instance(decl.artefact_id.id(), &decl.instance_id);
-//     let connector = Connector::from_decl(decl)?;
-//     world.repo.publish_connector(&url, false, connector).await?;
-//     Ok(())
-// }
-
-// async fn handle_troy_pipeline(world: &World, src: &str, atom: &srs::Query) -> Result<()> {
-//     let url = TremorUrl::parse(&format!(
-//         "/pipeline/{}/{}",
-//         atom.node_id.clone(),
-//         atom.alias
-//     ))?;
-//     world
-//         .repo
-//         .publish_pipeline(
-//             &url,
-//             false,
-//             tremor_pipeline::query::Query(tremor_script::Query::from_troy(src, atom)?),
-//         )
-//         .await?;
-
-//     Ok(())
-// }
