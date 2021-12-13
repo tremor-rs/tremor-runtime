@@ -1,0 +1,6 @@
+define flow main
+flow
+  define connector out from bad_connector;
+  create connector out;
+end;
+deploy flow main;

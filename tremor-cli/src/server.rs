@@ -91,7 +91,9 @@ async fn handle_signals(signals: Signals, world: World) {
 
 #[cfg(not(tarpaulin_include))]
 #[allow(clippy::too_many_lines)]
-pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
+#[must_use]
+pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<i32> {
+    let mut result = 0;
     use tremor_runtime::system::WorldConfig;
 
     // Logging
@@ -196,6 +198,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
             // manager stopped
             if let Err(e) = manager_res {
                 error!("Manager failed with: {}", e);
+                result = 1;
             }
             api_handle.cancel().await;
         }
@@ -203,6 +206,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
             // api stopped
             if let Err(e) = world.stop(ShutdownMode::Graceful).await {
                 error!("Error shutting down gracefully: {}", e);
+                result = 2;
             }
             manager_handle.cancel().await;
         }
@@ -210,7 +214,7 @@ pub(crate) async fn run_dun(matches: &ArgMatches) -> Result<()> {
     signal_handle.close();
     signal_handler_task.cancel().await;
     warn!("Tremor stopped.");
-    Ok(())
+    Ok(result)
 }
 
 macro_rules! log_and_print_error {
@@ -222,22 +226,25 @@ macro_rules! log_and_print_error {
 
 async fn server_run(matches: &ArgMatches) {
     version::print();
-    if let Err(ref e) = run_dun(matches).await {
-        match e {
-            Error(ErrorKind::AnyhowError(anyhow_e), _) => {
-                log_and_print_error!("{:?}", anyhow_e);
-            }
-            e => {
-                log_and_print_error!("Error: {}", e);
-                for e in e.iter().skip(1) {
-                    eprintln!("Caused by: {}", e);
+    match run_dun(matches).await {
+        Err(e) => {
+            match e {
+                Error(ErrorKind::AnyhowError(anyhow_e), _) => {
+                    log_and_print_error!("{:?}", anyhow_e);
+                }
+                e => {
+                    log_and_print_error!("Error: {}", e);
+                    for e in e.iter().skip(1) {
+                        eprintln!("Caused by: {}", e);
+                    }
                 }
             }
-        }
-        log_and_print_error!("We are SHUTTING DOWN due to errors during initialization!");
+            log_and_print_error!("We are SHUTTING DOWN due to errors during initialization!");
 
-        // ALLOW: main.rs
-        ::std::process::exit(1);
+            // ALLOW: main.rs
+            ::std::process::exit(1);
+        }
+        Ok(res) => ::std::process::exit(res),
     }
 }
 
