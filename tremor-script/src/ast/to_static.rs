@@ -16,13 +16,13 @@
 #![cfg(not(tarpaulin_include))]
 
 use super::{
-    query::WindowDecl, ArgsExprs, ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr,
-    Bytes, BytesPart, ClauseGroup, ClausePreCondition, Comprehension, ComprehensionCase, Consts,
-    CreationalWith, DefaultCase, DefinitioalArgs, DefinitioalArgsWith, EmitExpr, EventPath, Expr,
-    ExprPath, Field, Ident, IfElse, ImutExpr, Invocable, Invoke, InvokeAggrFn, List, Literal,
-    LocalPath, Match, Merge, MetadataPath, OperatorDecl, Patch, PatchOperation, Path, Pattern,
-    PredicateClause, PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Script, Segment,
-    StatePath, StrLitElement, StringLit, TuplePattern, UnaryExpr, WithExprs,
+    query::WindowDefinition, ArgsExprs, ArrayPattern, ArrayPredicatePattern, AssignPattern,
+    BinExpr, Bytes, BytesPart, ClauseGroup, ClausePreCondition, Comprehension, ComprehensionCase,
+    Consts, CreationalWith, DefaultCase, DefinitioalArgs, DefinitioalArgsWith, EmitExpr, EventPath,
+    Expr, ExprPath, Field, Ident, IfElse, ImutExpr, Invocable, Invoke, InvokeAggrFn, List, Literal,
+    LocalPath, Match, Merge, MetadataPath, OperatorDefinition, Patch, PatchOperation, Path,
+    Pattern, PredicateClause, PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Script,
+    Segment, StatePath, StrLitElement, StringLit, TuplePattern, UnaryExpr, WithExprs,
 };
 use crate::CustomFn;
 use beef::Cow;
@@ -1049,18 +1049,18 @@ impl<'script> Consts<'script> {
     }
 }
 
-impl<'script> WindowDecl<'script> {
+impl<'script> WindowDefinition<'script> {
     /// Removes lifetime dependencies from a `WindowDecl`
     #[must_use]
-    pub fn into_static(self) -> WindowDecl<'static> {
-        let WindowDecl {
+    pub fn into_static(self) -> WindowDefinition<'static> {
+        let WindowDefinition {
             node_id,
             mid,
             kind,
             params,
             script,
         } = self;
-        WindowDecl {
+        WindowDefinition {
             node_id,
             mid,
             kind,
@@ -1104,17 +1104,17 @@ impl<'script> Ident<'script> {
     }
 }
 
-impl<'script> OperatorDecl<'script> {
+impl<'script> OperatorDefinition<'script> {
     /// Removes lifetime dependencies from a `WindowDecl`
     #[must_use]
-    pub fn into_static(self) -> OperatorDecl<'static> {
-        let OperatorDecl {
+    pub fn into_static(self) -> OperatorDefinition<'static> {
+        let OperatorDefinition {
             node_id,
             mid,
             kind,
             params,
         } = self;
-        OperatorDecl {
+        OperatorDefinition {
             node_id,
             mid,
             kind,

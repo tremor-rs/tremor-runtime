@@ -15,11 +15,14 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
-use super::{node_id::BaseRef, raw::BaseExpr, DefinitioalArgs, DefinitioalArgsWith};
-use super::{node_id::NodeId, PipelineDecl};
+use super::{
+    node_id::BaseRef, raw::BaseExpr, visitors::ConstFolder, CreationalWith, DefinitioalArgs,
+    DefinitioalArgsWith,
+};
+use super::{node_id::NodeId, PipelineDefinition};
 use super::{Docs, HashMap, Value};
-use crate::{impl_expr_mid, impl_fqn};
-
+use crate::ast::walkers::DeployWalker;
+use crate::{errors::Result, impl_expr_mid, impl_fqn};
 pub(crate) mod raw;
 
 /// A Tremor deployment
@@ -31,11 +34,11 @@ pub struct Deploy<'script> {
     /// Statements
     pub stmts: DeployStmts<'script>,
     /// Flow Definitions
-    pub flow_decls: HashMap<NodeId, FlowDecl<'script>>,
+    pub flow_decls: HashMap<NodeId, FlowDefinition<'script>>,
     /// Connector Definitions
-    pub connector_decls: HashMap<NodeId, ConnectorDecl<'script>>,
+    pub connector_decls: HashMap<NodeId, ConnectorDefinition<'script>>,
     /// Pipeline Definitions
-    pub pipeline_decls: HashMap<NodeId, PipelineDecl<'script>>,
+    pub pipeline_decls: HashMap<NodeId, PipelineDefinition<'script>>,
     #[serde(skip)]
     /// Documentation comments
     pub docs: Docs,
@@ -54,11 +57,11 @@ impl<'script> Deploy<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum DeployStmt<'script> {
     /// A flow declaration
-    FlowDecl(Box<FlowDecl<'script>>),
+    FlowDefinition(Box<FlowDefinition<'script>>),
     /// A pipeline declaration
-    PipelineDecl(Box<PipelineDecl<'script>>),
+    PipelineDefinition(Box<PipelineDefinition<'script>>),
     /// A connector declaration
-    ConnectorDecl(Box<ConnectorDecl<'script>>),
+    ConnectorDefinition(Box<ConnectorDefinition<'script>>),
     /// The create instance constructor
     DeployFlowStmt(Box<DeployFlow<'script>>),
 }
@@ -68,9 +71,9 @@ impl<'script> BaseRef for DeployStmt<'script> {
     #[must_use]
     fn fqn(&self) -> String {
         match self {
-            DeployStmt::FlowDecl(stmt) => stmt.fqn(),
-            DeployStmt::PipelineDecl(stmt) => stmt.fqn(),
-            DeployStmt::ConnectorDecl(stmt) => stmt.fqn(),
+            DeployStmt::FlowDefinition(stmt) => stmt.fqn(),
+            DeployStmt::PipelineDefinition(stmt) => stmt.fqn(),
+            DeployStmt::ConnectorDefinition(stmt) => stmt.fqn(),
             DeployStmt::DeployFlowStmt(stmt) => stmt.fqn(),
         }
     }
@@ -80,9 +83,9 @@ impl<'script> BaseRef for DeployStmt<'script> {
 impl<'script> BaseExpr for DeployStmt<'script> {
     fn mid(&self) -> usize {
         match self {
-            DeployStmt::PipelineDecl(s) => s.mid(),
-            DeployStmt::ConnectorDecl(s) => s.mid(),
-            DeployStmt::FlowDecl(s) => s.mid(),
+            DeployStmt::PipelineDefinition(s) => s.mid(),
+            DeployStmt::ConnectorDefinition(s) => s.mid(),
+            DeployStmt::FlowDefinition(s) => s.mid(),
             DeployStmt::DeployFlowStmt(s) => s.mid(),
         }
     }
@@ -90,7 +93,7 @@ impl<'script> BaseExpr for DeployStmt<'script> {
 
 /// A connector declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ConnectorDecl<'script> {
+pub struct ConnectorDefinition<'script> {
     pub(crate) mid: usize,
     /// Identifer for the connector
     pub node_id: NodeId,
@@ -98,12 +101,14 @@ pub struct ConnectorDecl<'script> {
     pub params: DefinitioalArgsWith<'script>,
     /// Internal / intrinsic builtin name
     pub builtin_kind: String,
+    /// The rendered config of this connector
+    pub config: Value<'script>,
     /// Documentation comments
     #[serde(skip)]
     pub docs: Option<String>,
 }
-impl_expr_mid!(ConnectorDecl);
-impl_fqn!(ConnectorDecl);
+impl_expr_mid!(ConnectorDefinition);
+impl_fqn!(ConnectorDefinition);
 
 type DeployStmts<'script> = Vec<DeployStmt<'script>>;
 
@@ -137,6 +142,23 @@ pub enum ConnectStmt {
         /// The instance being connected
         to: DeployEndpoint,
     },
+}
+
+impl ConnectStmt {
+    pub(crate) fn from_mut(&mut self) -> &mut DeployEndpoint {
+        match self {
+            ConnectStmt::ConnectorToPipeline { from, .. } => from,
+            ConnectStmt::PipelineToConnector { from, .. } => from,
+            ConnectStmt::PipelineToPipeline { from, .. } => from,
+        }
+    }
+    pub(crate) fn to_mut(&mut self) -> &mut DeployEndpoint {
+        match self {
+            ConnectStmt::ConnectorToPipeline { to, .. } => to,
+            ConnectStmt::PipelineToConnector { to, .. } => to,
+            ConnectStmt::PipelineToPipeline { to, .. } => to,
+        }
+    }
 }
 
 /// A deployment endpoint
@@ -177,7 +199,7 @@ impl DeployEndpoint {
 
 /// A flow declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct FlowDecl<'script> {
+pub struct FlowDefinition<'script> {
     pub(crate) mid: usize,
     /// Identifer for the flow
     pub node_id: NodeId,
@@ -191,16 +213,39 @@ pub struct FlowDecl<'script> {
     #[serde(skip)]
     pub docs: Option<String>,
 }
-impl_expr_mid!(FlowDecl);
-impl_fqn!(FlowDecl);
+impl_expr_mid!(FlowDefinition);
+impl_fqn!(FlowDefinition);
+
+impl<'script> FlowDefinition<'script> {
+    /// Take the parameters of the `define flow` statement, which at this point should have been
+    /// combined with the ones from the `deploy flow` statement and propagate them down into each
+    /// `create *` statement inside this flow so that the `args` section of the `create` has
+    /// all occurences place and can resolve it's with satement
+    ///
+    /// ```text
+    ///                      v
+    /// deploy flow -> define flow -> create * -> define * -> <body>
+    /// ```
+    fn apply_args<'registry>(
+        &mut self,
+        helper: &mut super::Helper<'script, 'registry>,
+    ) -> Result<()> {
+        let args = self.params.render(&helper.meta)?;
+        for create in &mut self.creates {
+            create.apply_args(&args, helper)?;
+        }
+        ConstFolder::new(helper).walk_flow_definition(self)?;
+        Ok(())
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// A connect target
-pub enum CreateTargetDecl<'script> {
+pub enum CreateTargetDefinition<'script> {
     /// A connector
-    Connector(ConnectorDecl<'script>),
+    Connector(ConnectorDefinition<'script>),
     /// A Pipeline
-    Pipeline(PipelineDecl<'script>),
+    Pipeline(PipelineDefinition<'script>),
 }
 /// A create statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -210,12 +255,54 @@ pub struct CreateStmt<'script> {
     pub target: NodeId,
     /// The name of the created entity
     pub node_id: NodeId,
+    /// creational args
+    pub with: CreationalWith<'script>,
     /// Atomic unit of deployment
-    pub decl: CreateTargetDecl<'script>,
+    pub defn: CreateTargetDefinition<'script>,
 }
 impl_expr_mid!(CreateStmt);
 impl_fqn!(CreateStmt);
+impl<'script> CreateStmt<'script> {
+    /// First we apply the passed args to the creational with, substituting any use
+    /// of `args` in with with the value.
+    ///
+    /// Second we takle this newly substutated with and ingest it into the definitional
+    /// args of the definitions this create statment reffeences./
+    /// ```text
+    ///                                v
+    /// deploy flow -> define flow -> create * -> define * -> <body>
+    /// ```
 
+    fn apply_args<'registry>(
+        &mut self,
+        args: &Value<'script>,
+        helper: &mut super::Helper<'script, 'registry>,
+    ) -> Result<()> {
+        // replace any reference to the `args` path in the `with` statement of the receate
+        // with the value provided by the outer statement
+        self.with.substitute_args(args, helper)?;
+        // Since the `with` statement is now purely literals, we ingest the statement into
+        // the definitions `args` statment next by using `ingest_creational_with`.
+        // Finally we create the combined new `args` of the ingested creational with into the
+        // definitional args and definiitional with to apply it to all sub statements
+        match &mut self.defn {
+            CreateTargetDefinition::Connector(c) => {
+                // include creational with into definitional args
+                c.params.ingest_creational_with(&self.with)?;
+                c.config = c.params.generate_config(helper)?;
+                // We are done now since there are no statements inside of a connector
+                // the rendering will be handled once we deploy the pipeline and spawn
+                // the connector
+                Ok(())
+            }
+            CreateTargetDefinition::Pipeline(p) => {
+                p.params.ingest_creational_with(&self.with)?;
+                let args = p.params.render(&helper.meta)?;
+                p.apply_args(&args, helper)
+            }
+        }
+    }
+}
 /// A create statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DeployFlow<'script> {
@@ -225,7 +312,7 @@ pub struct DeployFlow<'script> {
     /// Target for creation
     pub node_id: NodeId,
     /// Atomic unit of deployment
-    pub decl: FlowDecl<'script>,
+    pub decl: FlowDefinition<'script>,
     /// Documentation comments
     #[serde(skip)]
     pub docs: Option<String>,

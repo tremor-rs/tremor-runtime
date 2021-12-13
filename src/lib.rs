@@ -86,7 +86,7 @@ use system::World;
 pub use tremor_pipeline::Event;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_script::Script;
-use tremor_script::{deploy::Deploy, highlighter::Term as TermHighlighter};
+use tremor_script::{deploy::Deploy, highlighter::Term as TermHighlighter, highlighter::Dumb as ToStringHighlighter};
 
 /// Operator Config
 pub type OpConfig = tremor_value::Value<'static>;
@@ -128,7 +128,7 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
                 eprintln!("Error: {}", e);
             };
 
-            return Err(format!("failed to load trickle script: {}", file_name).into());
+            return Err(format!("failed to load troy file: {}", file_name).into());
         }
     };
 
