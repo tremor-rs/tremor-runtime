@@ -210,7 +210,7 @@ struct Blaster {
 impl Source for Blaster {
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         if self.finished {
-            return Ok(SourceReply::Empty(100));
+            return Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL));
         }
         if !self.did_sleep {
             // TODO better sleep perhaps
@@ -246,6 +246,10 @@ impl Source for Blaster {
 
     fn is_transactional(&self) -> bool {
         self.is_transactional
+    }
+
+    fn asynchronous(&self) -> bool {
+        false
     }
 }
 
