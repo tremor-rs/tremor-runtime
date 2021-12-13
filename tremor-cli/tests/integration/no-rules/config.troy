@@ -1,0 +1,11 @@
+define flow main
+flow
+  define pipeline main
+  pipeline
+    define script error
+    script
+    end;
+  end;
+  create pipeline main;
+end;
+deploy flow;
