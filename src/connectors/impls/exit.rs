@@ -81,7 +81,7 @@ impl Sink for Exit {
                         "{} Sleeping for {}ms before triggering shutdown.",
                         ctx, delay
                     );
-                    task::sleep(Duration::from_millis(delay)).await;
+                    task::sleep(Duration::from_nanos(delay)).await;
                 }
                 let mode = if value.get_bool(Self::GRACEFUL).unwrap_or(true) {
                     ShutdownMode::Graceful
