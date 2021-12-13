@@ -1,9 +1,9 @@
 {
-    "dir": ".",
-    "cmd": "rm",
-    "args": [
-        "-r",
-        "data"
-    ],
-    "max-await-secs": 1
+	"dir": ".",
+	"cmd": "sh",
+	"args": [
+		"reset.sh"
+	],
+	"max-await-secs": 1,
+    "await": {"status": [0]}
 }

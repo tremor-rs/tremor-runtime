@@ -29,8 +29,10 @@ use std::path::PathBuf;
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct Before {
+    #[serde(default = "default_dir")]
     dir: String,
     cmd: String,
+    #[serde(default = "Default::default")]
     args: Vec<String>,
     #[serde(default = "Default::default")]
     env: HashMap<String, String>,
@@ -40,6 +42,10 @@ pub(crate) struct Before {
     until: u64,
     #[serde(rename = "min-await-secs", default = "default_min_await_secs")]
     before_start_delay: u64,
+}
+
+fn default_dir() -> String {
+    String::from(".")
 }
 
 impl Before {
@@ -123,7 +129,7 @@ impl Before {
                         }
                     }
                     if "status" == k.as_str() {
-                        let code = process.wait().await?.code().unwrap_or(0);
+                        let code = process.wait().await?.code().unwrap_or(99);
                         success &= v
                             .first()
                             .and_then(|code| code.parse::<i32>().ok())
@@ -179,11 +185,11 @@ impl BeforeController {
         let root = &self.base;
         let before_path = root.join("before.yaml");
         if before_path.exists() {
-            let before_json = load_before(&before_path);
-            match before_json {
+            let before_yaml = load_before(&before_path);
+            match before_yaml {
                 Ok(before_json) => before_json.spawn(root).await,
                 Err(Error(ErrorKind::Common(tremor_common::Error::FileOpen(_, _)), _)) => {
-                    // no before json found, all good
+                    // no before yaml found, all good
                     Ok(None)
                 }
                 Err(e) => Err(e),
