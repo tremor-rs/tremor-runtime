@@ -15,6 +15,7 @@
 use crate::connectors::ConnectorType;
 use crate::Result;
 use halfbrown::HashMap;
+use simd_json::ValueType;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_script::{
     ast::{ConnectStmt, Helper},
@@ -175,6 +176,25 @@ impl Connector {
         defn: Value<'static>,
     ) -> crate::Result<Connector> {
         let config = defn.get("config").cloned();
+
+        fn validate_type(v: &Value, k: &str, t: ValueType) -> Result<()> {
+            if v.get(k).is_some() && v.get(k).map(Value::value_type) != Some(t) {
+                return Err(format!(
+                    "Expect type {:?} for key {} but got {:?}",
+                    t,
+                    k,
+                    v.get(k).map(Value::value_type).unwrap_or(ValueType::Null)
+                )
+                .into());
+            }
+            Ok(())
+        }
+
+        // TODO: can we get hygenic errors here?
+        validate_type(&defn, "codec_map", ValueType::Object)?;
+        dbg!(validate_type(&defn, "preprocessors", ValueType::Array)?);
+        validate_type(&defn, "postprocessors", ValueType::Array)?;
+        validate_type(&defn, "metrics_interval_s", ValueType::U64)?;
 
         Ok(Connector {
             id,
