@@ -193,8 +193,8 @@ impl TargetProcess {
             let mut tailout = file::create(&stdout_path).await?;
             while let Ok(line) = stdout_rx.recv().await {
                 tailout.write_all(line.as_bytes()).await?;
+                tailout.sync_data().await?;
             }
-            tailout.sync_all().await?;
             Ok(())
         });
         let stderr_rx = self.stderr_receiver.clone();
@@ -203,8 +203,8 @@ impl TargetProcess {
             let mut tailerr = file::create(&stderr_path).await?;
             while let Ok(line) = stderr_rx.recv().await {
                 tailerr.write_all(line.as_bytes()).await?;
+                tailerr.sync_data().await?;
             }
-            tailerr.sync_all().await?;
             Ok(())
         });
         let exit_status = self.process.status().await?;

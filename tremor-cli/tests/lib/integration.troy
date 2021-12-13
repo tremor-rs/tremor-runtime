@@ -25,8 +25,7 @@ end;
 
 define pipeline out_or_exit
 into out, exit
-
 pipeline
     select event from in where event != "exit" into out/out;
-    select {"exit": 0, "delay": 0} from in where event == "exit" into out/exit;
+    select {"exit": 0, "delay": 1} from in where event == "exit" into out/exit;
 end;
