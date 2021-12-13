@@ -106,7 +106,9 @@ async fn handle_signals(signals: Signals, world: World) {
 
 impl ServerRun {
     #[cfg(not(tarpaulin_include))]
+    #[must_use]
     pub(crate) async fn run_dun(&self) -> Result<()> {
+        let mut result = 0;
         use tremor_runtime::system::WorldConfig;
 
         // Logging
@@ -204,6 +206,7 @@ impl ServerRun {
                 // manager stopped
                 if let Err(e) = manager_res {
                     error!("Manager failed with: {}", e);
+                    result = 1;
                 }
                 api_handle.cancel().await;
             }
@@ -211,6 +214,7 @@ impl ServerRun {
                 // api stopped
                 if let Err(e) = world.stop(ShutdownMode::Graceful).await {
                     error!("Error shutting down gracefully: {}", e);
+                    result = 2;
                 }
                 manager_handle.cancel().await;
             }
@@ -218,27 +222,30 @@ impl ServerRun {
         signal_handle.close();
         signal_handler_task.cancel().await;
         warn!("Tremor stopped.");
-        Ok(())
+        Ok(result)
     }
 
     pub(crate) async fn run(&self) {
         version::print();
-        if let Err(ref e) = self.run_dun().await {
-            match e {
-                Error(ErrorKind::AnyhowError(anyhow_e), _) => {
-                    log_and_print_error!("{:?}", anyhow_e);
-                }
-                e => {
-                    log_and_print_error!("Error: {}", e);
-                    for e in e.iter().skip(1) {
-                        eprintln!("Caused by: {}", e);
+        match run_dun(matches).await {
+            Err(e) => {
+                match e {
+                    Error(ErrorKind::AnyhowError(anyhow_e), _) => {
+                        log_and_print_error!("{:?}", anyhow_e);
+                    }
+                    e => {
+                        log_and_print_error!("Error: {}", e);
+                        for e in e.iter().skip(1) {
+                            eprintln!("Caused by: {}", e);
+                        }
                     }
                 }
-            }
-            log_and_print_error!("We are SHUTTING DOWN due to errors during initialization!");
+                log_and_print_error!("We are SHUTTING DOWN due to errors during initialization!");
 
-            // ALLOW: main.rs
-            ::std::process::exit(1);
+                // ALLOW: main.rs
+                ::std::process::exit(1);
+            }
+            Ok(res) => ::std::process::exit(res),
         }
     }
 }
