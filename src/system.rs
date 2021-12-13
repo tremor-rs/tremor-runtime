@@ -25,7 +25,7 @@ use hashbrown::HashMap;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
-use tremor_script::srs::DeployFlow;
+use tremor_script::{highlighter::Highlighter, srs::DeployFlow};
 
 /// Configuration for the runtime
 pub struct WorldConfig {
@@ -114,7 +114,7 @@ impl Manager {
                         let id = DeploymentId::from(&flow);
 
                         let res = Deployment::start(
-                            src,
+                            src.clone(),
                             flow,
                             &mut self.operator_id_gen,
                             &mut self.connector_id_gen,
@@ -128,7 +128,25 @@ impl Manager {
                                 }
                             }
                             Err(e) => {
-                                error!("Failed to start deployment: {}", e)
+                                error!("Failed to start deployment: {}", e);
+
+                                match e.0 {
+                                    crate::errors::ErrorKind::Script(e)
+                                    | crate::errors::ErrorKind::Pipeline(
+                                        tremor_pipeline::errors::ErrorKind::Script(e),
+                                    ) => {
+                                        let mut h = crate::TermHighlighter::stderr();
+                                        tremor_script::query::Query::format_error_from_script(
+                                            &src,
+                                            &mut h,
+                                            &tremor_script::errors::Error::from(e),
+                                        )?;
+                                        h.finalize()?;
+                                    }
+                                    e => {
+                                        dbg!(e);
+                                    }
+                                }
                             }
                         }
                     }
