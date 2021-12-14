@@ -357,14 +357,9 @@ impl<'script> PipelineCreateRaw<'script> {
         mut helper: &mut Helper<'script, 'registry>,
         args: Option<&Value<'script>>,
     ) -> Result<PipelineCreate> {
+        let target = self.target.clone().with_prefix(&helper.module);
         // Calculate the fully qualified name for the pipeline declaration.
-        let fq_pipeline_defn = self.target.fqn();
-        // if self.module.is_empty() {
-
-        // } else {
-        //     let module: Vec<String> = self.module.iter().map(ToString::to_string).collect();
-        //     format!("{}::{}", module.join("::"), self.target.clone())
-        // };
+        let fq_pipeline_defn = target.fqn();
 
         let pipeline_decl = helper.queries.get(&fq_pipeline_defn).ok_or_else(|| {
             err_generic(
