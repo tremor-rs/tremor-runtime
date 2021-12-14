@@ -25,15 +25,19 @@ pub(crate) struct TrickleOperator {
     pub op: Box<dyn Operator>,
 }
 
-fn mk_node_config(id: String, op_type: String, config: HashMap<String, Value>) -> NodeConfig {
+fn mk_node_config(id: String, op_type: String, config: Value) -> NodeConfig {
     NodeConfig {
         id,
         kind: crate::NodeKind::Operator,
         op_type,
-        config: if config.is_empty() {
+        config: if config
+            .as_object()
+            .map(HashMap::is_empty)
+            .unwrap_or_default()
+        {
             None
         } else {
-            Some(config.into_iter().collect::<Value>().into_static())
+            Some(config.into_static())
         },
         ..NodeConfig::default()
     }
@@ -49,7 +53,7 @@ impl TrickleOperator {
         use crate::operator;
         let stmt = decl.suffix();
         let op: Box<dyn Operator> = match stmt {
-            ast::Stmt::OperatorDecl(ref op) => {
+            ast::Stmt::OperatorDefinition(ref op) => {
                 let op = op.clone().into_static();
                 let config = mk_node_config(
                     op.node_id.id().to_string(),

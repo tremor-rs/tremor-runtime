@@ -25,7 +25,7 @@ use std::io::Write;
 #[derive(Debug, Clone)]
 pub struct Query {
     /// The query
-    pub query: srs::Query,
+    pub query: srs::QueryInstance,
     /// Source of the query
     pub source: String,
     /// Warnings emitted by the script
@@ -53,11 +53,12 @@ where
     /// Converts a troy embedded pipeline with resolved arguments to a runnable query
     /// # Errors
     ///   If the query fails to parse and convert correctly
-    pub fn from_troy(src: &str, query: &crate::srs::Query) -> Result<Self> {
+    pub fn from_troy(src: &str, query: &crate::srs::QueryInstance) -> Result<Self> {
         let warnings = BTreeSet::new();
         let locals = 0;
+        let query = query.clone();
         Ok(Self {
-            query: query.clone(),
+            query,
             source: src.to_string(),
             warnings,
             locals,
@@ -96,7 +97,7 @@ where
             .to_string();
 
         let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
-            let query = srs::Query::try_new::<Error, _>(
+            let query = srs::QueryInstance::try_new::<Error, _>(
                 &target_name,
                 source.clone(),
                 |src: &mut String| {
