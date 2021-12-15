@@ -1,0 +1,4 @@
+const two = 2;
+const three = 3;
+const six = two * three;
+event + six

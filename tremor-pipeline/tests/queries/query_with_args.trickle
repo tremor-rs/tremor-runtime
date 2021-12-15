@@ -1,1 +1,0 @@
-select args from in into out;

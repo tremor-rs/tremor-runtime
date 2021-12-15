@@ -530,54 +530,6 @@ pub trait Visitor<'script> {
         Ok(())
     }
 
-    /// visit an invoke1 expr
-    ///
-    /// # Errors
-    /// if the walker function fails
-    fn visit_invoke1(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-
-    /// leave an invoke1 expr
-    ///
-    /// # Errors
-    /// if the walker function fails
-    fn leave_invoke1(&mut self, _invoke: &mut Invoke<'script>) -> Result<()> {
-        Ok(())
-    }
-
-    /// visit an invoke2 expr
-    ///
-    /// # Errors
-    /// if the walker function fails
-    fn visit_invoke2(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-
-    /// leave an invoke2 expr
-    ///
-    /// # Errors
-    /// if the walker function fails
-    fn leave_invoke2(&mut self, _invoke: &mut Invoke<'script>) -> Result<()> {
-        Ok(())
-    }
-
-    /// visit an invoke3 expr
-    ///
-    /// # Errors
-    /// if the walker function fails
-    fn visit_invoke3(&mut self, _invoke: &mut Invoke<'script>) -> Result<VisitRes> {
-        Ok(Walk)
-    }
-
-    /// leave an invoke3 expr
-    ///
-    /// # Errors
-    /// if the walker function fails
-    fn leave_invoke3(&mut self, _invoke: &mut Invoke<'script>) -> Result<()> {
-        Ok(())
-    }
-
     /// visit an `invoke_aggr` expr
     ///
     /// # Errors
