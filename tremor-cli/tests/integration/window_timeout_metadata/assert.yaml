@@ -3,6 +3,3 @@ name: select target expression tests with window and group by
 asserts:
   - source: out.log
     equals_file: expected.json
-    contains:
-      - |
-        {"event":{"aggregate":2,"args":null,"event_last":"baz","from_group":2,"group":[2,"[2]"],"meta":[{"file":{"path":"in.json"},"foo":"bar"},{"file":{"path":"in.json"},"foo":"bar"}],"state":null,"window":"win"},"meta":{}}
