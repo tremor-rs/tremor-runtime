@@ -231,7 +231,6 @@ fn suite_unit(root: &Path, conf: &TestConfig) -> Result<(stats::Stats, Vec<repor
 }
 
 pub(crate) struct TestConfig {
-    pub(crate) quiet: bool,
     pub(crate) verbose: bool,
     pub(crate) sys_filter: &'static [&'static str],
     pub(crate) includes: Vec<String>,
@@ -247,13 +246,12 @@ impl TestConfig {
 
 impl Test {
     #[allow(clippy::too_many_lines)]
-    pub(crate) async fn run(&self, verbose: bool) -> Result<()> {
+    pub(crate) async fn run(&self) -> Result<()> {
         env_logger::init();
 
         let base_directory = tremor_common::file::canonicalize(&path)?;
         let mut config = TestConfig {
-            quiet: self.quiet,
-            verbose,
+            verbose: self.verbose,
             includes: self.includes.clone(),
             excludes: self.excludes.clone(),
             sys_filter: &[],
