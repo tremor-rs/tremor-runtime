@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::interpreter::val_eq;
 use crate::prelude::*;
 use crate::tremor_fn;
 use crate::{registry::Registry, TRUE};
 
 pub fn load(registry: &mut Registry) {
     registry.insert(tremor_fn! (test|assert(ctx, desc, expected, got) {
-        if expected == got {
+        if val_eq(expected, got) {
             Ok(TRUE)
         } else if ctx.panic_on_assert {
             Err(to_runtime_error(format!(r#"
