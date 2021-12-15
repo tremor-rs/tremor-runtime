@@ -1,0 +1,93 @@
+### # Utilities for dealing with nanoseconds
+
+## The amount of nanoseconds in a microsecond
+const NANOS_PER_MICROSECOND = 1_000;
+
+## The amount of nanoseconds in a millisecond
+const NANOS_PER_MILLISECOND = NANOS_PER_MICROSECOND * 1_000;
+
+## The amount of nanoseconds in a second
+const NANOS_PER_SECOND      = NANOS_PER_MILLISECOND * 1_000;
+
+## The amount of nanoseconds in a minute
+const NANOS_PER_MINUTE      = NANOS_PER_SECOND * 60;
+
+## The amount of nanoseconds in an hour
+const NANOS_PER_HOUR        = NANOS_PER_MINUTE * 60;
+
+## The amount of nanoseconds in a day
+const NANOS_PER_DAY         = NANOS_PER_HOUR * 24;
+
+## The amount of nanoseconds in a week
+const NANOS_PER_WEEK        = NANOS_PER_DAY * 7;
+
+
+## convert the given weeks to nanoseconds
+fn from_weeks(weeks) with
+  weeks * NANOS_PER_WEEK
+end;
+
+## convert the given hours to nanoseconds
+fn from_days(days) with
+  days * NANOS_PER_DAY
+end;
+
+## convert the given hours to nanoseconds
+fn from_hours(hours) with
+  hours * NANOS_PER_HOUR
+end;
+
+## convert the given minutes to nanoseconds
+fn from_minutes(minutes) with
+  minutes * NANOS_PER_MINUTE
+end;
+
+## Convert the given seconds to nanoseconds
+fn from_seconds(secs) with
+  secs * NANOS_PER_SECOND
+end;
+
+## Convert the given milliseconds to nanoseconds
+fn from_millis(millis) with
+  millis * NANOS_PER_MILLISECOND
+end;
+
+## Convert the given microseconds to nanoseconds
+fn from_micros(micros) with
+  micros * NANOS_PER_MICROSECOND
+end;
+
+## Convert the given nanoseconds to weeks
+fn to_weeks(nanos) with
+  nanos / NANOS_PER_WEEK
+end;
+
+## Convert the given nanoseconds to days
+fn to_days(nanos) with
+  nanos / NANOS_PER_DAY
+end;
+
+## Convert the given nanoseconds to hours
+fn to_hours(nanos) with
+  nanos / NANOS_PER_HOUR
+end;
+
+## Convert the given nanoseconds to minutes
+fn to_minutes(nanos) with
+  nanos / NANOS_PER_MINUTE
+end;
+
+## Convert the given nanoseconds to seconds
+fn to_seconds(nanos) with
+  nanos / NANOS_PER_SECOND
+end;
+
+## Convert the given nanoseconds to milliseconds
+fn to_millis(nanos) with
+  nanos / NANOS_PER_MILLISECOND
+end;
+
+## Convert the given nanoseconds to microseconds
+fn to_micros(nanos) with
+  nanos / NANOS_PER_MICROSECOND
+end;
