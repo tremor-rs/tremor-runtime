@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod deploy;
-mod expr;
-mod imut_expr;
-mod query;
+pub(crate) mod deploy;
+pub(crate) mod expr;
+pub(crate) mod imut_expr;
+pub(crate) mod query;
 
 pub use deploy::Walker as DeployWalker;
 pub use expr::Walker as ExprWalker;

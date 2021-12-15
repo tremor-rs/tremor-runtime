@@ -649,42 +649,6 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
         self.leave_invoke(invoke)
     }
 
-    /// walk an invoke1 expr
-    ///
-    /// # Errors
-    /// if the walker function fails
-    fn walk_invoke1(&mut self, invoke: &mut Invoke<'script>) -> Result<()> {
-        stop!(self.visit_invoke1(invoke), self.leave_invoke1(invoke));
-        for arg in &mut invoke.args {
-            self.walk_expr(arg)?;
-        }
-        self.leave_invoke1(invoke)
-    }
-
-    /// walk an invoke expr
-    ///
-    /// # Errors
-    /// if the walker function fails
-    fn walk_invoke2(&mut self, invoke: &mut Invoke<'script>) -> Result<()> {
-        stop!(self.visit_invoke2(invoke), self.leave_invoke2(invoke));
-        for arg in &mut invoke.args {
-            self.walk_expr(arg)?;
-        }
-        self.leave_invoke2(invoke)
-    }
-
-    /// walk an invoke expr
-    ///
-    /// # Errors
-    /// if the walker function fails
-    fn walk_invoke3(&mut self, invoke: &mut Invoke<'script>) -> Result<()> {
-        stop!(self.visit_invoke3(invoke), self.leave_invoke3(invoke));
-        for arg in &mut invoke.args {
-            self.walk_expr(arg)?;
-        }
-        self.leave_invoke3(invoke)
-    }
-
     /// walk an invoke expr
     ///
     /// # Errors
@@ -766,17 +730,11 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
             ImutExpr::Path(path) | ImutExpr::Present { path, .. } => {
                 self.walk_path(path)?;
             }
-            ImutExpr::Invoke(invoke) => {
+            ImutExpr::Invoke(invoke)
+            | ImutExpr::Invoke1(invoke)
+            | ImutExpr::Invoke2(invoke)
+            | ImutExpr::Invoke3(invoke) => {
                 self.walk_invoke(invoke)?;
-            }
-            ImutExpr::Invoke1(invoke1) => {
-                self.walk_invoke1(invoke1)?;
-            }
-            ImutExpr::Invoke2(invoke2) => {
-                self.walk_invoke2(invoke2)?;
-            }
-            ImutExpr::Invoke3(invoke3) => {
-                self.walk_invoke3(invoke3)?;
             }
             ImutExpr::InvokeAggr(invoke_aggr) => {
                 self.walk_invoke_aggr(invoke_aggr)?;

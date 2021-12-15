@@ -9,11 +9,6 @@ script
   let event.sensor_id = 4;
 
   let now = system::nanotime();
-  #let tm_format = "%Y-%m-%d %H:%M:%S.%f %z+00:00";
-
-  #let timestamp = core::datetime::format(event.time, tm_format);
-  #let timestamp_diff = (now - timestamp);
-  #let event.humidity = timestamp_diff;
   emit event;
 end;
 
