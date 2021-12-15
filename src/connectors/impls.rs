@@ -28,12 +28,18 @@ pub(crate) mod elastic;
 pub(crate) mod exit;
 /// file connector implementation
 pub(crate) mod file;
+
+/// Kafka consumer and producer
+pub(crate) mod kafka;
 /// KV
 pub(crate) mod kv;
 /// Home of the famous metrics collector
 pub(crate) mod metrics;
 /// Metronome
 pub(crate) mod metronome;
+
+/// Connector for streaming to AWS S3
+pub(crate) mod s3;
 /// std streams connector (stdout, stderr, stdin)
 pub(crate) mod stdio;
 /// tcp server and client connector impls
@@ -45,5 +51,5 @@ pub(crate) mod wal;
 /// WebSockets
 pub(crate) mod ws;
 
-/// Kafka consumer and producer
-pub(crate) mod kafka;
+
+
