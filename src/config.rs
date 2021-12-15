@@ -152,9 +152,8 @@ pub struct Connector {
 }
 
 impl Connector {
-    /// FIXME
+    /// Spawns a connector from a declaration
     pub fn from_decl(decl: &ConnectorDefinition) -> crate::Result<Connector> {
-        // FIXME: need some better support here
         let aggr_reg = tremor_script::registry::aggr();
         let reg = &*FN_REGISTRY.lock()?;
         let mut helper = Helper::new(reg, &aggr_reg, vec![]);
@@ -164,8 +163,7 @@ impl Connector {
 
         Connector::from_defn(decl.instance_id.clone(), decl.kind.clone().into(), defn)
     }
-    /// FIXME
-
+    /// Creates a connector from it's definition (aka config + settings)
     pub fn from_defn(
         id: String,
         connector_type: ConnectorType,

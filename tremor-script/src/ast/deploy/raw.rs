@@ -186,7 +186,6 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
                 Ok(DeployStmt::FlowDefinition(Box::new(stmt)))
             }
             DeployStmtRaw::DeployFlow(stmt) => {
-                // FIXME TODO constrain to flow create's for top level
                 let stmt: DeployFlow = stmt.up(helper)?;
                 helper.instances.insert(stmt.node_id.clone(), stmt.clone());
                 Ok(DeployStmt::DeployFlowStmt(Box::new(stmt)))
