@@ -77,6 +77,7 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
         if let Some(g) = select.maybe_group_by.as_mut() {
             self.walk_group_by(g)?;
         };
+
         // FIXME: do we want to walk window definitions
 
         self.leave_select(select)
@@ -209,7 +210,6 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
         }
 
         self.walk_definitinal_args(&mut defn.params)?;
-        // FIXME: we only have raw things here, we'll for now ignore it, this needs refactoring
         self.leave_pipeline_definition(defn)
     }
 
@@ -254,7 +254,6 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
             self.visit_pipeline_stmt(stmt),
             self.leave_pipeline_stmt(stmt)
         );
-        // FIXME: handle args
         self.leave_pipeline_stmt(stmt)
     }
 

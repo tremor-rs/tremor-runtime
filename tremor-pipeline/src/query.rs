@@ -429,7 +429,7 @@ impl Query {
                 | Stmt::OperatorDefinition(_)
                 | Stmt::PipelineDefinition(_) => {}
                 Stmt::PipelineCreate(s) => {
-                    // FIXME NOTE - This should really be using the node id with module
+                    // FIXME IMPORTANT - This should really be using the node id with module
                     if subqueries.contains_key(&s.id) {
                         return Err(pipeline_stmt_duplicate_name_err(
                             s,

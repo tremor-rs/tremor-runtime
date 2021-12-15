@@ -378,7 +378,7 @@ impl SourceManagerBuilder {
         // the pipeline is waiting for the source to process contraflow and the source waits for
         // the pipeline to process forward flow.
 
-        let name = ctx.alias.clone(); // FIXME: .short_id("c-src"); // connector source
+        let name = format!("{}-src", ctx.alias);
         let (source_tx, source_rx) = unbounded();
         let source_addr = SourceAddr { addr: source_tx };
         let manager = SourceManager::new(source, ctx, self, source_rx, source_addr.clone());
@@ -738,7 +738,10 @@ where
                 Ok(Control::Continue)
             }
             SourceMsg::Drain(sender) if self.state == Drained => {
-                self.ctx.log_err(sender.send(Msg::SourceDrained).await, "Error sending SourceDrained message");
+                self.ctx.log_err(
+                    sender.send(Msg::SourceDrained).await,
+                    "Error sending SourceDrained message",
+                );
                 Ok(Control::Continue)
             }
             SourceMsg::Drain(drained_sender) => {

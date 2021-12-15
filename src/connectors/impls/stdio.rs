@@ -28,7 +28,7 @@ lazy_static! {
         // is created, after that we simply clone the channel.
         let (mut tx, rx) = broadcast(crate::QSIZE.load(Ordering::Relaxed));
         // We user overflow so that non collected messages can be removed
-        // FIXME: is this what we want? for STDIO it should be good enough
+        // is this what we want? for STDIO it should be good enough
         tx.set_overflow(true);
         async_std::task::spawn(async move {
             let mut stream = stdin();
