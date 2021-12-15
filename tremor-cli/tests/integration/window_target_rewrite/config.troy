@@ -26,11 +26,12 @@ flow
     from in[my_window, my_other_window] where event != "exit"
     group by set(event.name, not event.bool)
     into out;
-    select {"exit": 0, "delay": 1} from in where event == "exit" into out/exit;
+    select {"exit": 0, "delay": core::datetime::with_seconds(2)} from in where event == "exit" into out/exit;
   end;
   create pipeline main;
   create connector in from integration::read_file;
   create connector out from integration::write_file;
+  create connector exit from integration::exit;
 
 
   connect /connector/in to /pipeline/main;
