@@ -17,9 +17,6 @@ use clap::{ArgEnum, Parser};
 #[derive(Parser, Debug)]
 #[clap(name = "tremor", author, version)]
 pub(crate) struct Cli {
-    /// Sets the level of verbosity (does not apply to logging)
-    #[clap(parse(from_occurrences), short, long)]
-    pub(crate) verbose: u8,
     /// Instance identifier
     #[clap(short, long, default_value = "tremor")]
     pub(crate) instance: String,
@@ -86,9 +83,9 @@ pub(crate) struct Test {
     /// Optional tags to filter test incusions by
     #[clap(short, long)]
     pub(crate) excludes: Vec<String>,
-    /// Only print failed tests
+    /// Sets the level of verbosity (does not apply to logging)
     #[clap(short, long)]
-    pub(crate) quiet: bool,
+    pub(crate) verbose: bool,
 }
 
 /// Shell type
