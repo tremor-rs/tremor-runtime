@@ -519,7 +519,7 @@ MayBeConstExpr: ExprRaw<'input> = {
 
 /// A const expressions (this gets compiled out during the 2nd phjase)
 Const: ExprRaw<'input> = {
-    <comment:DocComment> <start:@L> "const" <name:Ident> @L "=" @R <expr:SimpleExprImut> <end:@L> => ExprRaw::Const{name: name.id, expr: expr, start, end, comment},
+    <comment:DocComment> <start:@L> "const" <name:Ident> @L "=" @R <expr:ComplexExprImut> <end:@L> => ExprRaw::Const{name: name.id, expr: expr, start, end, comment},
 }
 
 
