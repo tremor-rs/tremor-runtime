@@ -307,7 +307,6 @@ impl QueryInstance {
     ///
     /// # Errors
     /// errors if the conversion function fails
-    // FIXME TODO pass in filename of trickle or id of troy pipe definiton here
     pub fn try_new<E, F>(target: &str, mut raw: String, f: F) -> std::result::Result<Self, E>
     where
         F: for<'head> FnOnce(&'head mut String) -> std::result::Result<ast::Query<'head>, E>,
@@ -612,7 +611,6 @@ impl FlowDefinition {
         for stmt in &flow.creates {
             match &stmt.defn {
                 ast::CreateTargetDefinition::Connector(instance) => {
-                    // FIXME: wire up args
                     connector_decls.push(ConnectorDefinition::new_from_deploy(
                         origin,
                         stmt.node_id.id.clone(),
@@ -620,7 +618,6 @@ impl FlowDefinition {
                     )?);
                 }
                 ast::CreateTargetDefinition::Pipeline(instance) => {
-                    // FIXME: wire up args
                     pipeline_decls.push(QueryInstance::new_from_deploy(
                         origin,
                         stmt.node_id.id.clone(),

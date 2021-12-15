@@ -706,7 +706,7 @@ pub struct WindowDefinitionRaw<'script> {
     pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) kind: WindowKind,
-    // FIXME / TODO: yes it is odd that we use the `creational` here but windows are not crates
+    // Yes it is odd that we use the `creational` here but windows are not crates
     // and defined like other constructs - perhaps we should revisit this?
     pub(crate) params: CreationalWithRaw<'script>,
     pub(crate) script: Option<ScriptRaw<'script>>,
