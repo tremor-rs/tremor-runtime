@@ -163,7 +163,7 @@ fn eval_suite_tests(
                 let prefix = if success { "(+)" } else { "(-)" };
                 let report = stats.report(success, &test_name);
 
-                let hidden = config.quiet && success;
+                let hidden = !config.verbose && success;
                 if !hidden {
                     status::h1("    Test", &test_name)?;
                     status::tagsx(
