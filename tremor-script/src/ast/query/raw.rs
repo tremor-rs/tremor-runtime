@@ -393,7 +393,6 @@ impl<'script> PipelineInlineRaw<'script> {
 
         pipeline_stmts.extend(pipeline_decl.raw_stmts.clone());
         let subq_module = &self.mangle_id(&self.id);
-        helper.module.push(subq_module.clone());
 
         let mut decl_params = pipeline_decl.params.clone();
         let mut stmt_params = self.params.clone().up(helper)?;
@@ -402,8 +401,13 @@ impl<'script> PipelineInlineRaw<'script> {
             ArgsRewriter::new(args.clone(), helper).walk_definitinal_args(&mut decl_params)?;
             ArgsRewriter::new(args.clone(), helper).walk_creational_with(&mut stmt_params)?;
         }
+        ConstFolder::new(helper).walk_definitinal_args(&mut decl_params)?;
+        ConstFolder::new(helper).walk_creational_with(&mut stmt_params)?;
+
         let subq_args = self.get_args_map(&decl_params, stmt_params, helper)?;
 
+        // we need to resolve the constant folder outside of this module
+        helper.module.push(subq_module.clone());
         for stmt in pipeline_stmts {
             match stmt {
                 StmtRaw::ModuleStmt(m) => {

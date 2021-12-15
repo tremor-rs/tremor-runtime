@@ -150,6 +150,10 @@ test_cases!(
     empty_array_pattern,
     const_in_const_lookup,
     // INSERT
+    const_fn_tremor,
+    const_string_interpolation,
+    const_in_const,
+    const_basic,
     size_functions,
     const_expr_path_non_const_segment,
     merge_assign_target_state,

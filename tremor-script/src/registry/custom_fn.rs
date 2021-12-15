@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::{FResult, FunctionError, Result};
-use crate::ast::{Expr, Exprs, FnDecl, ImutExpr, ImutExprs, InvokeAggrFn};
+use crate::ast::{visitors::IsConstFn, Expr, Exprs, FnDecl, ImutExpr, ImutExprs, InvokeAggrFn};
 use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
 use crate::prelude::*;
 use crate::Value;
@@ -44,13 +44,14 @@ pub struct CustomFn<'script> {
 }
 
 impl<'script> From<FnDecl<'script>> for CustomFn<'script> {
-    fn from(f: FnDecl<'script>) -> Self {
+    fn from(mut f: FnDecl<'script>) -> Self {
+        let is_const = IsConstFn::is_const(&mut f.body).unwrap_or_default();
         CustomFn {
             name: f.name.id,
             args: f.args.iter().map(ToString::to_string).collect(),
             locals: f.locals,
             body: f.body,
-            is_const: false, // TODO we should find a way to examine this!
+            is_const,
             open: f.open,
             inline: f.inline,
         }

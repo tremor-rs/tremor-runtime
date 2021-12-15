@@ -15,4 +15,5 @@
 pub(crate) mod args_rewriter;
 pub(crate) mod const_folder;
 pub(crate) mod group_by_extractor;
+pub(crate) mod is_const;
 pub(crate) mod target_event_ref;
