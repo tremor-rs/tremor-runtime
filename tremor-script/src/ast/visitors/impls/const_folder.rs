@@ -74,7 +74,7 @@ where
         });
         std::mem::swap(&mut buf, e);
         *e = match buf {
-            // Datatyes
+            // Datatypes
             ImutExpr::Record(Record { mid, base, fields }) if fields.is_empty() => Lit(Literal {
                 value: base.into(),
                 mid,
@@ -167,6 +167,7 @@ where
                     .into();
                 Lit(Literal { mid, value })
             }
+            // handled below
             e @ ImutExpr::String(_) => e,
 
             e @ ImutExpr::Patch(_) => e,         // TODO
