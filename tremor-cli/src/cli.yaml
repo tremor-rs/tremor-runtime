@@ -8,12 +8,6 @@ settings:
   - SubcommandRequiredElseHelp
   - PropagateVersion
 args:
-  - verbose:
-      short: v
-      long: verbose
-      multiple_occurrences: true
-      about: Sets the level of verbosity (does not apply to logging)
-      takes_value: false
   - instance:
       about: Instance identifier
       short: i
@@ -127,12 +121,12 @@ subcommands:
             multiple_occurrences: true
             multiple_values: true
             takes_value: true
-        - QUIET:
-            about: only print failed tests
-            short: q
-            long: quiet
-            required: false
-
+        - VERBOSE:
+            short: v
+            long: verbose
+            multiple_occurrences: true
+            about: Sets the level of verbosity (does not apply to logging)
+            takes_value: false
   - dbg:
       about: Advanced debugging commands
       args:

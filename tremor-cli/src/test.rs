@@ -234,7 +234,6 @@ fn suite_unit(root: &Path, conf: &TestConfig) -> Result<(stats::Stats, Vec<repor
 }
 
 pub(crate) struct TestConfig {
-    pub(crate) quiet: bool,
     pub(crate) verbose: bool,
     pub(crate) sys_filter: &'static [&'static str],
     pub(crate) includes: Vec<String>,
@@ -255,8 +254,8 @@ pub(crate) async fn run_cmd(matches: &ArgMatches) -> Result<()> {
     let kind: test::Kind = matches.value_of("MODE").unwrap_or_default().try_into()?;
     let path = matches.value_of("PATH").unwrap_or_default();
     let report = matches.value_of("REPORT");
-    let quiet = matches.is_present("QUIET");
-    let verbose = matches.is_present("verbose");
+    let verbose = matches.occurrences_of("VERBOSE");
+    let is_verbose = verbose > 0;
     let includes: Vec<String> = if matches.is_present("INCLUDES") {
         if let Some(matches) = matches.values_of("INCLUDES") {
             matches.map(std::string::ToString::to_string).collect()
@@ -278,8 +277,7 @@ pub(crate) async fn run_cmd(matches: &ArgMatches) -> Result<()> {
     };
     let base_directory = tremor_common::file::canonicalize(&path)?;
     let mut config = TestConfig {
-        quiet,
-        verbose,
+        verbose: is_verbose,
         includes,
         excludes,
         sys_filter: &[],
