@@ -230,6 +230,7 @@ impl<'script> FlowDefinition<'script> {
         &mut self,
         helper: &mut super::Helper<'script, 'registry>,
     ) -> Result<()> {
+        ConstFolder::new(helper).walk_flow_definition(self)?;
         let args = self.params.render(&helper.meta)?;
         for create in &mut self.creates {
             create.apply_args(&args, helper)?;

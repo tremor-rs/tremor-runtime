@@ -198,14 +198,19 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_pipeline_definition(&mut self, decl: &mut PipelineDefinition<'script>) -> Result<()> {
+    fn walk_pipeline_definition(&mut self, defn: &mut PipelineDefinition<'script>) -> Result<()> {
         stop!(
-            self.visit_pipeline_definition(decl),
-            self.leave_pipeline_definition(decl)
+            self.visit_pipeline_definition(defn),
+            self.leave_pipeline_definition(defn)
         );
-        self.walk_definitinal_args(&mut decl.params)?;
+
+        if let Some(query) = &mut defn.query {
+            self.walk_query(query)?
+        }
+
+        self.walk_definitinal_args(&mut defn.params)?;
         // FIXME: we only have raw things here, we'll for now ignore it, this needs refactoring
-        self.leave_pipeline_definition(decl)
+        self.leave_pipeline_definition(defn)
     }
 
     /// walks a `StreamStmt`

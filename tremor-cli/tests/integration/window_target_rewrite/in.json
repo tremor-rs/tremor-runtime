@@ -3,3 +3,4 @@
 {"array": [7,8,9], "name": "snot", "bool": true, "obj": {"key": "value"}}
 {"array": [0, 0], "name": "badger", "bool": true, "obj": {"key": "value"}}
 {"array": [], "name": "badger", "bool": true, "obj": {}}
+"exit"
