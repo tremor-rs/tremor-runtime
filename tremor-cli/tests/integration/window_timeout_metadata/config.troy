@@ -2,15 +2,7 @@ define flow my_flow
 flow
   use integration;
   use troy::connectors;
-  define pipeline out_or_exit
-  into
-    out, exit
-  pipeline
-    use std::time::nanos;
-    select event from in where event != "exit" into out/out;
-    # wait for 2s to trigger a window timeout
-    select {"exit": 0, "delay": nanos::frp,_seconds(2)} from in where event == "exit" into out/exit;
-  end;
+  use std::time::nanos;
 
   define pipeline main
   pipeline
@@ -48,7 +40,9 @@ flow
     } from post into out;
   end;
 
-  create pipeline or_exit from out_or_exit;
+  create pipeline or_exit from integration::out_or_exit with
+    delay = nanos::from_seconds(2)
+  end;
   create pipeline main;
   create connector in from integration::read_file;
   create connector out from integration::write_file;
