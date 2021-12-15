@@ -158,12 +158,12 @@ impl ClientContext for TremorConsumerContext {
             error
         {
             let notifier = self.err_notifier.clone();
-            let url = self.alias.clone();
+            let alias = self.alias.clone();
             async_std::task::spawn(async move {
                 if let Err(e) = notifier.notify().await {
                     error!(
                         "[Source::{}] Error notifying the connector of a failure: {}",
-                        &url, e
+                        &alias, e
                     );
                 }
             });
