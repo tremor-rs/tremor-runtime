@@ -1,0 +1,3 @@
+const one = 1;
+const string = "one is #{one}";
+string

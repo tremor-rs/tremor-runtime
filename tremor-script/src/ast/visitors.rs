@@ -28,6 +28,7 @@ pub mod query;
 pub(crate) use impls::args_rewriter::ArgsRewriter;
 pub use impls::const_folder::ConstFolder;
 pub(crate) use impls::group_by_extractor::GroupByExprExtractor;
+pub(crate) use impls::is_const::IsConstFn;
 pub(crate) use impls::target_event_ref::TargetEventRef;
 
 pub(crate) use deploy::Visitor as DeployVisitor;
