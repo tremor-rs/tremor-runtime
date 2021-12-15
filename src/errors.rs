@@ -122,7 +122,6 @@ impl<P> From<std::sync::PoisonError<P>> for Error {
 }
 
 impl<T: std::fmt::Debug> From<aws_sdk_s3::SdkError<T>> for Error {
-    // FIXME: dbg or display trait
     fn from(e: aws_sdk_s3::SdkError<T>) -> Self {
         Self::from(ErrorKind::S3Error(format!("{:?}", e)))
     }
