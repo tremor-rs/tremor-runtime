@@ -48,10 +48,12 @@ fn eval_suite_entrypoint(
     let mut elements = Vec::new();
     let mut stats = stats::Stats::new();
 
-    let spec = suite_spec
-        .get_field_expr("tests")
-        .and_then(ImutExpr::as_list)
+    let tests_expr = suite_spec
+        .cloned_field_expr("tests")
         .ok_or("Missing suite tests")?;
+    let spec = tests_expr
+        .as_list()
+        .ok_or("Invalid type for field \"tests\". Expected list.")?;
 
     if let Ok((s, mut e)) = eval_suite_tests(env, local, script, spec, tags, config) {
         elements.append(&mut e);
@@ -59,7 +61,8 @@ fn eval_suite_entrypoint(
     } else {
         stats.fail(
             suite_spec
-                .get_literal("name")
+                .cloned_field_literal("name")
+                .as_ref()
                 .and_then(Value::as_str)
                 .unwrap_or_default(),
         );
@@ -105,20 +108,25 @@ fn eval_suite_tests(
 
             let mut found_tags = Vec::new();
 
-            if let Some(tags) = spec.get_field_expr("tags") {
-                let tag_value = eval(tags, env, local)?;
+            if let Some(tags) = spec.cloned_field_expr("tags") {
+                let tag_value = eval(&tags, env, local)?;
                 if let Some(tags) = tag_value.as_array() {
                     let inner_tags = tags.iter().map(ToString::to_string);
                     found_tags.extend(inner_tags);
                 }
-            } else if let Some(tags) = spec.get_literal("tags").and_then(Value::as_array) {
+            } else if let Some(tags) = spec
+                .cloned_field_literal("tags")
+                .as_ref()
+                .and_then(Value::as_array)
+            {
                 let inner_tags = tags.iter().map(ToString::to_string);
                 found_tags.extend(inner_tags);
             }
 
             let case_tags = suite_tags.join(Some(found_tags));
             let test_name = spec
-                .get_literal("name")
+                .cloned_field_literal("name")
+                .as_ref()
                 .map(ToString::to_string)
                 .unwrap_or_default();
             if let (matched, false) = config.matches(&case_tags) {
@@ -132,9 +140,9 @@ fn eval_suite_tests(
                     )?;
                 }
                 stats.skip();
-            } else if let Some(item) = spec.get_field_expr("test") {
+            } else if let Some(item) = spec.cloned_field_expr("test") {
                 let start = nanotime();
-                let value = eval(item, env, local)?;
+                let value = eval(&item, env, local)?;
                 let elapsed = nanotime() - start;
 
                 // Non colorized test source extent for json report capture
@@ -249,18 +257,16 @@ pub(crate) fn run_suite(
                         .ok_or_else(|| Error::from("Invalid test specification"))?;
 
                     let mut found_tags = Vec::new();
-                    if let Some(tags) = spec.get_field_expr("tags") {
-                        let tag_value = eval(tags, &env, &local)?;
+                    if let Some(tags) = spec.cloned_field_expr("tags") {
+                        let tag_value = eval(&tags, &env, &local)?;
                         if let Some(tags) = tag_value.as_array() {
                             let inner_tags = tags.iter().map(|x| (*x).to_string());
                             found_tags.extend(inner_tags);
                         }
 
                         let suite_tags = scenario_tags.join(Some(found_tags));
-                        let suite_name = spec
-                            .get_literal("name")
-                            .and_then(Value::as_str)
-                            .unwrap_or_default();
+                        let name_lit = spec.cloned_field_literal("name");
+                        let suite_name = name_lit.as_str().unwrap_or_default();
 
                         // TODO revisit tags in unit tests
                         if let (_matched, true) = config.matches(&suite_tags) {

@@ -882,7 +882,7 @@ impl_expr_mid!(Field);
 pub struct Record<'script> {
     /// Id
     pub mid: usize,
-    /// base (or static part of the cecord)
+    /// base (or static part of the record)
     pub base: crate::Object<'script>,
     /// Fields of this record
     pub fields: Fields<'script>,
@@ -890,21 +890,25 @@ pub struct Record<'script> {
 impl_expr_mid!(Record);
 impl<'script> Record<'script> {
     /// Gets the expression for a given name
+    /// Attention: Clones its values!
     #[must_use]
-    pub fn get_field_expr(&self, name: &str) -> Option<&ImutExpr> {
-        self.fields.iter().find_map(|f| {
-            f.name
-                .as_str()
-                .and_then(|n| if n == name { Some(&f.value) } else { None })
-        })
+    pub fn cloned_field_expr(&self, name: &str) -> Option<ImutExpr> {
+        self.base.get(name.into()).map(|base_value| {
+            ImutExpr::Literal(Literal { mid: self.mid, value: base_value.clone() })
+        }).or_else(||
+            self.fields.iter().find_map(|f| {
+                f.name
+                    .as_str()
+                    .and_then(|n| if n == name { Some(f.value.clone()) } else { None })
+        }))
     }
-    /// Tries to fetch a literal from a record
+    /// Tries to fetch a literal from a record and clones it, snot!
     #[must_use]
-    pub fn get_literal(&self, name: &str) -> Option<&Value> {
-        if let Some(ImutExpr::Literal(Literal { value, .. })) = self.get_field_expr(name) {
+    pub fn cloned_field_literal(&self, name: &str) -> Option<Value> {
+        if let Some(ImutExpr::Literal(Literal { value, .. })) = self.cloned_field_expr(name) {
             Some(value)
         } else {
-            self.base.get(name)
+            self.base.get(name).cloned()
         }
     }
 }
@@ -2660,14 +2664,16 @@ hello
             fields: vec![f1, f2],
         };
 
-        assert_eq!(r.get_field_expr("snot"), Some(&v("badger")));
-        assert_eq!(r.get_field_expr("nots"), None);
+        assert_eq!(r.cloned_field_expr("snot"), Some(v("badger")));
+        assert_eq!(r.cloned_field_expr("nots"), None);
 
+        let lit = 
+            r.cloned_field_literal("badger");
         assert_eq!(
-            r.get_literal("badger").and_then(ValueAccess::as_str),
+            lit.as_str(),
             Some("snot")
         );
-        assert_eq!(r.get_field_expr("adgerb"), None);
+        assert_eq!(r.cloned_field_expr("adgerb"), None);
     }
 
     #[test]
