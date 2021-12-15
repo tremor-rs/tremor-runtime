@@ -47,6 +47,8 @@ use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
 
+use super::visitors::IsConstFn;
+
 /// A raw script we got to put this here because of silly lalrpoop focing it to be public
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ScriptRaw<'script> {
@@ -346,12 +348,13 @@ impl<'script> ModuleRaw<'script> {
                 ExprRaw::FnDecl(f) => {
                     let mut f = f.up(helper)?;
                     ExprWalker::walk_fn_decl(&mut ConstFolder::new(helper), &mut f)?;
+                    let is_const = IsConstFn::is_const(&mut f.body).unwrap_or_default();
                     let f = CustomFn {
                         name: f.name.id,
                         args: f.args.iter().map(ToString::to_string).collect(),
                         locals: f.locals,
                         body: f.body,
-                        is_const: false, // TODO: we should find a way to examine this
+                        is_const,
                         open: f.open,
                         inline: f.inline,
                     };
@@ -2402,6 +2405,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                     // Otherwise
                     let inner: Range = (self.start, self.end).into();
                     let outer: Range = inner.expand_lines(3);
+                    dbg!(helper.functions.keys().collect::<Vec<_>>());
                     Err(
                         ErrorKind::MissingFunction(outer, inner, self.module, self.fun, None)
                             .into(),
@@ -2410,6 +2414,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
             } else {
                 let inner: Range = (self.start, self.end).into();
                 let outer: Range = inner.expand_lines(3);
+                dbg!(helper.functions.keys().collect::<Vec<_>>());
                 Err(ErrorKind::MissingFunction(outer, inner, self.module, self.fun, None).into())
             }
         }

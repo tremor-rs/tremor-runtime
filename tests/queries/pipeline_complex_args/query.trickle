@@ -1,10 +1,11 @@
+use std::time::nanos;
 define pipeline subq
 args
  param1 = 1,
  param2 = 42 + 5,
  param3 = 5 + -(-(-3)),
  param4 = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],
- param5 = core::datetime::with_seconds(60),
+ param5 = nanos::from_seconds(60),
  param6 = "snot",
 pipeline
     define script foo
