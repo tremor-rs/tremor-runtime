@@ -264,7 +264,6 @@ impl<'script> PipelineDefinition<'script> {
         args_in: &Value<'script>,
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<()> {
-        dbg!();
         let mut params = self.params.clone();
         params.substitute_args(args_in, helper)?;
         let args = ArgsExprsRaw(
@@ -315,7 +314,6 @@ impl<'script> PipelineDefinition<'script> {
             ConstFolder::new(&helper).walk_stmt(stmt)?;
         }
         self.query = Some(query);
-        dbg!();
         Ok(())
     }
 }
