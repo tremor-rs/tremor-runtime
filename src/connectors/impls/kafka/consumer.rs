@@ -12,18 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::time::Duration;
+
 use super::SmolRuntime;
 use crate::connectors::prelude::*;
-use async_std::channel::{bounded, unbounded, Receiver, Sender};
+use async_std::channel::{bounded, unbounded, Receiver, Sender, TryRecvError};
 use async_std::task::{self, JoinHandle};
+use async_std::stream::StreamExt;
 use futures::select;
+use futures::FutureExt;
 use halfbrown::HashMap;
 use hashbrown::HashSet;
+use indexmap::IndexMap;
 use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, StreamConsumer};
 use rdkafka::error::KafkaError;
 use rdkafka::message::{BorrowedMessage, Headers, Message};
-use rdkafka::{ClientContext, TopicPartitionList};
+use rdkafka::{ClientContext, TopicPartitionList, Offset};
 use rdkafka_sys::RDKafkaErrorCode;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -59,7 +64,7 @@ impl ConfigImpl for Config {}
 pub(crate) struct Builder {}
 
 impl Builder {
-    fn verify_brokers(id: &TremorUrl, brokers: &Vec<String>) -> Result<(String, Option<u16>)> {
+    fn verify_brokers(id: &str, brokers: &Vec<String>) -> Result<(String, Option<u16>)> {
         let mut first_broker: Option<(String, Option<u16>)> = None;
         for broker in brokers {
             match broker.split(':').collect::<Vec<_>>().as_slice() {
@@ -67,7 +72,7 @@ impl Builder {
                     first_broker.get_or_insert_with(|| ((*host).to_string(), None));
                 }
                 [host, port] => {
-                    let port: u16 = port.parse().map_err(|e| {
+                    let port: u16 = port.parse().map_err(|_| {
                         Error::from(ErrorKind::InvalidConfiguration(
                             id.to_string(),
                             format!("Invalid broker: {}:{}", host, port),
@@ -129,20 +134,20 @@ impl ConnectorBuilder for Builder {
 }
 
 struct TremorConsumerContext {
-    url: TremorUrl,
+    alias: String,
     err_notifier: ConnectionLostNotifier,
 }
 
 impl ClientContext for TremorConsumerContext {
     fn stats(&self, statistics: rdkafka::Statistics) {
         // FIXME: expose as metrics to the source
-        info!("[Connector::{}] Client stats: {:?}", &self.url, statistics);
+        info!("[Connector::{}] Client stats: {:?}", &self.alias, statistics);
     }
 
     fn error(&self, error: KafkaError, reason: &str) {
         error!(
             "[Connector::{}] Kafka Error {}: {}",
-            &self.url, error, reason
+            &self.alias, error, reason
         );
         // check for errors that manifest a non-working consumer, so we bail out
         if let KafkaError::Subscription(_)
@@ -153,7 +158,7 @@ impl ClientContext for TremorConsumerContext {
             error
         {
             let notifier = self.err_notifier.clone();
-            let url = self.url.clone();
+            let url = self.alias.clone();
             async_std::task::spawn(async move {
                 if let Err(e) = notifier.notify().await {
                     error!(
@@ -242,7 +247,7 @@ impl Connector for KafkaConsumerConnector {
         );
         let tid = task::current().id();
         let mut client_config = ClientConfig::new();
-        let client_id = format!("tremor-{}-{}-{:?}", hostname(), ctx.url, tid);
+        let client_id = format!("tremor-{}-{}-{:?}", hostname(), ctx.alias, tid);
         client_config
             .set("group.id", self.config.group_id.clone())
             .set("client.id", &client_id)
@@ -262,7 +267,7 @@ impl Connector for KafkaConsumerConnector {
         debug!("{} Kafka Consumer Config: {:?}", &ctx, &client_config);
 
         let consumer_context = TremorConsumerContext {
-            url: ctx.url.clone(),
+            alias: ctx.alias.to_string(),
             err_notifier: ctx.notifier.clone(),
         };
         let consumer: TremorConsumer = client_config.create_with_context(consumer_context)?;
@@ -285,11 +290,12 @@ impl Connector for KafkaConsumerConnector {
 
         // used for generating stream nums
         topics.sort(); // sort them alphabetically
-        let topic_nums: HashMap<&str, u64> = topics
+        let topic_nums: IndexMap<String, u64> = topics
             .into_iter()
             .enumerate()
-            .map(|(num, topic)| (topic, num as u64))
+            .map(|(num, topic)| (topic.to_string(), num as u64))
             .collect();
+            
         let back_channel = self.consumer_rx.clone();
         let source_tx = self.source_tx.clone();
         let connector_ctx = ctx.clone();
@@ -300,11 +306,12 @@ impl Connector for KafkaConsumerConnector {
             .spawn(async move {
                 // We need to ensure we continuously poll the consumer stream
                 // to not run into timeouts with the consumer
-                let stream = consumer.stream();
+                let mut stream = consumer.stream();
                 let mut seen_partitions = HashSet::new();
                 loop {
-                    let kafka_msg_future = stream.next().fuse();
-                    let res = select! {
+                    let mut kafka_msg_future = stream.next().fuse();
+                    let mut back_channel_future = back_channel.recv().fuse();
+                    select! {
                         maybe_msg = kafka_msg_future => {
                             match maybe_msg {
                                 Some(Ok(kafka_msg)) => {
@@ -316,7 +323,7 @@ impl Connector for KafkaConsumerConnector {
                                     let partition = kafka_msg.partition() as u64;
                                     let topic = kafka_msg.topic();
                                     let offset = kafka_msg.offset();
-                                    let stream_id = *(topic_nums.get(topic).unwrap_or_default()) & (partition << 32);
+                                    let stream_id = topic_nums.get(topic).copied().unwrap_or_default() & (partition << 32);
                                     // the pull id only needs to be unique per stream
                                     // with a stream being a partition, we can simply use the offset
                                     let pull_id = Some(offset as u64);
@@ -339,13 +346,30 @@ impl Connector for KafkaConsumerConnector {
                                         data,
                                         meta: Some(meta),
                                         stream: stream_id,
-                                        port: OUT
+                                        port: Some(OUT)
                                     };
                                     source_tx.send((reply, pull_id)).await?;
 
                                 }
                                 Some(Err(e)) => {
                                     // handle kafka error
+                                    match e {
+                                        KafkaError::MessageConsumption(
+                                            e
+                                            @
+                                            (RDKafkaErrorCode::UnknownTopicOrPartition
+                                            | RDKafkaErrorCode::TopicAuthorizationFailed
+                                            | RDKafkaErrorCode::UnknownTopic),
+                                        ) => {
+                                            error!(
+                                                "{} Subscription failed: {}.",
+                                                &connector_ctx, e
+                                            );
+                                        }
+                                        err => {
+                                            debug!("{} Error consuming from kafka: {}", &connector_ctx, err);
+                                        }
+                                    }
                                 }
                                 None => {
                                     // stream done
@@ -354,7 +378,7 @@ impl Connector for KafkaConsumerConnector {
                                 }
                             }
                         },
-                        control_msg = back_channel.recv() => {
+                        control_msg = back_channel_future => {
                             match control_msg {
                                 Ok(ConsumerMsg::Pause) => {
                                     // TODO: check for fatal errors and notify the connector
@@ -369,17 +393,45 @@ impl Connector for KafkaConsumerConnector {
                                     }), "Error resuming consumer");
                                 }
                                 Ok(ConsumerMsg::Ack(stream, pull)) => {
-                                    let tpl: TopicPartitionList = todo!();
-                                    connector_ctx.log_err(consumer.commit(&tpl, CommitMode::Async), "Error committing offsets");
+                                    let topic_id = stream >> 32;
+                                    let partition = (stream & 0xFFFFFFFF) as i32;
+                                    let offset = Offset::Offset(pull as i64);
+                                    // insertion order should be the same as the actual indices, 
+                                    // so the index lookup can be misused as a reverse lookup
+                                    if let Some((topic, v)) = topic_nums.get_index(topic_id as usize) {
+                                        if *v != topic_id {
+                                            // shouldn't happen, just a safety net
+                                            error!("{} Invalid topic id in ack message. Expected={}, got={}", &connector_ctx, topic_id, v);
+                                        } else {
+
+                                            let mut tpl: TopicPartitionList = TopicPartitionList::with_capacity(1);
+                                            connector_ctx.log_err(tpl.add_partition_offset(topic.as_str(), partition as i32, offset), "Error populating TopicPartitionList for ack");
+                                            connector_ctx.log_err(consumer.commit(&tpl, CommitMode::Async), "Error committing offsets");
+                                        }
+                                    } else {
+                                        error!("{} Could not ack event with stream={}, pull_id={}. Unable to detect topic from internal state.", &connector_ctx, stream, pull);
+                                    }
                                 }
                                 Ok(ConsumerMsg::Fail(stream, pull)) => {
                                     if retry_failed_events {
-                                        let tpl: TopicPartitionList = todo!();
-                                        connector_ctx.log_err(consumer.seek(&tpl), "Error resetting offsets to retry failed messages");
+                                        let topic_id = stream >> 32;
+                                        let partition = (stream & 0xFFFFFFFF) as i32;
+                                        let offset = Offset::Offset(pull as i64);
+                                        if let Some((topic, v)) = topic_nums.get_index(topic_id as usize) {
+                                            if *v != topic_id {
+                                                // shouldn't happen, just a safety net
+                                                error!("{} Invalid topic id in ack message. Expected={}, got={}", &connector_ctx, topic_id, v);
+                                            } else {
+                                                let timeout = Duration::from_secs(1);
+                                                connector_ctx.log_err(
+                                                    consumer.seek(topic.as_str(), partition, offset, timeout), 
+                                                    "Error resetting offsets to retry failed messages");
+                                            }
+                                        }
                                     }
                                 }
                                 Err(_) => {
-                                    error!("")
+                                    error!("{}", &connector_ctx)
                                 }
                             }
                         }
@@ -397,7 +449,6 @@ impl Connector for KafkaConsumerConnector {
 }
 
 fn kafka_meta<'a>(msg: &BorrowedMessage<'a>) -> Value<'static> {
-    let mut meta = Value::object_with_capacity(6);
     let headers = msg.headers().map(|headers| {
         let mut headers_meta = Value::object_with_capacity(headers.count());
         for i in 0..headers.count() {
@@ -424,7 +475,7 @@ fn kafka_meta<'a>(msg: &BorrowedMessage<'a>) -> Value<'static> {
 enum ConsumerMsg {
     Pause,
     Resume,
-    /// first field is stream_id, second is pull_id - TODO: do we need a mapping from pull_id to offset?
+    /// first field is stream_id, second is pull_id
     Ack(u64, u64),
     Fail(u64, u64),
 }
@@ -436,7 +487,7 @@ struct KafkaConsumerSource {
 }
 #[async_trait::async_trait()]
 impl Source for KafkaConsumerSource {
-    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
         match self.source_rx.try_recv() {
             Ok((reply, custom_pull_id)) => {
                 if let Some(custom_pull_id) = custom_pull_id {
@@ -444,7 +495,12 @@ impl Source for KafkaConsumerSource {
                 }
                 Ok(reply)
             }
-            Err(e) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
+            Err(TryRecvError::Empty) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
+            Err(TryRecvError::Closed) => {
+                error!("{} Consumer unavailable. Initiating Reconnect...", &ctx);
+                ctx.notifier().notify().await?;
+                return Err("Consumer unavailable.".into())
+            }
         }
     }
 
@@ -490,7 +546,6 @@ impl Source for KafkaConsumerSource {
     }
 
     fn asynchronous(&self) -> bool {
-        // FIXME: check
         true
     }
 }

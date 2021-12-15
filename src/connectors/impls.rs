@@ -45,5 +45,5 @@ pub(crate) mod wal;
 /// WebSockets
 pub(crate) mod ws;
 
-// Kafka consumer and producer
-//pub(crate) mod kafka;
+/// Kafka consumer and producer
+pub(crate) mod kafka;
