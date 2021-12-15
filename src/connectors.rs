@@ -22,7 +22,6 @@ pub mod sink;
 /// source parts
 pub mod source;
 
-pub(crate) mod s3;
 #[macro_use]
 pub(crate) mod utils;
 
@@ -1158,7 +1157,7 @@ pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
         Box::new(impls::ws::server::Builder::default()),
         Box::new(impls::elastic::Builder::default()),
         Box::new(impls::crononome::Builder::default()),
-        Box::new(s3::Builder::default()),
+        Box::new(impls::s3::Builder::default()),
         Box::new(impls::kafka::consumer::Builder::default()),
     ]
 }
