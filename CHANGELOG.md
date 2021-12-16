@@ -44,6 +44,7 @@
 - Tests can be run without their suite. [#1238](https://github.com/tremor-rs/tremor-runtime/pull/1283)
 - Add the `std::size` module to convert sizes
 - Add custom function calls to constant folding
+- Integration test names are added as a tag so they can be run by name
 
 ### Fixes
 
