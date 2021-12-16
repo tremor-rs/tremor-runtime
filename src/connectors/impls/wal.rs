@@ -105,12 +105,12 @@ impl Source for WalSource {
         }
     }
 
-    async fn ack(&mut self, _stream_id: u64, pull_id: u64) -> Result<()> {
+    async fn ack(&mut self, _stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
         self.wal.lock().await.ack(pull_id).await?;
         Ok(())
     }
 
-    async fn fail(&mut self, _stream_id: u64, _pull_id: u64) -> Result<()> {
+    async fn fail(&mut self, _stream_id: u64, _pull_id: u64, _ctx: &SourceContext) -> Result<()> {
         self.wal.lock().await.revert().await?;
         Ok(())
     }

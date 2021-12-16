@@ -299,7 +299,7 @@ impl Source for CbSource {
         Ok(())
     }
 
-    async fn ack(&mut self, _stream_id: u64, pull_id: u64) -> Result<()> {
+    async fn ack(&mut self, _stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
         self.received_cbs.ack.push(pull_id);
         if self.finished && self.received_cbs.count() == self.num_sent
             || (self.config.expect_batched
@@ -313,7 +313,7 @@ impl Source for CbSource {
         }
         Ok(())
     }
-    async fn fail(&mut self, _stream_id: u64, pull_id: u64) -> Result<()> {
+    async fn fail(&mut self, _stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
         self.received_cbs.fail.push(pull_id);
         if self.finished && self.received_cbs.count() == self.num_sent
             || (self.config.expect_batched

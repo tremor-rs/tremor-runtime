@@ -14,16 +14,15 @@
 
 mod connectors;
 
+#[macro_use]
+extern crate log;
 #[cfg(feature = "es-integration")]
 mod test {
 
-    #[macro_use]
-    extern crate log;
-
     use std::time::{Duration, Instant};
 
+    use super::connectors::ConnectorHarness;
     use async_std::stream::StreamExt;
-    use connectors::ConnectorHarness;
     use elasticsearch::{http::transport::Transport, Elasticsearch};
     use futures::TryFutureExt;
     use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
@@ -93,21 +92,20 @@ mod test {
             async_std::task::sleep(Duration::from_secs(1)).await;
         }
 
-        let connector_yaml = format!(
-            r#"
-id: my_elastic
-type: elastic
-reconnect:
-  custom:
-    interval_ms: 1000
-    max_retries: 10
-config:
-  nodes:
-    - "http://127.0.0.1:{}"
-"#,
-            port
-        );
-        let harness = ConnectorHarness::new(connector_yaml).await?;
+        let connector_config = literal!({
+            "reconnect": {
+                "custom": {
+                    "interval_ms": 1000,
+                    "max_retries": 10
+                }
+            },
+            "config": {
+                "nodes": [
+                    format!("http://127.0.0.1:{}", port)
+                ]
+            }
+        });
+        let harness = ConnectorHarness::new("elastic", connector_config).await?;
         let out = harness.out().expect("No pipe connected to port OUT");
         let err = harness.err().expect("No pipe connected to port ERR");
         let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
@@ -350,15 +348,20 @@ config:
         let cf = in_pipe.get_contraflow().await?;
         assert_eq!(CbAction::Fail, cf.cb);
         let err_event = err.get_event().await?;
+        let mut err_event_meta = err_event.data.suffix().meta().clone_static();
+        let err_msg = err_event_meta.remove("error")?;
+        let err_msg_str = err_msg.unwrap();
+        let err = err_msg_str.as_str().unwrap();
+        assert!(err.starts_with("error sending request for url (http://127.0.0.1:9200/my_index/_bulk): error trying to connect: tcp connect error: Connection refused"));
+
         assert_eq!(
             literal!({
                 "elastic": {
                     "success": false
                 },
-                "error": "error sending request for url (http://127.0.0.1:9200/my_index/_bulk): error trying to connect: tcp connect error: Connection refused (os error 61)",
                 "correlation": [true, false]
             }),
-            err_event.data.suffix().meta()
+            err_event_meta
         );
 
         let (out_events, err_events) = harness.stop().await?;
