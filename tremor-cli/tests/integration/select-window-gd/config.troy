@@ -1,0 +1,30 @@
+define flow main
+flow
+  use troy::connectors;
+  define connector in from cb
+  with
+    codec = "json",
+    preprocessors = ["lines"],
+    config = {
+      "path": "in.json",
+      "timeout": 1000
+    }
+  end;
+  define pipeline main
+  pipeline
+    define window my_window from tumbling
+    with
+      size = 2
+    end;
+
+    # verify that a grouped select honours our cb/gs guarantees
+    select aggr::win::last(event) from in[my_window] group by event.cb into out;
+  end;
+
+  create connector in;
+  create pipeline main;
+  create connector out from connectors::tty;
+  connect /connector/in to /pipeline/main;
+  connect /pipeline/main to /connector/out;
+end;
+deploy flow main;
