@@ -22,7 +22,7 @@ jobs:
         env:
           PROPTEST_CASES: 2500
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
-        run: cargo test --all --locked
+        run: cargo test --all --locked --features=integration
   code-coverage:
     runs-on: ubuntu-latest
     steps:
@@ -41,7 +41,7 @@ jobs:
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
         with:
           version: "0.19.1"
-          args: " --exclude-files target* tremor-cli tremor-api **/errors.rs --out Lcov --all"
+          args: " --exclude-files target* tremor-cli tremor-api **/errors.rs --out Lcov --all --features=integration"
       - name: Coveralls
         uses: coverallsapp/github-action@master
         with:

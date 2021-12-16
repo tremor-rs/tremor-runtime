@@ -700,7 +700,6 @@ impl From<(u64, u64, u64, u64)> for TrackedPullIds {
     }
 }
 
-// TODO: add stu_counter
 impl fmt::Display for TrackedPullIds {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -716,10 +715,8 @@ impl fmt::Display for TrackedPullIds {
     }
 }
 
-// TODO adapt for streaming, so we maintain multiple counters per stream
 #[derive(Debug, Clone, Copy, Default)]
-/// for generating consecutive unique event ids
-/// that are always in sync with their pull id
+/// For generating consecutive unique event ids for a single stream.
 pub struct EventIdGenerator(u64, u64, u64);
 impl EventIdGenerator {
     /// generate the next event id for this stream

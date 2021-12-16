@@ -86,7 +86,9 @@ use system::World;
 pub use tremor_pipeline::Event;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_script::Script;
-use tremor_script::{deploy::Deploy, highlighter::Term as TermHighlighter, highlighter::Dumb as ToStringHighlighter};
+use tremor_script::{
+    deploy::Deploy, highlighter::Dumb as ToStringHighlighter, highlighter::Term as TermHighlighter,
+};
 
 /// Operator Config
 pub type OpConfig = tremor_value::Value<'static>;
