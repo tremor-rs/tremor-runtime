@@ -1,7 +1,7 @@
 {
-  "dir": "./after",
+  "dir": ".",
   "cmd": "bash",
   "args": [
-    "after/stop.sh"
+    "./after/stop.sh"
   ]
 }
