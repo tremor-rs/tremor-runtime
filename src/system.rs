@@ -64,7 +64,7 @@ pub(crate) enum ManagerMsg {
         /// deploy flow
         flow: DeployFlow,
         /// result sender
-        sender: Sender<Result<()>>
+        sender: Sender<Result<()>>,
     },
     RegisterConnectorType {
         /// the type of connector
@@ -116,7 +116,7 @@ impl Manager {
                         let id = DeploymentId::from(&flow);
                         let res = match self.deployments.entry(id.clone()) {
                             Entry::Occupied(_occupied) => {
-                                Err(ErrorKind::DuplicateFlow(id.0.clone()).into())      
+                                Err(ErrorKind::DuplicateFlow(id.0.clone()).into())
                             }
                             Entry::Vacant(vacant) => {
                                 let res = Deployment::start(
@@ -132,9 +132,7 @@ impl Manager {
                                         vacant.insert(deploy);
                                         Ok(())
                                     }
-                                    Err(e) => {
-                                        Err(e)
-                                    }
+                                    Err(e) => Err(e),
                                 }
                             }
                         };
@@ -220,14 +218,16 @@ impl World {
             .send(ManagerMsg::StartDeploy {
                 src: src.to_string(),
                 flow: flow.clone(),
-                sender: tx
+                sender: tx,
             })
             .await?;
         if let Err(e) = rx.recv().await? {
             let err_str = match e {
-                Error(ErrorKind::Script(e)
-                | ErrorKind::Pipeline(
-                    tremor_pipeline::errors::ErrorKind::Script(e)), _) => {
+                Error(
+                    ErrorKind::Script(e)
+                    | ErrorKind::Pipeline(tremor_pipeline::errors::ErrorKind::Script(e)),
+                    _,
+                ) => {
                     let mut h = crate::ToStringHighlighter::new();
                     tremor_script::query::Query::format_error_from_script(
                         &src,
@@ -237,11 +237,13 @@ impl World {
                     h.finalize()?;
                     h.to_string()
                 }
-                err => {
-                    err.to_string()
-                }
+                err => err.to_string(),
             };
-            error!("Error starting deployment of flow {}: {}", flow.instance_id.id(), &err_str);
+            error!(
+                "Error starting deployment of flow {}: {}",
+                flow.instance_id.id(),
+                &err_str
+            );
             Err(ErrorKind::DeployFlowError(flow.instance_id.id().to_string(), err_str).into())
         } else {
             Ok(())

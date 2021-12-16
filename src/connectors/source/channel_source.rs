@@ -76,10 +76,6 @@ impl ChannelSourceRuntime {
         let ctx = ctx.clone();
         let tx = self.sender.clone();
         task::spawn(async move {
-            if tx.send(SourceReply::StartStream(stream)).await.is_err() {
-                error!("{} Failed to start stream", &ctx);
-                return;
-            };
             while ctx.quiescence_beacon().continue_reading().await {
                 let sc_data = reader.read(stream).timeout(Self::READ_TIMEOUT_MS).await;
 

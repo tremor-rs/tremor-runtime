@@ -130,7 +130,6 @@ pub(crate) async fn run_process(
     };
     env.insert(String::from("TREMOR_PATH"), tremor_path);
 
-
     let binary = job::which("tremor")?;
     let mut process = job::TargetProcess::new_in_dir(binary, &args, &env, test_dir)?;
     info!("Starting {} ...", &process);

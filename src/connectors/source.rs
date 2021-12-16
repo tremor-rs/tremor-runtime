@@ -133,11 +133,11 @@ pub enum SourceReply {
         /// stream id
         stream: u64,
     },
-    /// A stream is opened
-    StartStream(u64),
     /// A stream is closed
     /// This might result in additional events being flushed from
     /// preprocessors, that is why we have `origin_uri` and `meta`
+    ///
+    /// A stream is automatically started once we receive its first event.
     EndStream {
         /// origin uri
         origin_uri: EventOriginUri,
@@ -237,12 +237,12 @@ pub trait Source: Send {
     // guaranteed delivery callbacks
     /// an event has been acknowledged and can be considered delivered
     /// multiple acks for the same set of ids are always possible
-    async fn ack(&mut self, _stream_id: u64, _pull_id: u64) -> Result<()> {
+    async fn ack(&mut self, _stream_id: u64, _pull_id: u64, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
     /// an event has failed along its way and can be considered failed
     /// multiple fails for the same set of ids are always possible
-    async fn fail(&mut self, _stream_id: u64, _pull_id: u64) -> Result<()> {
+    async fn fail(&mut self, _stream_id: u64, _pull_id: u64, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
 
@@ -445,31 +445,21 @@ impl Streams {
         })
     }
 
-    /// start a new stream if no such stream exists yet
-    /// do nothing if the stream already exists
-    fn start_stream(&mut self, stream_id: u64) -> Result<()> {
-        if let Entry::Vacant(e) = self.states.entry(stream_id) {
-            let state = Self::build_stream(
-                self.uid,
-                stream_id,
-                &self.codec_config,
-                self.preprocessor_configs.as_slice(),
-            )?;
-            e.insert(state);
-        }
-        Ok(())
-    }
-
     /// end a stream
     fn end_stream(&mut self, stream_id: u64) -> Option<StreamState> {
         self.states.remove(&stream_id)
     }
 
     /// get or create a stream
-    fn get_or_create_stream(&mut self, stream_id: u64) -> Result<&mut StreamState> {
+    fn get_or_create_stream<C: Context>(
+        &mut self,
+        stream_id: u64,
+        ctx: &C,
+    ) -> Result<&mut StreamState> {
         Ok(match self.states.entry(stream_id) {
             Entry::Occupied(e) => e.into_mut(),
             Entry::Vacant(e) => {
+                debug!("{} starting stream {}", ctx, stream_id);
                 let state = Self::build_stream(
                     self.uid,
                     stream_id,
@@ -780,15 +770,19 @@ where
             }
             SourceMsg::Cb(CbAction::Fail, id) => {
                 if let Some((stream_id, id)) = id.get_min_by_source(self.ctx.uid) {
-                    self.ctx
-                        .log_err(self.source.fail(stream_id, id).await, "fail failed");
+                    self.ctx.log_err(
+                        self.source.fail(stream_id, id, &self.ctx).await,
+                        "fail failed",
+                    );
                 }
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Ack, id) => {
                 if let Some((stream_id, id)) = id.get_max_by_source(self.ctx.uid) {
-                    self.ctx
-                        .log_err(self.source.ack(stream_id, id).await, "ack failed");
+                    self.ctx.log_err(
+                        self.source.ack(stream_id, id, &self.ctx).await,
+                        "ack failed",
+                    );
                 }
                 Ok(Control::Continue)
             }
@@ -975,7 +969,7 @@ where
                 port,
             } => {
                 let mut ingest_ns = nanotime();
-                let stream_state = self.streams.get_or_create_stream(stream)?; // we fail if we cannot create a stream (due to misconfigured codec, preprocessors, ...) (should not happen)
+                let stream_state = self.streams.get_or_create_stream(stream, &self.ctx)?; // we fail if we cannot create a stream (due to misconfigured codec, preprocessors, ...) (should not happen)
                 let results = build_events(
                     &self.ctx.alias,
                     stream_state,
@@ -998,7 +992,7 @@ where
                     let error = self.route_events(results).await;
                     if error {
                         self.ctx.log_err(
-                            self.source.fail(stream, pull_id).await,
+                            self.source.fail(stream, pull_id, &self.ctx).await,
                             "fail upon error sending events from data source reply failed",
                         );
                     }
@@ -1011,7 +1005,7 @@ where
                 port,
             } => {
                 let mut ingest_ns = nanotime();
-                let stream_state = self.streams.get_or_create_stream(stream)?; // we only error here due to misconfigured codec etc
+                let stream_state = self.streams.get_or_create_stream(stream, &self.ctx)?; // we only error here due to misconfigured codec etc
                 let connector_url = &self.ctx.alias;
 
                 let mut results = Vec::with_capacity(batch_data.len()); // assuming 1:1 mapping
@@ -1040,7 +1034,7 @@ where
                     let error = self.route_events(results).await;
                     if error {
                         self.ctx.log_err(
-                            self.source.fail(stream, pull_id).await,
+                            self.source.fail(stream, pull_id, &self.ctx).await,
                             "fail upon error sending events from batched data source reply failed",
                         );
                     }
@@ -1053,7 +1047,7 @@ where
                 port,
             } => {
                 let ingest_ns = nanotime();
-                let stream_state = self.streams.get_or_create_stream(stream)?;
+                let stream_state = self.streams.get_or_create_stream(stream, &self.ctx)?;
                 let event = build_event(
                     stream_state,
                     pull_id,
@@ -1065,17 +1059,10 @@ where
                 let error = self.route_events(vec![(port.unwrap_or(OUT), event)]).await;
                 if error {
                     self.ctx.log_err(
-                        self.source.fail(stream, pull_id).await,
+                        self.source.fail(stream, pull_id, &self.ctx).await,
                         "fail upon error sending events from structured data source reply failed",
                     );
                 }
-            }
-            SourceReply::StartStream(stream_id) => {
-                debug!(
-                    "[Source::{}] Starting stream {}",
-                    &self.ctx.alias, stream_id
-                );
-                self.streams.start_stream(stream_id)?; // failing here only due to misconfig, in that case, bail out, #yolo
             }
             SourceReply::EndStream {
                 origin_uri,
@@ -1110,7 +1097,7 @@ where
                         let error = self.route_events(results).await;
                         if error {
                             self.ctx.log_err(
-                                self.source.fail(stream_id, pull_id).await,
+                                self.source.fail(stream_id, pull_id, &self.ctx).await,
                                 "fail upon error sending events from endstream source reply failed",
                             );
                         }
@@ -1135,6 +1122,11 @@ where
     }
 
     async fn on_fully_drained(&mut self) -> Result<()> {
+        // TODO: we actually need to end all streams and flush preprocessors, they might buffer some data
+        //       The only problem is that we don't have the data around (meta, origin_uri).
+        //       This would be fixed if such metadata would be solely bound to the stream, not to the message
+        //       Right now we are losing the rest in the buffers.
+
         // this source has been fully drained
         self.state = SourceState::Drained;
         // send Drain signal

@@ -893,14 +893,25 @@ impl<'script> Record<'script> {
     /// Attention: Clones its values!
     #[must_use]
     pub fn cloned_field_expr(&self, name: &str) -> Option<ImutExpr> {
-        self.base.get(name.into()).map(|base_value| {
-            ImutExpr::Literal(Literal { mid: self.mid, value: base_value.clone() })
-        }).or_else(||
-            self.fields.iter().find_map(|f| {
-                f.name
-                    .as_str()
-                    .and_then(|n| if n == name { Some(f.value.clone()) } else { None })
-        }))
+        self.base
+            .get(name.into())
+            .map(|base_value| {
+                ImutExpr::Literal(Literal {
+                    mid: self.mid,
+                    value: base_value.clone(),
+                })
+            })
+            .or_else(|| {
+                self.fields.iter().find_map(|f| {
+                    f.name.as_str().and_then(|n| {
+                        if n == name {
+                            Some(f.value.clone())
+                        } else {
+                            None
+                        }
+                    })
+                })
+            })
     }
     /// Tries to fetch a literal from a record and clones it, snot!
     #[must_use]
@@ -2667,12 +2678,8 @@ hello
         assert_eq!(r.cloned_field_expr("snot"), Some(v("badger")));
         assert_eq!(r.cloned_field_expr("nots"), None);
 
-        let lit = 
-            r.cloned_field_literal("badger");
-        assert_eq!(
-            lit.as_str(),
-            Some("snot")
-        );
+        let lit = r.cloned_field_literal("badger");
+        assert_eq!(lit.as_str(), Some("snot"));
         assert_eq!(r.cloned_field_expr("adgerb"), None);
     }
 
