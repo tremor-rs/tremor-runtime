@@ -5,14 +5,14 @@
     "server",
     "run",
     "-p",
-    "before.pid",
+    "../before.pid",
     "-f",
-    "before/ws.trickle",
-    "before/config.troy",
-    "before/server.troy",
-    "-l",
-    "before/logger.yaml"
+    "config.troy",
   ],
+  "env": {
+    "RUST_LOG": "info",
+    "TREMOR_PATH": "../../../../tremor-script/lib"
+  },
   "await": {
     "port-open": [
       "9898",
