@@ -1,6 +1,0 @@
-#!config id = "test::ws"
-create stream quit;
-
-select event from in where event != "quit" into out;
-select { "done": true } from in where event == "quit" into out;
-select { "exit": 0, "delay": 1000 } from in where event == "quit" into out/exit;
