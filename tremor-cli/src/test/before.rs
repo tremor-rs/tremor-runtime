@@ -55,7 +55,11 @@ impl Before {
         let current_working_dir = base.join(&self.dir).canonicalize()?;
         let mut process =
             job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &current_working_dir)?;
-        debug!("Spawning before: {}", self.cmdline());
+        debug!(
+            "Spawning before: {} in {}",
+            self.cmdline(),
+            current_working_dir.display()
+        );
         self.block_on(&mut process, base).await?;
         debug!("Before process ready.");
         Ok(Some(process))
