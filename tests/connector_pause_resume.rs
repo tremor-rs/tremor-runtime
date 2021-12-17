@@ -76,7 +76,8 @@ async fn connector_udp_pause_resume() -> Result<()> {
         .wait_for_state(InstanceState::Paused, Duration::from_secs(5))
         .await?;
     // make sure the udp_server source got out of its last pull_data call and now knows it should pause
-    async_std::task::sleep(Duration::from_millis(100)).await;
+    async_std::task::sleep(Duration::from_millis(200)).await;
+
     // send some more data
     let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
     socket.send(data2.as_bytes()).await?;
