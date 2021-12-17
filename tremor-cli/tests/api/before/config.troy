@@ -1,0 +1,44 @@
+
+define flow main
+flow
+
+    use troy::connectors;
+
+    define connector in from ws_server
+    with
+        codec = "json-sorted",
+        config = {
+            "host": "127.0.0.1",
+            "port": 4242
+        }
+    end;
+
+    define connector out from file
+    with
+        codec = "json-sorted",
+        config = {
+            "path": "../before.log",
+            "mode": "truncate"
+        }
+    end;
+    
+    define pipeline ws
+    pipeline
+        create stream quit;
+
+        select event from in where event != "quit" into out;
+        select { "done": true } from in where event == "quit" into out;
+        select { "exit": 0 } from in where event == "quit" into out/exit;
+    end;
+
+    create connector in;
+    create connector out;
+    create connector exit from connectors::exit;
+    create pipeline ws;
+
+    connect /connector/in to /pipeline/ws;
+    connect /pipeline/ws to /connector/out;
+    connect /pipeline/ws/exit to /connector/exit;
+end;
+
+deploy flow main;
