@@ -1,0 +1,31 @@
+define flow main
+flow
+  use integration;
+  use troy::connectors;
+  define pipeline main
+  into out, exit
+  pipeline
+    select event from in into out;
+    select event from in where event == "exit" into out/exit;
+  end;
+  define connector out from ws_client
+  with
+    postprocessors = ["lines"],
+    config = {
+      "url": "ws://127.0.0.1:4242/"
+    }
+  end;
+
+  create connector in from integration::read_file;
+  create connector out;
+  create connector exit from integration::exit;
+  create connector stdio from connectors::tty;
+  create pipeline main;
+  
+  connect /connector/in to /pipeline/main;
+  connect /pipeline/main to /connector/out;
+  connect /pipeline/main to /connector/stdio;
+  connect /pipeline/main/exit to /connector/exit;
+
+end;
+deploy flow main;
