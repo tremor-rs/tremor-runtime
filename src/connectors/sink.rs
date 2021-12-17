@@ -409,7 +409,7 @@ impl SinkManagerBuilder {
         S: Sink + Send + 'static,
     {
         let qsize = self.qsize;
-        let name = ctx.alias.clone(); //FIXME .short_id("c-sink"); // connector sink
+        let name = format!("{}-sink", ctx.alias);
         let (sink_tx, sink_rx) = bounded(qsize);
         let manager = SinkManager::new(sink, ctx, self, sink_rx);
         // spawn manager task
