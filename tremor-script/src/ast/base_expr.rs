@@ -498,6 +498,7 @@ impl<'script> BaseExpr for StmtRaw<'script> {
             StmtRaw::Select(s) => s.start,
             StmtRaw::Stream(s) => s.start,
             StmtRaw::WindowDecl(s) => s.start,
+            StmtRaw::AggregateFnDecl(s) => s.start,
             StmtRaw::Expr(s) => s.s(meta),
         }
     }
@@ -513,6 +514,7 @@ impl<'script> BaseExpr for StmtRaw<'script> {
             StmtRaw::Select(e) => e.end,
             StmtRaw::Stream(e) => e.end,
             StmtRaw::WindowDecl(e) => e.end,
+            StmtRaw::AggregateFnDecl(s) => s.end,
             StmtRaw::Expr(e) => e.e(meta),
         }
     }

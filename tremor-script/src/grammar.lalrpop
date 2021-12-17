@@ -87,7 +87,6 @@ ModuleInnerStmt: StmtRaw<'input> = {
 
     Const => StmtRaw::Expr(Box::new(<>)),
     FnDecl => StmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
-    AggregateFnDecl => StmtRaw::Expr(Box::new(ExprRaw::AggregateFnDecl(<>))),
     Intrinsic => StmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
 
 }
@@ -110,6 +109,7 @@ Stmt: StmtRaw<'input> = {
 
     DefineSubquery => <>,
     CreateSubquery => <>,
+    AggregateFnDecl => StmtRaw::AggregateFnDecl(<>),
 
     <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::Stream(StreamStmtRaw { start, end, id: id.to_string() }),
 
@@ -582,7 +582,6 @@ ModuleExprs: ExprsRaw<'input> = {
 
 ModuleExpr: ExprRaw<'input> = {
     Const => <>,
-    AggregateFnDecl => ExprRaw::AggregateFnDecl(<>),
     FnDecl => ExprRaw::FnDecl(<>),
     Intrinsic => ExprRaw::FnDecl(<>),
     Module => ExprRaw::Module(<>),

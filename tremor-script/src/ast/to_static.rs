@@ -24,11 +24,12 @@ use super::{
     RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
     TuplePattern, UnaryExpr,
 };
-use crate::ast::InvocableAggregate;
+use crate::ast::{Ident, InvocableAggregate};
 use crate::registry::CustomAggregateFn;
 use crate::CustomFn;
 use beef::Cow;
 use tremor_value::Value;
+use crate::ast::aggregate_fn::{AggregateDecl, EmitDecl, InitDecl, MergeInDecl};
 
 impl<'script> ImutExpr<'script> {
     pub(crate) fn into_static(self) -> ImutExpr<'static> {
@@ -1099,6 +1100,7 @@ impl<'script> OperatorDecl<'script> {
 }
 
 impl<'script> InvocableAggregate<'script> {
+    #[must_use]
     pub(crate) fn into_static(self) -> InvocableAggregate<'static> {
         match self {
             InvocableAggregate::Intrinsic(x) => InvocableAggregate::Intrinsic(x),
@@ -1107,30 +1109,81 @@ impl<'script> InvocableAggregate<'script> {
     }
 }
 
+impl<'script> Ident<'script> {
+    #[must_use]
+    pub(crate) fn into_static(self) -> Ident<'static> {
+        let Ident { mid, id } = self;
+
+        Ident { mid, id: Cow::owned(id.to_string()) }
+    }
+}
+
 impl<'script> CustomAggregateFn<'script> {
+    #[must_use]
     pub(crate) fn into_static(self) -> CustomAggregateFn<'static> {
         let CustomAggregateFn {
             name,
             init_body,
-            aggregate_args,
             aggregate_body,
-            mergein_args,
             mergein_body,
-            emit_args,
             emit_body,
             state,
+            mid
         } = self;
 
         CustomAggregateFn {
-            aggregate_args,
-            mergein_args,
-            emit_args,
+            mid,
             name: Cow::owned(name.to_string()),
-            init_body: init_body.into_iter().map(Expr::into_static).collect(),
-            aggregate_body: aggregate_body.into_iter().map(Expr::into_static).collect(),
-            mergein_body: mergein_body.into_iter().map(Expr::into_static).collect(),
-            emit_body: emit_body.into_iter().map(Expr::into_static).collect(),
+            init_body: init_body.into_static(),
+            aggregate_body: aggregate_body.into_static(),
+            mergein_body: mergein_body.into_static(),
+            emit_body: emit_body.into_static(),
             state: state.into_static(),
         }
+    }
+}
+
+impl<'script> InitDecl<'script> {
+    #[must_use]
+    pub(crate) fn into_static(self) -> InitDecl<'static> {
+        let InitDecl(body) = self;
+
+        InitDecl(body.into_iter().map(Expr::into_static).collect())
+    }
+}
+
+impl<'script> AggregateDecl<'script> {
+    #[must_use]
+    pub(crate) fn into_static(self) -> AggregateDecl<'static> {
+        let AggregateDecl(args, body) = self;
+
+        AggregateDecl(
+            args.into_iter().map(Ident::into_static).collect(),
+            body.into_iter().map(Expr::into_static).collect()
+        )
+    }
+}
+
+impl<'script> MergeInDecl<'script> {
+    #[must_use]
+    pub(crate) fn into_static(self) -> MergeInDecl<'static> {
+        let MergeInDecl(args, body) = self;
+
+        MergeInDecl(
+            args.into_iter().map(Ident::into_static).collect(),
+            body.into_iter().map(Expr::into_static).collect()
+        )
+    }
+}
+
+impl<'script> EmitDecl<'script> {
+    #[must_use]
+    pub(crate) fn into_static(self) -> EmitDecl<'static> {
+        let EmitDecl(args, body) = self;
+
+        EmitDecl(
+            args.into_iter().map(Ident::into_static).collect(),
+            body.into_iter().map(Expr::into_static).collect()
+        )
     }
 }

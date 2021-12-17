@@ -3,20 +3,18 @@ with
   size = 2
 end;
 
-mod m with
-    aggregate collect_joined of
-        init ( ) =>
-            "not an empty string"
+aggregate collect_joined of
+    init ( ) =>
+        "not an empty string"
 
-        aggregate(st, x) =>
-            st + x
+    aggregate(st, x) =>
+        st + x
 
-        mergein(st, x) =>
-            st + x
+    mergein(st, x) =>
+        st + x
 
-        emit(st) =>
-            st
-    end
+    emit(st) =>
+        st
 end;
 
-select m::collect_joined(event) from in[by_two] into out;
+select collect_joined(event) from in[by_two] into out;

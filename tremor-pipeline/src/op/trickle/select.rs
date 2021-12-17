@@ -70,11 +70,10 @@ impl Select {
         let select = srs::Select::try_new_from_stmt(stmt)?;
         let event_id_gen = EventIdGenerator::new(operator_uid);
         if let ast::Stmt::Select(SelectStmt {
-            stmt: _,
             aggregates,
             consts,
-            locals: _,
             node_meta,
+            ..
         }) = stmt.suffix()
         {
             let windows_itr = windows.iter();
@@ -323,7 +322,7 @@ impl Operator for Select {
                             dflt_group.value.try_push(v.key().to_string());
 
                             let recursion_limit = sel_ctx.recursion_limit;
-                            let node_meta = sel_ctx.node_meta.clone();
+                            let node_meta = sel_ctx.node_meta;
                             // execute it
                             if !stry!(dflt_group.on_event(sel_ctx, consts, event, &mut events)) {
                                 // if we can't delete it check if we're having too many groups, if so, error.
@@ -400,8 +399,7 @@ impl Operator for Select {
 
                     let mut run = consts.run();
                     run.group = &g.value;
-                    let window_name = w.name.clone();
-                    run.window = &window_name;
+                    run.window = &w.name;
                     let window_event = w.window.on_tick(ingest_ns);
                     let mut can_remove = window_event.emit;
 

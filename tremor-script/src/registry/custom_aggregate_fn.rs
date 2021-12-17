@@ -12,34 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::Exprs;
+use crate::ast::{BaseExpr, Exprs};
 use crate::interpreter::{Cont, Env, LocalStack};
 use crate::prelude::{Builder, ExecOpts};
 use crate::registry::{FResult, FunctionError};
 use crate::{AggrType, Value};
 use beef::Cow;
+use crate::ast::aggregate_fn::{AggregateDecl, EmitDecl, InitDecl, MergeInDecl};
 
 /// public because lalrpop
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CustomAggregateFn<'script> {
     /// public because lalrpop
     pub name: Cow<'script, str>,
     /// public because lalrpop
-    pub init_body: Exprs<'script>,
+    pub init_body: InitDecl<'script>,
     /// public because lalrpop
-    pub aggregate_args: Vec<String>,
+    pub aggregate_body: AggregateDecl<'script>,
     /// public because lalrpop
-    pub aggregate_body: Exprs<'script>,
+    pub mergein_body: MergeInDecl<'script>,
     /// public because lalrpop
-    pub mergein_args: Vec<String>,
-    /// public because lalrpop
-    pub mergein_body: Exprs<'script>,
-    /// public because lalrpop
-    pub emit_args: Vec<String>,
-    /// public because lalrpop
-    pub emit_body: Exprs<'script>,
+    pub emit_body: EmitDecl<'script>,
     /// public because lalrpop
     pub state: Value<'script>,
+    /// public because lalrpop
+    pub mid: usize
 }
 
 impl<'script> CustomAggregateFn<'script> {
@@ -56,7 +53,7 @@ impl<'script> CustomAggregateFn<'script> {
         let mut state = Value::null().into_static();
         let mut no_event = Value::null();
 
-        let mut body_iter = self.init_body.iter().peekable();
+        let mut body_iter = self.init_body.0.iter().peekable();
         while let Some(expr) = body_iter.next() {
             let env_local = Env {
                 context: env.context,
@@ -97,7 +94,7 @@ impl<'script> CustomAggregateFn<'script> {
     where
         'script: 'event,
     {
-        let mut body_iter = self.aggregate_body.iter().peekable();
+        let mut body_iter = self.aggregate_body.1.iter().peekable();
         let mut no_meta = Value::null();
         let mut state = Value::null().into_static();
         let mut no_event = Value::null();
@@ -147,7 +144,7 @@ impl<'script> CustomAggregateFn<'script> {
     where
         'script: 'event,
     {
-        let mut body_iter = self.mergein_body.iter().peekable();
+        let mut body_iter = self.mergein_body.1.iter().peekable();
         let mut no_meta = Value::null();
         let mut state = Value::null().into_static();
         let mut no_event = Value::null();
@@ -195,7 +192,7 @@ impl<'script> CustomAggregateFn<'script> {
     where
         'script: 'event,
     {
-        let mut body_iter = self.emit_body.iter().peekable();
+        let mut body_iter = self.emit_body.1.iter().peekable();
         let mut local_stack = LocalStack::with_size(1);
 
         let mut no_meta = Value::null();
@@ -233,5 +230,11 @@ impl<'script> CustomAggregateFn<'script> {
         }
 
         Err(FunctionError::RecursionLimit) // todo return a correct error
+    }
+}
+
+impl<'script> BaseExpr for CustomAggregateFn<'script> {
+    fn mid(&self) -> usize {
+        self.mid
     }
 }

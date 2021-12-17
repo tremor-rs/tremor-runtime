@@ -19,6 +19,7 @@ use crate::ast::{Exprs, Helper, Ident};
 use crate::lexer::Location;
 use halfbrown::HashMap;
 use serde::Serialize;
+use crate::registry::CustomAggregateFn;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AggrFnDeclRaw<'input> {
@@ -70,9 +71,13 @@ pub struct FnDecl<'script> {
     pub emit: EmitDecl<'script>,
 }
 
+#[derive(Clone, Serialize, Debug, PartialEq)]
 pub struct InitDecl<'script>(pub Exprs<'script>);
+#[derive(Clone, Serialize, Debug, PartialEq)]
 pub struct AggregateDecl<'script>(pub Vec<Ident<'script>>, pub Exprs<'script>);
+#[derive(Clone, Serialize, Debug, PartialEq)]
 pub struct MergeInDecl<'script>(pub Vec<Ident<'script>>, pub Exprs<'script>);
+#[derive(Clone, Serialize, Debug, PartialEq)]
 pub struct EmitDecl<'script>(pub Vec<Ident<'script>>, pub Exprs<'script>);
 
 impl<'script> Upable<'script> for InitDeclRaw<'script> {
@@ -145,30 +150,32 @@ impl<'script> Upable<'script> for EmitDeclRaw<'script> {
 }
 
 impl<'script> Upable<'script> for AggrFnDeclRaw<'script> {
-    type Target = FnDecl<'script>;
+    type Target = CustomAggregateFn<'script>;
 
     fn up<'registry>(
         self,
         helper: &mut Helper<'script, 'registry>,
     ) -> crate::ast::visitors::prelude::Result<Self::Target> {
         Ok(Self::Target {
-            name: self.name.up(helper)?,
-            init: self.body.init.up(helper)?,
-            aggregate: self.body.aggregate.up(helper)?,
-            merge: self.body.merge.up(helper)?,
-            emit: self.body.emit.up(helper)?,
+            name: self.name.up(helper)?.id,
+            init_body: self.body.init.up(helper)?,
+            aggregate_body: self.body.aggregate.up(helper)?,
+            mergein_body: self.body.merge.up(helper)?,
+            emit_body: self.body.emit.up(helper)?,
+            state: Default::default(),
+            mid: helper.add_meta(self.start, self.end)
         })
     }
 }
 
 impl BaseExpr for AggrFnDeclRaw<'_> {
     fn mid(&self) -> usize {
-        self.end.absolute() - self.start.absolute()
+        0
     }
 }
 
 impl BaseExpr for AggrFnBodyRaw<'_> {
     fn mid(&self) -> usize {
-        self.end.absolute() - self.start.absolute()
+        0
     }
 }

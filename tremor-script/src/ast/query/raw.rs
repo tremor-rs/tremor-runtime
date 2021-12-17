@@ -32,6 +32,7 @@ use crate::ast::{
 use crate::{ast::InvokeAggrFn, impl_expr};
 use beef::Cow;
 use std::iter::FromIterator;
+use crate::ast::aggregate_fn::{AggregateDeclRaw, AggrFnDeclRaw};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// we're forced to make this pub because of lalrpop
@@ -96,6 +97,11 @@ impl<'script> QueryRaw<'script> {
                     // is triggered before dupe err from any of the inlined stmt
                     stmts.insert(create_stmt_index, Stmt::SubqueryStmt(sq_stmt));
                 }
+                StmtRaw::AggregateFnDecl(f) => {
+                    let upped = f.up(&mut helper)?;
+                    helper.register_aggregate_fun(upped.clone());
+                    stmts.push(Stmt::AggregateFnDecl(upped));
+                },
                 other => {
                     stmts.push(other.up(&mut helper)?);
                 }
@@ -137,6 +143,8 @@ pub enum StmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     ModuleStmt(ModuleStmtRaw<'script>),
     /// we're forced to make this pub because of lalrpop
+    AggregateFnDecl(AggrFnDeclRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Expr(Box<ExprRaw<'script>>),
 }
 impl<'script> StmtRaw<'script> {
@@ -176,6 +184,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
             StmtRaw::Script(stmt) => Ok(Stmt::Script(stmt.up(helper)?)),
             StmtRaw::SubqueryDecl(stmt) => Ok(Stmt::SubqueryDecl(stmt.up(helper)?)),
             StmtRaw::WindowDecl(stmt) => Ok(Stmt::WindowDecl(Box::new(stmt.up(helper)?))),
+            StmtRaw::AggregateFnDecl(stmt) => Ok(Stmt::AggregateFnDecl(stmt.up(helper)?)),
             StmtRaw::ModuleStmt(ref m) => error_generic(m, m, &Self::BAD_MODULE, &helper.meta),
             StmtRaw::SubqueryStmt(ref sq) => error_generic(sq, sq, &Self::BAD_SUBQ, &helper.meta),
             StmtRaw::Expr(m) => error_generic(&*m, &*m, &Self::BAD_EXPR, &helper.meta),
@@ -568,6 +577,9 @@ impl<'script> SubqueryStmtRaw<'script> {
                                 SubqueryStmtRaw::inline_params(w.params, &subq_args, &mut helper)?
                                     .into();
                             query_stmts.push(StmtRaw::WindowDecl(w).up(&mut helper)?);
+                        }
+                        StmtRaw::AggregateFnDecl(mut f) => {
+                            query_stmts.push(StmtRaw::AggregateFnDecl(f).up(&mut helper)?)
                         }
                         StmtRaw::Expr(e) => {
                             query_stmts.push(StmtRaw::Expr(e).up(&mut helper)?);

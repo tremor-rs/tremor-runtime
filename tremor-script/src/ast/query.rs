@@ -22,6 +22,7 @@ use super::{raw::BaseExpr, Consts};
 use crate::impl_expr_mid;
 use crate::{ast::eq::AstEq, impl_fqn};
 use raw::WindowDefnRaw;
+use crate::registry::CustomAggregateFn;
 
 /// A Tremor query
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -59,6 +60,8 @@ pub enum Stmt<'script> {
     SubqueryDecl(SubqueryDecl<'script>),
     /// An subquery creation
     SubqueryStmt(SubqueryStmt),
+    /// An aggregate function delcaration
+    AggregateFnDecl(CustomAggregateFn<'script>),
     /// A select statement
     Select(SelectStmt<'script>),
 }
@@ -76,6 +79,7 @@ impl<'script> BaseExpr for Stmt<'script> {
             Stmt::Operator(s) => s.mid(),
             Stmt::Script(s) => s.mid(),
             Stmt::Select(s) => s.mid(),
+            Stmt::AggregateFnDecl(s) => s.mid(),
         }
     }
 }

@@ -1,17 +1,15 @@
-mod m with
-    aggregate ag of
-        init ( ) =>
-            0
+aggregate ag of
+    init ( ) =>
+        0
 
-        aggregate(st, x) =>
-            1 * []
+    aggregate(st, x) =>
+        1 * []
 
-        mergein(st, x) =>
-            st + x
+    mergein(st, x) =>
+        st + x
 
-        emit(st) =>
-            st
-    end
+    emit(st) =>
+        st
 end;
 
-select m::ag(event) from in into out;
+select ag(event) from in into out;
