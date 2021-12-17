@@ -86,17 +86,19 @@ pub(crate) async fn suite_command(
         if let Some(suite_root) = suite.path().parent() {
             let base_tags = tag::resolve(base, suite_root)?;
 
+            let env = HashMap::new();
             // Set cwd to test root
             let cwd = std::env::current_dir()?;
             file::set_current_dir(&suite_root)?;
 
-            let mut before = before::BeforeController::new(suite_root);
-            let before_process = before.spawn().await?;
-            async_std::task::spawn(async move {
-                if let Err(e) = before.capture(before_process).await {
-                    eprint!("Can't capture results from 'before' process: {}", e);
-                };
-            });
+            let mut before = before::BeforeController::new(suite_root, &env);
+            if let Some(mut before_process) = before.spawn().await? {
+                async_std::task::spawn(async move {
+                    if let Err(e) = before_process.join().await {
+                        eprint!("Can't capture results from 'before' process: {}", e);
+                    };
+                });
+            }
 
             let suite_start = nanotime();
             let command_str = slurp_string(&suite.path())?;
@@ -183,7 +185,7 @@ pub(crate) async fn suite_command(
 
             before::update_evidence(suite_root, &mut evidence)?;
 
-            let mut after = after::AfterController::new(suite_root);
+            let mut after = after::AfterController::new(suite_root, &env);
             after.spawn().await?;
             after::update_evidence(suite_root, &mut evidence)?;
 

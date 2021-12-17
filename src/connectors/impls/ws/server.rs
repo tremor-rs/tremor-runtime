@@ -192,6 +192,8 @@ impl Connector for WsServer {
         let tls_server_config = self.tls_server_config.clone();
 
         // accept task
+        // FIXME: using `?` in the acceptor tasks causes the server quietly failing
+        //        when the acceptor task errors
         self.accept_task = Some(task::spawn(async move {
             let mut stream_id_gen = StreamIdGen::default();
             while let (true, Ok((tcp_stream, peer_addr))) = (
@@ -236,7 +238,13 @@ impl Connector for WsServer {
                     let ws_reader = WsReader::new(ws_read, origin_uri.clone(), meta);
                     source_runtime.register_stream_reader(stream_id, &ctx, ws_reader);
                 } else {
-                    let ws_stream = accept_async(tcp_stream).await?;
+                    let ws_stream = match accept_async(tcp_stream).await {
+                        Ok(s) => s,
+                        Err(e) => {
+                            error!("Websaocket connection error: {}", e);
+                            continue;
+                        }
+                    };
                     debug!(
                         "[Connector::{}] new connection from {}",
                         &accept_url, peer_addr
