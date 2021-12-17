@@ -14,6 +14,7 @@
 
 mod connectors;
 
+#[cfg(feature = "es-integration")]
 #[macro_use]
 extern crate log;
 #[cfg(feature = "es-integration")]

@@ -123,8 +123,6 @@ pub struct Connector {
     pub id: Id,
     pub(crate) connector_type: ConnectorType,
 
-    pub(crate) description: String,
-
     pub(crate) codec: Option<Codec>,
 
     pub(crate) config: tremor_pipeline::ConfigMap,
@@ -193,7 +191,6 @@ impl Connector {
         Ok(Connector {
             id,
             connector_type,
-            description: "FIXME: placeholder description".to_string(),
             config: config,
             codec_map: defn
                 .get_object("codec_map")
