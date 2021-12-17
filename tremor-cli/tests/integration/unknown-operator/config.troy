@@ -1,0 +1,28 @@
+define flow main
+flow
+  use troy::connectors;
+  define pipeline main
+  into out, exit
+  pipeline
+    define operator wal from qos::wal
+    with
+      read_count = 1,
+      max_elements = 1000,
+      max_bytes = 10485760
+    end;
+
+    create operator wal;
+
+    select event from in into wal;
+    select event from wal into out;
+  end;
+  
+  create connector in from connectors::tty;
+  create connector exit from connectors::exit;
+  create pipeline main;
+  
+  connect /connector/in to /pipeline/main;
+  connect /pipeline/main to /connector/exit;
+
+end;
+deploy flow main;

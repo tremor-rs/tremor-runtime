@@ -8,9 +8,7 @@
     "../before.pid",
     "-n",
     "-f",
-    "ws.trickle",
-    "config.yaml",
-    "server.yaml"
+    "config.troy"
   ],
   "await": {
     "port-open": [

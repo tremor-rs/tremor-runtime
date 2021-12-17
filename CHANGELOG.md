@@ -45,6 +45,7 @@
 - Add the `std::size` module to convert sizes
 - Add custom function calls to constant folding
 - Integration test names are added as a tag so they can be run by name
+- integration tests low log stdout/stderr for before and after
 
 ### Fixes
 
@@ -82,9 +83,10 @@
 
 - changed naming for `record` object to avoid keywords like `select` and `merge`. New names are `record.extract` and `record.combine`.
 - command seperators are now unified, both `patch`, `match` and `for` now use `;` the same way the rest of the language does
-- in all definitial statements `args` now specifies interface arguments that are overwritable in the correspanding `create` statement, while `with` specifies non overwritable configuration in both `define` and `create` statements - this unifiers the use of `with`  and `args` between trickle and troy
+- in all definitial statements `args` now specifies interface arguments that are overwritable in the correspanding `create` statement, while `with` specifies non-overwritable configuration in both `define` and `create` statements - this unifies the use of `with`  and `args` between trickle and troy
 - file connector no longer splits by lines - it now requires a preconnector
 - define for both troy and trickle now follow the same principle of `define <type> <alias> from <source>`
+- `wal` is no longer an operator but a connector
 
 ## 0.11.4
 

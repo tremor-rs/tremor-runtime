@@ -61,7 +61,7 @@ pub trait Preprocessor: Sync + Send {
 #[cfg(not(tarpaulin_include))]
 pub fn lookup_with_config(config: &PreprocessorConfig) -> Result<Box<dyn Preprocessor>> {
     match config.name.as_str() {
-        // TODO once preprocessors allow configuration, remove multiple entries for lines here
+        // FIXME once preprocessors allow configuration, remove multiple entries for lines here
         "lines" => Ok(Box::new(Lines::from_config(&config.config)?)),
         "lines-null" => Ok(Box::new(Lines::new(b'\0', 1_048_576, true))),
         "lines-pipe" => Ok(Box::new(Lines::new(b'|', 1_048_576, true))),

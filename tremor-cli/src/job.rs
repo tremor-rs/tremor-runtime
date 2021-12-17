@@ -182,11 +182,11 @@ impl TargetProcess {
         Ok(self.process.status().await?)
     }
 
-    pub(crate) async fn tail(
+    pub(crate) async fn stdio_tailer(
         &mut self,
         stdout_path: &Path,
         stderr_path: &Path,
-    ) -> Result<ExitStatus> {
+    ) -> Result<(JoinHandle<Result<()>>, JoinHandle<Result<()>>)> {
         let stdout_rx = self.stdout_receiver.clone();
         let stdout_path = stdout_path.to_path_buf();
         let stdout_handle = spawn::<_, Result<()>>(async move {
@@ -207,11 +207,27 @@ impl TargetProcess {
             }
             Ok(())
         });
+
+        Ok((stdout_handle, stderr_handle))
+    }
+    pub(crate) async fn join(&mut self) -> Result<ExitStatus> {
         let exit_status = self.process.status().await?;
 
         if self.process.kill().is_err() {
             // Do nothing
         };
+        Ok(exit_status)
+    }
+
+    pub(crate) async fn tail(
+        &mut self,
+        stdout_path: &Path,
+        stderr_path: &Path,
+    ) -> Result<ExitStatus> {
+        let (stdout_handle, stderr_handle) = self.stdio_tailer(stdout_path, stderr_path).await?;
+
+        let exit_status = self.join().await?;
+
         let _ = stdout_handle.await;
         let _ = stderr_handle.await;
         Ok(exit_status)
