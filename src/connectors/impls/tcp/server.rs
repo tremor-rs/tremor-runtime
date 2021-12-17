@@ -195,6 +195,8 @@ impl Source for TcpServerSource {
         let runtime = self.runtime.clone();
         let sink_runtime = self.sink_runtime.clone();
         // accept task
+        // FIXME: using `?` in the acceptor tasks causes the server quietly failing
+        //        when the acceptor task errors
         self.accept_task = Some(task::spawn(async move {
             let mut stream_id_gen = StreamIdGen::default();
             while let (true, Ok((stream, peer_addr))) = (

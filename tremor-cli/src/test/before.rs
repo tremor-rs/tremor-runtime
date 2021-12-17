@@ -49,17 +49,31 @@ fn default_dir() -> String {
 }
 
 impl Before {
-    pub(crate) async fn spawn(&self, base: &Path) -> Result<Option<TargetProcess>> {
+    pub(crate) async fn spawn(
+        &self,
+        base: &Path,
+        env: &HashMap<String, String>,
+    ) -> Result<Option<TargetProcess>> {
         let cmd = job::which(&self.cmd)?;
         // interpret `dir` as relative to `base`
         let current_working_dir = base.join(&self.dir).canonicalize()?;
+        let mut env = env.clone();
+        for (k, v) in &self.env {
+            env.insert(k.clone(), v.clone());
+        }
         let mut process =
-            job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &current_working_dir)?;
+            job::TargetProcess::new_in_dir(&cmd, &self.args, &env, &current_working_dir)?;
+
+        let fg_out_file = base.join("before.out.log");
+        let fg_err_file = base.join("before.err.log");
+        let _ = process.stdio_tailer(&fg_out_file, &fg_err_file).await?;
+
         debug!(
             "Spawning before: {} in {}",
             self.cmdline(),
             current_working_dir.display()
         );
+
         self.block_on(&mut process, base).await?;
         debug!("Before process ready.");
         Ok(Some(process))
@@ -98,48 +112,51 @@ impl Before {
                     .into());
                 }
                 for (k, v) in conditions.iter() {
-                    if "port-open" == k.as_str() {
-                        for port in v {
-                            if let Ok(port) = port.parse::<u16>() {
-                                success &= port_scanner::scan_port(port);
+                    match k.as_str() {
+                        "port-open" => {
+                            for port in v {
+                                if let Ok(port) = port.parse::<u16>() {
+                                    success &= port_scanner::scan_port(port);
+                                }
                             }
                         }
-                    }
-                    if "wait-for-ms" == k.as_str() {
-                        success &= v
-                            .first()
-                            .and_then(|delay| delay.parse().ok())
-                            .map(|delay| start.elapsed() > Duration::from_millis(delay))
-                            .unwrap_or_default();
-                    }
-                    if "http-ok" == k.as_str() {
-                        for endpoint in v {
-                            let res = task::block_on(future::timeout(
-                                Duration::from_secs(self.until.min(5)),
-                                surf::get(endpoint).send(),
-                            ))?;
-                            success &= match res {
-                                Ok(res) => res.status().is_success(),
-                                Err(_) => false,
+                        "wait-for-ms" => {
+                            success &= v
+                                .first()
+                                .and_then(|delay| delay.parse().ok())
+                                .map(|delay| start.elapsed() > Duration::from_millis(delay))
+                                .unwrap_or_default();
+                        }
+                        "http-ok" => {
+                            for endpoint in v {
+                                let res = task::block_on(future::timeout(
+                                    Duration::from_secs(self.until.min(5)),
+                                    surf::get(endpoint).send(),
+                                ))?;
+                                success &= match res {
+                                    Ok(res) => res.status().is_success(),
+                                    Err(_) => false,
+                                }
                             }
                         }
-                    }
-                    if "file-exists" == k.as_str() {
-                        let base_dir = base.join(&self.dir);
-                        for f in v {
-                            if let Ok(path) = base_dir.join(f).canonicalize() {
-                                debug!("Checking for existence of {}", path.display());
-                                success &= path.exists();
+                        "file-exists" => {
+                            let base_dir = base.join(&self.dir);
+                            for f in v {
+                                if let Ok(path) = base_dir.join(f).canonicalize() {
+                                    debug!("Checking for existence of {}", path.display());
+                                    success &= path.exists();
+                                }
                             }
                         }
-                    }
-                    if "status" == k.as_str() {
-                        let code = process.wait().await?.code().unwrap_or(99);
-                        success &= v
-                            .first()
-                            .and_then(|code| code.parse::<i32>().ok())
-                            .map(|expected_code| expected_code == code)
-                            .unwrap_or_default();
+                        "status" => {
+                            let code = process.wait().await?.code().unwrap_or(99);
+                            success &= v
+                                .first()
+                                .and_then(|code| code.parse::<i32>().ok())
+                                .map(|expected_code| expected_code == code)
+                                .unwrap_or_default();
+                        }
+                        _ => (),
                     }
                 }
                 if success {
@@ -177,12 +194,14 @@ pub(crate) fn load_before(path: &Path) -> Result<Before> {
 #[derive(Debug)]
 pub(crate) struct BeforeController {
     base: PathBuf,
+    env: HashMap<String, String>,
 }
 
 impl BeforeController {
-    pub(crate) fn new(base: &Path) -> Self {
+    pub(crate) fn new(base: &Path, env: &HashMap<String, String>) -> Self {
         Self {
             base: base.to_path_buf(),
+            env: env.clone(),
         }
     }
 
@@ -192,7 +211,7 @@ impl BeforeController {
         if before_path.exists() {
             let before_yaml = load_before(&before_path);
             match before_yaml {
-                Ok(before_json) => before_json.spawn(root).await,
+                Ok(before_yaml) => before_yaml.spawn(root, &self.env).await,
                 Err(Error(ErrorKind::Common(tremor_common::Error::FileOpen(_, _)), _)) => {
                     // no before yaml found, all good
                     Ok(None)
@@ -203,22 +222,11 @@ impl BeforeController {
             Ok(None)
         }
     }
-
-    pub(crate) async fn capture(&mut self, process: Option<TargetProcess>) -> Result<()> {
-        let root = self.base.clone();
-        let bg_out_file = root.join("bg.out.log");
-        let bg_err_file = root.join("bg.err.log");
-        if let Some(mut process) = process {
-            let status = process.tail(&bg_out_file, &bg_err_file).await?;
-            info!("Before process exited with: {:?}", status);
-        };
-        Ok(())
-    }
 }
 
 pub(crate) fn update_evidence(root: &Path, evidence: &mut HashMap<String, String>) -> Result<()> {
-    let bg_out_file = root.join("bg.out.log");
-    let bg_err_file = root.join("bg.err.log");
+    let bg_out_file = root.join("before.out.log");
+    let bg_err_file = root.join("before.err.log");
 
     if let Ok(x) = fs::metadata(&bg_out_file) {
         if x.is_file() {
