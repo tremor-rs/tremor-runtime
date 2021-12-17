@@ -20,9 +20,9 @@ use super::{
 };
 use super::{raw::BaseExpr, Consts};
 use crate::impl_expr_mid;
+use crate::registry::CustomAggregateFn;
 use crate::{ast::eq::AstEq, impl_fqn};
 use raw::WindowDefnRaw;
-use crate::registry::CustomAggregateFn;
 
 /// A Tremor query
 #[derive(Clone, Debug, PartialEq, Serialize)]

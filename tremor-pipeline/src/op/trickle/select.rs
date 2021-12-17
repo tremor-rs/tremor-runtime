@@ -201,6 +201,7 @@ impl Res {
 impl Operator for Select {
     // Note: we don't use state in this function as select does not allow mutation
     // so the state can never be changed.
+    #[allow(clippy::too_many_lines)]
     fn on_event(
         &mut self,
         _uid: u64,
@@ -332,7 +333,7 @@ impl Operator for Select {
                                 // otherwise we clone the default group (this is a cost we got to pay) and reset it.
                                 // If we didn't clone here we'd need to allocate a new group for every event we haven't seen yet
                                 v.insert(dflt_group.clone());
-                                dflt_group.reset(&ctx, &node_meta, consts.run(), recursion_limit)?;
+                                dflt_group.reset(&ctx, node_meta, consts.run(), recursion_limit)?;
                             }
                         }
                     }

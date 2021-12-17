@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{BaseExpr, Exprs};
+use crate::ast::aggregate_fn::{AggregateDecl, EmitDecl, InitDecl, MergeInDecl};
+use crate::ast::BaseExpr;
 use crate::interpreter::{Cont, Env, LocalStack};
 use crate::prelude::{Builder, ExecOpts};
 use crate::registry::{FResult, FunctionError};
 use crate::{AggrType, Value};
 use beef::Cow;
-use crate::ast::aggregate_fn::{AggregateDecl, EmitDecl, InitDecl, MergeInDecl};
 
 /// public because lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -36,7 +36,7 @@ pub struct CustomAggregateFn<'script> {
     /// public because lalrpop
     pub state: Value<'script>,
     /// public because lalrpop
-    pub mid: usize
+    pub mid: usize,
 }
 
 impl<'script> CustomAggregateFn<'script> {

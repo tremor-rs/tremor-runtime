@@ -410,6 +410,7 @@ impl Query {
                     outputs.push(id);
                 }
                 Stmt::WindowDecl(_)
+                | Stmt::AggregateFnDecl(_)
                 | Stmt::ScriptDecl(_)
                 | Stmt::OperatorDecl(_)
                 | Stmt::SubqueryDecl(_) => {}
@@ -538,8 +539,7 @@ impl Query {
                     pipe_ops.insert(id, op);
                     nodes.insert(common_cow(o.node_id.id()), id);
                     outputs.push(id);
-                },
-                Stmt::AggregateFnDecl(_) => {} // todo we should PROBABLY do SOMETHING here?
+                }
             };
         }
 

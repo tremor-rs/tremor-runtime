@@ -17,9 +17,11 @@ use crate::ast::raw::{ExprsRaw, IdentRaw};
 use crate::ast::upable::Upable;
 use crate::ast::{Exprs, Helper, Ident};
 use crate::lexer::Location;
+use crate::registry::CustomAggregateFn;
 use halfbrown::HashMap;
 use serde::Serialize;
-use crate::registry::CustomAggregateFn;
+use tremor_value::Value;
+use value_trait::Builder;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct AggrFnDeclRaw<'input> {
@@ -57,19 +59,6 @@ pub struct AggregateDeclRaw<'input>(pub Vec<IdentRaw<'input>>, pub ExprsRaw<'inp
 pub struct MergeInDeclRaw<'input>(pub Vec<IdentRaw<'input>>, pub ExprsRaw<'input>);
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct EmitDeclRaw<'input>(pub Vec<IdentRaw<'input>>, pub ExprsRaw<'input>);
-
-pub struct FnDecl<'script> {
-    /// public because lalrpop
-    pub name: Ident<'script>,
-    /// public because lalrpop
-    pub init: InitDecl<'script>,
-    /// public because lalrpop
-    pub aggregate: AggregateDecl<'script>,
-    /// public because lalrpop
-    pub merge: MergeInDecl<'script>,
-    /// public because lalrpop
-    pub emit: EmitDecl<'script>,
-}
 
 #[derive(Clone, Serialize, Debug, PartialEq)]
 pub struct InitDecl<'script>(pub Exprs<'script>);
@@ -162,8 +151,8 @@ impl<'script> Upable<'script> for AggrFnDeclRaw<'script> {
             aggregate_body: self.body.aggregate.up(helper)?,
             mergein_body: self.body.merge.up(helper)?,
             emit_body: self.body.emit.up(helper)?,
-            state: Default::default(),
-            mid: helper.add_meta(self.start, self.end)
+            state: Value::null(),
+            mid: helper.add_meta(self.start, self.end),
         })
     }
 }

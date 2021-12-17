@@ -24,6 +24,7 @@ use super::{
     Query, Registry, Result, ScriptDecl, ScriptStmt, Select, SelectStmt, Serialize, Stmt,
     StreamStmt, SubqueryDecl, SubqueryStmt, Upable, Value, WindowDecl, WindowKind,
 };
+use crate::ast::aggregate_fn::AggrFnDeclRaw;
 use crate::ast::{
     node_id::NodeId,
     visitors::{ArgsRewriter, ExprReducer, GroupByExprExtractor, TargetEventRef},
@@ -32,7 +33,6 @@ use crate::ast::{
 use crate::{ast::InvokeAggrFn, impl_expr};
 use beef::Cow;
 use std::iter::FromIterator;
-use crate::ast::aggregate_fn::{AggregateDeclRaw, AggrFnDeclRaw};
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// we're forced to make this pub because of lalrpop
@@ -101,7 +101,7 @@ impl<'script> QueryRaw<'script> {
                     let upped = f.up(&mut helper)?;
                     helper.register_aggregate_fun(upped.clone());
                     stmts.push(Stmt::AggregateFnDecl(upped));
-                },
+                }
                 other => {
                     stmts.push(other.up(&mut helper)?);
                 }
@@ -578,8 +578,8 @@ impl<'script> SubqueryStmtRaw<'script> {
                                     .into();
                             query_stmts.push(StmtRaw::WindowDecl(w).up(&mut helper)?);
                         }
-                        StmtRaw::AggregateFnDecl(mut f) => {
-                            query_stmts.push(StmtRaw::AggregateFnDecl(f).up(&mut helper)?)
+                        StmtRaw::AggregateFnDecl(f) => {
+                            query_stmts.push(StmtRaw::AggregateFnDecl(f).up(&mut helper)?);
                         }
                         StmtRaw::Expr(e) => {
                             query_stmts.push(StmtRaw::Expr(e).up(&mut helper)?);

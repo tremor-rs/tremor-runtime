@@ -35,7 +35,6 @@ use crate::{
     impl_expr, impl_expr_exraw,
     pos::{Location, Range},
     prelude::*,
-    registry::CustomAggregateFn,
     registry::CustomFn,
     tilde::Extractor,
     KnownKey, Value,

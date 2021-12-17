@@ -24,12 +24,12 @@ use super::{
     RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
     TuplePattern, UnaryExpr,
 };
+use crate::ast::aggregate_fn::{AggregateDecl, EmitDecl, InitDecl, MergeInDecl};
 use crate::ast::{Ident, InvocableAggregate};
 use crate::registry::CustomAggregateFn;
 use crate::CustomFn;
 use beef::Cow;
 use tremor_value::Value;
-use crate::ast::aggregate_fn::{AggregateDecl, EmitDecl, InitDecl, MergeInDecl};
 
 impl<'script> ImutExpr<'script> {
     pub(crate) fn into_static(self) -> ImutExpr<'static> {
@@ -1114,7 +1114,10 @@ impl<'script> Ident<'script> {
     pub(crate) fn into_static(self) -> Ident<'static> {
         let Ident { mid, id } = self;
 
-        Ident { mid, id: Cow::owned(id.to_string()) }
+        Ident {
+            mid,
+            id: Cow::owned(id.to_string()),
+        }
     }
 }
 
@@ -1128,7 +1131,7 @@ impl<'script> CustomAggregateFn<'script> {
             mergein_body,
             emit_body,
             state,
-            mid
+            mid,
         } = self;
 
         CustomAggregateFn {
@@ -1159,7 +1162,7 @@ impl<'script> AggregateDecl<'script> {
 
         AggregateDecl(
             args.into_iter().map(Ident::into_static).collect(),
-            body.into_iter().map(Expr::into_static).collect()
+            body.into_iter().map(Expr::into_static).collect(),
         )
     }
 }
@@ -1171,7 +1174,7 @@ impl<'script> MergeInDecl<'script> {
 
         MergeInDecl(
             args.into_iter().map(Ident::into_static).collect(),
-            body.into_iter().map(Expr::into_static).collect()
+            body.into_iter().map(Expr::into_static).collect(),
         )
     }
 }
@@ -1183,7 +1186,7 @@ impl<'script> EmitDecl<'script> {
 
         EmitDecl(
             args.into_iter().map(Ident::into_static).collect(),
-            body.into_iter().map(Expr::into_static).collect()
+            body.into_iter().map(Expr::into_static).collect(),
         )
     }
 }
