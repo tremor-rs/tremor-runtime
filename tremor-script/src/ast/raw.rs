@@ -2414,7 +2414,6 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
             } else {
                 let inner: Range = (self.start, self.end).into();
                 let outer: Range = inner.expand_lines(3);
-                dbg!(helper.functions.keys().collect::<Vec<_>>());
                 Err(ErrorKind::MissingFunction(outer, inner, self.module, self.fun, None).into())
             }
         }

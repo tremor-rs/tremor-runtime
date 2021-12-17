@@ -29,11 +29,24 @@ pub(crate) struct After {
 }
 
 impl After {
-    pub(crate) fn spawn(&self, base: &Path) -> Result<Option<TargetProcess>> {
+    pub(crate) async fn spawn(
+        &self,
+        base: &Path,
+        env: &HashMap<String, String>,
+    ) -> Result<Option<TargetProcess>> {
         let cmd = job::which(&self.cmd)?;
         // interpret `dir` as relative to `base`
         let current_dir = base.join(&self.dir).canonicalize()?;
-        let process = job::TargetProcess::new_in_dir(&cmd, &self.args, &self.env, &current_dir)?;
+
+        let mut env = env.clone();
+        for (k, v) in &self.env {
+            env.insert(k.clone(), v.clone());
+        }
+        let mut process = job::TargetProcess::new_in_dir(&cmd, &self.args, &env, &current_dir)?;
+        let out_file = base.join("after.out.log");
+        let err_file = base.join("after.err.log");
+        let _ = process.stdio_tailer(&out_file, &err_file).await?;
+
         Ok(Some(process))
     }
 }
@@ -51,12 +64,14 @@ pub(crate) fn load_after(path: &Path) -> Result<After> {
 
 pub(crate) struct AfterController {
     base: PathBuf,
+    env: HashMap<String, String>,
 }
 
 impl AfterController {
-    pub(crate) fn new(base: &Path) -> Self {
+    pub(crate) fn new(base: &Path, env: &HashMap<String, String>) -> Self {
         Self {
             base: base.to_path_buf(),
+            env: env.clone(),
         }
     }
 
@@ -66,7 +81,7 @@ impl AfterController {
         // This is optional
         if (&after_path).is_file() {
             let after_json = load_after(&after_path)?;
-            let after_process = after_json.spawn(root)?;
+            let after_process = after_json.spawn(root, &self.env).await?;
             if let Some(mut process) = after_process {
                 let after_out_file = root.join("after.out.log");
                 let after_err_file = root.join("after.err.log");

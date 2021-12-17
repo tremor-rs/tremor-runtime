@@ -44,7 +44,6 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::Display;
 use tremor_common::time::nanotime;
-use tremor_common::url::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::{ast::DeployEndpoint, EventPayload};
 
@@ -604,22 +603,24 @@ where
                 SinkMsgWrapper::ToSink(sink_msg) => {
                     match sink_msg {
                         SinkMsg::Link {
-                            port,
+                            port: _port,
                             mut pipelines,
                         } => {
-                            debug_assert!(
-                                port == IN,
-                                "[Sink::{}] connected to invalid connector sink port",
-                                &self.ctx.alias
-                            );
+                            // FIXME: the connector can define valid ports so we can't assum IN is the only valid one
+                            // debug_assert!(
+                            //     port == IN,
+                            //     "[Sink::{}] connected to invalid connector sink port",
+                            //     &self.ctx.alias
+                            // );
                             self.pipelines.append(&mut pipelines);
                         }
-                        SinkMsg::Unlink { id, port } => {
-                            debug_assert!(
-                                port == IN,
-                                "[Sink::{}] disconnected from invalid connector sink port",
-                                &self.ctx.alias
-                            );
+                        SinkMsg::Unlink { id, port: _port } => {
+                            // FIXME: the connector can define valid ports so we can't assum IN is the only valid one
+                            // debug_assert!(
+                            //     port == IN,
+                            //     "[Sink::{}] disconnected from invalid connector sink port",
+                            //     &self.ctx.alias
+                            // );
                             self.pipelines.retain(|(url, _)| url != &id);
                         }
                         // FIXME: only handle those if in the right state (see source part)
