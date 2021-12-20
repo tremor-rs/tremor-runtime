@@ -88,7 +88,7 @@ Tremor runs in a docker image. If you wish to build a local image, clone this re
 
 Note that since the image is building tremor in release mode it requires some serious resources. We recommend allowing docker to use at least **12 but better 16 gigabytes of memory** and as many cores as there are to spare. Depending on the system building, the image can take up to an hour.
 
-Providing too little resources to the docker machine can destabalize the docker build process. If you're encountering logs/errors like:
+Providing too little resources to the docker machine can destabilize the docker build process. If you're encountering logs/errors like:
 
 ```
 (signal: 9, SIGKILL: kill)
