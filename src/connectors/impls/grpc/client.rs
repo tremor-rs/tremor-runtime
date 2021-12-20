@@ -129,25 +129,28 @@ impl Sink for GrpcClientSink {
         &mut self,
         _input: &str,
         event: Event,
-        _ctx: &SinkContext,
+        ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
         if let Ok(error) = self.error_rx.try_recv() {
-            return Err(error);
+            error!("[Sink:{}] Could not send an event to a gRPC request stream: {}", &ctx.url, error);
         }
         let mut grpc_client_handler = self.grpc_client_handler.lock().await;
         if let Some(ref mut client_handler) = grpc_client_handler.as_mut() {
-            client_handler.send_request(event, self.error_tx.clone()).await?;
+            let error = client_handler.send_request(event, self.error_tx.clone(), ctx).await.err();
+            if let Some(error) = error {
+                error!("[Sink:{}] Unable to send the gRPC request: {}", &ctx.url, error);
+            }
         }
         Ok(SinkReply::NONE)
     }
 
     async fn on_signal(
         &mut self,
-        signal: Event,
+        _signal: Event,
         _ctx: &SinkContext,
-        serializer: &mut EventSerializer,
+        _serializer: &mut EventSerializer,
     ) -> Result<SinkReply> {
         Ok(SinkReply::default()) 
     }

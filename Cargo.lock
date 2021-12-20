@@ -2242,11 +2242,12 @@ name = "gen-tonic-impls"
 version = "0.1.0"
 dependencies = [
  "heck",
- "itertools 0.10.3",
+ "itertools 0.10.1",
+ "pbjson-build",
  "proc-macro2",
- "prost",
- "prost-build",
- "prost-types",
+ "prost 0.8.0",
+ "prost-build 0.8.0",
+ "prost-types 0.8.0",
  "quote",
  "tempfile",
 ]
@@ -2357,8 +2358,8 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8894a4cb9b32a73030f2c2dd6a251114d5ec62fb786d011850ae98cdfb8d2ff2"
 dependencies = [
- "prost",
- "prost-types",
+ "prost 0.8.0",
+ "prost-types 0.8.0",
  "tonic",
 ]
 
@@ -3827,6 +3828,51 @@ dependencies = [
 ]
 
 [[package]]
+name = "pbjson"
+version = "0.2.1"
+dependencies = [
+ "base64 0.13.0",
+ "serde",
+]
+
+[[package]]
+name = "pbjson"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12f64965beef9b7276dd811b81cce49569430a73ce1586aa121cb4ef9e0f498f"
+dependencies = [
+ "base64 0.13.0",
+ "serde",
+]
+
+[[package]]
+name = "pbjson-build"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1d726efd7bfb8725c7100c29cb723eaa865b5e56cd41b723f193436e404c07f5"
+dependencies = [
+ "heck",
+ "itertools 0.10.1",
+ "prost 0.9.0",
+ "prost-types 0.9.0",
+]
+
+[[package]]
+name = "pbjson-types"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d501adb5dc9774145e21cf497e62641d6b4c7f9db490c52388e26a0f966c7ea8"
+dependencies = [
+ "bytes 1.1.0",
+ "chrono",
+ "pbjson 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "pbjson-build",
+ "prost 0.9.0",
+ "prost-build 0.9.0",
+ "serde",
+]
+
+[[package]]
 name = "peeking_take_while"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4187,7 +4233,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de5e2533f59d08fcf364fd374ebda0692a70bd6d7e66ef97f306f45c6c5d8020"
 dependencies = [
  "bytes 1.1.0",
- "prost-derive",
+ "prost-derive 0.8.0",
+]
+
+[[package]]
+name = "prost"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "444879275cb4fd84958b1a1d5420d15e6fcf7c235fe47f053c9c2a80aceb6001"
+dependencies = [
+ "bytes 1.1.0",
+ "prost-derive 0.9.0",
 ]
 
 [[package]]
@@ -4202,8 +4258,28 @@ dependencies = [
  "log",
  "multimap",
  "petgraph 0.5.1",
- "prost",
- "prost-types",
+ "prost 0.8.0",
+ "prost-types 0.8.0",
+ "tempfile",
+ "which 4.2.2",
+]
+
+[[package]]
+name = "prost-build"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62941722fb675d463659e49c4f3fe1fe792ff24fe5bbaa9c08cd3b98a1c354f5"
+dependencies = [
+ "bytes 1.1.0",
+ "heck",
+ "itertools 0.10.1",
+ "lazy_static",
+ "log",
+ "multimap",
+ "petgraph 0.6.0",
+ "prost 0.9.0",
+ "prost-types 0.9.0",
+ "regex",
  "tempfile",
  "which 4.2.2",
 ]
@@ -4222,13 +4298,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "prost-derive"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9cc1a3263e07e0bf68e96268f37665207b49560d98739662cdfaae215c720fe"
+dependencies = [
+ "anyhow",
+ "itertools 0.10.1",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "prost-types"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "603bbd6394701d13f3f25aada59c7de9d35a6a5887cfc156181234a44002771b"
 dependencies = [
  "bytes 1.1.0",
- "prost",
+ "prost 0.8.0",
+]
+
+[[package]]
+name = "prost-types"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "534b7a0e836e3c482d2693070f982e39e7611da9695d4d1f5a4b186b51faef0a"
+dependencies = [
+ "bytes 1.1.0",
+ "prost 0.9.0",
 ]
 
 [[package]]
@@ -5983,10 +6082,17 @@ dependencies = [
  "hyper-timeout",
  "percent-encoding",
  "pin-project 1.0.8",
+<<<<<<< HEAD
  "prost",
  "prost-derive",
  "tokio 1.15.0",
  "tokio-rustls 0.22.0",
+=======
+ "prost 0.8.0",
+ "prost-derive 0.8.0",
+ "tokio 1.14.0",
+ "tokio-rustls",
+>>>>>>> a15ca3d3 (add grpc feature and minor changes)
  "tokio-stream",
  "tokio-util 0.6.9",
  "tower",
@@ -6003,7 +6109,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12b52d07035516c2b74337d2ac7746075e7dcae7643816c1b12c5ff8a7484c08"
 dependencies = [
  "proc-macro2",
- "prost-build",
+ "prost-build 0.8.0",
  "quote",
  "syn",
 ]
@@ -6209,7 +6315,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5c029f406f53b2d4df45f19a1235c0f842c453abd909e53891b4918f0aed5e48"
 dependencies = [
  "async-channel",
- "prost",
+ "prost 0.8.0",
  "tonic",
  "tonic-build",
 ]
@@ -6302,15 +6408,17 @@ dependencies = [
  "matches",
  "memchr",
  "openssl",
+ "pbjson 0.2.1",
+ "pbjson-types",
  "pin-project-lite 0.2.7",
  "port_scanner",
  "postgres",
  "postgres-protocol",
  "pretty_assertions",
  "proptest",
- "prost",
- "prost-build",
- "prost-types",
+ "prost 0.8.0",
+ "prost-build 0.8.0",
+ "prost-types 0.8.0",
  "qwal",
  "rand 0.8.4",
  "rdkafka",

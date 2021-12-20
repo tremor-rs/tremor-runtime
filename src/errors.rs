@@ -178,6 +178,7 @@ error_chain! {
         TonicStatusError(tonic::Status);
         TonicTransportError(tonic::transport::Error);
         TonicMetadataError(tonic::metadata::errors::InvalidMetadataValue);
+        TonicToStrError(tonic::metadata::errors::ToStrError);
         TryFromIntError(std::num::TryFromIntError);
         ValueError(tremor_value::Error);
         UrlParserError(url::ParseError);

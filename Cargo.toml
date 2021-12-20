@@ -177,6 +177,8 @@ tonic = { version = "0.5.2", default-features = false, features = [
 ] }
 prost = "0.8"
 prost-types = "0.8"
+pbjson = { path = "/home/sanskarjaiswal/pbjson/pbjson" }
+pbjson-types = "0.2.1"
 tremor-otelapis = { version = "0.2.2" }
 
 # aws-s3
@@ -209,12 +211,13 @@ signal-hook = "0.3"
 signal-hook-async-std = "0.2"
 
 [build-dependencies]
-gen-tonic-impls = { path = "/home/sanskarjaiswal/gen-tonic-impls" }
-tonic-build = "0.5.2"
-prost-build = "0.8"
+gen-tonic-impls = { path = "/home/sanskarjaiswal/gen-tonic-impls", optional = true }
+tonic-build = { version = "0.5.2", optional = true  }
+prost-build = { version = "0.8", optional = true }
 
 [features]
 default = []
+grpc = ["gen-tonic-impls", "tonic-build", "prost-build"]
 
 # support for 128bit numbers in tremor-value
 128bit = ["tremor-value/128bit"]

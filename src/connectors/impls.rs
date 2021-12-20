@@ -50,4 +50,6 @@ pub(crate) mod udp;
 pub(crate) mod wal;
 /// WebSockets
 pub(crate) mod ws;
+/// gRPC
+#[cfg(feature = "grpc")]
 pub(crate) mod grpc;

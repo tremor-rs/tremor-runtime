@@ -52,6 +52,23 @@ fn get_git_commit() -> std::io::Result<String> {
     })
 }
 
+#[cfg(feature = "grpc")]
+fn generate_grpc_impls_code() {
+    let out_dir = env::var_os("OUT_DIR").unwrap();
+    let proto = env::var_os("PROTO_FILES");
+    let include = env::var_os("INCLUDE");
+    if let Some((proto, include)) = proto.zip(include) {
+        let protos = proto.to_str().unwrap().split(",").collect::<Vec<&str>>();
+        let includes = include.to_str().unwrap().split(",").collect::<Vec<&str>>();
+
+        let mut config = prost_build::Config::new();
+        config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+        tonic_build::configure()
+            .compile_with_config(config, &protos, &includes).unwrap();
+        generate(&protos, &includes, out_dir, false, true).unwrap();
+    }
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=.git");
     if let Ok(branch) = get_git_branch() {
@@ -60,14 +77,6 @@ fn main() {
     if let Ok(commit) = get_git_commit() {
         println!("cargo:rustc-env=VERSION_HASH={}", commit);
     }
-    let out_dir = env::var_os("OUT_DIR").unwrap();
-    let proto = env::var_os("PROTO_FILES").unwrap();
-    let protos = proto.to_str().unwrap().split(",").collect::<Vec<&str>>();
-    let include = env::var_os("INCLUDE").unwrap();
-    let includes = include.to_str().unwrap().split(",").collect::<Vec<&str>>();
-    let mut config = prost_build::Config::new();
-    config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
-    tonic_build::configure()
-        .compile_with_config(config, &protos, &includes).unwrap();
-    generate(&protos, &includes, out_dir, false, true).unwrap();
+    #[cfg(feature = "grpc")]
+    generate_grpc_impls_code()
 }
