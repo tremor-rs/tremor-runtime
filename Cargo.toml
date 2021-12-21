@@ -211,7 +211,7 @@ signal-hook = "0.3"
 signal-hook-async-std = "0.2"
 
 [build-dependencies]
-tremor-grpc-build = { path = "/home/sanskarjaiswal/tremor-grpc-build", optional = true }
+tremor-grpc-build = { git = "https://github.com/aryan9600/tremor-grpc-build", optional = true }
 tonic-build = { version = "0.5.2", optional = true  }
 prost-build = { version = "0.8", optional = true }
 

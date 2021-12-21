@@ -6274,6 +6274,7 @@ dependencies = [
 [[package]]
 name = "tremor-grpc-build"
 version = "0.1.0"
+source = "git+https://github.com/aryan9600/tremor-grpc-build#e45031e5c2b9454c6a0779a8f1c3c6447604012f"
 dependencies = [
  "heck",
  "itertools 0.10.1",
