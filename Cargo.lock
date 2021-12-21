@@ -3837,7 +3837,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d726efd7bfb8725c7100c29cb723eaa865b5e56cd41b723f193436e404c07f5"
 dependencies = [
  "heck",
- "itertools 0.10.1",
+ "itertools 0.10.3",
  "prost 0.9.0",
  "prost-types 0.9.0",
 ]
@@ -4257,7 +4257,7 @@ checksum = "62941722fb675d463659e49c4f3fe1fe792ff24fe5bbaa9c08cd3b98a1c354f5"
 dependencies = [
  "bytes 1.1.0",
  "heck",
- "itertools 0.10.1",
+ "itertools 0.10.3",
  "lazy_static",
  "log",
  "multimap",
@@ -4289,7 +4289,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9cc1a3263e07e0bf68e96268f37665207b49560d98739662cdfaae215c720fe"
 dependencies = [
  "anyhow",
- "itertools 0.10.1",
+ "itertools 0.10.3",
  "proc-macro2",
  "quote",
  "syn",
@@ -6067,17 +6067,10 @@ dependencies = [
  "hyper-timeout",
  "percent-encoding",
  "pin-project 1.0.8",
-<<<<<<< HEAD
- "prost",
- "prost-derive",
- "tokio 1.15.0",
- "tokio-rustls 0.22.0",
-=======
  "prost 0.8.0",
  "prost-derive 0.8.0",
- "tokio 1.14.0",
- "tokio-rustls",
->>>>>>> a15ca3d3 (add grpc feature and minor changes)
+ "tokio 1.15.0",
+ "tokio-rustls 0.22.0",
  "tokio-stream",
  "tokio-util 0.6.9",
  "tower",
@@ -6274,10 +6267,10 @@ dependencies = [
 [[package]]
 name = "tremor-grpc-build"
 version = "0.1.0"
-source = "git+https://github.com/aryan9600/tremor-grpc-build#e45031e5c2b9454c6a0779a8f1c3c6447604012f"
+source = "git+https://github.com/aryan9600/tremor-grpc-build#21a912c1532c70990c073a8774e59f937dd91c10"
 dependencies = [
  "heck",
- "itertools 0.10.1",
+ "itertools 0.10.3",
  "proc-macro2",
  "prost 0.8.0",
  "prost-build 0.8.0",

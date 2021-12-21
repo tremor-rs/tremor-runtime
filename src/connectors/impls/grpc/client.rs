@@ -49,7 +49,7 @@ impl ConnectorBuilder for Builder {
 
     async fn from_config(
         &self,
-        _id: &TremorUrl,
+        _id: &str,
         config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         if let Some(raw_config) = config {
@@ -140,7 +140,7 @@ impl Sink for GrpcClientSink {
         if let Ok(error) = self.error_rx.try_recv() {
             error!(
                 "[Sink:{}] Could not send an event to a gRPC request stream: {}",
-                &ctx.url, error
+                ctx.alias, error
             );
         }
         let mut grpc_client_handler = self.grpc_client_handler.lock().await;
@@ -152,7 +152,7 @@ impl Sink for GrpcClientSink {
             if let Some(error) = error {
                 error!(
                     "[Sink:{}] Unable to send the gRPC request: {}",
-                    &ctx.url, error
+                    ctx.alias, error
                 );
             }
         }
@@ -181,7 +181,7 @@ impl Sink for GrpcClientSink {
 
 #[async_trait::async_trait]
 impl Source for GrpcClientSource {
-    async fn pull_data(&mut self, _pull_id: u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         match self.rx.try_recv() {
             Ok(event) => Ok(SourceReply::Structured {
                 origin_uri: self.origin_uri.clone(),
@@ -200,5 +200,9 @@ impl Source for GrpcClientSource {
     /// this source is not handling acks/fails
     fn is_transactional(&self) -> bool {
         false
+    }
+
+    fn asynchronous(&self) -> bool {
+        true
     }
 }
