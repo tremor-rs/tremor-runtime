@@ -211,13 +211,13 @@ signal-hook = "0.3"
 signal-hook-async-std = "0.2"
 
 [build-dependencies]
-gen-tonic-impls = { path = "/home/sanskarjaiswal/gen-tonic-impls", optional = true }
+tremor-grpc-build = { path = "/home/sanskarjaiswal/tremor-grpc-build", optional = true }
 tonic-build = { version = "0.5.2", optional = true  }
 prost-build = { version = "0.8", optional = true }
 
 [features]
 default = []
-grpc = ["gen-tonic-impls", "tonic-build", "prost-build"]
+grpc = ["tremor-grpc-build", "tonic-build", "prost-build"]
 
 # support for 128bit numbers in tremor-value
 128bit = ["tremor-value/128bit"]

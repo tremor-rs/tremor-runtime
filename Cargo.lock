@@ -2238,21 +2238,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gen-tonic-impls"
-version = "0.1.0"
-dependencies = [
- "heck",
- "itertools 0.10.1",
- "pbjson-build",
- "proc-macro2",
- "prost 0.8.0",
- "prost-build 0.8.0",
- "prost-types 0.8.0",
- "quote",
- "tempfile",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6287,6 +6272,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tremor-grpc-build"
+version = "0.1.0"
+dependencies = [
+ "heck",
+ "itertools 0.10.1",
+ "proc-macro2",
+ "prost 0.8.0",
+ "prost-build 0.8.0",
+ "prost-types 0.8.0",
+ "quote",
+ "tempfile",
+]
+
+[[package]]
 name = "tremor-influx"
 version = "0.3.2"
 dependencies = [
@@ -6385,7 +6384,6 @@ dependencies = [
  "event-listener",
  "file-mode",
  "futures",
- "gen-tonic-impls",
  "glob",
  "googapis",
  "gouth",
@@ -6450,6 +6448,7 @@ dependencies = [
  "tonic",
  "tonic-build",
  "tremor-common",
+ "tremor-grpc-build",
  "tremor-influx",
  "tremor-otelapis",
  "tremor-pipeline",

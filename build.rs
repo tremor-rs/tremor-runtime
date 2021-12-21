@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::env;
-use gen_tonic_impls::generate;
+use tremor_grpc_build::generate;
 
 fn get_git_branch() -> std::io::Result<String> {
     use std::process::Command;
@@ -58,13 +58,14 @@ fn generate_grpc_impls_code() {
     let proto = env::var_os("PROTO_FILES");
     let include = env::var_os("INCLUDE");
     if let Some((proto, include)) = proto.zip(include) {
-        let protos = proto.to_str().unwrap().split(",").collect::<Vec<&str>>();
-        let includes = include.to_str().unwrap().split(",").collect::<Vec<&str>>();
+        let protos = proto.to_str().unwrap().split(',').collect::<Vec<&str>>();
+        let includes = include.to_str().unwrap().split(',').collect::<Vec<&str>>();
 
         let mut config = prost_build::Config::new();
         config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
         tonic_build::configure()
-            .compile_with_config(config, &protos, &includes).unwrap();
+            .compile_with_config(config, &protos, &includes)
+            .unwrap();
         generate(&protos, &includes, out_dir, false, true).unwrap();
     }
 }
