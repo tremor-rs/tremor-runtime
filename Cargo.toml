@@ -177,8 +177,6 @@ tonic = { version = "0.5.2", default-features = false, features = [
 ] }
 prost = "0.8"
 prost-types = "0.8"
-pbjson = { path = "/home/sanskarjaiswal/pbjson/pbjson" }
-pbjson-types = "0.2.1"
 tremor-otelapis = { version = "0.2.2" }
 
 # aws-s3
