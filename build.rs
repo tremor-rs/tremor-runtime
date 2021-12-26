@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::env;
-use tremor_grpc_build::generate;
-
 fn get_git_branch() -> std::io::Result<String> {
     use std::process::Command;
 
@@ -54,6 +51,9 @@ fn get_git_commit() -> std::io::Result<String> {
 
 #[cfg(feature = "grpc")]
 fn generate_grpc_impls_code() {
+    use std::env;
+    use tremor_grpc_build::generate;
+
     let out_dir = env::var_os("OUT_DIR").unwrap();
     let proto = env::var_os("PROTO_FILES");
     let include = env::var_os("INCLUDE");

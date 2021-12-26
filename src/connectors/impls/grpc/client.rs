@@ -1,3 +1,17 @@
+// Copyright 2020-2021, The Tremor Team
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use async_std::channel::{unbounded, Receiver, Sender, TryRecvError};
 use async_std::sync::{Arc, Mutex};
 
@@ -28,8 +42,10 @@ pub struct GrpcClient {
 #[derive(Debug, Clone)]
 struct GrpcClientSink {
     grpc_client_handler: Arc<Mutex<Option<tremor_grpc::GrpcClientHandler>>>,
+    config: Config,
     error_rx: Receiver<Error>,
     error_tx: Sender<Error>,
+    tx: Sender<EventPayload>,
 }
 
 #[derive(Debug, Clone)]
@@ -103,23 +119,12 @@ impl Connector for GrpcClient {
             grpc_client_handler: Arc::new(Mutex::new(None)),
             error_rx,
             error_tx,
+            config: self.config.clone(),
+            tx: self.tx.clone(),
         };
         self.sink = Some(sink.clone());
         let addr = builder.spawn(sink, ctx)?;
         Ok(Some(addr))
-    }
-
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        let grpc_client_handler = tremor_grpc::GrpcClientHandler::connect(
-            format!("{}:{}", self.config.host, self.config.port),
-            self.tx.clone(),
-        )
-        .await?;
-        if let Some(sink) = &mut self.sink {
-            let mut client_handler = sink.grpc_client_handler.lock().await;
-            *client_handler = Some(grpc_client_handler);
-        }
-        Ok(true)
     }
 
     fn default_codec(&self) -> &str {
@@ -129,6 +134,17 @@ impl Connector for GrpcClient {
 
 #[async_trait::async_trait]
 impl Sink for GrpcClientSink {
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+        let grpc_client_handler = tremor_grpc::GrpcClientHandler::connect(
+            format!("{}:{}", self.config.host, self.config.port),
+            self.tx.clone(),
+        )
+        .await?;
+        let mut client_handler = self.grpc_client_handler.lock().await;
+        *client_handler = Some(grpc_client_handler);
+        Ok(true)
+    }
+
     async fn on_event(
         &mut self,
         _input: &str,

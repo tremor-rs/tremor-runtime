@@ -28,11 +28,11 @@ pub(crate) mod elastic;
 pub(crate) mod exit;
 /// file connector implementation
 pub(crate) mod file;
-/// Kafka consumer and producer
-pub(crate) mod kafka;
 /// gRPC
 #[cfg(feature = "grpc")]
 pub(crate) mod grpc;
+/// Kafka consumer and producer
+pub(crate) mod kafka;
 /// KV
 pub(crate) mod kv;
 /// Home of the famous metrics collector
