@@ -555,15 +555,20 @@ mod test {
         let mut s: Vec<u8> = r#"<46>Jan  5 15:33:03 plertrood-ThinkPad-X220 rsyslogd:  [software="rsyslogd" swVersion="8.32.0"] message"#.as_bytes().to_vec();
         let mut codec = test_codec();
         let decoded = codec.decode(s.as_mut_slice(), 0)?.unwrap();
-        let expected = Value::from(simd_json::json!({
+        // we use the current year for this shitty old format
+        // to not have to change this test every year, we use the current one for the expected timestamp
+        let year = chrono::Utc::now().year();
+        let timestamp =
+            chrono::DateTime::parse_from_rfc3339(format!("{}-01-05T15:33:03Z", year).as_str())?;
+        let expected = literal!({
             "hostname": "plertrood-ThinkPad-X220",
             "severity": "info",
             "facility": "syslog",
             "appname": "rsyslogd",
             "msg": "[software=\"rsyslogd\" swVersion=\"8.32.0\"] message",
             "protocol": "RFC3164",
-            "timestamp": 1_609_860_783_000_000_000_u64
-        }));
+            "timestamp": timestamp.timestamp_nanos() as u64
+        });
         assert_eq!(
             tremor_script::utils::sorted_serialize(&expected)?,
             tremor_script::utils::sorted_serialize(&decoded)?
