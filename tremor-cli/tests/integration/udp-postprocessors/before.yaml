@@ -11,7 +11,8 @@
     "./config.troy"
   ],
   "env": {
-    "RUST_LOG": "info"
+    "RUST_LOG": "info",
+    "TREMOR_PATH": "../../../lib:../../../../../tremor-script/lib"
   },
   "await": {
     "wait-for-ms": [
