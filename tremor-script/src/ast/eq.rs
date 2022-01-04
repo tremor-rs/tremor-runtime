@@ -1233,29 +1233,29 @@ mod tests {
     fn test_patch_operation() {
         assert!(PatchOperation::Insert {
             ident: "snot".into(),
-            expr: ImutExprInt::null_lit(),
+            expr: ImutExpr::null_lit(),
         }
         .ast_eq(&PatchOperation::Insert {
             ident: "snot".into(),
-            expr: ImutExprInt::null_lit(),
+            expr: ImutExpr::null_lit(),
         }));
 
         assert!(PatchOperation::Upsert {
             ident: "snot".into(),
-            expr: ImutExprInt::null_lit(),
+            expr: ImutExpr::null_lit(),
         }
         .ast_eq(&PatchOperation::Upsert {
             ident: "snot".into(),
-            expr: ImutExprInt::null_lit(),
+            expr: ImutExpr::null_lit(),
         }));
 
         assert!(PatchOperation::Update {
             ident: "snot".into(),
-            expr: ImutExprInt::null_lit(),
+            expr: ImutExpr::null_lit(),
         }
         .ast_eq(&PatchOperation::Update {
             ident: "snot".into(),
-            expr: ImutExprInt::null_lit(),
+            expr: ImutExpr::null_lit(),
         }));
 
         assert!(PatchOperation::Erase {
@@ -1284,34 +1284,34 @@ mod tests {
 
         assert!(PatchOperation::Merge {
             ident: "snot".into(),
-            expr: ImutExprInt::null_lit(),
+            expr: ImutExpr::null_lit(),
         }
         .ast_eq(&PatchOperation::Merge {
             ident: "snot".into(),
-            expr: ImutExprInt::null_lit(),
+            expr: ImutExpr::null_lit(),
         }));
 
         assert!(PatchOperation::MergeRecord {
-            expr: ImutExprInt::null_lit(),
+            expr: ImutExpr::null_lit(),
         }
         .ast_eq(&PatchOperation::MergeRecord {
-            expr: ImutExprInt::null_lit(),
+            expr: ImutExpr::null_lit(),
         }));
 
         assert!(PatchOperation::Default {
             ident: "snot".into(),
-            expr: ImutExprInt::null_lit(),
+            expr: ImutExpr::null_lit(),
         }
         .ast_eq(&PatchOperation::Default {
             ident: "snot".into(),
-            expr: ImutExprInt::null_lit(),
+            expr: ImutExpr::null_lit(),
         }));
 
         assert!(PatchOperation::DefaultRecord {
-            expr: ImutExprInt::null_lit(),
+            expr: ImutExpr::null_lit(),
         }
         .ast_eq(&PatchOperation::DefaultRecord {
-            expr: ImutExprInt::null_lit(),
+            expr: ImutExpr::null_lit(),
         }));
     }
 }
