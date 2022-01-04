@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::util::{get_source_kind, SourceKind};
 use crate::{
     cli::{ServerCommand, ServerRun},
     errors::{Error, ErrorKind, Result},
-    util::{get_source_kind, SourceKind},
 };
+use anyhow::Context;
 use async_std::stream::StreamExt;
 use futures::future;
 use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
@@ -36,13 +37,6 @@ macro_rules! log_and_print_error {
     };
 }
 
-impl ServerCommand {
-    pub(crate) async fn run(&self) {
-        match self {
-            ServerCommand::Run(c) => c.run().await,
-        }
-    }
-}
 async fn handle_api_request<
     G: std::future::Future<Output = api::Result<tide::Response>>,
     F: Fn(api::Request) -> G,
@@ -103,11 +97,11 @@ async fn handle_signals(signals: Signals, world: World) {
         }
     }
 }
-
 impl ServerRun {
     #[cfg(not(tarpaulin_include))]
+    #[allow(clippy::too_many_lines)]
     #[must_use]
-    pub(crate) async fn run_dun(&self) -> Result<()> {
+    async fn run_dun(&self) -> Result<i32> {
         let mut result = 0;
         use tremor_runtime::system::WorldConfig;
 
@@ -225,9 +219,9 @@ impl ServerRun {
         Ok(result)
     }
 
-    pub(crate) async fn run(&self) {
+    async fn run(&self) {
         version::print();
-        match run_dun(matches).await {
+        match self.run_dun().await {
             Err(e) => {
                 match e {
                     Error(ErrorKind::AnyhowError(anyhow_e), _) => {
@@ -246,6 +240,15 @@ impl ServerRun {
                 ::std::process::exit(1);
             }
             Ok(res) => ::std::process::exit(res),
+        }
+    }
+}
+
+impl ServerCommand {
+    #[cfg(not(tarpaulin_include))]
+    pub(crate) async fn run(&self) {
+        match self {
+            ServerCommand::Run(cmd) => cmd.run().await,
         }
     }
 }

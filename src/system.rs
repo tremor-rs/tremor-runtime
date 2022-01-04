@@ -280,7 +280,7 @@ impl World {
         }
         .start();
 
-        let mut world = Self { system };
+        let world = Self { system };
 
         connectors::register_builtin_connector_types(&world, config.debug_connectors).await?;
         Ok((world, system_h))

@@ -107,6 +107,14 @@ impl From<&str> for NameWithConfig {
         }
     }
 }
+impl From<&String> for NameWithConfig {
+    fn from(name: &String) -> Self {
+        Self {
+            name: name.clone(),
+            config: None,
+        }
+    }
+}
 
 /// A Codec
 pub type Codec = NameWithConfig;

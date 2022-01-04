@@ -249,7 +249,7 @@ impl Test {
     pub(crate) async fn run(&self) -> Result<()> {
         env_logger::init();
 
-        let base_directory = tremor_common::file::canonicalize(&path)?;
+        let base_directory = tremor_common::file::canonicalize(&self.path)?;
         let mut config = TestConfig {
             verbose: self.verbose,
             includes: self.includes.clone(),
@@ -262,7 +262,7 @@ impl Test {
         let found = GlobWalkerBuilder::new(&config.base_directory, "meta.json")
             .case_insensitive(true)
             .build()
-            .map_err(|e| Error::from(format!("failed to walk directory `{}`: {}", path, e)))?;
+            .map_err(|e| Error::from(format!("failed to walk directory `{}`: {}", self.path, e)))?;
 
         let mut reports = HashMap::new();
         let mut bench_stats = stats::Stats::new();
@@ -290,11 +290,11 @@ impl Test {
                 let stats = stats::Stats::new();
                 // Use CLI kind instead of default kind, since we don't have a
                 // meta.json to override the default with.
-                config.meta.kind = kind;
-                let test_report = match config.meta.kind {
-                    Kind::Bench => {
+                config.meta.mode = self.mode;
+                let test_report = match config.meta.mode {
+                    TestMode::Bench => {
                         let (s, t) =
-                            run_bench(PathBuf::from(path).as_path(), &config, stats).await?;
+                            run_bench(PathBuf::from(&self.path).as_path(), &config, stats).await?;
                         match t {
                             Some(x) => {
                                 bench_stats.merge(&s);
@@ -307,9 +307,10 @@ impl Test {
                             }
                         }
                     }
-                    Kind::Integration => {
+                    TestMode::Integration => {
                         let (s, t) =
-                            run_integration(PathBuf::from(path).as_path(), &config, stats).await?;
+                            run_integration(PathBuf::from(&self.path).as_path(), &config, stats)
+                                .await?;
                         match t {
                             Some(x) => {
                                 integration_stats.merge(&s);
@@ -324,27 +325,24 @@ impl Test {
                     }
                     // Command tests are their own beast, one singular folder might
                     // well result in many tests run
-                    Kind::Command => {
+                    TestMode::Command => {
                         let (s, t) =
-                            command::suite_command(PathBuf::from(path).as_path(), &config).await?;
+                            command::suite_command(PathBuf::from(&self.path).as_path(), &config)
+                                .await?;
                         cmd_stats.merge(&s);
                         t
                     }
-                    Kind::Unit => {
+                    TestMode::Unit => {
                         let (s, t) = suite_unit(&PathBuf::from("/"), &config)?;
                         unit_stats.merge(&s);
                         t
                     }
-                    Kind::All => {
+                    TestMode::All => {
                         eprintln!("No tests run: Don't know how to run test of kind All");
                         Vec::new()
                     }
-                    Kind::Unknown(ref x) => {
-                        eprintln!("No tests run: Unknown kind of test: {}", x);
-                        Vec::new()
-                    }
                 };
-                reports.insert(config.meta.kind.to_string(), test_report);
+                reports.insert(config.meta.mode.to_string(), test_report);
             } else {
                 return Err(Error::from(
                     "Specified folder does not contain a runnable test",
@@ -357,38 +355,38 @@ impl Test {
                     let meta: Meta = simd_json::from_str(meta_str.as_mut_str())?;
                     config.meta = meta;
 
-                    if config.meta.kind == Kind::All {
+                    if config.meta.mode == TestMode::All {
                         config.includes.push("all".into());
                     }
 
-                    if !(kind == Kind::All || kind == config.meta.kind) {
+                    if !(self.mode == TestMode::All || self.mode == config.meta.mode) {
                         continue;
                     }
 
-                    let test_reports = match config.meta.kind {
-                        Kind::Bench => {
+                    let test_reports = match config.meta.mode {
+                        TestMode::Bench => {
                             let (s, t) = suite_bench(root, &config).await?;
                             bench_stats.merge(&s);
                             t
                         }
-                        Kind::Integration => {
+                        TestMode::Integration => {
                             let (s, t) = suite_integration(root, &config).await?;
                             integration_stats.merge(&s);
                             t
                         }
-                        Kind::Command => {
+                        TestMode::Command => {
                             let (s, t) = suite_command(root, &config).await?;
                             cmd_stats.merge(&s);
                             t
                         }
-                        Kind::Unit => {
+                        TestMode::Unit => {
                             let (s, t) = suite_unit(root, &config)?;
                             unit_stats.merge(&s);
                             t
                         }
-                        Kind::All | Kind::Unknown(_) => continue,
+                        TestMode::All => continue,
                     };
-                    reports.insert(config.meta.kind.to_string(), test_reports);
+                    reports.insert(config.meta.mode.to_string(), test_reports);
                     status::hr();
                 }
             }
@@ -422,7 +420,7 @@ impl Test {
             reports,
             stats: stats_map,
         };
-        if let Some(report) = report {
+        if let Some(report) = &self.report {
             let mut file = file::create(report)?;
             let result = simd_json::to_string(&test_run)?;
             file.write_all(result.as_bytes()).map_err(|e| {

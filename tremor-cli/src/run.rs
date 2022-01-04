@@ -15,23 +15,28 @@
 use crate::errors::Result;
 use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
 use crate::{cli::Run, env};
+use async_std::task::block_on;
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
-use tremor_common::time::nanotime;
-use tremor_common::{file, ids::OperatorIdGen};
+use tremor_common::{file, ids::OperatorIdGen, time::nanotime};
 use tremor_pipeline::{Event, EventId};
-use tremor_runtime::codec::Codec;
-use tremor_runtime::postprocessor::Postprocessor;
-use tremor_runtime::preprocessor::Preprocessor;
-use tremor_script::deploy::Deploy;
-use tremor_script::highlighter::Error as HighlighterError;
-use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
-use tremor_script::prelude::*;
-use tremor_script::query::Query;
-use tremor_script::script::{AggrType, Return, Script};
-use tremor_script::srs;
-use tremor_script::{ctx::EventContext, lexer::Tokenizer};
-use tremor_script::{EventPayload, Value, ValueAndMeta};
+use tremor_runtime::{
+    codec::Codec,
+    config,
+    postprocessor::Postprocessor,
+    preprocessor::Preprocessor,
+    system::{ShutdownMode, World, WorldConfig},
+};
+use tremor_script::{
+    ctx::EventContext,
+    highlighter::{Error as HighlighterError, Highlighter, Term as TermHighlighter},
+    lexer::Tokenizer,
+    prelude::*,
+    query::Query,
+    script::{AggrType, Return, Script},
+    EventPayload, Value, ValueAndMeta,
+};
+
 struct Ingress {
     is_interactive: bool,
     is_pretty: bool,
@@ -45,13 +50,14 @@ type IngressHandler<T> =
     dyn Fn(&mut T, &mut u64, &mut Egress, &mut Value<'static>, u64, Value) -> Result<()>;
 
 impl Ingress {
-    fn from_cmd(cmd: &Run) -> Result<Self> {
-        let buffer: Box<dyn BufRead> = match cmd.infile.as_str() {
-            "-" => Box::new(BufReader::new(io::stdin())),
-            path => Box::new(BufReader::new(crate::open_file(path, None)?)),
+    fn from_args(cmd: &Run) -> Result<Self> {
+        let buffer: Box<dyn BufRead> = if cmd.infile == "-" {
+            Box::new(BufReader::new(io::stdin()))
+        } else {
+            Box::new(BufReader::new(crate::open_file(&cmd.infile, None)?))
         };
 
-        let codec = tremor_runtime::codec::lookup(&cmd.decoder);
+        let codec = tremor_runtime::codec::resolve(&config::Codec::from(&cmd.decoder));
         if let Err(_e) = codec {
             eprintln!("Error Codec {} not found error.", cmd.decoder);
             // ALLOW: main.rs
@@ -131,13 +137,14 @@ struct Egress {
 }
 
 impl Egress {
-    fn from_cmd(cmd: &Run) -> Result<Self> {
-        let buffer: Box<dyn Write> = match cmd.outfile.as_str() {
-            "-" => Box::new(BufWriter::new(io::stdout())),
-            path => Box::new(BufWriter::new(file::create(path)?)),
+    fn from_args(cmd: &Run) -> Result<Self> {
+        let buffer: Box<dyn Write> = if cmd.outfile == "-" {
+            Box::new(BufWriter::new(io::stdout()))
+        } else {
+            Box::new(BufWriter::new(file::create(&cmd.outfile)?))
         };
 
-        let codec = tremor_runtime::codec::lookup(&cmd.encoder);
+        let codec = tremor_runtime::codec::resolve(&config::Codec::from(&cmd.encoder));
         if let Err(_e) = codec {
             eprintln!("Error Codec {} not found error.", cmd.encoder);
             // ALLOW: main.rs
@@ -147,10 +154,7 @@ impl Egress {
 
         let postprocessor = tremor_runtime::postprocessor::lookup(&cmd.postprocessor);
         if let Err(_e) = postprocessor {
-            eprintln!(
-                "Error Postprocessor {} not found error.",
-                &cmd.postprocessor
-            );
+            eprintln!("Error Postprocessor {} not found error.", cmd.postprocessor);
             // ALLOW: main.rs
             std::process::exit(1);
         }
@@ -217,21 +221,10 @@ impl Egress {
 }
 
 impl Run {
-    pub(crate) fn run(&self) -> Result<()> {
-        match get_source_kind(&self.script) {
-            SourceKind::Tremor | SourceKind::Json => self.run_tremor_source(),
-            SourceKind::Trickle => self.run_trickle_source(),
-            SourceKind::Troy => self.run_troy_source(),
-            SourceKind::Unsupported(_) | SourceKind::Yaml => {
-                Err(format!("Error: Unable to execute source: {}", &self.script).into())
-            }
-        }
-    }
-
     fn run_tremor_source(&self) -> Result<()> {
         let raw = slurp_string(&self.script);
         if let Err(e) = raw {
-            eprintln!("Error processing file {}: {}", &self.script, e);
+            eprintln!("Error processing file {}: {}", self.script, e);
             // ALLOW: main.rs
             std::process::exit(1);
         }
@@ -244,10 +237,9 @@ impl Run {
             Ok(mut script) => {
                 script.format_warnings_with(&mut outer)?;
 
-                let mut ingress = Ingress::from_cmd(self)?;
-                let mut egress = Egress::from_cmd(self)?;
+                let mut ingress = Ingress::from_args(self)?;
+                let mut egress = Egress::from_args(self)?;
                 let id = 0_u64;
-
                 let src = self.script.clone();
                 ingress.process(
                     &mut script,
@@ -314,7 +306,7 @@ impl Run {
     fn run_trickle_source(&self) -> Result<()> {
         let raw = slurp_string(&self.script);
         if let Err(e) = raw {
-            eprintln!("Error processing file {}: {}", &self.script, e);
+            eprintln!("Error processing file {}: {}", self.script, e);
             // ALLOW: main.rs
             std::process::exit(1);
         }
@@ -339,17 +331,26 @@ impl Run {
                 std::process::exit(1);
             }
         };
+        self.run_trickle_query(runnable, self.script.to_string(), raw, &mut h)
+    }
 
-        runnable.format_warnings_with(&mut h)?;
+    fn run_trickle_query(
+        &self,
+        runnable: Query,
+        src: String,
+        raw: String,
+        h: &mut TermHighlighter,
+    ) -> Result<()> {
+        runnable.format_warnings_with(h)?;
 
-        let mut ingress = Ingress::from_cmd(self)?;
-        let mut egress = Egress::from_cmd(self)?;
+        let mut ingress = Ingress::from_args(self)?;
+        let mut egress = Egress::from_args(self)?;
 
         let runnable = tremor_pipeline::query::Query(runnable);
         let mut idgen = OperatorIdGen::new();
         let mut pipeline = runnable.to_pipe(&mut idgen)?;
         let id = 0_u64;
-        let src = self.script.clone();
+
         ingress.process(
             &mut pipeline,
             id,
@@ -362,7 +363,7 @@ impl Run {
                 if let Err(e) = runnable.enqueue(
                     "in",
                     Event {
-                        id: EventId::new(0, 0, *id, 0),
+                        id: EventId::from_id(0, 0, *id),
                         data: value.clone(),
                         ingest_ns: at,
                         ..Event::default()
@@ -423,89 +424,36 @@ impl Run {
 
         Ok(())
     }
+
     fn run_troy_source(&self) -> Result<()> {
-        use tremor_script::ast;
-        let raw = slurp_string(&self.script);
-        if let Err(e) = raw {
-            eprintln!("Error processing file {}: {}", &self.script, e);
-            // ALLOW: main.rs
-            std::process::exit(1);
-        }
-        let raw = raw?;
-        let env = env::setup()?;
-        let mut h = TermHighlighter::stderr();
+        env_logger::init();
 
-        let deployable = match Deploy::parse(
-            &env.module_path,
-            &self.script,
-            &raw,
-            vec![],
-            &env.fun,
-            &env.aggr,
-        ) {
-            Ok(deployable) => deployable,
-            Err(e) => {
-                if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
-                    eprintln!("Error: {}", e);
-                };
-                // ALLOW: main.rs
+        block_on(async {
+            let config = WorldConfig {
+                debug_connectors: true,
+                ..WorldConfig::default()
+            };
+            let (world, _handle) = World::start(config).await.unwrap();
+            if let Err(e) = tremor_runtime::load_troy_file(&world, &self.script).await {
+                error!("Troy error: {}", e);
                 std::process::exit(1);
-            }
-        };
+            };
 
-        let unit = deployable.deploy.as_deployment_unit()?;
-        let mut unit_pipeline: Option<ast::Query> = None;
-
-        let mut num_pipelines = 0;
-        // let _params = literal!({});
-
-        // FIXME - static analysis prototyping
-        // TODO When done - refactor and push down into compilation phase
-        for (_name, stmt) in unit.instances {
-            let fqsn = stmt.fqsn(&stmt.module);
-            if let Some(deployable) = unit.pipelines.get(&fqsn) {
-                unit_pipeline = Some(deployable.query.clone());
-                num_pipelines += 1;
-            //            dbg!(&deployable);
-            } else if let Some(_deployable) = unit.flows.get(&fqsn) {
-                dbg!("It's a flow instance");
-            //            dbg!(&deployable);
-            } else if let Some(_deployable) = unit.connectors.get(&fqsn) {
-                dbg!("It's a connector instance");
-            //            dbg!(&deployable);
-            } else {
-                eprintln!(
-                    "Error: Unable to find target definition {} for `create` {}",
-                    &fqsn, &stmt.idS
-                );
-                std::process::exit(1);
-            }
-        }
-
-        // dbg!(&num_pipelines);
-        if num_pipelines == 1 {
-            // let mut h = TermHighlighter::stderr();
-            if let Some(_unit_pipeline) = unit_pipeline {
-                // if let Some(query) = unit_pipeline.query {
-                // dbg!("got here");
-                // dbg!("Params: ", unit_pipeline.params);
-                // unit_pipeline.consts.args.insert("snot", Value::from("badger"));
-                // unit_pipeline.args = literal!({"snot": "badger badger badger"});
-                // let query = tremor_script::srs::Query::new_from_ast(unit_pipeline);
-                // let query = tremor_script::Query {
-                //     query,
-                //     warnings: BTreeSet::new(),
-                //     locals: 0,
-                //     source: self.script.clone(),
-                // };
-
-                // FIXME
-                // self.run_trickle_query(query, raw, &mut h)?;
-
-                //}
-            }
-        }
+            async_std::task::sleep(std::time::Duration::from_millis(150_000)).await;
+            world.stop(ShutdownMode::Graceful).await.unwrap();
+        });
 
         Ok(())
+    }
+
+    pub(crate) fn run(&self) -> Result<()> {
+        match get_source_kind(&self.script) {
+            SourceKind::Troy => self.run_troy_source(),
+            SourceKind::Trickle => self.run_trickle_source(),
+            SourceKind::Tremor => self.run_tremor_source(),
+            SourceKind::Json | SourceKind::Unsupported(_) => {
+                Err(format!("Error: Unable to execute source: {}", &self.script).into())
+            }
+        }
     }
 }
