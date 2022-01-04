@@ -894,7 +894,7 @@ impl<'script> Record<'script> {
     #[must_use]
     pub fn cloned_field_expr(&self, name: &str) -> Option<ImutExpr> {
         self.base
-            .get(name.into())
+            .get(name)
             .map(|base_value| {
                 ImutExpr::Literal(Literal {
                     mid: self.mid,
