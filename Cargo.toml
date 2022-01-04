@@ -80,7 +80,11 @@ ciborium = "0.1"
 simd-json = { version = "0.4", features = ["known-key"] }
 simd-json-derive = "0.2"
 snap = "1"
-surf = "=2.3.2"
+surf = { version = "=2.3.2", default-features = false, features = [
+  "encoding",          # this was a default feature, so we keep it
+  "h1-client-rustls",  # this will stop us from doing http2 :(
+  "middleware-logger", # default feature, so we keep it
+] }
 syslog_loose = "0.16"
 tremor-common = { path = "tremor-common" }
 tremor-influx = { path = "tremor-influx" }
@@ -103,14 +107,18 @@ postgres = { version = "0.19", features = [
   "with-chrono-0_4",
 ] }
 postgres-protocol = "0.6"
-tempfile = { version = "3.2" }
 tokio-postgres = "0.7"
 
 # amqp
-lapin = "1.9.0"
+lapin = { version = "1.9.0", default-features = false, features = [
+  "rustls",
+  "rustls-native-certs",
+] }
 
 # elasticsearch
-elasticsearch = { version = "=7.14.0-alpha.1", features = ["rustls-tls"] }
+elasticsearch = { version = "=7.14.0-alpha.1", default-features = false, features = [
+  "rustls-tls",
+] }
 
 # ws
 async-tungstenite = { version = "0.16.1", features = [
@@ -144,15 +152,11 @@ cron = "0.9.0"
 # logstash grok patterns
 grok = "1"
 
-# not used directly in tremor codebase, but present here so that we can turn
-# on features for these (see static-ssl feature here)
-openssl = { version = "0.10", features = ["vendored"] }
-
 #rest onramp
 tide = "0.16"
 
 # sse-onramp
-surf-sse = { git = "https://github.com/dak-x/surf-sse", tag = "2.0" }
+surf-sse = { git = "https://github.com/dak-x/surf-sse", tag = "2.0", default-features = false }
 
 # nats
 async-nats = "0.10.1"
@@ -189,7 +193,10 @@ googapis = { version = "0.5", default-features = false, features = [
 gouth = { version = "0.2" }
 
 http = "0.2.5"
-reqwest = "0.11.7"
+reqwest = { version = "0.11.8", default-features = false, features = [
+  "rustls-tls",
+  "rustls-tls-native-roots",
+] }
 
 # wal
 qwal = { git = "https://github.com/tremor-rs/qwal" }
@@ -201,6 +208,7 @@ env_logger = "0.9"
 pretty_assertions = "1.0.0"
 proptest = "1.0"
 regex = "1"
+tempfile = { version = "3.2" }
 test-case = "1.2"
 testcontainers = "0.12"
 signal-hook = "0.3"
