@@ -403,13 +403,6 @@ links:
         };
     }
 
-    // macro_rules! rampercize_with_logs {
-    //     ($onramp_config:expr, $offramp_config:expr, $test:tt) => {
-    //         env_logger::init();
-    //         rampercize!($onramp_config, $offramp_config, $test)
-    //     };
-    // }
-
     #[async_std::test]
     async fn tcp_onramp() -> Result<()> {
         let port = find_free_port(9000..9099).expect("no free port");

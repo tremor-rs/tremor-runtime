@@ -2817,19 +2817,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyper-tls"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
-dependencies = [
- "bytes 1.1.0",
- "hyper 0.14.17",
- "native-tls",
- "tokio 1.17.0",
- "tokio-native-tls",
-]
-
-[[package]]
 name = "ident_case"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4566,7 +4553,7 @@ dependencies = [
  "http",
  "http-body 0.3.1",
  "hyper 0.13.10",
- "hyper-tls 0.4.3",
+ "hyper-tls",
  "ipnet",
  "js-sys",
  "lazy_static",
@@ -4604,14 +4591,12 @@ dependencies = [
  "http-body 0.4.4",
  "hyper 0.14.17",
  "hyper-rustls 0.23.0",
- "hyper-tls 0.5.0",
  "ipnet",
  "js-sys",
  "lazy_static",
  "log",
  "mime",
  "mime_guess",
- "native-tls",
  "percent-encoding",
  "pin-project-lite 0.2.8",
  "rustls 0.20.4",
@@ -4621,7 +4606,6 @@ dependencies = [
  "serde_json",
  "serde_urlencoded 0.7.1",
  "tokio 1.17.0",
- "tokio-native-tls",
  "tokio-rustls 0.23.3",
  "tokio-util 0.6.9",
  "url",
@@ -5965,16 +5949,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-native-tls"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7d995660bd2b7f8c1568414c1126076c13fbb725c40112dc0120b78eb9b717b"
-dependencies = [
- "native-tls",
- "tokio 1.17.0",
-]
-
-[[package]]
 name = "tokio-postgres"
 version = "0.7.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6400,6 +6374,7 @@ dependencies = [
  "csv",
  "either",
  "elasticsearch",
+ "env_logger 0.9.0",
  "error-chain",
  "event-listener",
  "file-mode",

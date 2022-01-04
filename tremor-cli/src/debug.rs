@@ -146,7 +146,6 @@ impl DbgSrc {
                 }
             }
 
-            SourceKind::Yaml => error!("Unsupported: yaml"),
             SourceKind::Unsupported(Some(t)) => error!("Unsupported: {}", t),
             SourceKind::Unsupported(None) => error!("Unsupported: no file type"),
         }
@@ -330,7 +329,7 @@ impl DbgAst {
                     }
                 };
             }
-            SourceKind::Unsupported(_) | SourceKind::Yaml => {
+            SourceKind::Unsupported(_) => {
                 eprintln!("Unsupported");
             }
         };

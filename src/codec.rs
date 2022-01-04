@@ -14,7 +14,7 @@
 
 use crate::{
     config,
-    errors::{ErrorKind, Result},
+    errors::{Kind as ErrorKind, Result},
 };
 use tremor_script::Value;
 pub(crate) mod binary;
