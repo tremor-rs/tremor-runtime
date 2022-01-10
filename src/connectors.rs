@@ -1158,6 +1158,7 @@ pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
         Box::new(impls::elastic::Builder::default()),
         Box::new(impls::crononome::Builder::default()),
         Box::new(impls::s3::Builder::default()),
+        Box::new(impls::s3_source::Builder::default()),
         Box::new(impls::kafka::consumer::Builder::default()),
     ]
 }
