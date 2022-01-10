@@ -38,6 +38,8 @@ pub(crate) mod metrics;
 /// Metronome
 pub(crate) mod metronome;
 
+
+pub(crate) mod s3_source;
 /// Connector for streaming to AWS S3
 pub(crate) mod s3;
 /// std streams connector (stdout, stderr, stdin)
