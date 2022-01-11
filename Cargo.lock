@@ -580,7 +580,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fe174d1b67f7b2bafed829c09db039301eb5841f66e43be2cf60b326e7f8e2cc"
 dependencies = [
  "flate2",
- "http 0.2.5",
+ "http 0.2.6",
  "log",
  "url 2.2.2",
 ]
@@ -592,7 +592,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a8bda305457262b339322106c776e3fd21df860018e566eb6a5b1aa4b6ae02d"
 dependencies = [
  "flate2",
- "http 0.2.5",
+ "http 0.2.6",
  "log",
  "rustls 0.18.1",
  "serde",
@@ -2407,7 +2407,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "futures-util",
- "http 0.2.5",
+ "http 0.2.6",
  "indexmap",
  "slab",
  "tokio 0.2.25",
@@ -2418,16 +2418,16 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.6"
+version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c06815895acec637cd6ed6e9662c935b866d20a106f8361892893a7d9234964"
+checksum = "0c9de88456263e249e241fcd211d3954e2c9b0ef7ccfc235a444eb367cae3689"
 dependencies = [
  "bytes 1.1.0",
  "fnv",
  "futures-core",
  "futures-sink",
  "futures-util",
- "http 0.2.5",
+ "http 0.2.6",
  "indexmap",
  "slab",
  "tokio 1.12.0",
@@ -2583,13 +2583,13 @@ dependencies = [
 
 [[package]]
 name = "http"
-version = "0.2.5"
+version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1323096b05d41827dadeaee54c9981958c0f94e670bc94ed80037d1a7b8b186b"
+checksum = "31f4c6746584866f0feabcc69893c5b51beef3831656a968ed7ae254cdc4fd03"
 dependencies = [
  "bytes 1.1.0",
  "fnv",
- "itoa 0.4.8",
+ "itoa 1.0.1",
 ]
 
 [[package]]
@@ -2611,7 +2611,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13d5ff830006f7646652e057693569bfe0d51760c0085a071769d142a205111b"
 dependencies = [
  "bytes 0.5.6",
- "http 0.2.5",
+ "http 0.2.6",
 ]
 
 [[package]]
@@ -2621,7 +2621,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "399c583b2979440c60be0821a6199eca73bc3c8dcd9d070d75ac726e2c6186e5"
 dependencies = [
  "bytes 1.1.0",
- "http 0.2.5",
+ "http 0.2.6",
  "pin-project-lite 0.2.7",
 ]
 
@@ -2731,7 +2731,7 @@ dependencies = [
  "futures-core",
  "futures-util",
  "h2 0.2.7",
- "http 0.2.5",
+ "http 0.2.6",
  "http-body 0.3.1",
  "httparse",
  "httpdate 0.3.2",
@@ -2754,8 +2754,8 @@ dependencies = [
  "futures-channel",
  "futures-core",
  "futures-util",
- "h2 0.3.6",
- "http 0.2.5",
+ "h2 0.3.10",
+ "http 0.2.6",
  "http-body 0.4.3",
  "httparse",
  "httpdate 1.0.1",
@@ -2774,7 +2774,7 @@ version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d87c48c02e0dc5e3b849a2041db3029fd066650f8f717c07bf8ed78ccb895cac"
 dependencies = [
- "http 0.2.5",
+ "http 0.2.6",
  "hyper 0.14.13",
  "rustls 0.20.2",
  "tokio 1.12.0",
@@ -4786,7 +4786,7 @@ dependencies = [
  "encoding_rs",
  "futures-core",
  "futures-util",
- "http 0.2.5",
+ "http 0.2.6",
  "http-body 0.3.1",
  "hyper 0.13.10",
  "hyper-tls",
@@ -4812,16 +4812,17 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.11.8"
+version = "0.11.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c4e0a76dc12a116108933f6301b95e83634e0c47b0afbed6abbaa0601e99258"
+checksum = "87f242f1488a539a79bac6dbe7c8609ae43b7914b7736210f239a37cccb32525"
 dependencies = [
  "base64 0.13.0",
  "bytes 1.1.0",
  "encoding_rs",
  "futures-core",
  "futures-util",
- "http 0.2.5",
+ "h2 0.3.10",
+ "http 0.2.6",
  "http-body 0.4.3",
  "hyper 0.14.13",
  "hyper-rustls",
@@ -5317,7 +5318,7 @@ dependencies = [
  "flate2",
  "futures 0.3.19",
  "percent-encoding 2.1.0",
- "reqwest 0.11.8",
+ "reqwest 0.11.9",
  "serde",
  "serde_json",
  "tokio 1.12.0",
@@ -6489,8 +6490,8 @@ dependencies = [
  "bytes 1.1.0",
  "futures-core",
  "futures-util",
- "h2 0.3.6",
- "http 0.2.5",
+ "h2 0.3.10",
+ "http 0.2.6",
  "http-body 0.4.3",
  "hyper 0.14.13",
  "hyper-timeout",
@@ -6784,7 +6785,7 @@ dependencies = [
  "hdrhistogram",
  "hex",
  "hostname",
- "http 0.2.5",
+ "http 0.2.6",
  "http-types",
  "indexmap",
  "lapin",
@@ -6805,7 +6806,7 @@ dependencies = [
  "rdkafka-sys",
  "regex",
  "rental",
- "reqwest 0.11.8",
+ "reqwest 0.11.9",
  "rmp-serde",
  "rustls 0.19.1",
  "serde",
@@ -6973,7 +6974,7 @@ dependencies = [
  "base64 0.12.3",
  "byteorder",
  "bytes 0.5.6",
- "http 0.2.5",
+ "http 0.2.6",
  "httparse",
  "input_buffer",
  "log",
@@ -6992,7 +6993,7 @@ dependencies = [
  "base64 0.13.0",
  "byteorder",
  "bytes 1.1.0",
- "http 0.2.5",
+ "http 0.2.6",
  "httparse",
  "log",
  "rand 0.8.4",
