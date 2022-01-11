@@ -434,16 +434,15 @@ impl<'value> ValueAccess for Value<'value> {
         }
     }
 
-    #[cfg(feature = "128bit")]
-    #[inline]
-    #[must_use]
-    #[allow(clippy::cast_sign_loss)]
-    fn as_u128(&self) -> Option<u128> {
-        match self {
-            Self::Static(s) => s.as_u128(),
-            _ => None,
-        }
-    }
+    // #[cfg(feature = "128bit")]
+    // #[inline]
+    // #[must_use]
+    // fn as_u128(&self) -> Option<u128> {
+    //     match self {
+    //         Self::Static(s) => s.as_u128(),
+    //         _ => None,
+    //     }
+    // }
 
     #[inline]
     #[must_use]
@@ -633,6 +632,22 @@ mod test {
     use super::*;
     use crate::literal;
     use proptest::proptest;
+
+    #[test]
+    fn test_cmp_map() {
+        let mut o1 = Object::new();
+        let mut o2 = Object::new();
+
+        assert_eq!(cmp_map(&o1, &o2), Ordering::Equal);
+        o1.insert("snot".into(), 1.into());
+        assert_eq!(cmp_map(&o1, &o2), Ordering::Greater);
+        o2.insert("snot".into(), 1.into());
+        assert_eq!(cmp_map(&o1, &o2), Ordering::Equal);
+        o2.insert("badger".into(), 2.into());
+        assert_eq!(cmp_map(&o1, &o2), Ordering::Less);
+        o1.insert("badger".into(), 3.into());
+        assert_eq!(cmp_map(&o1, &o2), Ordering::Greater);
+    }
 
     #[test]
     fn obj_eq() {
@@ -865,38 +880,38 @@ mod test {
         assert_eq!(v.pop(), Ok(None));
     }
 
-    #[cfg(feature = "128bit")]
-    #[test]
-    fn conversions_i128() {
-        let v = Value::from(i128::max_value());
-        assert!(v.is_i128());
-        assert!(v.is_u128());
-        assert!(!v.is_i64());
-        assert!(!v.is_u64());
-        assert!(!v.is_i32());
-        assert!(!v.is_u32());
-        assert!(!v.is_i16());
-        assert!(!v.is_u16());
-        assert!(!v.is_i8());
-        assert!(!v.is_u8());
-        assert!(!v.is_f64());
-        assert!(!v.is_f32());
-        assert!(v.is_f64_castable());
-        let v = Value::from(i128::min_value());
-        assert!(v.is_i128());
-        assert!(!v.is_u128());
-        assert!(!v.is_i64());
-        assert!(!v.is_u64());
-        assert!(!v.is_i32());
-        assert!(!v.is_u32());
-        assert!(!v.is_i16());
-        assert!(!v.is_u16());
-        assert!(!v.is_i8());
-        assert!(!v.is_u8());
-        assert!(!v.is_f64());
-        assert!(!v.is_f32());
-        assert!(v.is_f64_castable());
-    }
+    // #[cfg(feature = "128bit")]
+    // #[test]
+    // fn conversions_i128() {
+    //     let v = Value::from(i128::max_value());
+    //     assert!(v.is_i128());
+    //     assert!(v.is_u128());
+    //     assert!(!v.is_i64());
+    //     assert!(!v.is_u64());
+    //     assert!(!v.is_i32());
+    //     assert!(!v.is_u32());
+    //     assert!(!v.is_i16());
+    //     assert!(!v.is_u16());
+    //     assert!(!v.is_i8());
+    //     assert!(!v.is_u8());
+    //     assert!(!v.is_f64());
+    //     assert!(!v.is_f32());
+    //     assert!(v.is_f64_castable());
+    //     let v = Value::from(i128::min_value());
+    //     assert!(v.is_i128());
+    //     assert!(!v.is_u128());
+    //     assert!(!v.is_i64());
+    //     assert!(!v.is_u64());
+    //     assert!(!v.is_i32());
+    //     assert!(!v.is_u32());
+    //     assert!(!v.is_i16());
+    //     assert!(!v.is_u16());
+    //     assert!(!v.is_i8());
+    //     assert!(!v.is_u8());
+    //     assert!(!v.is_f64());
+    //     assert!(!v.is_f32());
+    //     assert!(v.is_f64_castable());
+    // }
 
     #[test]
     fn conversions_i64() {
