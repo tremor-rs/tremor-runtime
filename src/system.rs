@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::config::{BindingVec, Config, MappingMap, OffRampVec, OnRampVec};
-use crate::errors::{Error, ErrorKind, Result};
+use crate::errors::{Error, Kind as ErrorKind, Result};
 use crate::lifecycle::{ActivationState, ActivatorLifecycleFsm};
 use crate::registry::{Registries, ServantId};
 use crate::repository::{
@@ -22,12 +22,8 @@ use crate::repository::{
 use crate::url::ports::METRICS;
 use crate::url::TremorUrl;
 use async_channel::bounded;
-use async_std::io::prelude::*;
-use async_std::path::Path;
 use async_std::task::{self, JoinHandle};
 use hashbrown::HashMap;
-use tremor_common::asy::file;
-use tremor_common::time::nanotime;
 
 pub(crate) use crate::offramp;
 pub(crate) use crate::onramp;
@@ -129,7 +125,6 @@ pub struct World {
     pub repo: Repositories,
     /// Registry
     pub reg: Registries,
-    storage_directory: Option<String>,
 }
 
 impl World {
@@ -593,33 +588,6 @@ impl World {
         Ok(config)
     }
 
-    /// Saves the current config
-    ///
-    /// # Errors
-    ///  * if the config can't be saved
-    pub async fn save_config(&self) -> Result<String> {
-        if let Some(storage_directory) = &self.storage_directory {
-            let config = self.to_config().await?;
-            let path = Path::new(storage_directory);
-            let file_name = format!("config_{}.yaml", nanotime());
-            let mut file_path = path.to_path_buf();
-            file_path.push(Path::new(&file_name));
-            info!(
-                "Serializing configuration to file {}",
-                file_path.to_string_lossy()
-            );
-            let mut f = file::create(&file_path).await?;
-            f.write_all(&serde_yaml::to_vec(&config)?).await?;
-            // lets really sync this!
-            f.sync_all().await?;
-            f.sync_all().await?;
-            f.sync_all().await?;
-            Ok(file_path.to_string_lossy().to_string())
-        } else {
-            Ok("".to_string())
-        }
-    }
-
     /// Unlinks a binding
     ///
     /// # Errors
@@ -646,10 +614,7 @@ impl World {
     ///
     /// # Errors
     ///  * if the world manager can't be started
-    pub async fn start(
-        qsize: usize,
-        storage_directory: Option<String>,
-    ) -> Result<(Self, JoinHandle<Result<()>>)> {
+    pub async fn start(qsize: usize) -> Result<(Self, JoinHandle<Result<()>>)> {
         let (onramp_h, onramp) = onramp::Manager::new(qsize).start();
         let (offramp_h, offramp) = offramp::Manager::new(qsize).start();
         let (pipeline_h, pipeline) = pipeline::Manager::new(qsize).start();
@@ -667,12 +632,7 @@ impl World {
 
         let repo = Repositories::new();
         let reg = Registries::new();
-        let mut world = Self {
-            system,
-            repo,
-            reg,
-            storage_directory,
-        };
+        let mut world = Self { system, repo, reg };
 
         world.register_system().await?;
         Ok((world, system_h))

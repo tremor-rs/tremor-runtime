@@ -1,249 +1,260 @@
----
-name: tremor
-version: "0.11"
-author: The Tremor Team
-about: Tremor cli - Command Line Interface
-settings:
-  - ArgRequiredElseHelp
-  - SubcommandRequiredElseHelp
-  - PropagateVersion
-  - ColorAlways
-args:
-  - verbose:
-      short: v
-      long: verbose
-      multiple_occurrences: true
-      about: Sets the level of verbosity (does not apply to logging)
-      takes_value: false
-  - instance:
-      about: Instance identifier
-      short: i
-      long: instance
-      takes_value: true
-      default_value: "tremor"
-subcommands:
-  #  - explain:
-  #    about: Explains supported commands
-  - completions:
-      about: Generate shell completions to stdout. Tries to guess the shell if no subcommand is given.
-      subcommands:
-        - guess:
-            about: Generate completion based on active shell
-        - bash:
-            about: Generate bash shell completions
-        - zsh:
-            about: Generate zsh shell completions
-        - elvish:
-            about: Generate elvish shell completions
-        - fish:
-            about: Generate fish shell completions
-        - powershell:
-            about: Generate powershell shell completions
-  - server:
-      about: Tremor server
-      subcommands:
-        - run:
-            about: Runs the tremor server process
-            args:
-              - artefacts:
-                  about: Paths to files containing pipelines, onramps, offramps to provision
-                  short: f
-                  takes_value: true
-                  min_values: 1
-                  max_values: 10000 # Imposed practical upper limit
-                  required: false
-                  multiple_values: true
-                  multiple_occurrences: true
-              - storage-directory:
-                  about: Directory to cache/store runtime type information
-                  short: d
-                  takes_value: true
-                  required: false
-              - pid:
-                  about: Captures process id if set and stores in a file
-                  short: p
-                  takes_value: true
-                  required: false
-              - no-api:
-                  about: Disable the API
-                  takes_value: false
-                  short: n
-                  long: no-api
-                  required: false
-              - api-host:
-                  about: The `host:port` to listen for the API
-                  short: a
-                  long: api-host
-                  takes_value: true
-                  default_value: "0.0.0.0:9898"
-              - logger-config:
-                  about: log4rs config
-                  short: l
-                  long: logger-config
-                  takes_value: true
-                  required: false
-              - recursion-limit:
-                  about: function tail-recursion stack depth limit
-                  short: r
-                  long: recursion-limit
-                  default_value: "1024"
-                  min_values: 1
-                  max_values: 1000000
-  - test:
-      about: Testing facilities
-      args:
-        - MODE:
-            about: One of `all`, `api`, `bench`, `command`, `integration`, `rest`, or `unit`
-            takes_value: true
-            default_value: "all"
-        - PATH:
-            about: The root test path
-            default_value: "tests"
-        - REPORT:
-            about: Should generate a test report to specified path
-            short: o
-            long: report
-            required: false
-            takes_value: true
-        - INCLUDES:
-            about: Optional tags to filter test executions by
-            short: i
-            long: includes
-            required: false
-            multiple_values: true
-            takes_value: true
-        - EXCLUDES:
-            about: Optional tags to filter test executions by
-            short: e
-            long: excludes
-            required: false
-            multiple_values: true
-            takes_value: true
-        - QUIET:
-            about: only print failed tests
-            short: q
-            long: quiet
-            required: false
+// Copyright 2020-2022, The Tremor Team
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+use clap::{ArgEnum, Parser};
 
-  - dbg:
-      about: Advanced debugging commands
-      args:
-        - no-banner:
-            about: do not print the banner
-            short: b
-            long: no-banner
-        - no-highlight:
-            about: do not highlight output
-            short: n
-            long: no-highlight
-        - raw:
-            about: do not output any formatting. Disables highlight, banner, line numbers.
-            short: r
-            long: raw
-      subcommands:
-        - dot:
-            about: prints the .dot representation for a trickle file (you can use `| dot -Tpng -oout.png` to generate a picture)
-            args:
-              - SCRIPT:
-                  about: trickle script filename
-                  required: true
-        - ast:
-            about: prints the AST of the source
-            args:
-              - exprs-only:
-                  about: only prints the expressions
-                  short: x
-                  long: exprs-only
-              - SCRIPT:
-                  about: tremor/json/trickle script filename
-                  required: true
-        - lex:
-            about: prints lexemes
-            args:
-              - preprocess:
-                  about: output the pre-processed source.
-                  long: preprocess
-              - SCRIPT:
-                  about: tremor/json/trickle script filename
-                  required: true
-        - src:
-            about: prints source
-            args:
-              - preprocess:
-                  about: output the pre-processed source.
-                  long: preprocess
-              - SCRIPT:
-                  about: tremor/json/trickle script filename
-                  required: true
-  - run:
-      about: >
-        Run tremor script or query files against stdin or a json data archive,
-        the data will be read from STDIN or an archive and written to STDOUT.
-      args:
-        - SCRIPT:
-            about: filename to run the data through
-            required: true
-        - interactive:
-            about: Should not output to consumed source / produced synthetic data or errors
-            long: interactive
-        - pretty:
-            about: Should not pretty print data [ when in interactive mode ]
-            long: pretty
-        - ENCODER:
-            short: e
-            long: encoder
-            about: The codec to use for encoding the data
-            takes_value: true
-            default_value: json
-        - DECODER:
-            short: d
-            long: decoder
-            about: The codec to use for decoding the data
-            takes_value: true
-            default_value: json
-        - INFILE:
-            about: input file
-            short: i
-            takes_value: true
-            default_value: "-"
-        - OUTFILE:
-            about: output file
-            short: o
-            takes_value: true
-            default_value: "-"
-        - PREPROCESSOR:
-            long: pre-processor
-            # multiple_values: true
-            about: preprocessor to pass data through before decoding
-            default_value: lines
-            takes_value: true
-        - POSTPROCESSOR:
-            long: post-processor
-            # multiple_values: true
-            about: postprocessor to pass data through after encoding
-            takes_value: true
-        - output-port:
-            long: port
-            short: p
-            about: selects the port to pull output
-  - doc:
-      about: >
-        Generates documention from tremor script files
-      args:
-        - interactive:
-            about: generates output to standard output
-            short: it
-            long: interactive
-        - DIR:
-            about: directory or source to generate documents for
-            required: true
-        - OUTDIR:
-            about: directory to generate documents into
-            takes_value: true
-            default_value: "docs"
-            required: false
-  - api:
-      about: Tremor API client
+/// Tremor cli - Command Line Interface
+#[derive(Parser, Debug)]
+#[clap(name = "tremor", author, version)]
+pub(crate) struct Cli {
+    /// Sets the level of verbosity (does not apply to logging)
+    #[clap(parse(from_occurrences), short, long)]
+    pub(crate) verbose: u8,
+    /// Instance identifier
+    #[clap(short, long, default_value = "tremor")]
+    pub(crate) instance: String,
+    #[clap(subcommand)]
+    pub(crate) command: Command,
+}
+
+#[derive(Parser, Debug)]
+pub(crate) enum Command {
+    /// Generate shell completions to stdout. Tries to guess the shell if no subcommand is given.
+    Completions {
+        #[clap(arg_enum)]
+        shell: Option<clap_complete::shells::Shell>,
+    },
+    /// Tremor server
+    Server {
+        #[clap(subcommand)]
+        command: ServerCommand,
+    },
+    /// Testing facilities
+    Test(Test),
+    /// Advanced debugging commands
+    Dbg(Dbg),
+    /// Run tremor script or query files against stdin or a json data archive,
+    /// the data will be read from STDIN or an archive and written to STDOUT.
+    Run(Run),
+    /// Generates documention from tremor script files
+    Doc(Doc),
+    /// Tremor API client
+    Api(Api),
+}
+
+/// Shell type
+#[derive(ArgEnum, Clone, Copy, Debug)]
+pub(crate) enum Shell {
+    /// Generate completion based on active shell
+    Guess,
+    /// Generate bash shell completions
+    Bash,
+    /// Generate zsh shell completions
+    Zsh,
+    /// Generate elvish shell completions
+    Elvish,
+    /// Generate fish shell completions
+    Fish,
+    /// Generate powershell shell completions
+    Powershell,
+}
+
+#[derive(Parser, Debug)]
+pub(crate) struct Test {
+    /// Specifies what to test
+    #[clap(arg_enum, default_value_t)]
+    pub(crate) mode: TestMode,
+    /// The root test path
+    #[clap(default_value = "tests")]
+    pub(crate) path: String,
+    /// Should generate a test report to specified path
+    #[clap(short = 'o', long)]
+    pub(crate) report: Option<String>,
+    /// Optional tags to filter test incusions by
+    #[clap(short, long)]
+    pub(crate) includes: Vec<String>,
+    /// Optional tags to filter test incusions by
+    #[clap(short, long)]
+    pub(crate) excludes: Vec<String>,
+    /// Only print failed tests
+    #[clap(short, long)]
+    pub(crate) quiet: bool,
+}
+
+/// Shell type
+#[derive(ArgEnum, Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+pub(crate) enum TestMode {
+    /// Run all tests
+    All,
+    /// Run benchmarks
+    Bench,
+    /// Run command tests
+    Command,
+    /// Run integration tests
+    Integration,
+    /// Run tremor script unit tests
+    Unit,
+}
+
+impl ToString for TestMode {
+    fn to_string(&self) -> String {
+        match self {
+            TestMode::Bench => "bench".to_string(),
+            TestMode::Integration => "integration".to_string(),
+            TestMode::Command => "command".to_string(),
+            TestMode::Unit => "unit".to_string(),
+            TestMode::All => "all".to_string(),
+        }
+    }
+}
+impl Default for TestMode {
+    fn default() -> Self {
+        Self::All
+    }
+}
+
+#[derive(Parser, Debug)]
+pub(crate) struct Doc {
+    /// Generates and prints to standard output
+    #[clap(short, long)]
+    pub(crate) interactive: bool,
+    /// Directory or source to generate documents for
+    pub(crate) dir: String,
+    #[clap(default_value = "docs")]
+    pub(crate) outdir: String,
+}
+
+#[derive(Parser, Debug)]
+pub(crate) struct Run {
+    /// filename to run the data through
+    pub(crate) script: String,
+    /// Should not output to consumed source / produced synthetic data or errors
+    #[clap(long)]
+    pub(crate) interactive: bool,
+    /// Should not pretty print data [ when in interactive mode ]
+    #[clap(long)]
+    pub(crate) pretty: bool,
+    /// The codec to use for encoding the data
+    #[clap(short, long, default_value = "json")]
+    pub(crate) encoder: String,
+    /// The codec to use for decoding the data
+    #[clap(short, long, default_value = "json")]
+    pub(crate) decoder: String,
+    /// Input file
+    #[clap(short, long, default_value = "-")]
+    pub(crate) infile: String,
+    /// Output file
+    #[clap(short, long, default_value = "-")]
+    pub(crate) outfile: String,
+    /// Preprocessors to pass data through before decoding
+    #[clap(long, default_value = "lines")]
+    pub(crate) preprocessor: String,
+    /// Postprocessor to pass data through after encoding
+    #[clap(long, default_value = "lines")]
+    pub(crate) postprocessor: String,
+    /// Specifies the port that is printed to the output
+    #[clap(short, long)]
+    pub(crate) port: Option<String>,
+}
+
+#[derive(Parser, Debug)]
+pub(crate) struct DbgSrc {
+    /// output the pre-processed source
+    #[clap(short, long)]
+    pub(crate) preprocess: bool,
+    /// tremor/json/trickle/troy File
+    pub(crate) script: String,
+}
+
+#[derive(Parser, Debug)]
+pub(crate) struct DbgAst {
+    /// only prints the expressions
+    #[clap(short = 'x', long)]
+    pub(crate) exprs_only: bool,
+    /// tremor/json/trickle/troy File
+    pub(crate) script: String,
+}
+
+#[derive(Parser, Debug)]
+pub(crate) struct DbgDot {
+    /// tremor/json/trickle/troy File
+    pub(crate) script: String,
+}
+#[derive(Parser, Debug)]
+pub(crate) enum DbgCommand {
+    /// Prints the .dot representation for a trickle file (you can use `| dot -Tpng -oout.png` to generate a picture)
+    Dot(DbgDot),
+    /// Prints the AST of the source
+    Ast(DbgAst),
+    /// Prints Lexemes
+    Lex(DbgSrc),
+    /// Prints source
+    Src(DbgSrc),
+}
+
+#[derive(Parser, Debug, Clone, Copy)]
+pub(crate) struct DbgOpts {
+    /// Do not print the banner
+    #[clap(short = 'b', long)]
+    pub(crate) no_banner: bool,
+    /// Do not highlight output
+    #[clap(short = 'n', long)]
+    pub(crate) no_highlight: bool,
+    /// Do not output any formatting. Disables highlight, banner, line numbers.
+    #[clap(short, long)]
+    pub(crate) raw: bool,
+}
+
+#[derive(Parser, Debug)]
+pub(crate) struct Dbg {
+    #[clap(flatten)]
+    pub opts: DbgOpts,
+    #[clap(subcommand)]
+    pub command: DbgCommand,
+}
+
+#[derive(Parser, Debug)]
+pub(crate) enum ServerCommand {
+    /// Runs the tremor server process
+    Run(ServerRun),
+}
+
+#[derive(Parser, Debug)]
+pub(crate) struct ServerRun {
+    /// Paths to files containing pipelines, onramps, offramps to provision
+    pub(crate) artefacts: Vec<String>,
+    /// Captures process id if set and stores in a file
+    #[clap(short, long)]
+    pub(crate) pid: Option<String>,
+    /// Disable the API
+    #[clap(short, long)]
+    pub(crate) no_api: bool,
+    /// The `host:port` to listen for the API
+    #[clap(short, long, default_value = "0.0.0.0:9898")]
+    pub(crate) api_host: String,
+    /// Configuration for Log4RS
+    #[clap(short, long)]
+    pub(crate) logger_config: Option<String>,
+    /// function tail-recursion stack depth limit
+    #[clap(short, long, default_value = "1024")]
+    pub(crate) recursion_limit: u32,
+}
+
+// FIXME: since the API will change this isn't translated yet
+#[derive(Parser, Debug)]
+pub(crate) struct Api {
+    /*
+- api:
       args:
         - FORMAT:
             short: f
@@ -456,3 +467,4 @@ subcommands:
                         about: The unique instance id for the offramp specification
                         required: true
                         takes_value: true
+    */}

@@ -52,7 +52,6 @@ error_chain! {
         Globwalk(globwalk::GlobError) #[doc = "Glob walker error"];
         SendError(std::sync::mpsc::SendError<String>);
         AnyhowError(anyhow::Error);
-        TestKindError(crate::test::Unknown);
         Url(url::ParseError) #[doc = "Error while parsing a url"];
         Common(tremor_common::Error);
         ParseIntError(std::num::ParseIntError);

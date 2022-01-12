@@ -105,17 +105,12 @@ pub fn serialize_error(t: ResourceType, d: Error) -> Result<Response> {
     }
 }
 
-pub async fn reply<T: Serialize + Send + Sync + 'static>(
-    req: Request,
+pub fn reply<T: Serialize + Send + Sync + 'static>(
+    req: &Request,
     result_in: T,
-    persist: bool,
     ok_code: StatusCode,
 ) -> Result<Response> {
-    if persist {
-        let world = &req.state().world;
-        world.save_config().await?;
-    }
-    serialize(accept(&req), &result_in, ok_code)
+    serialize(accept(req), &result_in, ok_code)
 }
 
 async fn decode<T>(mut req: Request) -> Result<(Request, T)>

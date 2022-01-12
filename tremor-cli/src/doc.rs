@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::env::{self, TremorCliEnv};
 use crate::errors::{Error, Result};
 use crate::util::visit_path_str;
-use clap::ArgMatches;
+use crate::{
+    cli::Doc,
+    env::{self, TremorCliEnv},
+};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use tremor_script::script::Script;
@@ -92,24 +94,20 @@ fn gen_doc(
     Ok(())
 }
 
-pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
-    let src_path = matches
-        .value_of("DIR")
-        .ok_or_else(|| Error::from("No path provided"))?;
-
-    let dest_path = matches.value_of("OUTDIR").ok_or("docs")?.to_string();
-    let is_interactive: bool = matches.is_present("interactive");
-    let mut env = env::setup()?;
-
-    env.module_path.add(src_path.to_string());
-
-    visit_path_str(src_path, &move |rel_path, src_path| {
-        // The closure exposes a 1-arity capture conforming to the PathVisitor 1-arity alias'd fn
-        // whilst binding the locally defined is_interactive and dest_path command parameters
-        // thereby adapting the 3-arity gen_doc to a 1-arity visitor callback fn
-        //
-        // This would be so much more elegant in erlang! Surely there's a more convivial syntax in rust?
-        //
-        gen_doc(is_interactive, rel_path, Some(&dest_path), &env, src_path)
-    })
+impl Doc {
+    pub(crate) fn run(&self) -> Result<()> {
+        let mut env = env::setup()?;
+        env.module_path.add(self.dir.clone());
+        let is_interactive = self.interactive;
+        let dest_path = self.outdir.clone();
+        visit_path_str(&self.dir, &move |rel_path, src_path| {
+            // The closure exposes a 1-arity capture conforming to the PathVisitor 1-arity alias'd fn
+            // whilst binding the locally defined is_interactive and dest_path command parameters
+            // thereby adapting the 3-arity gen_doc to a 1-arity visitor callback fn
+            //
+            // This would be so much more elegant in erlang! Surely there's a more convivial syntax in rust?
+            //
+            gen_doc(is_interactive, rel_path, Some(&dest_path), &env, src_path)
+        })
+    }
 }

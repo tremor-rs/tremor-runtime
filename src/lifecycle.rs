@@ -140,7 +140,7 @@ mod test {
 
     #[async_std::test]
     async fn onramp_activation_lifecycle() {
-        let (world, _) = World::start(10, None).await.expect("failed to start world");
+        let (world, _) = World::start(10).await.expect("failed to start world");
 
         let config = slurp("tests/configs/ut.passthrough.yaml");
         let mut runtime = incarnate(config).expect("failed to incarnate runtime");
@@ -204,7 +204,7 @@ mod test {
 
     #[async_std::test]
     async fn offramp_activation_lifecycle() {
-        let (world, _) = World::start(10, None).await.expect("failed to start world");
+        let (world, _) = World::start(10).await.expect("failed to start world");
 
         let config = slurp("tests/configs/ut.passthrough.yaml");
         let mut runtime = incarnate(config).expect("failed to incarnate runtime");
@@ -268,7 +268,7 @@ mod test {
 
     #[async_std::test]
     async fn binding_activation_lifecycle() {
-        let (world, _) = World::start(10, None).await.expect("failed to start world");
+        let (world, _) = World::start(10).await.expect("failed to start world");
 
         let config = slurp("tests/configs/ut.passthrough.yaml");
         let mut runtime = incarnate(config).expect("failed to incarnate runtime");

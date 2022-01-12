@@ -12,16 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::status;
 use super::after;
 use super::assert;
 use super::before;
 use super::job;
 use super::stats;
 use super::tag;
-use crate::errors::{Error, Result};
+use super::{super::status, stats::Stats};
 use crate::report;
 use crate::util::slurp_string;
+use crate::{
+    errors::{Error, Result},
+    report::TestReport,
+};
 use globwalk::GlobWalkerBuilder;
 use std::collections::HashMap;
 use std::path::Path;
@@ -34,7 +37,7 @@ pub(crate) fn run_process(
     _test_root: &Path,
     bench_root: &Path,
     _by_tag: &tag::TagFilter,
-) -> Result<report::TestReport> {
+) -> Result<TestReport> {
     let mut evidence = HashMap::new();
 
     let mut artefacts = GlobWalkerBuilder::from_patterns(
@@ -51,12 +54,18 @@ pub(crate) fn run_process(
 
     // fail fast if no artefacts are provided
     if artefacts.peek().is_none() {
-        return Err(Error::from(format!(
+        warn!(
             "No tremor artefacts found in '{}'.",
             bench_root.to_string_lossy()
-        )));
+        );
+        return Ok(TestReport {
+            description: "skipped".into(),
+            elements: HashMap::new(),
+            stats: Stats::default(),
+            duration: 0,
+        });
     }
-    let args: Vec<String> = vec!["server", "run", "-n", "-f"]
+    let args: Vec<String> = vec!["server", "run", "-n"]
         .iter()
         .map(|x| (*x).to_string())
         .chain(artefacts)

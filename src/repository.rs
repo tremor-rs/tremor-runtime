@@ -18,7 +18,7 @@
 
 mod artefact;
 
-use crate::errors::{ErrorKind, Result};
+use crate::errors::{Kind as ErrorKind, Result};
 use crate::url::TremorUrl;
 use async_channel::bounded;
 use async_std::task;

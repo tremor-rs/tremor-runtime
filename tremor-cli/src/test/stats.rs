@@ -15,7 +15,7 @@ use crate::report::StatusKind;
 // limitations under the License.
 
 /// Test statistics
-#[derive(Serialize, Debug, Clone)]
+#[derive(Serialize, Debug, Clone, Default)]
 pub struct Stats {
     pub(crate) pass: u32,
     pub(crate) fail: u32,
