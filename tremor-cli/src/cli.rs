@@ -250,7 +250,7 @@ pub(crate) struct ServerRun {
     pub(crate) recursion_limit: u32,
 }
 
-// FIXME: since the API will change this isn't translated yet
+// TODO: since the API will change this isn't translated yet
 #[derive(Parser, Debug)]
 pub(crate) struct Api {
     /*
