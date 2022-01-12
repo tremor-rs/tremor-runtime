@@ -30,6 +30,8 @@ impl Default for Version {
     }
 }
 
+// ALLOW: We allow this since it's required for generalizing accept fuinctions
+#[allow(clippy::unused_async)]
 pub async fn get(req: Request) -> Result<Response> {
-    reply(req, Version::default(), false, StatusCode::Ok).await
+    reply(&req, Version::default(), StatusCode::Ok)
 }

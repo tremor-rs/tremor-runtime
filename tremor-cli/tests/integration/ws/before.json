@@ -7,7 +7,6 @@
     "-p",
     "before.pid",
     "-n",
-    "-f",
     "before/ws.trickle",
     "before/config.yaml",
     "before/server.yaml"

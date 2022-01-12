@@ -31,7 +31,7 @@ const SOCKET_PATH: &'static str = "/tmp/test-unix-socket-onramp.sock";
 
 #[async_std::test]
 pub async fn unix_socket_default_permissions() -> Result<()> {
-    let (world, _handle) = system::World::start(50, None).await?;
+    let (world, _handle) = system::World::start(50).await?;
     let onramp_url = TremorUrl::from_onramp_id("test").expect("");
     let onramp_config = json!({
         "id": "test",
@@ -56,7 +56,7 @@ pub async fn unix_socket_default_permissions() -> Result<()> {
 
 #[async_std::test]
 pub async fn unix_socket() -> Result<()> {
-    let (world, _handle) = system::World::start(50, None).await?;
+    let (world, _handle) = system::World::start(50).await?;
     let onramp_url = TremorUrl::from_onramp_id("test").expect("");
     let onramp_config = json!({
         "id": "test",

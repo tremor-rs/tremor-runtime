@@ -23,6 +23,8 @@ use hdrhistogram::{self, serialization as hdr_s};
 
 use tremor_influx as influx;
 
+pub type Kind = ErrorKind;
+
 impl Clone for Error {
     fn clone(&self) -> Self {
         ErrorKind::ClonedError(format!("{}", self)).into()

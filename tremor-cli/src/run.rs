@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::env;
-use crate::errors::{Error, Result};
+use crate::errors::Result;
 use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
-use clap::ArgMatches;
+use crate::{cli::Run, env};
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use tremor_common::time::nanotime;
@@ -44,35 +43,30 @@ type IngressHandler<T> =
     dyn Fn(&mut T, &mut u64, &mut Egress, &mut Value<'static>, u64, Value) -> Result<()>;
 
 impl Ingress {
-    fn from_args(matches: &ArgMatches) -> Result<Self> {
-        let codec_pre = matches.value_of("PREPROCESSOR").unwrap_or("lines");
-        let codec_decoder = matches.value_of("DECODER").unwrap_or("json");
-        let is_interactive = matches.is_present("interactive");
-        let is_pretty = matches.is_present("pretty");
-
-        let buffer: Box<dyn BufRead> = match matches.value_of("INFILE") {
-            None | Some("-") => Box::new(BufReader::new(io::stdin())),
-            Some(data) => Box::new(BufReader::new(crate::open_file(data, None)?)),
+    fn from_cmd(cmd: &Run) -> Result<Self> {
+        let buffer: Box<dyn BufRead> = match cmd.infile.as_str() {
+            "-" => Box::new(BufReader::new(io::stdin())),
+            path => Box::new(BufReader::new(crate::open_file(path, None)?)),
         };
 
-        let codec = tremor_runtime::codec::lookup(codec_decoder);
+        let codec = tremor_runtime::codec::lookup(&cmd.decoder);
         if let Err(_e) = codec {
-            eprintln!("Error Codec {} not found error.", codec_decoder);
+            eprintln!("Error Codec {} not found error.", cmd.decoder);
             // ALLOW: main.rs
             std::process::exit(1);
         }
         let codec = codec?;
-        let preprocessor = tremor_runtime::preprocessor::lookup(codec_pre);
+        let preprocessor = tremor_runtime::preprocessor::lookup(&cmd.preprocessor);
         if let Err(_e) = preprocessor {
-            eprintln!("Error Preprocessor {} not found error.", codec_pre);
+            eprintln!("Error Preprocessor {} not found error.", cmd.preprocessor);
             // ALLOW: main.rs
             std::process::exit(1);
         }
         let preprocessor = preprocessor?;
 
         Ok(Self {
-            is_interactive,
-            is_pretty,
+            is_interactive: cmd.interactive,
+            is_pretty: cmd.pretty,
             buf: [0_u8; 4096],
             preprocessor,
             codec,
@@ -135,36 +129,34 @@ struct Egress {
 }
 
 impl Egress {
-    fn from_args(matches: &ArgMatches) -> Result<Self> {
-        let codec_post = matches.value_of("POSTPROCESSOR").unwrap_or("lines");
-        let codec_encoder = matches.value_of("ENCODER").unwrap_or("json");
-        let is_interactive = matches.is_present("interactive");
-        let is_pretty = matches.is_present("pretty");
-
-        let buffer: Box<dyn Write> = match matches.value_of("OUTFILE") {
-            None | Some("-") => Box::new(BufWriter::new(io::stdout())),
-            Some(data) => Box::new(BufWriter::new(file::create(data)?)),
+    fn from_cmd(cmd: &Run) -> Result<Self> {
+        let buffer: Box<dyn Write> = match cmd.outfile.as_str() {
+            "-" => Box::new(BufWriter::new(io::stdout())),
+            path => Box::new(BufWriter::new(file::create(path)?)),
         };
 
-        let codec = tremor_runtime::codec::lookup(codec_encoder);
+        let codec = tremor_runtime::codec::lookup(&cmd.encoder);
         if let Err(_e) = codec {
-            eprintln!("Error Codec {} not found error.", codec_encoder);
+            eprintln!("Error Codec {} not found error.", cmd.encoder);
             // ALLOW: main.rs
             std::process::exit(1);
         }
         let codec = codec?;
 
-        let postprocessor = tremor_runtime::postprocessor::lookup(codec_post);
+        let postprocessor = tremor_runtime::postprocessor::lookup(&cmd.postprocessor);
         if let Err(_e) = postprocessor {
-            eprintln!("Error Postprocessor {} not found error.", codec_post);
+            eprintln!(
+                "Error Postprocessor {} not found error.",
+                &cmd.postprocessor
+            );
             // ALLOW: main.rs
             std::process::exit(1);
         }
         let postprocessor = postprocessor?;
 
         Ok(Self {
-            is_interactive,
-            is_pretty,
+            is_interactive: cmd.interactive,
+            is_pretty: cmd.pretty,
             buffer,
             codec,
             postprocessor,
@@ -222,43 +214,162 @@ impl Egress {
     }
 }
 
-fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
-    let raw = slurp_string(&src);
-    if let Err(e) = raw {
-        eprintln!("Error processing file {}: {}", &src, e);
-        // ALLOW: main.rs
-        std::process::exit(1);
+impl Run {
+    pub(crate) fn run(&self) -> Result<()> {
+        match get_source_kind(&self.script) {
+            SourceKind::Tremor | SourceKind::Json => self.run_tremor_source(),
+            SourceKind::Trickle => self.run_trickle_source(),
+            SourceKind::Unsupported(_) | SourceKind::Yaml => {
+                Err(format!("Error: Unable to execute source: {}", &self.script).into())
+            }
+        }
     }
-    let raw = raw?;
 
-    let env = env::setup()?;
+    fn run_tremor_source(&self) -> Result<()> {
+        let raw = slurp_string(&self.script);
+        if let Err(e) = raw {
+            eprintln!("Error processing file {}: {}", &self.script, e);
+            // ALLOW: main.rs
+            std::process::exit(1);
+        }
+        let raw = raw?;
 
-    let mut outer = TermHighlighter::stderr();
-    match Script::parse(&env.module_path, &src, raw.clone(), &env.fun) {
-        Ok(mut script) => {
-            script.format_warnings_with(&mut outer)?;
+        let env = env::setup()?;
 
-            let mut ingress = Ingress::from_args(matches)?;
-            let mut egress = Egress::from_args(matches)?;
-            let id = 0_u64;
+        let mut outer = TermHighlighter::stderr();
+        match Script::parse(&env.module_path, &self.script, raw.clone(), &env.fun) {
+            Ok(mut script) => {
+                script.format_warnings_with(&mut outer)?;
 
-            ingress.process(
-                &mut script,
-                id,
-                &mut egress,
-                &move |runnable, _id, egress, state, at, event| {
-                    let mut global_map = Value::object();
-                    let mut event = event.clone_static();
-                    match runnable.run(
-                        &EventContext::new(at, None),
-                        AggrType::Tick,
-                        &mut event,
-                        state,
-                        &mut global_map,
-                    ) {
-                        Ok(r) => egress.process(&src, &event, r),
-                        Err(e) => {
-                            if let (Some(r), _) = e.context() {
+                let mut ingress = Ingress::from_cmd(self)?;
+                let mut egress = Egress::from_cmd(self)?;
+                let id = 0_u64;
+
+                let src = self.script.clone();
+                ingress.process(
+                    &mut script,
+                    id,
+                    &mut egress,
+                    &move |runnable, _id, egress, state, at, event| {
+                        let mut global_map = Value::object();
+                        let mut event = event.clone_static();
+                        match runnable.run(
+                            &EventContext::new(at, None),
+                            AggrType::Tick,
+                            &mut event,
+                            state,
+                            &mut global_map,
+                        ) {
+                            Ok(r) => egress.process(&src, &event, r),
+                            Err(e) => {
+                                if let (Some(r), _) = e.context() {
+                                    let mut inner = TermHighlighter::stderr();
+                                    let mut input = raw.clone();
+                                    input.push('\n'); // for nicer highlighting
+                                    let tokens: Vec<_> =
+                                        Tokenizer::new(&input).tokenize_until_err().collect();
+
+                                    if let Err(highlight_error) = inner.highlight_error(
+                                        Some(&src),
+                                        &tokens,
+                                        "",
+                                        true,
+                                        Some(r),
+                                        Some(HighlighterError::from(&e)),
+                                    ) {
+                                        eprintln!(
+                                            "Error during error highlighting: {}",
+                                            highlight_error
+                                        );
+                                        Err(highlight_error.into())
+                                    } else {
+                                        inner.finalize()?;
+                                        Ok(()) // error has already been displayed
+                                    }
+                                } else {
+                                    eprintln!("Error processing event: {}", e);
+                                    Err(e.into())
+                                }
+                            }
+                        }
+                    },
+                )?;
+
+                Ok(())
+            }
+            Err(e) => {
+                if let Err(e) = Script::format_error_from_script(&raw, &mut outer, &e) {
+                    eprintln!("Error: {}", e);
+                };
+
+                // ALLOW: main.rs
+                std::process::exit(1);
+            }
+        }
+    }
+
+    fn run_trickle_source(&self) -> Result<()> {
+        let raw = slurp_string(&self.script);
+        if let Err(e) = raw {
+            eprintln!("Error processing file {}: {}", &self.script, e);
+            // ALLOW: main.rs
+            std::process::exit(1);
+        }
+        let raw = raw?;
+        let env = env::setup()?;
+        let mut h = TermHighlighter::stderr();
+
+        let runnable = match Query::parse(
+            &env.module_path,
+            &self.script,
+            &raw,
+            vec![],
+            &env.fun,
+            &env.aggr,
+        ) {
+            Ok(runnable) => runnable,
+            Err(e) => {
+                if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
+                    eprintln!("Error: {}", e);
+                };
+                // ALLOW: main.rs
+                std::process::exit(1);
+            }
+        };
+
+        runnable.format_warnings_with(&mut h)?;
+
+        let mut ingress = Ingress::from_cmd(self)?;
+        let mut egress = Egress::from_cmd(self)?;
+
+        let runnable = tremor_pipeline::query::Query(runnable);
+        let mut idgen = OperatorIdGen::new();
+        let mut pipeline = runnable.to_pipe(&mut idgen)?;
+        let id = 0_u64;
+        let src = self.script.clone();
+        ingress.process(
+            &mut pipeline,
+            id,
+            &mut egress,
+            &move |runnable, id, egress, _state, at, event| {
+                let value = EventPayload::new(vec![], |_| ValueAndMeta::from(event.clone_static()));
+
+                let mut continuation = vec![];
+
+                if let Err(e) = runnable.enqueue(
+                    "in",
+                    Event {
+                        id: EventId::new(0, 0, *id),
+                        data: value.clone(),
+                        ingest_ns: at,
+                        ..Event::default()
+                    },
+                    &mut continuation,
+                ) {
+                    match e.0 {
+                        tremor_pipeline::errors::ErrorKind::Script(script_kind) => {
+                            let script_error: tremor_script::errors::Error = script_kind.into();
+                            if let (Some(r), _) = script_error.context() {
                                 let mut inner = TermHighlighter::stderr();
                                 let mut input = raw.clone();
                                 input.push('\n'); // for nicer highlighting
@@ -271,152 +382,42 @@ fn run_tremor_source(matches: &ArgMatches, src: String) -> Result<()> {
                                     "",
                                     true,
                                     Some(r),
-                                    Some(HighlighterError::from(&e)),
+                                    Some(HighlighterError::from(&script_error)),
                                 ) {
                                     eprintln!(
                                         "Error during error highlighting: {}",
                                         highlight_error
                                     );
-                                    Err(highlight_error.into())
-                                } else {
-                                    inner.finalize()?;
-                                    Ok(()) // error has already been displayed
+                                    return Err(highlight_error.into());
                                 }
-                            } else {
-                                eprintln!("Error processing event: {}", e);
-                                Err(e.into())
+                                inner.finalize()?;
+                                return Ok(());
                             }
                         }
-                    }
-                },
-            )?;
-
-            Ok(())
-        }
-        Err(e) => {
-            if let Err(e) = Script::format_error_from_script(&raw, &mut outer, &e) {
-                eprintln!("Error: {}", e);
-            };
-
-            // ALLOW: main.rs
-            std::process::exit(1);
-        }
-    }
-}
-
-fn run_trickle_source(matches: &ArgMatches, src: String) -> Result<()> {
-    let raw = slurp_string(&src);
-    if let Err(e) = raw {
-        eprintln!("Error processing file {}: {}", &src, e);
-        // ALLOW: main.rs
-        std::process::exit(1);
-    }
-    let raw = raw?;
-    let env = env::setup()?;
-    let mut h = TermHighlighter::stderr();
-
-    let runnable = match Query::parse(&env.module_path, &src, &raw, vec![], &env.fun, &env.aggr) {
-        Ok(runnable) => runnable,
-        Err(e) => {
-            if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
-                eprintln!("Error: {}", e);
-            };
-            // ALLOW: main.rs
-            std::process::exit(1);
-        }
-    };
-
-    runnable.format_warnings_with(&mut h)?;
-
-    let mut ingress = Ingress::from_args(matches)?;
-    let mut egress = Egress::from_args(matches)?;
-
-    let runnable = tremor_pipeline::query::Query(runnable);
-    let mut idgen = OperatorIdGen::new();
-    let mut pipeline = runnable.to_pipe(&mut idgen)?;
-    let id = 0_u64;
-
-    ingress.process(
-        &mut pipeline,
-        id,
-        &mut egress,
-        &move |runnable, id, egress, _state, at, event| {
-            let value = EventPayload::new(vec![], |_| ValueAndMeta::from(event.clone_static()));
-
-            let mut continuation = vec![];
-
-            if let Err(e) = runnable.enqueue(
-                "in",
-                Event {
-                    id: EventId::new(0, 0, *id),
-                    data: value.clone(),
-                    ingest_ns: at,
-                    ..Event::default()
-                },
-                &mut continuation,
-            ) {
-                match e.0 {
-                    tremor_pipeline::errors::ErrorKind::Script(script_kind) => {
-                        let script_error: tremor_script::errors::Error = script_kind.into();
-                        if let (Some(r), _) = script_error.context() {
-                            let mut inner = TermHighlighter::stderr();
-                            let mut input = raw.clone();
-                            input.push('\n'); // for nicer highlighting
-                            let tokens: Vec<_> =
-                                Tokenizer::new(&input).tokenize_until_err().collect();
-
-                            if let Err(highlight_error) = inner.highlight_error(
-                                Some(&src),
-                                &tokens,
-                                "",
-                                true,
-                                Some(r),
-                                Some(HighlighterError::from(&script_error)),
-                            ) {
-                                eprintln!("Error during error highlighting: {}", highlight_error);
-                                return Err(highlight_error.into());
-                            }
-                            inner.finalize()?;
-                            return Ok(());
+                        _ => {
+                            return Err(e.into());
                         }
-                    }
-                    _ => {
-                        return Err(e.into());
                     }
                 }
-            }
-            *id += 1;
+                *id += 1;
 
-            for (port, rvalue) in continuation.drain(..) {
-                egress.process(
-                    &simd_json::to_string_pretty(&value.suffix().value())?,
-                    &event,
-                    Return::Emit {
-                        value: rvalue.data.suffix().value().clone_static(),
-                        port: Some(port.to_string()),
-                    },
-                )?;
-            }
+                for (port, rvalue) in continuation.drain(..) {
+                    egress.process(
+                        &simd_json::to_string_pretty(&value.suffix().value())?,
+                        &event,
+                        Return::Emit {
+                            value: rvalue.data.suffix().value().clone_static(),
+                            port: Some(port.to_string()),
+                        },
+                    )?;
+                }
 
-            Ok(())
-        },
-    )?;
+                Ok(())
+            },
+        )?;
 
-    h.finalize()?;
+        h.finalize()?;
 
-    Ok(())
-}
-
-pub(crate) fn run_cmd(matches: &ArgMatches) -> Result<()> {
-    let script_file = matches
-        .value_of("SCRIPT")
-        .ok_or_else(|| Error::from("No script file provided"))?;
-    let script_file = script_file.to_string();
-    match get_source_kind(&script_file) {
-        SourceKind::Tremor | SourceKind::Json => run_tremor_source(matches, script_file),
-        SourceKind::Trickle => run_trickle_source(matches, script_file),
-        SourceKind::Unsupported(_) | SourceKind::Yaml => {
-            Err(format!("Error: Unable to execute source: {}", &script_file).into())
-        }
+        Ok(())
     }
 }

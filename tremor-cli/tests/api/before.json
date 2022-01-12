@@ -6,7 +6,6 @@
     "run",
     "-p",
     "before.pid",
-    "-f",
     "before/ws.trickle",
     "before/config.yaml",
     "before/server.yaml",

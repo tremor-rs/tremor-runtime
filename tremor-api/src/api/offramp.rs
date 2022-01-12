@@ -27,7 +27,7 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
         .iter()
         .filter_map(|v| v.artefact().map(String::from))
         .collect();
-    reply(req, result, false, StatusCode::Ok).await
+    reply(&req, result, StatusCode::Ok)
 }
 
 pub async fn publish_artefact(req: Request) -> Result<Response> {
@@ -35,7 +35,7 @@ pub async fn publish_artefact(req: Request) -> Result<Response> {
     let url = build_url(&["offramp", &data.id])?;
     let repo = &req.state().world.repo;
     let result = repo.publish_offramp(&url, false, data).await?;
-    reply(req, result, true, StatusCode::Created).await
+    reply(&req, result, StatusCode::Created)
 }
 
 pub async fn unpublish_artefact(req: Request) -> Result<Response> {
@@ -43,7 +43,7 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
     let url = build_url(&["offramp", id])?;
     let repo = &req.state().world.repo;
     let result = repo.unpublish_offramp(&url).await?;
-    reply(req, result, true, StatusCode::Ok).await
+    reply(&req, result, StatusCode::Ok)
 }
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
@@ -63,5 +63,5 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
             .collect(),
     };
 
-    reply(req, result, false, StatusCode::Ok).await
+    reply(&req, result, StatusCode::Ok)
 }

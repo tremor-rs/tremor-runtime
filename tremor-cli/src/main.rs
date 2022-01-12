@@ -29,24 +29,23 @@ extern crate serde_derive;
 #[macro_use]
 extern crate log;
 
-use crate::errors::{Error, Result};
-use crate::util::{load_config, FormatKind, TremorApp};
-use async_std::task;
-use clap::App;
-use clap::{load_yaml, AppSettings, ArgMatches};
+use crate::errors::Result;
+use clap::Parser;
+use cli::{Cli, Command};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use tremor_common::file;
 // use tremor_runtime::errors;
 
 mod alloc;
-mod api;
+// mod api;
 mod completions;
 mod debug;
 mod doc;
 mod env;
 mod errors;
 // mod explain;
+pub(crate) mod cli;
 mod job;
 mod report;
 mod run;
@@ -84,22 +83,20 @@ where
 
 #[cfg(not(tarpaulin_include))]
 fn main() -> Result<()> {
-    let yaml = load_yaml!("./cli.yaml");
-    let long_version = tremor_runtime::version::long_ver();
-    let app = App::from(yaml);
-    let app = app.version(long_version.as_str());
-    let app = app.global_setting(AppSettings::ColoredHelp);
-    let app = app.global_setting(AppSettings::ColorAlways);
+    let cli = cli::Cli::parse();
+    // let yaml = load_yaml!("./cli.yaml");
+    // let long_version = tremor_runtime::version::long_ver();
+    // let app = App::from(yaml);
+    // let app = app.color(clap::ColorChoice::Always);
+    // let app = app.version(long_version.as_str());
+    // let matches = app.clone().get_matches();
 
     tremor_runtime::functions::load()?;
-    let matches = app.clone().get_matches();
     unsafe {
         // We know that instance will only get set once at
         // the very beginning nothing can access it yet,
         // this makes it allowable to use unsafe here.
-        let s = matches
-            .value_of("instance")
-            .ok_or_else(|| Error::from("instance argument missing"))?;
+        let s = &cli.instance;
         // ALLOW: We do this on startup and forget the memory once we drop it, that's on purpose
         let forget_s = std::mem::transmute(s as &str);
         // This means we're going to LEAK this memory, however
@@ -107,7 +104,7 @@ fn main() -> Result<()> {
         // rest of the program execution.
         tremor_runtime::metrics::INSTANCE = forget_s;
     }
-    if let Err(e) = run(app, &matches) {
+    if let Err(e) = run(cli) {
         eprintln!("error: {}", e);
         // ALLOW: this is supposed to exit
         std::process::exit(1);
@@ -115,29 +112,24 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run(app: App, cmd: &ArgMatches) -> Result<()> {
-    let format = match &cmd.value_of("format") {
-        Some("json") => FormatKind::Json,
-        _ => FormatKind::Yaml,
-    };
-    match cmd
-        .subcommand_name()
-        .map(|name| (name, cmd.subcommand_matches(name)))
-    {
-        Some(("explain", Some(_matches))) => Err("Not yet implemented".into()),
-        Some(("completions", Some(matches))) => completions::run_cmd(app, matches),
-        Some(("server", Some(matches))) => server::run_cmd(app, matches),
-        Some(("run", Some(matches))) => run::run_cmd(matches),
-        Some(("doc", Some(matches))) => doc::run_cmd(matches),
-        Some(("api", Some(matches))) => task::block_on(api::run_cmd(
-            TremorApp {
-                format,
-                config: load_config()?,
-            },
-            matches,
-        )),
-        Some(("dbg", Some(matches))) => debug::run_cmd(matches),
-        Some(("test", Some(matches))) => test::run_cmd(matches),
-        other => Err(format!("unknown command: {:?}", other).into()),
+fn run(cli: Cli) -> Result<()> {
+    match cli.command {
+        Command::Completions { shell } => completions::run_cmd(shell),
+        Command::Server { command } => {
+            command.run();
+            Ok(())
+        }
+        Command::Test(t) => t.run(cli.verbose > 0),
+        Command::Dbg(d) => d.run(),
+        Command::Run(r) => r.run(),
+        Command::Doc(d) => d.run(),
+        Command::Api(_) => todo!(),
+        // Some(("api", Some(matches))) => task::block_on(api::run_cmd(
+        //     TremorApp {
+        //         format,
+        //         config: load_config()?,
+        //     },
+        //     matches,
+        // )),
     }
 }

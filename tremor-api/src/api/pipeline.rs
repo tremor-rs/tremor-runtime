@@ -31,7 +31,7 @@ pub async fn list_artefact(req: Request) -> Result<Response> {
         .iter()
         .filter_map(|v| v.artefact().map(String::from))
         .collect();
-    reply(req, result, false, StatusCode::Ok).await
+    reply(&req, result, StatusCode::Ok)
 }
 
 pub async fn publish_artefact(mut req: Request) -> Result<Response> {
@@ -62,7 +62,7 @@ pub async fn publish_artefact(mut req: Request) -> Result<Response> {
                 .publish_pipeline(&url, false, query)
                 .await
                 .map(|result| result.source().to_string())?;
-            reply_trickle_flat(req, result, true, StatusCode::Created).await
+            reply_trickle_flat(&req, result, StatusCode::Created)
         }
         Some(_) | None => Err(Error::new(
             StatusCode::UnsupportedMediaType,
@@ -71,18 +71,13 @@ pub async fn publish_artefact(mut req: Request) -> Result<Response> {
     }
 }
 
-pub async fn reply_trickle_flat(
-    req: Request,
+pub fn reply_trickle_flat(
+    req: &Request,
     result_in: String,
-    persist: bool,
     ok_code: StatusCode,
 ) -> Result<Response> {
-    if persist {
-        let world = &req.state().world;
-        world.save_config().await?;
-    }
-    match accept(&req) {
-        ResourceType::Json | ResourceType::Yaml => serialize(accept(&req), &result_in, ok_code),
+    match accept(req) {
+        ResourceType::Json | ResourceType::Yaml => serialize(accept(req), &result_in, ok_code),
         ResourceType::Trickle => {
             let mut r = Response::new(ok_code);
             r.insert_header(headers::CONTENT_TYPE, ResourceType::Trickle.as_str());
@@ -92,19 +87,14 @@ pub async fn reply_trickle_flat(
     }
 }
 
-pub async fn reply_trickle_instanced(
-    req: Request,
+pub fn reply_trickle_instanced(
+    req: &Request,
     mut result_in: String,
-    instances: Vec<String>,
-    persist: bool,
+    instances: &[String],
     ok_code: StatusCode,
 ) -> Result<Response> {
-    if persist {
-        let world = &req.state().world;
-        world.save_config().await?;
-    }
-    match accept(&req) {
-        ResourceType::Json | ResourceType::Yaml => serialize(accept(&req), &result_in, ok_code),
+    match accept(req) {
+        ResourceType::Json | ResourceType::Yaml => serialize(accept(req), &result_in, ok_code),
         ResourceType::Trickle => {
             let mut r = Response::new(ok_code);
             r.insert_header(headers::CONTENT_TYPE, ResourceType::Trickle.as_str());
@@ -125,7 +115,7 @@ pub async fn unpublish_artefact(req: Request) -> Result<Response> {
         .unpublish_pipeline(&url)
         .await
         .map(|result| result.source().to_string())?;
-    reply_trickle_flat(req, result, true, StatusCode::Ok).await
+    reply_trickle_flat(&req, result, StatusCode::Ok)
 }
 
 pub async fn get_artefact(req: Request) -> Result<Response> {
@@ -138,15 +128,13 @@ pub async fn get_artefact(req: Request) -> Result<Response> {
         .ok_or_else(Error::not_found)?;
 
     reply_trickle_instanced(
-        req,
+        &req,
         result.artefact.source().to_string(),
-        result
+        &result
             .instances
             .iter()
             .filter_map(|v| v.instance().map(String::from))
-            .collect(),
-        false,
+            .collect::<Vec<_>>(),
         StatusCode::Ok,
     )
-    .await
 }
