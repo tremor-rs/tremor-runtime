@@ -11,7 +11,7 @@ jobs:
 
     strategy:
       matrix:
-        kind: [integration, api, unit, command]
+        kind: [integration, unit, command]
         include:
           # - os: windows-2019
           - os: macos-10.15
