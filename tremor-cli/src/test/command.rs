@@ -32,8 +32,6 @@ use super::TestConfig;
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct CommandRun {
-    pub(crate) name: String,
-    pub(crate) tags: Option<Tags>,
     pub(crate) suites: Vec<CommandSuite>,
 }
 

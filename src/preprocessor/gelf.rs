@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::Preprocessor;
-use crate::errors::{ErrorKind, Result};
+use crate::errors::{Kind as ErrorKind, Result};
 use hashbrown::{hash_map::Entry, HashMap};
 use rand::{self, RngCore};
 
@@ -24,7 +24,6 @@ pub struct Gelf {
     buffer: HashMap<u64, GelfMsgs>,
     last_buffer: HashMap<u64, GelfMsgs>,
     last_swap: u64,
-    cnt: usize,
     is_tcp: bool,
 }
 
@@ -34,7 +33,6 @@ impl Gelf {
             buffer: HashMap::new(),
             last_buffer: HashMap::new(),
             last_swap: 0,
-            cnt: 0,
             is_tcp: false,
         }
     }
@@ -43,7 +41,6 @@ impl Gelf {
             buffer: HashMap::new(),
             last_buffer: HashMap::new(),
             last_swap: 0,
-            cnt: 0,
             is_tcp: true,
         }
     }

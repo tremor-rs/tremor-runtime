@@ -377,7 +377,6 @@ mod tests {
         let notifier = ConnectionLostNotifier::new(tx.clone());
         let alias = String::from("test");
         let addr = Addr {
-            uid: 0,
             alias: alias.clone(),
             source: None,
             sink: None,
@@ -412,7 +411,6 @@ mod tests {
         let notifier = ConnectionLostNotifier::new(tx.clone());
         let alias = String::from("test");
         let addr = Addr {
-            uid: 0,
             alias: alias.clone(),
             source: None,
             sink: None,

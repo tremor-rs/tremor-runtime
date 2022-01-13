@@ -21,7 +21,6 @@ use tremor_script::{
 };
 #[derive(Debug)]
 pub(crate) struct TrickleOperator {
-    pub id: String,
     pub op: Box<dyn Operator>,
 }
 
@@ -44,12 +43,7 @@ fn mk_node_config(id: String, op_type: String, config: Value) -> NodeConfig {
 }
 
 impl TrickleOperator {
-    pub fn with_stmt(
-        operator_uid: u64,
-        id: String,
-        decl: &srs::Stmt,
-        helper: &mut Helper,
-    ) -> Result<Self> {
+    pub fn with_stmt(operator_uid: u64, decl: &srs::Stmt, helper: &mut Helper) -> Result<Self> {
         use crate::operator;
         let stmt = decl.suffix();
         let op: Box<dyn Operator> = match stmt {
@@ -70,7 +64,7 @@ impl TrickleOperator {
             }
         };
 
-        Ok(Self { id, op })
+        Ok(Self { op })
     }
 }
 

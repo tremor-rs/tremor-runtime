@@ -56,7 +56,6 @@ pub(crate) use utils::{metrics, quiescence, reconnect};
 /// connector address
 #[derive(Clone, Debug)]
 pub struct Addr {
-    uid: u64,
     /// connector instance url
     pub alias: String,
     sender: Sender<Msg>,
@@ -413,7 +412,6 @@ async fn connector_task(
     let sink_addr = connector.create_sink(sink_ctx, sink_builder).await?;
 
     let connector_addr = Addr {
-        uid,
         alias: alias.clone(),
         sender: msg_tx,
         source: source_addr,

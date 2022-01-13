@@ -379,7 +379,6 @@ impl PartialEq for TremorFnWrapper {
 #[derive(Debug, Clone)]
 pub struct Registry {
     functions: HashMap<String, HashMap<String, TremorFnWrapper>>,
-    modules: Vec<String>,
 }
 
 #[doc(hidden)]
@@ -664,7 +663,6 @@ impl Default for Registry {
     fn default() -> Self {
         Self {
             functions: HashMap::new(),
-            modules: Vec::new(),
         }
     }
 }

@@ -103,7 +103,6 @@ type Addr = async_std::channel::Sender<Msg>;
 
 #[derive(Debug)]
 pub(crate) struct Deployment {
-    links: Vec<ConnectStmt>,
     addr: Addr,
 }
 
@@ -176,10 +175,7 @@ impl Deployment {
 
         addr.send(Msg::Start).await?;
 
-        let this = Deployment {
-            links: flow.decl.links.clone(),
-            addr,
-        };
+        let this = Deployment { addr };
 
         Ok(this)
     }
