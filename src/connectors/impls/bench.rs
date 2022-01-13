@@ -71,7 +71,11 @@ pub(crate) struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
-    async fn from_config(&self, id: &str, config: &Option<OpConfig>) -> Result<Box<dyn Connector>> {
+    async fn from_config(
+        &self,
+        _id: &str,
+        config: &Option<OpConfig>,
+    ) -> Result<Box<dyn Connector>> {
         if let Some(config) = config {
             let config: Config = Config::new(config)?;
             let mut source_data_file = file::open(&config.source)?;
@@ -114,14 +118,12 @@ impl ConnectorBuilder for Builder {
             };
             Ok(Box::new(Bench {
                 config,
-                data,
                 acc: Acc {
                     elements,
                     count: 0,
                     iterations: 0,
                 },
                 origin_uri,
-                onramp_id: id.to_string(),
             }))
         } else {
             Err("Missing config for blaster onramp".into())
@@ -156,8 +158,6 @@ impl Acc {
 #[derive(Clone)]
 pub struct Bench {
     pub config: Config,
-    onramp_id: String,
-    data: Vec<u8>,
     acc: Acc,
     origin_uri: EventOriginUri,
 }

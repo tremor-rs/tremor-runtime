@@ -371,6 +371,8 @@ impl QueryInstance {
 #[derive(Clone)]
 pub struct DeployStmt {
     /// The vector of raw input values
+    // ALLOW: we need this as it is a self referential struct
+    #[allow(dead_code)]
     raw: Vec<Arc<Pin<Vec<u8>>>>,
     structured: ast::deploy::DeployStmt<'static>,
 }
@@ -748,7 +750,7 @@ impl Select {
     pub fn rent<F, R>(&self, f: F) -> R
     where
         F: for<'iref, 'head> FnOnce(&'iref ast::SelectStmt<'head>) -> R,
-        R: ,
+        R:,
     {
         f(&self.select)
     }
@@ -760,7 +762,7 @@ impl Select {
     pub fn rent_mut<F, R>(&mut self, f: F) -> R
     where
         F: for<'iref, 'head> FnOnce(&'iref mut ast::SelectStmt<'head>) -> R,
-        R: ,
+        R:,
     {
         f(&mut self.select)
     }
@@ -1035,7 +1037,7 @@ impl EventPayload {
             &'iref mut ValueAndMeta<'head>,
             &'iref ast::ScriptDefinition<'head>,
         ) -> R,
-        R: ,
+        R:,
     {
         // We append first in the case that some data already moved into self.structured by the time
         // that the join_f fails
@@ -1054,7 +1056,7 @@ impl EventPayload {
     pub fn apply_script<R, F>(&mut self, other: &Script, apply_f: F) -> R
     where
         F: for<'iref, 'head> FnOnce(&'iref mut ValueAndMeta<'head>, &'iref ast::Script<'head>) -> R,
-        R: ,
+        R:,
     {
         // We append first in the case that some data already moved into self.structured by the time
         // that the join_f fails
@@ -1076,7 +1078,7 @@ impl EventPayload {
             &'iref mut ValueAndMeta<'head>,
             &'iref mut ast::SelectStmt<'head>,
         ) -> R,
-        R: ,
+        R:,
     {
         // We append first in the case that some data already moved into self.structured by the time
         // that the join_f fails

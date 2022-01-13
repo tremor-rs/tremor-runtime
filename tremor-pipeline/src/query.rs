@@ -784,7 +784,6 @@ fn select(
 
 fn operator(
     operator_uid: u64,
-    config: &NodeConfig,
     node: Option<&srs::Stmt>,
     helper: &mut Helper,
 ) -> Result<Box<dyn Operator>> {
@@ -793,7 +792,6 @@ fn operator(
     })?;
     Ok(Box::new(TrickleOperator::with_stmt(
         operator_uid,
-        config.id.clone(),
         node,
         helper,
     )?))
@@ -827,7 +825,7 @@ pub(crate) fn supported_operators(
 
     let op: Box<dyn op::Operator> = match name_parts.as_slice() {
         ["trickle", "select"] => select(uid, config, node, windows)?,
-        ["trickle", "operator"] => operator(uid, config, node, helper)?,
+        ["trickle", "operator"] => operator(uid, node, helper)?,
         ["trickle", "script"] => script(config, defn, node, &helper.meta)?,
         _ => crate::operator(uid, config)?,
     };
