@@ -3,4 +3,4 @@ name: Crash on unknown connector type
 asserts:
   - source: STDERR
     contains:
-      - Unknown operator type qos::wal
+      - "Unknown operator: op::unknown"
