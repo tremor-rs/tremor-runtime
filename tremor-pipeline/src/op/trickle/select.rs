@@ -62,7 +62,6 @@ impl Select {
         let windows: Vec<_> = windows
             .into_iter()
             .map(|(fqwn, window_impl)| Window {
-                module: Window::module_path(&fqwn),
                 name: Window::ident_name(&fqwn).to_string(),
                 window_impl,
             })

@@ -377,17 +377,10 @@ pub trait Trait: std::fmt::Debug {
 #[derive(Debug)]
 pub struct Window {
     pub(crate) window_impl: Impl,
-    pub(crate) module: Vec<String>,
     pub(crate) name: String,
 }
 
 impl Window {
-    pub(crate) fn module_path(fqwn: &str) -> Vec<String> {
-        let mut segments: Vec<_> = fqwn.split("::").map(String::from).collect();
-        segments.pop(); // Remove the last element
-        segments
-    }
-
     pub(crate) fn ident_name(fqwn: &str) -> &str {
         fqwn.split("::").last().map_or(fqwn, |last| last)
     }
