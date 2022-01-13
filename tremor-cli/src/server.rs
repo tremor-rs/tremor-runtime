@@ -100,7 +100,6 @@ async fn handle_signals(signals: Signals, world: World) {
 impl ServerRun {
     #[cfg(not(tarpaulin_include))]
     #[allow(clippy::too_many_lines)]
-    #[must_use]
     async fn run_dun(&self) -> Result<i32> {
         let mut result = 0;
         use tremor_runtime::system::WorldConfig;
