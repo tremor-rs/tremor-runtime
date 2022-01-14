@@ -1,0 +1,112 @@
+define flow main
+flow
+  use std::time::nanos;
+  use integration;
+  use troy::pipelines;
+
+  define pipeline main
+  pipeline
+    use std::time::nanos;
+    define script my_little_script
+    script
+      # setting required metadata for elastic
+      let $elastic = {
+        "_index": "my_little_index",
+        "_type": "my_little_doc"
+      };
+      event
+    end;
+    create script my_little_script;
+
+    define operator batch from generic::batch with
+      count = 1,
+      timeout = nanos::from_millis(1)
+    end;
+    create operator batch;
+
+    select event from in where event != "exit" into batch;
+    select event from batch into my_little_script;
+    select event from my_little_script into out;
+    select event from my_little_script/err into err;  
+  end;
+
+  define pipeline response_handling
+  pipeline
+    select {
+      "action": $elastic.action,
+      "success": $elastic.success,
+      "payload": event.payload,
+      "index": $elastic["_index"],
+      "doc": $elastic["_type"]
+    }
+    from in where $elastic.success into out;
+
+    select {
+      "action": $elastic.action,
+      "success": $elastic.success,
+      "payload": event.payload,
+      "index": $elastic["_index"],
+      "doc": $elastic["_type"]
+    }
+    from in where not $elastic.success into err;
+  end;
+  
+  define pipeline exit
+  pipeline
+    use std::time::nanos as nanos2;
+    select {"exit": 0, "delay": nanos2::from_seconds(5)} from in where event == "exit" into out;
+  end;
+
+  define connector input from bench
+  with
+    config = {
+      "source": "in.json",
+      "interval": nanos::from_millis(3),
+      "iters": 1
+    }
+  end;
+  define connector elastic from elastic
+  with
+    config = {
+      "nodes": ["http://127.0.0.1:9200/"],
+      "concurrency": 10,
+      "include_payload_in_response": true
+    }
+  end;
+
+  create pipeline main;
+  create pipeline exit;
+  create pipeline response_handling;
+  create pipeline passthrough from pipelines::passthrough;
+  create pipeline test from pipelines::passthrough;
+  create connector elastic;
+  create connector input;
+  create connector debug_out from integration::write_file
+  with
+    file = "debug.log"
+  end;
+  create connector errfile from integration::write_file
+  with
+    file = "err.log"
+  end;
+  create connector okfile from integration::write_file
+  with
+    file = "ok.log"
+  end;
+  create connector exit from integration::exit;
+
+  connect /connector/input/out to /pipeline/main/in;
+  connect /connector/input/out to /pipeline/exit/in;
+  connect /pipeline/main/out to /connector/elastic/in;
+  connect /pipeline/main/out to /connector/debug_out;
+  connect /pipeline/main/err to /connector/debug_out;
+  connect /pipeline/exit/out to /connector/exit/in;
+  connect /connector/elastic/out to /pipeline/response_handling/in;
+  connect /connector/elastic/out to /pipeline/passthrough/in;
+  connect /pipeline/response_handling/out to /connector/okfile/in;
+  connect /connector/elastic/err to /pipeline/response_handling/in;
+  connect /connector/elastic/err to /pipeline/passthrough/in;
+  connect /pipeline/response_handling/err to /connector/errfile/in;
+  connect /pipeline/passthrough/out to /connector/debug_out/in;
+end;
+deploy flow main;

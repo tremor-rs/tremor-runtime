@@ -192,7 +192,7 @@ impl Connector for Bench {
     }
 
     fn default_codec(&self) -> &str {
-        "null"
+        "json"
     }
 }
 
