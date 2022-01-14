@@ -266,6 +266,10 @@ impl Sink for ElasticSink {
         _serializer: &mut EventSerializer,
         start: u64,
     ) -> Result<SinkReply> {
+        if event.is_empty() {
+            debug!("{ctx} Received empty event. Won't send it to ES");
+            return Ok(SinkReply::NONE);
+        }
         // if we exceed the maximum concurrency here, we issue a CB close, but carry on anyhow
         let guard = self.concurrency_cap.inc_for(&event).await?;
 
@@ -401,6 +405,7 @@ impl Sink for ElasticSink {
                             }
                         }
                     }
+
                     let parts = match (index, doc_type) {
                         (Some(index), Some(doc_type)) => BulkParts::IndexType(index, doc_type),
                         (Some(index), None) => BulkParts::Index(index),
