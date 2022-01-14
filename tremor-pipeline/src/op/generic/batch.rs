@@ -21,7 +21,7 @@ use tremor_script::prelude::*;
 pub struct Config {
     /// Name of the event history ( path ) to track
     pub count: usize,
-    /// The amount time between messags to flush in milliseconds
+    /// The amount time between messags to flush in nanoseconds
     #[serde(default = "Default::default")]
     pub timeout: Option<u64>,
 }
@@ -51,7 +51,7 @@ pub fn empty() -> EventPayload {
 op!(BatchFactory(uid, node) {
 if let Some(map) = &node.config {
     let config: Config = Config::new(map)?;
-    let max_delay_ns = config.timeout.map(|max_delay_ms| max_delay_ms * 1_000_000);
+    let max_delay_ns = config.timeout;
     let mut idgen = EventIdGenerator::new(uid);
     Ok(Box::new(Batch {
         data: empty(),
