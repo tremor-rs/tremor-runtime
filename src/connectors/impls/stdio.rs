@@ -128,7 +128,7 @@ pub struct StdStreamSink {
 
 impl StdStreamConnector {
     const IN_PORTS: [Cow<'static, str>; 3] =
-        [IN, Cow::const_str("stdin"), Cow::const_str("stderr")];
+        [IN, Cow::const_str("stdout"), Cow::const_str("stderr")];
     const REF_IN_PORTS: &'static [Cow<'static, str>; 3] = &Self::IN_PORTS;
 }
 

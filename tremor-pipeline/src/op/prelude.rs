@@ -24,4 +24,3 @@ pub use value_trait::Value as ValueTrait;
 pub const OUT: Cow<'static, str> = Cow::const_str("out");
 pub const IN: Cow<'static, str> = Cow::const_str("in");
 pub const ERR: Cow<'static, str> = Cow::const_str("err");
-pub const METRICS: Cow<'static, str> = Cow::const_str("metrics");

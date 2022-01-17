@@ -13,54 +13,15 @@
 // limitations under the License.
 
 use crate::connectors::prelude::*;
-use crate::connectors::utils::metrics::METRICS_CHANNEL;
-use async_broadcast::{broadcast, Receiver, Sender, TryRecvError, TrySendError};
+use async_broadcast::{Receiver, Sender, TryRecvError, TrySendError};
 use beef::Cow;
+use tremor_pipeline::{MetricsMsg, METRICS_CHANNEL};
 use tremor_script::utils::hostname;
 
 const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
 const TAGS: Cow<'static, str> = Cow::const_str("tags");
 const FIELDS: Cow<'static, str> = Cow::const_str("fields");
 const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
-
-#[derive(Clone, Debug)]
-pub(crate) struct MetricsChannel {
-    tx: Sender<Msg>,
-    rx: Receiver<Msg>,
-}
-
-impl MetricsChannel {
-    pub(crate) fn new(qsize: usize) -> Self {
-        let (mut tx, rx) = broadcast(qsize);
-        // We user overflow so that non collected messages can be removed
-        // Ffor Metrics it should be good enough we consume them quickly
-        // and if not we got bigger problems
-        tx.set_overflow(true);
-        Self { tx, rx }
-    }
-
-    pub(crate) fn tx(&self) -> Sender<Msg> {
-        self.tx.clone()
-    }
-    pub(crate) fn rx(&self) -> Receiver<Msg> {
-        self.rx.clone()
-    }
-}
-#[derive(Debug, Clone)]
-pub struct Msg {
-    payload: EventPayload,
-    origin_uri: Option<EventOriginUri>,
-}
-
-impl Msg {
-    /// creates a new message
-    pub fn new(payload: EventPayload, origin_uri: Option<EventOriginUri>) -> Self {
-        Self {
-            payload,
-            origin_uri,
-        }
-    }
-}
 
 /// This is a system connector to collect and forward metrics.
 /// System metrics are fed to this connector and can be received by binding this connector's `out` port to a pipeline to handle metrics events.
@@ -72,8 +33,8 @@ impl Msg {
 /// There should be only one instance around all the time, identified by `tremor://localhost/connector/system::metrics/system`
 ///
 pub(crate) struct MetricsConnector {
-    tx: Sender<Msg>,
-    rx: Receiver<Msg>,
+    tx: Sender<MetricsMsg>,
+    rx: Receiver<MetricsMsg>,
 }
 
 impl MetricsConnector {
@@ -139,12 +100,12 @@ impl Connector for MetricsConnector {
 }
 
 pub(crate) struct MetricsSource {
-    rx: Receiver<Msg>,
+    rx: Receiver<MetricsMsg>,
     origin_uri: EventOriginUri,
 }
 
 impl MetricsSource {
-    pub(crate) fn new(rx: Receiver<Msg>) -> Self {
+    pub(crate) fn new(rx: Receiver<MetricsMsg>) -> Self {
         Self {
             rx,
             origin_uri: EventOriginUri {
@@ -182,11 +143,11 @@ impl Source for MetricsSource {
 }
 
 pub(crate) struct MetricsSink {
-    tx: Sender<Msg>,
+    tx: Sender<MetricsMsg>,
 }
 
 impl MetricsSink {
-    pub(crate) fn new(tx: Sender<Msg>) -> Self {
+    pub(crate) fn new(tx: Sender<MetricsMsg>) -> Self {
         Self { tx }
     }
 }
@@ -243,7 +204,7 @@ impl Sink for MetricsSink {
             origin_uri, data, ..
         } = event;
 
-        let metrics_msg = Msg::new(data, origin_uri);
+        let metrics_msg = MetricsMsg::new(data, origin_uri);
         let ack_or_fail = match self.tx.try_broadcast(metrics_msg) {
             Err(TrySendError::Closed(_)) => {
                 // channel is closed

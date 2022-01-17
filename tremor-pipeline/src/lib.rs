@@ -30,6 +30,7 @@ extern crate serde_derive;
 extern crate log;
 
 use crate::errors::{ErrorKind, Result};
+use async_broadcast::{broadcast, Receiver, Sender};
 use beef::Cow;
 use executable_graph::NodeConfig;
 use halfbrown::HashMap;
@@ -84,6 +85,59 @@ pub type NodeLookupFn = fn(
     windows: Option<HashMap<String, window::Impl>>,
     helper: &mut Helper,
 ) -> Result<OperatorNode>;
+
+/// A channel used to send metrics betwen different parts of the system
+#[derive(Clone, Debug)]
+pub struct MetricsChannel {
+    tx: Sender<MetricsMsg>,
+    rx: Receiver<MetricsMsg>,
+}
+
+impl MetricsChannel {
+    pub(crate) fn new(qsize: usize) -> Self {
+        let (mut tx, rx) = broadcast(qsize);
+        // We user overflow so that non collected messages can be removed
+        // Ffor Metrics it should be good enough we consume them quickly
+        // and if not we got bigger problems
+        tx.set_overflow(true);
+        Self { tx, rx }
+    }
+
+    /// Get the sender
+    pub fn tx(&self) -> Sender<MetricsMsg> {
+        self.tx.clone()
+    }
+    /// Get the receiver
+    pub fn rx(&self) -> Receiver<MetricsMsg> {
+        self.rx.clone()
+    }
+}
+/// Metrics message
+#[derive(Debug, Clone)]
+pub struct MetricsMsg {
+    /// The payload
+    pub payload: EventPayload,
+    /// The origin
+    pub origin_uri: Option<EventOriginUri>,
+}
+
+impl MetricsMsg {
+    /// creates a new message
+    pub fn new(payload: EventPayload, origin_uri: Option<EventOriginUri>) -> Self {
+        Self {
+            payload,
+            origin_uri,
+        }
+    }
+}
+
+/// Sender for metrics
+pub type MetricsSender = Sender<MetricsMsg>;
+
+lazy_static! {
+    /// TODO do we want to change this number or can we make it configurable?
+    pub static ref METRICS_CHANNEL: MetricsChannel = MetricsChannel::new(128);
+}
 
 /// Stringified numeric key
 /// from <https://github.com/serde-rs/json-benchmark/blob/master/src/prim_str.rs>

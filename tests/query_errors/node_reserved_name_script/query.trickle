@@ -1,8 +1,7 @@
-define script metrics
+define script out
 script
   event
 end;
-create script metrics;
+create script out;
 
-select event from in into metrics;
-select event from metrics into out;
+select event from in into out;

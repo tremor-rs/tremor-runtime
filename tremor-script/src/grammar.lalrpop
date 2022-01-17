@@ -352,7 +352,7 @@ DefineScript: StmtRaw<'input> = {
 
 DefinePipeline: PipelineDefinitionRaw<'input> = {
     <doc:DocComment> <start:@L> "define" "pipeline" <id:Ident> <from:("from" <Ports>)?> <into:("into" <Ports>)?> <params:DefinitionArgs> <pipeline:Pipeline> <end:@L> => {
-        PipelineDefinitionRaw { start, end, id: id.to_string(), pipeline, params, from, into, doc }
+        PipelineDefinitionRaw { start, end, id: id.to_string(), pipeline: pipeline.1, config: pipeline.0, params, from, into, doc }
     }
 }
 
@@ -478,8 +478,11 @@ EmbeddedScript: ScriptRaw<'input> = {
     "script" <exprs:Exprs> "end" => ScriptRaw::new(exprs, None),
 }
 
-Pipeline: StmtsRaw<'input> = {
-    "pipeline" <inner_stmts:PipelineCreateInner> "end" => inner_stmts,
+Pipeline: (ConfigRaw<'input>, StmtsRaw<'input>) = {
+    "pipeline" 
+      <cfg:ConfigDirectives?>
+      <inner_stmts:PipelineCreateInner>
+    "end" => (cfg.unwrap_or_default(), inner_stmts),
 }
 
 PipelineCreateInner : StmtsRaw<'input> = {
