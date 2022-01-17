@@ -26,12 +26,12 @@ pub use crate::connectors::utils::reconnect::{Attempt, ConnectionLostNotifier};
 pub use crate::connectors::{
     Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context, StreamDone, StreamIdGen,
 };
-pub use crate::errors::{Error, ErrorKind, Result};
+pub use crate::errors::{Error, Kind as ErrorKind, Result};
 pub use crate::utils::hostname;
 pub use crate::{Event, OpConfig, QSIZE};
 pub use std::sync::atomic::Ordering;
 pub use tremor_common::url::{
-    ports::{ERR, IN, METRICS, OUT},
+    ports::{ERR, IN, OUT},
     TremorUrl,
 };
 pub use tremor_pipeline::{

@@ -18,13 +18,14 @@ use crate::{
     op::{
         self,
         identity::PassthroughFactory,
-        prelude::{ERR, IN, METRICS, OUT},
+        prelude::{ERR, IN, OUT},
         trickle::{
             operator::TrickleOperator, script::Script, select::Select, simple_select::SimpleSelect,
             window,
         },
     },
     ConfigGraph, Connection, NodeConfig, NodeKind, Operator, OperatorNode, PortIndexMap,
+    METRICS_CHANNEL,
 };
 use beef::Cow;
 use halfbrown::HashMap;
@@ -47,11 +48,10 @@ use tremor_script::{
     srs, AggrRegistry, Registry, Value,
 };
 
-const BUILTIN_NODES: [(Cow<'static, str>, NodeKind); 4] = [
+const BUILTIN_NODES: [(Cow<'static, str>, NodeKind); 3] = [
     (IN, NodeKind::Input),
     (OUT, NodeKind::Output(OUT)),
     (ERR, NodeKind::Output(ERR)),
-    (METRICS, NodeKind::Output(METRICS)),
 ];
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -694,17 +694,12 @@ impl Query {
                 inputs2.insert(k.clone(), v);
             }
 
-            let metrics_idx = *nodes
-                .get(&METRICS)
-                .and_then(|idx| i2pos.get(idx))
-                .ok_or_else(|| Error::from("metrics node missing"))?;
             let mut exec = ExecutableGraph {
                 metrics: iter::repeat(NodeMetrics::default())
                     .take(graph.len())
                     .collect(),
                 stack: Vec::with_capacity(graph.len()),
                 id: pipeline_id.to_string(), // TODO make configurable
-                metrics_idx,
                 last_metrics: 0,
                 state: State::new(iter::repeat(Value::null()).take(graph.len()).collect()),
                 graph,
@@ -716,6 +711,7 @@ impl Query {
                 insights: Vec::new(),
                 source: Some(self.0.source.clone()),
                 dot: format!("{}", dot),
+                metrics_channel: METRICS_CHANNEL.tx(),
             };
             exec.optimize();
 
@@ -902,7 +898,7 @@ mod test {
         let g = q.to_pipe(&mut idgen).unwrap();
         assert!(g.inputs.contains_key("in/test_in"));
         assert_eq!(idgen.next_id(), first + g.graph.len() as u64 + 1);
-        let out = g.graph.get(5).unwrap();
+        let out = g.graph.get(4).unwrap();
         assert_eq!(out.id, "out/test_out");
         assert_eq!(out.kind, NodeKind::Output("test_out".into()));
     }
@@ -913,7 +909,6 @@ mod test {
         assert!(has_builtin_node_name(&"in".into()));
         assert!(has_builtin_node_name(&"out".into()));
         assert!(has_builtin_node_name(&"err".into()));
-        assert!(has_builtin_node_name(&"metrics".into()));
         assert!(!has_builtin_node_name(&"snot".into()));
         assert!(!has_builtin_node_name(&"badger".into()));
     }

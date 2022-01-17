@@ -14,7 +14,7 @@
 
 pub(crate) mod raw;
 
-use self::raw::{ArgsExprsRaw, DefinitioalArgsRaw, QueryRaw};
+use self::raw::{ArgsExprsRaw, ConfigRaw, DefinitioalArgsRaw, QueryRaw};
 
 use super::{
     error_generic, error_no_consts, error_no_locals,
@@ -245,6 +245,8 @@ pub struct PipelineDefinition<'script> {
     pub from: Vec<Ident<'script>>,
     /// Output Ports
     pub into: Vec<Ident<'script>>,
+    /// Raw config
+    pub raw_config: ConfigRaw<'script>,
     /// The raw pipeline statements
     pub raw_stmts: raw::StmtsRaw<'script>,
     /// The query in it's runnable form
@@ -291,7 +293,7 @@ impl<'script> PipelineDefinition<'script> {
         );
         let params = DefinitioalArgsRaw { args };
         let mut query = QueryRaw {
-            config: vec![],
+            config: self.raw_config.clone(),
             stmts: self.raw_stmts.clone(),
             params,
         }
