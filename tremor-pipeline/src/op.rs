@@ -72,7 +72,7 @@ impl EventAndInsights {
 
 /// The operator trait, this reflects the functionality of an operator in the
 /// pipeline graph
-pub trait Operator: std::fmt::Debug + Send {
+pub trait Operator: std::fmt::Debug + Send + Sync {
     /// Called on every Event. The event and input port are passed in,
     /// a vector of events is passed out.
     ///

@@ -12,22 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::atomic::Ordering;
-
-use crate::connectors::impls::metrics::{MetricsChannel, Msg};
-use async_broadcast::Sender;
 use beef::Cow;
 use halfbrown::HashMap;
 use tremor_common::url::ports::{ERR, IN, OUT};
+use tremor_pipeline::MetricsSender;
 use tremor_script::EventPayload;
 use tremor_value::prelude::*;
-
-pub(crate) type MetricsSender = Sender<Msg>;
-
-lazy_static! {
-    pub(crate) static ref METRICS_CHANNEL: MetricsChannel =
-        MetricsChannel::new(crate::QSIZE.load(Ordering::Relaxed));
-}
 
 /// metrics reporter for connector sources
 pub struct SourceReporter {
@@ -133,7 +123,9 @@ impl SinkReporter {
 // this is simple forwarding
 #[cfg(not(tarpaulin_include))]
 pub(crate) fn send(tx: &MetricsSender, metric: EventPayload, alias: &str) {
-    if let Err(_e) = tx.try_broadcast(Msg::new(metric, None)) {
+    use tremor_pipeline::MetricsMsg;
+
+    if let Err(_e) = tx.try_broadcast(MetricsMsg::new(metric, None)) {
         error!(
             "[Connector::{}] Error sending to system metrics connector.",
             &alias

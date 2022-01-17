@@ -47,8 +47,8 @@ macro_rules! test_cases {
 
     ($($file:ident),* ,) => {
         $(
-            #[test]
-            fn $file() -> Result<()> {
+            #[async_std::test]
+            async fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
                 let query_dir = [TEST_DIR,  stringify!($file)].iter().collect::<PathBuf>().to_string_lossy().to_string();
@@ -90,7 +90,7 @@ macro_rules! test_cases {
                     };
                     let mut r = Vec::new();
                     // run the pipeline, if an error occurs, dont stop but check for equivalence with `error.txt`
-                    match pipeline.enqueue("in", event, &mut r) {
+                    match pipeline.enqueue("in", event, &mut r).await {
                         Err(PipelineError(PipelineErrorKind::Script(e), o)) => {
                             if let Some(err) = err.as_ref() {
                                 let e = tremor_script::errors::Error(e, o);

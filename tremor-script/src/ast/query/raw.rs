@@ -219,6 +219,7 @@ pub struct PipelineDefinitionRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
     pub(crate) id: String,
+    pub(crate) config: ConfigRaw<'script>,
     pub(crate) params: DefinitioalArgsRaw<'script>,
     pub(crate) pipeline: StmtsRaw<'script>,
     pub(crate) from: Option<Vec<IdentRaw<'script>>>,
@@ -271,6 +272,7 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
         let params = self.params.up(helper)?;
 
         let pipeline_decl = PipelineDefinition {
+            raw_config: self.config,
             mid,
             node_id: NodeId::new(self.id, &helper.module),
             params,
