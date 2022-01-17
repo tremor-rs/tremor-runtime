@@ -440,7 +440,7 @@ pub(crate) async fn pipeline_task(
                 handle_cf_msg(msg, &mut pipeline, &inputs).await?;
             }
             M::F(Msg::Event { input, event }) => {
-                match pipeline.enqueue(&input, event, &mut eventset) {
+                match pipeline.enqueue(&input, event, &mut eventset).await {
                     Ok(()) => {
                         handle_insights(&mut pipeline, &inputs).await;
                         maybe_send(send_events(&mut eventset, &mut dests).await);

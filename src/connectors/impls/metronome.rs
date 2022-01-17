@@ -17,7 +17,7 @@ use tremor_common::time::nanotime;
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    /// Interval in milliseconds
+    /// Interval in nanoseconds
     pub interval: u64,
 }
 
@@ -46,9 +46,8 @@ impl ConnectorBuilder for Builder {
                 path: vec![config.interval.to_string()],
             };
 
-            let interval_ns = config.interval * 1_000_000;
             Ok(Box::new(Metronome {
-                interval_ns,
+                interval: config.interval,
                 origin_uri,
             }))
         } else {
@@ -59,7 +58,7 @@ impl ConnectorBuilder for Builder {
 
 #[derive(Clone, Debug)]
 pub struct Metronome {
-    interval_ns: u64,
+    interval: u64,
     origin_uri: EventOriginUri,
 }
 
@@ -78,7 +77,7 @@ impl Connector for Metronome {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = MetronomeSource::new(self.interval_ns, self.origin_uri.clone());
+        let source = MetronomeSource::new(self.interval, self.origin_uri.clone());
         builder.spawn(source, source_context).map(Some)
     }
 }

@@ -20,7 +20,7 @@ use crate::{
     errors::{Error, ErrorKind},
     influx_value,
     op::{prelude::IN, trickle::window},
-    ConfigMap, ExecPortIndexMap, NodeLookupFn,
+    ConfigMap, ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
@@ -262,9 +262,9 @@ pub struct ExecutableGraph {
     pub(crate) contraflow: Vec<usize>,
     pub(crate) port_indexes: ExecPortIndexMap,
     pub(crate) metrics: Vec<NodeMetrics>,
-    pub(crate) metrics_idx: usize,
     pub(crate) last_metrics: u64,
     pub(crate) metric_interval: Option<u64>,
+    pub(crate) metrics_channel: MetricsSender,
     /// snot
     pub insights: Vec<(usize, Event)>,
     /// source code of the pipeline
@@ -427,7 +427,7 @@ impl ExecutableGraph {
     ///
     /// # Errors
     /// Errors if the event can not be processed, or an operator fails
-    pub fn enqueue(
+    pub async fn enqueue(
         &mut self,
         stream_name: &str,
         event: Event,
@@ -441,8 +441,7 @@ impl ExecutableGraph {
         {
             let mut tags = HashMap::with_capacity(8);
             tags.insert("pipeline".into(), common_cow(&self.id).into());
-            // FIXME: send them to the metrics connector
-            self.enqueue_metrics("events", tags, event.ingest_ns);
+            self.send_metrics("events", tags, event.ingest_ns).await;
             self.last_metrics = event.ingest_ns;
         }
         let input = *stry!(self.inputs.get(stream_name).ok_or_else(|| {
@@ -505,7 +504,7 @@ impl ExecutableGraph {
         }
     }
 
-    fn enqueue_metrics(
+    async fn send_metrics(
         &mut self,
         metric_name: &str,
         mut tags: HashMap<Cow<'static, str>, Value<'static>>,
@@ -517,32 +516,30 @@ impl ExecutableGraph {
             });
             if let Ok(metrics) = unsafe { self.graph.get_unchecked(i) }.metrics(&tags, ingest_ns) {
                 for value in metrics {
-                    self.stack.push((
-                        self.metrics_idx,
-                        IN,
-                        Event {
-                            data: value.into(),
-                            ingest_ns,
-                            // TODO update this to point to tremor instance producing the metrics?
+                    if let Err(e) = self
+                        .metrics_channel
+                        .broadcast(MetricsMsg {
+                            payload: value.into(),
                             origin_uri: None,
-                            ..Event::default()
-                        },
-                    ));
+                        })
+                        .await
+                    {
+                        error!("Failed to send metrics: {}", e)
+                    };
                 }
             }
 
             for value in m.to_value(metric_name, &mut tags, ingest_ns) {
-                self.stack.push((
-                    self.metrics_idx,
-                    IN,
-                    Event {
-                        data: value.into(),
-                        ingest_ns,
-                        // TODO update this to point to tremor instance producing the metrics?
+                if let Err(e) = self
+                    .metrics_channel
+                    .broadcast(MetricsMsg {
+                        payload: value.into(),
                         origin_uri: None,
-                        ..Event::default()
-                    },
-                ));
+                    })
+                    .await
+                {
+                    error!("Failed to send metrics: {}", e)
+                };
             }
         }
     }
@@ -611,9 +608,9 @@ impl ExecutableGraph {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::op::{
-        identity::PassthroughFactory,
-        prelude::{METRICS, OUT},
+    use crate::{
+        op::{identity::PassthroughFactory, prelude::OUT},
+        METRICS_CHANNEL,
     };
     use tremor_script::prelude::*;
     fn pass(uid: u64, id: &'static str) -> OperatorNode {
@@ -623,7 +620,7 @@ mod test {
             kind: NodeKind::Operator,
             op_type: id.into(),
             op: PassthroughFactory::new_boxed().from_node(uid, &c).unwrap(),
-            uid: 0,
+            uid,
         }
     }
     #[test]
@@ -727,63 +724,66 @@ mod test {
         }
     }
 
-    fn test_metrics(mut metrics: Vec<Event>, n: u64) {
+    fn test_metrics(mut metrics: Vec<MetricsMsg>, n: u64) {
         // out/in
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "out");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "in");
 
         // all-2/out
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-2");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "out");
 
         // all-2/in
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-2");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "in");
 
         // all-1/out
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-1");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "out");
 
         // all-1/in
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-1");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "in");
 
         // out/in
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "in");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "out");
         assert!(metrics.is_empty());
     }
 
-    #[test]
-    fn eg_metrics() {
+    #[async_std::test]
+    async fn eg_metrics() {
         let mut in_n = pass(1, "in");
         in_n.kind = NodeKind::Input;
         let mut out_n = pass(2, "out");
         out_n.kind = NodeKind::Output(OUT);
-        let mut metrics_n = pass(3, "metrics");
-        metrics_n.kind = NodeKind::Output(METRICS);
 
         // The graph is in -> 1 -> 2 -> out, we pre-stack the edges since we do not
         // need to have order in here.
-        let graph = vec![in_n, all_op("all-1"), all_op("all-2"), out_n, metrics_n];
+        let graph = vec![
+            in_n,            // 0
+            all_op("all-1"), // 1
+            all_op("all-2"), // 2
+            out_n,           // 3
+        ];
 
         let mut inputs = HashMap::new();
         inputs.insert("in".into(), 0);
@@ -800,18 +800,12 @@ mod test {
             NodeMetrics::default(),
             NodeMetrics::default(),
             NodeMetrics::default(),
-            NodeMetrics::default(),
         ];
         // Create state for all nodes
         let state = State {
-            ops: vec![
-                Value::null(),
-                Value::null(),
-                Value::null(),
-                Value::null(),
-                Value::null(),
-            ],
+            ops: vec![Value::null(), Value::null(), Value::null(), Value::null()],
         };
+        let mut rx = METRICS_CHANNEL.rx();
         let mut g = ExecutableGraph {
             id: "test".into(),
             graph,
@@ -823,65 +817,63 @@ mod test {
             port_indexes,
             metrics,
             // The index of the metrics node in our pipeline
-            metrics_idx: 4,
             last_metrics: 0,
             metric_interval: Some(1),
             insights: vec![],
             source: None,
             dot: String::from(""),
+            metrics_channel: METRICS_CHANNEL.tx(),
         };
 
         // Test with one event
         let e = Event::default();
         let mut returns = Vec::new();
-        g.enqueue("in", e, &mut returns).unwrap();
+        g.enqueue("in", e, &mut returns).await.unwrap();
         assert_eq!(returns.len(), 1);
         returns.clear();
 
-        g.enqueue_metrics("test-metric", HashMap::new(), 123);
-        g.run(&mut returns).unwrap();
-        let (ports, metrics): (Vec<_>, Vec<_>) = returns.drain(..).unzip();
-        assert!(ports.iter().all(|v| v == "metrics"));
+        g.send_metrics("test-metric", HashMap::new(), 123).await;
+        let mut metrics = Vec::new();
+        while let Ok(m) = rx.try_recv() {
+            metrics.push(m);
+        }
         test_metrics(metrics, 1);
 
         // Test with two events
         let e = Event::default();
         let mut returns = Vec::new();
-        g.enqueue("in", e, &mut returns).unwrap();
+        g.enqueue("in", e, &mut returns).await.unwrap();
         assert_eq!(returns.len(), 1);
         returns.clear();
 
         let e = Event::default();
         let mut returns = Vec::new();
-        g.enqueue("in", e, &mut returns).unwrap();
+        g.enqueue("in", e, &mut returns).await.unwrap();
         assert_eq!(returns.len(), 1);
         returns.clear();
 
-        g.enqueue_metrics("test-metric", HashMap::new(), 123);
-        g.run(&mut returns).unwrap();
-        let (ports, metrics): (Vec<_>, Vec<_>) = returns.drain(..).unzip();
-        assert!(ports.iter().all(|v| v == "metrics"));
+        g.send_metrics("test-metric", HashMap::new(), 123).await;
+        let mut metrics = Vec::new();
+        while let Ok(m) = rx.try_recv() {
+            metrics.push(m);
+        }
         test_metrics(metrics, 3);
     }
 
-    #[test]
-    fn eg_optimize() {
-        let mut in_n = pass(1, "in");
+    #[async_std::test]
+    async fn eg_optimize() {
+        let mut in_n = pass(0, "in");
         in_n.kind = NodeKind::Input;
-        let mut out_n = pass(2, "out");
+        let mut out_n = pass(1, "out");
         out_n.kind = NodeKind::Output(OUT);
-        let mut metrics_n = pass(3, "metrics");
-        metrics_n.kind = NodeKind::Output(METRICS);
-
         // The graph is in -> 1 -> 2 -> out, we pre-stack the edges since we do not
         // need to have order in here.
         let graph = vec![
-            in_n,
-            all_op("all-1"),
-            pass(4, "nop"),
-            all_op("all-2"),
-            out_n,
-            metrics_n,
+            in_n,            // 0
+            all_op("all-1"), // 1
+            pass(2, "nop"),  // 2
+            all_op("all-2"), // 3
+            out_n,           // 4
         ];
 
         let mut inputs = HashMap::new();
@@ -901,12 +893,10 @@ mod test {
             NodeMetrics::default(),
             NodeMetrics::default(),
             NodeMetrics::default(),
-            NodeMetrics::default(),
         ];
         // Create state for all nodes
         let state = State {
             ops: vec![
-                Value::null(),
                 Value::null(),
                 Value::null(),
                 Value::null(),
@@ -925,18 +915,18 @@ mod test {
             port_indexes,
             metrics,
             // The index of the metrics node in our pipeline
-            metrics_idx: 5,
             last_metrics: 0,
-            metric_interval: Some(1),
+            metric_interval: None,
             insights: vec![],
             source: None,
             dot: String::from(""),
+            metrics_channel: METRICS_CHANNEL.tx(),
         };
         assert!(g.optimize().is_some());
         // Test with one event
         let e = Event::default();
         let mut returns = Vec::new();
-        g.enqueue("in", e, &mut returns).unwrap();
+        g.enqueue("in", e, &mut returns).await.unwrap();
         assert_eq!(returns.len(), 1);
         returns.clear();
 

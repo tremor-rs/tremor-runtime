@@ -194,7 +194,8 @@ impl Connector {
         validate_type(&defn, "codec_map", ValueType::Object)?;
         validate_type(&defn, "preprocessors", ValueType::Array)?;
         validate_type(&defn, "postprocessors", ValueType::Array)?;
-        validate_type(&defn, "metrics_interval_s", ValueType::U64)?;
+        validate_type(&defn, "metrics_interval_s", ValueType::U64)
+            .or_else(|_| validate_type(&defn, "metrics_interval_s", ValueType::I64))?;
 
         Ok(Connector {
             id,

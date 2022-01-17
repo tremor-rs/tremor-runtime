@@ -360,7 +360,7 @@ impl Run {
 
                 let mut continuation = vec![];
 
-                if let Err(e) = runnable.enqueue(
+                if let Err(e) = async_std::task::block_on(runnable.enqueue(
                     "in",
                     Event {
                         id: EventId::from_id(0, 0, *id),
@@ -369,7 +369,7 @@ impl Run {
                         ..Event::default()
                     },
                     &mut continuation,
-                ) {
+                )) {
                     match e.0 {
                         tremor_pipeline::errors::ErrorKind::Script(script_kind) => {
                             let script_error: tremor_script::errors::Error = script_kind.into();

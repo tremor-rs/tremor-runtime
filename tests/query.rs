@@ -42,8 +42,8 @@ macro_rules! test_cases {
 
     ($($file:ident),* ,) => {
         $(
-            #[test]
-            fn $file() -> Result<()> {
+            #[async_std::test]
+            async fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
                 let query_dir = concat!("tests/queries/", stringify!($file), "/").to_string();
@@ -74,7 +74,7 @@ macro_rules! test_cases {
                         ..Event::default()
                     };
                     let mut r = Vec::new();
-                    pipeline.enqueue("in", event, &mut r)?;
+                    pipeline.enqueue("in", event, &mut r).await?;
                     results.append(&mut r);
                 }
                 assert_eq!(results.len(), out_json.len(), "Number of events differ error");
