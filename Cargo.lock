@@ -6167,7 +6167,6 @@ version = "0.11.4"
 dependencies = [
  "anyhow",
  "async-std",
- "beef",
  "clap 3.0.7",
  "clap_complete",
  "criterion",
