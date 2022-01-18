@@ -122,7 +122,7 @@ suites:
         expects:
           - source: stdout
             contains:
-              - edit:completion:arg-completer[tremor] = [@words]{
+              - edit:completion:arg-completer[tremor]
       - name: |
           `tremor completions fish` returns fish completions
         command: tremor completions fish
