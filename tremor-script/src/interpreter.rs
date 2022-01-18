@@ -727,9 +727,7 @@ where
 {
     if let (Some(rep), Some(map)) = (replacement.as_object(), value.as_object_mut()) {
         for (k, v) in rep {
-            if v.is_null() {
-                map.remove(k);
-            } else if let Some(k) = map.get_mut(k) {
+            if let Some(k) = map.get_mut(k) {
                 stry!(merge_values(outer, inner, k, v));
             } else {
                 //NOTE: We got to clone here since we're duplicating values
