@@ -259,7 +259,7 @@ impl Test {
             base_directory,
         };
 
-        let found = GlobWalkerBuilder::new(&config.base_directory, "meta.json")
+        let found = GlobWalkerBuilder::new(&config.base_directory, "meta.yaml")
             .case_insensitive(true)
             .build()
             .map_err(|e| Error::from(format!("failed to walk directory `{}`: {}", self.path, e)))?;
@@ -274,7 +274,7 @@ impl Test {
         let start = nanotime();
 
         if found.is_empty() {
-            // No meta.json was found, therefore we might have the path to a
+            // No yaml.json was found, therefore we might have the path to a
             // specific folder. Let's apply some heuristics to see if we have
             // something runnable.
             let files = GlobWalkerBuilder::from_patterns(
