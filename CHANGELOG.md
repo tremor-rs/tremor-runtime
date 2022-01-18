@@ -90,6 +90,7 @@
 - for the elastic connector indexes have not to be set on the batch not the individual event so one batch can only be to a single index.
 - metronome interval is now in nanoseconds (as all other timings)
 - Most connectors require a specified codec now instead of using JSON as a default
+- `merge` no longer treats `null` in the spec as a delete option but rather as a normal value
 
 ## 0.11.4
 - Update to clap 3, this forced some breaking changes:
