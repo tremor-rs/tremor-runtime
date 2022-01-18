@@ -80,29 +80,36 @@ async fn run_bench(
     let tags = tag::resolve(config.base_directory.as_path(), root)?;
 
     let (matched, is_match) = config.matches(&tags);
+
     if is_match {
-        status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
-        let cwd = std::env::current_dir()?;
-        std::env::set_current_dir(Path::new(&root))?;
-        status::tags(&tags, Some(&matched), Some(&config.excludes))?;
-        let test_report = process::run_process(
-            "bench",
-            config.base_directory.as_path(),
-            &cwd.join(root),
-            &tags,
-        )
-        .await?;
+        let mut tags_file = PathBuf::from(root);
+        tags_file.push("tags.yaml");
+        if tags_file.exists() {
+            status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
+            let cwd = std::env::current_dir()?;
+            std::env::set_current_dir(Path::new(&root))?;
+            status::tags(&tags, Some(&matched), Some(&config.excludes))?;
+            let test_report = process::run_process(
+                "bench",
+                config.base_directory.as_path(),
+                &cwd.join(root),
+                &tags,
+            )
+            .await?;
 
-        // Restore cwd
-        file::set_current_dir(&cwd)?;
+            // Restore cwd
+            file::set_current_dir(&cwd)?;
 
-        status::duration(test_report.duration, "  ")?;
-        if test_report.stats.is_pass() {
-            stats.pass();
+            status::duration(test_report.duration, "  ")?;
+            if test_report.stats.is_pass() {
+                stats.pass();
+            } else {
+                stats.fail(&bench_root);
+            }
+            Ok((stats, Some(test_report)))
         } else {
-            stats.fail(&bench_root);
+            Ok((stats, None))
         }
-        Ok((stats, Some(test_report)))
     } else {
         stats.skip();
         status::h1(
@@ -274,17 +281,14 @@ impl Test {
         let start = nanotime();
 
         if found.is_empty() {
-            // No yaml.json was found, therefore we might have the path to a
+            // No meta.yaml was found, therefore we might have the path to a
             // specific folder. Let's apply some heuristics to see if we have
             // something runnable.
-            let files = GlobWalkerBuilder::from_patterns(
-                &config.base_directory,
-                &["*.{troy,tremor,trickle}"],
-            )
-            .case_insensitive(true)
-            .max_depth(1)
-            .build()?
-            .filter_map(std::result::Result::ok);
+            let files = GlobWalkerBuilder::from_patterns(&config.base_directory, &["*.{troy}"])
+                .case_insensitive(true)
+                .max_depth(1)
+                .build()?
+                .filter_map(std::result::Result::ok);
 
             if files.count() >= 1 {
                 let stats = stats::Stats::new();
