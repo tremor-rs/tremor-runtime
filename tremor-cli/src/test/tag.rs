@@ -127,10 +127,10 @@ impl TagFilter {
 
 // The intention is to find all tag files in the directories between base and other
 // basically if base is /a/b/c and other is /a/b/c/d/e/f we want to look for:
-// - /a/b/c/tags.json
-// - /a/b/c/d/tags.json
-// - /a/b/c/d/e/tags.json
-// - /a/b/c/d/e/f/tags.json
+// - /a/b/c/tags.yaml
+// - /a/b/c/d/tags.yaml
+// - /a/b/c/d/e/tags.yaml
+// - /a/b/c/d/e/f/tags.yaml
 pub(crate) fn resolve<P>(base: P, other: P) -> Result<TagFilter>
 where
     P: AsRef<Path>,
