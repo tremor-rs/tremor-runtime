@@ -86,6 +86,7 @@ struct MetronomeSource {
     interval_ns: u64,
     next: u64,
     origin_uri: EventOriginUri,
+    id: u64,
 }
 
 impl MetronomeSource {
@@ -94,6 +95,7 @@ impl MetronomeSource {
             interval_ns,
             next: nanotime() + interval_ns, // dummy placeholer
             origin_uri,
+            id: 0,
         }
     }
 }
@@ -108,6 +110,8 @@ impl Source for MetronomeSource {
         let now = nanotime();
         if self.next < now {
             self.next = now + self.interval_ns;
+            *pull_id = self.id;
+            self.id += 1;
             let data = literal!({
                 "onramp": "metronome",
                 "ingest_ns": now,
