@@ -1,6 +1,6 @@
 Error: 
     1 | define operator counter from generic::counter;
-    2 | create operator metrics from counter;
-      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Name `metrics` is reserved for built-in nodes, please use another name.
+    2 | create operator out from counter;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Name `out` is reserved for built-in nodes, please use another name.
     3 | 
-    4 | select event from in into metrics;
+    4 | select event from in into out;
