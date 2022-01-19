@@ -27,7 +27,7 @@ mod test {
     // use bytes::buf::buf_impl::Buf;
     use bytes::Buf;
 
-    use connectors::{ConnectorHarness, TestPipeline};
+    use super::connectors::{ConnectorHarness, TestPipeline};
     use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
     use signal_hook_async_std::Signals;
     use testcontainers::clients;
