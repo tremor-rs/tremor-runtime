@@ -63,6 +63,7 @@ impl<'script> CustomFn<'script> {
         self.is_const
     }
     pub(crate) fn can_inline(&self) -> bool {
+        use ImutExpr::{Invoke, Invoke1, Invoke2, Invoke3};
         if self.body.len() != 1 {
             return false;
         }
@@ -70,12 +71,7 @@ impl<'script> CustomFn<'script> {
             return true;
         }
         let i = match self.body.first() {
-            Some(Expr::Imut(
-                ImutExpr::Invoke1(i)
-                | ImutExpr::Invoke2(i)
-                | ImutExpr::Invoke3(i)
-                | ImutExpr::Invoke(i),
-            )) => i,
+            Some(Expr::Imut(Invoke1(i) | Invoke2(i) | Invoke3(i) | Invoke(i))) => i,
             _ => return false,
         };
         let mut a_idx = 0;
@@ -93,17 +89,13 @@ impl<'script> CustomFn<'script> {
         true
     }
     pub(crate) fn inline(&self, args: ImutExprs<'script>, mid: usize) -> Result<ImutExpr<'script>> {
+        use ImutExpr::{Invoke, Invoke1, Invoke2, Invoke3};
         if self.body.len() != 1 {
             return Err(format!("can't inline {}: too large body", self.name).into());
         }
 
         let i = match self.body.first() {
-            Some(Expr::Imut(
-                ImutExpr::Invoke1(i)
-                | ImutExpr::Invoke2(i)
-                | ImutExpr::Invoke3(i)
-                | ImutExpr::Invoke(i),
-            )) => i,
+            Some(Expr::Imut(Invoke1(i) | Invoke2(i) | Invoke3(i) | Invoke(i))) => i,
             Some(e) => {
                 return Err(format!("can't inline {}: bad expression: {:?}", self.name, e).into())
             }
@@ -119,10 +111,10 @@ impl<'script> CustomFn<'script> {
         i.args = args;
 
         Ok(match i.args.len() {
-            1 => ImutExpr::Invoke1(i),
-            2 => ImutExpr::Invoke2(i),
-            3 => ImutExpr::Invoke3(i),
-            _ => ImutExpr::Invoke(i),
+            1 => Invoke1(i),
+            2 => Invoke2(i),
+            3 => Invoke3(i),
+            _ => Invoke(i),
         })
     }
 
