@@ -172,16 +172,12 @@ impl Connector for Wal {
         builder.spawn(s, sink_context).map(Some)
     }
 
-    fn is_structured(&self) -> bool {
-        true
-    }
-
     async fn on_stop(&mut self, _ctx: &ConnectorContext) -> Result<()> {
         self.wal.lock().await.preserve_ack().await?;
         Ok(())
     }
 
-    fn default_codec(&self) -> &str {
-        "json"
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Structured
     }
 }

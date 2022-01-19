@@ -37,10 +37,6 @@ pub struct Exit {
 
 #[async_trait::async_trait]
 impl Connector for Exit {
-    fn is_structured(&self) -> bool {
-        true
-    }
-
     async fn create_sink(
         &mut self,
         sink_context: SinkContext,
@@ -51,8 +47,8 @@ impl Connector for Exit {
         Ok(Some(builder.spawn(sink, sink_context)?))
     }
 
-    fn default_codec(&self) -> &str {
-        "null"
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Structured
     }
 }
 

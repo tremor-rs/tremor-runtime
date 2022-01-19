@@ -66,10 +66,6 @@ impl ConnectorBuilder for Builder {
 
 #[async_trait::async_trait()]
 impl Connector for MetricsConnector {
-    fn is_structured(&self) -> bool {
-        true
-    }
-
     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         Ok(!self.tx.is_closed())
     }
@@ -93,9 +89,8 @@ impl Connector for MetricsConnector {
         let addr = builder.spawn(sink, sink_context)?;
         Ok(Some(addr))
     }
-
-    fn default_codec(&self) -> &str {
-        "json"
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Structured
     }
 }
 

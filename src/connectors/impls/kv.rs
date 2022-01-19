@@ -205,10 +205,6 @@ pub struct Kv {
 
 #[async_trait::async_trait]
 impl Connector for Kv {
-    fn is_structured(&self) -> bool {
-        true
-    }
-
     async fn create_source(
         &mut self,
         source_context: SourceContext,
@@ -245,8 +241,8 @@ impl Connector for Kv {
         builder.spawn(s, sink_context).map(Some)
     }
 
-    fn default_codec(&self) -> &str {
-        "json-sorted"
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Structured
     }
 }
 

@@ -142,8 +142,8 @@ impl Connector for TcpServer {
         builder.spawn(sink, ctx).map(Some)
     }
 
-    fn default_codec(&self) -> &str {
-        "json"
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Optional("json")
     }
 }
 
