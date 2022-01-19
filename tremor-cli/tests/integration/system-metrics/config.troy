@@ -37,7 +37,7 @@ flow
   end;
   create connector exit from connectors::exit;
   create connector metrics from connectors::metrics;
-  create connector stdio from connectors::tty;
+  create connector stdio from connectors::console;
 
   define pipeline main
   args
