@@ -6,7 +6,7 @@ define connector exit from exit;
 define connector metrics from metrics;
 
 ## A line seperated stdio based connector
-define connector tty from stdio
+define connector console from stdio
 with
   preprocessors = ["lines"],
   postprocessors = ["lines"],

@@ -23,7 +23,7 @@ flow
 
   create connector in;
   create pipeline main;
-  create connector out from connectors::tty;
+  create connector out from connectors::console;
   connect /connector/in to /pipeline/main;
   connect /pipeline/main to /connector/out;
 end;
