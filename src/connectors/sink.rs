@@ -51,7 +51,7 @@ use tremor_value::Value;
 
 pub use self::channel_sink::SinkMeta;
 
-use super::utils::metrics::SinkReporter;
+use super::{utils::metrics::SinkReporter, CodecReq};
 
 /// Result for a sink function that may provide insights or response.
 ///
@@ -424,7 +424,7 @@ impl SinkManagerBuilder {
 /// the builder then in a second step takes the source specific information to assemble and spawn the actual `SinkManager`.
 pub(crate) fn builder(
     config: &ConnectorConfig,
-    connector_default_codec: &str,
+    connector_default_codec: CodecReq,
     qsize: usize,
     metrics_reporter: SinkReporter,
 ) -> Result<SinkManagerBuilder> {
@@ -465,10 +465,26 @@ pub struct EventSerializer {
 impl EventSerializer {
     fn build(
         codec_config: Option<CodecConfig>,
-        default_codec: &str,
+        default_codec: CodecReq,
         postprocessor_configs: Vec<PostprocessorConfig>,
     ) -> Result<Self> {
-        let codec_config = codec_config.unwrap_or_else(|| CodecConfig::from(default_codec));
+        let codec_config = match default_codec {
+            CodecReq::Structured => {
+                if codec_config.is_some() {
+                    return Err(format!(
+                        "The connector {} can not be configured with a codec.",
+                        "FIXME: identify sink"
+                    )
+                    .into());
+                } else {
+                    CodecConfig::from("null")
+                }
+            }
+            CodecReq::Required => codec_config
+                .ok_or_else(|| format!("Missing codec for connector {}", "FIXME: identify sink"))?,
+            CodecReq::Optional(opt) => codec_config.unwrap_or_else(|| CodecConfig::from(opt)),
+        };
+
         let codec = codec::resolve(&codec_config)?;
         let postprocessors = make_postprocessors(postprocessor_configs.as_slice())?;
         Ok(Self {

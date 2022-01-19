@@ -195,7 +195,7 @@ impl Connector for StdStreamConnector {
         builder.spawn(source, source_context).map(Some)
     }
 
-    fn default_codec(&self) -> &str {
-        "json"
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Optional("json")
     }
 }

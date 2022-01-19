@@ -81,8 +81,8 @@ impl ConnectorBuilder for Builder {
 
 #[async_trait::async_trait()]
 impl Connector for UdpClient {
-    fn default_codec(&self) -> &str {
-        "json"
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Optional("json")
     }
 
     async fn create_sink(

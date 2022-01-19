@@ -191,8 +191,8 @@ impl Connector for Bench {
             .map(Some)
     }
 
-    fn default_codec(&self) -> &str {
-        "json"
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Optional("json")
     }
 }
 
