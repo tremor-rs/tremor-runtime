@@ -300,7 +300,7 @@ impl Connector for S3Connector {
     }
 
     fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Optional("json")
+        CodecReq::Required
     }
 }
 

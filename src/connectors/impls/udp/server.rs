@@ -61,7 +61,7 @@ impl ConnectorBuilder for Builder {
 #[async_trait::async_trait()]
 impl Connector for UdpServer {
     fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Optional("json")
+        CodecReq::Required
     }
 
     async fn create_source(
