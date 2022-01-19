@@ -78,7 +78,8 @@ impl Addr {
         &self.alias
     }
 
-    pub(crate) async fn send_insight(&self, event: Event) -> Result<()> {
+    /// send a contraflow insight message back down the pipeline
+    pub async fn send_insight(&self, event: Event) -> Result<()> {
         Ok(self.cf_addr.send(CfMsg::Insight(event)).await?)
     }
 

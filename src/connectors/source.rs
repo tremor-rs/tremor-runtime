@@ -21,6 +21,7 @@ pub use channel_source::{ChannelSource, ChannelSourceRuntime};
 
 use async_std::channel::unbounded;
 use async_std::task;
+use simd_json::Mutable;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::Display;
@@ -1230,7 +1231,7 @@ fn build_events(
                 let (port, payload) = match line_value {
                     Ok(decoded) => (port.unwrap_or(&OUT).clone(), decoded),
                     Err(None) => continue,
-                    Err(Some(e)) => (ERR, make_error(alias, &e, stream_state.stream_id, pull_id)),
+                    Err(Some(e)) => (ERR, make_error(alias, &e, stream_state.stream_id, pull_id, meta.clone())),
                 };
                 let event = build_event(
                     stream_state,
@@ -1246,7 +1247,7 @@ fn build_events(
         }
         Err(e) => {
             // preprocessor error
-            let err_payload = make_error(alias, &e, stream_state.stream_id, pull_id);
+            let err_payload = make_error(alias, &e, stream_state.stream_id, pull_id, meta.clone());
             let event = build_event(
                 stream_state,
                 pull_id,
@@ -1290,7 +1291,7 @@ fn build_last_events(
                 let (port, payload) = match line_value {
                     Ok(decoded) => (port.unwrap_or(&OUT).clone(), decoded),
                     Err(None) => continue,
-                    Err(Some(e)) => (ERR, make_error(alias, &e, stream_state.stream_id, pull_id)),
+                    Err(Some(e)) => (ERR, make_error(alias, &e, stream_state.stream_id, pull_id, meta.clone())),
                 };
                 let event = build_event(
                     stream_state,
@@ -1306,7 +1307,7 @@ fn build_last_events(
         }
         Err(e) => {
             // preprocessor error
-            let err_payload = make_error(alias, &e, stream_state.stream_id, pull_id);
+            let err_payload = make_error(alias, &e, stream_state.stream_id, pull_id, meta.clone());
             let event = build_event(
                 stream_state,
                 pull_id,
@@ -1321,7 +1322,7 @@ fn build_last_events(
 }
 
 /// create an error payload
-fn make_error(connector_alias: &str, error: &Error, stream_id: u64, pull_id: u64) -> EventPayload {
+fn make_error(connector_alias: &str, error: &Error, stream_id: u64, pull_id: u64, mut meta: Value<'static>) -> EventPayload {
     let e_string = error.to_string();
     let data = literal!({
         "error": e_string.clone(),
@@ -1329,7 +1330,7 @@ fn make_error(connector_alias: &str, error: &Error, stream_id: u64, pull_id: u64
         "stream_id": stream_id,
         "pull_id": pull_id
     });
-    let meta = literal!({ "error": e_string });
+    meta.try_insert("error", e_string);
     EventPayload::from(ValueAndMeta::from_parts(data, meta))
 }
 
