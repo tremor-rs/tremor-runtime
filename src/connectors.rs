@@ -597,10 +597,10 @@ async fn connector_task(
                     // react on the connection being lost
                     // immediately try to reconnect if we are not in draining state.
                     //
-                    // TODO: this might lead to very fast retry loops if the connection is established as connector.connect returns successful
+                    // TODO: this might lead to very fast retry loops if the connection is established as connector.connect() returns successful
                     //       but in the next instant fails and sends this message.
                     connectivity = Connectivity::Disconnected;
-                    info!("[Connector::{}] Disconnected.", &connector_addr.alias);
+                    info!("{} Connection lost.", &ctx);
                     connector_addr.send_sink(SinkMsg::ConnectionLost).await?;
                     connector_addr
                         .send_source(SourceMsg::ConnectionLost)
@@ -608,20 +608,18 @@ async fn connector_task(
 
                     // reconnect if running - wait with reconnect if paused (until resume)
                     if connector_state == InstanceState::Running {
-                        info!(
-                            "[Connector::{}] Triggering reconnect.",
-                            &connector_addr.alias
-                        );
-                        connector_addr.sender.send(Msg::Reconnect).await?;
+                        // ensure we don't reconnect in a hot loop
+                        // ensure we adhere to the reconnect strategy, waiting and possibly not reconnecting at all
+                        reconnect.enqueue_retry(&ctx).await;
                     }
                 }
                 Msg::Reconnect => {
                     // reconnect if we are below max_retries, otherwise bail out and fail the connector
-                    info!("[Connector::{}] Connecting...", &connector_addr.alias);
+                    info!("{} Connecting...", &ctx);
                     let (new, will_retry) = reconnect.attempt(connector.as_mut(), &ctx).await?;
                     match (&connectivity, &new) {
                         (Connectivity::Disconnected, Connectivity::Connected) => {
-                            info!("[Connector::{}] Connected.", &connector_addr.alias);
+                            info!("{} Connected.", &ctx);
                             // notify sink
                             connector_addr
                                 .send_sink(SinkMsg::ConnectionEstablished)
@@ -637,7 +635,7 @@ async fn connector_task(
                             }
                         }
                         (Connectivity::Connected, Connectivity::Disconnected) => {
-                            info!("[Connector::{}] Disconnected.", &connector_addr.alias);
+                            info!("{} Disconnected.", &ctx);
                             connector_addr.send_sink(SinkMsg::ConnectionLost).await?;
                             connector_addr
                                 .send_source(SourceMsg::ConnectionLost)
@@ -645,8 +643,8 @@ async fn connector_task(
                         }
                         _ => {
                             debug!(
-                                "[Connector::{}] No change: {:?}",
-                                &connector_addr.alias, &new
+                                "{} No change after reconnect: {:?}",
+                                &ctx, &new
                             );
                         }
                     }

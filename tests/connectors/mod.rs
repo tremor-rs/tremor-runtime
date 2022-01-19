@@ -32,7 +32,7 @@ use tremor_common::{
 use tremor_pipeline::{CbAction, EventId};
 use tremor_runtime::{
     config,
-    connectors::{self, builtin_connector_types, sink::SinkMsg, Connectivity, StatusReport},
+    connectors::{self, builtin_connector_types, sink::SinkMsg, source::SourceMsg, Connectivity, StatusReport},
     errors::Result,
     instance::InstanceState,
     pipeline::{self, CfMsg},
@@ -124,7 +124,7 @@ impl ConnectorHarness {
 
         // send a CBAction::open to the connector, so it starts pulling data
         self.addr
-            .send_source(connectors::source::SourceMsg::Cb(
+            .send_source(SourceMsg::Cb(
                 CbAction::Open,
                 EventId::default(),
             ))
@@ -239,6 +239,10 @@ impl ConnectorHarness {
     pub(crate) async fn send_to_sink(&self, event: Event, port: Cow<'static, str>) -> Result<()> {
         self.addr.send_sink(SinkMsg::Event { event, port }).await
     }
+
+    pub(crate) async fn send_contraflow(&self, cb: CbAction, id: EventId) -> Result<()> {
+        self.addr.send_source(SourceMsg::Cb(cb, id)).await
+    }
 }
 
 pub(crate) struct TestPipeline {
@@ -261,6 +265,10 @@ impl TestPipeline {
             rx_mgmt,
             addr,
         }
+    }
+
+    pub(crate) async fn send_contraflow(&self, event: Event) -> Result<()> {
+        self.addr.send_insight(event).await
     }
 
     pub(crate) fn get_contraflow_events(&self) -> Result<Vec<Event>> {
@@ -296,11 +304,19 @@ impl TestPipeline {
     /// get a single event from the pipeline
     pub(crate) async fn get_event(&self) -> Result<Event> {
         loop {
-            match *self.rx.recv().timeout(Duration::from_secs(2)).await?? {
-                pipeline::Msg::Event { event, .. } => break Ok(event),
-                // filter out signals
-                pipeline::Msg::Signal(signal) => {
-                    debug!("Received signal: {:?}", signal.kind)
+            match self.rx.recv().timeout(Duration::from_secs(2)).await {
+                Ok(Ok(msg)) => {
+                    match *msg {
+                        pipeline::Msg::Event { event, .. } => break Ok(event),
+                        // filter out signals
+                        pipeline::Msg::Signal(signal) => debug!("Received signal: {:?}", signal.kind)
+                    }
+                },
+                Ok(Err(e)) => {
+                    return Err(e.into());
+                }
+                Err(_) => {
+                    return Err("Did not receive an event for 2 seconds".into());
                 }
             }
         }
