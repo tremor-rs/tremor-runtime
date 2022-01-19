@@ -52,6 +52,8 @@ use tremor_pipeline::{
 use tremor_value::{literal, Value};
 use value_trait::Builder;
 
+use super::CodecReq;
+
 /// The default poll interval for `try_recv` on channels in connectors
 pub const DEFAULT_POLL_INTERVAL: u64 = 10;
 /// A duration for the default poll interval
@@ -395,15 +397,32 @@ impl SourceManagerBuilder {
 pub fn builder(
     connector_uid: u64,
     config: &ConnectorConfig,
-    connector_default_codec: &str,
+    connector_default_codec: CodecReq,
     qsize: usize,
     source_metrics_reporter: SourceReporter,
 ) -> Result<SourceManagerBuilder> {
     let preprocessor_configs = config.preprocessors.clone().unwrap_or_default();
-    let codec_config = config
-        .codec
-        .clone()
-        .unwrap_or_else(|| CodecConfig::from(connector_default_codec));
+    let codec_config = match connector_default_codec {
+        CodecReq::Structured => {
+            if config.codec.is_some() {
+                return Err(format!(
+                    "The connector {} can not be configured with a codec.",
+                    config.connector_type
+                )
+                .into());
+            } else {
+                CodecConfig::from("null")
+            }
+        }
+        CodecReq::Required => config
+            .codec
+            .clone()
+            .ok_or_else(|| format!("Missing codec for connector {}", config.connector_type))?,
+        CodecReq::Optional(opt) => config
+            .codec
+            .clone()
+            .unwrap_or_else(|| CodecConfig::from(opt)),
+    };
     let streams = Streams::new(connector_uid, codec_config, preprocessor_configs)?;
 
     Ok(SourceManagerBuilder {

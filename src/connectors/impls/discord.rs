@@ -84,8 +84,8 @@ impl std::fmt::Debug for Discord {
 
 #[async_trait::async_trait()]
 impl Connector for Discord {
-    fn is_structured(&self) -> bool {
-        true
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Structured
     }
 
     async fn create_source(
@@ -145,10 +145,6 @@ impl Connector for Discord {
         // set up new client task
         self.client_task = Some(task::spawn(async move { client.start().await }));
         Ok(true)
-    }
-
-    fn default_codec(&self) -> &str {
-        "json"
     }
 }
 

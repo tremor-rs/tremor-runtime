@@ -50,11 +50,8 @@ pub struct DnsClient {
 
 #[async_trait::async_trait()]
 impl Connector for DnsClient {
-    fn is_structured(&self) -> bool {
-        true
-    }
-    fn default_codec(&self) -> &str {
-        "json"
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Structured
     }
 
     async fn create_source(

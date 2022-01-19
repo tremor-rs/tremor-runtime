@@ -80,14 +80,6 @@ pub struct Crononome {
 
 #[async_trait::async_trait()]
 impl Connector for Crononome {
-    fn is_structured(&self) -> bool {
-        true
-    }
-
-    fn default_codec(&self) -> &str {
-        "json"
-    }
-
     async fn create_source(
         &mut self,
         source_context: SourceContext,
@@ -95,6 +87,10 @@ impl Connector for Crononome {
     ) -> Result<Option<SourceAddr>> {
         let source = CrononomeSource::new(self.entries.clone());
         builder.spawn(source, source_context).map(Some)
+    }
+
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Structured
     }
 }
 struct CrononomeSource {

@@ -375,8 +375,10 @@ async fn connector_task(
         config.metrics_interval_s,
     );
 
-    let default_codec = connector.default_codec();
-    if connector.is_structured() && (config.codec.is_some() || config.codec_map.is_some()) {
+    let default_codec = connector.codec_requirements();
+    if connector.codec_requirements() == CodecReq::Structured
+        && (config.codec.is_some() || config.codec_map.is_some())
+    {
         return Err(format!(
             "[Connector::{}] is a structured connector and can't be configured with a codec",
             alias
@@ -1008,12 +1010,6 @@ pub trait Connector: Send {
         false
     }
 
-    /// This connector works with structured data and does not allow the use
-    /// of codecs.
-    fn is_structured(&self) -> bool {
-        false
-    }
-
     /// create a source part for this connector if applicable
     ///
     /// This function is called exactly once upon connector creation.
@@ -1084,8 +1080,19 @@ pub trait Connector: Send {
         Ok(())
     }
 
-    /// returns the default codec for this connector
-    fn default_codec(&self) -> &str;
+    /// Returns the codec requirements for the connector
+    fn codec_requirements(&self) -> CodecReq;
+}
+
+/// Specifeis if a connector requires a codec
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum CodecReq {
+    /// No codec can be provided for this connector it always returns structured data
+    Structured,
+    /// A codec must be provided for this connector
+    Required,
+    /// A codec can be provided for this connector otherwise the default is used
+    Optional(&'static str),
 }
 
 /// the type of a connector

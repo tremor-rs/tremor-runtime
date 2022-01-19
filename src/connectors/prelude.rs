@@ -24,7 +24,8 @@ pub use crate::connectors::source::{
 };
 pub use crate::connectors::utils::reconnect::{Attempt, ConnectionLostNotifier};
 pub use crate::connectors::{
-    Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context, StreamDone, StreamIdGen,
+    CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context, StreamDone,
+    StreamIdGen,
 };
 pub use crate::errors::{Error, Kind as ErrorKind, Result};
 pub use crate::utils::hostname;
