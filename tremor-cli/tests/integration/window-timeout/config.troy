@@ -40,7 +40,7 @@ flow
   create pipeline or_exit from out_or_exit;
   create connector in from integration::read_file;
   create connector out from integration::write_file;
-  create connector debug from connectors::stdio;
+  create connector debug from connectors::tty;
   create connector exit from integration::exit;
 
   connect /connector/in to /pipeline/or_exit;

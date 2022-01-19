@@ -230,6 +230,6 @@ impl Connector for WsClient {
     }
 
     fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Optional("json")
+        CodecReq::Required
     }
 }

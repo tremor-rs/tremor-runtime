@@ -16,7 +16,7 @@ define connector read_file from file
 args
     file = "in.json"
 with 
-    codec = "json",
+    codec = "json-sorted",
     config = {
         "path": args.file,
         "mode": "read"
