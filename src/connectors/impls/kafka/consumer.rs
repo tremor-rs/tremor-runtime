@@ -22,13 +22,13 @@ use async_std::prelude::StreamExt;
 use async_std::task::{self, JoinHandle};
 use halfbrown::HashMap;
 use indexmap::IndexMap;
+use log::Level::Debug;
 use rdkafka::config::ClientConfig;
-use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, StreamConsumer, Rebalance};
+use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, Rebalance, StreamConsumer};
 use rdkafka::error::KafkaError;
 use rdkafka::message::{BorrowedMessage, Headers, Message};
 use rdkafka::{ClientContext, Offset, TopicPartitionList};
 use rdkafka_sys::RDKafkaErrorCode;
-use log::Level::Debug;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -153,7 +153,7 @@ impl ConnectorBuilder for Builder {
 
 struct TremorConsumerContext {
     ctx: SourceContext,
-    connect_tx: Sender<Result<bool>>
+    connect_tx: Sender<Result<bool>>,
 }
 
 impl ClientContext for TremorConsumerContext {
@@ -223,13 +223,14 @@ impl ConsumerContext for TremorConsumerContext {
                         )
                     })
                     .collect();
-                info!("{} Rebalance Revoked: {}", &self.ctx, offset_strings.join(" "));
+                info!(
+                    "{} Rebalance Revoked: {}",
+                    &self.ctx,
+                    offset_strings.join(" ")
+                );
             }
             Rebalance::Error(err_info) => {
-                warn!(
-                    "{} Post Rebalance error {}",
-                    &self.ctx, err_info
-                );
+                warn!("{} Post Rebalance error {}", &self.ctx, err_info);
             }
         }
     }
@@ -242,10 +243,7 @@ impl ConsumerContext for TremorConsumerContext {
         match result {
             Ok(_) => {
                 if offsets.count() > 0 {
-                    debug!(
-                        "{} Offsets committed successfully",
-                        &self.ctx
-                    );
+                    debug!("{} Offsets committed successfully", &self.ctx);
                     if log_enabled!(Debug) {
                         let offset_strings: Vec<String> = offsets
                             .elements()
@@ -259,20 +257,13 @@ impl ConsumerContext for TremorConsumerContext {
                                 )
                             })
                             .collect();
-                        debug!(
-                            "{} Offsets: {}",
-                            &self.ctx,
-                            offset_strings.join(" ")
-                        );
+                        debug!("{} Offsets: {}", &self.ctx, offset_strings.join(" "));
                     }
                 }
             }
             // this is actually not an error - we just didnt have any offset to commit
             Err(KafkaError::ConsumerCommit(rdkafka_sys::RDKafkaErrorCode::NoOffset)) => {}
-            Err(e) => warn!(
-                "{} Error while committing offsets: {}",
-                &self.ctx, e
-            ),
+            Err(e) => warn!("{} Error while committing offsets: {}", &self.ctx, e),
         };
     }
 }
@@ -281,7 +272,7 @@ impl TremorConsumerContext {
     fn new(source_ctx: &SourceContext, connect_tx: Sender<Result<bool>>) -> Self {
         Self {
             ctx: source_ctx.clone(),
-            connect_tx
+            connect_tx,
         }
     }
 }
@@ -310,7 +301,7 @@ impl Connector for KafkaConsumerConnector {
     }
 
     fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Optional("json")
+        CodecReq::Required
     }
 }
 
@@ -425,14 +416,14 @@ impl Source for KafkaConsumerSource {
 
         let source_tx = self.source_tx.clone();
         let source_ctx = ctx.clone();
-        
+
         let consumer_origin_uri = self.origin_uri.clone();
         let topic_resolver = self.topic_resolver.clone();
         let handle = task::spawn(async move {
             info!("{} Consumer started.", &source_ctx);
             let mut stream = task_consumer.stream();
             let mut connect_result_channel = Some(connect_result_tx);
-            
+
             loop {
                 match stream.next().await {
                     Some(Ok(kafka_msg)) => {
@@ -464,7 +455,6 @@ impl Source for KafkaConsumerSource {
                         source_tx.send((reply, Some(pull_id))).await?;
                     }
                     Some(Err(e)) => {
-
                         // handle kafka error
                         match e {
                             // Those we consider fatal
@@ -553,7 +543,10 @@ impl Source for KafkaConsumerSource {
                 if let Some((topic, partition, offset)) =
                     self.topic_resolver.resolve_topic(stream_id, pull_id)
                 {
-                    debug!("{} Failing: [topic={}, partition={} offset={:?}]", &ctx, topic, partition, offset);
+                    debug!(
+                        "{} Failing: [topic={}, partition={} offset={:?}]",
+                        &ctx, topic, partition, offset
+                    );
                     consumer.seek(topic, partition, offset, self.seek_timeout)?;
                 } else {
                     error!("{} Could not seek back to failed event with stream={}, pull_id={}. Unable to detect topic from internal state.", &ctx, stream_id, pull_id);
@@ -664,7 +657,12 @@ impl TopicResolver {
         self.resolve_stream_and_pull_ids_inner(topic, partition, offset)
     }
 
-    fn resolve_stream_and_pull_ids_inner(&self, topic: &str, partition: i32, offset: i64) -> (u64, u64) {
+    fn resolve_stream_and_pull_ids_inner(
+        &self,
+        topic: &str,
+        partition: i32,
+        offset: i64,
+    ) -> (u64, u64) {
         let topic_idx = self.0.get(topic).copied().unwrap_or_default();
         let stream_id = topic_idx | ((partition as u64) << 32);
         (stream_id, offset as u64)
@@ -674,25 +672,27 @@ impl TopicResolver {
 #[cfg(test)]
 mod test {
 
-    use super::{TopicResolver, Offset};
+    use super::{Offset, TopicResolver};
     use proptest::prelude::*;
 
     fn topics_and_index() -> BoxedStrategy<(Vec<String>, usize)> {
-        proptest::collection::hash_set(proptest::string::string_regex(".+").unwrap(), 1..100_usize).prop_flat_map(|topics| {
-            let len = topics.len();
-            (Just(topics.into_iter().collect::<Vec<_>>()), 0..len)
-        }).boxed()
+        proptest::collection::hash_set(proptest::string::string_regex(".+").unwrap(), 1..100_usize)
+            .prop_flat_map(|topics| {
+                let len = topics.len();
+                (Just(topics.into_iter().collect::<Vec<_>>()), 0..len)
+            })
+            .boxed()
     }
     proptest! {
         #[test]
         fn topic_resolver_prop(
-            (topics, topic_idx) in topics_and_index(), 
+            (topics, topic_idx) in topics_and_index(),
             partition in 0..i32::MAX,
             offset in 0..i64::MAX
         ) {
             let topic = topics.get(topic_idx).unwrap().to_string();
             let resolver = TopicResolver::new(topics);
-            
+
             let (stream_id, pull_id) = resolver.resolve_stream_and_pull_ids_inner(topic.as_str(), partition, offset);
             let res = resolver.resolve_topic(stream_id, pull_id);
             assert!(res.is_some());
@@ -702,5 +702,4 @@ mod test {
             assert_eq!(Offset::Offset(offset), resolved_offset);
         }
     }
-    
 }
