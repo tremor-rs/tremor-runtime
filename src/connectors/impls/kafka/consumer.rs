@@ -18,16 +18,17 @@ use std::time::Duration;
 use super::SmolRuntime;
 use crate::connectors::prelude::*;
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
-use async_std::stream::StreamExt;
+use async_std::prelude::StreamExt;
 use async_std::task::{self, JoinHandle};
 use halfbrown::HashMap;
 use indexmap::IndexMap;
 use rdkafka::config::ClientConfig;
-use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, StreamConsumer};
+use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, StreamConsumer, Rebalance};
 use rdkafka::error::KafkaError;
 use rdkafka::message::{BorrowedMessage, Headers, Message};
 use rdkafka::{ClientContext, Offset, TopicPartitionList};
 use rdkafka_sys::RDKafkaErrorCode;
+use log::Level::Debug;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -152,11 +153,12 @@ impl ConnectorBuilder for Builder {
 
 struct TremorConsumerContext {
     ctx: SourceContext,
+    connect_tx: Sender<Result<bool>>
 }
 
 impl ClientContext for TremorConsumerContext {
     fn stats(&self, statistics: rdkafka::Statistics) {
-        // FIXME: expose as metrics to the source
+        // TODO: expose as metrics to the source
         info!("{} Client stats: {:?}", &self.ctx, statistics);
     }
 
@@ -167,38 +169,119 @@ impl ClientContext for TremorConsumerContext {
             | KafkaError::ClientConfig(_, _, _, _)
             | KafkaError::ClientCreation(_)
             // TODO: what else?
-            | KafkaError::Global(RDKafkaErrorCode::UnknownTopicOrPartition | RDKafkaErrorCode::UnknownTopic) =
+            | KafkaError::Global(RDKafkaErrorCode::UnknownTopicOrPartition | RDKafkaErrorCode::UnknownTopic | RDKafkaErrorCode::AllBrokersDown) =
             error
         {
-            let notifier = self.ctx.notifier().clone();
+            let connect_tx = self.connect_tx.clone();
             let alias = self.ctx.alias.clone();
-            async_std::task::spawn(async move {
-                if let Err(e) = notifier.notify().await {
-                    error!(
-                        "[Source::{}] Error notifying the connector of a failure: {}",
-                        &alias, e
-                    );
-                }
-            });
+            if let Err(e) = connect_tx.try_send(Err(format!("Kafka Error: {}: {}", &error, reason).into())) {
+                error!(
+                    "[Source::{}] Error notifying the connect method of a failure: {}",
+                    &alias, e
+                )
+            }
         }
     }
 }
 
 impl ConsumerContext for TremorConsumerContext {
-    fn post_rebalance<'a>(&self, _rebalance: &rdkafka::consumer::Rebalance<'a>) {}
+    fn post_rebalance<'a>(&self, rebalance: &rdkafka::consumer::Rebalance<'a>) {
+        match rebalance {
+            Rebalance::Assign(tpl) => {
+                let offset_strings: Vec<String> = tpl
+                    .elements()
+                    .iter()
+                    .map(|elem| {
+                        format!(
+                            "[Topic: {}, Partition: {}, Offset: {:?}]",
+                            elem.topic(),
+                            elem.partition(),
+                            elem.offset()
+                        )
+                    })
+                    .collect();
+                // if we got something assigned, this is a good indicator that we are connected
+                if !offset_strings.is_empty() {
+                    let _ = self.connect_tx.try_send(Ok(true));
+                }
+                info!(
+                    "{} Rebalance Assigned: {}",
+                    &self.ctx,
+                    offset_strings.join(" ")
+                );
+            }
+            Rebalance::Revoke(tpl) => {
+                let offset_strings: Vec<String> = tpl
+                    .elements()
+                    .iter()
+                    .map(|elem| {
+                        format!(
+                            "[Topic: {}, Partition: {}, Offset: {:?}]",
+                            elem.topic(),
+                            elem.partition(),
+                            elem.offset()
+                        )
+                    })
+                    .collect();
+                info!("{} Rebalance Revoked: {}", &self.ctx, offset_strings.join(" "));
+            }
+            Rebalance::Error(err_info) => {
+                warn!(
+                    "{} Post Rebalance error {}",
+                    &self.ctx, err_info
+                );
+            }
+        }
+    }
 
     fn commit_callback(
         &self,
-        _result: rdkafka::error::KafkaResult<()>,
-        _offsets: &rdkafka::TopicPartitionList,
+        result: rdkafka::error::KafkaResult<()>,
+        offsets: &rdkafka::TopicPartitionList,
     ) {
+        match result {
+            Ok(_) => {
+                if offsets.count() > 0 {
+                    debug!(
+                        "{} Offsets committed successfully",
+                        &self.ctx
+                    );
+                    if log_enabled!(Debug) {
+                        let offset_strings: Vec<String> = offsets
+                            .elements()
+                            .iter()
+                            .map(|elem| {
+                                format!(
+                                    "[Topic: {}, Partition: {}, Offset: {:?}]",
+                                    elem.topic(),
+                                    elem.partition(),
+                                    elem.offset()
+                                )
+                            })
+                            .collect();
+                        debug!(
+                            "{} Offsets: {}",
+                            &self.ctx,
+                            offset_strings.join(" ")
+                        );
+                    }
+                }
+            }
+            // this is actually not an error - we just didnt have any offset to commit
+            Err(KafkaError::ConsumerCommit(rdkafka_sys::RDKafkaErrorCode::NoOffset)) => {}
+            Err(e) => warn!(
+                "{} Error while committing offsets: {}",
+                &self.ctx, e
+            ),
+        };
     }
 }
 
-impl From<&SourceContext> for TremorConsumerContext {
-    fn from(source_ctx: &SourceContext) -> Self {
+impl TremorConsumerContext {
+    fn new(source_ctx: &SourceContext, connect_tx: Sender<Result<bool>>) -> Self {
         Self {
             ctx: source_ctx.clone(),
+            connect_tx
         }
     }
 }
@@ -318,7 +401,8 @@ impl Source for KafkaConsumerSource {
             "{} Connecting using rdkafka -1x{:08x}, {}",
             &ctx, version_n, version_s
         );
-        let consumer_context = TremorConsumerContext::from(ctx);
+        let (connect_result_tx, connect_result_rx) = bounded(1);
+        let consumer_context = TremorConsumerContext::new(ctx, connect_result_tx.clone());
         let consumer: TremorConsumer = self.client_config.create_with_context(consumer_context)?;
 
         let topics: Vec<&str> = self
@@ -341,13 +425,20 @@ impl Source for KafkaConsumerSource {
 
         let source_tx = self.source_tx.clone();
         let source_ctx = ctx.clone();
+        
         let consumer_origin_uri = self.origin_uri.clone();
         let topic_resolver = self.topic_resolver.clone();
         let handle = task::spawn(async move {
+            info!("{} Consumer started.", &source_ctx);
             let mut stream = task_consumer.stream();
+            let mut connect_result_channel = Some(connect_result_tx);
+            
             loop {
                 match stream.next().await {
                     Some(Ok(kafka_msg)) => {
+                        if let Some(tx) = connect_result_channel.take() {
+                            let _ = tx.try_send(Ok(true));
+                        }
                         // handle kafka msg
                         let (stream_id, pull_id) =
                             topic_resolver.resolve_stream_and_pull_ids(&kafka_msg);
@@ -373,6 +464,7 @@ impl Source for KafkaConsumerSource {
                         source_tx.send((reply, Some(pull_id))).await?;
                     }
                     Some(Err(e)) => {
+
                         // handle kafka error
                         match e {
                             // Those we consider fatal
@@ -382,8 +474,13 @@ impl Source for KafkaConsumerSource {
                                 | RDKafkaErrorCode::UnknownTopic),
                             ) => {
                                 error!("{} Subscription failed: {}.", &source_ctx, e);
-                                // Initiate reconnect (if configured)
-                                source_ctx.notifier().notify().await?;
+
+                                if let Some(tx) = connect_result_channel.take() {
+                                    let _ = tx.try_send(Err("Subscription failed".into()));
+                                } else {
+                                    // Initiate reconnect (if configured)
+                                    source_ctx.notifier().notify().await?;
+                                }
                                 break;
                             }
                             err => {
@@ -399,7 +496,11 @@ impl Source for KafkaConsumerSource {
                             "{} Consumer is done consuming. Initiating reconnect...",
                             &source_ctx
                         );
-                        source_ctx.notifier().notify().await?;
+                        if let Some(tx) = connect_result_channel.take() {
+                            let _ = tx.try_send(Err("Consumer done".into()));
+                        } else {
+                            source_ctx.notifier().notify().await?;
+                        }
                         break;
                     }
                 }
@@ -408,7 +509,7 @@ impl Source for KafkaConsumerSource {
         });
         self.consumer_task = Some(handle);
 
-        Ok(true)
+        connect_result_rx.recv().await?
     }
 
     async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
@@ -452,6 +553,7 @@ impl Source for KafkaConsumerSource {
                 if let Some((topic, partition, offset)) =
                     self.topic_resolver.resolve_topic(stream_id, pull_id)
                 {
+                    debug!("{} Failing: [topic={}, partition={} offset={:?}]", &ctx, topic, partition, offset);
                     consumer.seek(topic, partition, offset, self.seek_timeout)?;
                 } else {
                     error!("{} Could not seek back to failed event with stream={}, pull_id={}. Unable to detect topic from internal state.", &ctx, stream_id, pull_id);
@@ -496,10 +598,11 @@ impl Source for KafkaConsumerSource {
         Ok(())
     }
 
-    async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
+    async fn on_stop(&mut self, ctx: &SourceContext) -> Result<()> {
         // stop the consumer task
         if let Some(consumer_task) = self.consumer_task.take() {
             consumer_task.cancel().await;
+            info!("{} Consumer stopped.", &ctx);
         }
         // clear out the consumer
         self.consumer = None;
@@ -533,8 +636,8 @@ impl TopicResolver {
 
     /// Resolve topic, partition and message offset for the given `stream_id` and `pull_id`
     fn resolve_topic(&self, stream_id: u64, pull_id: u64) -> Option<(&str, i32, Offset)> {
-        let topic_id = stream_id >> 32;
-        let partition = (stream_id & 0xfffffffe) as i32;
+        let partition = (stream_id >> 32) as i32;
+        let topic_id = stream_id & 0xffffffff;
         // insertion order should be the same as the actual indices,
         // so the index lookup can be misused as a reverse lookup
         self.0.get_index(topic_id as usize).map(|(topic, idx)| {
@@ -555,10 +658,49 @@ impl TopicResolver {
     /// The pull id only needs to be unique per stream
     /// with a stream being a partition, we can simply use the offset.
     fn resolve_stream_and_pull_ids(&self, kafka_msg: &BorrowedMessage<'_>) -> (u64, u64) {
-        let partition = kafka_msg.partition() as u64;
+        let partition = kafka_msg.partition();
         let topic = kafka_msg.topic();
         let offset = kafka_msg.offset();
-        let stream_id = self.0.get(topic).copied().unwrap_or_default() & (partition << 32);
+        self.resolve_stream_and_pull_ids_inner(topic, partition, offset)
+    }
+
+    fn resolve_stream_and_pull_ids_inner(&self, topic: &str, partition: i32, offset: i64) -> (u64, u64) {
+        let topic_idx = self.0.get(topic).copied().unwrap_or_default();
+        let stream_id = topic_idx | ((partition as u64) << 32);
         (stream_id, offset as u64)
     }
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::{TopicResolver, Offset};
+    use proptest::prelude::*;
+
+    fn topics_and_index() -> BoxedStrategy<(Vec<String>, usize)> {
+        proptest::collection::hash_set(proptest::string::string_regex(".+").unwrap(), 1..100_usize).prop_flat_map(|topics| {
+            let len = topics.len();
+            (Just(topics.into_iter().collect::<Vec<_>>()), 0..len)
+        }).boxed()
+    }
+    proptest! {
+        #[test]
+        fn topic_resolver_prop(
+            (topics, topic_idx) in topics_and_index(), 
+            partition in 0..i32::MAX,
+            offset in 0..i64::MAX
+        ) {
+            let topic = topics.get(topic_idx).unwrap().to_string();
+            let resolver = TopicResolver::new(topics);
+            
+            let (stream_id, pull_id) = resolver.resolve_stream_and_pull_ids_inner(topic.as_str(), partition, offset);
+            let res = resolver.resolve_topic(stream_id, pull_id);
+            assert!(res.is_some());
+            let (resolved_topic, resolved_partition, resolved_offset) = res.unwrap();
+            assert_eq!(topic.as_str(), resolved_topic);
+            assert_eq!(partition, resolved_partition);
+            assert_eq!(Offset::Offset(offset), resolved_offset);
+        }
+    }
+    
 }
