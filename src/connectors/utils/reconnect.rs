@@ -308,7 +308,7 @@ impl ReconnectRuntime {
 mod tests {
     // use crate::connectors::quiescence::QuiescenceBeacon;
 
-    use crate::connectors::quiescence::QuiescenceBeacon;
+    use crate::connectors::{quiescence::QuiescenceBeacon, CodecReq};
 
     use super::*;
 
@@ -322,8 +322,8 @@ mod tests {
             self.answer.ok_or("Blergh!".into())
         }
 
-        fn default_codec(&self) -> &str {
-            "json"
+        fn codec_requirements(&self) -> CodecReq {
+            CodecReq::Optional("json")
         }
     }
 

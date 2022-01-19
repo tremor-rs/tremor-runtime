@@ -226,8 +226,8 @@ impl Connector for KafkaConsumerConnector {
         builder.spawn(source, source_context).map(Some)
     }
 
-    fn default_codec(&self) -> &str {
-        "json"
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Optional("json")
     }
 }
 
@@ -377,9 +377,7 @@ impl Source for KafkaConsumerSource {
                         match e {
                             // Those we consider fatal
                             KafkaError::MessageConsumption(
-                                e
-                                @
-                                (RDKafkaErrorCode::UnknownTopicOrPartition
+                                e @ (RDKafkaErrorCode::UnknownTopicOrPartition
                                 | RDKafkaErrorCode::TopicAuthorizationFailed
                                 | RDKafkaErrorCode::UnknownTopic),
                             ) => {

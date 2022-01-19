@@ -184,8 +184,8 @@ impl Connector for File {
         Ok(true)
     }*/
 
-    fn default_codec(&self) -> &str {
-        "json"
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Required
     }
 }
 

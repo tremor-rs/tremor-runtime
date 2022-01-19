@@ -67,8 +67,8 @@ pub struct Cb {
 
 #[async_trait::async_trait()]
 impl Connector for Cb {
-    fn default_codec(&self) -> &str {
-        "json"
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Optional("json")
     }
 
     async fn create_source(
