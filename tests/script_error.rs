@@ -138,6 +138,7 @@ test_cases!(
     pp_cyclic,
     pp_nest_cyclic,
     // INSERT
+    lexer_invalid_pp,
     const_expr_id_into_arr,
     const_expr_range_on_non_array,
     const_expr_index_into_int,
