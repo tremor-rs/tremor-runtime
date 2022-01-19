@@ -1,0 +1,4 @@
+Error: 
+    1 | #!this makes no sense!
+      | ^^^^^^^^^^^^^^^^^^^^^^ Found the token `#!this makes no sense!` but expected one of `!`, `"`, `$`, `(`, `+`, `-`, `<<`, `<doc-comment>`, `<ident>`, `<mod-comment>`, `[`, `absent`, `args`, `bool`, `const`, `drop`, `emit`, `event`, `float`, `fn`, `for`, `group`, `"""`, `int`, `intrinsic`, `let`, `match`, `merge`, `mod`, `nil`, `not`, `patch`, `present`, `recur`, `state`, `window`, `{`
+    2 | event
