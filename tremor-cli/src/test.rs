@@ -78,7 +78,6 @@ async fn run_bench(
 ) -> Result<(stats::Stats, Option<report::TestReport>)> {
     let bench_root = root.to_string_lossy();
     let tags = tag::resolve(config.base_directory.as_path(), root)?;
-
     let (matched, is_match) = config.matches(&tags);
 
     if is_match {
@@ -165,9 +164,7 @@ async fn run_integration(
 ) -> Result<(stats::Stats, Option<report::TestReport>)> {
     let base = config.base_directory.as_path();
     let bench_root = root.to_string_lossy();
-    let mut tags = tag::resolve(base, root)?;
-    let name = basename(&bench_root);
-    tags.includes.insert(name);
+    let tags = tag::resolve(base, root)?;
 
     let (matched, is_match) = config.matches(&tags);
     if is_match {

@@ -3,5 +3,5 @@
     "tags": [
         "bench"
     ],
-    "includes": "{bench,through}*"
+    "includes": "*"
 }

@@ -1,6 +1,0 @@
-[
-    "pipeline",
-    "passthrough",
-    "binflux",
-    "bench_pipe_passthrough_binflux"
-]
