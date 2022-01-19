@@ -90,7 +90,7 @@ flow
     file = "ok.log"
   end;
   create connector exit from integration::exit;
-  create connector stdio from connectors::tty;
+  create connector stdio from connectors::console;
   create connector elastic;
 
   create pipeline main;

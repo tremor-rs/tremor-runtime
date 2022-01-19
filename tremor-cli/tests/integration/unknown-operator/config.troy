@@ -18,7 +18,7 @@ flow
     select event from unknown into out;
   end;
   
-  create connector in from connectors::tty;
+  create connector in from connectors::console;
   create connector exit from connectors::exit;
   create pipeline main;
   
