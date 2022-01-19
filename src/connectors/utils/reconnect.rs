@@ -19,7 +19,7 @@ use crate::connectors::source::SourceMsg;
 use crate::connectors::{Addr, Connectivity, Connector, ConnectorContext, Context, Msg};
 use crate::errors::{Error, Result};
 use async_std::channel::{bounded, Sender};
-use async_std::task;
+use async_std::task::{self, JoinHandle};
 use futures::future::{join3, ready, FutureExt};
 use std::convert::identity;
 use std::fmt::Display;
@@ -32,21 +32,39 @@ enum ShouldRetry {
 }
 
 trait ReconnectStrategy: std::marker::Send {
+    /// Compute the next interval in milliseconds.
+    /// 
+    /// Upon the first reconnect attempt or upon connection loss after a successful connect attempt, `current` is `None`.
+    /// Further reconnect retries will have the last interval set.
     fn next_interval(&mut self, current: Option<u64>, attempt: &Attempt) -> u64;
-    /// should we actually do a reconnect attempt?
-    ///
-    /// will throw a `MaxRetriesExceeded` error
-    fn should_retry(&mut self, attempt: &Attempt) -> ShouldRetry;
+    /// Should we actually do a reconnect attempt?
+    fn should_reconnect(&mut self, attempt: &Attempt) -> ShouldRetry;
 }
 
+/// Strategy that only reconnects once when the connection was lost
+/// and does no further reconnect attempts when the connection could not be re-established.
 struct FailFast {}
 impl ReconnectStrategy for FailFast {
-    fn next_interval(&mut self, current: Option<u64>, _attempt: &Attempt) -> u64 {
-        current.unwrap_or(0)
+    fn next_interval(&mut self, current: Option<u64>, attempt: &Attempt) -> u64 {
+        if attempt.since_last_success() == 0 {
+            // we lost the connection and this is the first reconnect attempt
+            // lets wait for a second to avoid hot loops
+            1000
+        } else {
+            // further reconnect retries are forbidden by the logic in `should_reconnect`
+            current.unwrap_or(0)
+        }
     }
 
-    fn should_retry(&mut self, _attempt: &Attempt) -> ShouldRetry {
-        ShouldRetry::No("`None` Reconnect strategy.".to_string())
+    fn should_reconnect(&mut self, attempt: &Attempt) -> ShouldRetry {
+        if attempt.since_last_success() == 0 {
+            // we lost the connection and this is the first reconnect attempt
+            // this one we let through
+            ShouldRetry::Yes
+        } else {
+            // no further reconnect attempts
+            ShouldRetry::No("`None` Reconnect strategy.".to_string())
+        }
     }
 }
 
@@ -68,7 +86,7 @@ impl ReconnectStrategy for SimpleBackoff {
         }
     }
 
-    fn should_retry(&mut self, attempt: &Attempt) -> ShouldRetry {
+    fn should_reconnect(&mut self, attempt: &Attempt) -> ShouldRetry {
         if attempt.since_last_success() < self.max_retries {
             ShouldRetry::Yes
         } else {
@@ -137,6 +155,7 @@ pub(crate) struct ReconnectRuntime {
     strategy: Box<dyn ReconnectStrategy>,
     addr: Addr,
     notifier: ConnectionLostNotifier,
+    retry_task: Option<JoinHandle<()>>,
     alias: String,
 }
 
@@ -200,6 +219,7 @@ impl ReconnectRuntime {
             strategy,
             addr,
             notifier,
+            retry_task: None,
             alias,
         }
     }
@@ -254,7 +274,7 @@ impl ReconnectRuntime {
                     &format!("Error connecting the connector ({})", self.attempt),
                 );
 
-                let will_retry = self.update_and_retry();
+                let will_retry = self.update_and_retry(ctx).await;
                 Ok((Connectivity::Disconnected, will_retry))
             }
         }
@@ -262,11 +282,15 @@ impl ReconnectRuntime {
 
     /// update internal state for the current failed connect attempt
     /// and spawn a retry task
-    fn update_and_retry(&mut self) -> bool {
+    async fn update_and_retry(&mut self, ctx: &ConnectorContext) -> bool {
         // update internal state
         self.attempt.on_failure();
-        // check if we can retry according to strategy
-        if let ShouldRetry::No(msg) = self.strategy.should_retry(&self.attempt) {
+        self.enqueue_retry(ctx).await
+    }
+
+    pub(crate) async fn enqueue_retry(&mut self, _ctx: &ConnectorContext) -> bool {
+        // FIXME: ensure we have only 1 retry wait task running
+        if let ShouldRetry::No(msg) = self.strategy.should_reconnect(&self.attempt) {
             warn!("[Connector::{}] Not reconnecting: {}", &self.alias, msg);
             false
         } else {
@@ -278,20 +302,28 @@ impl ReconnectRuntime {
             );
             self.interval_ms = Some(interval);
 
-            // spawn retry
-            // ALLOW: we are not interested in fractions here
-            let duration = Duration::from_millis(interval);
-            let sender = self.addr.sender.clone();
-            let url = self.alias.clone();
-            task::spawn(async move {
-                task::sleep(duration).await;
-                if sender.send(Msg::Reconnect).await.is_err() {
-                    error!(
-                        "[Connector::{}] Error sending reconnect msg to connector.",
-                        &url
-                    );
-                }
-            });
+            // spawn a retry only if there is no retry currently pending
+            let spawn_retry = if let Some(retry_handle) = self.retry_task.as_mut() {
+                // poll once to check if the task is done
+                futures::poll!(retry_handle).is_ready()
+            } else {
+                true
+            };
+            if spawn_retry {
+                let duration = Duration::from_millis(interval);
+                let sender = self.addr.sender.clone();
+                let url = self.alias.clone();
+                self.retry_task = Some(task::spawn(async move {
+                    task::sleep(duration).await;
+                    if sender.send(Msg::Reconnect).await.is_err() {
+                        error!(
+                            "[Connector::{}] Error sending reconnect msg to connector.",
+                            &url
+                        );
+                    }
+                }));
+            }
+            
             true
         }
     }
@@ -351,21 +383,24 @@ mod tests {
     fn failfast_strategy() -> Result<()> {
         let mut strategy = FailFast {};
         let mut attempt = Attempt::default();
+        // the first one we let through
         assert_eq!(
-            ShouldRetry::No("`None` Reconnect strategy.".to_string()),
-            strategy.should_retry(&attempt)
+            ShouldRetry::Yes,
+            strategy.should_reconnect(&attempt)
         );
-        assert_eq!(0, strategy.next_interval(None, &attempt));
+        // but we wait for a second
+        assert_eq!(1000, strategy.next_interval(None, &attempt));
         attempt.on_failure();
         assert_eq!(0, strategy.next_interval(Some(0), &attempt));
+        // no retries
         assert_eq!(
             ShouldRetry::No("`None` Reconnect strategy.".to_string()),
-            strategy.should_retry(&attempt)
+            strategy.should_reconnect(&attempt)
         );
         attempt.on_failure();
         assert_eq!(
             ShouldRetry::No("`None` Reconnect strategy.".to_string()),
-            strategy.should_retry(&attempt)
+            strategy.should_reconnect(&attempt)
         );
         attempt.on_success();
         Ok(())
