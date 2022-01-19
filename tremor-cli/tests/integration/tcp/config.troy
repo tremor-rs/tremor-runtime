@@ -7,6 +7,7 @@ flow
   define connector tcp_client from tcp_client
   with
     postprocessors = ["lines"],
+    codec = "json",
     config = {
       "host": "127.0.0.1",
       "port": 65535,
@@ -26,6 +27,7 @@ flow
   define connector tcp_server from tcp_server
   with
     preprocessors = ["lines"],
+    codec = "json",
     config = {
       "host": "0.0.0.0",
       "port": 65535,

@@ -5,6 +5,7 @@ flow
   define connector in from ws_server
   with
     preprocessors = ["lines-no-buffer"],
+    codec = "json",
     config = {
       "host": "127.0.0.1",
       "port": 4242

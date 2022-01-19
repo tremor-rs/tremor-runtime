@@ -277,6 +277,6 @@ impl Connector for WsServer {
     }
 
     fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Optional("json")
+        CodecReq::Required
     }
 }

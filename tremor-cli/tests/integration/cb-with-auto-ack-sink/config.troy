@@ -13,13 +13,8 @@ flow
     }
   end;
 
-  define connector stdio from stdio
-  with
-    postprocessors = ["lines"]
-  end;
-
   create connector cb_in;
-  create connector stdio;
+  create connector stdio from connectors::tty;
   create pipeline passthrough from pipelines::passthrough;
  
   connect /connector/cb_in/out to /pipeline/passthrough/in;

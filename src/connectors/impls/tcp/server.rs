@@ -143,7 +143,7 @@ impl Connector for TcpServer {
     }
 
     fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Optional("json")
+        CodecReq::Required
     }
 }
 
