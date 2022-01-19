@@ -178,106 +178,108 @@ impl ErrorKind {
             DoublePipelineCreate, DoubleStream, EmptyInterpolation, EmptyScript, ExtraToken,
             Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst,
             InvalidDrop, InvalidEmit, InvalidExtractor, InvalidFloatLiteral, InvalidFn,
-            InvalidHexLiteral, InvalidIntLiteral, InvalidMod, InvalidRecur, InvalidToken,
-            InvalidUnary, InvalidUtf8Sequence, Io, JsonError, MergeTypeConflict, MissingEffectors,
-            MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed,
-            NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
-            ParseIntError, ParserError, PatchKeyExists, PipelineUnknownPort, PreprocessorError,
-            QueryNodeDuplicateName, QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit,
-            RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
-            UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
-            UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
-            UpdateKeyMissing, Utf8Error, ValueError,
+            InvalidHexLiteral, InvalidIntLiteral, InvalidMod, InvalidPP, InvalidRecur,
+            InvalidToken, InvalidUnary, InvalidUtf8Sequence, Io, JsonError, MergeTypeConflict,
+            MissingEffectors, MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit,
+            NoConstsAllowed, NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant,
+            NotFound, Oops, ParseIntError, ParserError, PatchKeyExists, PipelineUnknownPort,
+            PreprocessorError, QueryNodeDuplicateName, QueryNodeReservedName,
+            QueryStreamNotDefined, RecursionLimit, RuntimeError, TailingHereDoc, TypeConflict,
+            UnexpectedCharacter, UnexpectedEndOfStream, UnexpectedEscapeCode, UnrecognizedToken,
+            UnterminatedExtractor, UnterminatedHereDoc, UnterminatedIdentLiteral,
+            UnterminatedInterpolation, UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error,
+            ValueError,
         };
         match self {
             NoClauseHit(outer)
             | Oops(outer, _, _)
             | QueryNodeDuplicateName(outer, _)
             | QueryNodeReservedName(outer, _) => (Some(outer.expand_lines(2)), Some(*outer)),
-            ArrayOutOfRange(outer, inner, _, _)
+            AggrInAggr(outer, inner)
+            | ArrayOutOfRange(outer, inner, _, _)
             | AssignIntoArray(outer, inner)
+            | AssignToConst(outer, inner)
             | BadAccessInEvent(outer, inner, _, _)
-            | BadAccessInState(outer, inner, _, _)
             | BadAccessInGlobal(outer, inner, _, _)
             | BadAccessInLocal(outer, inner, _, _)
+            | BadAccessInState(outer, inner, _, _)
             | BadArity(outer, inner, _, _, _, _)
             | BadArrayIndex(outer, inner, _, _)
             | BadType(outer, inner, _, _, _)
             | BinaryDrop(outer, inner)
             | BinaryEmit(outer, inner)
             | DecreasingRange(outer, inner, _, _)
+            | DeployArgNotSpecified(outer, inner, _)
+            | DeployArtefactNotDefined(outer, inner, _, _)
+            | DeployRequiredArgDoesNotResolve(outer, inner, _)
+            | DoubleConst(outer, inner, _)
+            | DoublePipelineCreate(outer, inner, _)
+            | DoubleStream(outer, inner, _)
+            | EmptyInterpolation(outer, inner, _)
             | ExtraToken(outer, inner, _)
-            | PatchKeyExists(outer, inner, _)
+            | Generic(outer, inner, _)
             | InvalidAssign(outer, inner)
             | InvalidBinary(outer, inner, _, _, _)
             | InvalidBitshift(outer, inner)
+            | InvalidConst(outer, inner)
             | InvalidDrop(outer, inner)
             | InvalidEmit(outer, inner)
-            | InvalidRecur(outer, inner)
-            | RecursionLimit(outer, inner)
-            | InvalidConst(outer, inner)
-            | InvalidMod(outer, inner)
-            | InvalidFn(outer, inner)
-            | AssignToConst(outer, inner)
-            | DoubleConst(outer, inner, _)
-            | DoubleStream(outer, inner, _)
-            | DoublePipelineCreate(outer, inner, _)
             | InvalidExtractor(outer, inner, _, _, _)
             | InvalidFloatLiteral(outer, inner, _)
+            | InvalidFn(outer, inner)
             | InvalidHexLiteral(outer, inner, _)
             | InvalidIntLiteral(outer, inner, _)
+            | InvalidMod(outer, inner)
+            | InvalidPP(outer, inner, _)
+            | InvalidRecur(outer, inner)
             | InvalidToken(outer, inner)
             | InvalidUnary(outer, inner, _, _)
+            | InvalidUtf8Sequence(outer, inner, _)
             | MergeTypeConflict(outer, inner, _, _)
             | MissingEffectors(outer, inner)
             | MissingFunction(outer, inner, _, _, _)
             | MissingModule(outer, inner, _, _)
             | ModuleNotFound(outer, inner, _, _)
+            | NoConstsAllowed(outer, inner)
             | NoEventReferencesAllowed(outer, inner)
             | NoLocalsAllowed(outer, inner)
-            | NoConstsAllowed(outer, inner)
-            | QueryStreamNotDefined(outer, inner, _)
+            | NotConstant(outer, inner)
+            | PatchKeyExists(outer, inner, _)
             | PipelineUnknownPort(outer, inner, _, _)
+            | QueryStreamNotDefined(outer, inner, _)
+            | RecursionLimit(outer, inner)
             | RuntimeError(outer, inner, _, _, _, _)
+            | TailingHereDoc(outer, inner, _, _)
             | TypeConflict(outer, inner, _, _)
             | UnexpectedCharacter(outer, inner, _, _)
             | UnexpectedEscapeCode(outer, inner, _, _)
-            | InvalidUtf8Sequence(outer, inner, _)
             | UnrecognizedToken(outer, inner, _, _)
             | UnterminatedExtractor(outer, inner, _)
-            | UnterminatedIdentLiteral(outer, inner, _)
-            | UnterminatedStringLiteral(outer, inner, _)
-            | UpdateKeyMissing(outer, inner, _)
             | UnterminatedHereDoc(outer, inner, _)
+            | UnterminatedIdentLiteral(outer, inner, _)
             | UnterminatedInterpolation(outer, inner, _)
-            | EmptyInterpolation(outer, inner, _)
-            | TailingHereDoc(outer, inner, _, _)
-            | Generic(outer, inner, _)
-            | AggrInAggr(outer, inner)
-            | NotConstant(outer, inner)
-            | DeployArtefactNotDefined(outer, inner, _, _)
-            | DeployArgNotSpecified(outer, inner, _)
-            | DeployRequiredArgDoesNotResolve(outer, inner, _) => (Some(*outer), Some(*inner)),
+            | UnterminatedStringLiteral(outer, inner, _)
+            | UpdateKeyMissing(outer, inner, _) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
+            | AccessError(_)
+            | CantSetArgsConst
+            | CantSetGroupConst
+            | CantSetWindowConst
             | Common(_)
             | Grok(_)
             | Io(_)
             | JsonError(_)
-            | ValueError(_)
-            | AccessError(_)
             | Msg(_)
             | NoObjectError(_)
             | NotFound
             | ParseIntError(_)
             | ParserError(_)
             | PreprocessorError(_)
+            | Self::__Nonexhaustive { .. }
             | UnexpectedEndOfStream
             | Utf8Error(_)
-            | CantSetWindowConst
-            | CantSetArgsConst
-            | CantSetGroupConst
-            | Self::__Nonexhaustive { .. } => (Some(Range::default()), None),
+            | ValueError(_) => (Some(Range::default()), None),
         }
     }
     pub(crate) fn token(&self) -> Option<UnfinishedToken> {
@@ -313,7 +315,8 @@ impl ErrorKind {
         };
         match self {
             UnrecognizedToken(outer, inner, t, _) if t.is_empty() && inner.0.absolute() == outer.1.absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
-            UnrecognizedToken(_, _, t, _) if t == "default" || t == "case" => Some("You might have a trailing `,` in the prior statement".into()),
+            UnrecognizedToken(_, _, t, _) if t == "##"  || t == "##"   => Some(format!("`{t}` is as doc comment, it needs to be followed by a statement, did you want to use `#` here?")),
+            UnrecognizedToken(_, _, t, _) if t == "default" || t == "case" => Some("You might have a trailing `;` in the prior statement".into()),
             UnrecognizedToken(_, _, t, l) if !matches!(lexer::ident_to_token(t), lexer::Token::Ident(_, _)) && l.contains(&("`<ident>`".to_string())) => Some(format!("It looks like you tried to use the '{}' as a ident, consider quoting it as `{}` to make it an identifier.", t, t)),
             UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
             UnrecognizedToken(_, _, key, options) => {
@@ -480,6 +483,10 @@ error_chain! {
         InvalidToken(range: Range, loc: Range) {
             description("Invalid token")
                 display("Invalid token")
+        }
+        InvalidPP(range: Range, loc: Range, directive: String) {
+            description("Invalid preprocessor directive")
+                display("Found the preprocessor directive `{}` but expected {}", directive, choices(&["#!config"]))
         }
         /*
          * Generic
