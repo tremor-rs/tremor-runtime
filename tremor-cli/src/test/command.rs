@@ -103,10 +103,10 @@ pub(crate) async fn suite_command(
             let suite = serde_yaml::from_str::<CommandRun>(&command_str)?;
             let mut header_printed = false;
             for suite in suite.suites {
-                let suite_tags = base_tags.join(suite.tags);
+                let suite_tags = base_tags.clone_joined(suite.tags);
                 let mut casex = stats::Stats::new();
                 for case in suite.cases {
-                    let current_tags = suite_tags.join(case.tags.clone());
+                    let current_tags = suite_tags.clone_joined(case.tags.clone());
                     if let (_, false) = config.matches(&current_tags) {
                         if config.verbose {
                             status::h1("Command Test ( Skipping )", &case.name)?;

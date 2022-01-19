@@ -1,0 +1,15 @@
+  define connector bench from bench
+  args
+    codec = "json",
+    file = "data.json.xz",
+    base64 = false,
+  with
+    codec = args.codec,
+    config = {
+      "base64": args.base64,
+      "source":  "../../../../demo/data/#{args.file}",
+      "warmup_secs": 5,
+      "stop_after_secs": 25,
+      "significant_figures": 2,
+    }
+  end;

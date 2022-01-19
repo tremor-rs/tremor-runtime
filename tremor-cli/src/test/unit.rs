@@ -123,7 +123,7 @@ fn eval_suite_tests(
                 found_tags.extend(inner_tags);
             }
 
-            let case_tags = suite_tags.join(Some(found_tags));
+            let case_tags = suite_tags.clone_joined(Some(found_tags));
             let test_name = spec
                 .cloned_field_literal("name")
                 .as_ref()
@@ -264,7 +264,7 @@ pub(crate) fn run_suite(
                             found_tags.extend(inner_tags);
                         }
 
-                        let suite_tags = scenario_tags.join(Some(found_tags));
+                        let suite_tags = scenario_tags.clone_joined(Some(found_tags));
                         let name_lit = spec.cloned_field_literal("name");
                         let suite_name = name_lit.as_str().unwrap_or_default();
 
