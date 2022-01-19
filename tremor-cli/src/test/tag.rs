@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
 use crate::util::slurp_string;
+use crate::{errors::Result, util::basename};
 use std::{collections::HashSet, path::Path};
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -24,12 +24,8 @@ pub(crate) struct TagFilter {
 
 pub(crate) type Tags = Vec<String>;
 
-pub(crate) fn maybe_slurp_tags(path: &Path) -> Tags {
-    let tags_data = slurp_string(path);
-    match tags_data {
-        Ok(mut tags_data) => simd_json::from_str(&mut tags_data).unwrap_or_default(),
-        Err(_not_found) => vec![],
-    }
+pub(crate) fn maybe_slurp_tags(path: &Path) -> Option<Tags> {
+    serde_yaml::from_str(&slurp_string(path).ok()?).ok()
 }
 
 impl TagFilter {
@@ -115,7 +111,7 @@ impl TagFilter {
         }
     }
 
-    pub(crate) fn join(&self, tags: Option<Vec<String>>) -> TagFilter {
+    pub(crate) fn clone_joined(&self, tags: Option<Vec<String>>) -> TagFilter {
         let mut includes: Tags = self.includes.iter().cloned().collect();
         let excludes: Tags = self.excludes.iter().cloned().collect();
         if let Some(mut tags) = tags {
@@ -140,13 +136,15 @@ where
     if let Ok(rel) = other.strip_prefix(&base) {
         let tags_file = base.join("tags.yaml");
         let mut tags = TagFilter::new(vec![], vec![]);
-        tags = tags.join(Some(maybe_slurp_tags(&tags_file)));
+        tags = tags.clone_joined(maybe_slurp_tags(&tags_file));
         for dirname in rel.components() {
             base = base.join(dirname.as_os_str());
             let tags_file = base.join("tags.yaml");
-            tags = tags.join(Some(maybe_slurp_tags(&tags_file)));
+            tags = tags.clone_joined(maybe_slurp_tags(&tags_file));
         }
-
+        let root_name = other.to_string_lossy();
+        let name = basename(&root_name);
+        tags.includes.insert(name);
         Ok(tags)
     } else {
         Err(format!(

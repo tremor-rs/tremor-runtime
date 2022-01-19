@@ -1,0 +1,14 @@
+define flow main
+flow
+  use troy::pipelines;
+    use bench;
+  create connector bench from bench::bench
+  with
+    codec = "binary",
+  end;
+  create pipeline main from pipelines::passthrough;
+
+  connect /connector/bench to /pipeline/main;
+  connect /pipeline/main to /connector/bench;
+end;
+deploy flow main;

@@ -1,0 +1,13 @@
+define flow main
+flow
+  use troy::pipelines;
+  use bench;
+  create connector bench1 from bench::bench;
+  create connector bench2 from bench::bench;
+  create pipeline main from pipelines::passthrough;
+
+  connect /connector/bench1 to /pipeline/main;
+  connect /connector/bench2 to /pipeline/main;
+  connect /pipeline/main to /connector/bench1;
+end;
+deploy flow main;
