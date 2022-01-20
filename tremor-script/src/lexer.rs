@@ -18,20 +18,16 @@
 use crate::errors::{Error, Kind as ErrorKind, Result, ResultExt, UnfinishedToken};
 #[cfg_attr(feature = "cargo-clippy", allow(clippy::all, clippy::unwrap_used))]
 use crate::parser::g::__ToTriple;
-use crate::path::ModulePath;
 use crate::pos;
 pub use crate::pos::*;
 use crate::Value;
 use beef::Cow;
 use simd_json::Writable;
-use std::ffi::OsStr;
 use std::fmt;
-use std::io::Read;
 use std::iter::Peekable;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::str::Chars;
 use std::{collections::VecDeque, mem};
-use tremor_common::file;
 use unicode_xid::UnicodeXID;
 
 /// Source for a parser
@@ -394,8 +390,6 @@ pub enum Token<'input> {
     Use,
     /// The `as` keyword
     As,
-    /// Preprocessor directives
-    LineDirective(Location, Cow<'input, str>),
     /// Config Directive
     ConfigDirective,
     /// The `pipeline` keyword
@@ -425,10 +419,7 @@ impl<'input> Token<'input> {
     pub(crate) fn is_ignorable(&self) -> bool {
         matches!(
             *self,
-            Token::SingleLineComment(_)
-                | Token::Whitespace(_)
-                | Token::NewLine
-                | Token::LineDirective(_, _)
+            Token::SingleLineComment(_) | Token::Whitespace(_) | Token::NewLine
         )
     }
 
@@ -534,7 +525,6 @@ impl<'input> Token<'input> {
                 | Token::EqArrow
                 | Token::LBrace
                 | Token::LBracket
-                | Token::LineDirective(_, _)
                 | Token::ConfigDirective
                 | Token::LParen
                 | Token::LPatBrace
@@ -769,15 +759,6 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Recur => write!(f, "recur"),
             // Preprocessor
             Token::ConfigDirective => write!(f, "#!config "),
-            Token::LineDirective(l, file) => write!(
-                f,
-                "#!line {} {} {} {} {}",
-                l.absolute(),
-                l.line(),
-                l.column(),
-                l.unit_id,
-                file
-            ),
             // Troy
             Token::Pipeline => write!(f, "pipeline"),
             Token::Connector => write!(f, "connector"),
@@ -879,23 +860,6 @@ impl<'input> Iterator for Tokenizer<'input> {
     }
 }
 
-/// A lexical preprocessor in the spirit of cpp
-///
-pub struct Preprocessor {}
-
-macro_rules! take_while {
-    ($let:ident, $token:pat, $iter:expr) => {
-        $let = $iter.next().ok_or(ErrorKind::UnexpectedEndOfStream)??;
-        loop {
-            if let Spanned { value: $token, .. } = $let {
-                $let = $iter.next().ok_or(ErrorKind::UnexpectedEndOfStream)??;
-                continue;
-            }
-            break;
-        }
-    };
-}
-
 /// A compilation unit
 #[derive(Clone, Debug)]
 pub struct CompilationUnit {
@@ -903,14 +867,6 @@ pub struct CompilationUnit {
 }
 
 impl CompilationUnit {
-    fn from_file(file: &Path) -> Self {
-        let mut p = PathBuf::new();
-        p.push(file);
-        Self {
-            file_path: p.into_boxed_path(),
-        }
-    }
-
     /// Returns the path of the file for this
     #[must_use]
     pub fn file_path(&self) -> &Path {
@@ -926,280 +882,6 @@ impl PartialEq for CompilationUnit {
 impl fmt::Display for CompilationUnit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.file_path.to_string_lossy())
-    }
-}
-
-/// Tracks set of included files in a given logical compilation unit
-pub struct IncludeStack {
-    elements: Vec<CompilationUnit>,
-    pub(crate) cus: Vec<CompilationUnit>,
-}
-impl Default for IncludeStack {
-    fn default() -> Self {
-        Self {
-            elements: Vec::new(),
-            cus: Vec::new(),
-        }
-    }
-}
-
-impl IncludeStack {
-    fn pop(&mut self) {
-        self.elements.pop();
-    }
-
-    /// Returns set of compilation units
-    #[must_use]
-    pub fn into_cus(self) -> Vec<CompilationUnit> {
-        self.cus
-    }
-
-    /// Pushes a a compilation unit onto the include stack
-    ///
-    /// # Errors
-    /// if a cyclic dependency is detected
-    pub fn push<S: AsRef<OsStr> + ?Sized>(&mut self, file: &S) -> Result<usize> {
-        let e = CompilationUnit::from_file(Path::new(file));
-        if self.contains(&e) {
-            let es = self
-                .elements
-                .iter()
-                .map(ToString::to_string)
-                .collect::<Vec<_>>()
-                .join(" -> ");
-            Err(format!("Cyclic dependency detected: {} -> {}", es, e.to_string()).into())
-        } else {
-            let cu = self.cus.len();
-            self.cus.push(e.clone());
-            self.elements.push(e);
-            Ok(cu)
-        }
-    }
-    fn contains(&self, e: &CompilationUnit) -> bool {
-        self.elements.contains(e)
-    }
-}
-
-fn urt(next: &Spanned<'_>, alt: &[&'static str]) -> Error {
-    ErrorKind::UnrecognizedToken(
-        Range::from(next.span).expand_lines(2),
-        Range::from(next.span),
-        next.value.to_string(),
-        alt.iter().map(ToString::to_string).collect(),
-    )
-    .into()
-}
-
-fn as_ident(next: Spanned<'_>) -> Result<Cow<'_, str>> {
-    if let Token::Ident(id, _) = next.value {
-        Ok(id)
-    } else {
-        Err(urt(&next, &["`<ident>`"]))
-    }
-}
-impl<'input> Preprocessor {
-    pub(crate) fn resolve(
-        module_path: &ModulePath,
-        use_span: Span,
-        span2: Span,
-        rel_module_path: &Path,
-        include_stack: &mut IncludeStack,
-    ) -> Result<(usize, Box<Path>)> {
-        let mut file = PathBuf::from(rel_module_path);
-        file.set_extension("troy");
-        if let Some(path) = module_path.resolve(&file) {
-            if path.is_file() {
-                let cu = include_stack.push(path.as_os_str())?;
-                return Ok((cu, path));
-            }
-        }
-
-        file.set_extension("troy");
-        if let Some(path) = module_path.resolve(&file) {
-            if path.is_file() {
-                let cu = include_stack.push(path.as_os_str())?;
-                return Ok((cu, path));
-            }
-        }
-
-        file.set_extension("trickle");
-        if let Some(path) = module_path.resolve(&file) {
-            if path.is_file() {
-                let cu = include_stack.push(path.as_os_str())?;
-                return Ok((cu, path));
-            }
-        }
-
-        file.set_extension("tremor");
-        if let Some(path) = module_path.resolve(&file) {
-            if path.is_file() {
-                let cu = include_stack.push(path.as_os_str())?;
-                return Ok((cu, path));
-            }
-        }
-
-        let outer = Range::from((use_span.start, use_span.end)).expand_lines(2);
-        let inner = Range::from((span2.start, span2.end));
-        let path = rel_module_path.to_string_lossy().to_string();
-        Err(ErrorKind::ModuleNotFound(outer, inner, path, module_path.mounts.clone()).into())
-    }
-
-    #[allow(clippy::too_many_lines)]
-    /// Preprocess a possibly nested set of related sources into a single compilation unit
-    ///
-    /// # Errors
-    /// on preprocessor failreus
-    pub fn preprocess<S: AsRef<OsStr> + ?Sized>(
-        module_path: &ModulePath,
-        file_name: &S,
-        input: &'input mut std::string::String,
-        cu: usize,
-        include_stack: &mut IncludeStack,
-    ) -> Result<Vec<Result<TokenSpan<'input>>>> {
-        let file_name = Path::new(file_name);
-
-        let top = input.clone();
-
-        input.clear();
-
-        let mut iter = Tokenizer::new(top.as_str());
-
-        let mut next;
-        loop {
-            next = iter.next().ok_or(ErrorKind::UnexpectedEndOfStream)??;
-            match next {
-                //
-                // use <module_path> [as <alias>] ;
-                //
-                Spanned {
-                    value: Token::Use,
-                    span: use_span,
-                    ..
-                } => {
-                    let mut rel_module_path = PathBuf::new();
-                    let mut alias;
-                    take_while!(next, Token::Whitespace(_), iter);
-
-                    let id = as_ident(next)?;
-                    alias = id.to_string();
-                    rel_module_path.push(&alias);
-
-                    take_while!(next, Token::Whitespace(_), iter);
-
-                    loop {
-                        if next.value == Token::ColonColon {
-                            // module path of the form:
-                            // <ident> [ :: <ident> ]*;
-                            //
-                            take_while!(next, Token::Whitespace(_), iter);
-
-                            let id = as_ident(next)?;
-                            alias = id.to_string();
-                            rel_module_path.push(&alias);
-                            take_while!(next, Token::Whitespace(_), iter);
-                            match next.value {
-                                Token::As => (),
-                                Token::ColonColon => continue,
-                                Token::Semi => break,
-                                _ => {
-                                    return Err(urt(&next, &["`as`", "`::`", "`;`"]));
-                                }
-                            }
-                        } else if next.value == Token::As || next.value == Token::Semi {
-                            break;
-                        } else {
-                            return Err(urt(&next, &["`as`", "`::`", "`;`"]));
-                        }
-                    }
-
-                    //
-                    // As <alias:ident>
-                    //
-
-                    if next.value == Token::As {
-                        take_while!(next, Token::Whitespace(_), iter);
-
-                        alias = as_ident(next)?.to_string();
-
-                        // ';'
-                        take_while!(next, Token::Whitespace(_), iter);
-
-                        // Semi
-                        take_while!(next, Token::Whitespace(_), iter);
-                    }
-
-                    if next.value == Token::Semi {
-                        take_while!(next, Token::Whitespace(_), iter);
-                    }
-
-                    if next.value == Token::NewLine {
-                        //let file_path = rel_module_path.clone();
-                        let (inner_cu, file_path) = Preprocessor::resolve(
-                            module_path,
-                            use_span,
-                            next.span,
-                            &rel_module_path,
-                            include_stack,
-                        )?;
-                        let file_path2 = file_path.clone();
-
-                        let mut file = file::open(&file_path)?;
-                        let mut s = String::new();
-                        file.read_to_string(&mut s)?;
-
-                        s.push(' ');
-                        let s = Preprocessor::preprocess(
-                            module_path,
-                            file_path.as_os_str(),
-                            &mut s,
-                            inner_cu,
-                            include_stack,
-                        )?;
-                        let y = s
-                            .into_iter()
-                            .filter_map(|x| x.map(|x| format!("{}", x.value)).ok())
-                            .collect::<Vec<String>>()
-                            .join("");
-                        input.push_str(&format!(
-                            "#!line 0 0 0 {} {}\n",
-                            inner_cu,
-                            &file_path2.to_string_lossy()
-                        ));
-                        input.push_str(&format!("mod {} with\n", &alias));
-                        input.push_str(&format!(
-                            "#!line 0 0 0 {} {}\n",
-                            inner_cu,
-                            &file_path2.to_string_lossy()
-                        ));
-                        input.push_str(&format!("{}\n", y.trim()));
-                        input.push_str("end;\n");
-                        input.push_str(&format!(
-                            "#!line {} {} {} {} {}\n",
-                            next.span.end.absolute(),
-                            next.span.end.line() + 1,
-                            0,
-                            cu,
-                            file_name.to_string_lossy(),
-                        ));
-
-                        include_stack.pop();
-                    } else {
-                        return Err(urt(&next, &["`<newline>`"]));
-                    }
-                }
-                Spanned {
-                    value: Token::EndOfStream,
-                    ..
-                } => break,
-                other => {
-                    input.push_str(&format!("{}", other.value));
-                }
-            }
-        }
-        //input.push_str(" ");
-        let tokens = Tokenizer::new(input).collect();
-
-        Ok(tokens)
     }
 }
 
@@ -1361,6 +1043,8 @@ impl<'input> Lexer<'input> {
     fn comment(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         if let Some((end, _)) = self.starts_with(start, "#!config ") {
             Ok(self.spanned(start, end, Token::ConfigDirective))
+        } else if let Some((end, lexeme)) = self.starts_with(start, "#!") {
+            Ok(self.spanned(start, end, Token::Bad(lexeme.to_string())))
         } else {
             let (end, lexeme) = self.take_until(start, |ch| ch == '\n');
 
@@ -1370,31 +1054,6 @@ impl<'input> Lexer<'input> {
             } else if let Some(l) = lexeme.strip_prefix("##") {
                 let doc = Token::DocComment(l);
                 Ok(self.spanned(start, end, doc))
-            } else if let Some(directive) = lexeme.strip_prefix("#!line") {
-                let directive = directive.trim();
-                let splitted: Vec<_> = directive.split(' ').collect();
-
-                if let Some(&[absolute, line, column, cu, file]) = splitted.get(0..5) {
-                    let cu = cu.parse()?;
-                    // we need to move up 1 line as the line directive itself occupies its own line
-                    let l = Location::new(line.parse()?, column.parse()?, absolute.parse()?, cu)
-                        .move_up_lines(1);
-
-                    let line_directive = Token::LineDirective(l, file.into());
-
-                    // set the file offset to the difference between the included file (line directive)
-                    // and the current position in the source so we point to the correct location
-                    // in the included file
-                    self.file_offset = (start - l).start_of_line();
-                    // update the cu to the included file
-                    self.file_offset.unit_id = cu;
-                    self.cu = cu;
-                    Ok(self.spanned(start, end, line_directive))
-                } else {
-                    Err("failed to parse line directive!".into())
-                }
-            } else if lexeme.starts_with("#!") {
-                Ok(self.spanned(start, end, Token::Bad(lexeme.to_string())))
             } else {
                 Ok(self.spanned(
                     start,
@@ -1610,7 +1269,7 @@ impl<'input> Lexer<'input> {
     }
 
     /// handle quoted idents `\` ...
-    fn id2(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+    fn quoted_ident(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let mut string = String::new();
         let mut end = start;
 
@@ -1657,7 +1316,7 @@ impl<'input> Lexer<'input> {
     }
 
     /// handle quoted strings or heredoc strings
-    fn qs_or_hd(&mut self, start: Location) -> Result<Vec<TokenSpan<'input>>> {
+    fn string_or_heredoc(&mut self, start: Location) -> Result<Vec<TokenSpan<'input>>> {
         let mut end = start;
         let heredoc_start = start;
         end.shift('"');
@@ -1694,7 +1353,7 @@ impl<'input> Lexer<'input> {
                         res = vec![self.spanned(start, end + '"', Token::HereDocStart)]; // (0, vec![]))];
                         string = String::new();
                         newline_loc.shift('\n'); // content starts after newline
-                        self.hd(heredoc_start, newline_loc, end, false, &string, res)
+                        self.heredoc(heredoc_start, newline_loc, end, false, &string, res)
                     }
                     (end, ch) => {
                         let token_str = self
@@ -1720,7 +1379,7 @@ impl<'input> Lexer<'input> {
                 Ok(res)
             }
         } else {
-            self.qs(heredoc_start, end, end, false, string, res)
+            self.string(heredoc_start, end, end, false, string, res)
         }
     }
 
@@ -1919,7 +1578,7 @@ impl<'input> Lexer<'input> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn handle_qs_hd_generic<F>(
+    fn handle_string_heredoc_generic<F>(
         &mut self,
         is_hd: bool,
         error_prefix: &str,
@@ -1993,7 +1652,7 @@ impl<'input> Lexer<'input> {
     }
 
     /// Handle heredoc strings `"""`  ...
-    fn hd(
+    fn heredoc(
         &mut self,
         heredoc_start: Location,
         mut segment_start: Location,
@@ -2053,7 +1712,7 @@ impl<'input> Lexer<'input> {
                     content = String::new();
                 }
                 lc => {
-                    self.handle_qs_hd_generic(
+                    self.handle_string_heredoc_generic(
                         true,
                         "\"\"\"\n",
                         &mut has_escapes,
@@ -2071,7 +1730,7 @@ impl<'input> Lexer<'input> {
     }
 
     /// Handle quote strings `"`  ...
-    fn qs(
+    fn string(
         &mut self,
         total_start: Location,
         mut segment_start: Location,
@@ -2121,7 +1780,7 @@ impl<'input> Lexer<'input> {
                     .into());
                 }
                 lc => {
-                    self.handle_qs_hd_generic(
+                    self.handle_string_heredoc_generic(
                         false,
                         "\"",
                         &mut has_escapes,
@@ -2187,7 +1846,7 @@ impl<'input> Lexer<'input> {
     }
 
     /// handle test/extractor '|...'
-    fn pl(&mut self, total_start: Location) -> Result<TokenSpan<'input>> {
+    fn extractor(&mut self, total_start: Location) -> Result<TokenSpan<'input>> {
         let mut string = String::new();
         let mut strings = Vec::new();
 
@@ -2241,7 +1900,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn nm_float(&mut self, start: Location, int: &str) -> Result<TokenSpan<'input>> {
+    fn float(&mut self, start: Location, int: &str) -> Result<TokenSpan<'input>> {
         self.bump(); // Skip '.'
         let (end, float) = self.extract_number(start, is_dec_digit);
         match self.lookahead() {
@@ -2322,7 +1981,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn nm_hex(&mut self, start: Location, int: &str) -> Result<TokenSpan<'input>> {
+    fn hex(&mut self, start: Location, int: &str) -> Result<TokenSpan<'input>> {
         self.bump(); // Skip 'x'
         let int_start = self.next_index()?;
         let (end, hex) = self.extract_number(int_start, is_hex);
@@ -2386,11 +2045,11 @@ impl<'input> Lexer<'input> {
 
     /// handle numbers (with or without leading '-')
     #[allow(clippy::too_many_lines)]
-    fn nm(&mut self, start: Location) -> Result<TokenSpan<'input>> {
+    fn number(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let (end, int) = self.extract_number(start, is_dec_digit);
         match self.lookahead() {
-            Some((_, '.')) => self.nm_float(start, &int),
-            Some((_, 'x')) => self.nm_hex(start, &int),
+            Some((_, '.')) => self.float(start, &int),
+            Some((_, 'x')) => self.hex(start, &int),
             Some((char_loc, ch)) if is_ident_start(ch) => Err(ErrorKind::UnexpectedCharacter(
                 Range::from((start, end)).expand_lines(2),
                 Range::from((char_loc, char_loc)),
@@ -2420,7 +2079,7 @@ impl<'input> Lexer<'input> {
     }
 
     /// Consume whitespace
-    fn ws(&mut self, start: Location) -> TokenSpan<'input> {
+    fn whitespace(&mut self, start: Location) -> TokenSpan<'input> {
         let (end, src) = self.take_while(start, is_ws);
         self.spanned(start, end, Token::Whitespace(src))
     }
@@ -2468,7 +2127,7 @@ impl<'input> Iterator for Lexer<'input> {
             '&' => Some(Ok(self.spanned(start, start + ch, Token::BitAnd))),
             ':' => Some(Ok(self.colon(start))),
             '-' => match self.lookahead() {
-                Some((_loc, c)) if is_dec_digit(c) => Some(self.nm(start)),
+                Some((_loc, c)) if is_dec_digit(c) => Some(self.number(start)),
                 _ => Some(Ok(self.spanned(start, start + ch, Token::Sub))),
             },
             '#' => Some(self.comment(start)),
@@ -2477,12 +2136,12 @@ impl<'input> Iterator for Lexer<'input> {
             '>' => Some(Ok(self.gt(start))),
             '%' => Some(self.pb(start)),
             '~' => Some(self.tl(start)),
-            '`' => Some(self.id2(start)),
+            '`' => Some(self.quoted_ident(start)),
             // TODO account for bitwise not operator
             '!' => Some(self.pe(start)),
             '\n' => Some(Ok(self.spanned(start, start, Token::NewLine))),
             ch if is_ident_start(ch) => Some(Ok(self.id(start))),
-            '"' => match self.qs_or_hd(start) {
+            '"' => match self.string_or_heredoc(start) {
                 Ok(mut tokens) => {
                     for t in tokens.drain(..) {
                         self.stored_tokens.push_back(t);
@@ -2491,9 +2150,9 @@ impl<'input> Iterator for Lexer<'input> {
                 }
                 Err(e) => Some(Err(e)),
             },
-            ch if is_test_start(ch) => Some(self.pl(start)),
-            ch if is_dec_digit(ch) => Some(self.nm(start)),
-            ch if ch.is_whitespace() => Some(Ok(self.ws(start))),
+            ch if is_test_start(ch) => Some(self.extractor(start)),
+            ch if is_dec_digit(ch) => Some(self.number(start)),
+            ch if ch.is_whitespace() => Some(Ok(self.whitespace(start))),
             _ => {
                 let str = format!("{}", ch);
                 Some(Ok(self.spanned(start, start, Token::Bad(str))))

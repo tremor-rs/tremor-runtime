@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{self, visitors::ConstFolder, walkers::QueryWalker, Warning};
 use crate::errors::{CompilerError, Error, Result};
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 use crate::path::ModulePath;
 use crate::prelude::*;
+use crate::{
+    ast::{self, visitors::ConstFolder, walkers::QueryWalker, Warning},
+    lexer::Tokenizer,
+};
 use crate::{lexer, srs};
 use std::collections::BTreeSet;
 use std::io::Write;
@@ -70,7 +73,7 @@ where
     /// # Errors
     /// if the query can not be parsed
     pub fn parse(
-        module_path: &ModulePath,
+        _module_path: &ModulePath,
         file_name: &str,
         script: &'script str,
         cus: Vec<ast::CompilationUnit>,
@@ -85,35 +88,23 @@ where
         // TODO make lexer EOS tolerant to avoid this kludge
         source.push('\n');
 
-        let mut include_stack = lexer::IncludeStack::default();
-
         let target_name = std::path::Path::new(file_name)
             .file_stem()
             .ok_or(CompilerError {
                 error: "Snot".into(),
-                cus: lexer::IncludeStack::default().into_cus(),
+                cus: Vec::new(),
             })?
             .to_string_lossy()
             .to_string();
 
-        let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
+        let r = || -> Result<Self> {
             let query = srs::QueryInstance::try_new::<Error, _>(
                 &target_name,
                 source.clone(),
                 |src: &mut String| {
                     let mut helper = ast::Helper::new(reg, aggr_reg, cus);
-                    let cu = include_stack.push(&file_name)?;
-                    let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
-                        module_path,
-                        file_name,
-                        src,
-                        cu,
-                        include_stack,
-                    )?;
-                    let filtered_tokens = lexemes
-                        .into_iter()
-                        .filter_map(Result::ok)
-                        .filter(|t| !t.value.is_ignorable());
+                    let tokens = Tokenizer::new(src.as_str()).collect::<Result<Vec<_>>>()?;
+                    let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
                     let script_stage_1 =
                         crate::parser::g::QueryParser::new().parse(filtered_tokens)?;
                     let mut query = script_stage_1.up_script(&mut helper)?;
@@ -133,10 +124,10 @@ where
                 warnings,
                 locals,
             })
-        }(&mut include_stack);
+        }();
         r.map_err(|error| CompilerError {
             error,
-            cus: include_stack.into_cus(),
+            cus: Vec::new(),
         })
     }
 

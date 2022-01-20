@@ -81,6 +81,7 @@ macro_rules! test_cases {
                 }
 
                 let mut results = Vec::new();
+                let mut had_error = false;
                 for (id, json) in in_json.into_iter().enumerate() {
                     let event = Event {
                         id: EventId::from_id(0, 0, (id as u64)),
@@ -101,6 +102,7 @@ macro_rules! test_cases {
                                 let got = got.trim();
                                 println!("{}", got);
                                 assert_eq!(err, got);
+                                had_error = true;
                             } else {
                                 println!("Got unexpected error: {:?}", e);
                                 assert!(false);
@@ -114,6 +116,7 @@ macro_rules! test_cases {
                     }
                     results.append(&mut r);
                 }
+                dbg!(&results, &out_json);
                 assert_eq!(results.len(), out_json.len(), "Number of events differ error");
                 for (_, result) in results {
                     for value in result.value_iter() {
@@ -123,6 +126,8 @@ macro_rules! test_cases {
                         }
                     }
                 }
+                assert!(had_error, "we should have seen errors");
+
                 Ok(())
             }
         )*
@@ -132,4 +137,5 @@ macro_rules! test_cases {
 test_cases!(
     branch_error_then_ok,
     // INSERT
+    meta_and_use,
 );
