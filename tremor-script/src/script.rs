@@ -14,7 +14,13 @@
 
 pub use crate::interpreter::AggrType;
 use crate::{
-    ast::{visitors::ConstFolder, walkers::QueryWalker, Docs, Helper, Warning, Warnings},
+    ast::{
+        docs::Docs,
+        helper::{Warning, Warnings},
+        visitors::ConstFolder,
+        walkers::QueryWalker,
+        Helper,
+    },
     ctx::EventContext,
     errors::{CompilerError, Error, Result},
     highlighter::{Dumb as DumbHighlighter, Highlighter},

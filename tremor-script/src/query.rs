@@ -17,7 +17,7 @@ use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 use crate::path::ModulePath;
 use crate::prelude::*;
 use crate::{
-    ast::{self, visitors::ConstFolder, walkers::QueryWalker, Warning},
+    ast::{self, helper::Warning, visitors::ConstFolder, walkers::QueryWalker},
     lexer::Tokenizer,
 };
 use crate::{lexer, srs};

@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{CompilerError, Error, Result};
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 use crate::path::ModulePath;
 use crate::prelude::*;
+use crate::{ast, lexer::Tokenizer};
 use crate::{
-    ast::{self, Warning},
-    lexer::Tokenizer,
+    ast::helper::Warning,
+    errors::{CompilerError, Error, Result},
 };
 use crate::{lexer, srs};
 use std::collections::BTreeSet;

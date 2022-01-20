@@ -2180,6 +2180,8 @@ fn indentation(strings: &[String]) -> usize {
 
 #[cfg(test)]
 mod tests {
+    use crate::path::ModulePath;
+
     use super::*;
 
     macro_rules! lex_ok {
@@ -2652,13 +2654,7 @@ mod tests {
         let mut snot2 = snot.clone();
 
         let mut include_stack = IncludeStack::default();
-        let badger2 = Preprocessor::preprocess(
-            &ModulePath { mounts: vec![] },
-            "foo",
-            &mut snot2,
-            0,
-            &mut include_stack,
-        )?;
+
         let mut res = String::new();
         for b in Tokenizer::new(&snot)
             .filter_map(Result::ok)
@@ -2667,15 +2663,6 @@ mod tests {
             res.push_str(&format!("{}", b.value));
         }
         assert_eq!(snot, res);
-        let mut res2 = String::new();
-        for b in badger2
-            .into_iter()
-            .filter_map(Result::ok)
-            .collect::<Vec<TokenSpan>>()
-        {
-            res2.push_str(&format!("{}", b.value));
-        }
-        assert_eq!(snot, res2);
         Ok(())
     }
 

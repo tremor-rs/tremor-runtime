@@ -24,20 +24,19 @@ use crate::{
         walkers::{ExprWalker, ImutExprWalker},
         ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr, BinOpKind, Bytes, BytesPart,
         ClauseGroup, Comprehension, ComprehensionCase, Costly, DefaultCase, EmitExpr, EventPath,
-        Expr, ExprPath, Expression, Field, FnDecl, FnDoc, Helper, Ident, IfElse, ImutExpr,
-        Invocable, Invoke, InvokeAggr, InvokeAggrFn, List, Literal, LocalPath, Match, Merge,
-        MetadataPath, ModDoc, NodeMetas, Patch, PatchOperation, Path, Pattern, PredicateClause,
-        PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Script, Segment, StatePath,
-        StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr, UnaryOpKind,
+        Expr, ExprPath, Expression, Field, FnDecl, Helper, Ident, IfElse, ImutExpr, Invocable,
+        Invoke, InvokeAggr, InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath,
+        NodeMetas, Patch, PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record,
+        RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
+        TestExpr, TuplePattern, UnaryExpr, UnaryOpKind,
     },
     errors::{
         err_generic, error_generic, error_missing_effector, error_oops, Error, Kind as ErrorKind,
         Result,
     },
-    impl_expr, impl_expr_exraw,
+    impl_expr, impl_expr_exraw, impl_expr_no_lt,
     pos::{Location, Range},
     prelude::*,
-    registry::CustomFn,
     tilde::Extractor,
     KnownKey, Value,
 };
@@ -47,17 +46,33 @@ use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
 
-use super::visitors::IsConstFn;
+use super::{
+    docs::{FnDoc, ModDoc},
+    module::ModuleRaw,
+    Const, NodeId,
+};
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct UseRaw {
+    pub alias: Option<String>,
+    pub module: NodeId,
+    pub start: Location,
+    pub end: Location,
+}
+impl_expr_no_lt!(UseRaw);
 
 /// A raw script we got to put this here because of silly lalrpoop focing it to be public
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ScriptRaw<'script> {
-    exprs: ExprsRaw<'script>,
+    exprs: TopLevelExprsRaw<'script>,
     doc: Option<Vec<Cow<'script, str>>>,
 }
 
 impl<'script> ScriptRaw<'script> {
-    pub(crate) fn new(exprs: ExprsRaw<'script>, doc: Option<Vec<Cow<'script, str>>>) -> Self {
+    pub(crate) fn new(
+        exprs: TopLevelExprsRaw<'script>,
+        doc: Option<Vec<Cow<'script, str>>>,
+    ) -> Self {
         Self { exprs, doc }
     }
 
@@ -70,16 +85,19 @@ impl<'script> ScriptRaw<'script> {
         let last_idx = self.exprs.len() - 1;
         for (i, e) in self.exprs.into_iter().enumerate() {
             match e {
-                ExprRaw::Module(m) => {
+                TopLevelExprRaw::Use(_) => {
+                    panic!("FIXME");
+                }
+                TopLevelExprRaw::Module(m) => {
                     m.define(&mut helper)?;
                 }
-                ExprRaw::Const {
+                TopLevelExprRaw::Const(ConstRaw {
                     name,
                     expr,
                     start,
                     end,
                     comment,
-                } => {
+                }) => {
                     let name_v = vec![name.to_string()];
                     let r = Range::from((start, end));
 
@@ -104,16 +122,16 @@ impl<'script> ScriptRaw<'script> {
                     }
                     helper.add_const_doc(&name, comment, value_type);
                 }
-                ExprRaw::FnDecl(f) => {
+                TopLevelExprRaw::FnDecl(f) => {
                     helper.docs.fns.push(f.doc());
                     let mut f = f.up(&mut helper)?;
                     ExprWalker::walk_fn_decl(&mut ConstFolder::new(helper), &mut f)?;
                     helper.register_fun(f.into())?;
                 }
-                other => {
-                    let other = other.up(&mut helper)?;
+                TopLevelExprRaw::Expr(expr) => {
+                    let expr = expr.up(&mut helper)?;
                     // ExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut other)?;
-                    exprs.push(other);
+                    exprs.push(expr);
                 }
             }
         }
@@ -164,7 +182,7 @@ impl<'script> ScriptRaw<'script> {
             exprs,
             consts: helper.consts.clone(),
             aggregates: helper.aggregates.clone(),
-            windows: helper.windows.clone(),
+            windows: HashMap::new(), //helper.windows.clone(),
             locals: helper.locals.len(),
             node_meta: helper.meta.clone(),
             functions: helper.func_vec.clone(),
@@ -306,66 +324,6 @@ impl<'script> Upable<'script> for BytesRaw<'script> {
                 .map(|b| b.up(helper))
                 .collect::<Result<_>>()?,
         })
-    }
-}
-
-/// we're forced to make this pub because of lalrpop
-#[derive(Debug, PartialEq, Serialize, Clone)]
-pub struct ModuleRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub name: IdentRaw<'script>,
-    pub exprs: ExprsRaw<'script>,
-    pub doc: Option<Vec<Cow<'script, str>>>,
-}
-impl_expr!(ModuleRaw);
-
-impl<'script> ModuleRaw<'script> {
-    pub(crate) fn define<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<()> {
-        helper.module.push(self.name.to_string());
-        for e in self.exprs {
-            match e {
-                ExprRaw::Module(m) => {
-                    m.define(helper)?;
-                }
-                ExprRaw::Const {
-                    name,
-                    expr,
-                    start,
-                    end,
-                    ..
-                } => {
-                    let mut name_v = helper.module.clone();
-                    name_v.push(name.to_string());
-                    let mut expr = expr.up(helper)?;
-                    ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut expr)?;
-                    let v = expr.try_into_value(helper)?;
-                    helper.consts.insert(name_v, v).map_err(|_old| {
-                        let r = Range::from((start, end));
-                        ErrorKind::DoubleConst(r.expand_lines(2), r, name.to_string())
-                    })?;
-                }
-                ExprRaw::FnDecl(f) => {
-                    let mut f = f.up(helper)?;
-                    ExprWalker::walk_fn_decl(&mut ConstFolder::new(helper), &mut f)?;
-                    let is_const = IsConstFn::is_const(&mut f.body).unwrap_or_default();
-                    let f = CustomFn {
-                        name: f.name.id,
-                        args: f.args.iter().map(ToString::to_string).collect(),
-                        locals: f.locals,
-                        body: f.body,
-                        is_const,
-                        open: f.open,
-                        inline: f.inline,
-                    };
-                    helper.register_fun(f)?;
-                }
-                // ALLOW: the gramer doesn't allow this
-                _ => unreachable!("Can't have expressions inside of modules"),
-            }
-        }
-        helper.module.pop();
-        Ok(())
     }
 }
 
@@ -540,27 +498,56 @@ impl<'script> From<&'script str> for StrLitElementRaw<'script> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct ConstRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
+    pub name: Cow<'script, str>,
+    /// we're forced to make this pub because of lalrpop
+    pub expr: ImutExprRaw<'script>,
+    /// we're forced to make this pub because of lalrpop
+    pub start: Location,
+    /// we're forced to make this pub because of lalrpop
+    pub end: Location,
+    /// we're forced to make this pub because of lalrpop
+    pub comment: Option<Vec<Cow<'script, str>>>,
+}
+impl_expr!(ConstRaw);
+
+impl<'script> Upable<'script> for ConstRaw<'script> {
+    type Target = Const<'script>;
+
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let mut expr = self.expr.up(helper)?;
+        ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut expr)?;
+        let value = expr.try_into_lit(&helper.meta)?;
+        Ok(Const {
+            mid: helper.add_meta_w_name(self.start, self.end, &self.name),
+            name: self.name.to_string(),
+            value,
+        })
+    }
+}
+
 /// we're forced to make this pub because of lalrpop
 pub type StrLitElementsRaw<'script> = Vec<StrLitElementRaw<'script>>;
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub enum TopLevelExprRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
+    Const(ConstRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
+    Module(ModuleRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
+    FnDecl(AnyFnRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
+    Use(UseRaw),
+    /// we're forced to make this pub because of lalrpop
+    Expr(ExprRaw<'script>),
+}
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ExprRaw<'script> {
-    /// we're forced to make this pub because of lalrpop
-    Const {
-        /// we're forced to make this pub because of lalrpop
-        name: Cow<'script, str>,
-        /// we're forced to make this pub because of lalrpop
-        expr: ImutExprRaw<'script>,
-        /// we're forced to make this pub because of lalrpop
-        start: Location,
-        /// we're forced to make this pub because of lalrpop
-        end: Location,
-        /// we're forced to make this pub because of lalrpop
-        comment: Option<Vec<Cow<'script, str>>>,
-    },
-    /// we're forced to make this pub because of lalrpop
-    Module(ModuleRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     MatchExpr(Box<MatchRaw<'script, Self>>),
     /// we're forced to make this pub because of lalrpop
@@ -575,8 +562,6 @@ pub enum ExprRaw<'script> {
     },
     /// we're forced to make this pub because of lalrpop
     Emit(Box<EmitExprRaw<'script>>),
-    /// we're forced to make this pub because of lalrpop
-    FnDecl(AnyFnRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Imut(ImutExprRaw<'script>),
 }
@@ -605,10 +590,6 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
     type Target = Expr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
-            ExprRaw::FnDecl(_) | ExprRaw::Const { .. } | ExprRaw::Module(ModuleRaw { .. }) => {
-                // ALLOW: There is no code path that leads here,
-                unreachable!()
-            }
             ExprRaw::MatchExpr(m) => match m.up(helper)? {
                 Match {
                     mid,
@@ -2515,6 +2496,7 @@ impl<'script> Upable<'script> for TestExprRaw {
     }
 }
 
+pub type TopLevelExprsRaw<'script> = Vec<TopLevelExprRaw<'script>>;
 pub type ExprsRaw<'script> = Vec<ExprRaw<'script>>;
 pub type ImutExprsRaw<'script> = Vec<ImutExprRaw<'script>>;
 pub type FieldsRaw<'script> = Vec<FieldRaw<'script>>;
