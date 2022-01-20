@@ -17,7 +17,7 @@
 
 use crate::lexer::{Token, TokenSpan};
 use crate::pos::Location;
-use crate::{ast::Warning, errors::UnfinishedToken};
+use crate::{ast::helper::Warning, errors::UnfinishedToken};
 use crate::{
     errors::{CompilerError, Error as ScriptError},
     lexer::Range,

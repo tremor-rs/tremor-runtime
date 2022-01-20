@@ -22,8 +22,8 @@ use super::Value;
 use super::{BaseExpr, DeployFlow};
 use super::{ConnectStmt, DeployEndpoint};
 use crate::ast::{
-    error_generic, node_id::NodeId, query::raw::ConfigRaw, CreateTargetDefinition, Deploy,
-    DeployStmt, Helper, ModDoc, NodeMetas, PipelineDefinition, Script, Upable,
+    docs::ModDoc, error_generic, module::ModuleRaw, node_id::NodeId, query::raw::ConfigRaw,
+    raw::UseRaw, Deploy, DeployStmt, Helper, PipelineDefinition, Script, Upable,
 };
 use crate::ast::{
     query::raw::{
@@ -31,10 +31,7 @@ use crate::ast::{
     },
     visitors::ConstFolder,
 };
-use crate::ast::{
-    raw::{ExprRaw, IdentRaw, ModuleRaw},
-    walkers::ImutExprWalker,
-};
+use crate::ast::{raw::IdentRaw, walkers::ImutExprWalker};
 use crate::errors::{Kind as ErrorKind, Result};
 use crate::impl_expr;
 use crate::pos::Location;
@@ -84,14 +81,9 @@ impl<'script> DeployRaw<'script> {
         mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<Deploy<'script>> {
         let mut stmts: Vec<DeployStmt<'script>> = vec![];
-        for (_i, e) in self.stmts.into_iter().enumerate() {
-            match e {
-                DeployStmtRaw::Module(m) => {
-                    m.define(&mut helper)?;
-                }
-                other => {
-                    stmts.push(other.up(&mut helper)?);
-                }
+        for (_i, stmt) in self.stmts.into_iter().enumerate() {
+            if let Some(stmt) = stmt.up(&mut helper)? {
+                stmts.push(stmt);
             }
         }
 
@@ -110,57 +102,13 @@ impl<'script> DeployRaw<'script> {
         Ok(Deploy {
             config,
             stmts,
-            connector_decls: helper.connector_decls.clone(),
-            pipeline_decls: helper.pipeline_decls.clone(),
-            flow_decls: helper.flow_decls.clone(),
+            connector_decls: HashMap::new(), // FIXME
+            pipeline_decls: HashMap::new(),  // FIXME
+            flow_decls: HashMap::new(),      // FIXME
             docs: helper.docs.clone(),
         })
     }
 }
-
-/// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum DeployModuleStmtRaw<'script> {
-    ConnectorDefinition(ConnectorDefinitionRaw<'script>),
-    /// we're forced to make this pub because of lalrpop
-    PipelineDefinition(PipelineDefinitionRaw<'script>),
-    /// we're forced to make this pub because of lalrpop
-    Module(DeployModuleRaw<'script>),
-    /// we're forced to make this pub because of lalrpop
-    Expr(Box<ExprRaw<'script>>),
-}
-impl<'script> DeployModuleStmtRaw<'script> {
-    const BAD_MODULE: &'static str = "Module in wrong place error";
-    const BAD_EXPR: &'static str = "Expression in wrong place error";
-}
-
-impl<'script> Upable<'script> for DeployModuleStmtRaw<'script> {
-    type Target = DeployStmt<'script>;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        match self {
-            DeployModuleStmtRaw::PipelineDefinition(stmt) => {
-                let stmt: PipelineDefinition<'script> = stmt.up(helper)?;
-                helper
-                    .pipeline_decls
-                    .insert(stmt.node_id.clone(), stmt.clone());
-                Ok(DeployStmt::PipelineDefinition(Box::new(stmt)))
-            }
-            DeployModuleStmtRaw::ConnectorDefinition(stmt) => {
-                let stmt: ConnectorDefinition<'script> = stmt.up(helper)?;
-                helper
-                    .connector_decls
-                    .insert(stmt.node_id.clone(), stmt.clone());
-                Ok(DeployStmt::ConnectorDefinition(Box::new(stmt)))
-            }
-            DeployModuleStmtRaw::Module(ref m) => {
-                error_generic(m, m, &Self::BAD_MODULE, &helper.meta)
-            }
-            DeployModuleStmtRaw::Expr(m) => error_generic(&*m, &*m, &Self::BAD_EXPR, &helper.meta),
-        }
-    }
-}
-
-pub type DeployModuleStmtsRaw<'script> = Vec<DeployModuleStmtRaw<'script>>;
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -170,82 +118,34 @@ pub enum DeployStmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     FlowDefinition(FlowDefinitionRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    Module(DeployModuleRaw<'script>),
-}
-impl<'script> DeployStmtRaw<'script> {
-    const BAD_MODULE: &'static str = "Module in wrong place error";
+    Module(ModuleRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
+    Use(UseRaw),
 }
 
 impl<'script> Upable<'script> for DeployStmtRaw<'script> {
-    type Target = DeployStmt<'script>;
+    type Target = Option<DeployStmt<'script>>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
+            DeployStmtRaw::Use(u) => {
+                todo!()
+            }
             DeployStmtRaw::FlowDefinition(stmt) => {
                 let stmt: FlowDefinition<'script> = stmt.up(helper)?;
-                helper.flow_decls.insert(stmt.node_id.clone(), stmt.clone());
-                Ok(DeployStmt::FlowDefinition(Box::new(stmt)))
+                //FIXME: helper.flow_decls.insert(stmt.node_id.clone(), stmt.clone());
+                // Ok(Some(DeployStmt::FlowDefinition(Box::new(stmt))))
+                todo!();
             }
             DeployStmtRaw::DeployFlow(stmt) => {
                 let stmt: DeployFlow = stmt.up(helper)?;
                 helper.instances.insert(stmt.node_id.clone(), stmt.clone());
-                Ok(DeployStmt::DeployFlowStmt(Box::new(stmt)))
+                Ok(Some(DeployStmt::DeployFlowStmt(Box::new(stmt))))
             }
-            DeployStmtRaw::Module(ref m) => error_generic(m, m, &Self::BAD_MODULE, &helper.meta),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Serialize, Clone)]
-pub struct DeployModuleRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub name: IdentRaw<'script>,
-    pub stmts: DeployModuleStmtsRaw<'script>,
-    pub docs: Option<Vec<Cow<'script, str>>>,
-}
-impl_expr!(DeployModuleRaw);
-
-impl<'script> DeployModuleRaw<'script> {
-    pub(crate) fn define<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<()> {
-        helper.module.push(self.name.to_string());
-        for e in self.stmts {
-            match e {
-                DeployModuleStmtRaw::Expr(e) => {
-                    // We create a 'fake' tremor script module to define
-                    // expressions inside this module
-                    let expr_m = ModuleRaw {
-                        name: self.name.clone(),
-                        start: self.start,
-                        end: self.end,
-                        doc: self.docs.clone(),
-                        exprs: vec![*e],
-                    };
-                    // since `ModuleRaw::define` also prepends the module
-                    // name we got to remove it prior to calling `define` and
-                    // add it back later
-                    helper.module.pop();
-                    expr_m.define(helper)?;
-                    helper.module.push(self.name.to_string());
-                }
-                DeployModuleStmtRaw::Module(m) => {
-                    m.define(helper)?;
-                }
-                DeployModuleStmtRaw::ConnectorDefinition(stmt) => {
-                    let stmt: ConnectorDefinition<'script> = stmt.up(helper)?;
-                    helper
-                        .connector_decls
-                        .insert(stmt.node_id.clone(), stmt.clone());
-                }
-                DeployModuleStmtRaw::PipelineDefinition(stmt) => {
-                    let stmt: PipelineDefinition<'script> = stmt.up(helper)?;
-                    helper
-                        .pipeline_decls
-                        .insert(stmt.node_id.clone(), stmt.clone());
-                }
+            DeployStmtRaw::Module(m) => {
+                m.define(helper)?;
+                Ok(None)
             }
         }
-        helper.module.pop();
-        Ok(())
     }
 }
 
@@ -261,6 +161,7 @@ pub struct ConnectorDefinitionRaw<'script> {
     pub(crate) params: DefinitioalArgsWithRaw<'script>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
+impl_expr!(ConnectorDefinitionRaw);
 
 impl<'script> Upable<'script> for ConnectorDefinitionRaw<'script> {
     type Target = ConnectorDefinition<'script>;
@@ -404,15 +305,17 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
                 }
                 FlowStmtRaw::ConnectorDefinition(stmt) => {
                     let stmt: ConnectorDefinition<'script> = stmt.up(helper)?;
-                    helper
-                        .connector_decls
-                        .insert(stmt.node_id.clone(), stmt.clone());
+                    todo!();
+                    // helper
+                    //     .connector_decls
+                    //     .insert(stmt.node_id.clone(), stmt.clone());
                 }
                 FlowStmtRaw::PipelineDefinition(stmt) => {
                     let stmt: PipelineDefinition<'script> = stmt.up(helper)?;
-                    helper
-                        .pipeline_decls
-                        .insert(stmt.node_id.clone(), stmt.clone());
+                    todo!();
+                    // helper
+                    //     .pipeline_decls
+                    //     .insert(stmt.node_id.clone(), stmt.clone());
                 }
                 FlowStmtRaw::Connect(connect) => {
                     connections.push(connect.up(helper)?);
@@ -449,7 +352,7 @@ pub type FlowStmtsRaw<'script> = Vec<FlowStmtRaw<'script>>;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum FlowStmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
-    Module(DeployModuleRaw<'script>),
+    Module(ModuleRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     ConnectorDefinition(ConnectorDefinitionRaw<'script>),
     /// we're forced to make this pub because of lalrpop
@@ -495,51 +398,53 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         let params = self.params.up(helper)?;
         let decl = match self.kind {
             CreateKind::Connector => {
-                if let Some(artefact) = helper.connector_decls.get(&target) {
-                    CreateTargetDefinition::Connector(artefact.clone())
-                } else {
-                    return Err(ErrorKind::DeployArtefactNotDefined(
-                        outer,
-                        inner,
-                        target.to_string(),
-                        helper
-                            .connector_decls
-                            .keys()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                    .into());
-                }
+                todo!();
+                // if let Some(artefact) = helper.connector_decls.get(&target) {
+                //     CreateTargetDefinition::Connector(artefact.clone())
+                // } else {
+                //     return Err(ErrorKind::DeployArtefactNotDefined(
+                //         outer,
+                //         inner,
+                //         target.to_string(),
+                //         helper
+                //             .connector_decls
+                //             .keys()
+                //             .map(ToString::to_string)
+                //             .collect(),
+                //     )
+                //     .into());
+                // }
             }
             CreateKind::Pipeline => {
-                if let Some(artefact) = helper.pipeline_decls.get(&target) {
-                    CreateTargetDefinition::Pipeline(artefact.clone())
-                } else {
-                    return Err(ErrorKind::DeployArtefactNotDefined(
-                        outer,
-                        inner,
-                        target.to_string(),
-                        helper
-                            .pipeline_decls
-                            .keys()
-                            .map(ToString::to_string)
-                            .collect(),
-                    )
-                    .into());
-                }
+                todo!();
+                // if let Some(artefact) = helper.pipeline_decls.get(&target) {
+                //     CreateTargetDefinition::Pipeline(artefact.clone())
+                // } else {
+                //     return Err(ErrorKind::DeployArtefactNotDefined(
+                //         outer,
+                //         inner,
+                //         target.to_string(),
+                //         helper
+                //             .pipeline_decls
+                //             .keys()
+                //             .map(ToString::to_string)
+                //             .collect(),
+                //     )
+                //     .into());
+                // }
             }
         };
 
-        let create_stmt = CreateStmt {
-            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            with: params,
-            node_id: node_id.clone(),
-            target,
-            defn: decl,
-        };
+        // let create_stmt = CreateStmt {
+        //     mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+        //     with: params,
+        //     node_id: node_id.clone(),
+        //     target,
+        //     defn: decl,
+        // };
         // helper.instances.insert(node_id, create_stmt.clone());
 
-        Ok(create_stmt)
+        // Ok(create_stmt)
     }
 }
 
@@ -564,14 +469,14 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
         let node_id = NodeId::new(&self.id.id, &helper.module);
         let target = self.target.clone().with_prefix(&helper.module);
 
-        let mut defn = if let Some(artefact) = helper.flow_decls.get(&target) {
+        let mut defn = if let Some(artefact) = helper.get_flow_decls(&target) {
             artefact.clone()
         } else {
             return Err(ErrorKind::DeployArtefactNotDefined(
                 self.extent(&helper.meta),
                 self.id.extent(&helper.meta),
                 target.to_string(),
-                helper.flow_decls.keys().map(ToString::to_string).collect(),
+                Vec::new(), //FIXME; helper.flow_decls.keys().map(ToString::to_string).collect(),
             )
             .into());
         };

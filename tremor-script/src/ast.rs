@@ -21,6 +21,9 @@ pub mod deploy;
 /// custom equality definition - checking for equivalence of different AST nodes
 /// e.g. two different event paths with different metadata
 pub mod eq;
+/// FIXME
+pub mod helper;
+pub(crate) mod module;
 mod node_id;
 /// Query AST
 pub mod query;
@@ -31,9 +34,12 @@ mod upable;
 /// collection of AST visitors
 pub mod visitors;
 
+/// docs
+pub mod docs;
 /// collection of AST visitors
 pub mod walkers;
 
+pub use self::helper::Helper;
 pub use self::node_id::{BaseRef, NodeId};
 use self::visitors::ConstFolder;
 use self::walkers::ImutExprWalker;
@@ -46,11 +52,9 @@ use crate::{
     errors::{error_generic, error_no_consts, error_no_locals, Kind as ErrorKind, Result},
     impl_expr_ex_mid, impl_expr_mid,
     interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack},
-    pos::{Location, Range},
+    pos::Location,
     prelude::*,
-    registry::{
-        Aggr as AggrRegistry, CustomFn, FResult, Registry, TremorAggrFnWrapper, TremorFnWrapper,
-    },
+    registry::{CustomFn, FResult, TremorAggrFnWrapper, TremorFnWrapper},
     script::Return,
     stry,
     tilde::Extractor,
@@ -63,10 +67,7 @@ pub use deploy::*;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    mem,
-};
+use std::{collections::BTreeMap, mem};
 use upable::Upable;
 
 pub(crate) type Exprs<'script> = Vec<Expr<'script>>;
@@ -94,10 +95,6 @@ pub trait Expression: Clone + std::fmt::Debug + PartialEq + Serialize {
 
     /// a null literal
     fn null_lit() -> Self;
-}
-
-fn shadow_name(id: usize) -> String {
-    format!(" __SHADOW {}__ ", id)
 }
 
 #[derive(Default, Clone, Serialize, Debug, PartialEq)]
@@ -189,30 +186,6 @@ impl<'script> NodeMetas {
     }
 }
 
-#[derive(Serialize, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-/// A warning generated while lexing or parsing
-pub struct Warning {
-    /// Outer span of the warning
-    pub outer: Range,
-    /// Inner span of thw warning
-    pub inner: Range,
-    /// Warning message
-    pub msg: String,
-}
-
-impl Warning {
-    fn new<T: ToString>(inner: Range, outer: Range, msg: &T) -> Self {
-        Self {
-            outer,
-            inner,
-            msg: msg.to_string(),
-        }
-    }
-    fn new_with_scope<T: ToString>(warning_scope: Range, msg: &T) -> Self {
-        Self::new(warning_scope, warning_scope, msg)
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 struct Function<'script> {
     is_const: bool,
@@ -250,135 +223,6 @@ pub struct Bytes<'script> {
     pub value: Vec<BytesPart<'script>>,
 }
 impl_expr_mid!(Bytes);
-
-/// Documentation from constant
-#[derive(Debug, Clone, PartialEq)]
-pub struct ConstDoc {
-    /// Constant name
-    pub name: String,
-    /// Constant documentation
-    pub doc: Option<String>,
-    /// Constant value type
-    pub value_type: ValueType,
-}
-
-impl ToString for ConstDoc {
-    fn to_string(&self) -> String {
-        format!(
-            r#"
-### {}
-
-*type*: {:?}
-
-{}
-"#,
-            self.name,
-            self.value_type,
-            &self.doc.clone().unwrap_or_default()
-        )
-    }
-}
-
-/// Documentation from function
-#[derive(Debug, Clone, PartialEq)]
-pub struct FnDoc {
-    /// Function name
-    pub name: String,
-    /// Function arguments
-    pub args: Vec<String>,
-    /// Function documentation
-    pub doc: Option<String>,
-    /// Whether the function is open or not
-    // TODO clarify what open exactly is
-    pub open: bool,
-}
-
-impl ToString for FnDoc {
-    fn to_string(&self) -> String {
-        format!(
-            r#"
-### {}({})
-
-{}
-"#,
-            self.name,
-            self.args.join(", "),
-            self.doc.clone().unwrap_or_default()
-        )
-    }
-}
-
-/// Documentation from a module
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct ModDoc {
-    /// Module name
-    pub name: String,
-    /// Module documentation
-    pub doc: Option<String>,
-}
-
-impl ModDoc {
-    /// Prints the module documentation
-    #[must_use]
-    pub fn print_with_name(&self, name: &str) -> String {
-        format!(
-            r#"
-# {}
-
-{}
-"#,
-            name,
-            &self.doc.clone().unwrap_or_default()
-        )
-    }
-}
-
-/// Documentation from a query statement
-#[derive(Debug, Clone, PartialEq)]
-pub struct QueryDeclDoc {
-    /// Statment name
-    pub name: String,
-    /// Statment documentation
-    pub doc: Option<String>,
-}
-
-impl ToString for QueryDeclDoc {
-    fn to_string(&self) -> String {
-        format!(
-            r#"
-### {}
-
-{}
-"#,
-            self.name,
-            &self.doc.clone().unwrap_or_default()
-        )
-    }
-}
-
-/// Documentation from a module
-#[derive(Debug, Clone, PartialEq)]
-pub struct Docs {
-    /// Constants
-    pub consts: Vec<ConstDoc>,
-    /// Functions
-    pub fns: Vec<FnDoc>,
-    /// Query Stament documentation
-    pub query_decls: Vec<QueryDeclDoc>,
-    /// Module level documentation
-    pub module: Option<ModDoc>,
-}
-
-impl Default for Docs {
-    fn default() -> Self {
-        Self {
-            consts: Vec::new(),
-            fns: Vec::new(),
-            query_decls: Vec::new(),
-            module: None,
-        }
-    }
-}
 
 /// Constants and special keyword values
 #[derive(Clone, Copy, Debug)]
@@ -481,215 +325,7 @@ impl<'script> Consts<'script> {
     }
 }
 
-/// ordered collection of warnings
-pub type Warnings = std::collections::BTreeSet<Warning>;
-
 /// don't use
-#[allow(clippy::struct_excessive_bools)]
-pub struct Helper<'script, 'registry>
-where
-    'script: 'registry,
-{
-    // NOTE We should refactor this into multiple structs as its becoming a bit of a
-    // spaghetti junction over time the languages and runtime continue to evolve. What
-    // we have today is no longer a helper, its essential, but badly factored for what
-    // we need today and looking forward
-    //
-    reg: &'registry Registry,
-    aggr_reg: &'registry AggrRegistry,
-    can_emit: bool,
-    is_in_aggr: bool,
-    // Troy
-    instances: HashMap<NodeId, DeployFlow<'script>>,
-    flow_decls: HashMap<NodeId, FlowDefinition<'script>>,
-    connector_decls: HashMap<NodeId, ConnectorDefinition<'script>>,
-    pipeline_decls: HashMap<NodeId, PipelineDefinition<'script>>,
-    // Trickle
-    queries: HashMap<String, PipelineDefinition<'script>>,
-    windows: HashMap<String, WindowDefinition<'script>>,
-    scripts: HashMap<String, ScriptDefinition<'script>>,
-    operators: HashMap<String, OperatorDefinition<'script>>,
-    /// Aggregates
-    pub aggregates: Vec<InvokeAggrFn<'script>>,
-    /// Warnings
-    pub warnings: Warnings,
-    shadowed_vars: Vec<String>,
-    func_vec: Vec<CustomFn<'script>>,
-    pub(crate) locals: HashMap<String, usize>,
-    pub(crate) functions: HashMap<Vec<String>, usize>,
-    /// Runtime constant pool
-    pub consts: Consts<'script>,
-    /// AST Metadata
-    pub meta: NodeMetas,
-    docs: Docs,
-    module: Vec<String>,
-    possible_leaf: bool,
-    fn_argc: usize,
-    is_open: bool,
-    file_offset: Location,
-    cu: usize,
-}
-
-impl<'script, 'registry> Helper<'script, 'registry>
-where
-    'script: 'registry,
-{
-    fn is_const(&self, id: &[String]) -> Option<&usize> {
-        self.consts.is_const(id)
-    }
-
-    fn add_const_doc<N: ToString>(
-        &mut self,
-        name: &N,
-        doc: Option<Vec<Cow<'script, str>>>,
-        value_type: ValueType,
-    ) {
-        let doc = doc.map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
-        self.docs.consts.push(ConstDoc {
-            name: name.to_string(),
-            doc,
-            value_type,
-        });
-    }
-    fn add_query_decl_doc<N: ToString>(&mut self, name: &N, doc: Option<Vec<Cow<'script, str>>>) {
-        let doc = doc.map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
-        self.docs.query_decls.push(QueryDeclDoc {
-            name: name.to_string(),
-            doc,
-        });
-    }
-    pub(crate) fn add_meta(&mut self, start: Location, end: Location) -> usize {
-        self.meta
-            .add_meta(start - self.file_offset, end - self.file_offset, self.cu)
-    }
-    pub(crate) fn add_meta_w_name<S>(&mut self, start: Location, end: Location, name: &S) -> usize
-    where
-        S: ToString,
-    {
-        self.meta.add_meta_w_name(
-            start - self.file_offset,
-            end - self.file_offset,
-            name,
-            self.cu,
-        )
-    }
-    pub(crate) fn has_locals(&self) -> bool {
-        self.locals
-            .iter()
-            .any(|(n, _)| !n.starts_with(" __SHADOW "))
-    }
-
-    pub(crate) fn swap(
-        &mut self,
-        aggregates: &mut Vec<InvokeAggrFn<'script>>,
-        locals: &mut HashMap<String, usize>,
-    ) {
-        mem::swap(&mut self.aggregates, aggregates);
-        mem::swap(&mut self.locals, locals);
-    }
-
-    /// Creates a new AST helper
-    #[must_use]
-    pub fn new(
-        reg: &'registry Registry,
-        aggr_reg: &'registry AggrRegistry,
-        cus: Vec<crate::lexer::CompilationUnit>,
-    ) -> Self {
-        Helper {
-            reg,
-            aggr_reg,
-            can_emit: true,
-            is_in_aggr: false,
-            // Troy
-            instances: HashMap::new(),
-            flow_decls: HashMap::new(),
-            connector_decls: HashMap::new(),
-            pipeline_decls: HashMap::new(),
-            // Trickle
-            queries: HashMap::new(),
-            windows: HashMap::new(),
-            scripts: HashMap::new(),
-            operators: HashMap::new(),
-            aggregates: Vec::new(),
-            // Common
-            warnings: BTreeSet::new(),
-            locals: HashMap::new(),
-            consts: Consts::default(),
-            functions: HashMap::new(),
-            func_vec: Vec::new(),
-            shadowed_vars: Vec::new(),
-            meta: NodeMetas::new(cus),
-            docs: Docs::default(),
-            module: Vec::new(),
-            possible_leaf: false,
-            fn_argc: 0,
-            is_open: false,
-            file_offset: Location::default(),
-            cu: 0,
-        }
-    }
-
-    fn register_fun(&mut self, f: CustomFn<'script>) -> Result<usize> {
-        let i = self.func_vec.len();
-        let mut mf = self.module.clone();
-        mf.push(f.name.clone().to_string());
-
-        if self.functions.insert(mf, i).is_none() {
-            self.func_vec.push(f);
-            Ok(i)
-        } else {
-            Err(format!("function {} already defined.", f.name).into())
-        }
-    }
-
-    fn register_shadow_var(&mut self, id: &str) -> usize {
-        let r = self.reserve_shadow();
-        self.shadowed_vars.push(id.to_string());
-        r
-    }
-
-    fn end_shadow_var(&mut self) {
-        self.shadowed_vars.pop();
-    }
-
-    fn find_shadow_var(&self, id: &str) -> Option<String> {
-        let mut r = None;
-        for (i, s) in self.shadowed_vars.iter().enumerate() {
-            if s == id {
-                //TODO: make sure we never overwrite this,
-                r = Some(shadow_name(i));
-            }
-        }
-        r
-    }
-
-    fn reserve_shadow(&mut self) -> usize {
-        self.var_id(&shadow_name(self.shadowed_vars.len()))
-    }
-
-    fn reserve_2_shadow(&mut self) -> (usize, usize) {
-        let l = self.shadowed_vars.len();
-        let n1 = shadow_name(l);
-        let n2 = shadow_name(l + 1);
-        (self.var_id(&n1), self.var_id(&n2))
-    }
-
-    fn var_id(&mut self, id: &str) -> usize {
-        let id = self.find_shadow_var(id).unwrap_or_else(|| id.to_string());
-
-        self.locals.get(id.as_str()).copied().unwrap_or_else(|| {
-            self.locals.insert(id.to_string(), self.locals.len());
-            self.locals.len() - 1
-        })
-    }
-
-    fn warn<S: ToString>(&mut self, inner: Range, outer: Range, msg: &S) {
-        self.warnings.insert(Warning::new(inner, outer, msg));
-    }
-    fn warn_with_scope<S: ToString>(&mut self, r: Range, msg: &S) {
-        self.warnings.insert(Warning::new_with_scope(r, msg));
-    }
-}
 
 /// A tremor script instance
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -715,7 +351,7 @@ pub struct Script<'script> {
     pub node_meta: NodeMetas,
     #[serde(skip)]
     /// Documentation from the script
-    pub docs: Docs,
+    pub docs: docs::Docs,
 }
 impl_expr_mid!(Script);
 
@@ -956,6 +592,15 @@ pub struct FnDecl<'script> {
     pub(crate) inline: bool,
 }
 impl_expr_mid!(FnDecl);
+
+/// A Constant
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Const<'script> {
+    pub(crate) mid: usize,
+    pub(crate) value: Value<'script>,
+    pub(crate) name: String,
+}
+impl_expr_mid!(Const);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Legal expression forms
@@ -2574,9 +2219,11 @@ impl_expr_mid!(UnaryExpr);
 #[cfg(test)]
 mod test {
 
-    use super::{ConstDoc, FnDoc, ModDoc, QueryDeclDoc};
     use crate::{
-        ast::{Expr, ImutExpr, Invocable, Invoke, Record},
+        ast::{
+            docs::{ModDoc, QueryDeclDoc},
+            Expr, ImutExpr, Invocable, Invoke, Record,
+        },
         prelude::*,
         CustomFn,
     };
@@ -2586,74 +2233,6 @@ mod test {
             mid: 0,
             value: Value::from(s),
         })
-    }
-    #[test]
-    fn const_doc() {
-        let c = ConstDoc {
-            name: "const test".into(),
-            doc: Some("hello".into()),
-            value_type: ValueType::Null,
-        };
-        assert_eq!(
-            c.to_string(),
-            r#"
-### const test
-
-*type*: Null
-
-hello
-"#
-        );
-    }
-
-    #[test]
-    fn fn_doc() {
-        let c = FnDoc {
-            name: "fn_test".into(),
-            args: vec!["snot".into(), "badger".into()],
-            doc: Some("hello".into()),
-            open: false,
-        };
-        assert_eq!(
-            c.to_string(),
-            r#"
-### fn_test(snot, badger)
-
-hello
-"#
-        );
-    }
-
-    #[test]
-    fn mod_doc() {
-        let c = ModDoc {
-            name: "test mod".into(),
-            doc: Some("hello".into()),
-        };
-        assert_eq!(
-            c.print_with_name(&c.name),
-            r#"
-# test mod
-
-hello
-"#
-        );
-    }
-
-    #[test]
-    fn query_doc() {
-        let q = QueryDeclDoc {
-            name: "test query".into(),
-            doc: Some("hello".into()),
-        };
-        assert_eq!(
-            q.to_string(),
-            r#"
-### test query
-
-hello
-"#
-        );
     }
 
     #[test]

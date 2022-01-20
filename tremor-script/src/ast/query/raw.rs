@@ -18,24 +18,28 @@
 use std::collections::HashSet;
 
 use super::{
-    super::raw::{ExprRaw, IdentRaw, ImutExprRaw, ModuleRaw, ScriptRaw},
+    super::raw::{IdentRaw, ImutExprRaw, ScriptRaw},
     ArgsExprs, CreationalWith, DefinitioalArgs, DefinitioalArgsWith, WithExprs,
 };
 use super::{
     error_generic, error_no_consts, error_no_locals, BaseExpr, GroupBy, HashMap, Helper, Location,
-    NodeMetas, OperatorCreate, OperatorDefinition, OperatorKind, PipelineCreate,
-    PipelineDefinition, Query, Result, ScriptCreate, ScriptDefinition, Select, SelectStmt,
-    Serialize, Stmt, StreamStmt, Upable, Value, WindowDefinition, WindowKind,
+    OperatorCreate, OperatorDefinition, OperatorKind, PipelineCreate, PipelineDefinition, Query,
+    Result, ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamStmt,
+    Upable, Value, WindowDefinition, WindowKind,
 };
-use crate::{ast::InvokeAggrFn, impl_expr};
 use crate::{
     ast::{
+        module::ModuleRaw,
         node_id::{BaseRef, NodeId},
         visitors::{ArgsRewriter, ConstFolder, GroupByExprExtractor, TargetEventRef},
         walkers::{ImutExprWalker, QueryWalker},
         Ident,
     },
     errors::err_generic,
+};
+use crate::{
+    ast::{raw::TopLevelExprRaw, InvokeAggrFn},
+    impl_expr,
 };
 use beef::Cow;
 use std::iter::FromIterator;
@@ -93,10 +97,13 @@ impl<'script> QueryRaw<'script> {
             config,
             stmts,
             node_meta: helper.meta.clone(),
-            windows: helper.windows.clone(),
-            scripts: helper.scripts.clone(),
-            operators: helper.operators.clone(),
+            // windows: helper.windows.clone(),
+            // scripts: helper.scripts.clone(),
+            // operators: helper.operators.clone(),
             consts: helper.consts.clone(),
+            windows: todo!(),
+            scripts: todo!(),
+            operators: todo!(),
         })
     }
 }
@@ -123,9 +130,9 @@ pub enum StmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     SelectStmt(Box<SelectRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
-    ModuleStmt(ModuleStmtRaw<'script>),
+    ModuleStmt(ModuleRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    Expr(Box<ExprRaw<'script>>),
+    Expr(Box<TopLevelExprRaw<'script>>),
 }
 impl<'script> StmtRaw<'script> {
     const BAD_MODULE: &'static str = "Module in wrong place error";
@@ -160,14 +167,16 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
             StmtRaw::StreamStmt(stmt) => Ok(Stmt::StreamStmt(stmt.up(helper)?)),
             StmtRaw::OperatorDefinition(stmt) => {
                 let stmt: OperatorDefinition<'script> = stmt.up(helper)?;
-                helper.operators.insert(stmt.fqn(), stmt.clone());
-                Ok(Stmt::OperatorDefinition(stmt))
+                todo!();
+                //FIXME: helper.operators.insert(stmt.fqn(), stmt.clone());
+                // Ok(Stmt::OperatorDefinition(stmt))
             }
             StmtRaw::OperatorCreate(stmt) => Ok(Stmt::OperatorCreate(stmt.up(helper)?)),
             StmtRaw::ScriptDefinition(stmt) => {
                 let stmt: ScriptDefinition<'script> = stmt.up(helper)?;
-                helper.scripts.insert(stmt.fqn(), stmt.clone());
-                Ok(Stmt::ScriptDefinition(Box::new(stmt)))
+                todo!();
+                //FIXME: helper.scripts.insert(stmt.fqn(), stmt.clone());
+                // Ok(Stmt::ScriptDefinition(Box::new(stmt)))
             }
             StmtRaw::ScriptCreate(stmt) => Ok(Stmt::ScriptCreate(stmt.up(helper)?)),
             StmtRaw::PipelineDefinition(stmt) => {
@@ -175,8 +184,9 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
             }
             StmtRaw::WindowDefinition(stmt) => {
                 let stmt: WindowDefinition<'script> = stmt.up(helper)?;
-                helper.windows.insert(stmt.fqn(), stmt.clone());
-                Ok(Stmt::WindowDefinition(Box::new(stmt)))
+                todo!();
+                //FIXME: helper.windows.insert(stmt.fqn(), stmt.clone());
+                // Ok(Stmt::WindowDefinition(Box::new(stmt)))
             }
             StmtRaw::ModuleStmt(ref m) => error_generic(m, m, &Self::BAD_MODULE, &helper.meta),
             StmtRaw::PipelineCreate(ref sq) => error_generic(sq, sq, &Self::BAD_SUBQ, &helper.meta),
@@ -195,6 +205,7 @@ pub struct OperatorDefinitionRaw<'script> {
     pub(crate) params: DefinitioalArgsWithRaw<'script>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
+impl_expr!(OperatorDefinitionRaw);
 
 impl<'script> Upable<'script> for OperatorDefinitionRaw<'script> {
     type Target = OperatorDefinition<'script>;
@@ -205,11 +216,12 @@ impl<'script> Upable<'script> for OperatorDefinitionRaw<'script> {
             kind: self.kind.up(helper)?,
             params: self.params.up(helper)?,
         };
-        helper
-            .operators
-            .insert(operator_decl.fqn(), operator_decl.clone());
-        helper.add_query_decl_doc(&operator_decl.node_id.id(), self.doc);
-        Ok(operator_decl)
+        todo!();
+        //FIXME: helper
+        // .operators
+        // .insert(operator_decl.fqn(), operator_decl.clone());
+        // helper.add_query_decl_doc(&operator_decl.node_id.id(), self.doc);
+        // Ok(operator_decl)
     }
 }
 
@@ -283,12 +295,13 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
         };
 
         let pipeline_name = pipeline_decl.fqn();
-        if helper.queries.contains_key(&pipeline_name) {
-            let err_str = format!("Can't define the pipeline `{}` twice", pipeline_name);
-            return error_generic(&pipeline_decl, &pipeline_decl, &err_str, &helper.meta);
-        }
+        // FIXME:
+        // if helper.queries.contains_key(&pipeline_name) {
+        //     let err_str = format!("Can't define the pipeline `{}` twice", pipeline_name);
+        //     return error_generic(&pipeline_decl, &pipeline_decl, &err_str, &helper.meta);
+        // }
 
-        helper.queries.insert(pipeline_name, pipeline_decl.clone());
+        // FIXME: helper.queries.insert(pipeline_name, pipeline_decl.clone());
         helper.add_query_decl_doc(&pipeline_decl.fqn(), self.doc);
         Ok(pipeline_decl)
     }
@@ -361,16 +374,16 @@ impl<'script> PipelineInlineRaw<'script> {
     ) -> Result<PipelineCreate> {
         let target = self.target.clone().with_prefix(&helper.module);
         // Calculate the fully qualified name for the pipeline declaration.
-        let fq_pipeline_defn = target.fqn();
+        // let fq_pipeline_defn = target.fqn();
 
-        let pipeline_decl = helper.queries.get(&fq_pipeline_defn).ok_or_else(|| {
+        let pipeline_decl = helper.get_pipeline(&target).ok_or_else(|| {
             err_generic(
                 &self,
                 &self,
                 &format!(
-                    "pipeline `{}` not found in: {}",
-                    fq_pipeline_defn,
-                    helper.queries.keys().cloned().collect::<Vec<_>>().join(",")
+                    "pipeline `{}` not found ",
+                    target,
+                    //helper.queries.keys().cloned().collect::<Vec<_>>().join(",")
                 ),
                 &helper.meta,
             )
@@ -502,14 +515,14 @@ impl<'script> PipelineInlineRaw<'script> {
                     let mut d = d.up(&mut helper)?;
                     d.params.substitute_args(&subq_args, helper)?;
                     // We overwrite the original script with the substituted one
-                    helper.scripts.insert(d.node_id.fqn(), d.clone());
+                    // FIXME: helper.scripts.insert(d.node_id.fqn(), d.clone());
                     query_stmts.push(Stmt::ScriptDefinition(Box::new(d)));
                 }
                 StmtRaw::OperatorDefinition(d) => {
                     let mut d = d.up(&mut helper)?;
                     d.params.substitute_args(&subq_args, &mut helper)?;
                     // We overwrite the original script with the substituted one
-                    helper.operators.insert(d.node_id.fqn(), d.clone());
+                    // FIXME: helper.operators.insert(d.node_id.fqn(), d.clone());
                     query_stmts.push(Stmt::OperatorDefinition(d));
                 }
                 StmtRaw::PipelineDefinition(d) => {
@@ -536,73 +549,6 @@ impl<'script> PipelineInlineRaw<'script> {
             port_stream_map: pipeline_stream_map,
         };
         Ok(pipeline_stmt)
-    }
-}
-
-#[derive(Debug, PartialEq, Serialize, Clone)]
-pub struct ModuleStmtRaw<'script> {
-    pub start: Location,
-    pub end: Location,
-    pub name: IdentRaw<'script>,
-    pub stmts: StmtsRaw<'script>,
-    pub doc: Option<Vec<Cow<'script, str>>>,
-}
-impl_expr!(ModuleStmtRaw);
-
-impl<'script> ModuleStmtRaw<'script> {
-    const BAD_STMT: &'static str = "Unsupported statement type inside of query module";
-    pub(crate) fn define<'registry>(
-        self,
-        mut helper: &mut Helper<'script, 'registry>,
-    ) -> Result<()> {
-        helper.module.push(self.name.to_string());
-        for e in self.stmts {
-            match e {
-                StmtRaw::ModuleStmt(m) => {
-                    m.define(helper)?;
-                }
-                StmtRaw::Expr(e) => {
-                    // We create a 'fake' tremor script module to define
-                    // expressions inside this module
-                    let expr_m = ModuleRaw {
-                        name: self.name.clone(),
-                        start: self.start,
-                        end: self.end,
-                        doc: None,
-                        exprs: vec![*e],
-                    };
-                    // since `ModuleRaw::define` also prepends the module
-                    // name we got to remove it prior to calling `define` and
-                    // add it back later
-                    let old = helper.module.pop();
-                    expr_m.define(helper)?;
-                    if let Some(old) = old {
-                        helper.module.push(old);
-                    }
-                }
-                StmtRaw::WindowDefinition(stmt) => {
-                    let w = stmt.up(&mut helper)?;
-                    helper.windows.insert(w.fqn(), w);
-                }
-                StmtRaw::ScriptDefinition(stmt) => {
-                    let s = stmt.up(&mut helper)?;
-                    helper.scripts.insert(s.fqn(), s);
-                }
-                StmtRaw::PipelineDefinition(stmt) => {
-                    let o = stmt.up(&mut helper)?;
-                    helper.queries.insert(o.fqn(), o);
-                }
-                StmtRaw::OperatorDefinition(stmt) => {
-                    let o = stmt.up(&mut helper)?;
-                    helper.operators.insert(o.fqn(), o);
-                }
-                ref e => {
-                    return error_generic(e, e, &Self::BAD_STMT, &helper.meta);
-                }
-            }
-        }
-        helper.module.pop();
-        Ok(())
     }
 }
 
@@ -640,6 +586,7 @@ pub struct ScriptDefinitionRaw<'script> {
     pub(crate) script: ScriptRaw<'script>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
+impl_expr!(ScriptDefinitionRaw);
 
 impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
     type Target = ScriptDefinition<'script>;
@@ -670,9 +617,9 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
             script,
         };
 
-        helper
-            .scripts
-            .insert(script_decl.node_id.fqn(), script_decl.clone());
+        // FIXME: helper
+        // .scripts
+        // .insert(script_decl.node_id.fqn(), script_decl.clone());
         helper.add_query_decl_doc(&script_decl.node_id.id(), self.doc);
         Ok(script_decl)
     }
@@ -714,6 +661,7 @@ pub struct WindowDefinitionRaw<'script> {
     pub(crate) script: Option<ScriptRaw<'script>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
+impl_expr!(WindowDefinitionRaw);
 
 impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
     type Target = WindowDefinition<'script>;
@@ -730,9 +678,9 @@ impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
             script: maybe_script,
         };
 
-        helper
-            .windows
-            .insert(window_decl.fqn(), window_decl.clone());
+        // FIXME: helper
+        // .windows
+        // .insert(window_decl.fqn(), window_decl.clone());
         helper.add_query_decl_doc(&window_decl.node_id.id(), self.doc);
         Ok(window_decl)
     }

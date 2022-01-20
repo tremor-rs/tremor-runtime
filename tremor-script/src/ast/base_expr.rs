@@ -24,16 +24,18 @@ use crate::{
     pos::{Location, Range},
 };
 
+use super::raw::TopLevelExprRaw;
+
 #[doc(hidden)]
 /// Implements the BaseExpr trait for a given expression
 #[macro_export]
 macro_rules! impl_expr {
     ($name:ident) => {
-        impl<'script> BaseExpr for $name<'script> {
-            fn s(&self, _meta: &NodeMetas) -> Location {
+        impl<'script> crate::ast::base_expr::BaseExpr for $name<'script> {
+            fn s(&self, _meta: &crate::ast::NodeMetas) -> Location {
                 self.start
             }
-            fn e(&self, _meta: &NodeMetas) -> Location {
+            fn e(&self, _meta: &crate::ast::NodeMetas) -> Location {
                 self.end
             }
             fn mid(&self) -> usize {
@@ -420,6 +422,32 @@ impl<'script> BaseExpr for ReservedPathRaw<'script> {
     }
 }
 
+impl<'script> BaseExpr for TopLevelExprRaw<'script> {
+    fn mid(&self) -> usize {
+        0
+    }
+
+    fn s(&self, meta: &NodeMetas) -> Location {
+        match self {
+            TopLevelExprRaw::Const(c) => c.s(meta),
+            TopLevelExprRaw::Module(e) => e.s(meta),
+            TopLevelExprRaw::FnDecl(e) => e.s(meta),
+            TopLevelExprRaw::Use(e) => e.s(meta),
+            TopLevelExprRaw::Expr(e) => e.s(meta),
+        }
+    }
+
+    fn e(&self, meta: &NodeMetas) -> Location {
+        match self {
+            TopLevelExprRaw::Const(c) => c.e(meta),
+            TopLevelExprRaw::Module(e) => e.e(meta),
+            TopLevelExprRaw::FnDecl(e) => e.e(meta),
+            TopLevelExprRaw::Use(e) => e.e(meta),
+            TopLevelExprRaw::Expr(e) => e.e(meta),
+        }
+    }
+}
+
 impl<'script> BaseExpr for ExprRaw<'script> {
     fn mid(&self) -> usize {
         0
@@ -427,26 +455,22 @@ impl<'script> BaseExpr for ExprRaw<'script> {
 
     fn s(&self, meta: &NodeMetas) -> Location {
         match self {
-            ExprRaw::Const { start, .. } | ExprRaw::Drop { start, .. } => *start,
-            ExprRaw::Module(e) => e.s(meta),
+            ExprRaw::Drop { start, .. } => *start,
             ExprRaw::MatchExpr(e) => e.s(meta),
             ExprRaw::Assign(e) => e.s(meta),
             ExprRaw::Comprehension(e) => e.s(meta),
             ExprRaw::Emit(e) => e.s(meta),
-            ExprRaw::FnDecl(e) => e.s(meta),
             ExprRaw::Imut(e) => e.s(meta),
         }
     }
 
     fn e(&self, meta: &NodeMetas) -> Location {
         match self {
-            ExprRaw::Const { end, .. } | ExprRaw::Drop { end, .. } => *end,
-            ExprRaw::Module(e) => e.e(meta),
+            ExprRaw::Drop { end, .. } => *end,
             ExprRaw::MatchExpr(e) => e.e(meta),
             ExprRaw::Assign(e) => e.e(meta),
             ExprRaw::Comprehension(e) => e.e(meta),
             ExprRaw::Emit(e) => e.e(meta),
-            ExprRaw::FnDecl(e) => e.e(meta),
             ExprRaw::Imut(e) => e.e(meta),
         }
     }
@@ -476,7 +500,7 @@ impl<'script> BaseExpr for StmtRaw<'script> {
     }
     fn s(&self, meta: &NodeMetas) -> Location {
         match self {
-            StmtRaw::ModuleStmt(s) => s.start,
+            StmtRaw::ModuleStmt(s) => s.s(meta),
             StmtRaw::OperatorCreate(s) => s.start,
             StmtRaw::OperatorDefinition(s) => s.start,
             StmtRaw::ScriptCreate(s) => s.start,
@@ -491,7 +515,7 @@ impl<'script> BaseExpr for StmtRaw<'script> {
     }
     fn e(&self, meta: &NodeMetas) -> Location {
         match self {
-            StmtRaw::ModuleStmt(e) => e.end,
+            StmtRaw::ModuleStmt(e) => e.e(meta),
             StmtRaw::OperatorCreate(e) => e.end,
             StmtRaw::OperatorDefinition(e) => e.end,
             StmtRaw::ScriptCreate(e) => e.end,

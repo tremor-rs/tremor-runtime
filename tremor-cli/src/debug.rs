@@ -93,7 +93,7 @@ where
 
 fn preprocessed_tokens<'input>(
     _data: &DbgData,
-    input: &'input mut String,
+    input: &'input str,
 ) -> Result<Vec<Spanned<'input>>> {
     let lexemes: Vec<_> = lexer::Tokenizer::new(input)
         .filter_map(std::result::Result::ok)
