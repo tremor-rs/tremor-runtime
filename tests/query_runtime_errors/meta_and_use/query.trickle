@@ -1,0 +1,13 @@
+use std::record;
+
+define script test
+script
+  let $ = "snot";
+  $
+end;
+
+create script test;
+
+select event from in into test;
+select event from test into out;
+select event from test/err into out;

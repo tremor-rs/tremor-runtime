@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{self, Warning};
 use crate::errors::{CompilerError, Error, Result};
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 use crate::path::ModulePath;
 use crate::prelude::*;
+use crate::{
+    ast::{self, Warning},
+    lexer::Tokenizer,
+};
 use crate::{lexer, srs};
 use std::collections::BTreeSet;
 use std::io::Write;
@@ -63,8 +66,8 @@ where
     /// # Errors
     /// if the deployment can not be parsed
     pub fn parse(
-        module_path: &ModulePath,
-        file_name: &str,
+        _module_path: &ModulePath,
+        _file_name: &str,
         script: &'script str,
         cus: Vec<ast::CompilationUnit>,
         reg: &Registry,
@@ -78,23 +81,12 @@ where
         // TODO make lexer EOS tolerant to avoid this kludge
         source.push('\n');
 
-        let mut include_stack = lexer::IncludeStack::default();
-
-        let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
+        let r = || -> Result<Self> {
             let deploy = srs::Deploy::try_new::<Error, _>(source.clone(), |src: &mut String| {
                 let mut helper = ast::Helper::new(reg, aggr_reg, cus);
-                let cu = include_stack.push(&file_name)?;
-                let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
-                    module_path,
-                    file_name,
-                    src,
-                    cu,
-                    include_stack,
-                )?;
-                let filtered_tokens = lexemes
-                    .into_iter()
-                    .filter_map(Result::ok)
-                    .filter(|t| !t.value.is_ignorable());
+                //let cu = include_stack.push(&file_name)?;
+                let tokens = Tokenizer::new(src.as_str()).collect::<Result<Vec<_>>>()?;
+                let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
                 let script_stage_1 =
                     crate::parser::g::DeployParser::new().parse(filtered_tokens)?;
                 let script = script_stage_1.up_script(&mut helper)?;
@@ -110,10 +102,10 @@ where
                 warnings,
                 locals,
             })
-        }(&mut include_stack);
+        }();
         r.map_err(|error| CompilerError {
             error,
-            cus: include_stack.into_cus(),
+            cus: Vec::new(),
         })
     }
 

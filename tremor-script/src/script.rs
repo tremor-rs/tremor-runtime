@@ -18,7 +18,7 @@ use crate::{
     ctx::EventContext,
     errors::{CompilerError, Error, Result},
     highlighter::{Dumb as DumbHighlighter, Highlighter},
-    lexer,
+    lexer::{self, Tokenizer},
     parser::g as grammar,
     path::ModulePath,
     pos::Range,
@@ -72,32 +72,21 @@ impl Script {
     /// # Errors
     /// if the script can not be parsed
     pub fn parse(
-        module_path: &ModulePath,
-        file_name: &str,
+        _module_path: &ModulePath,
+        _file_name: &str,
         script: String,
         reg: &Registry,
     ) -> std::result::Result<Self, CompilerError> {
-        let mut include_stack = lexer::IncludeStack::default();
-        let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
+        let r = || -> Result<Self> {
             let mut warnings = Warnings::new();
 
             let rented_script = srs::Script::try_new::<Error, _>(script.clone(), |script| {
-                let cu = include_stack.push(file_name)?;
-                let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
-                    module_path,
-                    file_name,
-                    script,
-                    cu,
-                    include_stack,
-                )?;
-                let filtered_tokens = lexemes
-                    .into_iter()
-                    .filter_map(Result::ok)
-                    .filter(|t| !t.value.is_ignorable());
+                let tokens = Tokenizer::new(script.as_str()).collect::<Result<Vec<_>>>()?;
+                let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
 
                 let script_raw = grammar::ScriptParser::new().parse(filtered_tokens)?;
                 let fake_aggr_reg = AggrRegistry::default();
-                let mut helper = Helper::new(reg, &fake_aggr_reg, include_stack.cus.clone());
+                let mut helper = Helper::new(reg, &fake_aggr_reg, Vec::new());
                 // helper.consts.args = args.clone_static();
                 let mut screw_rust = script_raw.up_script(&mut helper)?;
                 ConstFolder::new(&helper).walk_script(&mut screw_rust)?;
@@ -110,10 +99,10 @@ impl Script {
                 source: script,
                 warnings,
             })
-        }(&mut include_stack);
+        }();
         r.map_err(|error| CompilerError {
             error,
-            cus: include_stack.into_cus(),
+            cus: Vec::new(),
         })
     }
 
