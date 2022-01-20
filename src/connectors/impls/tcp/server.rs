@@ -199,6 +199,7 @@ impl Source for TcpServerSource {
         //        when the acceptor task errors
         self.accept_task = Some(task::spawn(async move {
             let mut stream_id_gen = StreamIdGen::default();
+            // FIXME: handle quiesence when no new accepts happen
             while let (true, Ok((stream, peer_addr))) = (
                 ctx.quiescence_beacon().continue_reading().await,
                 listener.accept().await,
