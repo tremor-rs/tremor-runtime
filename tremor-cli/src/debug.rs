@@ -92,22 +92,12 @@ where
 }
 
 fn preprocessed_tokens<'input>(
-    data: &DbgData,
+    _data: &DbgData,
     input: &'input mut String,
 ) -> Result<Vec<Spanned<'input>>> {
-    let mut include_stack = lexer::IncludeStack::default();
-    let cu = include_stack.push(&data.src)?;
-
-    let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
-        &tremor_script::path::load(),
-        &data.src,
-        input,
-        cu,
-        &mut include_stack,
-    )?
-    .into_iter()
-    .filter_map(std::result::Result::ok)
-    .collect();
+    let lexemes: Vec<_> = lexer::Tokenizer::new(input)
+        .filter_map(std::result::Result::ok)
+        .collect();
     Ok(lexemes)
 }
 
@@ -219,16 +209,6 @@ where
                     write!(h.get_writer(), "{:^16} \u{2219}    ", line_spec,)?;
                     h.set_color(&mut directive)?;
                     writeln!(h.get_writer(), " #!config ")?;
-                }
-                Token::LineDirective(_location, file) => {
-                    h.set_color(&mut line)?;
-                    let line_spec = format!(
-                        "{}:{} - {}:{}",
-                        start.line(), start.column(), end.line(), end.column()
-                    );
-                    write!(h.get_writer(), "{:^16} \u{2219}    ", line_spec,)?;
-                    h.set_color(&mut directive)?;
-                    writeln!(h.get_writer(), " #!line {}", file.to_string())?;
                 }
                 _other_token => {
                     h.set_color(&mut line)?;

@@ -1,0 +1,5 @@
+Error: 
+    1 | use std::array;
+    2 | 
+    3 | let $ = "snot";
+      |     ^^^^^^^^^^ You are trying to assign to a value that isn't valid

@@ -412,9 +412,6 @@ pub trait Highlighter {
                 c.set_intense(true).set_fg(Some(Color::Red));
             }
             match &x.value {
-                Token::LineDirective(_, _) => {
-                    c.set_intense(true).set_fg(Some(Color::White));
-                }
                 Token::SingleLineComment(_) => {
                     c.set_intense(true).set_fg(Some(Color::Blue));
                 }
