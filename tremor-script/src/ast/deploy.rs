@@ -16,11 +16,11 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::{
-    node_id::BaseRef, raw::BaseExpr, visitors::ConstFolder, CreationalWith, DefinitioalArgs,
-    DefinitioalArgsWith,
+    docs::Docs, node_id::BaseRef, raw::BaseExpr, visitors::ConstFolder, CreationalWith,
+    DefinitioalArgs, DefinitioalArgsWith,
 };
 use super::{node_id::NodeId, PipelineDefinition};
-use super::{Docs, HashMap, Value};
+use super::{HashMap, Value};
 use crate::ast::walkers::DeployWalker;
 use crate::{errors::Result, impl_expr_mid, impl_fqn};
 pub(crate) mod raw;

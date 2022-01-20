@@ -18,11 +18,12 @@
 use super::{
     query::WindowDefinition, ArgsExprs, ArrayPattern, ArrayPredicatePattern, AssignPattern,
     BinExpr, Bytes, BytesPart, ClauseGroup, ClausePreCondition, Comprehension, ComprehensionCase,
-    Consts, CreationalWith, DefaultCase, DefinitioalArgs, DefinitioalArgsWith, EmitExpr, EventPath,
-    Expr, ExprPath, Field, Ident, IfElse, ImutExpr, Invocable, Invoke, InvokeAggrFn, List, Literal,
-    LocalPath, Match, Merge, MetadataPath, OperatorDefinition, Patch, PatchOperation, Path,
-    Pattern, PredicateClause, PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Script,
-    Segment, StatePath, StrLitElement, StringLit, TuplePattern, UnaryExpr, WithExprs,
+    ConnectorDefinition, Consts, CreationalWith, DefaultCase, DefinitioalArgs, DefinitioalArgsWith,
+    EmitExpr, EventPath, Expr, ExprPath, Field, Ident, IfElse, ImutExpr, Invocable, Invoke,
+    InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath, OperatorDefinition, Patch,
+    PatchOperation, Path, Pattern, PipelineDefinition, PredicateClause, PredicatePattern, Record,
+    RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
+    TuplePattern, UnaryExpr, WithExprs,
 };
 use crate::CustomFn;
 use beef::Cow;
@@ -1154,5 +1155,20 @@ impl<'script> ArgsExprs<'script> {
                 .map(|(k, v)| (k.into_static(), v.map(ImutExpr::into_static)))
                 .collect(),
         )
+    }
+}
+
+impl<'script> ConnectorDefinition<'script> {
+    /// Removes lifetime dependencies from a `WithExprs`
+    #[must_use]
+    pub fn into_static(self) -> ConnectorDefinition<'static> {
+        ConnectorDefinition {
+            mid: self.mid,
+            node_id: self.node_id,
+            params: self.params.into_static(),
+            builtin_kind: self.builtin_kind,
+            config: self.config.into_static(),
+            docs: self.docs,
+        }
     }
 }
