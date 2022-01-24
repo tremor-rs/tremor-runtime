@@ -300,5 +300,9 @@ error_chain! {
             description("Duplicate Flow")
                 display("Flow with id \"{}\" is already deployed.", flow)
         }
+        ProducerNotAvailable(alias: String) {
+            description("Producer not available")
+                display("Kafka Producer not available for Connector {}", alias)
+        }
     }
 }

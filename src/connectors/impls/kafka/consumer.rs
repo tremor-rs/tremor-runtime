@@ -62,37 +62,6 @@ impl ConfigImpl for Config {}
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
 
-impl Builder {
-    fn verify_brokers(id: &str, brokers: &Vec<String>) -> Result<(String, Option<u16>)> {
-        let mut first_broker: Option<(String, Option<u16>)> = None;
-        for broker in brokers {
-            match broker.split(':').collect::<Vec<_>>().as_slice() {
-                [host] => {
-                    first_broker.get_or_insert_with(|| ((*host).to_string(), None));
-                }
-                [host, port] => {
-                    let port: u16 = port.parse().map_err(|_| {
-                        Error::from(ErrorKind::InvalidConfiguration(
-                            id.to_string(),
-                            format!("Invalid broker: {}:{}", host, port),
-                        ))
-                    })?;
-                    first_broker.get_or_insert_with(|| ((*host).to_string(), Some(port)));
-                }
-                b => {
-                    return Err(ErrorKind::InvalidConfiguration(
-                        id.to_string(),
-                        format!("Invalid broker: {}", b.join(":")),
-                    )
-                    .into())
-                }
-            }
-        }
-        first_broker.ok_or_else(|| {
-            ErrorKind::InvalidConfiguration(id.to_string(), "Missing brokers.".to_string()).into()
-        })
-    }
-}
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -107,7 +76,7 @@ impl ConnectorBuilder for Builder {
         if let Some(raw_config) = config {
             let config = Config::new(raw_config)?;
             // returns the first broker if all are valid
-            let (host, port) = Self::verify_brokers(alias, &config.brokers)?;
+            let (host, port) = super::verify_brokers(alias, &config.brokers)?;
             let origin_uri = EventOriginUri {
                 scheme: "tremor-kafka".to_string(),
                 host,
@@ -165,20 +134,17 @@ impl ClientContext for TremorConsumerContext {
     fn error(&self, error: KafkaError, reason: &str) {
         error!("{} Kafka Error {}: {}", &self.ctx, error, reason);
         // check for errors that manifest a non-working consumer, so we bail out
-        if let KafkaError::Subscription(_)
+        if let e@(KafkaError::Subscription(_)
             | KafkaError::ClientConfig(_, _, _, _)
             | KafkaError::ClientCreation(_)
             // TODO: what else?
-            | KafkaError::Global(RDKafkaErrorCode::UnknownTopicOrPartition | RDKafkaErrorCode::UnknownTopic | RDKafkaErrorCode::AllBrokersDown) =
+            | KafkaError::Global(RDKafkaErrorCode::UnknownTopicOrPartition | RDKafkaErrorCode::UnknownTopic | RDKafkaErrorCode::AllBrokersDown)) =
             error
         {
             let connect_tx = self.connect_tx.clone();
-            let alias = self.ctx.alias.clone();
-            if let Err(e) = connect_tx.try_send(Err(format!("Kafka Error: {}: {}", &error, reason).into())) {
+            if let Err(e) = connect_tx.try_send(Err(e.into())) {
                 error!(
-                    "[Source::{}] Error notifying the connect method of a failure: {}",
-                    &alias, e
-                )
+                    "{} Error notifying the connect method of a failure: {e}", self.ctx);
             }
         }
     }
@@ -389,7 +355,7 @@ impl Source for KafkaConsumerSource {
         }
         let (version_n, version_s) = rdkafka::util::get_rdkafka_version();
         info!(
-            "{} Connecting using rdkafka -1x{:08x}, {}",
+            "{} Connecting using rdkafka 0x{:08x}, {}",
             &ctx, version_n, version_s
         );
         let (connect_result_tx, connect_result_rx) = bounded(1);
