@@ -18,20 +18,22 @@ mod connectors;
 #[macro_use]
 extern crate log;
 
-
 #[cfg(feature = "integration")]
 mod test {
 
-    use std::time::Duration;
     use async_std::task;
     use serial_test::serial;
+    use std::time::Duration;
 
+    use super::connectors::ConnectorHarness;
     use beef::Cow;
     use futures::StreamExt;
     use rdkafka::{
         admin::{AdminClient, AdminOptions, NewTopic, TopicReplication},
         config::FromClientConfig,
-        ClientConfig, producer::{BaseRecord, BaseProducer, Producer}, message::OwnedHeaders,
+        message::OwnedHeaders,
+        producer::{BaseProducer, BaseRecord, Producer},
+        ClientConfig,
     };
     use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
     use signal_hook_async_std::Signals;
@@ -42,10 +44,8 @@ mod test {
     };
     use tremor_pipeline::CbAction;
     use tremor_runtime::errors::Result;
-    use tremor_value::{Value, literal};
+    use tremor_value::{literal, Value};
     use value_trait::Builder;
-    use super::connectors::ConnectorHarness;
-
 
     const IMAGE: &'static str = "docker.vectorized.io/vectorized/redpanda";
     const VERSION: &'static str = "latest"; //FIXME: pin version
@@ -80,8 +80,7 @@ mod test {
             });
         let container = docker.run_with_args(
             image,
-            RunArgs::default()
-                .with_mapped_port((9092_u16, 9092_u16))
+            RunArgs::default().with_mapped_port((9092_u16, 9092_u16)),
         );
 
         let container_id = container.id().to_string();
@@ -127,7 +126,6 @@ mod test {
             .create()
             .expect("Producer creation error");
 
-        
         let connector_config = literal!({
             "reconnect": {
                 "custom": {
@@ -174,7 +172,7 @@ mod test {
             return Err("Unable to send record to kafka".into());
         }
         producer.flush(Duration::from_secs(1));
-        
+
         let e1 = out.get_event().await?;
         assert_eq!(
             literal!({
@@ -198,9 +196,10 @@ mod test {
             e1.data.suffix().meta()
         );
 
-
         // ack event
-        harness.send_contraflow(CbAction::Ack, e1.id.clone()).await?;
+        harness
+            .send_contraflow(CbAction::Ack, e1.id.clone())
+            .await?;
 
         // second event
         let record2 = BaseRecord::to(topic)
@@ -213,10 +212,7 @@ mod test {
         }
         producer.flush(Duration::from_secs(1));
         let e2 = out.get_event().await?;
-        assert_eq!(
-            Value::null(),
-            e2.data.suffix().value()
-        );
+        assert_eq!(Value::null(), e2.data.suffix().value());
         assert_eq!(
             &literal!({
                 "kafka": {
@@ -231,14 +227,13 @@ mod test {
             e2.data.suffix().meta()
         );
         // fail -> ensure it is replayed
-        harness.send_contraflow(CbAction::Fail, e2.id.clone()).await?;
+        harness
+            .send_contraflow(CbAction::Fail, e2.id.clone())
+            .await?;
 
         // we get the same event again
         let e3 = out.get_event().await?;
-        assert_eq!(
-            Value::null(),
-            e3.data.suffix().value()
-        );
+        assert_eq!(Value::null(), e3.data.suffix().value());
         assert_eq!(
             &literal!({
                 "kafka": {
@@ -256,7 +251,9 @@ mod test {
         assert_eq!(e2.id.stream_id(), e3.id.stream_id());
 
         // ack the event
-        harness.send_contraflow(CbAction::Ack, e3.id.clone()).await?;
+        harness
+            .send_contraflow(CbAction::Ack, e3.id.clone())
+            .await?;
 
         // send another event and check that the previous one isn't replayed
         let record3 = BaseRecord::to(topic)
@@ -268,13 +265,10 @@ mod test {
             return Err("Could not send to kafka".into());
         }
         producer.flush(Duration::from_secs(1));
-        
+
         // next event
         let e4 = out.get_event().await?;
-        assert_eq!(
-            Value::from(false),
-            e4.data.suffix().value()
-        );
+        assert_eq!(Value::from(false), e4.data.suffix().value());
         assert_eq!(
             &literal!({
                 "kafka": {
@@ -285,7 +279,7 @@ mod test {
                     "partition": 2,
                     "timestamp": 123000000
                 }
-       
+
             }),
             e4.data.suffix().meta()
         );
@@ -315,11 +309,11 @@ mod test {
             &literal!({
                 "error": "SIMD JSON error: InternalError at character 0 ('}')",
                 "kafka": {
-                    "key": Value::Bytes(Cow::owned("failure".as_bytes().to_vec())), 
-                    "headers": null, 
-                    "topic": topic, 
-                    "partition": 2, 
-                    "offset": 1, 
+                    "key": Value::Bytes(Cow::owned("failure".as_bytes().to_vec())),
+                    "headers": null,
+                    "topic": topic,
+                    "partition": 2,
+                    "offset": 1,
                     "timestamp": 1234000000
                 }
             }),
@@ -366,8 +360,7 @@ mod test {
             });
         let container = docker.run_with_args(
             image,
-            RunArgs::default()
-                .with_mapped_port((9092_u16, 9092_u16))
+            RunArgs::default().with_mapped_port((9092_u16, 9092_u16)),
         );
 
         let container_id = container.id().to_string();
@@ -380,8 +373,6 @@ mod test {
                 signal_docker.rm(container_id.as_str());
             }
         });
-
-        
 
         let port = container.get_host_port(9092).unwrap_or(9092);
         let mut admin_config = ClientConfig::new();
@@ -408,7 +399,7 @@ mod test {
                 }
             }
         }
-        
+
         let connector_config = literal!({
             "reconnect": {
                 "custom": {
@@ -458,7 +449,7 @@ mod test {
             return Err("Unable to send record to kafka".into());
         }
         producer.flush(Duration::from_secs(1));
-        
+
         let e1 = out.get_event().await?;
         assert_eq!(
             literal!({
@@ -483,7 +474,9 @@ mod test {
         );
 
         // ack event
-        harness.send_contraflow(CbAction::Ack, e1.id.clone()).await?;
+        harness
+            .send_contraflow(CbAction::Ack, e1.id.clone())
+            .await?;
 
         // produce second event
         let record2 = BaseRecord::to(topic)
@@ -498,10 +491,7 @@ mod test {
 
         // get second event
         let e2 = out.get_event().await?;
-        assert_eq!(
-            Value::null(),
-            e2.data.suffix().value()
-        );
+        assert_eq!(Value::null(), e2.data.suffix().value());
         assert_eq!(
             &literal!({
                 "kafka": {
@@ -516,7 +506,9 @@ mod test {
             e2.data.suffix().meta()
         );
         // fail -> ensure it is not replayed
-        harness.send_contraflow(CbAction::Fail, e2.id.clone()).await?;
+        harness
+            .send_contraflow(CbAction::Fail, e2.id.clone())
+            .await?;
 
         // we don't get no event
         assert!(out.get_event().await.is_err());
@@ -531,13 +523,10 @@ mod test {
             return Err("Could not send to kafka".into());
         }
         producer.flush(Duration::from_secs(1));
-        
+
         // we only get the next event, no previous one
         let e3 = out.get_event().await?;
-        assert_eq!(
-            Value::from(false),
-            e3.data.suffix().value()
-        );
+        assert_eq!(Value::from(false), e3.data.suffix().value());
         assert_eq!(
             &literal!({
                 "kafka": {
@@ -548,7 +537,7 @@ mod test {
                     "partition": 2,
                     "timestamp": 123000000
                 }
-       
+
             }),
             e3.data.suffix().meta()
         );
@@ -578,11 +567,11 @@ mod test {
             &literal!({
                 "error": "SIMD JSON error: InternalError at character 0 ('}')",
                 "kafka": {
-                    "key": Value::Bytes(Cow::owned("failure".as_bytes().to_vec())), 
-                    "headers": null, 
-                    "topic": topic, 
-                    "partition": 2, 
-                    "offset": 1, 
+                    "key": Value::Bytes(Cow::owned("failure".as_bytes().to_vec())),
+                    "headers": null,
+                    "topic": topic,
+                    "partition": 2,
+                    "offset": 1,
                     "timestamp": 1234000000
                 }
             }),
@@ -629,8 +618,7 @@ mod test {
             });
         let container = docker.run_with_args(
             image,
-            RunArgs::default()
-                .with_mapped_port((9092_u16, 9092_u16))
+            RunArgs::default().with_mapped_port((9092_u16, 9092_u16)),
         );
 
         let container_id = container.id().to_string();
@@ -670,7 +658,7 @@ mod test {
                 }
             }
         }
-        
+
         let connector_config = literal!({
             "reconnect": {
                 "custom": {
@@ -719,7 +707,7 @@ mod test {
             return Err("Unable to send record to kafka".into());
         }
         producer.flush(Duration::from_secs(1));
-        
+
         let e1 = out.get_event().await?;
         assert_eq!(
             literal!({
@@ -744,7 +732,9 @@ mod test {
         );
 
         // ack event
-        harness.send_contraflow(CbAction::Ack, e1.id.clone()).await?;
+        harness
+            .send_contraflow(CbAction::Ack, e1.id.clone())
+            .await?;
 
         // produce second event
         let record2 = BaseRecord::to(topic)
@@ -759,10 +749,7 @@ mod test {
 
         // get second event
         let e2 = out.get_event().await?;
-        assert_eq!(
-            Value::null(),
-            e2.data.suffix().value()
-        );
+        assert_eq!(Value::null(), e2.data.suffix().value());
         assert_eq!(
             &literal!({
                 "kafka": {
@@ -777,9 +764,10 @@ mod test {
             e2.data.suffix().meta()
         );
 
-
         // fail -> ensure it is not replayed
-        harness.send_contraflow(CbAction::Fail, e2.id.clone()).await?;
+        harness
+            .send_contraflow(CbAction::Fail, e2.id.clone())
+            .await?;
 
         // we don't get no event
         assert!(out.get_event().await.is_err());
@@ -794,13 +782,10 @@ mod test {
             return Err("Could not send to kafka".into());
         }
         producer.flush(Duration::from_secs(1));
-        
+
         // we only get the next event, no previous one
         let e3 = out.get_event().await?;
-        assert_eq!(
-            Value::from(false),
-            e3.data.suffix().value()
-        );
+        assert_eq!(Value::from(false), e3.data.suffix().value());
         assert_eq!(
             &literal!({
                 "kafka": {
@@ -811,7 +796,7 @@ mod test {
                     "partition": 2,
                     "timestamp": 123000000
                 }
-       
+
             }),
             e3.data.suffix().meta()
         );
@@ -841,11 +826,11 @@ mod test {
             &literal!({
                 "error": "SIMD JSON error: InternalError at character 0 ('}')",
                 "kafka": {
-                    "key": Value::Bytes(Cow::owned("failure".as_bytes().to_vec())), 
-                    "headers": null, 
-                    "topic": topic, 
-                    "partition": 2, 
-                    "offset": 1, 
+                    "key": Value::Bytes(Cow::owned("failure".as_bytes().to_vec())),
+                    "headers": null,
+                    "topic": topic,
+                    "partition": 2,
+                    "offset": 1,
                     "timestamp": 1234000000
                 }
             }),
@@ -861,7 +846,7 @@ mod test {
         drop(container);
         Ok(())
     }
-   
+
     #[async_std::test]
     #[serial(kafka)]
     async fn connector_kafka_consumer_unreachable() -> Result<()> {
@@ -929,5 +914,4 @@ mod test {
         assert!(err_events.is_empty());
         Ok(())
     }
-
 }

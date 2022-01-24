@@ -32,7 +32,9 @@ use tremor_common::{
 use tremor_pipeline::{CbAction, EventId};
 use tremor_runtime::{
     config,
-    connectors::{self, builtin_connector_types, sink::SinkMsg, source::SourceMsg, Connectivity, StatusReport},
+    connectors::{
+        self, builtin_connector_types, sink::SinkMsg, source::SourceMsg, Connectivity, StatusReport,
+    },
     errors::Result,
     instance::InstanceState,
     pipeline::{self, CfMsg},
@@ -124,10 +126,7 @@ impl ConnectorHarness {
 
         // send a CBAction::open to the connector, so it starts pulling data
         self.addr
-            .send_source(SourceMsg::Cb(
-                CbAction::Open,
-                EventId::default(),
-            ))
+            .send_source(SourceMsg::Cb(CbAction::Open, EventId::default()))
             .await?;
         Ok(())
     }
@@ -309,9 +308,11 @@ impl TestPipeline {
                     match *msg {
                         pipeline::Msg::Event { event, .. } => break Ok(event),
                         // filter out signals
-                        pipeline::Msg::Signal(signal) => debug!("Received signal: {:?}", signal.kind)
+                        pipeline::Msg::Signal(signal) => {
+                            debug!("Received signal: {:?}", signal.kind)
+                        }
                     }
-                },
+                }
                 Ok(Err(e)) => {
                     return Err(e.into());
                 }

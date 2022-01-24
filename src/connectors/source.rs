@@ -1250,7 +1250,10 @@ fn build_events(
                 let (port, payload) = match line_value {
                     Ok(decoded) => (port.unwrap_or(&OUT).clone(), decoded),
                     Err(None) => continue,
-                    Err(Some(e)) => (ERR, make_error(alias, &e, stream_state.stream_id, pull_id, meta.clone())),
+                    Err(Some(e)) => (
+                        ERR,
+                        make_error(alias, &e, stream_state.stream_id, pull_id, meta.clone()),
+                    ),
                 };
                 let event = build_event(
                     stream_state,
@@ -1310,7 +1313,10 @@ fn build_last_events(
                 let (port, payload) = match line_value {
                     Ok(decoded) => (port.unwrap_or(&OUT).clone(), decoded),
                     Err(None) => continue,
-                    Err(Some(e)) => (ERR, make_error(alias, &e, stream_state.stream_id, pull_id, meta.clone())),
+                    Err(Some(e)) => (
+                        ERR,
+                        make_error(alias, &e, stream_state.stream_id, pull_id, meta.clone()),
+                    ),
                 };
                 let event = build_event(
                     stream_state,
@@ -1341,7 +1347,13 @@ fn build_last_events(
 }
 
 /// create an error payload
-fn make_error(connector_alias: &str, error: &Error, stream_id: u64, pull_id: u64, mut meta: Value<'static>) -> EventPayload {
+fn make_error(
+    connector_alias: &str,
+    error: &Error,
+    stream_id: u64,
+    pull_id: u64,
+    mut meta: Value<'static>,
+) -> EventPayload {
     let e_string = error.to_string();
     let data = literal!({
         "error": e_string.clone(),

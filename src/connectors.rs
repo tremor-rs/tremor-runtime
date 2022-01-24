@@ -342,7 +342,7 @@ pub async fn spawn(
     alias: String,
     connector_id_gen: &mut ConnectorIdGen,
     known_connectors: &KnownConnectors,
-    config: crate::Connector,
+    config: ConnectorConfig,
 ) -> Result<Addr> {
     // lookup and instantiate connector
     let builder = known_connectors
@@ -642,10 +642,7 @@ async fn connector_task(
                                 .await?;
                         }
                         _ => {
-                            debug!(
-                                "{} No change after reconnect: {:?}",
-                                &ctx, &new
-                            );
+                            debug!("{} No change after reconnect: {:?}", &ctx, &new);
                         }
                     }
                     // ugly extra check
@@ -1163,6 +1160,7 @@ pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
         Box::new(impls::crononome::Builder::default()),
         Box::new(impls::s3::Builder::default()),
         Box::new(impls::kafka::consumer::Builder::default()),
+        Box::new(impls::kafka::producer::Builder::default()),
     ]
 }
 
