@@ -229,9 +229,7 @@ where
                 })
             }
 
-            e
-            @
-            (ImutExpr::Invoke(_)
+            e @ (ImutExpr::Invoke(_)
             | ImutExpr::Invoke1(_)
             | ImutExpr::Invoke2(_)
             | ImutExpr::Invoke3(_)

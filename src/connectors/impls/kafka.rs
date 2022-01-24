@@ -14,6 +14,7 @@
 pub(crate) mod consumer;
 pub(crate) mod producer;
 
+use crate::errors::{Error, Kind as ErrorKind, Result};
 use core::future::Future;
 use futures::future;
 use rdkafka::util::AsyncRuntime;
@@ -36,4 +37,35 @@ impl AsyncRuntime for SmolRuntime {
         // This needs to be smol::Timer we can't use async_io::Timer
         futures::FutureExt::map(smol::Timer::after(duration), |_| ())
     }
+}
+
+/// verify broker host:port pairs in kafka connector configs
+fn verify_brokers(id: &str, brokers: &Vec<String>) -> Result<(String, Option<u16>)> {
+    let mut first_broker: Option<(String, Option<u16>)> = None;
+    for broker in brokers {
+        match broker.split(':').collect::<Vec<_>>().as_slice() {
+            [host] => {
+                first_broker.get_or_insert_with(|| ((*host).to_string(), None));
+            }
+            [host, port] => {
+                let port: u16 = port.parse().map_err(|_| {
+                    Error::from(ErrorKind::InvalidConfiguration(
+                        id.to_string(),
+                        format!("Invalid broker: {}:{}", host, port),
+                    ))
+                })?;
+                first_broker.get_or_insert_with(|| ((*host).to_string(), Some(port)));
+            }
+            b => {
+                return Err(ErrorKind::InvalidConfiguration(
+                    id.to_string(),
+                    format!("Invalid broker: {}", b.join(":")),
+                )
+                .into())
+            }
+        }
+    }
+    first_broker.ok_or_else(|| {
+        ErrorKind::InvalidConfiguration(id.to_string(), "Missing brokers.".to_string()).into()
+    })
 }
