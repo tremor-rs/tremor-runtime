@@ -33,7 +33,7 @@ enum ShouldRetry {
 
 trait ReconnectStrategy: std::marker::Send {
     /// Compute the next interval in milliseconds.
-    /// 
+    ///
     /// Upon the first reconnect attempt or upon connection loss after a successful connect attempt, `current` is `None`.
     /// Further reconnect retries will have the last interval set.
     fn next_interval(&mut self, current: Option<u64>, attempt: &Attempt) -> u64;
@@ -323,7 +323,7 @@ impl ReconnectRuntime {
                     }
                 }));
             }
-            
+
             true
         }
     }
@@ -384,10 +384,7 @@ mod tests {
         let mut strategy = FailFast {};
         let mut attempt = Attempt::default();
         // the first one we let through
-        assert_eq!(
-            ShouldRetry::Yes,
-            strategy.should_reconnect(&attempt)
-        );
+        assert_eq!(ShouldRetry::Yes, strategy.should_reconnect(&attempt));
         // but we wait for a second
         assert_eq!(1000, strategy.next_interval(None, &attempt));
         attempt.on_failure();
