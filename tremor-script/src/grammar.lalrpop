@@ -119,15 +119,16 @@ WithExpr: (IdentRaw<'input>, ImutExprRaw<'input>) = {
     <name:Ident> "=" <expr:ExprImut> => (name, expr)
 }
 
-/// Modules
 
-Module: ModuleRaw<'input> = {
-    <start:@L> "mod" <name:Ident> "with" <doc:ModComment> <stmts:ModuleStmts> "end" <end:@L> => ModuleRaw{name, start, end, stmts, doc},
-}
-
-pub(crate) ModuleBody: ModuleRaw<'input> = {
+ModuleBody: ModuleRaw<'input> = {
     <start:@L> <doc:ModComment> <stmts:ModuleStmts> <end:@L> => ModuleRaw{name: IdentRaw::from(""), start, end, stmts, doc},
 }
+
+pub(crate) ModuleFile: ModuleRaw<'input> = {
+    <ModuleBody> "<end-of-stream>"  => <>,
+}
+
+
 
 /// List of expressions at the root of the script
 ModuleStmts: ModuleStmtsRaw<'input> = {
@@ -141,9 +142,6 @@ ModuleStmts: ModuleStmtsRaw<'input> = {
 
  // In case we need to limit the content of deploy stmt
 ModuleStmt: ModuleStmtRaw<'input> = {
-    // Generic
-    Module => ModuleStmtRaw::Module(<>),
-
     // Script
     Const => ModuleStmtRaw::Const(<>),
     FnDecl => ModuleStmtRaw::FnDecl(<>),
@@ -157,6 +155,7 @@ ModuleStmt: ModuleStmtRaw<'input> = {
 
     /// troy
     DefineConnector => ModuleStmtRaw::Connector(<>),
+    DefineFlow => ModuleStmtRaw::Flow(<>),
 }
 
 /// Module target
@@ -211,7 +210,6 @@ DeployStmts: DeployStmtsRaw<'input> = {
 
 
 DeployStmt: DeployStmtRaw<'input> = {
-    Module => DeployStmtRaw::Module(<>),
     DefineFlow => DeployStmtRaw::FlowDefinition(<>),
     DeployFlowStmt => DeployStmtRaw::DeployFlow(<>),
     Use => DeployStmtRaw::Use(<>),
@@ -247,7 +245,6 @@ CreateKind: CreateKind = {
 
 
 FlowStmtInner: FlowStmtRaw<'input> = {
-    <Module> => FlowStmtRaw::Module(<>),
     <Define> => <>,
     <Create> => FlowStmtRaw::Create(<>),
     <Connect> => FlowStmtRaw::Connect(<>),
@@ -308,7 +305,6 @@ Stmts: StmtsRaw<'input> = {
 }
 
 Stmt: StmtRaw<'input> = {
-    Module => StmtRaw::ModuleStmt(<>),
 
     DefineWindow => StmtRaw::WindowDefinition(<>),
     DefineOperator => StmtRaw::OperatorDefinition(Box::new(<>)),
@@ -519,7 +515,6 @@ TopLevelExpr: TopLevelExprRaw<'input> = {
      Const => TopLevelExprRaw::Const(<>),
      FnDecl => TopLevelExprRaw::FnDecl(<>),
      Intrinsic => TopLevelExprRaw::FnDecl(<>),
-     Module => TopLevelExprRaw::Module(<>),
      Expr => TopLevelExprRaw::Expr(<>),
      Use => TopLevelExprRaw::Use(<>),
 }
@@ -749,14 +744,6 @@ Intrinsic: AnyFnRaw<'input> = {
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
         AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: true, inline: true})
     },
-}
-
-ModuleExpr: TopLevelExprRaw<'input> = {
-    Const => TopLevelExprRaw::Const(<>),
-    FnDecl => TopLevelExprRaw::FnDecl(<>),
-    Intrinsic => TopLevelExprRaw::FnDecl(<>),
-    Module => TopLevelExprRaw::Module(<>),
-    Use => TopLevelExprRaw::Use(<>),
 }
 
 FnDecl: AnyFnRaw<'input> = {

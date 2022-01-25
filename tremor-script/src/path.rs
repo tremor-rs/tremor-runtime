@@ -15,6 +15,8 @@
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
+use crate::ast::NodeId;
+
 /// default `TREMOR_PATH`
 ///
 /// * `/usr/share/tremor/lib` - in packages this directory contains the stdlib
@@ -28,18 +30,36 @@ pub struct ModulePath {
     pub mounts: Vec<String>,
 }
 
+impl Default for ModulePath {
+    fn default() -> Self {
+        ModulePath::load()
+    }
+}
+
 impl ModulePath {
     /// Adds to the module path
-    pub fn add(&mut self, path: String) {
-        self.mounts.push(path);
+    pub fn add<S: ToString>(&mut self, path: S) {
+        self.mounts.push(path.to_string());
     }
 
     /// Does a particular module exist relative to the module path in force
-    pub fn resolve<S: AsRef<Path> + ?Sized>(&self, rel_file: &S) -> Option<Box<Path>> {
+    pub fn resolve_id(&self, id: &NodeId) -> Option<PathBuf> {
+        let mut p = PathBuf::new();
+        for e in &id.module {
+            p.push(e);
+        }
+        // FIXME: do we want to unfiy here to tremor (as done with other parts) or
+        // allow troy and trickle as well
+        p.push(format!("{}.tremor", id.id));
+        self.resolve(p)
+    }
+
+    /// Does a particular module exist relative to the module path in force
+    pub fn resolve<S: AsRef<Path>>(&self, rel_file: S) -> Option<PathBuf> {
         for mount in &self.mounts {
             let mut target = PathBuf::new();
             target.push(mount);
-            target.push(rel_file);
+            target.push(&rel_file);
             if let Ok(meta) = std::fs::metadata(&target) {
                 if meta.is_file() {
                     return Some(target.into()); // NOTE The first match on the path is returned so overriding is neither possible nor supported
@@ -115,8 +135,8 @@ mod tests {
     fn test_add() {
         let mounts = vec![];
         let mut paths = ModulePath { mounts };
-        paths.add(String::from("/foo/bar/baz"));
-        paths.add(String::from("snot/badger"));
+        paths.add("/foo/bar/baz");
+        paths.add("snot/badger");
         assert_eq!(
             vec![String::from("/foo/bar/baz"), String::from("snot/badger")],
             paths.mounts

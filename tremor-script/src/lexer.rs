@@ -2180,7 +2180,6 @@ fn indentation(strings: &[String]) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use crate::path::ModulePath;
 
     use super::*;
 
@@ -2651,9 +2650,6 @@ mod tests {
     #[test]
     fn test_test_literal_format_bug_regression() -> Result<()> {
         let snot = "match %{ test ~= base64|| } of default => \"badger\" end ".to_string();
-        let mut snot2 = snot.clone();
-
-        let mut include_stack = IncludeStack::default();
 
         let mut res = String::new();
         for b in Tokenizer::new(&snot)

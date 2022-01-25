@@ -48,7 +48,6 @@ use serde::Serialize;
 
 use super::{
     docs::{FnDoc, ModDoc},
-    module::ModuleRaw,
     Const, NodeId,
 };
 
@@ -87,9 +86,6 @@ impl<'script> ScriptRaw<'script> {
             match e {
                 TopLevelExprRaw::Use(_) => {
                     panic!("FIXME");
-                }
-                TopLevelExprRaw::Module(m) => {
-                    m.define(&mut helper)?;
                 }
                 TopLevelExprRaw::Const(ConstRaw {
                     name,
@@ -535,8 +531,6 @@ pub type StrLitElementsRaw<'script> = Vec<StrLitElementRaw<'script>>;
 pub enum TopLevelExprRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Const(ConstRaw<'script>),
-    /// we're forced to make this pub because of lalrpop
-    Module(ModuleRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     FnDecl(AnyFnRaw<'script>),
     /// we're forced to make this pub because of lalrpop
