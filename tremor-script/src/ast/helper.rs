@@ -102,9 +102,9 @@ where
     pub(crate) fn get_pipeline(&self, _: &NodeId) -> Option<PipelineDefinition<'script>> {
         None
     }
-    pub(crate) fn get_script(&self, _: &NodeId) -> Option<ScriptDefinition<'script>> {
-        None
-    }
+    // pub(crate) fn get_script(&self, _: &NodeId) -> Option<ScriptDefinition<'script>> {
+    //     None
+    // }
 
     pub(crate) fn is_const(&self, id: &[String]) -> Option<&usize> {
         self.consts.is_const(id)

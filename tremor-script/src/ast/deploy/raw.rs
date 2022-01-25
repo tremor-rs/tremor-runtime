@@ -22,8 +22,8 @@ use super::Value;
 use super::{BaseExpr, DeployFlow};
 use super::{ConnectStmt, DeployEndpoint};
 use crate::ast::{
-    docs::ModDoc, error_generic, module::ModuleRaw, node_id::NodeId, query::raw::ConfigRaw,
-    raw::UseRaw, Deploy, DeployStmt, Helper, PipelineDefinition, Script, Upable,
+    docs::ModDoc, error_generic, node_id::NodeId, query::raw::ConfigRaw, raw::UseRaw, Deploy,
+    DeployStmt, Helper, PipelineDefinition, Script, Upable,
 };
 use crate::ast::{
     query::raw::{
@@ -118,8 +118,6 @@ pub enum DeployStmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     FlowDefinition(FlowDefinitionRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    Module(ModuleRaw<'script>),
-    /// we're forced to make this pub because of lalrpop
     Use(UseRaw),
 }
 
@@ -127,11 +125,11 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
     type Target = Option<DeployStmt<'script>>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
-            DeployStmtRaw::Use(u) => {
+            DeployStmtRaw::Use(_u) => {
                 todo!()
             }
             DeployStmtRaw::FlowDefinition(stmt) => {
-                let stmt: FlowDefinition<'script> = stmt.up(helper)?;
+                let _stmt: FlowDefinition<'script> = stmt.up(helper)?;
                 //FIXME: helper.flow_decls.insert(stmt.node_id.clone(), stmt.clone());
                 // Ok(Some(DeployStmt::FlowDefinition(Box::new(stmt))))
                 todo!();
@@ -140,10 +138,6 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
                 let stmt: DeployFlow = stmt.up(helper)?;
                 helper.instances.insert(stmt.node_id.clone(), stmt.clone());
                 Ok(Some(DeployStmt::DeployFlowStmt(Box::new(stmt))))
-            }
-            DeployStmtRaw::Module(m) => {
-                m.define(helper)?;
-                Ok(None)
             }
         }
     }
@@ -282,6 +276,7 @@ pub struct FlowDefinitionRaw<'script> {
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
     pub(crate) atoms: Vec<FlowStmtRaw<'script>>,
 }
+impl_expr!(FlowDefinitionRaw);
 
 impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
     type Target = FlowDefinition<'script>;
@@ -300,18 +295,15 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
         let mut creates = Vec::new();
         for link in self.atoms {
             match link {
-                FlowStmtRaw::Module(m) => {
-                    m.define(helper)?;
-                }
                 FlowStmtRaw::ConnectorDefinition(stmt) => {
-                    let stmt: ConnectorDefinition<'script> = stmt.up(helper)?;
+                    let _stmt: ConnectorDefinition<'script> = stmt.up(helper)?;
                     todo!();
                     // helper
                     //     .connector_decls
                     //     .insert(stmt.node_id.clone(), stmt.clone());
                 }
                 FlowStmtRaw::PipelineDefinition(stmt) => {
-                    let stmt: PipelineDefinition<'script> = stmt.up(helper)?;
+                    let _stmt: PipelineDefinition<'script> = stmt.up(helper)?;
                     todo!();
                     // helper
                     //     .pipeline_decls
@@ -352,8 +344,6 @@ pub type FlowStmtsRaw<'script> = Vec<FlowStmtRaw<'script>>;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum FlowStmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
-    Module(ModuleRaw<'script>),
-    /// we're forced to make this pub because of lalrpop
     ConnectorDefinition(ConnectorDefinitionRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     PipelineDefinition(PipelineDefinitionRaw<'script>),
@@ -391,12 +381,12 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // TODO check that names across pipeline/flow/connector definitions are unique or else hygienic error
 
-        let node_id = NodeId::new(&self.id.id, &helper.module);
-        let target = self.target.clone().with_prefix(&helper.module);
-        let outer = self.extent(&helper.meta);
-        let inner = self.id.extent(&helper.meta);
-        let params = self.params.up(helper)?;
-        let decl = match self.kind {
+        let _node_id = NodeId::new(&self.id.id, &helper.module);
+        let _target = self.target.clone().with_prefix(&helper.module);
+        let _outer = self.extent(&helper.meta);
+        let _inner = self.id.extent(&helper.meta);
+        let _params = self.params.up(helper)?;
+        let _decl = match self.kind {
             CreateKind::Connector => {
                 todo!();
                 // if let Some(artefact) = helper.connector_decls.get(&target) {

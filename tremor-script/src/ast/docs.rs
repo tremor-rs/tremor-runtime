@@ -143,6 +143,7 @@ impl Default for Docs {
     }
 }
 
+#[cfg(test)]
 mod test {
     use super::*;
 
