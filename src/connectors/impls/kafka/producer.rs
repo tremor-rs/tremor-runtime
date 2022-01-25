@@ -146,8 +146,9 @@ impl Connector for KafkaProducerConnector {
         );
         builder.spawn(sink, sink_context).map(Some)
     }
-    fn default_codec(&self) -> &str {
-        "json"
+
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Required
     }
 }
 
