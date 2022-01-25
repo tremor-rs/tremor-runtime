@@ -21,9 +21,9 @@ use super::{
     ConnectorDefinition, Consts, CreationalWith, DefaultCase, DefinitioalArgs, DefinitioalArgsWith,
     EmitExpr, EventPath, Expr, ExprPath, Field, Ident, IfElse, ImutExpr, Invocable, Invoke,
     InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath, OperatorDefinition, Patch,
-    PatchOperation, Path, Pattern, PipelineDefinition, PredicateClause, PredicatePattern, Record,
-    RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
-    TuplePattern, UnaryExpr, WithExprs,
+    PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record, RecordPattern, Recur,
+    ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit, TuplePattern, UnaryExpr,
+    WithExprs,
 };
 use crate::CustomFn;
 use beef::Cow;
