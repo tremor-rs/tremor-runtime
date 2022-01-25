@@ -430,7 +430,6 @@ impl<'script> BaseExpr for TopLevelExprRaw<'script> {
     fn s(&self, meta: &NodeMetas) -> Location {
         match self {
             TopLevelExprRaw::Const(c) => c.s(meta),
-            TopLevelExprRaw::Module(e) => e.s(meta),
             TopLevelExprRaw::FnDecl(e) => e.s(meta),
             TopLevelExprRaw::Use(e) => e.s(meta),
             TopLevelExprRaw::Expr(e) => e.s(meta),
@@ -440,7 +439,6 @@ impl<'script> BaseExpr for TopLevelExprRaw<'script> {
     fn e(&self, meta: &NodeMetas) -> Location {
         match self {
             TopLevelExprRaw::Const(c) => c.e(meta),
-            TopLevelExprRaw::Module(e) => e.e(meta),
             TopLevelExprRaw::FnDecl(e) => e.e(meta),
             TopLevelExprRaw::Use(e) => e.e(meta),
             TopLevelExprRaw::Expr(e) => e.e(meta),
@@ -500,7 +498,6 @@ impl<'script> BaseExpr for StmtRaw<'script> {
     }
     fn s(&self, meta: &NodeMetas) -> Location {
         match self {
-            StmtRaw::ModuleStmt(s) => s.s(meta),
             StmtRaw::OperatorCreate(s) => s.start,
             StmtRaw::OperatorDefinition(s) => s.start,
             StmtRaw::ScriptCreate(s) => s.start,
@@ -515,7 +512,6 @@ impl<'script> BaseExpr for StmtRaw<'script> {
     }
     fn e(&self, meta: &NodeMetas) -> Location {
         match self {
-            StmtRaw::ModuleStmt(e) => e.e(meta),
             StmtRaw::OperatorCreate(e) => e.end,
             StmtRaw::OperatorDefinition(e) => e.end,
             StmtRaw::ScriptCreate(e) => e.end,

@@ -14,20 +14,20 @@
 
 ///! FIXME
 use super::{
-    deploy::raw::ConnectorDefinitionRaw,
+    deploy::raw::{ConnectorDefinitionRaw, FlowDefinitionRaw},
     helper::raw::{
         OperatorDefinitionRaw, PipelineDefinitionRaw, ScriptDefinitionRaw, WindowDefinitionRaw,
     },
     raw::{AnyFnRaw, ConstRaw, IdentRaw, UseRaw},
     upable::Upable,
-    BaseExpr, ConnectorDefinition, FlowDefinition, FnDecl, Helper, OperatorDefinition,
+    BaseExpr, ConnectorDefinition, FlowDefinition, FnDecl, Helper, NodeId, OperatorDefinition,
     PipelineDefinition, ScriptDefinition, WindowDefinition,
 };
 use crate::{
     errors::Result,
     impl_expr,
     lexer::{Location, Tokenizer},
-    CustomFn,
+    path::ModulePath,
 };
 use beef::Cow;
 use sha2::Digest;
@@ -44,13 +44,14 @@ use tremor_value::Value;
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ModuleStmtRaw<'script> {
+    /// we're forced to make this pub because of lalrpop
+    Flow(FlowDefinitionRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
     Connector(ConnectorDefinitionRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Const(ConstRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     FnDecl(AnyFnRaw<'script>),
-    /// we're forced to make this pub because of lalrpop
-    Module(ModuleRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Pipeline(PipelineDefinitionRaw<'script>),
     /// we're forced to make this pub because of lalrpop
@@ -69,10 +70,10 @@ impl<'script> BaseExpr for ModuleStmtRaw<'script> {
 
     fn s(&self, meta: &super::NodeMetas) -> Location {
         match self {
+            ModuleStmtRaw::Flow(e) => e.s(meta),
             ModuleStmtRaw::Connector(e) => e.s(meta),
             ModuleStmtRaw::Const(e) => e.s(meta),
             ModuleStmtRaw::FnDecl(e) => e.s(meta),
-            ModuleStmtRaw::Module(e) => e.s(meta),
             ModuleStmtRaw::Pipeline(e) => e.s(meta),
             ModuleStmtRaw::Use(e) => e.s(meta),
             ModuleStmtRaw::Window(e) => e.s(meta),
@@ -83,10 +84,10 @@ impl<'script> BaseExpr for ModuleStmtRaw<'script> {
 
     fn e(&self, meta: &super::NodeMetas) -> Location {
         match self {
+            ModuleStmtRaw::Flow(e) => e.e(meta),
             ModuleStmtRaw::Connector(e) => e.e(meta),
             ModuleStmtRaw::Const(e) => e.e(meta),
             ModuleStmtRaw::FnDecl(e) => e.e(meta),
-            ModuleStmtRaw::Module(e) => e.e(meta),
             ModuleStmtRaw::Pipeline(e) => e.e(meta),
             ModuleStmtRaw::Use(e) => e.e(meta),
             ModuleStmtRaw::Window(e) => e.e(meta),
@@ -95,34 +96,6 @@ impl<'script> BaseExpr for ModuleStmtRaw<'script> {
         }
     }
 }
-impl<'script> ModuleStmtRaw<'script> {
-    const BAD_MODULE: &'static str = "Module in wrong place error";
-    const BAD_EXPR: &'static str = "Expression in wrong place error";
-}
-
-// impl<'script> Upable<'script> for ModuleStmtRaw<'script> {
-//     type Target = DeployStmt<'script>;
-//     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-//         match self {
-//             ModuleStmtRaw::PipelineDefinition(stmt) => {
-//                 let stmt: PipelineDefinition<'script> = stmt.up(helper)?;
-//                 helper
-//                     .pipeline_decls
-//                     .insert(stmt.node_id.clone(), stmt.clone());
-//                 Ok(DeployStmt::PipelineDefinition(Box::new(stmt)))
-//             }
-//             ModuleStmtRaw::ConnectorDefinition(stmt) => {
-//                 let stmt: ConnectorDefinition<'script> = stmt.up(helper)?;
-//                 helper
-//                     .connector_decls
-//                     .insert(stmt.node_id.clone(), stmt.clone());
-//                 Ok(DeployStmt::ConnectorDefinition(Box::new(stmt)))
-//             }
-//             ModuleStmtRaw::Module(ref m) => error_generic(m, m, &Self::BAD_MODULE, &helper.meta),
-//             ModuleStmtRaw::Expr(m) => error_generic(&*m, &*m, &Self::BAD_EXPR, &helper.meta),
-//         }
-//     }
-// }
 
 pub type ModuleStmtsRaw<'script> = Vec<ModuleStmtRaw<'script>>;
 
@@ -136,15 +109,6 @@ pub struct ModuleRaw<'script> {
     pub doc: Option<Vec<Cow<'script, str>>>,
 }
 impl_expr!(ModuleRaw);
-
-impl<'script> ModuleRaw<'script> {
-    pub(crate) fn define<'registry>(
-        self,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<Module> {
-        todo!();
-    }
-}
 
 /// module id
 #[derive(Debug, Clone, PartialEq)]
@@ -217,9 +181,9 @@ impl Module {
     pub fn load<P>(id: ModuleId, file_name: P, src: Arc<Pin<String>>) -> Result<Self>
     where
         P: AsRef<Path>,
-        PathBuf: From<P>,
     {
         // FIXME this isn't a good id but good enough for testing
+        // FIXME there are transmutes hers :sob:
 
         let aggr_reg = crate::aggr_registry();
         let reg = crate::registry(); // FIXME
@@ -227,10 +191,11 @@ impl Module {
 
         let lexemes = Tokenizer::new(&src)
             .filter_map(std::result::Result::ok)
-            .filter(|t| t.value.is_ignorable());
-        let raw: ModuleRaw = crate::parser::g::ModuleBodyParser::new().parse(lexemes)?;
+            .filter(|t| !t.value.is_ignorable());
+        let raw: ModuleRaw = crate::parser::g::ModuleFileParser::new().parse(lexemes)?;
         let raw = unsafe { transmute::<ModuleRaw<'_>, ModuleRaw<'static>>(raw) };
 
+        let mut flows = NamedEnteties::default();
         let mut connectors = NamedEnteties::default();
         let mut pipelines = NamedEnteties::default();
         let mut windows = NamedEnteties::default();
@@ -240,8 +205,15 @@ impl Module {
         let mut consts = NamedEnteties::default();
         for s in raw.stmts {
             match s {
-                ModuleStmtRaw::Module(_) => todo!(),
                 ModuleStmtRaw::Use(_) => todo!(),
+                ModuleStmtRaw::Flow(e) => {
+                    let e = e.up(&mut helper)?;
+                    let name = e.node_id.id.clone();
+                    // The self referential nature comes into play here
+                    let e = unsafe { transmute::<FlowDefinition<'_>, FlowDefinition<'static>>(e) };
+
+                    flows.insert(name, e)?;
+                }
                 ModuleStmtRaw::Connector(e) => {
                     let e = e.up(&mut helper)?.into_static();
                     let name = e.node_id.id.clone();
@@ -296,6 +268,7 @@ impl Module {
             }
         }
 
+        let file_name: &Path = file_name.as_ref();
         Ok(Module {
             src,
             file_name: PathBuf::from(file_name),
@@ -305,31 +278,39 @@ impl Module {
             windows,
             scripts,
             operators,
-            flows: NamedEnteties::default(),
+            flows,
             consts,
             functions,
         })
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(crate) struct ModuleManager {
+    path: ModulePath,
     modules: Vec<Module>,
 }
 
 impl ModuleManager {
+    pub fn load_id(&mut self, id: &NodeId) -> Result<usize> {
+        let f = self
+            .path
+            .resolve_id(id)
+            .ok_or_else(|| format!("module {} not found", id))?;
+        self.load(f)
+    }
     pub fn load<P: AsRef<Path>>(&mut self, p: P) -> Result<usize> {
-        let src = std::fs::read_to_string(p)?;
+        let mut src = std::fs::read_to_string(&p)?;
         let id = ModuleId::from(src.as_bytes());
 
         if let Some((id, _)) = self.modules.iter().enumerate().find(|(i, m)| m.id == id) {
             Ok(id)
         } else {
             let n = self.modules.len();
-            // FIXME: add a real module
-
-            // let m = Module::default();
-            // self.modules.push(m);
+            // FIXME: **sob** we still need this
+            src.push('\n');
+            let src = Arc::new(Pin::new(src));
+            self.modules.push(Module::load(id, p, src)?);
             Ok(n)
         }
     }
@@ -342,7 +323,28 @@ mod test {
     #[test]
     fn load() -> Result<()> {
         let mut m = ModuleManager::default();
-        m.load("tremor-script/lib/std.tremor")?;
+        let id1 = m.load("./lib/std/string.tremor")?;
+        let id2 = m.load("./lib/std/string.tremor")?;
+        assert_eq!(id1, id2);
+        // dbg!(m);
+        // panic!();
+        Ok(())
+    }
+    #[test]
+    fn load_from_id() -> Result<()> {
+        let mut m = ModuleManager {
+            path: ModulePath {
+                mounts: vec!["./lib".to_string()],
+            },
+            modules: Vec::new(),
+        };
+
+        m.load_id(&NodeId {
+            id: "string".to_string(),
+            module: vec!["std".to_string()],
+        })?;
+        // dbg!(m);
+        // panic!();
         Ok(())
     }
 }

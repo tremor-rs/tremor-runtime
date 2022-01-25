@@ -2220,10 +2220,7 @@ impl_expr_mid!(UnaryExpr);
 mod test {
 
     use crate::{
-        ast::{
-            docs::{ModDoc, QueryDeclDoc},
-            Expr, ImutExpr, Invocable, Invoke, Record,
-        },
+        ast::{Expr, ImutExpr, Invocable, Invoke, Record},
         prelude::*,
         CustomFn,
     };

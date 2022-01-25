@@ -29,7 +29,6 @@ use super::{
 };
 use crate::{
     ast::{
-        module::ModuleRaw,
         node_id::{BaseRef, NodeId},
         visitors::{ArgsRewriter, ConstFolder, GroupByExprExtractor, TargetEventRef},
         walkers::{ImutExprWalker, QueryWalker},
@@ -62,9 +61,6 @@ impl<'script> QueryRaw<'script> {
 
         for stmt_raw in self.stmts {
             match stmt_raw {
-                StmtRaw::ModuleStmt(m) => {
-                    m.define(&mut helper)?;
-                }
                 // A subquert that is going to be inlined
                 StmtRaw::PipelineCreate(sq_stmt_raw) => {
                     let create_stmt_index = stmts.len();
@@ -91,20 +87,20 @@ impl<'script> QueryRaw<'script> {
             ConstFolder::new(helper).walk_expr(&mut v)?;
             config.insert(k.to_string(), v.try_into_lit(&helper.meta)?);
         }
-
-        Ok(Query {
-            params,
-            config,
-            stmts,
-            node_meta: helper.meta.clone(),
-            // windows: helper.windows.clone(),
-            // scripts: helper.scripts.clone(),
-            // operators: helper.operators.clone(),
-            consts: helper.consts.clone(),
-            windows: todo!(),
-            scripts: todo!(),
-            operators: todo!(),
-        })
+        todo!()
+        // Ok(Query {
+        //     params,
+        //     config,
+        //     stmts,
+        //     node_meta: helper.meta.clone(),
+        //     // windows: helper.windows.clone(),
+        //     // scripts: helper.scripts.clone(),
+        //     // operators: helper.operators.clone(),
+        //     consts: helper.consts.clone(),
+        //     windows: todo!(),
+        //     scripts: todo!(),
+        //     operators: todo!(),
+        // })
     }
 }
 
@@ -130,12 +126,9 @@ pub enum StmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     SelectStmt(Box<SelectRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
-    ModuleStmt(ModuleRaw<'script>),
-    /// we're forced to make this pub because of lalrpop
     Expr(Box<TopLevelExprRaw<'script>>),
 }
 impl<'script> StmtRaw<'script> {
-    const BAD_MODULE: &'static str = "Module in wrong place error";
     const BAD_EXPR: &'static str = "Expression in wrong place error";
     const BAD_SUBQ: &'static str = "Pipeline Stmt in wrong place error";
 }
@@ -166,14 +159,14 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
             }
             StmtRaw::StreamStmt(stmt) => Ok(Stmt::StreamStmt(stmt.up(helper)?)),
             StmtRaw::OperatorDefinition(stmt) => {
-                let stmt: OperatorDefinition<'script> = stmt.up(helper)?;
+                let _stmt: OperatorDefinition<'script> = stmt.up(helper)?;
                 todo!();
                 //FIXME: helper.operators.insert(stmt.fqn(), stmt.clone());
                 // Ok(Stmt::OperatorDefinition(stmt))
             }
             StmtRaw::OperatorCreate(stmt) => Ok(Stmt::OperatorCreate(stmt.up(helper)?)),
             StmtRaw::ScriptDefinition(stmt) => {
-                let stmt: ScriptDefinition<'script> = stmt.up(helper)?;
+                let _stmt: ScriptDefinition<'script> = stmt.up(helper)?;
                 todo!();
                 //FIXME: helper.scripts.insert(stmt.fqn(), stmt.clone());
                 // Ok(Stmt::ScriptDefinition(Box::new(stmt)))
@@ -183,12 +176,11 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 Ok(Stmt::PipelineDefinition(Box::new(stmt.up(helper)?)))
             }
             StmtRaw::WindowDefinition(stmt) => {
-                let stmt: WindowDefinition<'script> = stmt.up(helper)?;
+                let _stmt: WindowDefinition<'script> = stmt.up(helper)?;
                 todo!();
                 //FIXME: helper.windows.insert(stmt.fqn(), stmt.clone());
                 // Ok(Stmt::WindowDefinition(Box::new(stmt)))
             }
-            StmtRaw::ModuleStmt(ref m) => error_generic(m, m, &Self::BAD_MODULE, &helper.meta),
             StmtRaw::PipelineCreate(ref sq) => error_generic(sq, sq, &Self::BAD_SUBQ, &helper.meta),
             StmtRaw::Expr(m) => error_generic(&*m, &*m, &Self::BAD_EXPR, &helper.meta),
         }
@@ -210,7 +202,7 @@ impl_expr!(OperatorDefinitionRaw);
 impl<'script> Upable<'script> for OperatorDefinitionRaw<'script> {
     type Target = OperatorDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let operator_decl = OperatorDefinition {
+        let _operator_decl = OperatorDefinition {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, &helper.module),
             kind: self.kind.up(helper)?,
@@ -294,7 +286,7 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
             query,
         };
 
-        let pipeline_name = pipeline_decl.fqn();
+        let _pipeline_name = pipeline_decl.fqn();
         // FIXME:
         // if helper.queries.contains_key(&pipeline_name) {
         //     let err_str = format!("Can't define the pipeline `{}` twice", pipeline_name);
@@ -425,9 +417,6 @@ impl<'script> PipelineInlineRaw<'script> {
         helper.module.push(subq_module.clone());
         for stmt in pipeline_stmts {
             match stmt {
-                StmtRaw::ModuleStmt(m) => {
-                    m.define(&mut helper)?;
-                }
                 StmtRaw::PipelineCreate(mut s) => {
                     let unmangled_id = s.id.clone();
                     s.id = self.mangle_id(&s.id);
