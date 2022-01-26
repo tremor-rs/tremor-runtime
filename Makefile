@@ -61,7 +61,7 @@ it:
 	cd tremor-cli && TREMOR_PATH=../tremor-script/lib tremor test integration tests -i integration -e ws
 
 bench: force
-	cargo build --release -p tremor
+	cargo build --release -p tremor-cli
 	./bench/all.sh | tee bench-`date +%s`.txt
 
 force:
