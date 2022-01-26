@@ -23,8 +23,11 @@ use std::mem;
 use aws_sdk_s3 as s3;
 use aws_types::{credentials::Credentials, region::Region};
 use s3::model::Object;
+use s3::ByteStream;
 use s3::Client as S3Client;
 use s3::Endpoint;
+
+const MINCHUNKSIZE: i64 = 8 * 1024 * 1024; // 8 MBs
 
 struct S3SourceConnector {
     config: S3SourceConfig,
@@ -42,15 +45,23 @@ pub struct S3SourceConfig {
     #[serde(default = "S3SourceConfig::default_aws_region")]
     aws_region: String,
 
-    max_connections: usize,
     endpoint: Option<String>,
+
+    /// Sourcing field names and defaults from
+    /// https://docs.aws.amazon.com/cli/latest/topic/s3-config.html
+    #[serde(default = "S3SourceConfig::default_multipart_chunksize")]
+    multipart_chunksize: i64,
+    #[serde(default = "S3SourceConfig::default_multipart_threshold")]
+    multipart_threshold: i64,
+
+    #[serde(default = "S3SourceConfig::default_max_connections")]
+    max_connections: usize,
 
     bucket: String,
     prefix: Option<String>,
     delimiter: Option<String>,
 }
 
-// FIXME: insert better name here
 struct KeyPayload {
     object_data: Object,
     stream: u64,
@@ -68,6 +79,18 @@ impl S3SourceConfig {
 
     fn default_aws_region() -> String {
         "AWS_REGION".to_string()
+    }
+
+    fn default_multipart_chunksize() -> i64 {
+        MINCHUNKSIZE
+    }
+    fn default_multipart_threshold() -> i64 {
+        MINCHUNKSIZE
+    }
+
+    /// https://docs.aws.amazon.com/cli/latest/topic/s3-config.html#max-concurrent-requests
+    fn default_max_connections() -> usize {
+        10
     }
 }
 
@@ -95,13 +118,15 @@ impl ConnectorBuilder for Builder {
             config.aws_access_key_id = env::var(config.aws_access_key_id)?;
             config.aws_region = env::var(config.aws_region)?;
 
-            // Check the validity of given url
+            // Check the validity of given url.
             let endpoint = if let Some(url) = &config.endpoint {
                 let url_parsed = url.parse::<http::Uri>()?;
                 Some(url_parsed)
             } else {
                 None
             };
+
+            // FIXME: display a warning if chunksize lesser than some quantity
 
             Ok(Box::new(S3SourceConnector {
                 handles: Vec::with_capacity(config.max_connections),
@@ -142,6 +167,7 @@ impl Connector for S3SourceConnector {
             ))
             .region(Region::new(self.config.aws_region.clone()));
 
+        // FIXME: Donot forget to add endpoint resolver once config is changed again.
         let s3_config = match &self.endpoint {
             Some(uri) => s3_config.endpoint_resolver(Endpoint::immutable(uri.clone())),
             None => (s3_config),
@@ -158,8 +184,8 @@ impl Connector for S3SourceConnector {
 
         let (tx_key, rx_key) = channel::bounded(QSIZE.load(Ordering::Relaxed));
 
-        //FIXME: track on number of spawned tasks
-        for _i in 0..self.config.max_connections {
+        // spawn object fetcher tasks
+        for i in 0..self.config.max_connections {
             let task_client = client.clone();
             let task_rx = rx_key.clone();
             let task_bucket = self.config.bucket.clone();
@@ -169,20 +195,26 @@ impl Connector for S3SourceConnector {
                 .clone()
                 .ok_or_else(|| ErrorKind::S3Error("source sender not initialized".to_string()))?;
 
-            let handle = task::spawn(fetch_object_task(
-                task_client,
-                task_bucket,
-                task_rx,
-                task_sender,
-            ));
+            let handle = task::Builder::new()
+                .name(format!("fetch_obj_task{}", i))
+                .spawn(fetch_object_task(
+                    task_client,
+                    task_bucket,
+                    task_rx,
+                    task_sender,
+                    self.config.multipart_threshold,
+                    self.config.multipart_chunksize,
+                ))?;
             self.handles.push(handle);
         }
 
-        // Key Fetcher Task
+        // spawn key fetcher task
         let bucket = self.config.bucket.clone();
         let prefix = self.config.prefix.clone();
         let delim = self.config.delimiter.clone();
-        task::spawn(fetch_keys_task(client, bucket, prefix, delim, tx_key));
+        task::Builder::new()
+            .name("fetch_key_task".to_owned())
+            .spawn(fetch_keys_task(client, bucket, prefix, delim, tx_key))?;
 
         Ok(true)
     }
@@ -252,64 +284,103 @@ async fn fetch_keys_task(
 
     Ok(())
 }
-
+/*
+Gets key from the recvr
+Fetches the object from s3
+Send to the ChannelSource channel */
 async fn fetch_object_task(
     client: S3Client,
     bucket: String,
     recvr: Receiver<KeyPayload>,
     sender: Sender<SourceReply>,
+    threshold: i64,
+    part_size: i64,
 ) -> Result<()> {
-    // gets key from the recvr
-    // fetches the object from s3
-    // send to the ChannelSource channel
+    
+    let origin_uri = EventOriginUri {
+        scheme: "s3".to_string(),
+        host: hostname(),
+        port: None,
+        path: vec![bucket.clone()],
+    };
+    // Construct the event struct
+    let event_from = |data, stream| SourceReply::Data {
+        origin_uri: origin_uri.clone(),
+        data,
+        meta: None,
+        stream,
+        port: None,
+    };
+    // Set the key and range (if present)
+    let object_stream = |key, range| async {
+        Result::<ByteStream>::Ok(
+            client
+                .get_object()
+                .bucket(bucket.clone())
+                .set_key(key)
+                .set_range(range)
+                .send()
+                .await?
+                .body,
+        )
+    };
 
-    // would make sense to use a preallocated buffer.
     let mut v = Vec::new();
 
     while let Ok(KeyPayload {
         object_data,
         stream,
     }) = recvr.recv().await
-    {
-        // Auto handled.
-        // sender.send(SourceReply::StartStream(stream)).await?;
+    {   
+        info!("key: {:?}", object_data.key());
+        // FIXME: usize -> i64, should be alright.
+        if object_data.size() <= threshold {
+            // Perform a single fetch.
+            let obj_stream: ByteStream = object_stream(object_data.key, None).await?;
 
-        // Fetch the object here
-        let obj_stream = client
-            .get_object()
-            .bucket(bucket.clone())
-            .set_key(object_data.key)
-            .send()
-            .await?
-            .body;
+            let bytes_read = obj_stream
+                .collect()
+                .await
+                .map_err(|e| ErrorKind::S3Error(e.to_string()))?
+                .reader()
+                .read_to_end(&mut v)?;
+            v.truncate(bytes_read);
+            let event_data = mem::take(&mut v);
+            sender.send(event_from(event_data, stream)).await?;
+            
+        } else {
+            // Fetch multipart.
+            let mut fetched_bytes = 0; // represent the next byte to fetch.
 
-        let bytes_read = obj_stream
-            .collect()
-            .await
-            .map_err(|e| ErrorKind::S3Error(e.to_string()))?
-            .reader()
-            .read_to_end(&mut v)?;
-        v.truncate(bytes_read);
+            while fetched_bytes < object_data.size {
+                let fetch_till = fetched_bytes + part_size;
+                let range = Some(format!("bytes={}-{}", fetched_bytes, fetch_till - 1)); // -1 is reqd here as range is inclusive.
 
-        let origin_uri = EventOriginUri {
-            scheme: "s3".to_string(),
-            host: hostname(),
-            port: None,
-            path: vec![bucket.clone()],
-        };
+                warn!("Fetching bytes: bytes={}-{}", fetched_bytes, fetch_till - 1);
+                // fetch the range.
+                let obj_stream = object_stream(object_data.key.clone(), range).await?;
 
-        let event = SourceReply::Data {
-            origin_uri: origin_uri.clone(),
-            data: mem::take(&mut v),
-            meta: None,
-            stream,
-            port: None,
-        };
+                let bytes_read = obj_stream
+                    .collect()
+                    .await
+                    .map_err(|e| ErrorKind::S3Error(e.to_string()))?
+                    .reader()
+                    .read_to_end(&mut v)?;
 
-        sender.send(event).await?;
+                v.truncate(bytes_read);
+
+                // update for next iteration.
+                fetched_bytes = fetch_till;
+
+                let event_data = mem::take(&mut v);
+                sender.send(event_from(event_data, stream)).await?;
+            }
+        }
+
+        // Close the stream
         sender
             .send(SourceReply::EndStream {
-                origin_uri,
+                origin_uri: origin_uri.clone(),
                 stream,
                 meta: None,
             })
