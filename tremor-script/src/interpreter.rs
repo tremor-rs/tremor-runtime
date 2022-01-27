@@ -541,7 +541,6 @@ where
                 return error_bad_key(outer, lpath, path, key, vec![], env.meta);
             }
         }
-        Path::Const(lpath) => stry!(env.get_const(lpath.idx, outer, env.meta)),
         Path::Meta(_path) => meta,
         Path::Event(_path) => event,
         Path::State(_path) => state,

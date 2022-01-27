@@ -336,7 +336,7 @@ impl<'script> Expr<'script> {
         let segments: &'run [Segment<'event>] = path.segments();
 
         let mut current: &Value = match path {
-            Path::Const(_) | Path::Reserved(_) | Path::Expr(_) => {
+            Path::Reserved(_) | Path::Expr(_) => {
                 return error_assign_to_const(self, env.meta);
             }
 
@@ -418,9 +418,7 @@ impl<'script> Expr<'script> {
         value: Value<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         match path {
-            Path::Const(_) | Path::Reserved(_) | Path::Expr(_) => {
-                error_assign_to_const(self, env.meta)
-            }
+            Path::Reserved(_) | Path::Expr(_) => error_assign_to_const(self, env.meta),
             Path::Local(lpath) => {
                 let o = stry!(local.get_mut(lpath.idx, self, lpath.mid(), env.meta));
                 Ok(Cow::Borrowed(o.insert(value)))
