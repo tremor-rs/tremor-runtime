@@ -239,44 +239,6 @@ where
         };
         Ok(())
     }
-    /// Reduce path lookups by replacing const path lookups with literals of the const
-    fn leave_path(&mut self, path: &mut Path<'script>) -> Result<()> {
-        let mut buf = Path::Expr(ExprPath {
-            expr: Box::new(ImutExpr::Literal(Literal {
-                value: Value::const_null(),
-                mid: path.mid(),
-            })),
-            segments: vec![],
-            var: 0,
-            mid: path.mid(),
-        });
-        std::mem::swap(&mut buf, path);
-        *path = match buf {
-            Path::Const(LocalPath {
-                is_const: true,
-                segments,
-                idx,
-                mid,
-            }) => {
-                if let Some(v) = self.consts.get(idx) {
-                    let lit = Literal {
-                        mid,
-                        value: v.clone(),
-                    };
-                    Path::Expr(ExprPath {
-                        expr: Box::new(ImutExpr::Literal(lit)),
-                        segments,
-                        var: 0,
-                        mid,
-                    })
-                } else {
-                    return Err(format!("Invalid Constati idx: {}", idx).into());
-                }
-            }
-            _ => buf,
-        };
-        Ok(())
-    }
 
     /// Reduce path segments by:
     /// 1) ranges, if both start and end are known turn `RangeExpr`'s into Ranges with the correct

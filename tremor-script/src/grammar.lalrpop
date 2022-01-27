@@ -142,6 +142,9 @@ ModuleStmts: ModuleStmtsRaw<'input> = {
 
  // In case we need to limit the content of deploy stmt
 ModuleStmt: ModuleStmtRaw<'input> = {
+    // Generic
+    Use => ModuleStmtRaw::Use(<>),
+    
     // Script
     Const => ModuleStmtRaw::Const(<>),
     FnDecl => ModuleStmtRaw::FnDecl(<>),

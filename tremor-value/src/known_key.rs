@@ -26,6 +26,11 @@ pub struct KnownKey<'key> {
     key: Cow<'key, str>,
     hash: u64,
 }
+impl<'key> std::fmt::Display for KnownKey<'key> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.key.fmt(f)
+    }
+}
 
 /// Error for known keys
 #[derive(Debug, PartialEq, Clone)]

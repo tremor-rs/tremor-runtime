@@ -15,6 +15,7 @@
 pub use super::query::*;
 use super::{
     docs::{ConstDoc, Docs, QueryDeclDoc},
+    module::ModuleContent,
     Consts, DeployFlow, FlowDefinition, InvokeAggrFn, NodeId, NodeMetas,
 };
 use crate::{
@@ -54,6 +55,17 @@ impl Warning {
     }
 }
 
+#[derive(Default, Debug)]
+pub(crate) struct Scope<'script> {
+    pub(crate) modules: HashMap<String, Vec<String>>,
+    pub(crate) content: ModuleContent<'script>,
+    pub(crate) parent: Option<Box<Scope<'script>>>,
+}
+impl<'script> Scope<'script> {
+    pub fn add_module_alias(&mut self, alias: String, mid: Vec<String>) {
+        self.modules.insert(alias, mid);
+    }
+}
 /// Helper
 #[allow(clippy::struct_excessive_bools)]
 pub struct Helper<'script, 'registry>
@@ -89,12 +101,32 @@ where
     pub(crate) fn_argc: usize,
     pub(crate) is_open: bool,
     pub(crate) file_offset: Location,
+    pub(crate) scope: Scope<'script>,
 }
 
 impl<'script, 'registry> Helper<'script, 'registry>
 where
     'script: 'registry,
 {
+    /// get current scope
+    pub(crate) fn scope(&mut self) -> &mut Scope<'script> {
+        &mut self.scope
+    }
+    /// Enters a new scope
+    pub(crate) fn enter_scope(&mut self) {
+        let mut scope = Scope::default();
+        std::mem::swap(&mut self.scope, &mut scope);
+        self.scope.parent = Some(Box::new(scope));
+    }
+    /// leaves a scope
+    pub(crate) fn leave_scope(&mut self) -> Result<()> {
+        if let Some(next) = self.scope.parent.take() {
+            self.scope = *next;
+            Ok(())
+        } else {
+            Err("No parent scope".into())
+        }
+    }
     pub(crate) fn get_flow_decls(&self, _: &NodeId) -> Option<FlowDefinition<'script>> {
         None
     }
@@ -106,8 +138,8 @@ where
     //     None
     // }
 
-    pub(crate) fn is_const(&self, id: &[String]) -> Option<&usize> {
-        self.consts.is_const(id)
+    pub(crate) fn is_const(&self, id: &str) -> bool {
+        self.scope.content.consts.contains_key(id)
     }
 
     pub(crate) fn add_const_doc<N: ToString>(
@@ -195,6 +227,7 @@ where
             fn_argc: 0,
             is_open: false,
             file_offset: Location::default(),
+            scope: Scope::default(),
         }
     }
 

@@ -4,19 +4,6 @@
 ## Returns an `integer`.
 intrinsic fn parse(string) as integer::parse;
 
-mod signed with
-  ### Signed integer constatns
-
-  ## Max signed value
-  const max = 9223372036854775807;
-  
-  ## Minimal signed value
-  ##
-  ## This is slighty wrong, it should be `-9223372036854775808`
-  ## see https://github.com/tremor-rs/tremor-runtime/issues/127
-  const min = (-9223372036854775807);
-end;
-
 # mod unsigned with
 #  ##! Unsigned integer constatns
 #

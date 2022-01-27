@@ -505,7 +505,6 @@ impl<'script> AstEq for TuplePattern<'script> {
 impl<'script> AstEq for Path<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Const(c1), Self::Const(c2)) => c1.ast_eq(c2),
             (Self::Local(l1), Self::Local(l2)) => l1.ast_eq(l2),
             (Self::Event(e1), Self::Event(e2)) => e1.ast_eq(e2),
             (Self::State(s1), Self::State(s2)) => s1.ast_eq(s2),
@@ -513,8 +512,7 @@ impl<'script> AstEq for Path<'script> {
             (Self::Reserved(r1), Self::Reserved(r2)) => r1.ast_eq(r2),
             (Self::Expr(e1), Self::Expr(e2)) => e1.ast_eq(e2),
             (
-                Self::Const(_)
-                | Self::Local(_)
+                Self::Local(_)
                 | Self::Event(_)
                 | Self::State(_)
                 | Self::Meta(_)
