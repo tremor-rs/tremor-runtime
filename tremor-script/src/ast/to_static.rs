@@ -88,7 +88,6 @@ impl<'script> Literal<'script> {
 impl<'script> Path<'script> {
     fn into_static(self) -> Path<'static> {
         match self {
-            Path::Const(p) => Path::Const(p.into_static()),
             Path::Local(p) => Path::Local(p.into_static()),
             Path::Event(p) => Path::Event(p.into_static()),
             Path::State(p) => Path::State(p.into_static()),

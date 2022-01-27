@@ -537,7 +537,6 @@ impl<'script> ImutExpr<'script> {
                     Cow::Owned(o) => set_local_shadow(self, local, env.meta, *var, o)?,
                 }
             }
-            Path::Const(path) => stry!(env.get_const(path.idx, self, env.meta)),
             Path::Meta(_path) => meta,
             Path::Event(_path) => event,
             Path::State(_path) => state,

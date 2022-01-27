@@ -287,7 +287,7 @@ impl<'script> BaseExpr for PathRaw<'script> {
 impl<'script> BaseExpr for Path<'script> {
     fn mid(&self) -> usize {
         match self {
-            Path::Const(e) | Path::Local(e) => e.mid(),
+            Path::Local(e) => e.mid(),
             Path::Meta(e) => e.mid(),
             Path::Event(e) => e.mid(),
             Path::State(e) => e.mid(),

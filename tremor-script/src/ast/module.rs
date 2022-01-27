@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+#![allow(dead_code)]
 
 ///! FIXME
 use super::{
@@ -20,8 +21,8 @@ use super::{
     },
     raw::{AnyFnRaw, ConstRaw, IdentRaw, UseRaw},
     upable::Upable,
-    BaseExpr, ConnectorDefinition, FlowDefinition, FnDecl, Helper, NodeId, OperatorDefinition,
-    PipelineDefinition, ScriptDefinition, WindowDefinition,
+    BaseExpr, ConnectorDefinition, Const, FlowDefinition, FnDecl, Helper, NodeId,
+    OperatorDefinition, PipelineDefinition, ScriptDefinition, WindowDefinition,
 };
 use crate::{
     errors::Result,
@@ -39,8 +40,11 @@ use std::{
     pin::Pin,
     sync::Arc,
 };
-use tremor_value::Value;
 
+use std::sync::RwLock;
+lazy_static::lazy_static! {
+    static ref MODULES: RwLock<ModuleManager> = RwLock::new(ModuleManager::default());
+}
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum ModuleStmtRaw<'script> {
@@ -114,61 +118,99 @@ impl_expr!(ModuleRaw);
 #[derive(Debug, Clone, PartialEq)]
 pub struct ModuleId(Vec<u8>);
 
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) struct NamedEnteties<T>
-where
-    T: Debug + Clone + PartialEq,
-{
-    enteties: Vec<T>,
-    names: HashMap<String, usize>,
+type NamedEnteties<T> = HashMap<String, T>;
+
+#[derive(Default, Debug, Clone)]
+pub(crate) struct ModuleContent<'script> {
+    pub(crate) connectors: NamedEnteties<ConnectorDefinition<'script>>,
+    pub(crate) pipelines: NamedEnteties<PipelineDefinition<'script>>,
+    pub(crate) windows: NamedEnteties<WindowDefinition<'script>>,
+    pub(crate) scripts: NamedEnteties<ScriptDefinition<'script>>,
+    pub(crate) operators: NamedEnteties<OperatorDefinition<'script>>,
+    pub(crate) flows: NamedEnteties<FlowDefinition<'script>>,
+    pub(crate) consts: NamedEnteties<Const<'script>>,
+    pub(crate) functions: NamedEnteties<FnDecl<'script>>,
 }
-impl<T> Default for NamedEnteties<T>
-where
-    T: Debug + Clone + PartialEq,
-{
-    fn default() -> Self {
-        Self {
-            enteties: Vec::new(),
-            names: HashMap::new(),
+
+impl<'script> ModuleContent<'script> {
+    pub(crate) fn insert_flow(&mut self, flow: FlowDefinition<'script>) -> Result<()> {
+        let name = flow.node_id.id.clone();
+        if let Some(_old) = self.flows.insert(name.clone(), flow) {
+            Err("FIXME: already defined".into())
+        } else {
+            Ok(())
         }
     }
-}
-impl<T> NamedEnteties<T>
-where
-    T: Debug + Clone + PartialEq,
-{
-    pub fn insert(&mut self, name: String, value: T) -> Result<usize> {
-        if self.names.contains_key(&name) {
-            return Err(format!("{name} already defined.").into());
+    pub(crate) fn insert_connector(
+        &mut self,
+        connector: ConnectorDefinition<'script>,
+    ) -> Result<()> {
+        let name = connector.node_id.id.clone();
+        if let Some(_old) = self.connectors.insert(name.clone(), connector) {
+            Err("FIXME: already defined".into())
+        } else {
+            Ok(())
         }
-        let id = self.enteties.len();
-        self.enteties.push(value);
-        self.names.insert(name, id);
-        Ok(id)
+    }
+    pub(crate) fn insert_const(&mut self, c: Const<'script>) -> Result<()> {
+        let name = c.name.clone();
+        if let Some(old) = self.consts.insert(name.clone(), c) {
+            Err(format!("FIXME: already defined: {}", old.name).into())
+        } else {
+            Ok(())
+        }
+    }
+    pub(crate) fn insert_function(&mut self, f: FnDecl<'script>) -> Result<()> {
+        let name = f.name.to_string();
+        if let Some(_old) = self.functions.insert(name, f) {
+            Err("FIXME: already defined".into())
+        } else {
+            Ok(())
+        }
+    }
+    pub(crate) fn insert_pipeline(&mut self, pipeline: PipelineDefinition<'script>) -> Result<()> {
+        let name = pipeline.node_id.id.clone();
+        if let Some(_old) = self.pipelines.insert(name, pipeline) {
+            Err("FIXME: already defined".into())
+        } else {
+            Ok(())
+        }
     }
 
-    pub fn get_name(&self, n: &str) -> Option<&T> {
-        self.names.get(n).and_then(|id| self.enteties.get(*id))
+    pub(crate) fn insert_window(&mut self, window: WindowDefinition<'script>) -> Result<()> {
+        let name = window.node_id.id.clone();
+        if let Some(_old) = self.windows.insert(name, window) {
+            Err("FIXME: already defined".into())
+        } else {
+            Ok(())
+        }
     }
-    pub fn get_id(&self, id: usize) -> Option<&T> {
-        self.enteties.get(id)
+    pub(crate) fn insert_operator(&mut self, operator: OperatorDefinition<'script>) -> Result<()> {
+        let name = operator.node_id.id.clone();
+        if let Some(_old) = self.operators.insert(name, operator) {
+            Err("FIXME: already defined".into())
+        } else {
+            Ok(())
+        }
+    }
+    pub(crate) fn insert_script(&mut self, script: ScriptDefinition<'script>) -> Result<()> {
+        let name = script.node_id.id.clone();
+        if let Some(_old) = self.scripts.insert(name, script) {
+            Err("FIXME: already defined".into())
+        } else {
+            Ok(())
+        }
     }
 }
 
 // This is a self referential struct, beware
 #[derive(Debug, Clone)]
-pub struct Module {
+pub(crate) struct Module {
+    pub(crate) name: Vec<String>,
     pub(crate) src: Arc<Pin<String>>,
     pub(crate) file_name: PathBuf,
     pub(crate) id: ModuleId,
-    pub(crate) connectors: NamedEnteties<ConnectorDefinition<'static>>,
-    pub(crate) pipelines: NamedEnteties<PipelineDefinition<'static>>,
-    pub(crate) windows: NamedEnteties<WindowDefinition<'static>>,
-    pub(crate) scripts: NamedEnteties<ScriptDefinition<'static>>,
-    pub(crate) operators: NamedEnteties<OperatorDefinition<'static>>,
-    pub(crate) flows: NamedEnteties<FlowDefinition<'static>>,
-    pub(crate) consts: NamedEnteties<Value<'static>>,
-    pub(crate) functions: NamedEnteties<FnDecl<'static>>,
+    pub(crate) content: ModuleContent<'static>,
 }
 
 impl From<&[u8]> for ModuleId {
@@ -178,7 +220,41 @@ impl From<&[u8]> for ModuleId {
 }
 
 impl Module {
-    pub fn load<P>(id: ModuleId, file_name: P, src: Arc<Pin<String>>) -> Result<Self>
+    pub(crate) fn insert_flow(&mut self, flow: FlowDefinition<'static>) -> Result<()> {
+        self.content.insert_flow(flow)
+    }
+    pub(crate) fn insert_connector(
+        &mut self,
+        connector: ConnectorDefinition<'static>,
+    ) -> Result<()> {
+        self.content.insert_connector(connector)
+    }
+    pub(crate) fn insert_const(&mut self, c: Const<'static>) -> Result<()> {
+        self.content.insert_const(c)
+    }
+    pub(crate) fn insert_function(&mut self, f: FnDecl<'static>) -> Result<()> {
+        self.content.insert_function(f)
+    }
+    pub(crate) fn insert_pipeline(&mut self, pipeline: PipelineDefinition<'static>) -> Result<()> {
+        self.content.insert_pipeline(pipeline)
+    }
+
+    pub(crate) fn insert_window(&mut self, window: WindowDefinition<'static>) -> Result<()> {
+        self.content.insert_window(window)
+    }
+    pub(crate) fn insert_operator(&mut self, operator: OperatorDefinition<'static>) -> Result<()> {
+        self.content.insert_operator(operator)
+    }
+    pub(crate) fn insert_script(&mut self, script: ScriptDefinition<'static>) -> Result<()> {
+        self.content.insert_script(script)
+    }
+
+    pub fn load<P>(
+        id: ModuleId,
+        file_name: P,
+        src: Arc<Pin<String>>,
+        name: Vec<String>,
+    ) -> Result<Self>
     where
         P: AsRef<Path>,
     {
@@ -194,43 +270,39 @@ impl Module {
             .filter(|t| !t.value.is_ignorable());
         let raw: ModuleRaw = crate::parser::g::ModuleFileParser::new().parse(lexemes)?;
         let raw = unsafe { transmute::<ModuleRaw<'_>, ModuleRaw<'static>>(raw) };
+        let file_name: &Path = file_name.as_ref();
 
-        let mut flows = NamedEnteties::default();
-        let mut connectors = NamedEnteties::default();
-        let mut pipelines = NamedEnteties::default();
-        let mut windows = NamedEnteties::default();
-        let mut scripts = NamedEnteties::default();
-        let mut operators = NamedEnteties::default();
-        let mut functions = NamedEnteties::default();
-        let mut consts = NamedEnteties::default();
         for s in raw.stmts {
             match s {
-                ModuleStmtRaw::Use(_) => todo!(),
+                ModuleStmtRaw::Use(u) => {
+                    // FIXME: prevent self inclusion
+                    let UseRaw { alias, module, .. } = u;
+                    let _parsed = ModuleManager::load(&module)?;
+                    let alias = alias.unwrap_or_else(|| module.id.clone());
+                    let mid = module.to_vec();
+                    helper.scope().add_module_alias(alias, mid);
+                }
                 ModuleStmtRaw::Flow(e) => {
                     let e = e.up(&mut helper)?;
-                    let name = e.node_id.id.clone();
                     // The self referential nature comes into play here
                     let e = unsafe { transmute::<FlowDefinition<'_>, FlowDefinition<'static>>(e) };
-
-                    flows.insert(name, e)?;
+                    helper.scope.content.insert_flow(e)?;
                 }
                 ModuleStmtRaw::Connector(e) => {
                     let e = e.up(&mut helper)?.into_static();
-                    let name = e.node_id.id.clone();
-                    connectors.insert(name, e)?;
+                    helper.scope.content.insert_connector(e)?;
                 }
                 ModuleStmtRaw::Const(e) => {
                     let e = e.up(&mut helper)?;
                     // The self referential nature comes into play here
-                    let value = unsafe { transmute::<Value<'_>, Value<'static>>(e.value) };
-                    consts.insert(e.name, value)?;
+                    let e = unsafe { transmute::<Const<'_>, Const<'static>>(e) };
+                    helper.scope.content.insert_const(e)?;
                 }
                 ModuleStmtRaw::FnDecl(e) => {
                     let e = e.up(&mut helper)?;
                     // The self referential nature comes into play here
                     let e = unsafe { transmute::<FnDecl<'_>, FnDecl<'static>>(e) };
-                    let name = e.name.to_string();
-                    functions.insert(name, e)?;
+                    helper.scope.content.insert_function(e)?;
                 }
 
                 ModuleStmtRaw::Pipeline(e) => {
@@ -240,20 +312,16 @@ impl Module {
                     let e = unsafe {
                         transmute::<PipelineDefinition<'_>, PipelineDefinition<'static>>(e)
                     };
-
-                    let name = e.node_id.id.clone();
-                    pipelines.insert(name, e)?;
+                    helper.scope.content.insert_pipeline(e)?;
                 }
 
                 ModuleStmtRaw::Window(e) => {
                     let e = e.up(&mut helper)?.into_static();
-                    let name = e.node_id.id.clone();
-                    windows.insert(name, e)?;
+                    helper.scope.content.insert_window(e)?;
                 }
                 ModuleStmtRaw::Operator(e) => {
                     let e = e.up(&mut helper)?.into_static();
-                    let name = e.node_id.id.clone();
-                    operators.insert(name, e)?;
+                    helper.scope.content.insert_operator(e)?;
                 }
                 ModuleStmtRaw::Script(e) => {
                     // FIXME? We can't do into static here
@@ -261,26 +329,16 @@ impl Module {
                     // The self referential nature comes into play here
                     let e =
                         unsafe { transmute::<ScriptDefinition<'_>, ScriptDefinition<'static>>(e) };
-
-                    let name = e.node_id.id.clone();
-                    scripts.insert(name, e)?;
+                    helper.scope.content.insert_script(e)?;
                 }
             }
         }
-
-        let file_name: &Path = file_name.as_ref();
         Ok(Module {
             src,
             file_name: PathBuf::from(file_name),
             id,
-            connectors,
-            pipelines,
-            windows,
-            scripts,
-            operators,
-            flows,
-            consts,
-            functions,
+            name,
+            content: helper.scope.content,
         })
     }
 }
@@ -291,28 +349,50 @@ pub(crate) struct ModuleManager {
     modules: Vec<Module>,
 }
 
+// FIXME: unwraps
 impl ModuleManager {
-    pub fn load_id(&mut self, id: &NodeId) -> Result<usize> {
-        let f = self
-            .path
-            .resolve_id(id)
-            .ok_or_else(|| format!("module {} not found", id))?;
-        self.load(f)
+    pub fn add_path<S: ToString>(path: S) {
+        MODULES.write().unwrap().path.add(path);
     }
-    pub fn load<P: AsRef<Path>>(&mut self, p: P) -> Result<usize> {
-        let mut src = std::fs::read_to_string(&p)?;
+    pub fn modules(&self) -> &[Module] {
+        &self.modules
+    }
+
+    pub fn load(node_id: &NodeId) -> Result<usize> {
+        let p = MODULES
+            .read()
+            .unwrap()
+            .path
+            .resolve_id(node_id)
+            .ok_or_else(|| format!("module {} not found", node_id))?;
+        let src = std::fs::read_to_string(&p)?;
         let id = ModuleId::from(src.as_bytes());
 
-        if let Some((id, _)) = self.modules.iter().enumerate().find(|(i, m)| m.id == id) {
+        let maybe_id = MODULES
+            .read()
+            .unwrap()
+            .modules()
+            .iter()
+            .enumerate()
+            .find(|(_, m)| m.id == id)
+            .map(|(i, _)| i);
+        if let Some(id) = maybe_id {
             Ok(id)
         } else {
-            let n = self.modules.len();
-            // FIXME: **sob** we still need this
-            src.push('\n');
+            let mid = node_id.to_vec();
             let src = Arc::new(Pin::new(src));
-            self.modules.push(Module::load(id, p, src)?);
+            let m = Module::load(id, p, src, mid)?;
+            let mut mm = MODULES.write().unwrap(); // FIXME
+            let n = mm.modules.len();
+            mm.modules.push(m);
             Ok(n)
         }
+    }
+
+    pub fn get_const(module: &[String], name: &str) -> Option<Const<'static>> {
+        let ms = MODULES.read().unwrap();
+        let m = ms.modules().iter().find(|m| &m.name == module)?;
+        m.content.consts.get(name).cloned()
     }
 }
 
@@ -321,30 +401,36 @@ mod test {
     use super::*;
 
     #[test]
-    fn load() -> Result<()> {
-        let mut m = ModuleManager::default();
-        let id1 = m.load("./lib/std/string.tremor")?;
-        let id2 = m.load("./lib/std/string.tremor")?;
+    fn load_wice() -> Result<()> {
+        ModuleManager::add_path("./lib");
+        let id1 = ModuleManager::load(&NodeId {
+            id: "string".to_string(),
+            module: vec!["std".into()],
+        })?;
+        let id2 = ModuleManager::load(&NodeId {
+            id: "string".to_string(),
+            module: vec!["std".into()],
+        })?;
         assert_eq!(id1, id2);
-        // dbg!(m);
-        // panic!();
+        Ok(())
+    }
+    #[test]
+    fn load_nested() -> Result<()> {
+        ModuleManager::add_path("./tests/modules");
+        ModuleManager::load(&NodeId {
+            id: "outside".to_string(),
+            module: vec![],
+        })?;
         Ok(())
     }
     #[test]
     fn load_from_id() -> Result<()> {
-        let mut m = ModuleManager {
-            path: ModulePath {
-                mounts: vec!["./lib".to_string()],
-            },
-            modules: Vec::new(),
-        };
+        ModuleManager::add_path("./lib");
 
-        m.load_id(&NodeId {
+        ModuleManager::load(&NodeId {
             id: "string".to_string(),
             module: vec!["std".to_string()],
         })?;
-        // dbg!(m);
-        // panic!();
         Ok(())
     }
 }

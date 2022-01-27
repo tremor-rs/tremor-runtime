@@ -12,10 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::ast::NodeId;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
-
-use crate::ast::NodeId;
 
 /// default `TREMOR_PATH`
 ///
@@ -39,7 +38,10 @@ impl Default for ModulePath {
 impl ModulePath {
     /// Adds to the module path
     pub fn add<S: ToString>(&mut self, path: S) {
-        self.mounts.push(path.to_string());
+        let p = path.to_string();
+        if !self.mounts.contains(&p) {
+            self.mounts.push(p);
+        }
     }
 
     /// Does a particular module exist relative to the module path in force
@@ -68,12 +70,18 @@ impl ModulePath {
         }
         None
     }
-
-    /// Convert a relative file path to a module reference
-    #[must_use]
-    pub fn file_to_module(rel_file: &str) -> String {
-        rel_file.trim_end_matches(".tremor").replace("/", "::")
+    /// Determines the module id for a path
+    pub fn resolve_module<S: AsRef<Path>>(rel_file: S) -> Option<Vec<String>> {
+        let p: &Path = rel_file.as_ref();
+        let mut root = p
+            .parent()?
+            .iter()
+            .map(|s| Some(s.to_str()?.to_string()))
+            .collect::<Option<Vec<_>>>()?;
+        root.push(p.file_stem()?.to_str()?.to_string());
+        Some(root)
     }
+
     /// Load module path
     #[must_use]
     pub fn load() -> Self {
@@ -140,14 +148,6 @@ mod tests {
         assert_eq!(
             vec![String::from("/foo/bar/baz"), String::from("snot/badger")],
             paths.mounts
-        );
-    }
-
-    #[test]
-    fn test_file_to_module() {
-        assert_eq!(
-            String::from("foo::snot::badger"),
-            ModulePath::file_to_module("foo/snot/badger.tremor")
         );
     }
 

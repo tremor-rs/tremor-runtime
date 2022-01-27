@@ -17,7 +17,7 @@ use super::raw::IdentRaw;
 // limitations under the License.
 
 /// Identifies a node in the AST.
-#[derive(Clone, Debug, PartialEq, Serialize, Hash, Eq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Hash, Eq, Default)]
 pub struct NodeId {
     /// The ID of the Node
     pub(crate) id: String,
@@ -95,6 +95,12 @@ impl NodeId {
         } else {
             format!("{}::{}", self.module.join("::"), target)
         }
+    }
+
+    pub(crate) fn to_vec(&self) -> Vec<String> {
+        let mut res = self.module.clone();
+        res.push(self.id.clone());
+        res
     }
 }
 

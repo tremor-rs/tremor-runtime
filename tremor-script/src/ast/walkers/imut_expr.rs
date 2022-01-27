@@ -468,9 +468,6 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
             Path::Expr(p) => {
                 self.walk_expr_path(p)?;
             }
-            Path::Const(p) => {
-                self.walk_const_path(p)?;
-            }
             Path::Local(p) => {
                 self.walk_local_path(p)?;
             }
@@ -499,16 +496,6 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
         self.walk_expr(&mut path.expr)?;
         self.walk_segments(&mut path.segments)?;
         self.leave_expr_path(path)
-    }
-
-    /// walk a `ConstPath` (represented as `LocalPath` in the AST)
-    ///
-    /// # Errors
-    /// if the walker function fails
-    fn walk_const_path(&mut self, path: &mut LocalPath<'script>) -> Result<()> {
-        stop!(self.visit_const_path(path), self.leave_const_path(path));
-        self.walk_segments(&mut path.segments)?;
-        self.leave_const_path(path)
     }
 
     /// walk a local path
