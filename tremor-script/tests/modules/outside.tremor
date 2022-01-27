@@ -1,0 +1,4 @@
+use loading::deep::inside;
+
+const outside = inside::inside;
+const outside_linked = inside::linked;

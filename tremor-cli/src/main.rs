@@ -82,9 +82,6 @@ where
         Err(e) => Err(e.into()),
     }
 }
-lazy_static! {
-    static ref LONG_VERSION: String = tremor_runtime::version::long_ver();
-}
 
 #[cfg(not(tarpaulin_include))]
 #[async_std::main]

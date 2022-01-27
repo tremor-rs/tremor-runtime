@@ -297,31 +297,9 @@ impl<'script> Consts<'script> {
             window: Value::const_null(),
         }
     }
-    fn is_const(&self, id: &[String]) -> Option<&usize> {
-        self.names.get(id)
-    }
 
     fn len(&self) -> usize {
         self.values.len()
-    }
-
-    fn insert(
-        &mut self,
-        name_v: Vec<String>,
-        val: Value<'script>,
-    ) -> std::result::Result<usize, usize> {
-        let idx = self.values.len();
-
-        self.names.insert(name_v, idx).map_or_else(
-            || {
-                self.values.push(val);
-                Ok(idx)
-            },
-            Err,
-        )
-    }
-    pub(crate) fn get(&self, idx: usize) -> Option<&Value<'script>> {
-        self.values.get(idx)
     }
 }
 
@@ -1923,8 +1901,6 @@ impl_expr_mid!(TuplePattern);
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Represents a path-like-structure
 pub enum Path<'script> {
-    /// A constant path
-    Const(LocalPath<'script>),
     /// A local path
     Local(LocalPath<'script>),
     /// The current event
@@ -1944,7 +1920,7 @@ impl<'script> Path<'script> {
     #[must_use]
     pub fn segments(&self) -> &Segments<'script> {
         match self {
-            Path::Const(path) | Path::Local(path) => &path.segments,
+            Path::Local(path) => &path.segments,
             Path::Meta(path) => &path.segments,
             Path::Event(path) => &path.segments,
             Path::State(path) => &path.segments,
@@ -1958,7 +1934,7 @@ impl<'script> Path<'script> {
     #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub fn segments_mut(&mut self) -> &mut Segments<'script> {
         match self {
-            Path::Const(path) | Path::Local(path) => &mut path.segments,
+            Path::Local(path) => &mut path.segments,
             Path::Meta(path) => &mut path.segments,
             Path::Event(path) => &mut path.segments,
             Path::State(path) => &mut path.segments,
@@ -2015,6 +1991,16 @@ pub enum Segment<'script> {
         /// End of range value expression
         end: Box<ImutExpr<'script>>,
     },
+}
+
+impl<'script> Segment<'script> {
+    pub(crate) fn id_name(&self) -> Option<&str> {
+        if let Segment::Id { key, .. } = self {
+            Some(key.key())
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Default)]

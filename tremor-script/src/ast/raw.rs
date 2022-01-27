@@ -31,8 +31,7 @@ use crate::{
         TestExpr, TuplePattern, UnaryExpr, UnaryOpKind,
     },
     errors::{
-        err_generic, error_generic, error_missing_effector, error_oops, Error, Kind as ErrorKind,
-        Result,
+        err_generic, error_generic, error_missing_effector, error_oops, Kind as ErrorKind, Result,
     },
     impl_expr, impl_expr_exraw, impl_expr_no_lt,
     pos::{Location, Range},
@@ -48,6 +47,7 @@ use serde::Serialize;
 
 use super::{
     docs::{FnDoc, ModDoc},
+    module::ModuleManager,
     Const, NodeId,
 };
 
@@ -81,8 +81,7 @@ impl<'script> ScriptRaw<'script> {
         mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<Script<'script>> {
         let mut exprs = vec![];
-        let last_idx = self.exprs.len() - 1;
-        for (i, e) in self.exprs.into_iter().enumerate() {
+        for e in self.exprs {
             match e {
                 TopLevelExprRaw::Use(_) => {
                     panic!("FIXME");
@@ -94,28 +93,19 @@ impl<'script> ScriptRaw<'script> {
                     end,
                     comment,
                 }) => {
-                    let name_v = vec![name.to_string()];
-                    let r = Range::from((start, end));
-
                     let mut expr = expr.up(helper)?;
                     ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut expr)?;
-                    let v = expr.try_into_lit(&helper.meta)?;
-                    let value_type = v.value_type();
+                    let value = expr.try_into_lit(&helper.meta)?;
+                    let value_type = value.value_type();
 
-                    let idx = helper.consts.insert(name_v, v).map_err(|_old| {
-                        Error::from(ErrorKind::DoubleConst(
-                            r.expand_lines(2),
-                            r,
-                            name.to_string(),
-                        ))
-                    })?;
-                    if i == last_idx {
-                        exprs.push(Expr::Imut(ImutExpr::Local {
-                            is_const: true,
-                            idx,
-                            mid: helper.add_meta_w_name(start, end, &name),
-                        }));
-                    }
+                    let mid = helper.add_meta_w_name(start, end, &name);
+                    let c = Const {
+                        mid,
+                        name: name.to_string(),
+                        value: value.clone(),
+                    };
+                    helper.scope.content.insert_const(c)?;
+                    exprs.push(Expr::Imut(ImutExpr::Literal(Literal { value, mid })));
                     helper.add_const_doc(&name, comment, value_type);
                 }
                 TopLevelExprRaw::FnDecl(f) => {
@@ -1715,13 +1705,31 @@ impl<'script> Upable<'script> for PathRaw<'script> {
         Ok(match self {
             Local(p) => {
                 let p = p.up(helper)?;
+                // Handle local constatns
                 if p.is_const {
-                    Path::Const(p)
+                    let (name, rest) = p.segments.split_first().ok_or("invalid path 1")?;
+                    let id = name.id_name().ok_or("invalid path 2")?;
+
+                    let c = helper
+                        .scope
+                        .content
+                        .consts
+                        .get(id)
+                        .ok_or("invalid constant")?;
+                    Path::Expr(ExprPath {
+                        expr: Box::new(ImutExpr::Literal(Literal {
+                            mid: c.mid,
+                            value: c.value.clone(),
+                        })),
+                        segments: rest.to_vec(),
+                        var: 0,
+                        mid: p.mid,
+                    })
                 } else {
                     Path::Local(p)
                 }
             }
-            Const(p) => Path::Const(p.up(helper)?),
+            Const(p) => Path::Expr(p.up(helper)?),
             Event(p) => Path::Event(p.up(helper)?),
             State(p) => Path::State(p.up(helper)?),
             Meta(p) => Path::Meta(p.up(helper)?),
@@ -1885,33 +1893,47 @@ pub struct ConstPathRaw<'script> {
 impl_expr!(ConstPathRaw);
 
 impl<'script> Upable<'script> for ConstPathRaw<'script> {
-    type Target = LocalPath<'script>;
+    type Target = ExprPath<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let segments = self.segments.up(helper)?;
         let mut segments = segments.into_iter();
-        if let Some(Segment::Id { mid, .. }) = segments.next() {
+        if let Some(Segment::Id { mid, key }) = segments.next() {
             let segments = segments.collect();
             let id = helper.meta.name_dflt(mid).to_string();
             let mid = helper.add_meta_w_name(self.start, self.end, &id);
-            let mut module_direct: Vec<String> =
-                self.module.iter().map(|m| m.to_string()).collect();
-            let mut module = helper.module.clone();
-            module.append(&mut module_direct);
-            module.push(id);
-            if let Some(idx) = helper.is_const(&module) {
-                Ok(LocalPath {
-                    is_const: true,
-                    idx: *idx,
-                    mid,
+            let module_direct: Vec<String> = self.module.iter().map(|m| m.to_string()).collect();
+            let module = if let Some((m, rest)) = module_direct.split_first() {
+                if let Some(ms) = helper.scope().modules.get(m) {
+                    let mut module = ms.to_vec();
+                    module.extend_from_slice(rest);
+                    module
+                } else {
+                    return Err("FIXME: unknown module!".into());
+                }
+            } else {
+                return Err("FIXME: unknown module!".into());
+            };
+
+            if let Some(c) = ModuleManager::get_const(&module, key.key()) {
+                let var = helper.reserve_shadow();
+
+                Ok(ExprPath {
+                    expr: Box::new(ImutExpr::Literal(Literal {
+                        mid,
+                        value: c.value,
+                    })),
                     segments,
+                    var,
+                    mid,
                 })
             } else {
                 error_generic(
                     &(self.start, self.end),
                     &(self.start, self.end),
                     &format!(
-                        "The constant {} (absolute path) is not defined.",
-                        module.join("::")
+                        "The constant {}::{} (absolute path) is not defined.",
+                        module.join("::"),
+                        key
                     ),
                     &helper.meta,
                 )
@@ -2019,18 +2041,16 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
     type Target = LocalPath<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let segments = self.segments.up(helper)?;
-        let mut segments = segments.into_iter();
-        if let Some(Segment::Id { mid, .. }) = segments.next() {
-            let segments = segments.collect();
-            let id = helper.meta.name_dflt(mid).to_string();
+        if let Some(Segment::Id { mid, .. }) = segments.first() {
+            let id = helper.meta.name_dflt(*mid).to_string();
             let mid = helper.add_meta_w_name(self.start, self.end, &id);
 
-            let mut rel_path = helper.module.clone();
-            rel_path.push(id.to_string());
-            let (idx, is_const) = helper
-                .is_const(&rel_path)
-                .copied()
-                .map_or_else(|| (helper.var_id(&id), false), |idx| (idx, true));
+            let is_const = helper.is_const(&id);
+            let idx = if is_const {
+                0 //FIXME: this is a placeholder but it probably is Ok?
+            } else {
+                helper.var_id(&id)
+            };
             Ok(LocalPath {
                 idx,
                 is_const,
@@ -2357,7 +2377,6 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                     // Otherwise
                     let inner: Range = (self.start, self.end).into();
                     let outer: Range = inner.expand_lines(3);
-                    dbg!(helper.functions.keys().collect::<Vec<_>>());
                     Err(
                         ErrorKind::MissingFunction(outer, inner, self.module, self.fun, None)
                             .into(),
