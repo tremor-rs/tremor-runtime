@@ -16,10 +16,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::SmolRuntime;
-use crate::connectors::impls::kafka::is_failed_connect_error;
+use crate::connectors::impls::kafka::{is_failed_connect_error, KAFKA_CONNECT_TIMEOUT};
 use crate::connectors::prelude::*;
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
-use async_std::prelude::StreamExt;
+use async_std::prelude::{FutureExt, StreamExt};
 use async_std::task::{self, JoinHandle};
 use halfbrown::HashMap;
 use indexmap::IndexMap;
@@ -54,6 +54,7 @@ pub struct Config {
     /// This should not be used when persistent errors are expected (e.g. if the message content is malformed and will lead to repeated errors)
     #[serde(default = "Default::default")]
     pub retry_failed_events: bool,
+
     /// Optional rdkafka configuration
     pub rdkafka_options: Option<HashMap<String, String>>,
 }
@@ -473,7 +474,21 @@ impl Source for KafkaConsumerSource {
         });
         self.consumer_task = Some(handle);
 
-        connect_result_rx.recv().await?
+        let res = connect_result_rx
+            .recv()
+            .timeout(KAFKA_CONNECT_TIMEOUT)
+            .await;
+        match res {
+            Err(_timeout) => {
+                // all good, we didn't receive an error, so let's assume we are fine
+                Ok(true)
+            }
+            Ok(Err(e)) => {
+                // receive error - bail out
+                Err(e.into())
+            }
+            Ok(Ok(connected)) => connected,
+        }
     }
 
     async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
