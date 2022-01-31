@@ -18,7 +18,7 @@
 use std::time::Duration;
 
 use super::SmolRuntime;
-use crate::connectors::impls::kafka::is_failed_connect_error;
+use crate::connectors::impls::kafka::{is_failed_connect_error, KAFKA_CONNECT_TIMEOUT};
 use crate::connectors::prelude::*;
 use async_std::channel::{bounded, Sender};
 use async_std::prelude::FutureExt;
@@ -290,9 +290,8 @@ impl Sink for KafkaProducerSink {
         let producer_config = self.producer_config.clone();
         let producer: FutureProducer<TremorProducerContext, SmolRuntime> =
             FutureProducer::from_config_and_context(&producer_config, context)?;
-        // start polling explicitly here, and check if we receive any error callbacks
-        producer.poll(Duration::from_millis(200));
-        match rx.recv().timeout(Duration::from_secs(1)).await {
+        // check if we receive any error callbacks
+        match rx.recv().timeout(KAFKA_CONNECT_TIMEOUT).await {
             Err(_timeout) => {
                 // timeout error, everything is ok, no error
                 self.producer = Some(producer);
