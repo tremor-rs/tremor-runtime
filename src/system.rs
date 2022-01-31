@@ -148,7 +148,13 @@ impl Manager {
                             let (tx, rx) = bounded(self.deployments.len());
                             let mut expected_stops = self.deployments.len();
                             for (_, deployment) in self.deployments {
-                                deployment.stop(tx.clone()).await?;
+                                if let Err(e) = deployment.stop(tx.clone()).await {
+                                    error!(
+                                        "Failed to stop Deployment \"{alias}\": {e}",
+                                        alias = deployment.alias()
+                                    );
+                                    expected_stops = expected_stops.saturating_sub(1);
+                                }
                             }
                             let h = task::spawn::<_, Result<()>>(async move {
                                 while expected_stops > 0 {
@@ -169,15 +175,23 @@ impl Manager {
                         if num_deployments == 0 {
                             sender.send(Ok(())).await?;
                         } else {
-                            info!("Draining all Flows ...");
+                            info!("Draining all {num_deployments} Flows ...");
+                            let mut alive_deployments = 0_usize;
                             let (tx, rx) = bounded(num_deployments);
                             for (_, deployment) in &self.deployments {
-                                deployment.drain(tx.clone()).await?;
+                                if let Err(e) = deployment.drain(tx.clone()).await {
+                                    error!(
+                                        "Failed to drain Deployment \"{alias}\": {e}",
+                                        alias = deployment.alias()
+                                    )
+                                } else {
+                                    alive_deployments += 1;
+                                }
                             }
 
                             task::spawn::<_, Result<()>>(async move {
                                 let rx_futures =
-                                    std::iter::repeat_with(|| rx.recv()).take(num_deployments);
+                                    std::iter::repeat_with(|| rx.recv()).take(alive_deployments);
                                 for result in futures::future::join_all(rx_futures).await {
                                     match result {
                                         Err(_) => {
