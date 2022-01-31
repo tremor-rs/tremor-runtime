@@ -103,6 +103,7 @@ type Addr = async_std::channel::Sender<Msg>;
 
 #[derive(Debug)]
 pub(crate) struct Deployment {
+    alias: String,
     addr: Addr,
 }
 
@@ -114,6 +115,9 @@ pub struct StatusReport {
     pub status: InstanceState,
 }
 impl Deployment {
+    pub(crate) fn alias(&self) -> &str {
+        self.alias.as_str()
+    }
     pub(crate) async fn stop(&self, tx: async_std::channel::Sender<Result<()>>) -> Result<()> {
         self.addr.send(Msg::Stop(tx)).await.map_err(Error::from)
     }
@@ -175,7 +179,10 @@ impl Deployment {
 
         addr.send(Msg::Start).await?;
 
-        let this = Deployment { addr };
+        let this = Deployment {
+            alias: flow.instance_id.to_string(),
+            addr,
+        };
 
         Ok(this)
     }
