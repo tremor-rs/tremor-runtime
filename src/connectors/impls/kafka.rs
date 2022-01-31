@@ -21,6 +21,8 @@ use rdkafka::{error::KafkaError, util::AsyncRuntime};
 use rdkafka_sys::RDKafkaErrorCode;
 use std::time::{Duration, Instant};
 
+const KAFKA_CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
+
 pub struct SmolRuntime;
 
 impl AsyncRuntime for SmolRuntime {
