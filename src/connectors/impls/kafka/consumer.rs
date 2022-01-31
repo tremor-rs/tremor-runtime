@@ -16,6 +16,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use super::SmolRuntime;
+use crate::connectors::impls::kafka::is_failed_connect_error;
 use crate::connectors::prelude::*;
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use async_std::prelude::StreamExt;
@@ -134,17 +135,24 @@ impl ClientContext for TremorConsumerContext {
     fn error(&self, error: KafkaError, reason: &str) {
         error!("{} Kafka Error {}: {}", &self.ctx, error, reason);
         // check for errors that manifest a non-working consumer, so we bail out
-        if let e@(KafkaError::Subscription(_)
-            | KafkaError::ClientConfig(_, _, _, _)
-            | KafkaError::ClientCreation(_)
-            // TODO: what else?
-            | KafkaError::Global(RDKafkaErrorCode::UnknownTopicOrPartition | RDKafkaErrorCode::UnknownTopic | RDKafkaErrorCode::AllBrokersDown)) =
-            error
-        {
-            let connect_tx = self.connect_tx.clone();
-            if let Err(e) = connect_tx.try_send(Err(e.into())) {
-                error!(
-                    "{} Error notifying the connect method of a failure: {e}", self.ctx);
+        if matches!(&error, KafkaError::Subscription(_)) || is_failed_connect_error(&error) {
+            if !self.connect_tx.is_closed() {
+                // we are in the connect phase - channel is still open, so notify the connect method of an error
+                if let Err(e) = self.connect_tx.try_send(Err(error.into())) {
+                    error!(
+                        "{} Error notifying the connect method of a failure: {e}",
+                        self.ctx
+                    );
+                } else {
+                    self.connect_tx.close();
+                }
+            } else {
+                // issue a reconnect upon fatal errors
+                let notifier = self.ctx.notifier().clone();
+                task::spawn(async move {
+                    notifier.notify().await?;
+                    Ok::<(), Error>(())
+                });
             }
         }
     }
