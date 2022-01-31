@@ -18,8 +18,10 @@
 use std::time::Duration;
 
 use super::SmolRuntime;
+use crate::connectors::impls::kafka::is_failed_connect_error;
 use crate::connectors::prelude::*;
-use async_std::channel::Sender;
+use async_std::channel::{bounded, Sender};
+use async_std::prelude::FutureExt;
 use async_std::task;
 use halfbrown::HashMap;
 use rdkafka::config::{ClientConfig, FromClientConfigAndContext};
@@ -107,6 +109,9 @@ impl ConnectorBuilder for Builder {
 
 struct TremorProducerContext {
     ctx: SinkContext,
+    /// during connect we poll the producer to peek for errors, like AllBrokersDown and similar
+    /// We try to send it to a special `bounded(1)` channel to fail the connect attempt
+    connect_sender: Sender<KafkaError>,
 }
 
 impl ClientContext for TremorProducerContext {
@@ -117,7 +122,17 @@ impl ClientContext for TremorProducerContext {
 
     fn error(&self, error: KafkaError, reason: &str) {
         error!("{} Kafka Error: {}: {}", &self.ctx, error, reason);
-        if is_fatal(&error) {
+
+        // send to the connect sender if it is not yet closed, that is if we are still waiting in connect
+        // otherwise notify the runtime
+        if !self.connect_sender.is_closed() {
+            if is_fatal(&error) || is_failed_connect_error(&error) {
+                // ignore any errors here, if the queue is full, we are probably not in the connect phase anymore
+                let _ = self.connect_sender.try_send(error.clone());
+                self.connect_sender.close();
+            }
+        } else if is_fatal(&error) {
+            // issue a reconnect upon fatal errors
             let notifier = self.ctx.notifier().clone();
             task::spawn(async move {
                 notifier.notify().await?;
@@ -264,16 +279,34 @@ impl Sink for KafkaProducerSink {
             drop(old_producer);
         };
 
-        let context = TremorProducerContext { ctx: ctx.clone() };
+        let (tx, rx) = bounded(1);
+        let context = TremorProducerContext {
+            ctx: ctx.clone(),
+            connect_sender: tx,
+        };
         let (version_n, version_s) = rdkafka::util::get_rdkafka_version();
         info!("{ctx} Connecting kafka producer with rdkafka 0x{version_n:08x} {version_s}");
 
         let producer_config = self.producer_config.clone();
         let producer: FutureProducer<TremorProducerContext, SmolRuntime> =
             FutureProducer::from_config_and_context(&producer_config, context)?;
-        self.producer = Some(producer);
-
-        Ok(true)
+        // start polling explicitly here, and check if we receive any error callbacks
+        producer.poll(Duration::from_millis(200));
+        match rx.recv().timeout(Duration::from_secs(1)).await {
+            Err(_timeout) => {
+                // timeout error, everything is ok, no error
+                self.producer = Some(producer);
+                Ok(true)
+            }
+            Ok(Err(e)) => {
+                // receive error - we cannot tell what happened, better error here to trigger a retry
+                Err(e.into())
+            }
+            Ok(Ok(kafka_error)) => {
+                // we received an error from rdkafka - fail it big time
+                Err(kafka_error.into())
+            }
+        }
     }
 
     async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
@@ -325,7 +358,7 @@ async fn wait_for_delivery(
     Ok(())
 }
 
-/// check if a kafka error is fatal
+/// check if a kafka error is fatal for the producer
 fn is_fatal(e: &KafkaError) -> bool {
     match e {
         // Generic fatal errors
