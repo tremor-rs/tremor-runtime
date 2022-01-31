@@ -15,7 +15,6 @@ jobs:
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
       - uses: actions-rs/toolchain@v1
         with:
-          override: true
           profile: minimal
       - uses: Swatinem/rust-cache@v1
       - name: Run tests and validate lockfile
@@ -32,7 +31,6 @@ jobs:
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
       - uses: actions-rs/toolchain@v1
         with:
-          override: true
           profile: minimal
       - uses: Swatinem/rust-cache@v1
       - name: Run cargo-tarpaulin
