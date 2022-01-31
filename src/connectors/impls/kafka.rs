@@ -17,7 +17,8 @@ pub(crate) mod producer;
 use crate::errors::{Error, Kind as ErrorKind, Result};
 use core::future::Future;
 use futures::future;
-use rdkafka::util::AsyncRuntime;
+use rdkafka::{error::KafkaError, util::AsyncRuntime};
+use rdkafka_sys::RDKafkaErrorCode;
 use std::time::{Duration, Instant};
 
 pub struct SmolRuntime;
@@ -68,4 +69,16 @@ fn verify_brokers(id: &str, brokers: &Vec<String>) -> Result<(String, Option<u16
     first_broker.ok_or_else(|| {
         ErrorKind::InvalidConfiguration(id.to_string(), "Missing brokers.".to_string()).into()
     })
+}
+
+/// Returns `true` if the error denotes a failed connect attempt
+/// for both consumer and producer
+fn is_failed_connect_error(err: &KafkaError) -> bool {
+    matches!(
+        err,
+        KafkaError::ClientConfig(_, _, _, _)
+            | KafkaError::ClientCreation(_)
+            // TODO: what else?
+            | KafkaError::Global(RDKafkaErrorCode::UnknownTopicOrPartition | RDKafkaErrorCode::UnknownTopic | RDKafkaErrorCode::AllBrokersDown)
+    )
 }
