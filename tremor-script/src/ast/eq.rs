@@ -166,8 +166,7 @@ impl<'script> AstEq for StrLitElement<'script> {
 
 impl<'script> AstEq for Invoke<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.module.eq(&other.module)
-            && self.fun == other.fun
+        self.node_id.eq(&other.node_id)
             && self.invocable.ast_eq(&other.invocable)
             && self.args.ast_eq(&other.args)
     }

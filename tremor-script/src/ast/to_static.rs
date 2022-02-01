@@ -102,15 +102,13 @@ impl<'script> Invoke<'script> {
     fn into_static(self) -> Invoke<'static> {
         let Invoke {
             mid,
-            module,
-            fun,
+            node_id,
             invocable,
             args,
         } = self;
         Invoke {
             mid,
-            module,
-            fun,
+            node_id,
             invocable: invocable.into_static(),
             args: args.into_iter().map(ImutExpr::into_static).collect(),
         }
@@ -1000,7 +998,6 @@ impl<'script> Script<'script> {
             consts,
             aggregates,
             windows,
-            functions,
             locals,
             node_meta,
             docs,
@@ -1020,7 +1017,6 @@ impl<'script> Script<'script> {
                 .into_iter()
                 .map(|(k, v)| (k, v.into_static()))
                 .collect(),
-            functions: functions.into_iter().map(CustomFn::into_static).collect(),
             locals,
             node_meta,
             docs,
