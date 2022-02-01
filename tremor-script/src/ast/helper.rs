@@ -15,14 +15,15 @@
 pub use super::query::*;
 use super::{
     docs::{ConstDoc, Docs, QueryDeclDoc},
-    module::ModuleContent,
-    Consts, DeployFlow, FlowDefinition, InvokeAggrFn, NodeId, NodeMetas,
+    module::{ModuleContent, ModuleManager},
+    ConnectorDefinition, Const, Consts, DeployFlow, FlowDefinition, FnDecl, InvokeAggrFn, NodeId,
+    NodeMetas,
 };
 use crate::{
     errors::Result,
     pos::{Location, Range},
     prelude::*,
-    registry::{Aggr as AggrRegistry, CustomFn, Registry},
+    registry::{Aggr as AggrRegistry, Registry},
 };
 use beef::Cow;
 use halfbrown::HashMap;
@@ -65,6 +66,35 @@ impl<'script> Scope<'script> {
     pub fn add_module_alias(&mut self, alias: String, mid: Vec<String>) {
         self.modules.insert(alias, mid);
     }
+
+    pub(crate) fn insert_flow(&mut self, flow: FlowDefinition<'script>) -> Result<()> {
+        self.content.insert_flow(flow)
+    }
+    pub(crate) fn insert_connector(
+        &mut self,
+        connector: ConnectorDefinition<'script>,
+    ) -> Result<()> {
+        self.content.insert_connector(connector)
+    }
+    pub(crate) fn insert_const(&mut self, c: Const<'script>) -> Result<()> {
+        self.content.insert_const(c)
+    }
+    pub(crate) fn insert_function(&mut self, f: FnDecl<'script>) -> Result<()> {
+        self.content.insert_function(f)
+    }
+    pub(crate) fn insert_pipeline(&mut self, pipeline: PipelineDefinition<'script>) -> Result<()> {
+        self.content.insert_pipeline(pipeline)
+    }
+
+    pub(crate) fn insert_window(&mut self, window: WindowDefinition<'script>) -> Result<()> {
+        self.content.insert_window(window)
+    }
+    pub(crate) fn insert_operator(&mut self, operator: OperatorDefinition<'script>) -> Result<()> {
+        self.content.insert_operator(operator)
+    }
+    pub(crate) fn insert_script(&mut self, script: ScriptDefinition<'script>) -> Result<()> {
+        self.content.insert_script(script)
+    }
 }
 /// Helper
 #[allow(clippy::struct_excessive_bools)]
@@ -88,9 +118,7 @@ where
     /// Warnings
     pub warnings: Warnings,
     pub(crate) shadowed_vars: Vec<String>,
-    pub(crate) func_vec: Vec<CustomFn<'script>>,
     pub(crate) locals: HashMap<String, usize>,
-    pub(crate) functions: HashMap<Vec<String>, usize>,
     /// Runtime constant pool
     pub consts: Consts<'script>,
     /// AST Metadata
@@ -128,11 +156,46 @@ where
         }
     }
     pub(crate) fn get_flow_decls(&self, _: &NodeId) -> Option<FlowDefinition<'script>> {
-        None
+        todo!()
     }
 
     pub(crate) fn get_pipeline(&self, _: &NodeId) -> Option<PipelineDefinition<'script>> {
-        None
+        todo!()
+    }
+
+    pub(crate) fn get_function(&self, id: &NodeId) -> Option<FnDecl<'script>> {
+        if id.module.is_empty() {
+            self.scope.content.functions.get(&id.id).cloned()
+        } else {
+            let id = self.resolve_module_alias(id)?;
+
+            ModuleManager::get_function(&id.module, &id.id)
+        }
+    }
+
+    pub(crate) fn get_const(&self, id: &NodeId) -> Option<Const<'script>> {
+        if id.module.is_empty() {
+            self.scope.content.consts.get(&id.id).cloned()
+        } else {
+            let id = self.resolve_module_alias(id)?;
+            ModuleManager::get_const(&id.module, &id.id)
+        }
+    }
+
+    /// resolves the local aliases for modules
+    pub(crate) fn resolve_module_alias(&self, id: &NodeId) -> Option<NodeId> {
+        if id.module.is_empty() {
+            Some(id.clone())
+        } else {
+            let (m, rest) = id.module.split_first()?;
+            let ms = self.scope.modules.get(m)?;
+            let mut module = ms.to_vec();
+            module.extend_from_slice(rest);
+            Some(NodeId {
+                module,
+                id: id.id.clone(),
+            })
+        }
     }
     // pub(crate) fn get_script(&self, _: &NodeId) -> Option<ScriptDefinition<'script>> {
     //     None
@@ -217,8 +280,6 @@ where
             warnings: BTreeSet::new(),
             locals: HashMap::new(),
             consts: Consts::default(),
-            functions: HashMap::new(),
-            func_vec: Vec::new(),
             shadowed_vars: Vec::new(),
             meta: NodeMetas::new(cus),
             docs: Docs::default(),
@@ -228,19 +289,6 @@ where
             is_open: false,
             file_offset: Location::default(),
             scope: Scope::default(),
-        }
-    }
-
-    pub(crate) fn register_fun(&mut self, f: CustomFn<'script>) -> Result<usize> {
-        let i = self.func_vec.len();
-        let mut mf = self.module.clone();
-        mf.push(f.name.clone().to_string());
-
-        if self.functions.insert(mf, i).is_none() {
-            self.func_vec.push(f);
-            Ok(i)
-        } else {
-            Err(format!("function {} already defined.", f.name).into())
         }
     }
 
