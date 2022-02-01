@@ -288,7 +288,6 @@ DefineFlow: FlowDefinitionRaw<'input> = {
     <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> "flow" <atoms:FlowStmts> "end" <end:@L> => FlowDefinitionRaw { start, end, id: id.to_string(), params, atoms, docs },
 }
 
-
 ////////////////////////////// Trickle statements //////////////////////////////
 // These statements for the root of the language.
 
@@ -693,10 +692,10 @@ Intrinsic: AnyFnRaw<'input> = {
         AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, start, end, doc, open: false, inline: true})
     },
     <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> ")" "as" <imod:ModularTarget><end:@L> => {
-        let invoce_args = args.iter().map(|a|
+        let invoce_args = args.iter().map(|root|
             ImutExprRaw::Path(
                 PathRaw::Local(
-                    LocalPathRaw{start: a.start, end: a.end, segments: vec![SegmentRaw::from_id(a.clone())]}
+                    LocalPathRaw{start: root.start, end: root.end, segments: vec![], root: root.clone()}
                 ))).collect();
         let mut imod = imod;
         let mut module = vec!["core".to_string()];
@@ -713,10 +712,10 @@ Intrinsic: AnyFnRaw<'input> = {
         AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: false, inline: true})
     },
     <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> "," "." "." "." ")" "as" <imod:ModularTarget> <end:@L> => {
-        let invoce_args = args.iter().map(|a|
+        let invoce_args = args.iter().map(|root|
             ImutExprRaw::Path(
                 PathRaw::Local(
-                    LocalPathRaw{start: a.start, end: a.end, segments: vec![SegmentRaw::from_id(a.clone())]}
+                    LocalPathRaw{start: root.start, end: root.end, segments: vec![], root: root.clone()}
                 ))).collect();
         let mut imod = imod;
         let mut module = vec!["core".to_string()];
@@ -977,14 +976,14 @@ ExprPath: PathRaw<'input> = {
 
 /// A metadata path
 MetaPath: PathRaw<'input> = {
-    <start:@L> "$" <segment:PathSegment> <segments:PathSegments> <end:@L> => {
+    <start:@L> "$" <root:Ident> <segments:PathSegments> <end:@L> => {
         let mut segments = segments;
-        segments.insert(0, segment);
+        segments.insert(0, root.into());
 
         PathRaw::Meta(MetadataPathRaw { segments, start, end })
     },
-    <start:@L> "$" <segment:PathSegment> <end:@L> => {
-        PathRaw::Meta(MetadataPathRaw { segments: vec![segment], start, end })
+    <start:@L> "$" <root:Ident> <end:@L> => {
+        PathRaw::Meta(MetadataPathRaw { segments: vec![root.into()], start, end })
     },
     <start:@L> "$" <end:@L> => PathRaw::Meta(MetadataPathRaw { segments: vec![], start, end }),
 }
@@ -1011,21 +1010,19 @@ ArgsPath: PathRaw<'input> = {
 
 /// Local path
 LocalPath: PathRaw<'input> = {
-    <start:@L> <segment:PathSegment> <segments:PathSegments> <end:@L> => {
-        let mut segments = segments;
-        segments.insert(0, segment);
-        PathRaw::Local(LocalPathRaw { segments, start, end })
+    <start:@L> <root:Ident> <segments:PathSegments> <end:@L> => {
+        PathRaw::Local(LocalPathRaw { root, segments, start, end })
     },
-    <start:@L> <segment:PathSegment> <end:@L> => {
-        PathRaw::Local(LocalPathRaw { segments:  vec![segment], start, end })
+    <start:@L> <root:Ident> <end:@L> => {
+        PathRaw::Local(LocalPathRaw { segments:  vec![], root, start, end })
     },
 }
 
 /// Const path - absolute path prefixed with module
 ConstPath: PathRaw<'input> = {
     <start:@L> <module:ModPath> "::" <path:LocalPath> <end:@L> => {
-        if let PathRaw::Local(LocalPathRaw { segments, .. }) = path {
-            PathRaw::Const(ConstPathRaw { module, segments, start, end })
+        if let PathRaw::Local(LocalPathRaw { root, segments, .. }) = path {
+            PathRaw::Const(ConstPathRaw { module, root, segments, start, end })
         } else {
             unreachable!()
         }
@@ -1047,23 +1044,18 @@ EventPath: PathRaw<'input> = {
 
 /// Segments of a path
 PathSegments: SegmentsRaw<'input> = {
-    "." <segment:PathSegment> <segments:PathSegments> => {
-        let mut segments = segments;
-        segments.insert(0, segment);
-        segments
-    },
+    // "." <segment:PathSegment> <segments:PathSegments> => {
+    //     let mut segments = segments;
+    //     segments.insert(0, segment);
+    //     segments
+    // },
     "[" <selector:Selector> "]" <segments:PathSegments> => {
         let mut segments = segments;
         segments.insert(0, selector);
         segments
     },
     "[" <selector:Selector> "]" => vec![selector],
-    "." <segment:PathSegment> => vec![segment],
-}
-
-/// Singular part of a path
-PathSegment: SegmentRaw<'input> = {
-    <id:Ident> => SegmentRaw::from_id(id),
+    "." <segment:Ident> => vec![segment.into()],
 }
 
 /// A path selector aka [...]

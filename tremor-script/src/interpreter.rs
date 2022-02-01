@@ -95,24 +95,6 @@ where
     pub recursion_limit: u32,
 }
 
-impl<'run, 'event> Env<'run, 'event>
-where
-    'event: 'run,
-{
-    /// Fetches the value for a constant
-    ///
-    /// # Errors
-    /// if the constant wasn't defined
-    pub fn get_const<O>(&self, idx: usize, outer: &O, meta: &NodeMetas) -> Result<&Value<'event>>
-    where
-        O: BaseExpr,
-    {
-        self.consts
-            .get(idx)
-            .ok_or_else(|| error_oops_err(outer, 0xdead_0010, "Unknown constant", meta))
-    }
-}
-
 /// Local variable stack
 #[derive(Default, Debug)]
 pub struct LocalStack<'stack> {

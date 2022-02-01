@@ -30,9 +30,7 @@ use crate::{
         RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
         TestExpr, TuplePattern, UnaryExpr, UnaryOpKind,
     },
-    errors::{
-        err_generic, error_generic, error_missing_effector, error_oops, Kind as ErrorKind, Result,
-    },
+    errors::{err_generic, error_generic, error_missing_effector, Kind as ErrorKind, Result},
     impl_expr, impl_expr_exraw, impl_expr_no_lt,
     pos::{Location, Range},
     prelude::*,
@@ -47,7 +45,7 @@ use serde::Serialize;
 
 use super::{
     docs::{FnDoc, ModDoc},
-    Const, NodeId,
+    Const, Consts, NodeId,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -165,7 +163,7 @@ impl<'script> ScriptRaw<'script> {
             mid: helper.add_meta_w_name(start, end, &meta_name),
             imports: vec![], // Compiled out
             exprs,
-            consts: helper.consts.clone(),
+            consts: Consts::new(),
             aggregates: helper.aggregates.clone(),
             windows: HashMap::new(), //helper.windows.clone(),
             locals: helper.locals.len(),
@@ -780,11 +778,12 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
         let target = self
             .args
             .iter()
-            .map(|a| {
+            .map(|root| {
                 ImutExprRaw::Path(PathRaw::Local(LocalPathRaw {
-                    start: a.start,
-                    end: a.end,
-                    segments: vec![SegmentRaw::from_id(a.clone())],
+                    start: root.start,
+                    end: root.end,
+                    root: root.clone(),
+                    segments: vec![],
                 }))
             })
             .collect();
@@ -799,23 +798,28 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
                 if c.pattern != PatternRaw::Default {
                     let args = self.args.iter().enumerate();
                     let mut exprs: Vec<_> = args
-                        .map(|(i, a)| {
+                        .map(|(i, root)| {
                             ExprRaw::Assign(Box::new(AssignRaw {
                                 start: c.start,
                                 end: c.end,
                                 path: PathRaw::Local(LocalPathRaw {
-                                    start: a.start,
-                                    end: a.end,
-                                    segments: vec![SegmentRaw::from_id(a.clone())],
+                                    start: root.start,
+                                    end: root.end,
+                                    root: root.clone(),
+                                    segments: vec![],
                                 }),
                                 expr: ExprRaw::Imut(ImutExprRaw::Path(PathRaw::Local(
                                     LocalPathRaw {
-                                        start: a.start,
-                                        end: a.end,
-                                        segments: vec![
-                                            SegmentRaw::from_str(FN_RES_NAME, a.start, a.end),
-                                            SegmentRaw::from_usize(i, a.start, a.end),
-                                        ],
+                                        start: root.start,
+                                        end: root.end,
+                                        root: IdentRaw {
+                                            start: root.start,
+                                            end: root.start,
+                                            id: FN_RES_NAME.into(),
+                                        },
+                                        segments: vec![SegmentRaw::from_usize(
+                                            i, root.start, root.end,
+                                        )],
                                     },
                                 ))),
                             }))
@@ -932,11 +936,10 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
             },
             ImutExprRaw::Path(p) => match p.up(helper)? {
                 Path::Local(LocalPath {
-                    is_const,
                     mid,
                     idx,
                     ref segments,
-                }) if segments.is_empty() => ImutExpr::Local { mid, idx, is_const },
+                }) if segments.is_empty() => ImutExpr::Local { mid, idx },
                 p => ImutExpr::Path(p),
             },
             ImutExprRaw::Literal(l) => ImutExpr::Literal(l.up(helper)?),
@@ -1702,28 +1705,25 @@ impl<'script> Upable<'script> for PathRaw<'script> {
         use PathRaw::{Const, Event, Expr, Local, Meta, Reserved, State};
         Ok(match self {
             Local(p) => {
-                let p = p.up(helper)?;
                 // Handle local constatns
-                if p.is_const {
-                    let (name, rest) = p.segments.split_first().ok_or("invalid path 1")?;
-                    let id = name.id_name().ok_or("invalid path 2")?;
+                if helper.is_const_path(&p) {
+                    let id = p.root.id;
 
                     let c = helper
-                        .scope
-                        .content
-                        .consts
-                        .get(id)
+                        .get_const(&NodeId::from(&id))
                         .ok_or("invalid constant")?;
+                    let mid = helper.add_meta_w_name(p.start, p.end, &id);
                     Path::Expr(ExprPath {
                         expr: Box::new(ImutExpr::Literal(Literal {
                             mid: c.mid,
                             value: c.value.clone(),
                         })),
-                        segments: rest.to_vec(),
+                        segments: p.segments.up(helper)?,
                         var: 0,
-                        mid: p.mid,
+                        mid,
                     })
                 } else {
+                    let p = p.up(helper)?;
                     Path::Local(p)
                 }
             }
@@ -1838,8 +1838,8 @@ impl<'script> Upable<'script> for SegmentRaw<'script> {
     }
 }
 
-impl<'script> SegmentRaw<'script> {
-    pub fn from_id(id: IdentRaw<'script>) -> Self {
+impl<'script> From<IdentRaw<'script>> for SegmentRaw<'script> {
+    fn from(id: IdentRaw<'script>) -> Self {
         SegmentRaw::Element(Box::new(SegmentElementRaw {
             start: id.start,
             end: id.end,
@@ -1849,6 +1849,12 @@ impl<'script> SegmentRaw<'script> {
                 value: Value::from(id.id),
             }),
         }))
+    }
+}
+
+impl<'script> SegmentRaw<'script> {
+    pub fn from_id(id: IdentRaw<'script>) -> Self {
+        id.into()
     }
     pub fn from_str(id: &'script str, start: Location, end: Location) -> Self {
         SegmentRaw::Element(Box::new(SegmentElementRaw {
@@ -1886,6 +1892,7 @@ pub struct ConstPathRaw<'script> {
     pub(crate) module: Vec<IdentRaw<'script>>,
     pub(crate) start: Location,
     pub(crate) end: Location,
+    pub(crate) root: IdentRaw<'script>,
     pub(crate) segments: SegmentsRaw<'script>,
 }
 impl_expr!(ConstPathRaw);
@@ -1893,34 +1900,28 @@ impl_expr!(ConstPathRaw);
 impl<'script> Upable<'script> for ConstPathRaw<'script> {
     type Target = ExprPath<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let segments = self.segments.up(helper)?;
-        let mut segments = segments.into_iter();
         let r = (self.start, self.end);
-        if let Some(Segment::Id { mid, .. }) = segments.next() {
-            let segments = segments.collect();
-            let id = helper.meta.name_dflt(mid).to_string();
-            let mid = helper.add_meta_w_name(self.start, self.end, &id);
-            let node_id = NodeId {
-                module: self.module.iter().map(|m| m.to_string()).collect(),
-                id,
-            };
+        let segments = self.segments.up(helper)?;
+        let id = self.root.up(helper)?;
 
-            let c = helper.get_const(&node_id).ok_or_else(|| {
-                let msg = format!("The constant {node_id} (absolute path) is not defined.",);
-                err_generic(&r, &r, &msg, &helper.meta)
-            })?;
-            let var = helper.reserve_shadow();
+        let mid = helper.add_meta_w_name(self.start, self.end, &id);
+        let node_id = NodeId {
+            module: self.module.iter().map(|m| m.to_string()).collect(),
+            id: id.to_string(),
+        };
 
-            Ok(ExprPath {
-                expr: Literal::boxed_expr(mid, c.value),
-                segments,
-                var,
-                mid,
-            })
-        } else {
-            // We should never encounter this
-            error_oops(&r, 0xdead_0007, "Empty local path", &helper.meta)
-        }
+        let c = helper.get_const(&node_id).ok_or_else(|| {
+            let msg = format!("The constant {node_id} (absolute path) is not defined.",);
+            err_generic(&r, &r, &msg, &helper.meta)
+        })?;
+        let var = helper.reserve_shadow();
+
+        Ok(ExprPath {
+            expr: Literal::boxed_expr(mid, c.value),
+            segments,
+            var,
+            mid,
+        })
     }
 }
 
@@ -2007,6 +2008,7 @@ impl<'script> Upable<'script> for ReservedPathRaw<'script> {
 pub struct LocalPathRaw<'script> {
     pub(crate) start: Location,
     pub(crate) end: Location,
+    pub(crate) root: IdentRaw<'script>,
     pub(crate) segments: SegmentsRaw<'script>,
 }
 impl_expr!(LocalPathRaw);
@@ -2014,32 +2016,16 @@ impl_expr!(LocalPathRaw);
 impl<'script> Upable<'script> for LocalPathRaw<'script> {
     type Target = LocalPath<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let id = self.root.up(helper)?;
         let segments = self.segments.up(helper)?;
-        if let Some(Segment::Id { mid, .. }) = segments.first() {
-            let id = helper.meta.name_dflt(*mid).to_string();
-            let mid = helper.add_meta_w_name(self.start, self.end, &id);
 
-            let is_const = helper.is_const(&id);
-            let idx = if is_const {
-                0 //FIXME: this is a placeholder but it probably is Ok?
-            } else {
-                helper.var_id(&id)
-            };
-            Ok(LocalPath {
-                idx,
-                is_const,
-                mid,
-                segments,
-            })
-        } else {
-            // We should never encounter this
-            error_oops(
-                &(self.start, self.end),
-                0xdead_0008,
-                "Empty local path",
-                &helper.meta,
-            )
-        }
+        let mid = helper.add_meta_w_name(self.start, self.end, &id);
+
+        Ok(LocalPath {
+            idx: helper.var_id(&id.id),
+            mid,
+            segments,
+        })
     }
 }
 
