@@ -130,6 +130,7 @@
     "wintel"
   ],
   "rust-analyzer.cargo.features": [
+    "integration"
   ],
   "editor.formatOnSave": true
 }
