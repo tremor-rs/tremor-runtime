@@ -84,18 +84,7 @@ impl<'script> AstEq for ImutExpr<'script> {
                 path.ast_eq(local)
             }
             (String(s1), String(s2)) => s1.ast_eq(s2),
-            (
-                Local {
-                    idx: idx1,
-                    is_const: const1,
-                    ..
-                },
-                Local {
-                    idx: idx2,
-                    is_const: const2,
-                    ..
-                },
-            ) => idx1 == idx2 && const1 == const2,
+            (Local { idx: idx1, .. }, Local { idx: idx2, .. }) => idx1 == idx2,
             (Literal(l1), Literal(l2)) => l1.ast_eq(l2),
             (Present { path: path1, .. }, Present { path: path2, .. }) => path1.ast_eq(path2),
             (Invoke1(i1), Invoke1(i2))
@@ -533,10 +522,10 @@ impl<'script> AstEq<ImutExpr<'script>> for Path<'script> {
     fn ast_eq(&self, other: &ImutExpr<'script>) -> bool {
         match (self, other) {
             // special case if a `Local` references the same local variable as this path
-            (Self::Local(local_path), ImutExpr::Local { idx, is_const, .. })
+            (Self::Local(local_path), ImutExpr::Local { idx, .. })
                 if local_path.segments.is_empty() =>
             {
-                local_path.idx == *idx && local_path.is_const == *is_const
+                local_path.idx == *idx
             }
             (_, ImutExpr::Path(other)) => self.ast_eq(other),
             _ => false,
@@ -580,9 +569,7 @@ impl<'script> AstEq for Segment<'script> {
 
 impl<'script> AstEq for LocalPath<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
-        self.idx == other.idx
-            && self.is_const == other.is_const
-            && self.segments.ast_eq(&other.segments)
+        self.idx == other.idx && self.segments.ast_eq(&other.segments)
     }
 }
 
@@ -1182,20 +1169,14 @@ mod tests {
         let path = ImutExpr::Path(Path::Local(LocalPath {
             idx: 1,
             mid: 1,
-            is_const: false,
             segments: vec![Segment::Idx { idx: 1, mid: 15 }],
         }));
-        let local = ImutExpr::Local {
-            idx: 1,
-            mid: 42,
-            is_const: false,
-        };
+        let local = ImutExpr::Local { idx: 1, mid: 42 };
         // has segments
         assert!(!path.ast_eq(&local));
         let path2 = ImutExpr::Path(Path::Local(LocalPath {
             idx: 1,
             mid: 1_212_432,
-            is_const: false,
             segments: vec![],
         }));
         assert!(path2.ast_eq(&local));
@@ -1203,7 +1184,6 @@ mod tests {
         assert!(!ImutExpr::Path(Path::Local(LocalPath {
             idx: 2,
             mid: 42,
-            is_const: false,
             segments: vec![]
         }))
         .ast_eq(&local));
@@ -1211,7 +1191,6 @@ mod tests {
         assert!(!ImutExpr::Path(Path::Local(LocalPath {
             idx: 1,
             mid: 42,
-            is_const: true,
             segments: vec![]
         }))
         .ast_eq(&local));
@@ -1219,7 +1198,6 @@ mod tests {
         assert!(Path::Local(LocalPath {
             idx: 1,
             mid: 34_786_752_389,
-            is_const: false,
             segments: vec![]
         })
         .ast_eq(&local));

@@ -22,17 +22,17 @@ use super::{
     ArgsExprs, CreationalWith, DefinitioalArgs, DefinitioalArgsWith, WithExprs,
 };
 use super::{
-    error_generic, error_no_consts, error_no_locals, BaseExpr, GroupBy, HashMap, Helper, Location,
-    OperatorCreate, OperatorDefinition, OperatorKind, PipelineCreate, PipelineDefinition, Query,
-    Result, ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamStmt,
-    Upable, Value, WindowDefinition, WindowKind,
+    error_generic, error_no_locals, BaseExpr, GroupBy, HashMap, Helper, Location, OperatorCreate,
+    OperatorDefinition, OperatorKind, PipelineCreate, PipelineDefinition, Query, Result,
+    ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamStmt, Upable, Value,
+    WindowDefinition, WindowKind,
 };
 use crate::{
     ast::{
         node_id::{BaseRef, NodeId},
         visitors::{ArgsRewriter, ConstFolder, GroupByExprExtractor, TargetEventRef},
         walkers::{ImutExprWalker, QueryWalker},
-        Ident,
+        Consts, Ident,
     },
     errors::err_generic,
 };
@@ -152,7 +152,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 Ok(Stmt::SelectStmt(SelectStmt {
                     stmt: Box::new(stmt),
                     aggregates,
-                    consts: helper.consts.clone(),
+                    consts: Consts::new(),
                     locals: locals.len(),
                     node_meta: helper.meta.clone(),
                 }))
@@ -702,8 +702,6 @@ impl_expr!(SelectRaw);
 impl<'script> Upable<'script> for SelectRaw<'script> {
     type Target = Select<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let const_count = helper.consts.len();
-
         let mut target = self.target.up(helper)?;
 
         if helper.has_locals() {
@@ -716,10 +714,6 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
                 return error_no_locals(&(self.start, self.end), &definitely, &helper.meta);
             }
         };
-        // We ensure that no new constatns were added
-        if const_count != helper.consts.len() {
-            return error_no_consts(&(self.start, self.end), &target, &helper.meta);
-        }
 
         let maybe_where = self.maybe_where.up(helper)?;
         if helper.has_locals() {
