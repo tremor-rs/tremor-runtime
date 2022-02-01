@@ -76,9 +76,9 @@ impl ConnectorBuilder for Builder {
     async fn from_config(
         &self,
         id: &str,
-        raw_config: &Option<OpConfig>,
+        raw_config: &ConnectorConfig,
     ) -> crate::errors::Result<Box<dyn Connector>> {
-        if let Some(raw_config) = raw_config {
+        if let Some(raw_config) = &raw_config.config {
             let config = Config::new(raw_config)?;
 
             let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {

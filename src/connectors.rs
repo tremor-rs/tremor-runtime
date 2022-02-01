@@ -29,12 +29,11 @@ use self::metrics::{SinkReporter, SourceReporter};
 use self::sink::{SinkAddr, SinkContext, SinkMsg};
 use self::source::{SourceAddr, SourceContext, SourceMsg};
 use self::utils::quiescence::QuiescenceBeacon;
-use crate::config::Connector as ConnectorConfig;
+pub use crate::config::Connector as ConnectorConfig;
 use crate::errors::{Error, Kind as ErrorKind, Result};
 use crate::instance::InstanceState;
 use crate::pipeline;
 use crate::system::World;
-use crate::OpConfig;
 use async_std::channel::{bounded, Sender};
 use async_std::task::{self};
 use beef::Cow;
@@ -348,7 +347,7 @@ pub async fn spawn(
     let builder = known_connectors
         .get(&config.connector_type)
         .ok_or_else(|| ErrorKind::UnknownConnectorType(config.connector_type.to_string()))?;
-    let connector = builder.from_config(&alias, &config.config).await?;
+    let connector = builder.from_config(&alias, &config).await?;
 
     Ok(connector_task(alias, connector, config, connector_id_gen.next_id()).await?)
 }
@@ -1134,7 +1133,7 @@ pub trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
     async fn from_config(
         &self,
         alias: &str,
-        config: &Option<OpConfig>,
+        config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>>;
 }
 

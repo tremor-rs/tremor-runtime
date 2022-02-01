@@ -25,14 +25,14 @@ use tremor_value::prelude::*;
 
 pub(crate) type Id = String;
 
-/// possible reconnect strategies for controlling if and how to reconnect
+/// Reconnect strategies for controlling if and how to reconnect
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase", deny_unknown_fields)]
-pub(crate) enum Reconnect {
-    /// do not reconnect
+pub enum Reconnect {
+    /// No reconnection
     None,
     // TODO: RandomizedBackoff
-    /// custom reconnect strategy
+    /// Custom configurable reconnect strategy
     Custom {
         /// start interval to wait after a failing connect attempt
         interval_ms: u64,
@@ -127,15 +127,19 @@ pub(crate) type Postprocessor = NameWithConfig;
 /// Specific parts are catched in the `config` map.
 #[derive(Clone, Debug, Default)]
 pub struct Connector {
-    /// connector identifier
+    /// Connector identifier
     pub id: Id,
-    pub(crate) connector_type: ConnectorType,
 
-    pub(crate) codec: Option<Codec>,
+    /// Connector type
+    pub connector_type: ConnectorType,
 
-    pub(crate) config: tremor_pipeline::ConfigMap,
+    /// Codec in force for connector
+    pub codec: Option<Codec>,
 
-    /// mapping from mime-type to codec used to handle requests/responses
+    /// Configuration map
+    pub config: tremor_pipeline::ConfigMap,
+
+    /// Mapping from mime-type to codec used to handle requests/responses
     /// with this mime-type
     ///
     /// e.g.:
@@ -145,11 +149,16 @@ pub struct Connector {
     ///
     /// A default builtin codec mapping is defined
     /// for msgpack, json, yaml and plaintext codecs with the common mime-types
-    pub(crate) codec_map: Option<HashMap<String, Codec>>,
+    ///
+    pub codec_map: Option<HashMap<String, Codec>>,
 
     // TODO: interceptors or configurable processors
-    pub(crate) preprocessors: Option<Vec<Preprocessor>>,
-    pub(crate) postprocessors: Option<Vec<Postprocessor>>,
+    /// Preprocessor chain configuration
+    pub preprocessors: Option<Vec<Preprocessor>>,
+
+    // TODO: interceptors or configurable processors
+    /// Postprocessor chain configuration
+    pub postprocessors: Option<Vec<Postprocessor>>,
 
     pub(crate) reconnect: Reconnect,
 
