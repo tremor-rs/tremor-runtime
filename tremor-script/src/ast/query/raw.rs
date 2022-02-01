@@ -204,7 +204,7 @@ impl<'script> Upable<'script> for OperatorDefinitionRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let _operator_decl = OperatorDefinition {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            node_id: NodeId::new(self.id, &helper.module),
+            node_id: NodeId::new(self.id, &[]),
             kind: self.kind.up(helper)?,
             params: self.params.up(helper)?,
         };
@@ -245,7 +245,7 @@ impl<'script> PipelineDefinitionRaw<'script> {
 impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
     type Target = PipelineDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        helper.module.push(self.id.clone());
+        helper.enter_scope();
 
         let query = None;
 
@@ -272,13 +272,13 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
         }
 
         let mid = helper.add_meta_w_name(self.start, self.end, &self.id);
-        helper.module.pop();
+        helper.leave_scope()?;
         let params = self.params.up(helper)?;
 
         let pipeline_decl = PipelineDefinition {
             raw_config: self.config,
             mid,
-            node_id: NodeId::new(self.id, &helper.module),
+            node_id: NodeId::new(self.id, &[]),
             params,
             raw_stmts: self.pipeline,
             from,
@@ -364,9 +364,9 @@ impl<'script> PipelineInlineRaw<'script> {
         mut helper: &mut Helper<'script, 'registry>,
         args: Option<&Value<'script>>,
     ) -> Result<PipelineCreate> {
-        let target = self.target.clone().with_prefix(&helper.module);
-        // Calculate the fully qualified name for the pipeline declaration.
-        // let fq_pipeline_defn = target.fqn();
+        let target = self.target.clone().with_prefix(&[]); // FIXME
+                                                           // Calculate the fully qualified name for the pipeline declaration.
+                                                           // let fq_pipeline_defn = target.fqn();
 
         let pipeline_decl = helper.get_pipeline(&target).ok_or_else(|| {
             err_generic(
@@ -414,7 +414,7 @@ impl<'script> PipelineInlineRaw<'script> {
         let subq_args = self.get_args_map(&decl_params, stmt_params, helper)?;
 
         // we need to resolve the constant folder outside of this module
-        helper.module.push(subq_module.clone());
+        helper.enter_scope();
         for stmt in pipeline_stmts {
             match stmt {
                 StmtRaw::PipelineCreate(mut s) => {
@@ -529,11 +529,11 @@ impl<'script> PipelineInlineRaw<'script> {
                 }
             }
         }
-        helper.module.pop();
+        helper.leave_scope()?;
 
         let pipeline_stmt = PipelineCreate {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            module: helper.module.clone(),
+            module: vec![], // FIXME
             id: self.id,
             port_stream_map: pipeline_stream_map,
         };
@@ -558,8 +558,8 @@ impl<'script> Upable<'script> for OperatorCreateRaw<'script> {
         let params = self.params.up(helper)?;
         Ok(OperatorCreate {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            node_id: NodeId::new(self.id, &helper.module),
-            target: self.target.with_prefix(&helper.module),
+            node_id: NodeId::new(self.id, &[]),
+            target: self.target.with_prefix(&[]), // FIXME
             params,
         })
     }
@@ -590,14 +590,14 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         //
 
         // Handle the content of the script in it's own module
-        helper.module.push(self.id.clone());
+        helper.enter_scope();
         let script = self.script.up_script(helper)?;
         let mid = helper.add_meta_w_name(self.start, self.end, &self.id);
-        helper.module.pop();
+        helper.leave_scope()?;
         // Handle the params in the outside module
         let params = self.params;
         let params = params.up(helper)?;
-        let node_id = NodeId::new(&self.id, &helper.module);
+        let node_id = NodeId::new(&self.id, &[]); // FIXME
 
         let script_decl = ScriptDefinition {
             mid,
@@ -630,9 +630,9 @@ impl<'script> Upable<'script> for ScriptCreateRaw<'script> {
         let params = self.params.up(helper)?;
         Ok(ScriptCreate {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            node_id: NodeId::new(self.id, &helper.module),
+            node_id: NodeId::new(self.id, &[]),
             params,
-            target: self.target.with_prefix(&helper.module),
+            target: self.target.with_prefix(&[]), // FIXME
         })
     }
 }
@@ -661,7 +661,7 @@ impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
 
         let window_decl = WindowDefinition {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            node_id: NodeId::new(self.id, &helper.module),
+            node_id: NodeId::new(self.id, &[]),
             kind: self.kind,
             params: self.params.up(helper)?,
             script: maybe_script,
@@ -748,10 +748,10 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
             .windows
             .unwrap_or_default()
             .into_iter()
-            .map(|mut w| {
-                w.id = w.id.with_prefix(&helper.module);
-                w
-            })
+            // .map(|mut w| {
+            //     w.id = w.id.with_prefix(&helper.module);
+            //     w
+            // })
             .collect();
         if !windows.is_empty() {
             // if we have windows we need to forbid free event references in the target if they are not
