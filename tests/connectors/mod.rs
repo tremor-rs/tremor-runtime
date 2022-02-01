@@ -270,6 +270,7 @@ impl TestPipeline {
         self.addr.send_insight(event).await
     }
 
+    // get all available contraflow events
     pub(crate) fn get_contraflow_events(&self) -> Result<Vec<Event>> {
         let mut events = Vec::with_capacity(self.rx.len());
         while let Ok(CfMsg::Insight(event)) = self.rx_cf.try_recv() {
@@ -278,6 +279,7 @@ impl TestPipeline {
         Ok(events)
     }
 
+    // wait for a contraflow event
     pub(crate) async fn get_contraflow(&self) -> Result<Event> {
         match self.rx_cf.recv().await? {
             CfMsg::Insight(event) => Ok(event),

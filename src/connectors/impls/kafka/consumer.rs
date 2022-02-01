@@ -31,6 +31,8 @@ use rdkafka::message::{BorrowedMessage, Headers, Message};
 use rdkafka::{ClientContext, Offset, TopicPartitionList};
 use rdkafka_sys::RDKafkaErrorCode;
 
+const KAFKA_CONSUMER_META_KEY: &'static str = "kafka_consumer";
+
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -293,7 +295,7 @@ fn kafka_meta<'a>(msg: &BorrowedMessage<'a>) -> Value<'static> {
         headers_meta
     });
     literal!({
-        "kafka": {
+        KAFKA_CONSUMER_META_KEY: {
             "key": msg.key().map(|s| Value::Bytes(Vec::from(s).into())),
             "headers": headers,
             "topic": msg.topic().to_string(),
