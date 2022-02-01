@@ -322,7 +322,6 @@ pub struct Script<'script> {
     /// Aggregate functions
     pub aggregates: Vec<InvokeAggrFn<'script>>,
     windows: HashMap<String, WindowDefinition<'script>>,
-    functions: Vec<CustomFn<'script>>,
     /// Locals
     pub locals: usize,
     /// Node metadata
@@ -555,6 +554,12 @@ pub struct Literal<'script> {
     pub mid: usize,
     /// Literal value
     pub value: Value<'script>,
+}
+
+impl<'script> Literal<'script> {
+    pub(crate) fn boxed_expr(mid: usize, value: Value<'script>) -> Box<ImutExpr<'script>> {
+        Box::new(ImutExpr::Literal(Literal { mid, value }))
+    }
 }
 impl_expr_mid!(Literal);
 
@@ -923,9 +928,7 @@ pub struct Invoke<'script> {
     /// Id
     pub mid: usize,
     /// Module path
-    pub module: Vec<String>,
-    /// Function name
-    pub fun: String,
+    pub node_id: NodeId,
     /// Invocable implementation
     #[serde(skip)]
     pub invocable: Invocable<'script>,
@@ -2206,7 +2209,7 @@ impl_expr_mid!(UnaryExpr);
 mod test {
 
     use crate::{
-        ast::{Expr, ImutExpr, Invocable, Invoke, Record},
+        ast::{Expr, ImutExpr, Invocable, Invoke, NodeId, Record},
         prelude::*,
         CustomFn,
     };
@@ -2265,8 +2268,10 @@ mod test {
         });
         let i = Invoke {
             mid: 0,
-            module: Vec::new(),
-            fun: "fun".to_string(),
+            node_id: NodeId {
+                module: Vec::new(),
+                id: "fun".to_string(),
+            },
             invocable,
             args: Vec::new(),
         };

@@ -229,25 +229,6 @@ impl Module {
     ) -> Result<()> {
         self.content.insert_connector(connector)
     }
-    pub(crate) fn insert_const(&mut self, c: Const<'static>) -> Result<()> {
-        self.content.insert_const(c)
-    }
-    pub(crate) fn insert_function(&mut self, f: FnDecl<'static>) -> Result<()> {
-        self.content.insert_function(f)
-    }
-    pub(crate) fn insert_pipeline(&mut self, pipeline: PipelineDefinition<'static>) -> Result<()> {
-        self.content.insert_pipeline(pipeline)
-    }
-
-    pub(crate) fn insert_window(&mut self, window: WindowDefinition<'static>) -> Result<()> {
-        self.content.insert_window(window)
-    }
-    pub(crate) fn insert_operator(&mut self, operator: OperatorDefinition<'static>) -> Result<()> {
-        self.content.insert_operator(operator)
-    }
-    pub(crate) fn insert_script(&mut self, script: ScriptDefinition<'static>) -> Result<()> {
-        self.content.insert_script(script)
-    }
 
     pub fn load<P>(
         id: ModuleId,
@@ -286,23 +267,23 @@ impl Module {
                     let e = e.up(&mut helper)?;
                     // The self referential nature comes into play here
                     let e = unsafe { transmute::<FlowDefinition<'_>, FlowDefinition<'static>>(e) };
-                    helper.scope.content.insert_flow(e)?;
+                    helper.scope.insert_flow(e)?;
                 }
                 ModuleStmtRaw::Connector(e) => {
                     let e = e.up(&mut helper)?.into_static();
-                    helper.scope.content.insert_connector(e)?;
+                    helper.scope.insert_connector(e)?;
                 }
                 ModuleStmtRaw::Const(e) => {
                     let e = e.up(&mut helper)?;
                     // The self referential nature comes into play here
                     let e = unsafe { transmute::<Const<'_>, Const<'static>>(e) };
-                    helper.scope.content.insert_const(e)?;
+                    helper.scope.insert_const(e)?;
                 }
                 ModuleStmtRaw::FnDecl(e) => {
                     let e = e.up(&mut helper)?;
                     // The self referential nature comes into play here
                     let e = unsafe { transmute::<FnDecl<'_>, FnDecl<'static>>(e) };
-                    helper.scope.content.insert_function(e)?;
+                    helper.scope.insert_function(e)?;
                 }
 
                 ModuleStmtRaw::Pipeline(e) => {
@@ -312,16 +293,16 @@ impl Module {
                     let e = unsafe {
                         transmute::<PipelineDefinition<'_>, PipelineDefinition<'static>>(e)
                     };
-                    helper.scope.content.insert_pipeline(e)?;
+                    helper.scope.insert_pipeline(e)?;
                 }
 
                 ModuleStmtRaw::Window(e) => {
                     let e = e.up(&mut helper)?.into_static();
-                    helper.scope.content.insert_window(e)?;
+                    helper.scope.insert_window(e)?;
                 }
                 ModuleStmtRaw::Operator(e) => {
                     let e = e.up(&mut helper)?.into_static();
-                    helper.scope.content.insert_operator(e)?;
+                    helper.scope.insert_operator(e)?;
                 }
                 ModuleStmtRaw::Script(e) => {
                     // FIXME? We can't do into static here
@@ -329,7 +310,7 @@ impl Module {
                     // The self referential nature comes into play here
                     let e =
                         unsafe { transmute::<ScriptDefinition<'_>, ScriptDefinition<'static>>(e) };
-                    helper.scope.content.insert_script(e)?;
+                    helper.scope.insert_script(e)?;
                 }
             }
         }
@@ -394,6 +375,12 @@ impl ModuleManager {
         let m = ms.modules().iter().find(|m| &m.name == module)?;
         m.content.consts.get(name).cloned()
     }
+
+    pub fn get_function(module: &[String], name: &str) -> Option<FnDecl<'static>> {
+        let ms = MODULES.read().unwrap();
+        let m = ms.modules().iter().find(|m| &m.name == module)?;
+        m.content.functions.get(name).cloned()
+    }
 }
 
 #[cfg(test)]
@@ -401,7 +388,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn load_wice() -> Result<()> {
+    fn load_twice() -> Result<()> {
         ModuleManager::add_path("./lib");
         let id1 = ModuleManager::load(&NodeId {
             id: "string".to_string(),

@@ -28,8 +28,6 @@ extern crate serde_derive;
 
 #[macro_use]
 extern crate log;
-#[macro_use]
-extern crate lazy_static;
 
 use crate::errors::Result;
 use clap::Parser;
