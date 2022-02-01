@@ -182,7 +182,7 @@ mod test {
         );
         assert_eq!(
             &literal!({
-                "kafka": {
+                "kafka_consumer": {
                     "key": Value::Bytes(Cow::owned("foo".as_bytes().to_vec())),
                     "headers": {
                         "header": Value::Bytes(Cow::owned("snot".as_bytes().to_vec()))
@@ -215,7 +215,7 @@ mod test {
         assert_eq!(Value::null(), e2.data.suffix().value());
         assert_eq!(
             &literal!({
-                "kafka": {
+                "kafka_consumer": {
                     "key": Value::Bytes(Cow::owned("snot".as_bytes().to_vec())),
                     "headers": null,
                     "topic": topic,
@@ -236,7 +236,7 @@ mod test {
         assert_eq!(Value::null(), e3.data.suffix().value());
         assert_eq!(
             &literal!({
-                "kafka": {
+                "kafka_consumer": {
                     "key": Value::Bytes(Cow::owned("snot".as_bytes().to_vec())),
                     "headers": null,
                     "topic": topic,
@@ -271,7 +271,7 @@ mod test {
         assert_eq!(Value::from(false), e4.data.suffix().value());
         assert_eq!(
             &literal!({
-                "kafka": {
+                "kafka_consumer": {
                     "key": Value::Bytes(Cow::owned("trigger".as_bytes().to_vec())),
                     "headers": null,
                     "topic": topic,
@@ -308,7 +308,7 @@ mod test {
         assert_eq!(
             &literal!({
                 "error": "SIMD JSON error: InternalError at character 0 ('}')",
-                "kafka": {
+                "kafka_consumer": {
                     "key": Value::Bytes(Cow::owned("failure".as_bytes().to_vec())),
                     "headers": null,
                     "topic": topic,
@@ -459,7 +459,7 @@ mod test {
         );
         assert_eq!(
             &literal!({
-                "kafka": {
+                "kafka_consumer": {
                     "key": Value::Bytes(Cow::owned("foo".as_bytes().to_vec())),
                     "headers": {
                         "header": Value::Bytes(Cow::owned("snot".as_bytes().to_vec()))
@@ -494,7 +494,7 @@ mod test {
         assert_eq!(Value::null(), e2.data.suffix().value());
         assert_eq!(
             &literal!({
-                "kafka": {
+                "kafka_consumer": {
                     "key": Value::Bytes(Cow::owned("snot".as_bytes().to_vec())),
                     "headers": null,
                     "topic": topic,
@@ -529,7 +529,7 @@ mod test {
         assert_eq!(Value::from(false), e3.data.suffix().value());
         assert_eq!(
             &literal!({
-                "kafka": {
+                "kafka_consumer": {
                     "key": Value::Bytes(Cow::owned("trigger".as_bytes().to_vec())),
                     "headers": null,
                     "topic": topic,
@@ -566,7 +566,7 @@ mod test {
         assert_eq!(
             &literal!({
                 "error": "SIMD JSON error: InternalError at character 0 ('}')",
-                "kafka": {
+                "kafka_consumer": {
                     "key": Value::Bytes(Cow::owned("failure".as_bytes().to_vec())),
                     "headers": null,
                     "topic": topic,
@@ -717,7 +717,7 @@ mod test {
         );
         assert_eq!(
             &literal!({
-                "kafka": {
+                "kafka_consumer": {
                     "key": Value::Bytes(Cow::owned("foo".as_bytes().to_vec())),
                     "headers": {
                         "header": Value::Bytes(Cow::owned("snot".as_bytes().to_vec()))
@@ -752,7 +752,7 @@ mod test {
         assert_eq!(Value::null(), e2.data.suffix().value());
         assert_eq!(
             &literal!({
-                "kafka": {
+                "kafka_consumer": {
                     "key": Value::Bytes(Cow::owned("snot".as_bytes().to_vec())),
                     "headers": null,
                     "topic": topic,
@@ -788,7 +788,7 @@ mod test {
         assert_eq!(Value::from(false), e3.data.suffix().value());
         assert_eq!(
             &literal!({
-                "kafka": {
+                "kafka_consumer": {
                     "key": Value::Bytes(Cow::owned("trigger".as_bytes().to_vec())),
                     "headers": null,
                     "topic": topic,
@@ -825,7 +825,7 @@ mod test {
         assert_eq!(
             &literal!({
                 "error": "SIMD JSON error: InternalError at character 0 ('}')",
-                "kafka": {
+                "kafka_consumer": {
                     "key": Value::Bytes(Cow::owned("failure".as_bytes().to_vec())),
                     "headers": null,
                     "topic": topic,
