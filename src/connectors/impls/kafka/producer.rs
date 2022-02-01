@@ -35,6 +35,8 @@ use rdkafka::{
 use rdkafka_sys::RDKafkaErrorCode;
 use tremor_common::time::nanotime;
 
+const KAFKA_PRODUCER_META_KEY: &'static str = "kafka_producer";
+
 #[derive(Deserialize, Clone)]
 pub struct Config {
     /// list of brokers forming a cluster. 1 is enough
@@ -212,7 +214,7 @@ impl Sink for KafkaProducerSink {
         };
         let ingest_ns = event.ingest_ns;
         for (value, meta) in event.value_meta_iter() {
-            let kafka_meta = meta.get("kafka");
+            let kafka_meta = meta.get(KAFKA_PRODUCER_META_KEY);
             // expecting string or bytes as kafka key in metadata, both works
             let kafka_key = kafka_meta
                 .get("key")
@@ -234,7 +236,8 @@ impl Sink for KafkaProducerSink {
                     record = record.headers(headers);
                 }
                 if let Some(timestamp) = kafka_meta.get_i64("timestamp") {
-                    record = record.timestamp(timestamp);
+                    // our timestamp is in nanos, kafkas timestamp in is millis
+                    record = record.timestamp(timestamp / 1_000_000);
                 }
                 if let Some(partition) = kafka_meta.get_i32("partition") {
                     record = record.partition(partition);
@@ -256,7 +259,11 @@ impl Sink for KafkaProducerSink {
             }
         }
         if !delivery_futures.is_empty() {
-            let cf_data = ContraflowData::from(&event);
+            let cf_data = if transactional {
+                Some(ContraflowData::from(&event))
+            } else {
+                None
+            };
             task::spawn(wait_for_delivery(
                 ctx.clone(),
                 cf_data,
@@ -326,7 +333,7 @@ impl Sink for KafkaProducerSink {
 
 async fn wait_for_delivery(
     ctx: SinkContext,
-    cf_data: ContraflowData,
+    cf_data: Option<ContraflowData>,
     start: u64,
     futures: Vec<DeliveryFuture>,
     reply_tx: Sender<AsyncSinkReply>,
@@ -341,19 +348,21 @@ async fn wait_for_delivery(
                         error!("{ctx} Error notifying runtime of fatal Kafka error");
                     }
                 }
-                AsyncSinkReply::Fail(cf_data)
+                cf_data.map(AsyncSinkReply::Fail)
             } else {
-                AsyncSinkReply::Ack(cf_data, nanotime() - start)
+                cf_data.map(|cf| AsyncSinkReply::Ack(cf, nanotime() - start))
             }
         }
         Err(e) => {
             error!("{ctx} Kafka record delivery cancelled. Record delivery status unclear, consider it failed: {e}.");
-            AsyncSinkReply::Fail(cf_data)
+            cf_data.map(AsyncSinkReply::Fail)
         }
     };
-    if reply_tx.send(cb).await.is_err() {
-        error!("{ctx} Error sending insight for kafka record delivery");
-    };
+    if let Some(cb) = cb {
+        if reply_tx.send(cb).await.is_err() {
+            error!("{ctx} Error sending insight for kafka record delivery");
+        };
+    }
     Ok(())
 }
 
