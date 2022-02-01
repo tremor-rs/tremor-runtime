@@ -2,3 +2,21 @@ use loading::deep::inside;
 
 const outside = inside::inside;
 const outside_linked = inside::linked;
+
+intrinsic fn is_empty(input) as string::is_empty;
+
+fn f_outside() with
+  is_empty(outside)
+end;
+
+fn f_outside_inside() with
+  inside::inside
+end;
+
+fn f_other_function() with
+  f_outside_inside()
+end;
+
+fn f_remote_function() with
+  inside::f_inside()
+end;

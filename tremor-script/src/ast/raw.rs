@@ -47,7 +47,6 @@ use serde::Serialize;
 
 use super::{
     docs::{FnDoc, ModDoc},
-    module::ModuleManager,
     Const, NodeId,
 };
 
@@ -104,7 +103,7 @@ impl<'script> ScriptRaw<'script> {
                         name: name.to_string(),
                         value: value.clone(),
                     };
-                    helper.scope.content.insert_const(c)?;
+                    helper.scope.insert_const(c)?;
                     exprs.push(Expr::Imut(ImutExpr::Literal(Literal { value, mid })));
                     helper.add_const_doc(&name, comment, value_type);
                 }
@@ -112,7 +111,7 @@ impl<'script> ScriptRaw<'script> {
                     helper.docs.fns.push(f.doc());
                     let mut f = f.up(&mut helper)?;
                     ExprWalker::walk_fn_decl(&mut ConstFolder::new(helper), &mut f)?;
-                    helper.register_fun(f.into())?;
+                    helper.scope.insert_function(f)?;
                 }
                 TopLevelExprRaw::Expr(expr) => {
                     let expr = expr.up(&mut helper)?;
@@ -171,7 +170,6 @@ impl<'script> ScriptRaw<'script> {
             windows: HashMap::new(), //helper.windows.clone(),
             locals: helper.locals.len(),
             node_meta: helper.meta.clone(),
-            functions: helper.func_vec.clone(),
             docs: helper.docs.clone(),
             start: Location {
                 unit_id: 0,
@@ -1897,55 +1895,31 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let segments = self.segments.up(helper)?;
         let mut segments = segments.into_iter();
-        if let Some(Segment::Id { mid, key }) = segments.next() {
+        let r = (self.start, self.end);
+        if let Some(Segment::Id { mid, .. }) = segments.next() {
             let segments = segments.collect();
             let id = helper.meta.name_dflt(mid).to_string();
             let mid = helper.add_meta_w_name(self.start, self.end, &id);
-            let module_direct: Vec<String> = self.module.iter().map(|m| m.to_string()).collect();
-            let module = if let Some((m, rest)) = module_direct.split_first() {
-                if let Some(ms) = helper.scope().modules.get(m) {
-                    let mut module = ms.to_vec();
-                    module.extend_from_slice(rest);
-                    module
-                } else {
-                    return Err("FIXME: unknown module!".into());
-                }
-            } else {
-                return Err("FIXME: unknown module!".into());
+            let node_id = NodeId {
+                module: self.module.iter().map(|m| m.to_string()).collect(),
+                id,
             };
 
-            if let Some(c) = ModuleManager::get_const(&module, key.key()) {
-                let var = helper.reserve_shadow();
+            let c = helper.get_const(&node_id).ok_or_else(|| {
+                let msg = format!("The constant {node_id} (absolute path) is not defined.",);
+                err_generic(&r, &r, &msg, &helper.meta)
+            })?;
+            let var = helper.reserve_shadow();
 
-                Ok(ExprPath {
-                    expr: Box::new(ImutExpr::Literal(Literal {
-                        mid,
-                        value: c.value,
-                    })),
-                    segments,
-                    var,
-                    mid,
-                })
-            } else {
-                error_generic(
-                    &(self.start, self.end),
-                    &(self.start, self.end),
-                    &format!(
-                        "The constant {}::{} (absolute path) is not defined.",
-                        module.join("::"),
-                        key
-                    ),
-                    &helper.meta,
-                )
-            }
+            Ok(ExprPath {
+                expr: Literal::boxed_expr(mid, c.value),
+                segments,
+                var,
+                mid,
+            })
         } else {
             // We should never encounter this
-            error_oops(
-                &(self.start, self.end),
-                0xdead_0007,
-                "Empty local path",
-                &helper.meta,
-            )
+            error_oops(&r, 0xdead_0007, "Empty local path", &helper.meta)
         }
     }
 }
@@ -2336,56 +2310,48 @@ impl_expr!(InvokeRaw);
 
 impl<'script> Upable<'script> for InvokeRaw<'script> {
     type Target = Invoke<'script>;
+
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        if self.module.first() == Some(&String::from("core")) && self.module.len() == 2 {
+        let node_id = NodeId {
+            id: self.fun,
+            module: self.module,
+        };
+        let inner: Range = (self.start, self.end).into();
+        let outer: Range = inner.expand_lines(3);
+        if node_id.module.first() == Some(&String::from("core")) && node_id.module.len() == 2 {
             // we know a second module exists
-            let module = self.module.get(1).cloned().unwrap_or_default();
+            let module = node_id.module.get(1).cloned().unwrap_or_default();
 
             let invocable = helper
                 .reg
-                .find(&module, &self.fun)
-                .map_err(|e| e.into_err(&self, &self, Some(helper.reg), &helper.meta))?;
+                .find(&module, &node_id.id)
+                .map_err(|e| e.into_err(&outer, &inner, Some(helper.reg), &helper.meta))?;
             let args = self.args.up(helper)?.into_iter().collect();
-            let mf = format!("{}::{}", self.module.join("::"), self.fun);
+            let mf = node_id.fqn();
             Ok(Invoke {
                 mid: helper.add_meta_w_name(self.start, self.end, &mf),
-                module: self.module,
-                fun: self.fun,
+                node_id,
                 invocable: Invocable::Intrinsic(invocable.clone()),
                 args,
             })
         } else {
             // Absolute locability from without a set of nested modules
-            let mut abs_module = helper.module.clone();
-            abs_module.extend_from_slice(&self.module);
-            abs_module.push(self.fun.clone());
 
             // of the form: [mod, mod1, name] - where the list of idents is effectively a fully qualified resource name
-            if let Some(f) = helper.functions.get(&abs_module) {
-                if let Some(f) = helper.func_vec.get(*f) {
-                    let invocable = Invocable::Tremor(f.clone());
-                    let args = self.args.up(helper)?.into_iter().collect();
-                    let mf = abs_module.join("::");
-                    Ok(Invoke {
-                        mid: helper.add_meta_w_name(self.start, self.end, &mf),
-                        module: self.module,
-                        fun: self.fun,
-                        invocable,
-                        args,
-                    })
-                } else {
-                    // Otherwise
-                    let inner: Range = (self.start, self.end).into();
-                    let outer: Range = inner.expand_lines(3);
-                    Err(
-                        ErrorKind::MissingFunction(outer, inner, self.module, self.fun, None)
-                            .into(),
-                    )
-                }
+            if let Some(f) = helper.get_function(&node_id) {
+                let invocable = Invocable::Tremor(f.clone().into());
+                let args = self.args.up(helper)?.into_iter().collect();
+                Ok(Invoke {
+                    mid: helper.add_meta_w_name(self.start, self.end, &node_id.fqn()),
+                    node_id,
+                    invocable,
+                    args,
+                })
             } else {
-                let inner: Range = (self.start, self.end).into();
-                let outer: Range = inner.expand_lines(3);
-                Err(ErrorKind::MissingFunction(outer, inner, self.module, self.fun, None).into())
+                Err(
+                    ErrorKind::MissingFunction(outer, inner, node_id.module, node_id.id, None)
+                        .into(),
+                )
             }
         }
     }

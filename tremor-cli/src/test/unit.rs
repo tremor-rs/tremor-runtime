@@ -94,11 +94,8 @@ fn eval_suite_tests(
 
     let ll = suite_spec.exprs.len();
     for (idx, item) in suite_spec.exprs.iter().enumerate() {
-        if let ImutExpr::Invoke1(Invoke {
-            module, fun, args, ..
-        }) = item
-        {
-            if module != &["test"] || fun != "test" {
+        if let ImutExpr::Invoke1(Invoke { node_id, args, .. }) = item {
+            if node_id.module() != &["test"] || node_id.id() != "test" {
                 continue;
             }
             let spec = args
@@ -244,12 +241,9 @@ pub(crate) fn run_suite(
                 let mut stats = stats::Stats::new();
                 let mut elements = Vec::new();
 
-                let Invoke {
-                    module, fun, args, ..
-                } = expr;
+                let Invoke { node_id, args, .. } = expr;
 
-                let m = module.join("").to_string();
-                if m == "test" && fun == "suite" {
+                if node_id.module() == &["test"] || node_id.id() == "test" {
                     // A Test suite
                     let spec = args
                         .first()
