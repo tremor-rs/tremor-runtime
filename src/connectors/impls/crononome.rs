@@ -37,12 +37,8 @@ impl ConnectorBuilder for Builder {
         "crononome".into()
     }
 
-    async fn from_config(
-        &self,
-        id: &str,
-        raw_config: &Option<OpConfig>,
-    ) -> Result<Box<dyn Connector>> {
-        if let Some(raw) = raw_config {
+    async fn from_config(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+        if let Some(raw) = &config.config {
             let raw = Config::new(raw)?;
             let payload = if let Some(yaml_entries) = raw.entries {
                 let mut entries = simd_json::to_vec(&yaml_entries)?;

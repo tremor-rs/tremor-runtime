@@ -62,8 +62,8 @@ impl ConnectorBuilder for Builder {
         "elastic".into()
     }
 
-    async fn from_config(&self, id: &str, config: &Option<OpConfig>) -> Result<Box<dyn Connector>> {
-        if let Some(raw_config) = config {
+    async fn from_config(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+        if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
             if config.nodes.is_empty() {
                 Err(

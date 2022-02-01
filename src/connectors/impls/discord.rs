@@ -44,8 +44,8 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "discord".into()
     }
-    async fn from_config(&self, id: &str, config: &Option<OpConfig>) -> Result<Box<dyn Connector>> {
-        if let Some(config) = config {
+    async fn from_config(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+        if let Some(config) = &config.config {
             let config: Config = Config::new(config)?;
 
             let origin_uri = EventOriginUri {

@@ -66,12 +66,8 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "tcp_client".into()
     }
-    async fn from_config(
-        &self,
-        _id: &str,
-        config: &Option<OpConfig>,
-    ) -> Result<Box<dyn Connector>> {
-        if let Some(raw_config) = config {
+    async fn from_config(&self, _id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+        if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
             let (tls_connector, tls_domain) = match config.tls.as_ref() {
                 Some(Either::Right(true)) => {

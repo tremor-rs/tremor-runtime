@@ -60,9 +60,9 @@ impl ConnectorBuilder for Builder {
     async fn from_config(
         &self,
         _id: &str,
-        raw_config: &Option<OpConfig>,
+        raw_config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
-        if let Some(config) = raw_config {
+        if let Some(config) = &raw_config.config {
             let config: Config = Config::new(config)?;
             Ok(Box::new(UdpClient { config }))
         } else {
