@@ -124,11 +124,9 @@ where
     /// AST Metadata
     pub meta: NodeMetas,
     pub(crate) docs: Docs,
-    pub(crate) module: Vec<String>,
     pub(crate) possible_leaf: bool,
     pub(crate) fn_argc: usize,
     pub(crate) is_open: bool,
-    pub(crate) file_offset: Location,
     pub(crate) scope: Scope<'script>,
 }
 
@@ -231,19 +229,14 @@ where
     }
     pub(crate) fn add_meta(&mut self, start: Location, end: Location) -> usize {
         // FIXME: cu
-        self.meta
-            .add_meta(start - self.file_offset, end - self.file_offset, 0)
+        self.meta.add_meta(start, end, 0)
     }
     pub(crate) fn add_meta_w_name<S>(&mut self, start: Location, end: Location, name: &S) -> usize
     where
         S: ToString,
     {
-        self.meta.add_meta_w_name(
-            start - self.file_offset,
-            end - self.file_offset,
-            name,
-            0, // FIXME: self.cu,
-        )
+        // FIXME: self.cu
+        self.meta.add_meta_w_name(start, end, name, 0)
     }
     pub(crate) fn has_locals(&self) -> bool {
         self.locals
@@ -283,11 +276,9 @@ where
             shadowed_vars: Vec::new(),
             meta: NodeMetas::new(cus),
             docs: Docs::default(),
-            module: Vec::new(),
             possible_leaf: false,
             fn_argc: 0,
             is_open: false,
-            file_offset: Location::default(),
             scope: Scope::default(),
         }
     }

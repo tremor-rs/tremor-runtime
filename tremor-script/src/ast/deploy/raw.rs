@@ -165,7 +165,7 @@ impl<'script> Upable<'script> for ConnectorDefinitionRaw<'script> {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             params: self.params.up(helper)?,
             builtin_kind: self.kind.to_string(),
-            node_id: NodeId::new(self.id, &helper.module),
+            node_id: NodeId::new(self.id, &[]),
             docs: self
                 .docs
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
@@ -288,8 +288,8 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
         // We add the script name to the scope as a means to distinguish these orthogonal
         // definitions. This is achieved with the push/pop pointcut around the up() call
         // below. The actual function registration occurs in the up() call in the usual way.
-        //
-        helper.module.push(self.id.clone());
+
+        helper.enter_scope();
 
         let mut connections = Vec::new();
         let mut creates = Vec::new();
@@ -322,8 +322,9 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
             .docs
             .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
         let params = self.params.up(helper)?;
-        helper.module.pop();
-        let node_id = NodeId::new(&self.id, &helper.module);
+        helper.leave_scope()?;
+
+        let node_id = NodeId::new(&self.id, &[]); // FIXME
 
         let flow_decl = FlowDefinition {
             mid,
@@ -381,8 +382,8 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // TODO check that names across pipeline/flow/connector definitions are unique or else hygienic error
 
-        let _node_id = NodeId::new(&self.id.id, &helper.module);
-        let _target = self.target.clone().with_prefix(&helper.module);
+        let _node_id = NodeId::new(&self.id.id, &[]); // FIXME
+        let _target = self.target.clone().with_prefix(&[]); // FIXME
         let _outer = self.extent(&helper.meta);
         let _inner = self.id.extent(&helper.meta);
         let _params = self.params.up(helper)?;
@@ -456,8 +457,8 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // TODO check that names across pipeline/flow/connector definitions are unique or else hygienic error
 
-        let node_id = NodeId::new(&self.id.id, &helper.module);
-        let target = self.target.clone().with_prefix(&helper.module);
+        let node_id = NodeId::new(&self.id.id, &[]); // FIXME
+        let target = self.target.clone().with_prefix(&[]); // FIXME
 
         let mut defn = if let Some(artefact) = helper.get_flow_decls(&target) {
             artefact.clone()
