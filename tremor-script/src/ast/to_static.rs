@@ -42,7 +42,7 @@ impl<'script> ImutExpr<'script> {
             ImutExpr::Merge(e) => ImutExpr::Merge(Box::new(e.into_static())),
             ImutExpr::Path(p) => ImutExpr::Path(p.into_static()),
             ImutExpr::String(e) => ImutExpr::String(e.into_static()),
-            ImutExpr::Local { idx, mid, is_const } => ImutExpr::Local { idx, mid, is_const },
+            ImutExpr::Local { idx, mid } => ImutExpr::Local { idx, mid },
             ImutExpr::Literal(l) => ImutExpr::Literal(l.into_static()),
             ImutExpr::Present { path, mid } => ImutExpr::Present {
                 path: path.into_static(),
@@ -651,15 +651,9 @@ impl<'script> BytesPart<'script> {
 
 impl<'script> LocalPath<'script> {
     pub(crate) fn into_static(self) -> LocalPath<'static> {
-        let LocalPath {
-            idx,
-            is_const,
-            mid,
-            segments,
-        } = self;
+        let LocalPath { idx, mid, segments } = self;
         LocalPath {
             idx,
-            is_const,
             mid,
             segments: segments.into_iter().map(Segment::into_static).collect(),
         }
@@ -1029,15 +1023,11 @@ impl<'script> Script<'script> {
 impl<'script> Consts<'script> {
     pub(crate) fn into_static(self) -> Consts<'static> {
         let Consts {
-            names,
-            values,
             args,
             group,
             window,
         } = self;
         Consts {
-            names,
-            values: values.into_iter().map(Value::into_static).collect(),
             args: args.into_static(),
             group: group.into_static(),
             window: window.into_static(),

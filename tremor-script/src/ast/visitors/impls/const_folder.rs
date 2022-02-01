@@ -28,43 +28,30 @@ use simd_json_derive::Serialize;
 use tremor_value::KnownKey;
 
 /// Walks a AST and performs constant folding on arguments
-pub struct ConstFolder<'run, 'script>
-where
-    'script: 'run,
-{
+pub struct ConstFolder<'run> {
     /// Node Metadata
     pub meta: &'run NodeMetas,
     /// Function Registry
     pub reg: &'run Registry,
-    /// Constants
-    pub consts: &'run Consts<'script>,
 }
 
 fn fake_path(mid: &usize) -> Path {
     Path::Expr(ExprPath {
-        expr: Box::new(ImutExpr::Local {
-            idx: 0,
-            mid: *mid,
-            is_const: true,
-        }),
+        expr: Box::new(ImutExpr::Local { idx: 0, mid: *mid }),
         segments: vec![],
         var: 0,
         mid: *mid,
     })
 }
-impl<'run, 'script> DeployWalker<'script> for ConstFolder<'run, 'script> {}
-impl<'run, 'script> QueryWalker<'script> for ConstFolder<'run, 'script> {}
-impl<'run, 'script> ExprWalker<'script> for ConstFolder<'run, 'script> {}
-impl<'run, 'script> ImutExprWalker<'script> for ConstFolder<'run, 'script> where 'script: 'run {}
+impl<'run, 'script: 'run> DeployWalker<'script> for ConstFolder<'run> {}
+impl<'run, 'script: 'run> QueryWalker<'script> for ConstFolder<'run> {}
+impl<'run, 'script: 'run> ExprWalker<'script> for ConstFolder<'run> {}
+impl<'run, 'script: 'run> ImutExprWalker<'script> for ConstFolder<'run> {}
+impl<'run, 'script: 'run> DeployVisitor<'script> for ConstFolder<'run> {}
+impl<'run, 'script: 'run> QueryVisitor<'script> for ConstFolder<'run> {}
+impl<'run, 'script: 'run> ExprVisitor<'script> for ConstFolder<'run> {}
 
-impl<'run, 'script> DeployVisitor<'script> for ConstFolder<'run, 'script> where 'script: 'run {}
-impl<'run, 'script> QueryVisitor<'script> for ConstFolder<'run, 'script> where 'script: 'run {}
-impl<'run, 'script> ExprVisitor<'script> for ConstFolder<'run, 'script> where 'script: 'run {}
-
-impl<'script, 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script>
-where
-    'script: 'run,
-{
+impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
     #[allow(clippy::too_many_lines)]
     fn leave_expr(&mut self, e: &mut ImutExpr<'script>) -> Result<()> {
         use ImutExpr::Literal as Lit;
@@ -379,7 +366,7 @@ where
     }
 }
 
-impl<'run, 'script> ConstFolder<'run, 'script>
+impl<'run, 'script> ConstFolder<'run>
 where
     'script: 'run,
 {
@@ -394,7 +381,6 @@ where
         ConstFolder {
             meta: &helper.meta,
             reg: helper.reg,
-            consts: &helper.consts,
         }
     }
 

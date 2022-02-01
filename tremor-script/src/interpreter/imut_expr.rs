@@ -242,16 +242,11 @@ impl<'script> ImutExpr<'script> {
             ImutExpr::InvokeAggr(ref call) => self.emit_aggr(opts, env, call),
             ImutExpr::Patch(ref expr) => Self::patch(opts, env, event, state, meta, local, expr),
             ImutExpr::Merge(ref expr) => self.merge(opts, env, event, state, meta, local, expr),
-            ImutExpr::Local {
-                idx,
-                mid,
-                is_const: false,
-            } => {
+            ImutExpr::Local { idx, mid, .. } => {
                 if let Some(l) = stry!(local.get(*idx, self, *mid, env.meta)) {
                     Ok(Cow::Borrowed(l))
                 } else {
                     let path: Path = Path::Local(LocalPath {
-                        is_const: false,
                         idx: *idx,
                         mid: *mid,
                         segments: vec![],
@@ -261,11 +256,7 @@ impl<'script> ImutExpr<'script> {
                     error_bad_key(self, self, &path, key, vec![], env.meta)
                 }
             }
-            ImutExpr::Local {
-                idx,
-                is_const: true,
-                ..
-            } => env.get_const(*idx, self, env.meta).map(Cow::Borrowed),
+
             ImutExpr::Unary(ref expr) => self.unary(opts, env, event, state, meta, local, expr),
             ImutExpr::Binary(ref expr) => self.binary(opts, env, event, state, meta, local, expr),
             ImutExpr::Match(ref expr) => {
