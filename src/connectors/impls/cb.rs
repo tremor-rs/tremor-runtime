@@ -104,9 +104,9 @@ impl ConnectorBuilder for Builder {
     async fn from_config(
         &self,
         alias: &str,
-        config: &Option<OpConfig>,
+        config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
-        if let Some(raw) = config {
+        if let Some(raw) = &config.config {
             let config = Config::new(raw)?;
             Ok(Box::new(Cb { config }))
         } else {

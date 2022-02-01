@@ -73,9 +73,9 @@ impl ConnectorBuilder for Builder {
     async fn from_config(
         &self,
         alias: &str,
-        config: &Option<OpConfig>,
+        config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
-        if let Some(raw_config) = config {
+        if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
             // returns the first broker if all are valid
             let (host, port) = super::verify_brokers(alias, &config.brokers)?;

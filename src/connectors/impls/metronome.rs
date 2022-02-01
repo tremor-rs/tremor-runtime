@@ -35,9 +35,9 @@ impl ConnectorBuilder for Builder {
     async fn from_config(
         &self,
         _id: &str,
-        raw_config: &Option<OpConfig>,
+        raw_config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
-        if let Some(raw) = raw_config {
+        if let Some(raw) = &raw_config.config {
             let config = Config::new(raw)?;
             let origin_uri = EventOriginUri {
                 scheme: "tremor-metronome".to_string(),

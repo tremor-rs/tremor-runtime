@@ -36,7 +36,7 @@ impl ConnectorBuilder for Builder {
     async fn from_config(
         &self,
         _id: &str,
-        _raw_config: &Option<OpConfig>,
+        _raw_config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
         let (tx, rx) = bounded(128);
         Ok(Box::new(DnsClient { tx, rx }))

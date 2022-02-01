@@ -94,8 +94,8 @@ impl ConnectorBuilder for Builder {
         "file".into()
     }
 
-    async fn from_config(&self, id: &str, config: &Option<OpConfig>) -> Result<Box<dyn Connector>> {
-        if let Some(raw_config) = config {
+    async fn from_config(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+        if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
             Ok(Box::new(File { config }))
         } else {
