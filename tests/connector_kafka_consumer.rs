@@ -914,4 +914,150 @@ mod test {
         assert!(err_events.is_empty());
         Ok(())
     }
+
+    #[async_std::test]
+    #[serial(kafka)]
+    async fn connector_kafka_consumer_pause_resume() -> Result<()> {
+        let _ = env_logger::try_init();
+
+        let docker = DockerCli::default();
+        let args = vec![
+            "redpanda",
+            "start",
+            "--overprovisioned",
+            "--smp",
+            "1",
+            "--memory",
+            "1G",
+            "--reserve-memory=0M",
+            "--node-id=0",
+            "--check=false",
+            "--kafka-addr=0.0.0.0:9092",
+            "--advertise-kafka-addr=127.0.0.1:9092",
+        ]
+        .into_iter()
+        .map(ToString::to_string)
+        .collect();
+        let image = GenericImage::new(format!("{}:{}", IMAGE, VERSION))
+            .with_args(args)
+            .with_wait_for(WaitFor::LogMessage {
+                message: "Successfully started Redpanda!".to_string(),
+                stream: WaitForStream::StdErr,
+            });
+        let container = docker.run_with_args(
+            image,
+            RunArgs::default().with_mapped_port((9092_u16, 9092_u16)),
+        );
+
+        let container_id = container.id().to_string();
+        let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
+        let signal_handle = signals.handle();
+        let signal_handler_task = async_std::task::spawn(async move {
+            let signal_docker = DockerCli::default();
+            while let Some(_signal) = signals.next().await {
+                signal_docker.stop(container_id.as_str());
+                signal_docker.rm(container_id.as_str());
+            }
+        });
+
+        let port = container.get_host_port(9092).unwrap_or(9092);
+        let mut admin_config = ClientConfig::new();
+
+        let broker = format!("127.0.0.1:{}", port);
+        let topic = "tremor_test_pause_resume";
+        let group_id = "group_pause_resume";
+
+        admin_config
+            .set("client.id", "test-admin")
+            .set("bootstrap.servers", &broker);
+        let admin_client = AdminClient::from_config(&admin_config)?;
+        let options = AdminOptions::default();
+        let res = admin_client
+            .create_topics(
+                vec![&NewTopic::new(topic, 3, TopicReplication::Fixed(1))],
+                &options,
+            )
+            .await?;
+        for r in res {
+            match r {
+                Err((topic, err)) => {
+                    error!("Error creating topic {}: {}", &topic, err);
+                }
+                Ok(topic) => {
+                    info!("Created topic {}", topic);
+                }
+            }
+        }
+
+        let producer: BaseProducer = ClientConfig::new()
+            .set("bootstrap.servers", &broker)
+            .create()
+            .expect("Producer creation error");
+        let connector_config = literal!({
+            "codec": "json-sorted",
+            "config": {
+                "brokers": [
+                    broker
+                ],
+                "group_id": group_id,
+                "topics": [
+                    topic
+                ],
+                "rdkafka_options": {
+                //    "debug": "all"
+                }
+            }
+        });
+        let harness = ConnectorHarness::new("kafka_consumer", connector_config).await?;
+        let out = harness.out().expect("No pipe connected to port OUT");
+        harness.start().await?;
+        harness.wait_for_connected(Duration::from_secs(10)).await?;
+
+        task::sleep(Duration::from_secs(5)).await;
+
+        let record = BaseRecord::to(topic)
+            .key("badger")
+            .payload("{\"snot\": true}")
+            .partition(1)
+            .timestamp(0);
+        if producer.send(record).is_err() {
+            return Err("Unable to send record to Kafka".into());
+        }
+        producer.flush(Duration::from_secs(1));
+        let e1 = out.get_event().await?;
+        assert_eq!(
+            literal!({
+                "snot": true
+            }),
+            e1.data.suffix().value()
+        );
+
+        harness.pause().await?;
+
+        let record2 = BaseRecord::to(topic)
+            .key("waiting around to die")
+            .payload("\"R.I.P.\"")
+            .partition(0)
+            .timestamp(1);
+        if producer.send(record2).is_err() {
+            return Err("Unable to send record to Kafka".into());
+        }
+        producer.flush(Duration::from_secs(1));
+        // we didn't receive shit because we are paused
+        assert!(out.get_event().await.is_err());
+
+        harness.resume().await?;
+        let e2 = out.get_event().await?;
+        assert_eq!(Value::from("R.I.P."), e2.data.suffix().value());
+
+        let (out_events, err_events) = harness.stop().await?;
+        assert!(out_events.is_empty());
+        assert!(err_events.is_empty());
+
+        // cleanup
+        signal_handle.close();
+        signal_handler_task.cancel().await;
+        drop(container);
+        Ok(())
+    }
 }
