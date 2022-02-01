@@ -1004,14 +1004,6 @@ pub(crate) fn error_no_locals<T, O: BaseExpr, I: BaseExpr>(
     Err(ErrorKind::NoLocalsAllowed(outer.extent(meta), inner.extent(meta)).into())
 }
 
-pub(crate) fn error_no_consts<T, O: BaseExpr, I: BaseExpr>(
-    outer: &O,
-    inner: &I,
-    meta: &NodeMetas,
-) -> Result<T> {
-    Err(ErrorKind::NoConstsAllowed(outer.extent(meta), inner.extent(meta)).into())
-}
-
 pub(crate) fn error_event_ref_not_allowed<T, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,

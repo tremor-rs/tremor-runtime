@@ -49,7 +49,7 @@ use crate::{
         eq::AstEq,
         raw::{BytesDataType, Endian},
     },
-    errors::{error_generic, error_no_consts, error_no_locals, Kind as ErrorKind, Result},
+    errors::{error_generic, error_no_locals, Kind as ErrorKind, Result},
     impl_expr_ex_mid, impl_expr_mid,
     interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack},
     pos::Location,
@@ -230,8 +230,6 @@ pub struct RunConsts<'run, 'script>
 where
     'script: 'run,
 {
-    names: &'run HashMap<Vec<String>, usize>,
-    values: &'run Vec<Value<'script>>,
     /// the `args` keyword
     pub args: &'run Value<'script>,
     /// the `group` keyword
@@ -244,17 +242,11 @@ impl<'run, 'script> RunConsts<'run, 'script>
 where
     'script: 'run,
 {
-    pub(crate) fn get(&self, idx: usize) -> Option<&Value<'script>> {
-        self.values.get(idx)
-    }
-
     pub(crate) fn with_new_args<'r>(&'r self, args: &'r Value<'script>) -> RunConsts<'r, 'script>
     where
         'run: 'r,
     {
         RunConsts {
-            names: self.names,
-            values: self.values,
             args,
             group: self.group,
             window: self.window,
@@ -265,8 +257,6 @@ where
 /// Constants and special keyword values
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
 pub struct Consts<'script> {
-    names: HashMap<Vec<String>, usize>,
-    values: Vec<Value<'script>>,
     // always present 'special' constants
     /// the `args` keyword
     pub args: Value<'script>,
@@ -281,8 +271,6 @@ impl<'script> Consts<'script> {
     #[must_use]
     pub fn run(&self) -> RunConsts<'_, 'script> {
         RunConsts {
-            names: &self.names,
-            values: &self.values,
             args: &self.args,
             group: &self.group,
             window: &self.window,
@@ -290,16 +278,10 @@ impl<'script> Consts<'script> {
     }
     pub(crate) fn new() -> Self {
         Consts {
-            names: HashMap::new(),
-            values: Vec::new(),
             args: Value::const_null(),
             group: Value::const_null(),
             window: Value::const_null(),
         }
-    }
-
-    fn len(&self) -> usize {
-        self.values.len()
     }
 }
 
@@ -712,8 +694,6 @@ pub enum ImutExpr<'script> {
         idx: usize,
         /// Id
         mid: usize,
-        /// True, if it is declared constant
-        is_const: bool,
     },
     /// Literal
     Literal(Literal<'script>),
@@ -1310,7 +1290,6 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
                                 key: key.clone(),
                             }],
                             idx: 0,
-                            is_const: true,
                             mid: 0,
                         }),
                     });
@@ -1996,23 +1975,11 @@ pub enum Segment<'script> {
     },
 }
 
-impl<'script> Segment<'script> {
-    pub(crate) fn id_name(&self) -> Option<&str> {
-        if let Segment::Id { key, .. } = self {
-            Some(key.key())
-        } else {
-            None
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Default)]
 /// A path local to the current program
 pub struct LocalPath<'script> {
     /// Local Index
     pub idx: usize,
-    /// True, if declared const
-    pub is_const: bool,
     /// Id
     pub mid: usize,
     /// Segments

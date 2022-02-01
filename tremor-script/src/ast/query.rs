@@ -17,7 +17,7 @@ pub(crate) mod raw;
 use self::raw::{ArgsExprsRaw, ConfigRaw, DefinitioalArgsRaw, QueryRaw};
 
 use super::{
-    error_generic, error_no_consts, error_no_locals,
+    error_generic, error_no_locals,
     node_id::NodeId,
     raw::{IdentRaw, ImutExprRaw, LiteralRaw},
     visitors::{ArgsRewriter, ConstFolder},

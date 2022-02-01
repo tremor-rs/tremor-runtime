@@ -16,7 +16,8 @@ pub use super::query::*;
 use super::{
     docs::{ConstDoc, Docs, QueryDeclDoc},
     module::{ModuleContent, ModuleManager},
-    ConnectorDefinition, Const, Consts, DeployFlow, FlowDefinition, FnDecl, InvokeAggrFn, NodeId,
+    raw::LocalPathRaw,
+    ConnectorDefinition, Const, DeployFlow, FlowDefinition, FnDecl, InvokeAggrFn, NodeId,
     NodeMetas,
 };
 use crate::{
@@ -102,11 +103,6 @@ pub struct Helper<'script, 'registry>
 where
     'script: 'registry,
 {
-    // NOTE We should refactor this into multiple structs as its becoming a bit of a
-    // spaghetti junction over time the languages and runtime continue to evolve. What
-    // we have today is no longer a helper, its essential, but badly factored for what
-    // we need today and looking forward
-    //
     pub(crate) reg: &'registry Registry,
     pub(crate) aggr_reg: &'registry AggrRegistry,
     pub(crate) can_emit: bool,
@@ -119,8 +115,6 @@ where
     pub warnings: Warnings,
     pub(crate) shadowed_vars: Vec<String>,
     pub(crate) locals: HashMap<String, usize>,
-    /// Runtime constant pool
-    pub consts: Consts<'script>,
     /// AST Metadata
     pub meta: NodeMetas,
     pub(crate) docs: Docs,
@@ -203,6 +197,10 @@ where
         self.scope.content.consts.contains_key(id)
     }
 
+    pub(crate) fn is_const_path(&self, p: &LocalPathRaw) -> bool {
+        self.is_const(&p.root.id)
+    }
+
     pub(crate) fn add_const_doc<N: ToString>(
         &mut self,
         name: &N,
@@ -272,7 +270,6 @@ where
             // Common
             warnings: BTreeSet::new(),
             locals: HashMap::new(),
-            consts: Consts::default(),
             shadowed_vars: Vec::new(),
             meta: NodeMetas::new(cus),
             docs: Docs::default(),
