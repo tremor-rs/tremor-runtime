@@ -62,7 +62,7 @@ impl ConnectorBuilder for Builder {
     async fn from_config(
         &self,
         _id: &str,
-        _raw_config: &Option<OpConfig>,
+        _raw_config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(StdStreamConnector {}))
     }

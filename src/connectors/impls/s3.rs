@@ -93,9 +93,9 @@ impl ConnectorBuilder for Builder {
     async fn from_config(
         &self,
         id: &str,
-        raw_config: &Option<OpConfig>,
+        raw_config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
-        if let Some(config) = raw_config {
+        if let Some(config) = &raw_config.config {
             let mut config = S3Config::new(config)?;
 
             // Fetch the secrets from the env.

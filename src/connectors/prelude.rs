@@ -49,3 +49,6 @@ pub(crate) const DEFAULT_BUF_SIZE: usize = 8 * 1024;
 pub(crate) fn default_buf_size() -> usize {
     DEFAULT_BUF_SIZE
 }
+
+/// Encapsulates connector configuration
+pub use crate::connectors::ConnectorConfig;
