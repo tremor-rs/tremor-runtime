@@ -1,4 +1,4 @@
-use foo:: bar ::baz    ::    mork  as    bork ;    
+use foo3:: bar ::baz    ::    mork  as    bork ;    
     
 match event of
   case {} => "snot #{bork::snot}"

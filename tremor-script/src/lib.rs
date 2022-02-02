@@ -74,6 +74,7 @@ extern crate serde;
 extern crate serde_derive;
 
 pub use crate::ast::deploy::raw::run_script;
+pub use crate::ast::module::ModuleManager;
 pub use crate::ast::query::SelectType;
 pub use crate::ctx::{EventContext, EventOriginUri};
 pub use crate::query::Query;

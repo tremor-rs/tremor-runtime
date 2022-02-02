@@ -211,6 +211,7 @@ pub(crate) struct Module {
     pub(crate) file_name: PathBuf,
     pub(crate) id: ModuleId,
     pub(crate) content: ModuleContent<'static>,
+    pub(crate) modules: HashMap<String, usize>,
 }
 
 impl From<&[u8]> for ModuleId {
@@ -255,12 +256,10 @@ impl Module {
 
         for s in raw.stmts {
             match s {
-                ModuleStmtRaw::Use(u) => {
+                ModuleStmtRaw::Use(UseRaw { alias, module, .. }) => {
                     // FIXME: prevent self inclusion
-                    let UseRaw { alias, module, .. } = u;
-                    let _parsed = ModuleManager::load(&module)?;
+                    let mid = ModuleManager::load(&module)?;
                     let alias = alias.unwrap_or_else(|| module.id.clone());
-                    let mid = module.to_vec();
                     helper.scope().add_module_alias(alias, mid);
                 }
                 ModuleStmtRaw::Flow(e) => {
@@ -320,26 +319,39 @@ impl Module {
             id,
             name,
             content: helper.scope.content,
+            modules: helper.scope.modules,
         })
     }
 }
 
+/// Global Module Manager
 #[derive(Default, Debug)]
-pub(crate) struct ModuleManager {
+pub struct ModuleManager {
     path: ModulePath,
     modules: Vec<Module>,
 }
 
 // FIXME: unwraps
 impl ModuleManager {
+    /// Addas a module path
     pub fn add_path<S: ToString>(path: S) {
         MODULES.write().unwrap().path.add(path);
     }
-    pub fn modules(&self) -> &[Module] {
+    /// shows modules
+    pub(crate) fn modules(&self) -> &[Module] {
         &self.modules
     }
 
-    pub fn load(node_id: &NodeId) -> Result<usize> {
+    pub(crate) fn find_module(mut root: usize, nest: &[String]) -> Option<usize> {
+        let ms = MODULES.read().unwrap();
+        for k in nest {
+            let m = ms.modules.get(root)?;
+            root = *m.modules.get(k)?;
+        }
+        Some(root)
+    }
+
+    pub(crate) fn load(node_id: &NodeId) -> Result<usize> {
         let p = MODULES
             .read()
             .unwrap()
@@ -358,7 +370,7 @@ impl ModuleManager {
             .find(|(_, m)| m.id == id)
             .map(|(i, _)| i);
         if let Some(id) = maybe_id {
-            Ok(id)
+            Ok(dbg!(id))
         } else {
             let mid = node_id.to_vec();
             let src = Arc::new(Pin::new(src));
@@ -370,16 +382,19 @@ impl ModuleManager {
         }
     }
 
-    pub fn get_const(module: &[String], name: &str) -> Option<Const<'static>> {
+    pub(crate) fn get_const(module: usize, name: &str) -> Option<Const<'static>> {
         let ms = MODULES.read().unwrap();
-        let m = ms.modules().iter().find(|m| &m.name == module)?;
-        m.content.consts.get(name).cloned()
+        ms.modules().get(module)?.content.consts.get(name).cloned()
     }
 
-    pub fn get_function(module: &[String], name: &str) -> Option<FnDecl<'static>> {
+    pub(crate) fn get_function(module: usize, name: &str) -> Option<FnDecl<'static>> {
         let ms = MODULES.read().unwrap();
-        let m = ms.modules().iter().find(|m| &m.name == module)?;
-        m.content.functions.get(name).cloned()
+        ms.modules()
+            .get(module)?
+            .content
+            .functions
+            .get(name)
+            .cloned()
     }
 }
 
