@@ -22,10 +22,6 @@ use super::Value;
 use super::{BaseExpr, DeployFlow};
 use super::{ConnectStmt, DeployEndpoint};
 use crate::ast::{
-    docs::ModDoc, error_generic, node_id::NodeId, query::raw::ConfigRaw, raw::UseRaw, Deploy,
-    DeployStmt, Helper, PipelineDefinition, Script, Upable,
-};
-use crate::ast::{
     query::raw::{
         CreationalWithRaw, DefinitioalArgsRaw, DefinitioalArgsWithRaw, PipelineDefinitionRaw,
     },
@@ -37,6 +33,13 @@ use crate::impl_expr;
 use crate::pos::Location;
 use crate::AggrType;
 use crate::EventContext;
+use crate::{
+    ast::{
+        docs::ModDoc, error_generic, node_id::NodeId, query::raw::ConfigRaw, raw::UseRaw, Deploy,
+        DeployStmt, Helper, Script, Upable,
+    },
+    ModuleManager,
+};
 use beef::Cow;
 use halfbrown::HashMap;
 use tremor_common::time::nanotime;
@@ -125,14 +128,22 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
     type Target = Option<DeployStmt<'script>>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
-            DeployStmtRaw::Use(_u) => {
-                todo!()
+            DeployStmtRaw::Use(UseRaw { alias, module, .. }) => {
+                let mid = ModuleManager::load(dbg!(&module))?;
+                let alias = alias.unwrap_or_else(|| module.id.clone());
+                helper.scope().add_module_alias(dbg!(alias), mid);
+                Ok(None)
             }
             DeployStmtRaw::FlowDefinition(stmt) => {
-                let _stmt: FlowDefinition<'script> = stmt.up(helper)?;
+                // FIXME we don't have flow docs!
+                // helper.docs.flows.push(stmt.doc());
+                let stmt: FlowDefinition<'script> = stmt.up(helper)?;
+                // FIXME do we want to do this here?
+                // ExprWalker::walk_fn_decl(&mut ConstFolder::new(helper), &mut f)?;
+                helper.scope.insert_flow(stmt)?;
                 //FIXME: helper.flow_decls.insert(stmt.node_id.clone(), stmt.clone());
                 // Ok(Some(DeployStmt::FlowDefinition(Box::new(stmt))))
-                todo!();
+                Ok(None)
             }
             DeployStmtRaw::DeployFlow(stmt) => {
                 let stmt: DeployFlow = stmt.up(helper)?;
@@ -296,18 +307,12 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
         for link in self.atoms {
             match link {
                 FlowStmtRaw::ConnectorDefinition(stmt) => {
-                    let _stmt: ConnectorDefinition<'script> = stmt.up(helper)?;
-                    todo!();
-                    // helper
-                    //     .connector_decls
-                    //     .insert(stmt.node_id.clone(), stmt.clone());
+                    let stmt = stmt.up(helper)?;
+                    helper.scope.insert_connector(stmt)?;
                 }
                 FlowStmtRaw::PipelineDefinition(stmt) => {
-                    let _stmt: PipelineDefinition<'script> = stmt.up(helper)?;
-                    todo!();
-                    // helper
-                    //     .pipeline_decls
-                    //     .insert(stmt.node_id.clone(), stmt.clone());
+                    let stmt = stmt.up(helper)?;
+                    helper.scope.insert_pipeline(stmt)?;
                 }
                 FlowStmtRaw::Connect(connect) => {
                     connections.push(connect.up(helper)?);

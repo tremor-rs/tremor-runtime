@@ -75,7 +75,9 @@ impl<'script> QueryRaw<'script> {
                 }
 
                 other => {
-                    stmts.push(other.up(&mut helper)?);
+                    if let Some(stmt) = other.up(&mut helper)? {
+                        stmts.push(stmt)
+                    };
                 }
             }
         }
@@ -87,20 +89,13 @@ impl<'script> QueryRaw<'script> {
             ConstFolder::new(helper).walk_expr(&mut v)?;
             config.insert(k.to_string(), v.try_into_lit(&helper.meta)?);
         }
-        todo!()
-        // Ok(Query {
-        //     params,
-        //     config,
-        //     stmts,
-        //     node_meta: helper.meta.clone(),
-        //     // windows: helper.windows.clone(),
-        //     // scripts: helper.scripts.clone(),
-        //     // operators: helper.operators.clone(),
-        //     consts: helper.consts.clone(),
-        //     windows: todo!(),
-        //     scripts: todo!(),
-        //     operators: todo!(),
-        // })
+        Ok(Query {
+            params,
+            config,
+            stmts,
+            node_meta: helper.meta.clone(),
+            content: helper.scope.content.clone(),
+        })
     }
 }
 
@@ -134,7 +129,7 @@ impl<'script> StmtRaw<'script> {
 }
 
 impl<'script> Upable<'script> for StmtRaw<'script> {
-    type Target = Stmt<'script>;
+    type Target = Option<Stmt<'script>>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
             StmtRaw::SelectStmt(stmt) => {
@@ -149,37 +144,36 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                     .collect();
                 // only allocate scratches if they are really needed - when we have multiple windows
 
-                Ok(Stmt::SelectStmt(SelectStmt {
+                Ok(Some(Stmt::SelectStmt(SelectStmt {
                     stmt: Box::new(stmt),
                     aggregates,
                     consts: Consts::new(),
                     locals: locals.len(),
                     node_meta: helper.meta.clone(),
-                }))
+                })))
             }
-            StmtRaw::StreamStmt(stmt) => Ok(Stmt::StreamStmt(stmt.up(helper)?)),
+            StmtRaw::StreamStmt(stmt) => Ok(Some(Stmt::StreamStmt(stmt.up(helper)?))),
             StmtRaw::OperatorDefinition(stmt) => {
-                let _stmt: OperatorDefinition<'script> = stmt.up(helper)?;
-                todo!();
-                //FIXME: helper.operators.insert(stmt.fqn(), stmt.clone());
-                // Ok(Stmt::OperatorDefinition(stmt))
+                let stmt: OperatorDefinition<'script> = stmt.up(helper)?;
+                helper.scope.insert_operator(stmt)?;
+                Ok(None)
             }
-            StmtRaw::OperatorCreate(stmt) => Ok(Stmt::OperatorCreate(stmt.up(helper)?)),
+            StmtRaw::OperatorCreate(stmt) => Ok(Some(Stmt::OperatorCreate(stmt.up(helper)?))),
             StmtRaw::ScriptDefinition(stmt) => {
-                let _stmt: ScriptDefinition<'script> = stmt.up(helper)?;
-                todo!();
-                //FIXME: helper.scripts.insert(stmt.fqn(), stmt.clone());
-                // Ok(Stmt::ScriptDefinition(Box::new(stmt)))
+                let stmt: ScriptDefinition<'script> = stmt.up(helper)?;
+                helper.scope.insert_script(stmt)?;
+                Ok(None)
             }
-            StmtRaw::ScriptCreate(stmt) => Ok(Stmt::ScriptCreate(stmt.up(helper)?)),
+            StmtRaw::ScriptCreate(stmt) => Ok(Some(Stmt::ScriptCreate(stmt.up(helper)?))),
             StmtRaw::PipelineDefinition(stmt) => {
-                Ok(Stmt::PipelineDefinition(Box::new(stmt.up(helper)?)))
+                let stmt = stmt.up(helper)?;
+                helper.scope.insert_pipeline(stmt)?;
+                Ok(None)
             }
             StmtRaw::WindowDefinition(stmt) => {
-                let _stmt: WindowDefinition<'script> = stmt.up(helper)?;
-                todo!();
-                //FIXME: helper.windows.insert(stmt.fqn(), stmt.clone());
-                // Ok(Stmt::WindowDefinition(Box::new(stmt)))
+                let stmt: WindowDefinition<'script> = stmt.up(helper)?;
+                helper.scope.insert_window(stmt)?;
+                Ok(None)
             }
             StmtRaw::PipelineCreate(ref sq) => error_generic(sq, sq, &Self::BAD_SUBQ, &helper.meta),
             StmtRaw::Expr(m) => error_generic(&*m, &*m, &Self::BAD_EXPR, &helper.meta),
@@ -202,18 +196,14 @@ impl_expr!(OperatorDefinitionRaw);
 impl<'script> Upable<'script> for OperatorDefinitionRaw<'script> {
     type Target = OperatorDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let _operator_decl = OperatorDefinition {
+        let operator_decl = OperatorDefinition {
             mid: helper.add_meta_w_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, &[]),
             kind: self.kind.up(helper)?,
             params: self.params.up(helper)?,
         };
-        todo!();
-        //FIXME: helper
-        // .operators
-        // .insert(operator_decl.fqn(), operator_decl.clone());
-        // helper.add_query_decl_doc(&operator_decl.node_id.id(), self.doc);
-        // Ok(operator_decl)
+        helper.add_query_decl_doc(&operator_decl.node_id.id(), self.doc);
+        Ok(operator_decl)
     }
 }
 
@@ -286,14 +276,6 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
             query,
         };
 
-        let _pipeline_name = pipeline_decl.fqn();
-        // FIXME:
-        // if helper.queries.contains_key(&pipeline_name) {
-        //     let err_str = format!("Can't define the pipeline `{}` twice", pipeline_name);
-        //     return error_generic(&pipeline_decl, &pipeline_decl, &err_str, &helper.meta);
-        // }
-
-        // FIXME: helper.queries.insert(pipeline_name, pipeline_decl.clone());
         helper.add_query_decl_doc(&pipeline_decl.fqn(), self.doc);
         Ok(pipeline_decl)
     }
@@ -472,33 +454,33 @@ impl<'script> PipelineInlineRaw<'script> {
                     s.from.0.id = Cow::owned(self.mangle_id(&s.from.0.id.to_string()));
                     s.into.0.id = Cow::owned(self.mangle_id(&s.into.0.id.to_string()));
 
-                    let mut select_up = StmtRaw::SelectStmt(s).up(&mut helper)?;
-
-                    if let Stmt::SelectStmt(s) = &mut select_up {
-                        // Inline the args in target, where, having and group-by clauses
-                        ArgsRewriter::new(subq_args.clone(), helper)
-                            .rewrite_expr(&mut s.stmt.target)?;
-
-                        if let Some(expr) = &mut s.stmt.maybe_where {
-                            ArgsRewriter::new(subq_args.clone(), helper).rewrite_expr(expr)?;
-                        }
-                        if let Some(expr) = &mut s.stmt.maybe_having {
-                            ArgsRewriter::new(subq_args.clone(), helper).rewrite_expr(expr)?;
-                        }
-                        if let Some(group_by) = &mut s.stmt.maybe_group_by {
+                    if let Some(mut select_up) = StmtRaw::SelectStmt(s).up(&mut helper)? {
+                        if let Stmt::SelectStmt(s) = &mut select_up {
+                            // Inline the args in target, where, having and group-by clauses
                             ArgsRewriter::new(subq_args.clone(), helper)
-                                .rewrite_group_by(group_by)?;
-                        }
+                                .rewrite_expr(&mut s.stmt.target)?;
 
-                        // Store the unmangled name in meta for error reports
-                        if let Some(meta) = helper.meta.nodes.get_mut(s.stmt.from.0.mid()) {
-                            meta.name = Some(unmangled_from);
+                            if let Some(expr) = &mut s.stmt.maybe_where {
+                                ArgsRewriter::new(subq_args.clone(), helper).rewrite_expr(expr)?;
+                            }
+                            if let Some(expr) = &mut s.stmt.maybe_having {
+                                ArgsRewriter::new(subq_args.clone(), helper).rewrite_expr(expr)?;
+                            }
+                            if let Some(group_by) = &mut s.stmt.maybe_group_by {
+                                ArgsRewriter::new(subq_args.clone(), helper)
+                                    .rewrite_group_by(group_by)?;
+                            }
+
+                            // Store the unmangled name in meta for error reports
+                            if let Some(meta) = helper.meta.nodes.get_mut(s.stmt.from.0.mid()) {
+                                meta.name = Some(unmangled_from);
+                            }
+                            if let Some(meta) = helper.meta.nodes.get_mut(s.stmt.into.0.mid()) {
+                                meta.name = Some(unmangled_into);
+                            }
                         }
-                        if let Some(meta) = helper.meta.nodes.get_mut(s.stmt.into.0.mid()) {
-                            meta.name = Some(unmangled_into);
-                        }
+                        query_stmts.push(select_up);
                     }
-                    query_stmts.push(select_up);
                 }
                 StmtRaw::ScriptDefinition(d) => {
                     let mut d = d.up(&mut helper)?;
@@ -525,7 +507,7 @@ impl<'script> PipelineInlineRaw<'script> {
                     query_stmts.push(Stmt::WindowDefinition(Box::new(d)));
                 }
                 StmtRaw::Expr(e) => {
-                    query_stmts.push(StmtRaw::Expr(e).up(&mut helper)?);
+                    return error_generic(&*e, &*e, &StmtRaw::BAD_EXPR, &helper.meta)
                 }
             }
         }

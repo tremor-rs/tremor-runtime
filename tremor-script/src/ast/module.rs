@@ -120,16 +120,25 @@ pub struct ModuleId(Vec<u8>);
 
 type NamedEnteties<T> = HashMap<String, T>;
 
-#[derive(Default, Debug, Clone)]
-pub(crate) struct ModuleContent<'script> {
-    pub(crate) connectors: NamedEnteties<ConnectorDefinition<'script>>,
-    pub(crate) pipelines: NamedEnteties<PipelineDefinition<'script>>,
-    pub(crate) windows: NamedEnteties<WindowDefinition<'script>>,
-    pub(crate) scripts: NamedEnteties<ScriptDefinition<'script>>,
-    pub(crate) operators: NamedEnteties<OperatorDefinition<'script>>,
-    pub(crate) flows: NamedEnteties<FlowDefinition<'script>>,
-    pub(crate) consts: NamedEnteties<Const<'script>>,
-    pub(crate) functions: NamedEnteties<FnDecl<'script>>,
+/// Content of a module
+#[derive(Default, Debug, Clone, Serialize, PartialEq)]
+pub struct ModuleContent<'script> {
+    /// connectors in this module
+    pub connectors: NamedEnteties<ConnectorDefinition<'script>>,
+    /// pipelines in this module
+    pub pipelines: NamedEnteties<PipelineDefinition<'script>>,
+    /// windows in this module
+    pub windows: NamedEnteties<WindowDefinition<'script>>,
+    /// scripts in this module
+    pub scripts: NamedEnteties<ScriptDefinition<'script>>,
+    /// operators in this module
+    pub operators: NamedEnteties<OperatorDefinition<'script>>,
+    /// flows in this module
+    pub flows: NamedEnteties<FlowDefinition<'script>>,
+    /// consts in this module
+    pub consts: NamedEnteties<Const<'script>>,
+    /// functions in this module
+    pub functions: NamedEnteties<FnDecl<'script>>,
 }
 
 impl<'script> ModuleContent<'script> {
@@ -385,6 +394,16 @@ impl ModuleManager {
     pub(crate) fn get_const(module: usize, name: &str) -> Option<Const<'static>> {
         let ms = MODULES.read().unwrap();
         ms.modules().get(module)?.content.consts.get(name).cloned()
+    }
+
+    pub(crate) fn get_pipeline(module: usize, name: &str) -> Option<PipelineDefinition<'static>> {
+        let ms = MODULES.read().unwrap();
+        ms.modules()
+            .get(module)?
+            .content
+            .pipelines
+            .get(name)
+            .cloned()
     }
 
     pub(crate) fn get_function(module: usize, name: &str) -> Option<FnDecl<'static>> {

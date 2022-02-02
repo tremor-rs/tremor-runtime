@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::ast::module::ModuleContent;
+
 use super::super::visitors::prelude::*;
 use VisitRes::Walk;
 
@@ -122,6 +124,22 @@ pub trait Visitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn leave_query(&mut self, _q: &mut Query<'script>) -> Result<()> {
+        Ok(())
+    }
+
+    /// visit a `ModuleContent`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn visit_module_content(&mut self, _q: &mut ModuleContent<'script>) -> Result<VisitRes> {
+        Ok(Walk)
+    }
+
+    /// leave a `ModuleContent`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_module_content(&mut self, _q: &mut ModuleContent<'script>) -> Result<()> {
         Ok(())
     }
 

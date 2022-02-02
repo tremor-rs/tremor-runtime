@@ -18,6 +18,7 @@ use self::raw::{ArgsExprsRaw, ConfigRaw, DefinitioalArgsRaw, QueryRaw};
 
 use super::{
     error_generic, error_no_locals,
+    module::ModuleContent,
     node_id::NodeId,
     raw::{IdentRaw, ImutExprRaw, LiteralRaw},
     visitors::{ArgsRewriter, ConstFolder},
@@ -43,16 +44,10 @@ pub struct Query<'script> {
     pub stmts: Stmts<'script>,
     /// Query Node Metadata
     pub node_meta: NodeMetas,
-    /// Window declarations
-    pub windows: HashMap<String, WindowDefinition<'script>>,
-    /// Script declarations
-    pub scripts: HashMap<String, ScriptDefinition<'script>>,
-    /// Operators declarations
-    pub operators: HashMap<String, OperatorDefinition<'script>>,
-    /// Query Constants
-    pub consts: Consts<'script>,
     /// Params if this is a modular query
     pub params: DefinitioalArgs<'script>,
+    /// definitions
+    pub content: ModuleContent<'script>,
 }
 
 /// Query statement
