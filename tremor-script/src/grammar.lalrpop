@@ -1044,11 +1044,11 @@ EventPath: PathRaw<'input> = {
 
 /// Segments of a path
 PathSegments: SegmentsRaw<'input> = {
-    // "." <segment:PathSegment> <segments:PathSegments> => {
-    //     let mut segments = segments;
-    //     segments.insert(0, segment);
-    //     segments
-    // },
+    "." <segment:Ident> <segments:PathSegments> => {
+        let mut segments = segments;
+        segments.insert(0, segment.into());
+        segments
+    },
     "[" <selector:Selector> "]" <segments:PathSegments> => {
         let mut segments = segments;
         segments.insert(0, selector);
