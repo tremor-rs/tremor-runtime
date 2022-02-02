@@ -178,7 +178,7 @@ version = "0.16"
 
 [dev-dependencies]
 matches = "0.1"
-pretty_assertions = "1.0.0"
+pretty_assertions = "1.1.0"
 proptest = "1.0"
 regex = "1"
 tempfile = { version = "3.2" }
