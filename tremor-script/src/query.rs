@@ -12,13 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::errors::{CompilerError, Error, Result};
 use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
 use crate::path::ModulePath;
 use crate::prelude::*;
-use crate::{
-    ast::Consts,
-    errors::{CompilerError, Error, Result},
-};
 use crate::{
     ast::{self, helper::Warning, visitors::ConstFolder, walkers::QueryWalker},
     lexer::Tokenizer,
@@ -116,7 +113,6 @@ where
 
                     std::mem::swap(&mut warnings, &mut helper.warnings);
                     locals = helper.locals.len();
-                    query.consts = Consts::new();
                     Ok(query)
                 },
             )?;
