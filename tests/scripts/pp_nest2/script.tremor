@@ -1,4 +1,4 @@
-use foo::bar::baz;
+use foo6::bar::baz;
 
 match event of
   case {} => "snot #{baz::snot}"
