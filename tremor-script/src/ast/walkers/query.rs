@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{CreationalWith, DefinitioalArgs, WithExpr};
+use crate::ast::{module::ModuleContent, CreationalWith, DefinitioalArgs, WithExpr};
 
 use super::super::visitors::prelude::*;
 macro_rules! stop {
@@ -297,15 +297,45 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
         for s in &mut q.stmts {
             self.walk_stmt(s)?;
         }
-        for d in q.windows.values_mut() {
+        self.walk_module_content(&mut q.content)?;
+        self.leave_query(q)
+    }
+
+    /// alternative entry point into this visitor - call this to start visiting the given query
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn walk_module_content(&mut self, m: &mut ModuleContent<'script>) -> Result<()> {
+        stop!(self.visit_module_content(m), self.leave_module_content(m));
+        for d in m.windows.values_mut() {
             self.walk_window_decl(d)?;
         }
-        for d in q.scripts.values_mut() {
+        for d in m.pipelines.values_mut() {
+            self.walk_pipeline_definition(d)?;
+        }
+        for d in m.scripts.values_mut() {
             self.walk_script_decl(d)?;
         }
-        for d in q.operators.values_mut() {
+        for d in m.operators.values_mut() {
             self.walk_operator_decl(d)?;
         }
-        self.leave_query(q)
+        for d in m.functions.values_mut() {
+            self.walk_fn_decl(d)?;
+        }
+
+        for d in m.consts.values_mut() {
+            // self.walk_const(d)?;
+            todo!()
+        }
+        for d in m.flows.values_mut() {
+            // self.walk_flow_definition(d)?;
+            todo!()
+        }
+        for d in m.connectors.values_mut() {
+            // self.walk_connector_definition(d)?;
+            todo!()
+        }
+
+        self.leave_module_content(m)
     }
 }

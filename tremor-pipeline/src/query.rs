@@ -375,8 +375,8 @@ impl Query {
                     };
                     let id = pipe_graph.add_node(node.clone());
 
-                    let mut ww = HashMap::with_capacity(query.windows.len());
-                    for (name, decl) in &query.windows {
+                    let mut ww = HashMap::with_capacity(query.content.windows.len());
+                    for (name, decl) in &query.content.windows {
                         ww.insert(name.clone(), window_decl_to_impl(decl, &helper.meta)?);
                     }
                     let op = node.to_op(
@@ -466,6 +466,7 @@ impl Query {
                     let stmt_srs =
                         srs::Stmt::try_new_from_query::<Error, _>(&self.0.query, |query| {
                             let mut decl = query
+                                .content
                                 .operators
                                 .get(&fqon)
                                 .ok_or("operator not found")?
@@ -509,6 +510,7 @@ impl Query {
                         srs::Stmt::try_new_from_query::<Error, _>(&self.0.query, |query| {
                             // FIXME: Better error
                             let decl = query
+                                .content
                                 .scripts
                                 .get(&fqn)
                                 .ok_or_else(|| {
@@ -516,6 +518,7 @@ impl Query {
                                         "script not found: {} in {}",
                                         &fqn,
                                         query
+                                            .content
                                             .scripts
                                             .keys()
                                             .cloned()

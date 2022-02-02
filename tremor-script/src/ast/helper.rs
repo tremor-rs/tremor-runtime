@@ -156,8 +156,13 @@ where
         todo!()
     }
 
-    pub(crate) fn get_pipeline(&self, _: &NodeId) -> Option<PipelineDefinition<'script>> {
-        todo!()
+    pub(crate) fn get_pipeline(&self, id: &NodeId) -> Option<PipelineDefinition<'script>> {
+        if id.module.is_empty() {
+            self.scope.content.pipelines.get(&id.id).cloned()
+        } else {
+            let (mid, id) = self.resolve_module_alias(id)?;
+            ModuleManager::get_pipeline(mid, id)
+        }
     }
 
     pub(crate) fn get_function(&self, id: &NodeId) -> Option<FnDecl<'script>> {
