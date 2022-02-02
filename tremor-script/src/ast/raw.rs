@@ -45,6 +45,7 @@ use serde::Serialize;
 
 use super::{
     docs::{FnDoc, ModDoc},
+    module::ModuleManager,
     Const, Consts, NodeId,
 };
 
@@ -80,8 +81,10 @@ impl<'script> ScriptRaw<'script> {
         let mut exprs = vec![];
         for e in self.exprs {
             match e {
-                TopLevelExprRaw::Use(_) => {
-                    panic!("FIXME");
+                TopLevelExprRaw::Use(UseRaw { alias, module, .. }) => {
+                    let mid = ModuleManager::load(dbg!(&module))?;
+                    let alias = alias.unwrap_or_else(|| module.id.clone());
+                    helper.scope().add_module_alias(dbg!(alias), mid);
                 }
                 TopLevelExprRaw::Const(ConstRaw {
                     name,
@@ -1911,6 +1914,7 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
         };
 
         let c = helper.get_const(&node_id).ok_or_else(|| {
+            dbg!(&helper.scope.modules);
             let msg = format!("The constant {node_id} (absolute path) is not defined.",);
             err_generic(&r, &r, &msg, &helper.meta)
         })?;
@@ -2334,6 +2338,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                     args,
                 })
             } else {
+                dbg!(&helper.scope);
                 Err(
                     ErrorKind::MissingFunction(outer, inner, node_id.module, node_id.id, None)
                         .into(),

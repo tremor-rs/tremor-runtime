@@ -59,12 +59,17 @@ impl Warning {
 
 #[derive(Default, Debug)]
 pub(crate) struct Scope<'script> {
-    pub(crate) modules: HashMap<String, Vec<String>>,
+    pub(crate) modules: std::collections::HashMap<String, usize>,
     pub(crate) content: ModuleContent<'script>,
     pub(crate) parent: Option<Box<Scope<'script>>>,
 }
 impl<'script> Scope<'script> {
-    pub fn add_module_alias(&mut self, alias: String, mid: Vec<String>) {
+    pub(crate) fn get_module(&self, id: &[String]) -> Option<usize> {
+        let (first, rest) = id.split_first()?;
+        let id = *self.modules.get(first)?;
+        ModuleManager::find_module(id, rest)
+    }
+    pub fn add_module_alias(&mut self, alias: String, mid: usize) {
         self.modules.insert(alias, mid);
     }
 
@@ -159,9 +164,8 @@ where
         if id.module.is_empty() {
             self.scope.content.functions.get(&id.id).cloned()
         } else {
-            let id = self.resolve_module_alias(id)?;
-
-            ModuleManager::get_function(&id.module, &id.id)
+            let (mid, id) = self.resolve_module_alias(id)?;
+            ModuleManager::get_function(mid, id)
         }
     }
 
@@ -169,24 +173,18 @@ where
         if id.module.is_empty() {
             self.scope.content.consts.get(&id.id).cloned()
         } else {
-            let id = self.resolve_module_alias(id)?;
-            ModuleManager::get_const(&id.module, &id.id)
+            let (mid, id) = dbg!(self.resolve_module_alias(id))?;
+            ModuleManager::get_const(mid, id)
         }
     }
 
     /// resolves the local aliases for modules
-    pub(crate) fn resolve_module_alias(&self, id: &NodeId) -> Option<NodeId> {
+    pub(crate) fn resolve_module_alias<'n>(&self, id: &'n NodeId) -> Option<(usize, &'n str)> {
         if id.module.is_empty() {
-            Some(id.clone())
+            None
         } else {
-            let (m, rest) = id.module.split_first()?;
-            let ms = self.scope.modules.get(m)?;
-            let mut module = ms.to_vec();
-            module.extend_from_slice(rest);
-            Some(NodeId {
-                module,
-                id: id.id.clone(),
-            })
+            let mid = self.scope.get_module(&id.module)?;
+            Some((mid, &id.id))
         }
     }
     // pub(crate) fn get_script(&self, _: &NodeId) -> Option<ScriptDefinition<'script>> {
