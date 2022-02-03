@@ -51,15 +51,13 @@ pub mod errors;
 mod event;
 mod executable_graph;
 
+/// Common metrics related code - metrics message formats etc
+/// Placed here because we need it here and in tremor-runtime, but also depend on tremor-value inside of it
+pub mod metrics;
+
 #[macro_use]
 mod macros;
 pub(crate) mod op;
-
-const COUNT: Cow<'static, str> = Cow::const_str("count");
-const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
-const TAGS: Cow<'static, str> = Cow::const_str("tags");
-const FIELDS: Cow<'static, str> = Cow::const_str("fields");
-const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
 
 /// Tools to turn tremor query into pipelines
 pub mod query;
@@ -879,24 +877,6 @@ fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
 
 fn operator(uid: u64, node: &NodeConfig) -> Result<Box<dyn Operator + 'static>> {
     factory(node)?.from_node(uid, node)
-}
-
-/// Takes a name, tags and creates a influx codec compatible Value
-#[must_use]
-pub fn influx_value(
-    metric_name: Cow<'static, str>,
-    tags: HashMap<Cow<'static, str>, Value<'static>>,
-    count: u64,
-    timestamp: u64,
-) -> Value<'static> {
-    literal!({
-        MEASUREMENT: metric_name,
-        TAGS: tags,
-        FIELDS: {
-            COUNT: count
-        },
-        TIMESTAMP: timestamp
-    })
 }
 
 #[derive(Debug, Default)]

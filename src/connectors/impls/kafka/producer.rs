@@ -19,19 +19,22 @@ use std::time::Duration;
 
 use super::SmolRuntime;
 use crate::connectors::impls::kafka::{is_failed_connect_error, KAFKA_CONNECT_TIMEOUT};
+use crate::connectors::metrics::make_metrics_payload;
 use crate::connectors::prelude::*;
+use async_broadcast::{broadcast, Receiver as BroadcastReceiver, Sender as BroadcastSender};
 use async_std::channel::{bounded, Sender};
 use async_std::prelude::FutureExt;
 use async_std::task;
+use beef::Cow;
 use halfbrown::HashMap;
 use rdkafka::config::{ClientConfig, FromClientConfigAndContext};
 use rdkafka::producer::{DeliveryFuture, Producer};
-use rdkafka::ClientContext;
 use rdkafka::{
     error::KafkaError,
     message::OwnedHeaders,
     producer::{FutureProducer, FutureRecord},
 };
+use rdkafka::{ClientContext, Statistics};
 use rdkafka_sys::RDKafkaErrorCode;
 use tremor_common::time::nanotime;
 
@@ -75,6 +78,7 @@ impl ConnectorBuilder for Builder {
         alias: &str,
         config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
+        let metrics_interval_s = config.metrics_interval_s;
         if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
 
@@ -92,6 +96,13 @@ impl ConnectorBuilder for Builder {
                 .set("bootstrap.servers", config.brokers.join(","))
                 .set("message.timeout.ms", "5000")
                 .set("queue.buffering.max.ms", "0"); // set to 0 for sending each message out immediately without kafka client internal batching --> low latency, busy network
+            if let Some(metrics_interval_s) = metrics_interval_s {
+                // enable stats collection
+                producer_config.set(
+                    "statistics.interval.ms",
+                    format!("{}", metrics_interval_s * 1000),
+                );
+            }
             config
                 .rdkafka_options
                 .iter()
@@ -113,13 +124,38 @@ struct TremorProducerContext {
     ctx: SinkContext,
     /// during connect we poll the producer to peek for errors, like AllBrokersDown and similar
     /// We try to send it to a special `bounded(1)` channel to fail the connect attempt
-    connect_sender: Sender<KafkaError>,
+    connect_tx: Sender<KafkaError>,
+    // using a broadcast channel as a hack, as it supports overflow handling
+    // and will this always only have the latest metrics value available, which is what we want,
+    // old shit is old
+    metrics_tx: BroadcastSender<EventPayload>,
 }
 
 impl ClientContext for TremorProducerContext {
-    fn stats(&self, statistics: rdkafka::Statistics) {
-        // TODO: expose metrics to the sink
-        info!("{} Client stats: {statistics:?}", self.ctx);
+    fn stats(&self, stats: Statistics) {
+        if stats.client_type.eq("producer") {
+            let timestamp = stats.time as u64 * 1_000_000_000;
+            let mut fields = HashMap::with_capacity(3);
+            fields.insert(Cow::const_str("tx_msgs"), Value::from(stats.txmsgs));
+            fields.insert(
+                Cow::const_str("tx_msg_bytes"),
+                Value::from(stats.txmsg_bytes),
+            );
+            fields.insert(Cow::const_str("queued_msgs"), Value::from(stats.msg_cnt));
+
+            let mut tags = HashMap::with_capacity(1);
+            tags.insert(
+                Cow::const_str("connector"),
+                Value::from(self.ctx.alias.clone()),
+            );
+
+            let metrics_payload =
+                make_metrics_payload("kafka_producer_stats", fields, tags, timestamp);
+
+            if let Err(e) = self.metrics_tx.try_broadcast(metrics_payload) {
+                warn!("{} Erro sending kafka stats: {e}", self.ctx);
+            }
+        }
     }
 
     fn error(&self, error: KafkaError, reason: &str) {
@@ -127,11 +163,11 @@ impl ClientContext for TremorProducerContext {
 
         // send to the connect sender if it is not yet closed, that is if we are still waiting in connect
         // otherwise notify the runtime
-        if !self.connect_sender.is_closed() {
+        if !self.connect_tx.is_closed() {
             if is_fatal(&error) || is_failed_connect_error(&error) {
                 // ignore any errors here, if the queue is full, we are probably not in the connect phase anymore
-                let _ = self.connect_sender.try_send(error.clone());
-                self.connect_sender.close();
+                let _ = self.connect_tx.try_send(error.clone());
+                self.connect_tx.close();
             }
         } else if is_fatal(&error) {
             // issue a reconnect upon fatal errors
@@ -174,6 +210,7 @@ struct KafkaProducerSink {
     producer_config: ClientConfig,
     producer: Option<FutureProducer<TremorProducerContext, SmolRuntime>>,
     reply_tx: Sender<AsyncSinkReply>,
+    metrics_rx: Option<BroadcastReceiver<EventPayload>>,
 }
 
 impl KafkaProducerSink {
@@ -187,6 +224,7 @@ impl KafkaProducerSink {
             producer_config,
             producer: None,
             reply_tx,
+            metrics_rx: None,
         }
     }
 }
@@ -287,9 +325,13 @@ impl Sink for KafkaProducerSink {
         };
 
         let (tx, rx) = bounded(1);
+        let (mut metrics_tx, metrics_rx) = broadcast(1);
+        metrics_tx.set_overflow(true);
+        self.metrics_rx = Some(metrics_rx);
         let context = TremorProducerContext {
             ctx: ctx.clone(),
-            connect_sender: tx,
+            connect_tx: tx,
+            metrics_tx,
         };
         let (version_n, version_s) = rdkafka::util::get_rdkafka_version();
         info!("{ctx} Connecting kafka producer with rdkafka 0x{version_n:08x} {version_s}");
@@ -328,6 +370,18 @@ impl Sink for KafkaProducerSink {
 
     fn auto_ack(&self) -> bool {
         false
+    }
+
+    async fn metrics(&mut self, _timestamp: u64, _ctx: &SinkContext) -> Vec<EventPayload> {
+        if let Some(metrics_rx) = self.metrics_rx.as_mut() {
+            let mut vec = Vec::with_capacity(metrics_rx.len());
+            while let Ok(payload) = metrics_rx.try_recv() {
+                vec.push(payload);
+            }
+            vec
+        } else {
+            vec![]
+        }
     }
 }
 
