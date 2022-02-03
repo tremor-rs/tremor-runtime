@@ -307,7 +307,14 @@ Stmts: StmtsRaw<'input> = {
 }
 
 Stmt: StmtRaw<'input> = {
+    // Generic
+    Use => StmtRaw::Use(<>),
+    
+    // Script
+    // Const => StmtRaw::Const(<>),
+    // FnDecl => StmtRaw::FnDecl(<>),
 
+    // Query
     DefineWindow => StmtRaw::WindowDefinition(<>),
     DefineOperator => StmtRaw::OperatorDefinition(Box::new(<>)),
     DefineScript => StmtRaw::ScriptDefinition(<>),

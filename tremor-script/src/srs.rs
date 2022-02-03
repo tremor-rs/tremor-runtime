@@ -244,8 +244,9 @@ impl Script {
 #[derive(Clone, PartialEq)]
 pub struct QueryInstance {
     /// The vector of raw input values
-    raw: Vec<Arc<Pin<Vec<u8>>>>,
-    query: ast::Query<'static>,
+    pub raw: Vec<Arc<Pin<Vec<u8>>>>,
+    /// FIXME don't make this public!
+    pub query: ast::Query<'static>,
     /// NodeId of this declaration
     pub artifact_id: NodeId,
     /// The alias
