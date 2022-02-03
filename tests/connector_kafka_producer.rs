@@ -278,6 +278,11 @@ mod test {
             snot_msg.payload()
         );
         assert!(snot_msg.headers().is_none());
+        drop(snot_msg);
+        drop(batchman_msg);
+
+        consumer.unsubscribe();
+        drop(consumer);
 
         // shutdown
         let (out_events, err_events) = harness.stop().await?;
