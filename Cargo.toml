@@ -136,14 +136,17 @@ rustls-native-certs = "0.5"
 async-std-resolver = "0.20"
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
-rdkafka = { version = "0.28", features = [
+# we stick with git until we have a release with https://github.com/fede1024/rust-rdkafka/pull/417
+#rdkafka = { version = "0.28", features = [
+rdkafka = { git = "https://github.com/fede1024/rust-rdkafka", rev = "7a2355f03c9aee8d4544e89bc4b0b0b6b96826e0", features = [
   "cmake-build",
   "libz-static",
 ], default-features = false }
-rdkafka-sys = { version = "4.2.0", features = [
+# rdkafka-sys = { version = "4.2.0", features = [
+rdkafka-sys = { git = "https://github.com/fede1024/rust-rdkafka", rev = "7a2355f03c9aee8d4544e89bc4b0b0b6b96826e0", features = [
   "cmake-build",
   "libz-static",
-] } # tracking the version rdkafka depends on
+], default-features = false } # tracking the version rdkafka depends on
 smol = "1.2.5"
 
 # crononome
