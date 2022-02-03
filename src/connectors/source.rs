@@ -184,7 +184,7 @@ pub trait Source: Send {
     }
 
     /// Pulls custom metrics from the source
-    fn metrics(&mut self, _timestamp: u64) -> Vec<EventPayload> {
+    fn metrics(&mut self, _timestamp: u64, _ctx: &SourceContext) -> Vec<EventPayload> {
         vec![]
     }
 
@@ -884,8 +884,8 @@ where
                 &mut self.pipelines_err
             } else {
                 error!(
-                    "[Source::{}] Trying to send event to invalid port: {}",
-                    &self.ctx.alias, &port
+                    "{} Trying to send event to invalid port: {}",
+                    &self.ctx, &port
                 );
                 continue;
             };
@@ -893,7 +893,7 @@ where
             // flush metrics reporter or similar
             if let Some(t) = self.metrics_reporter.periodic_flush(event.ingest_ns) {
                 self.metrics_reporter
-                    .send_source_metrics(self.source.metrics(t));
+                    .send_source_metrics(self.source.metrics(t, &self.ctx));
             }
 
             if let Some((last, pipelines)) = pipelines.split_last_mut() {
@@ -906,8 +906,8 @@ where
                         .await
                     {
                         error!(
-                            "[Source::{}] Failed to send event {} to pipeline {}: {}",
-                            &self.ctx.alias, &event.id, &pipe_url, e
+                            "{} Failed to send event {} to pipeline {}: {}",
+                            &self.ctx, &event.id, &pipe_url, e
                         );
                         send_error = true;
                     }

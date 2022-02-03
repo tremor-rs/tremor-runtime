@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
+use async_std::sync::Arc;
+use beef::Cow;
 use std::time::Duration;
 
 use super::SmolRuntime;
 use crate::connectors::impls::kafka::{is_failed_connect_error, KAFKA_CONNECT_TIMEOUT};
 use crate::connectors::prelude::*;
+use crate::connectors::utils::metrics::make_metrics_payload;
+use async_broadcast::{broadcast, Receiver as BroadcastReceiver, Sender as BroadcastSender};
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use async_std::prelude::{FutureExt, StreamExt};
 use async_std::task::{self, JoinHandle};
@@ -77,6 +80,7 @@ impl ConnectorBuilder for Builder {
         alias: &str,
         config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
+        let metrics_interval_s = config.metrics_interval_s;
         if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
             // returns the first broker if all are valid
@@ -100,6 +104,14 @@ impl ConnectorBuilder for Builder {
                 .set("enable.auto.commit", "true")
                 .set("auto.commit.interval.ms", "5000")
                 .set("enable.auto.offset.store", "true");
+
+            if let Some(metrics_interval_s) = metrics_interval_s {
+                // enable stats collection
+                client_config.set(
+                    "statistics.interval.ms",
+                    format!("{}", metrics_interval_s * 1000),
+                );
+            }
             config
                 .rdkafka_options
                 .iter()
@@ -124,15 +136,56 @@ impl ConnectorBuilder for Builder {
     }
 }
 
+#[derive(Debug, Clone)]
+struct KafkaStats {}
+
 struct TremorConsumerContext {
     ctx: SourceContext,
     connect_tx: Sender<Result<bool>>,
+    metrics_tx: BroadcastSender<EventPayload>,
 }
 
 impl ClientContext for TremorConsumerContext {
-    fn stats(&self, statistics: rdkafka::Statistics) {
-        // TODO: expose as metrics to the source
-        info!("{} Client stats: {:?}", &self.ctx, statistics);
+    fn stats(&self, stats: rdkafka::Statistics) {
+        // expose as metrics to the source
+
+        if stats.client_type.eq("consumer") {
+            let timestamp = stats.time as u64 * 1_000_000_000;
+
+            // consumer stats
+            let mut fields = HashMap::with_capacity(4);
+            fields.insert(Cow::const_str("rx_msgs"), Value::from(stats.rxmsgs));
+            fields.insert(
+                Cow::const_str("rx_msg_bytes"),
+                Value::from(stats.rxmsg_bytes),
+            );
+            if let Some(cg) = stats.cgrp {
+                fields.insert(
+                    Cow::const_str("partitions_assigned"),
+                    Value::from(cg.assignment_size),
+                );
+            }
+            let mut consumer_lag = 0_i64;
+            for (_name, topic) in &stats.topics {
+                for (_index, partition) in &topic.partitions {
+                    if partition.consumer_lag >= 0 {
+                        consumer_lag += partition.consumer_lag;
+                    }
+                }
+            }
+            fields.insert(Cow::const_str("consumer_lag"), Value::from(consumer_lag));
+            let mut tags = HashMap::with_capacity(1);
+            tags.insert(
+                Cow::const_str("connector"),
+                Value::from(self.ctx.alias.clone()),
+            );
+            let metrics_payload =
+                make_metrics_payload("kafka_consumer_stats", fields, tags, timestamp);
+
+            if let Err(e) = self.metrics_tx.try_broadcast(metrics_payload) {
+                warn!("{} Error sending kafka statistics: {}", &self.ctx, e);
+            }
+        }
     }
 
     fn error(&self, error: KafkaError, reason: &str) {
@@ -246,10 +299,15 @@ impl ConsumerContext for TremorConsumerContext {
 }
 
 impl TremorConsumerContext {
-    fn new(source_ctx: &SourceContext, connect_tx: Sender<Result<bool>>) -> Self {
+    fn new(
+        source_ctx: &SourceContext,
+        connect_tx: Sender<Result<bool>>,
+        metrics_tx: BroadcastSender<EventPayload>,
+    ) -> Self {
         Self {
             ctx: source_ctx.clone(),
             connect_tx,
+            metrics_tx,
         }
     }
 }
@@ -288,7 +346,7 @@ fn kafka_meta<'a>(msg: &BorrowedMessage<'a>) -> Value<'static> {
         for i in 0..headers.count() {
             if let Some(header) = headers.get(i) {
                 let key = String::from(header.0);
-                let val = Value::Bytes(Vec::from(header.1).into());
+                let val = Value::Bytes(header.1.to_vec().into());
                 headers_meta.try_insert(key, val);
             }
         }
@@ -296,7 +354,7 @@ fn kafka_meta<'a>(msg: &BorrowedMessage<'a>) -> Value<'static> {
     });
     literal!({
         KAFKA_CONSUMER_META_KEY: {
-            "key": msg.key().map(|s| Value::Bytes(Vec::from(s).into())),
+            "key": msg.key().map(|s| Value::Bytes(s.to_vec().into())),
             "headers": headers,
             "topic": msg.topic().to_string(),
             "partition": msg.partition(),
@@ -318,6 +376,7 @@ struct KafkaConsumerSource {
     source_rx: Receiver<(SourceReply, Option<u64>)>,
     consumer: Option<Arc<TremorConsumer>>,
     consumer_task: Option<JoinHandle<Result<()>>>,
+    metrics_rx: Option<BroadcastReceiver<EventPayload>>,
 }
 
 impl KafkaConsumerSource {
@@ -342,6 +401,8 @@ impl KafkaConsumerSource {
             .unwrap_or(Self::DEFAULT_SEEK_TIMEOUT);
 
         let (source_tx, source_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        // we only ever want to report on the latest metrics and discard old ones
+        // if no messages arrive, no metrics will be reported, so be it.
         Self {
             client_config,
             origin_uri,
@@ -354,6 +415,7 @@ impl KafkaConsumerSource {
             source_rx,
             consumer: None,
             consumer_task: None,
+            metrics_rx: None,
         }
     }
 }
@@ -362,6 +424,10 @@ impl KafkaConsumerSource {
 impl Source for KafkaConsumerSource {
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
         if let Some(consumer_task) = self.consumer_task.take() {
+            if let Some(consumer) = self.consumer.take() {
+                consumer.unsubscribe();
+                drop(consumer);
+            }
             consumer_task.cancel().await;
         }
         let (version_n, version_s) = rdkafka::util::get_rdkafka_version();
@@ -370,7 +436,11 @@ impl Source for KafkaConsumerSource {
             &ctx, version_n, version_s
         );
         let (connect_result_tx, connect_result_rx) = bounded(1);
-        let consumer_context = TremorConsumerContext::new(ctx, connect_result_tx.clone());
+        let (mut metrics_tx, metrics_rx) = broadcast(1);
+        metrics_tx.set_overflow(true);
+        self.metrics_rx = Some(metrics_rx);
+        let consumer_context =
+            TremorConsumerContext::new(ctx, connect_result_tx.clone(), metrics_tx);
         let consumer: TremorConsumer = self.client_config.create_with_context(consumer_context)?;
 
         let topics: Vec<&str> = self
@@ -513,7 +583,6 @@ impl Source for KafkaConsumerSource {
     async fn ack(&mut self, stream_id: u64, pull_id: u64, ctx: &SourceContext) -> Result<()> {
         if self.transactional {
             if let Some(consumer) = self.consumer.as_ref() {
-                let _ = consumer.client();
                 if let Some((topic, partition, offset)) =
                     self.topic_resolver.resolve_topic(stream_id, pull_id)
                 {
@@ -583,13 +652,16 @@ impl Source for KafkaConsumerSource {
     }
 
     async fn on_stop(&mut self, ctx: &SourceContext) -> Result<()> {
+        // clear out the consumer
+        if let Some(consumer) = self.consumer.take() {
+            consumer.unsubscribe();
+            drop(consumer);
+        }
         // stop the consumer task
         if let Some(consumer_task) = self.consumer_task.take() {
             consumer_task.cancel().await;
             info!("{} Consumer stopped.", &ctx);
         }
-        // clear out the consumer
-        self.consumer = None;
         Ok(())
     }
 
@@ -599,6 +671,18 @@ impl Source for KafkaConsumerSource {
 
     fn asynchronous(&self) -> bool {
         true
+    }
+
+    fn metrics(&mut self, _timestamp: u64, _ctx: &SourceContext) -> Vec<EventPayload> {
+        if let Some(metrics_rx) = self.metrics_rx.as_mut() {
+            let mut vec = Vec::with_capacity(metrics_rx.len());
+            while let Ok(payload) = metrics_rx.try_recv() {
+                vec.push(payload);
+            }
+            vec
+        } else {
+            vec![]
+        }
     }
 }
 
@@ -622,6 +706,7 @@ impl TopicResolver {
     fn resolve_topic(&self, stream_id: u64, pull_id: u64) -> Option<(&str, i32, Offset)> {
         let partition = (stream_id >> 32) as i32;
         let topic_id = stream_id & 0xffffffff;
+
         // insertion order should be the same as the actual indices,
         // so the index lookup can be misused as a reverse lookup
         self.0.get_index(topic_id as usize).map(|(topic, idx)| {
