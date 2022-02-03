@@ -13,7 +13,6 @@
 // limitations under the License.
 #![allow(dead_code)]
 
-///! FIXME
 use super::{
     deploy::raw::{ConnectorDefinitionRaw, FlowDefinitionRaw},
     helper::raw::{
@@ -29,6 +28,7 @@ use crate::{
     impl_expr,
     lexer::{Location, Tokenizer},
     path::ModulePath,
+    FN_REGISTRY,
 };
 use beef::Cow;
 use sha2::Digest;
@@ -121,7 +121,7 @@ pub struct ModuleId(Vec<u8>);
 type NamedEnteties<T> = HashMap<String, T>;
 
 /// Content of a module
-#[derive(Default, Debug, Clone, Serialize, PartialEq)]
+#[derive(Default, Clone, Serialize, PartialEq)]
 pub struct ModuleContent<'script> {
     /// connectors in this module
     pub connectors: NamedEnteties<ConnectorDefinition<'script>>,
@@ -139,6 +139,21 @@ pub struct ModuleContent<'script> {
     pub consts: NamedEnteties<Const<'script>>,
     /// functions in this module
     pub functions: NamedEnteties<FnDecl<'script>>,
+}
+
+impl<'script> Debug for ModuleContent<'script> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ModuleContent")
+            .field("connectors", &self.connectors.keys())
+            .field("pipelines", &self.pipelines.keys())
+            .field("windows", &self.windows.keys())
+            .field("scripts", &self.scripts.keys())
+            .field("operators", &self.operators.keys())
+            .field("flows", &self.flows.keys())
+            .field("consts", &self.consts.keys())
+            .field("functions", &self.functions.keys())
+            .finish()
+    }
 }
 
 impl<'script> ModuleContent<'script> {
@@ -253,7 +268,7 @@ impl Module {
         // FIXME there are transmutes hers :sob:
 
         let aggr_reg = crate::aggr_registry();
-        let reg = crate::registry(); // FIXME
+        let reg = &*FN_REGISTRY.read()?; // FIXME
         let mut helper = Helper::new(&reg, &aggr_reg, Vec::new());
 
         let lexemes = Tokenizer::new(&src)
@@ -389,6 +404,23 @@ impl ModuleManager {
             mm.modules.push(m);
             Ok(n)
         }
+    }
+    pub(crate) fn get_flow(module: usize, name: &str) -> Option<FlowDefinition<'static>> {
+        let ms = MODULES.read().unwrap();
+        ms.modules().get(module)?.content.flows.get(name).cloned()
+    }
+    pub(crate) fn get_operator(module: usize, name: &str) -> Option<OperatorDefinition<'static>> {
+        let ms = MODULES.read().unwrap();
+        ms.modules()
+            .get(module)?
+            .content
+            .operators
+            .get(name)
+            .cloned()
+    }
+    pub(crate) fn get_script(module: usize, name: &str) -> Option<ScriptDefinition<'static>> {
+        let ms = MODULES.read().unwrap();
+        ms.modules().get(module)?.content.scripts.get(name).cloned()
     }
 
     pub(crate) fn get_const(module: usize, name: &str) -> Option<Const<'static>> {

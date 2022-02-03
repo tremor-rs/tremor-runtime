@@ -297,7 +297,7 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
         for s in &mut q.stmts {
             self.walk_stmt(s)?;
         }
-        self.walk_module_content(&mut q.content)?;
+        self.walk_module_content(&mut q.scope.content)?;
         self.leave_query(q)
     }
 

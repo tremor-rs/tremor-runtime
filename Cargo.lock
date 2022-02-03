@@ -6572,7 +6572,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_derive",
- "sha2 0.10.1",
+ "sha2 0.10.2",
  "simd-json",
  "simd-json-derive",
  "sketches-ddsketch",
