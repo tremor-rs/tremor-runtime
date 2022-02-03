@@ -18,7 +18,7 @@ use self::raw::{ArgsExprsRaw, ConfigRaw, DefinitioalArgsRaw, QueryRaw};
 
 use super::{
     error_generic, error_no_locals,
-    module::ModuleContent,
+    helper::Scope,
     node_id::NodeId,
     raw::{IdentRaw, ImutExprRaw, LiteralRaw},
     visitors::{ArgsRewriter, ConstFolder},
@@ -47,7 +47,7 @@ pub struct Query<'script> {
     /// Params if this is a modular query
     pub params: DefinitioalArgs<'script>,
     /// definitions
-    pub content: ModuleContent<'script>,
+    pub scope: Scope<'script>,
 }
 
 /// Query statement
@@ -68,7 +68,7 @@ pub enum Stmt<'script> {
     /// A script creation
     ScriptCreate(ScriptCreate<'script>),
     /// An pipeline creation
-    PipelineCreate(PipelineCreate),
+    PipelineCreate(PipelineCreate<'script>),
     /// A select statement
     SelectStmt(SelectStmt<'script>),
 }
@@ -255,8 +255,8 @@ impl<'script> PipelineDefinition<'script> {
             .clone()
             .ok_or(format!("not a toplevel query: {}", &self.node_id.id()))?)
     }
-
-    pub(crate) fn apply_args<'registry>(
+    /// FIXME: :sob:
+    pub fn apply_args<'registry>(
         &mut self,
         args_in: &Value<'script>,
         helper: &mut Helper<'script, 'registry>,
@@ -301,7 +301,7 @@ impl<'script> PipelineDefinition<'script> {
                 | Stmt::ScriptDefinition(_)
                 | Stmt::PipelineDefinition(_)
                 | Stmt::StreamStmt(_) => (),
-                Stmt::PipelineCreate(_) => unreachable!(),
+                Stmt::PipelineCreate(c) => c.params.substitute_args(&args_in, helper)?,
                 Stmt::OperatorCreate(op) => op.params.substitute_args(&args_in, helper)?,
                 Stmt::ScriptCreate(script) => script.params.substitute_args(&args_in, helper)?,
                 Stmt::SelectStmt(select) => {
@@ -319,16 +319,16 @@ impl_fqn!(PipelineDefinition);
 
 /// A pipeline creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct PipelineCreate {
+pub struct PipelineCreate<'script> {
     pub(crate) mid: usize,
-    /// Module of the pipeline
-    pub module: Vec<String>,
-    /// ID of the pipeline
-    pub id: String,
+    /// The node id of the pipeline definition we want to create
+    pub node_id: NodeId,
     /// Map of pipeline ports and internal stream id
     pub port_stream_map: HashMap<String, String>,
+    /// With arguments
+    pub params: CreationalWith<'script>,
 }
-impl BaseExpr for PipelineCreate {
+impl<'script> BaseExpr for PipelineCreate<'script> {
     fn mid(&self) -> usize {
         self.mid
     }

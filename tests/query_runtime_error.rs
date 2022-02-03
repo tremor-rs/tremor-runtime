@@ -18,8 +18,8 @@ use tremor_common::{file, ids::OperatorIdGen};
 
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
-use tremor_pipeline::FN_REGISTRY;
 use tremor_pipeline::{Event, EventId};
+use tremor_script::FN_REGISTRY;
 
 use tremor_pipeline::errors::{Error as PipelineError, ErrorKind as PipelineErrorKind};
 use tremor_runtime::errors::*;

@@ -84,8 +84,8 @@ use crate::errors::{Error, Result};
 pub(crate) use crate::config::Connector;
 use system::World;
 pub use tremor_pipeline::Event;
-use tremor_pipeline::FN_REGISTRY;
 use tremor_script::Script;
+use tremor_script::FN_REGISTRY;
 use tremor_script::{
     deploy::Deploy, highlighter::Dumb as ToStringHighlighter, highlighter::Term as TermHighlighter,
 };
@@ -119,7 +119,7 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
         file_name,
         &src,
         vec![],
-        &*FN_REGISTRY.lock()?,
+        &*FN_REGISTRY.read()?,
         &aggr_reg,
     );
     let deployable = match deployable {

@@ -507,7 +507,7 @@ impl<'script> BaseExpr for StmtRaw<'script> {
             StmtRaw::SelectStmt(s) => s.start,
             StmtRaw::StreamStmt(s) => s.start,
             StmtRaw::WindowDefinition(s) => s.start,
-            StmtRaw::Expr(s) => s.s(meta),
+            StmtRaw::Use(s) => s.s(meta),
         }
     }
     fn e(&self, meta: &NodeMetas) -> Location {
@@ -521,7 +521,7 @@ impl<'script> BaseExpr for StmtRaw<'script> {
             StmtRaw::SelectStmt(e) => e.end,
             StmtRaw::StreamStmt(e) => e.end,
             StmtRaw::WindowDefinition(e) => e.end,
-            StmtRaw::Expr(e) => e.e(meta),
+            StmtRaw::Use(e) => e.e(meta),
         }
     }
 }

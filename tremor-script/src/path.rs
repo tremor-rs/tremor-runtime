@@ -50,10 +50,20 @@ impl ModulePath {
         for e in &id.module {
             p.push(e);
         }
-        // FIXME: do we want to unfiy here to tremor (as done with other parts) or
-        // allow troy and trickle as well
-        p.push(format!("{}.tremor", id.id));
-        self.resolve(p)
+
+        let mut p_tremor = p.clone();
+        p_tremor.push(format!("{}.tremor", id.id));
+        self.resolve(p_tremor)
+            .or_else(|| {
+                let mut p_trickle = p.clone();
+                p_trickle.push(format!("{}.trickle", id.id));
+                self.resolve(p_trickle)
+            })
+            .or_else(|| {
+                let mut p_troy = p.clone();
+                p_troy.push(format!("{}.troy", id.id));
+                self.resolve(p_troy)
+            })
     }
 
     /// Does a particular module exist relative to the module path in force

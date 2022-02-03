@@ -1,4 +1,4 @@
-use foo::bar ;
+use foo6::bar ;
 
 
 create script adder from bar::add;

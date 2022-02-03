@@ -86,7 +86,10 @@ pub use crate::script::{Return, Script};
 use ast::{Consts, InvokeAggrFn};
 pub use interpreter::{AggrType, FALSE, NULL, TRUE};
 use lazy_static::lazy_static;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{
+    atomic::{AtomicU32, Ordering},
+    RwLock,
+};
 pub use tremor_common::stry;
 pub use tremor_value::{literal, KnownKey, Object, Value};
 
@@ -102,6 +105,16 @@ pub fn recursion_limit() -> u32 {
 pub(crate) const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 lazy_static! {
     static ref NO_CONSTS: Consts<'static> = Consts::new();
+}
+
+lazy_static! {
+    /// Function registory for the pipeline to look up functions
+    // We wrap the registry in a mutex so that we can add functions from the outside
+    // if required.
+    pub static ref FN_REGISTRY: RwLock<Registry> = {
+        let registry: Registry = crate::registry();
+        RwLock::new(registry)
+    };
 }
 
 #[cfg(test)]

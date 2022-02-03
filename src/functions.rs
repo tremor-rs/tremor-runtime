@@ -15,16 +15,16 @@
 use crate::connectors::impls::otel;
 use crate::errors::Result;
 use crate::version::VERSION;
-use tremor_pipeline::FN_REGISTRY;
 use tremor_script::registry::Registry;
 use tremor_script::tremor_fn;
+use tremor_script::FN_REGISTRY;
 
 /// Loads the function library
 ///
 /// # Errors
 ///  * if we can't load the registry
 pub fn load() -> Result<()> {
-    let mut reg = FN_REGISTRY.lock()?;
+    let mut reg = FN_REGISTRY.write()?;
     install(&mut reg)
 }
 
