@@ -249,7 +249,7 @@ impl Sink for ElasticSink {
         Ok(true)
     }
 
-    fn metrics(&mut self, _timestamp: u64) -> Vec<EventPayload> {
+    async fn metrics(&mut self, _timestamp: u64, _ctx: &SinkContext) -> Vec<EventPayload> {
         // TODO: use the /_cluster/stats/nodes/ or /<index>/_stats/_all and expose them here
         // TODO: which are the important metrics to expose?
         vec![]

@@ -200,7 +200,7 @@ pub trait Sink: Send {
     /// }
     /// ```
     ///
-    fn metrics(&mut self, _timestamp: u64) -> Vec<EventPayload> {
+    async fn metrics(&mut self, _timestamp: u64, _ctx: &SinkContext) -> Vec<EventPayload> {
         vec![]
     }
 
@@ -765,7 +765,7 @@ where
                             self.metrics_reporter.increment_in();
                             if let Some(t) = self.metrics_reporter.periodic_flush(event.ingest_ns) {
                                 self.metrics_reporter
-                                    .send_sink_metrics(self.sink.metrics(t));
+                                    .send_sink_metrics(self.sink.metrics(t, &self.ctx).await);
                             }
 
                             // FIXME: fix additional clones here for merge

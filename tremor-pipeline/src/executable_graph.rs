@@ -18,7 +18,7 @@ use crate::{
     common_cow,
     errors::Result,
     errors::{Error, ErrorKind},
-    influx_value,
+    metrics::metrics_value_count,
     op::{prelude::IN, trickle::window},
     ConfigMap, ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
 };
@@ -227,7 +227,7 @@ impl NodeMetrics {
         tags.insert("direction".into(), "input".into());
         for (k, v) in &self.inputs {
             tags.insert("port".into(), Value::from(k.clone()));
-            res.push(influx_value(
+            res.push(metrics_value_count(
                 metric_name.to_string().into(),
                 tags.clone(),
                 *v,
@@ -237,7 +237,7 @@ impl NodeMetrics {
         tags.insert("direction".into(), "output".into());
         for (k, v) in &self.outputs {
             tags.insert("port".into(), Value::from(k.clone()));
-            res.push(influx_value(
+            res.push(metrics_value_count(
                 metric_name.to_string().into(),
                 tags.clone(),
                 *v,

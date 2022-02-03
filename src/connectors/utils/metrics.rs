@@ -15,6 +15,7 @@
 use beef::Cow;
 use halfbrown::HashMap;
 use tremor_common::url::ports::{ERR, IN, OUT};
+use tremor_pipeline::metrics::{metrics_value, metrics_value_count};
 use tremor_pipeline::MetricsSender;
 use tremor_script::EventPayload;
 use tremor_value::prelude::*;
@@ -134,20 +135,29 @@ pub(crate) fn send(tx: &MetricsSender, metric: EventPayload, alias: &str) {
 }
 
 #[must_use]
-fn make_event_count_metrics_payload(
+pub(crate) fn make_event_count_metrics_payload(
     timestamp: u64,
     port: Cow<'static, str>,
     count: u64,
     artefact_id: &str,
 ) -> EventPayload {
     let mut tags: HashMap<Cow<'static, str>, Value<'static>> = HashMap::with_capacity(2);
-    tags.insert_nocheck(Cow::from("connector"), artefact_id.to_string().into());
-    tags.insert_nocheck(Cow::from("port"), port.into());
+    tags.insert_nocheck(Cow::const_str("connector"), artefact_id.to_string().into());
+    tags.insert_nocheck(Cow::const_str("port"), port.into());
 
-    let value =
-        tremor_pipeline::influx_value(Cow::from("connector_events"), tags, count, timestamp);
+    let value = metrics_value_count(Cow::from("connector_events"), tags, count, timestamp);
     // full metrics payload
     (value, Value::object()).into()
 }
 
 // TODO: add convenience functions for creating custom metrics payloads
+#[must_use]
+pub(crate) fn make_metrics_payload(
+    name: &'static str,
+    fields: HashMap<Cow<'static, str>, Value<'static>>,
+    tags: HashMap<Cow<'static, str>, Value<'static>>,
+    timestamp: u64,
+) -> EventPayload {
+    let value = metrics_value(Cow::const_str(name), tags, fields, timestamp);
+    (value, Value::object()).into()
+}
