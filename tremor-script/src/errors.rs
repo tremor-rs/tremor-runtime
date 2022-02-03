@@ -76,6 +76,12 @@ impl From<Error> for std::io::Error {
     }
 }
 
+impl<P> From<std::sync::PoisonError<P>> for Error {
+    fn from(e: std::sync::PoisonError<P>) -> Self {
+        Self::from(format!("Poison Error: {:?}", e))
+    }
+}
+
 impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
     fn from(error: ParserError<'screw_lalrpop>) -> Self {
         match error {

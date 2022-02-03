@@ -15,7 +15,7 @@
 use crate::connectors::ConnectorType;
 use crate::Result;
 use simd_json::ValueType;
-use tremor_pipeline::FN_REGISTRY;
+use tremor_script::FN_REGISTRY;
 use tremor_script::{
     ast::{ConnectStmt, Helper},
     srs::ConnectorDefinition,
@@ -160,7 +160,7 @@ impl Connector {
     /// Spawns a connector from a declaration
     pub fn from_decl(decl: &ConnectorDefinition) -> crate::Result<Connector> {
         let aggr_reg = tremor_script::registry::aggr();
-        let reg = &*FN_REGISTRY.lock()?;
+        let reg = &*FN_REGISTRY.read()?;
         let mut helper = Helper::new(reg, &aggr_reg, vec![]);
         let params = decl.params.clone();
 

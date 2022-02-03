@@ -40,10 +40,10 @@ use petgraph::graph::{self, NodeIndex};
 use simd_json::OwnedValue;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
+use std::fmt;
 use std::fmt::Display;
 use std::iter::Iterator;
 use std::str::FromStr;
-use std::{fmt, sync::Mutex};
 use tremor_script::{ast::Helper, prelude::*};
 
 /// Pipeline Errors
@@ -220,16 +220,6 @@ impl OpMeta {
     pub fn merge(&mut self, mut other: Self) {
         self.0.append(&mut other.0);
     }
-}
-
-lazy_static! {
-    /// Function registory for the pipeline to look up functions
-    // We wrap the registry in a mutex so that we can add functions from the outside
-    // if required.
-    pub static ref FN_REGISTRY: Mutex<Registry> = {
-        let registry: Registry = tremor_script::registry();
-        Mutex::new(registry)
-    };
 }
 
 pub(crate) fn common_cow(s: &str) -> beef::Cow<'static, str> {

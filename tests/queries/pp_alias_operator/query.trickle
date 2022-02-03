@@ -1,4 +1,4 @@
-use foo::bar as baz;
+use foo1::bar as baz;
 
 create operator counter from baz::counter;
 select event from in into counter;

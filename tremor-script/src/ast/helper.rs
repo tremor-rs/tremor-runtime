@@ -57,10 +57,12 @@ impl Warning {
     }
 }
 
-#[derive(Default, Debug)]
-pub(crate) struct Scope<'script> {
+/// A scope
+#[derive(Default, Debug, Clone, Serialize, PartialEq)]
+pub struct Scope<'script> {
     pub(crate) modules: std::collections::HashMap<String, usize>,
-    pub(crate) content: ModuleContent<'script>,
+    /// Content of the scope
+    pub content: ModuleContent<'script>,
     pub(crate) parent: Option<Box<Scope<'script>>>,
 }
 impl<'script> Scope<'script> {
@@ -69,7 +71,7 @@ impl<'script> Scope<'script> {
         let id = *self.modules.get(first)?;
         ModuleManager::find_module(id, rest)
     }
-    pub fn add_module_alias(&mut self, alias: String, mid: usize) {
+    pub(crate) fn add_module_alias(&mut self, alias: String, mid: usize) {
         self.modules.insert(alias, mid);
     }
 
@@ -126,7 +128,8 @@ where
     pub(crate) possible_leaf: bool,
     pub(crate) fn_argc: usize,
     pub(crate) is_open: bool,
-    pub(crate) scope: Scope<'script>,
+    /// Current scope
+    pub scope: Scope<'script>,
 }
 
 impl<'script, 'registry> Helper<'script, 'registry>
@@ -145,6 +148,7 @@ where
     }
     /// leaves a scope
     pub(crate) fn leave_scope(&mut self) -> Result<()> {
+        // FIXME return left scope
         if let Some(next) = self.scope.parent.take() {
             self.scope = *next;
             Ok(())
@@ -152,11 +156,17 @@ where
             Err("No parent scope".into())
         }
     }
-    pub(crate) fn get_flow_decls(&self, _: &NodeId) -> Option<FlowDefinition<'script>> {
-        todo!()
+    pub(crate) fn get_flow_decls(&self, id: &NodeId) -> Option<FlowDefinition<'script>> {
+        if id.module.is_empty() {
+            self.scope.content.flows.get(&id.id).cloned()
+        } else {
+            let (mid, id) = self.resolve_module_alias(id)?;
+            ModuleManager::get_flow(mid, id)
+        }
     }
 
-    pub(crate) fn get_pipeline(&self, id: &NodeId) -> Option<PipelineDefinition<'script>> {
+    /// fetch pipeline
+    pub fn get_pipeline(&self, id: &NodeId) -> Option<PipelineDefinition<'script>> {
         if id.module.is_empty() {
             self.scope.content.pipelines.get(&id.id).cloned()
         } else {
@@ -173,6 +183,15 @@ where
             ModuleManager::get_function(mid, id)
         }
     }
+    /// Fetches an operator
+    pub fn get_operator(&self, id: &NodeId) -> Option<OperatorDefinition<'script>> {
+        if id.module.is_empty() {
+            self.scope.content.operators.get(&id.id).cloned()
+        } else {
+            let (mid, id) = self.resolve_module_alias(id)?;
+            ModuleManager::get_operator(mid, id)
+        }
+    }
 
     pub(crate) fn get_const(&self, id: &NodeId) -> Option<Const<'script>> {
         if id.module.is_empty() {
@@ -180,6 +199,15 @@ where
         } else {
             let (mid, id) = dbg!(self.resolve_module_alias(id))?;
             ModuleManager::get_const(mid, id)
+        }
+    }
+    /// Finds a script
+    pub fn get_script(&self, id: &NodeId) -> Option<ScriptDefinition<'script>> {
+        if id.module.is_empty() {
+            self.scope.content.scripts.get(&id.id).cloned()
+        } else {
+            let (mid, id) = dbg!(self.resolve_module_alias(id))?;
+            ModuleManager::get_script(mid, id)
         }
     }
 
@@ -192,9 +220,6 @@ where
             Some((mid, &id.id))
         }
     }
-    // pub(crate) fn get_script(&self, _: &NodeId) -> Option<ScriptDefinition<'script>> {
-    //     None
-    // }
 
     pub(crate) fn is_const(&self, id: &str) -> bool {
         self.scope.content.consts.contains_key(id)
