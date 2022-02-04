@@ -40,7 +40,6 @@ const EXEC_OPTS: ExecOpts = ExecOpts {
 fn eval_suite_entrypoint(
     env: &Env,
     local: &LocalStack,
-    script: &str,
     suite_spec: &Record<'_>,
     tags: &tag::TagFilter,
     config: &TestConfig,
@@ -55,7 +54,7 @@ fn eval_suite_entrypoint(
         .as_list()
         .ok_or("Invalid type for field \"tests\". Expected list.")?;
 
-    if let Ok((s, mut e)) = eval_suite_tests(env, local, script, spec, tags, config) {
+    if let Ok((s, mut e)) = eval_suite_tests(env, local, spec, tags, config) {
         elements.append(&mut e);
         stats.merge(&s);
     } else {
@@ -84,7 +83,6 @@ fn eval(expr: &ImutExpr, env: &Env, local: &LocalStack) -> Result<Value<'static>
 fn eval_suite_tests(
     env: &Env,
     local: &LocalStack,
-    script: &str,
     suite_spec: &List,
     suite_tags: &test::TagFilter,
     config: &TestConfig,
@@ -143,11 +141,11 @@ fn eval_suite_tests(
                 let elapsed = nanotime() - start;
 
                 // Non colorized test source extent for json report capture
-                let extent = item.extent(env.meta);
-                let mut hh = DumbHighlighter::new();
-                tremor_script::Script::highlight_script_with_range(script, extent, &mut hh)?;
+                let extent = item.extent();
+                let mut dh = DumbHighlighter::new();
+                dh.highlight_range(extent)?;
 
-                let mut info = hh.to_string();
+                let mut info = dh.to_string();
                 let success = if let Some(success) = value.as_bool() {
                     success
                 } else if let Some([expected, got]) = value.as_array().map(Vec::as_slice) {
@@ -172,14 +170,12 @@ fn eval_suite_tests(
                     // Interactive console report
                     status::executing_unit_testcase(idx, ll, success)?;
 
-                    let mut hh: TermHighlighter = TermHighlighter::default();
-                    tremor_script::Script::highlight_script_with_range_indent(
-                        "       ", script, extent, &mut hh,
-                    )?;
+                    let mut th: TermHighlighter = TermHighlighter::default();
+                    th.highlight_range_with_indent("       ", extent)?;
                     if let Some([expected, got]) = value.as_array().map(Vec::as_slice) {
                         println!("             | {} != {}", expected, got);
                     }
-                    hh.finalize()?;
+                    th.finalize()?;
                     println!();
                 }
                 // Test record
@@ -219,7 +215,7 @@ pub(crate) fn run_suite(
     let env = env::setup()?;
     let report_start = nanotime();
     let mut stats = stats::Stats::new();
-    match tremor_script::Script::parse(&env.module_path, &script, raw.clone(), &env.fun) {
+    match tremor_script::Script::parse(raw.clone(), &env.fun) {
         Ok(runnable) => {
             let local = LocalStack::default();
 
@@ -233,7 +229,6 @@ pub(crate) fn run_suite(
                 context,
                 consts: script.consts.run(),
                 aggrs: &script.aggregates,
-                meta: &script.node_meta,
                 recursion_limit: tremor_script::recursion_limit(),
             };
 
@@ -271,14 +266,8 @@ pub(crate) fn run_suite(
                                 Some(&config.includes),
                                 Some(&config.excludes),
                             )?;
-                            let (test_stats, mut test_reports) = eval_suite_entrypoint(
-                                &env,
-                                &local,
-                                &raw,
-                                spec,
-                                &suite_tags,
-                                config,
-                            )?;
+                            let (test_stats, mut test_reports) =
+                                eval_suite_entrypoint(&env, &local, spec, &suite_tags, config)?;
 
                             stats.merge(&test_stats);
                             elements.append(&mut test_reports);
@@ -301,7 +290,7 @@ pub(crate) fn run_suite(
         Err(e) => {
             stats.fail(&script);
             let mut h = TermHighlighter::default();
-            if let Err(e) = tremor_script::Script::format_error_from_script(&raw, &mut h, &e) {
+            if let Err(e) = h.format_error(&e) {
                 eprintln!("Error: {}", e);
             };
         }

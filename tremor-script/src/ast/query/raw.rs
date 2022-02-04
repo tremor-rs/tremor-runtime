@@ -22,29 +22,32 @@ use super::{
     ArgsExprs, CreationalWith, DefinitioalArgs, DefinitioalArgsWith, WithExprs,
 };
 use super::{
-    error_generic, error_no_locals, BaseExpr, GroupBy, HashMap, Helper, Location, OperatorCreate,
+    error_generic, error_no_locals, GroupBy, HashMap, Helper, Location, OperatorCreate,
     OperatorDefinition, OperatorKind, PipelineCreate, PipelineDefinition, Query, Result,
-    ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamStmt, Upable, Value,
+    ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamStmt, Upable,
     WindowDefinition, WindowKind,
 };
-use crate::{ast::InvokeAggrFn, impl_expr};
 use crate::{
     ast::{
         node_id::{BaseRef, NodeId},
         raw::UseRaw,
-        visitors::{ArgsRewriter, ConstFolder, GroupByExprExtractor, TargetEventRef},
+        visitors::{ConstFolder, GroupByExprExtractor, TargetEventRef},
         walkers::{ImutExprWalker, QueryWalker},
         Consts, Ident,
     },
-    errors::err_generic,
     ModuleManager,
 };
+use crate::{
+    ast::{InvokeAggrFn, NodeMeta},
+    impl_expr_raw,
+};
 use beef::Cow;
-use std::iter::FromIterator;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
 pub struct QueryRaw<'script> {
+    pub(crate) start: Location,
+    pub(crate) end: Location,
     pub(crate) config: ConfigRaw<'script>,
     pub(crate) stmts: StmtsRaw<'script>,
     pub(crate) params: DefinitioalArgsRaw<'script>,
@@ -55,7 +58,7 @@ impl<'script> QueryRaw<'script> {
         mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<Query<'script>> {
         let params = self.params.up(helper)?;
-        let args = params.render(&helper.meta)?;
+        // let args = params.render()?; FIXME
 
         let mut stmts: Vec<_> = self
             .stmts
@@ -69,13 +72,13 @@ impl<'script> QueryRaw<'script> {
         let mut config = HashMap::new();
         for (k, mut v) in self.config.up(helper)? {
             ConstFolder::new(helper).walk_expr(&mut v)?;
-            config.insert(k.to_string(), v.try_into_lit(&helper.meta)?);
+            config.insert(k.to_string(), v.try_into_lit()?);
         }
         Ok(Query {
+            mid: NodeMeta::new_box(self.start, self.end),
             params,
             config,
             stmts,
-            node_meta: helper.meta.clone(),
             scope: helper.scope.clone(),
         })
     }
@@ -130,7 +133,6 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                     aggregates,
                     consts: Consts::new(),
                     locals: locals.len(),
-                    node_meta: helper.meta.clone(),
                 })))
             }
             StmtRaw::StreamStmt(stmt) => Ok(Some(Stmt::StreamStmt(stmt.up(helper)?))),
@@ -158,9 +160,9 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
             }
             StmtRaw::PipelineCreate(stmt) => Ok(Some(Stmt::PipelineCreate(stmt.up(helper)?))),
             StmtRaw::Use(UseRaw { alias, module, .. }) => {
-                let mid = ModuleManager::load(dbg!(&module))?;
+                let mid = ModuleManager::load(&module)?;
                 let alias = alias.unwrap_or_else(|| module.id.clone());
-                helper.scope().add_module_alias(dbg!(alias), mid);
+                helper.scope().add_module_alias(alias, mid);
                 Ok(None)
             }
         }
@@ -177,13 +179,13 @@ pub struct OperatorDefinitionRaw<'script> {
     pub(crate) params: DefinitioalArgsWithRaw<'script>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
-impl_expr!(OperatorDefinitionRaw);
+impl_expr_raw!(OperatorDefinitionRaw);
 
 impl<'script> Upable<'script> for OperatorDefinitionRaw<'script> {
     type Target = OperatorDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let operator_decl = OperatorDefinition {
-            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, &[]),
             kind: self.kind.up(helper)?,
             params: self.params.up(helper)?,
@@ -206,15 +208,27 @@ pub struct PipelineDefinitionRaw<'script> {
     pub(crate) into: Option<Vec<IdentRaw<'script>>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
-impl_expr!(PipelineDefinitionRaw);
+impl_expr_raw!(PipelineDefinitionRaw);
 
 impl<'script> PipelineDefinitionRaw<'script> {
     const STREAM_PORT_CONFILCT: &'static str = "Streams cannot share names with from/into ports";
-    fn dflt_in_ports<'ident>() -> Vec<Ident<'ident>> {
-        vec!["in".into()]
+    fn dflt_in_ports<'ident>(&self) -> Vec<Ident<'ident>> {
+        vec![Ident {
+            mid: NodeMeta::new_box_with_name(self.start, self.end, "in"),
+            id: "in".into(),
+        }]
     }
-    fn dflt_out_ports<'ident>() -> Vec<Ident<'ident>> {
-        vec!["out".into(), "err".into()]
+    fn dflt_out_ports<'ident>(&self) -> Vec<Ident<'ident>> {
+        vec![
+            Ident {
+                mid: NodeMeta::new_box_with_name(self.start, self.end, "out"),
+                id: "in".into(),
+            },
+            Ident {
+                mid: NodeMeta::new_box_with_name(self.start, self.end, "err"),
+                id: "in".into(),
+            },
+        ]
     }
 }
 
@@ -224,9 +238,10 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
         helper.enter_scope();
 
         let query = None;
-
-        let from = self.from.up(helper)?.unwrap_or_else(Self::dflt_in_ports);
-        let into = self.into.up(helper)?.unwrap_or_else(Self::dflt_out_ports);
+        let dflt_in_ports = self.dflt_in_ports();
+        let dflt_out_ports = self.dflt_out_ports();
+        let from = self.from.up(helper)?.unwrap_or(dflt_in_ports);
+        let into = self.into.up(helper)?.unwrap_or(dflt_out_ports);
 
         let ports_set: HashSet<_> = from
             .iter()
@@ -237,17 +252,12 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
             if let StmtRaw::StreamStmt(stream_raw) = stmt {
                 if ports_set.contains(&stream_raw.id) {
                     let stream = stream_raw.clone().up(helper)?;
-                    return error_generic(
-                        &stream,
-                        &stream,
-                        &Self::STREAM_PORT_CONFILCT,
-                        &helper.meta,
-                    );
+                    return error_generic(&stream, &stream, &Self::STREAM_PORT_CONFILCT);
                 }
             }
         }
 
-        let mid = helper.add_meta_w_name(self.start, self.end, &self.id);
+        let mid = NodeMeta::new_box_with_name(self.start, self.end, &self.id);
         helper.leave_scope()?;
         let params = self.params.up(helper)?;
 
@@ -276,7 +286,7 @@ pub struct PipelineInlineRaw<'script> {
     pub(crate) target: NodeId,
     pub(crate) params: CreationalWithRaw<'script>,
 }
-impl_expr!(PipelineInlineRaw);
+impl_expr_raw!(PipelineInlineRaw);
 
 impl<'script> Upable<'script> for PipelineInlineRaw<'script> {
     type Target = PipelineCreate<'script>;
@@ -284,249 +294,12 @@ impl<'script> Upable<'script> for PipelineInlineRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // FIXME are those correct?!?
         Ok(PipelineCreate {
-            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
             node_id: self.target,
             port_stream_map: HashMap::new(),
             params: self.params.up(helper)?,
         })
     }
-}
-
-impl<'script> PipelineInlineRaw<'script> {
-    fn mangle_id(&self, id: &str) -> String {
-        format!("__PIP__id:{}_alias:{}", self.id, id)
-    }
-
-    fn get_args_map<'registry>(
-        &self,
-        decl_params: &DefinitioalArgs<'script>,
-        stmt_params: CreationalWith<'script>,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<Value<'script>> {
-        let mut stmt_params: HashMap<_, _> = stmt_params
-            .with
-            .0
-            .into_iter()
-            .map(|(k, v)| {
-                let v = ConstFolder::reduce_to_val(helper, v)?;
-                Ok((k.id, v))
-            })
-            .collect::<Result<_>>()?;
-        for (param, value) in &decl_params.args.0 {
-            if !stmt_params.contains_key(&param.id) {
-                let value = value
-                    .clone()
-                    .map(|v| ConstFolder::reduce_to_val(helper, v))
-                    .transpose()?;
-                if let Some(value) = value {
-                    stmt_params.insert(param.id.clone(), value);
-                } else {
-                    return Err("missing parameter".into()); // FIXME: good error
-                }
-            }
-        }
-
-        // Make sure no new params were introduced in creation
-        let stmt_param_set: HashSet<_> = stmt_params.keys().into_iter().collect();
-        let decl_param_set: HashSet<_> = decl_params.args.0.iter().map(|(k, _)| &k.id).collect();
-        let mut unknown_params: Vec<_> = stmt_param_set.difference(&decl_param_set).collect();
-
-        if let Some(param) = unknown_params.pop() {
-            let err_str = format!("Unknown parameter `{}`", param);
-            error_generic(self, self, &err_str, &helper.meta)
-        } else {
-            Ok(Value::from_iter(stmt_params))
-        }
-    }
-
-    // #[allow(clippy::too_many_lines)]
-    // pub fn inline<'registry>(
-    //     self,
-    //     mut query_stmts: &mut Vec<Stmt<'script>>,
-    //     mut helper: &mut Helper<'script, 'registry>,
-    //     args: Option<&Value<'script>>,
-    // ) -> Result<PipelineCreate> {
-    //     let target = self.target.clone().with_prefix(&[]);
-    //     // FIXME
-    //     // Calculate the fully qualified name for the pipeline declaration.
-    //     // let fq_pipeline_defn = target.fqn();
-
-    //     let pipeline_decl = helper.get_pipeline(&target).ok_or_else(|| {
-    //         dbg!(&helper.scope);
-    //         err_generic(
-    //             &self,
-    //             &self,
-    //             &format!(
-    //                 "pipeline `{}` not found ",
-    //                 target,
-    //                 //helper.queries.keys().cloned().collect::<Vec<_>>().join(",")
-    //             ),
-    //             &helper.meta,
-    //         )
-    //     })?;
-
-    //     let mut pipeline_stmts = vec![];
-
-    //     let mut ports_set: HashSet<_> = HashSet::new();
-    //     // Map of pipeline -> {ports->internal_stream}
-    //     let mut pipeline_stream_map: HashMap<String, String> = HashMap::new();
-
-    //     let ports = pipeline_decl.from.iter().chain(pipeline_decl.into.iter());
-    //     for port in ports {
-    //         let stream_stmt = StmtRaw::StreamStmt(StreamStmtRaw {
-    //             start: port.s(&helper.meta),
-    //             end: port.e(&helper.meta),
-    //             id: port.id.to_string(),
-    //         });
-    //         ports_set.insert(port.id.to_string());
-    //         pipeline_stmts.push(stream_stmt);
-    //     }
-
-    //     pipeline_stmts.extend(pipeline_decl.raw_stmts.clone());
-    //     let subq_module = &self.mangle_id(&self.id);
-
-    //     let mut decl_params = pipeline_decl.params.clone();
-    //     let mut stmt_params = self.params.clone().up(helper)?;
-
-    //     if let Some(args) = args {
-    //         ArgsRewriter::new(args.clone(), helper).walk_definitinal_args(&mut decl_params)?;
-    //         ArgsRewriter::new(args.clone(), helper).walk_creational_with(&mut stmt_params)?;
-    //     }
-    //     ConstFolder::new(helper).walk_definitinal_args(&mut decl_params)?;
-    //     ConstFolder::new(helper).walk_creational_with(&mut stmt_params)?;
-
-    //     let subq_args = self.get_args_map(&decl_params, stmt_params, helper)?;
-
-    //     // we need to resolve the constant folder outside of this module
-    //     helper.enter_scope();
-    //     for stmt in pipeline_stmts {
-    //         match stmt {
-    //             StmtRaw::PipelineCreate(mut s) => {
-    //                 let unmangled_id = s.id.clone();
-    //                 s.id = self.mangle_id(&s.id);
-
-    //                 let s_up = s.inline(&mut query_stmts, &mut helper, Some(&subq_args))?;
-    //                 if let Some(meta) = helper.meta.nodes.get_mut(s_up.mid) {
-    //                     meta.name = Some(unmangled_id);
-    //                 }
-    //                 query_stmts.push(Stmt::PipelineCreate(s_up));
-    //             }
-    //             StmtRaw::OperatorCreate(mut o) => {
-    //                 let unmangled_id = o.id.clone();
-    //                 o.id = self.mangle_id(&o.id);
-    //                 let mut o = o.up(helper)?;
-    //                 o.params.substitute_args(&subq_args, &mut helper)?;
-    //                 if let Some(meta) = helper.meta.nodes.get_mut(o.mid) {
-    //                     meta.name = Some(unmangled_id);
-    //                 }
-    //                 // All `define`s inside the subq are inside `subq_module`
-    //                 o.node_id.module_mut().insert(0, subq_module.clone());
-    //                 query_stmts.push(Stmt::OperatorCreate(o));
-    //             }
-    //             StmtRaw::ScriptCreate(mut s) => {
-    //                 let unmangled_id = s.id.clone();
-    //                 s.id = self.mangle_id(&s.id);
-    //                 let mut s = s.up(helper)?;
-    //                 s.params.substitute_args(&subq_args, &mut helper)?;
-    //                 if let Some(meta) = helper.meta.nodes.get_mut(s.mid) {
-    //                     meta.name = Some(unmangled_id);
-    //                 }
-    //                 s.node_id.module_mut().insert(0, subq_module.clone());
-    //                 query_stmts.push(Stmt::ScriptCreate(s));
-    //             }
-    //             StmtRaw::StreamStmt(mut s) => {
-    //                 let unmangled_id = s.id.clone();
-    //                 s.id = self.mangle_id(&s.id);
-    //                 let s = s.up(helper)?;
-    //                 // Add the internal stream.id to the map of port->stream_id
-    //                 // if the stream.id matches a port_name.
-    //                 if let Some(port_name) = ports_set.get(&unmangled_id) {
-    //                     pipeline_stream_map.insert(port_name.clone(), s.id.clone());
-    //                 }
-
-    //                 // Store the unmangled name in the meta
-    //                 if let Some(meta) = helper.meta.nodes.get_mut(s.mid) {
-    //                     meta.name = Some(unmangled_id);
-    //                 }
-    //                 query_stmts.push(Stmt::StreamStmt(s));
-    //             }
-    //             StmtRaw::SelectStmt(mut s) => {
-    //                 let unmangled_from = s.from.0.id.to_string();
-    //                 let unmangled_into = s.into.0.id.to_string();
-    //                 s.from.0.id = Cow::owned(self.mangle_id(&s.from.0.id.to_string()));
-    //                 s.into.0.id = Cow::owned(self.mangle_id(&s.into.0.id.to_string()));
-
-    //                 if let Some(mut select_up) = StmtRaw::SelectStmt(s).up(&mut helper)? {
-    //                     if let Stmt::SelectStmt(s) = &mut select_up {
-    //                         // Inline the args in target, where, having and group-by clauses
-    //                         ArgsRewriter::new(subq_args.clone(), helper)
-    //                             .rewrite_expr(&mut s.stmt.target)?;
-
-    //                         if let Some(expr) = &mut s.stmt.maybe_where {
-    //                             ArgsRewriter::new(subq_args.clone(), helper).rewrite_expr(expr)?;
-    //                         }
-    //                         if let Some(expr) = &mut s.stmt.maybe_having {
-    //                             ArgsRewriter::new(subq_args.clone(), helper).rewrite_expr(expr)?;
-    //                         }
-    //                         if let Some(group_by) = &mut s.stmt.maybe_group_by {
-    //                             ArgsRewriter::new(subq_args.clone(), helper)
-    //                                 .rewrite_group_by(group_by)?;
-    //                         }
-
-    //                         // Store the unmangled name in meta for error reports
-    //                         if let Some(meta) = helper.meta.nodes.get_mut(s.stmt.from.0.mid()) {
-    //                             meta.name = Some(unmangled_from);
-    //                         }
-    //                         if let Some(meta) = helper.meta.nodes.get_mut(s.stmt.into.0.mid()) {
-    //                             meta.name = Some(unmangled_into);
-    //                         }
-    //                     }
-    //                     query_stmts.push(select_up);
-    //                 }
-    //             }
-    //             StmtRaw::ScriptDefinition(d) => {
-    //                 let mut d = d.up(&mut helper)?;
-    //                 d.params.substitute_args(&subq_args, helper)?;
-    //                 // We overwrite the original script with the substituted one
-    //                 // FIXME: helper.scripts.insert(d.node_id.fqn(), d.clone());
-    //                 query_stmts.push(Stmt::ScriptDefinition(Box::new(d)));
-    //             }
-    //             StmtRaw::OperatorDefinition(d) => {
-    //                 let mut d = d.up(&mut helper)?;
-    //                 d.params.substitute_args(&subq_args, &mut helper)?;
-    //                 // We overwrite the original script with the substituted one
-    //                 // FIXME: helper.operators.insert(d.node_id.fqn(), d.clone());
-    //                 query_stmts.push(Stmt::OperatorDefinition(d));
-    //             }
-    //             StmtRaw::PipelineDefinition(d) => {
-    //                 let mut d = d.up(&mut helper)?;
-    //                 d.params.substitute_args(&subq_args, &mut helper)?;
-    //                 query_stmts.push(Stmt::PipelineDefinition(Box::new(d)));
-    //             }
-    //             StmtRaw::WindowDefinition(d) => {
-    //                 let mut d = d.up(&mut helper)?;
-    //                 d.params.substitute_args(&subq_args, &mut helper)?;
-    //                 query_stmts.push(Stmt::WindowDefinition(Box::new(d)));
-    //             }
-    //             StmtRaw::Use(UseRaw { alias, module, .. }) => {
-    //                 let mid = ModuleManager::load(dbg!(&module))?;
-    //                 let alias = alias.unwrap_or_else(|| module.id.clone());
-    //                 helper.scope().add_module_alias(dbg!(alias), mid);
-    //             }
-    //         }
-    //     }
-    //     helper.leave_scope()?;
-
-    //     let pipeline_stmt = PipelineCreate {
-    //         mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-    //         node_id: NodeId {
-    //             module: vec![], // FIXME
-    //             id: self.id,
-    //         },
-    //         port_stream_map: pipeline_stream_map,
-    //     };
-    //     Ok(pipeline_stmt)
-    // }
 }
 
 /// we're forced to make this pub because of lalrpop
@@ -538,14 +311,14 @@ pub struct OperatorCreateRaw<'script> {
     pub(crate) target: NodeId,
     pub(crate) params: CreationalWithRaw<'script>,
 }
-impl_expr!(OperatorCreateRaw);
+impl_expr_raw!(OperatorCreateRaw);
 
 impl<'script> Upable<'script> for OperatorCreateRaw<'script> {
     type Target = OperatorCreate<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let params = self.params.up(helper)?;
         Ok(OperatorCreate {
-            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, &[]),
             target: self.target.with_prefix(&[]), // FIXME
             params,
@@ -563,7 +336,7 @@ pub struct ScriptDefinitionRaw<'script> {
     pub(crate) script: ScriptRaw<'script>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
-impl_expr!(ScriptDefinitionRaw);
+impl_expr_raw!(ScriptDefinitionRaw);
 
 impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
     type Target = ScriptDefinition<'script>;
@@ -580,7 +353,7 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         // Handle the content of the script in it's own module
         helper.enter_scope();
         let script = self.script.up_script(helper)?;
-        let mid = helper.add_meta_w_name(self.start, self.end, &self.id);
+        let mid = NodeMeta::new_box_with_name(self.start, self.end, &self.id);
         helper.leave_scope()?;
         // Handle the params in the outside module
         let params = self.params;
@@ -617,7 +390,7 @@ impl<'script> Upable<'script> for ScriptCreateRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let params = self.params.up(helper)?;
         Ok(ScriptCreate {
-            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, &[]),
             params,
             target: self.target.with_prefix(&[]), // FIXME
@@ -638,7 +411,7 @@ pub struct WindowDefinitionRaw<'script> {
     pub(crate) script: Option<ScriptRaw<'script>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
 }
-impl_expr!(WindowDefinitionRaw);
+impl_expr_raw!(WindowDefinitionRaw);
 
 impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
     type Target = WindowDefinition<'script>;
@@ -648,7 +421,7 @@ impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
         // warn params if `emit_empty_windows` is defined, but neither `max_groups` nor `evicition_period` is defined
 
         let window_decl = WindowDefinition {
-            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
             node_id: NodeId::new(self.id, &[]),
             kind: self.kind,
             params: self.params.up(helper)?,
@@ -685,7 +458,7 @@ pub struct SelectRaw<'script> {
     pub(crate) maybe_group_by: Option<GroupByRaw<'script>>,
     pub(crate) windows: Option<Vec<WindowDefnRaw>>,
 }
-impl_expr!(SelectRaw);
+impl_expr_raw!(SelectRaw);
 
 impl<'script> Upable<'script> for SelectRaw<'script> {
     type Target = Select<'script>;
@@ -693,26 +466,26 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
         let mut target = self.target.up(helper)?;
 
         if helper.has_locals() {
-            return error_no_locals(&(self.start, self.end), &target, &helper.meta);
+            return error_no_locals(&(self.start, self.end), &target);
         };
 
         let maybe_having = self.maybe_having.up(helper)?;
         if helper.has_locals() {
             if let Some(definitely) = maybe_having {
-                return error_no_locals(&(self.start, self.end), &definitely, &helper.meta);
+                return error_no_locals(&(self.start, self.end), &definitely);
             }
         };
 
         let maybe_where = self.maybe_where.up(helper)?;
         if helper.has_locals() {
             if let Some(definitely) = maybe_where {
-                return error_no_locals(&(self.start, self.end), &definitely, &helper.meta);
+                return error_no_locals(&(self.start, self.end), &definitely);
             }
         };
         let maybe_group_by = self.maybe_group_by.up(helper)?;
         if helper.has_locals() {
             if let Some(definitely) = maybe_group_by {
-                return error_no_locals(&(self.start, self.end), &definitely, &helper.meta);
+                return error_no_locals(&(self.start, self.end), &definitely);
             }
         };
 
@@ -738,7 +511,7 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
         if !windows.is_empty() {
             // if we have windows we need to forbid free event references in the target if they are not
             // inside an aggregate function or can be rewritten to a group reference
-            TargetEventRef::new(group_by_expressions, &helper.meta).rewrite_target(&mut target)?;
+            TargetEventRef::new(group_by_expressions).rewrite_target(&mut target)?;
         }
 
         let from = match self.from {
@@ -758,7 +531,7 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
             (stream, Some(port)) => (stream, port),
         };
         Ok(Select {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             from: (from.0.up(helper)?, from.1.up(helper)?),
             into: (into.0.up(helper)?, into.1.up(helper)?),
             target,
@@ -807,15 +580,15 @@ impl<'script> Upable<'script> for GroupByRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
             GroupByRaw::Expr { start, end, expr } => GroupBy::Expr {
-                mid: helper.add_meta(start, end),
+                mid: NodeMeta::new_box(start, end),
                 expr: expr.up(helper)?,
             },
             GroupByRaw::Each { start, end, expr } => GroupBy::Each {
-                mid: helper.add_meta(start, end),
+                mid: NodeMeta::new_box(start, end),
                 expr: expr.up(helper)?,
             },
             GroupByRaw::Set { start, end, items } => GroupBy::Set {
-                mid: helper.add_meta(start, end),
+                mid: NodeMeta::new_box(start, end),
                 items: items.up(helper)?,
             },
         })
@@ -833,9 +606,9 @@ pub struct OperatorKindRaw {
 
 impl<'script> Upable<'script> for OperatorKindRaw {
     type Target = OperatorKind;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+    fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(OperatorKind {
-            mid: helper.add_meta_w_name(
+            mid: NodeMeta::new_box_with_name(
                 self.start,
                 self.end,
                 &format!("{}::{}", self.module, self.operation),
@@ -855,9 +628,9 @@ pub struct StreamStmtRaw {
 }
 impl<'script> Upable<'script> for StreamStmtRaw {
     type Target = StreamStmt;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+    fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(StreamStmt {
-            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
             id: self.id,
         })
     }

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::ast::Const;
+
 use super::super::visitors::prelude::*;
 macro_rules! stop {
     ($e:expr, $leave_fn:expr) => {
@@ -737,5 +739,14 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
             }
         }
         self.leave_expr(e)
+    }
+
+    /// walk a `Case`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn walk_const(&mut self, c: &mut Const<'script>) -> Result<()> {
+        stop!(self.visit_const(c), self.leave_const(c));
+        self.leave_const(c)
     }
 }

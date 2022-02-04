@@ -44,7 +44,10 @@ use std::fmt;
 use std::fmt::Display;
 use std::iter::Iterator;
 use std::str::FromStr;
-use tremor_script::{ast::Helper, prelude::*};
+use tremor_script::{
+    ast::{self, Helper},
+    prelude::*,
+};
 
 /// Pipeline Errors
 pub mod errors;
@@ -78,8 +81,7 @@ pub type ConfigMap = Option<tremor_value::Value<'static>>;
 pub type NodeLookupFn = fn(
     config: &NodeConfig,
     uid: u64,
-    defn: Option<&tremor_script::srs::Stmt>,
-    node: Option<&tremor_script::srs::Stmt>,
+    node: Option<&ast::Stmt<'static>>,
     windows: Option<HashMap<String, window::Impl>>,
     helper: &mut Helper,
 ) -> Result<OperatorNode>;

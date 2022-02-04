@@ -21,11 +21,11 @@ pub(crate) use crate::ast::{
     CreateTargetDefinition, CreationalWith, DefaultCase, DefinitioalArgs, DefinitioalArgsWith,
     DeployEndpoint, EmitExpr, EventPath, Expr, ExprPath, Exprs, Field, FlowDefinition, FnDecl,
     GroupBy, Helper, Ident, IfElse, ImutExpr, Invoke, InvokeAggr, List, Literal, LocalPath, Match,
-    Merge, MetadataPath, NodeMetas, OperatorCreate, OperatorDefinition, Patch, PatchOperation,
-    Path, Pattern, PipelineCreate, PipelineDefinition, PredicateClause, PredicatePattern, Query,
-    Record, RecordPattern, Recur, ReservedPath, Script, ScriptCreate, ScriptDefinition, Segment,
-    Select, SelectStmt, StatePath, Stmt, StrLitElement, StreamStmt, StringLit, TestExpr,
-    TuplePattern, UnaryExpr, WindowDefinition, WithExpr,
+    Merge, MetadataPath, OperatorCreate, OperatorDefinition, Patch, PatchOperation, Path, Pattern,
+    PipelineCreate, PipelineDefinition, PredicateClause, PredicatePattern, Query, Record,
+    RecordPattern, Recur, ReservedPath, Script, ScriptCreate, ScriptDefinition, Segment, Select,
+    SelectStmt, StatePath, Stmt, StrLitElement, StreamStmt, StringLit, TestExpr, TuplePattern,
+    UnaryExpr, WindowDefinition, WithExpr,
 };
 
 pub(crate) use crate::ast::visitors::{

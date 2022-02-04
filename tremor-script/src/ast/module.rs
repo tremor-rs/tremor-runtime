@@ -20,12 +20,13 @@ use super::{
     },
     raw::{AnyFnRaw, ConstRaw, IdentRaw, UseRaw},
     upable::Upable,
-    BaseExpr, ConnectorDefinition, Const, FlowDefinition, FnDecl, Helper, NodeId,
+    BaseExpr, ConnectorDefinition, Const, FlowDefinition, FnDecl, Helper, NodeId, NodeMeta,
     OperatorDefinition, PipelineDefinition, ScriptDefinition, WindowDefinition,
 };
 use crate::{
+    arena::{self, Arena},
     errors::Result,
-    impl_expr,
+    impl_expr_raw,
     lexer::{Location, Tokenizer},
     path::ModulePath,
     FN_REGISTRY,
@@ -33,13 +34,7 @@ use crate::{
 use beef::Cow;
 use sha2::Digest;
 use std::mem::transmute;
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    path::{Path, PathBuf},
-    pin::Pin,
-    sync::Arc,
-};
+use std::{collections::HashMap, fmt::Debug};
 
 use std::sync::RwLock;
 lazy_static::lazy_static! {
@@ -68,35 +63,35 @@ pub enum ModuleStmtRaw<'script> {
     Script(ScriptDefinitionRaw<'script>),
 }
 impl<'script> BaseExpr for ModuleStmtRaw<'script> {
-    fn mid(&self) -> usize {
-        0
+    fn meta(&self) -> &NodeMeta {
+        todo!()
     }
 
-    fn s(&self, meta: &super::NodeMetas) -> Location {
+    fn s(&self) -> Location {
         match self {
-            ModuleStmtRaw::Flow(e) => e.s(meta),
-            ModuleStmtRaw::Connector(e) => e.s(meta),
-            ModuleStmtRaw::Const(e) => e.s(meta),
-            ModuleStmtRaw::FnDecl(e) => e.s(meta),
-            ModuleStmtRaw::Pipeline(e) => e.s(meta),
-            ModuleStmtRaw::Use(e) => e.s(meta),
-            ModuleStmtRaw::Window(e) => e.s(meta),
-            ModuleStmtRaw::Operator(e) => e.s(meta),
-            ModuleStmtRaw::Script(e) => e.s(meta),
+            ModuleStmtRaw::Flow(e) => e.s(),
+            ModuleStmtRaw::Connector(e) => e.s(),
+            ModuleStmtRaw::Const(e) => e.s(),
+            ModuleStmtRaw::FnDecl(e) => e.s(),
+            ModuleStmtRaw::Pipeline(e) => e.s(),
+            ModuleStmtRaw::Use(e) => e.s(),
+            ModuleStmtRaw::Window(e) => e.s(),
+            ModuleStmtRaw::Operator(e) => e.s(),
+            ModuleStmtRaw::Script(e) => e.s(),
         }
     }
 
-    fn e(&self, meta: &super::NodeMetas) -> Location {
+    fn e(&self) -> Location {
         match self {
-            ModuleStmtRaw::Flow(e) => e.e(meta),
-            ModuleStmtRaw::Connector(e) => e.e(meta),
-            ModuleStmtRaw::Const(e) => e.e(meta),
-            ModuleStmtRaw::FnDecl(e) => e.e(meta),
-            ModuleStmtRaw::Pipeline(e) => e.e(meta),
-            ModuleStmtRaw::Use(e) => e.e(meta),
-            ModuleStmtRaw::Window(e) => e.e(meta),
-            ModuleStmtRaw::Operator(e) => e.e(meta),
-            ModuleStmtRaw::Script(e) => e.e(meta),
+            ModuleStmtRaw::Flow(e) => e.e(),
+            ModuleStmtRaw::Connector(e) => e.e(),
+            ModuleStmtRaw::Const(e) => e.e(),
+            ModuleStmtRaw::FnDecl(e) => e.e(),
+            ModuleStmtRaw::Pipeline(e) => e.e(),
+            ModuleStmtRaw::Use(e) => e.e(),
+            ModuleStmtRaw::Window(e) => e.e(),
+            ModuleStmtRaw::Operator(e) => e.e(),
+            ModuleStmtRaw::Script(e) => e.e(),
         }
     }
 }
@@ -112,7 +107,7 @@ pub struct ModuleRaw<'script> {
     pub stmts: ModuleStmtsRaw<'script>,
     pub doc: Option<Vec<Cow<'script, str>>>,
 }
-impl_expr!(ModuleRaw);
+impl_expr_raw!(ModuleRaw);
 
 /// module id
 #[derive(Debug, Clone, PartialEq)]
@@ -231,11 +226,9 @@ impl<'script> ModuleContent<'script> {
 #[derive(Debug, Clone)]
 pub(crate) struct Module {
     pub(crate) name: Vec<String>,
-    pub(crate) src: Arc<Pin<String>>,
-    pub(crate) file_name: PathBuf,
     pub(crate) id: ModuleId,
     pub(crate) content: ModuleContent<'static>,
-    pub(crate) modules: HashMap<String, usize>,
+    pub(crate) modules: HashMap<String, Index>,
 }
 
 impl From<&[u8]> for ModuleId {
@@ -243,6 +236,10 @@ impl From<&[u8]> for ModuleId {
         ModuleId(sha2::Sha512::digest(src).to_vec())
     }
 }
+
+#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+/// Module Index
+pub struct Index(usize);
 
 impl Module {
     pub(crate) fn insert_flow(&mut self, flow: FlowDefinition<'static>) -> Result<()> {
@@ -255,28 +252,21 @@ impl Module {
         self.content.insert_connector(connector)
     }
 
-    pub fn load<P>(
+    pub fn load(
         id: ModuleId,
-        file_name: P,
-        src: Arc<Pin<String>>,
+        aid: arena::Index,
+        src: &'static str,
         name: Vec<String>,
-    ) -> Result<Self>
-    where
-        P: AsRef<Path>,
-    {
-        // FIXME this isn't a good id but good enough for testing
-        // FIXME there are transmutes hers :sob:
-
+    ) -> Result<Self> {
         let aggr_reg = crate::aggr_registry();
         let reg = &*FN_REGISTRY.read()?; // FIXME
-        let mut helper = Helper::new(&reg, &aggr_reg, Vec::new());
+        let mut helper = Helper::new(&reg, &aggr_reg);
 
-        let lexemes = Tokenizer::new(&src)
+        let lexemes = Tokenizer::new(&src, aid)
             .filter_map(std::result::Result::ok)
             .filter(|t| !t.value.is_ignorable());
         let raw: ModuleRaw = crate::parser::g::ModuleFileParser::new().parse(lexemes)?;
         let raw = unsafe { transmute::<ModuleRaw<'_>, ModuleRaw<'static>>(raw) };
-        let file_name: &Path = file_name.as_ref();
 
         for s in raw.stmts {
             match s {
@@ -288,58 +278,41 @@ impl Module {
                 }
                 ModuleStmtRaw::Flow(e) => {
                     let e = e.up(&mut helper)?;
-                    // The self referential nature comes into play here
-                    let e = unsafe { transmute::<FlowDefinition<'_>, FlowDefinition<'static>>(e) };
                     helper.scope.insert_flow(e)?;
                 }
                 ModuleStmtRaw::Connector(e) => {
-                    let e = e.up(&mut helper)?.into_static();
+                    let e = e.up(&mut helper)?;
                     helper.scope.insert_connector(e)?;
                 }
                 ModuleStmtRaw::Const(e) => {
                     let e = e.up(&mut helper)?;
-                    // The self referential nature comes into play here
-                    let e = unsafe { transmute::<Const<'_>, Const<'static>>(e) };
                     helper.scope.insert_const(e)?;
                 }
                 ModuleStmtRaw::FnDecl(e) => {
                     let e = e.up(&mut helper)?;
-                    // The self referential nature comes into play here
-                    let e = unsafe { transmute::<FnDecl<'_>, FnDecl<'static>>(e) };
                     helper.scope.insert_function(e)?;
                 }
 
                 ModuleStmtRaw::Pipeline(e) => {
-                    // FIXME? We can't do into static here
                     let e = e.up(&mut helper)?;
-                    // The self referential nature comes into play here
-                    let e = unsafe {
-                        transmute::<PipelineDefinition<'_>, PipelineDefinition<'static>>(e)
-                    };
                     helper.scope.insert_pipeline(e)?;
                 }
 
                 ModuleStmtRaw::Window(e) => {
-                    let e = e.up(&mut helper)?.into_static();
+                    let e = e.up(&mut helper)?;
                     helper.scope.insert_window(e)?;
                 }
                 ModuleStmtRaw::Operator(e) => {
-                    let e = e.up(&mut helper)?.into_static();
+                    let e = e.up(&mut helper)?;
                     helper.scope.insert_operator(e)?;
                 }
                 ModuleStmtRaw::Script(e) => {
-                    // FIXME? We can't do into static here
                     let e = e.up(&mut helper)?;
-                    // The self referential nature comes into play here
-                    let e =
-                        unsafe { transmute::<ScriptDefinition<'_>, ScriptDefinition<'static>>(e) };
                     helper.scope.insert_script(e)?;
                 }
             }
         }
         Ok(Module {
-            src,
-            file_name: PathBuf::from(file_name),
             id,
             name,
             content: helper.scope.content,
@@ -366,16 +339,16 @@ impl ModuleManager {
         &self.modules
     }
 
-    pub(crate) fn find_module(mut root: usize, nest: &[String]) -> Option<usize> {
+    pub(crate) fn find_module(mut root: Index, nest: &[String]) -> Option<Index> {
         let ms = MODULES.read().unwrap();
         for k in nest {
-            let m = ms.modules.get(root)?;
+            let m = ms.modules.get(root.0)?;
             root = *m.modules.get(k)?;
         }
         Some(root)
     }
 
-    pub(crate) fn load(node_id: &NodeId) -> Result<usize> {
+    pub(crate) fn load(node_id: &NodeId) -> Result<Index> {
         let p = MODULES
             .read()
             .unwrap()
@@ -394,54 +367,64 @@ impl ModuleManager {
             .find(|(_, m)| m.id == id)
             .map(|(i, _)| i);
         if let Some(id) = maybe_id {
-            Ok(dbg!(id))
+            Ok(Index(id))
         } else {
             let mid = node_id.to_vec();
-            let src = Arc::new(Pin::new(src));
-            let m = Module::load(id, p, src, mid)?;
+            let (aid, src) = Arena::insert(src)?;
+            let m = Module::load(id, aid, src, mid)?;
             let mut mm = MODULES.write().unwrap(); // FIXME
             let n = mm.modules.len();
             mm.modules.push(m);
-            Ok(n)
+            Ok(Index(n))
         }
     }
-    pub(crate) fn get_flow(module: usize, name: &str) -> Option<FlowDefinition<'static>> {
+    pub(crate) fn get_flow(module: Index, name: &str) -> Option<FlowDefinition<'static>> {
         let ms = MODULES.read().unwrap();
-        ms.modules().get(module)?.content.flows.get(name).cloned()
+        ms.modules().get(module.0)?.content.flows.get(name).cloned()
     }
-    pub(crate) fn get_operator(module: usize, name: &str) -> Option<OperatorDefinition<'static>> {
+    pub(crate) fn get_operator(module: Index, name: &str) -> Option<OperatorDefinition<'static>> {
         let ms = MODULES.read().unwrap();
         ms.modules()
-            .get(module)?
+            .get(module.0)?
             .content
             .operators
             .get(name)
             .cloned()
     }
-    pub(crate) fn get_script(module: usize, name: &str) -> Option<ScriptDefinition<'static>> {
-        let ms = MODULES.read().unwrap();
-        ms.modules().get(module)?.content.scripts.get(name).cloned()
-    }
-
-    pub(crate) fn get_const(module: usize, name: &str) -> Option<Const<'static>> {
-        let ms = MODULES.read().unwrap();
-        ms.modules().get(module)?.content.consts.get(name).cloned()
-    }
-
-    pub(crate) fn get_pipeline(module: usize, name: &str) -> Option<PipelineDefinition<'static>> {
+    pub(crate) fn get_script(module: Index, name: &str) -> Option<ScriptDefinition<'static>> {
         let ms = MODULES.read().unwrap();
         ms.modules()
-            .get(module)?
+            .get(module.0)?
+            .content
+            .scripts
+            .get(name)
+            .cloned()
+    }
+
+    pub(crate) fn get_const(module: Index, name: &str) -> Option<Const<'static>> {
+        let ms = MODULES.read().unwrap();
+        ms.modules()
+            .get(module.0)?
+            .content
+            .consts
+            .get(name)
+            .cloned()
+    }
+
+    pub(crate) fn get_pipeline(module: Index, name: &str) -> Option<PipelineDefinition<'static>> {
+        let ms = MODULES.read().unwrap();
+        ms.modules()
+            .get(module.0)?
             .content
             .pipelines
             .get(name)
             .cloned()
     }
 
-    pub(crate) fn get_function(module: usize, name: &str) -> Option<FnDecl<'static>> {
+    pub(crate) fn get_function(module: Index, name: &str) -> Option<FnDecl<'static>> {
         let ms = MODULES.read().unwrap();
         ms.modules()
-            .get(module)?
+            .get(module.0)?
             .content
             .functions
             .get(name)

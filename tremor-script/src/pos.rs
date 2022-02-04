@@ -15,6 +15,8 @@
 // Copyright of original code is with original authors. Source cited below:
 // [libsyntax_pos]: https://github.com/rust-lang/rust/blob/master/src/libsyntax_pos/lib.rs
 
+use crate::arena;
+
 use super::lexer::Token;
 pub use codespan::{
     ByteIndex as Byte, ByteOffset, ColumnIndex as Column, ColumnOffset, LineIndex as Line,
@@ -25,24 +27,25 @@ pub use codespan::{
     Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd, Serialize, Deserialize,
 )]
 pub struct Location {
-    /// The compilation unit id
-    pub unit_id: usize, // mapping of id -> file ( str )
     /// The Line
     pub(crate) line: usize,
     /// The Column
     pub(crate) column: usize,
     /// Absolute location in bytes starting from 0
     pub(crate) absolute: usize,
+    /// Absolute location in bytes starting from 0
+    pub(crate) aid: arena::Index,
 }
 
 impl std::ops::Sub for Location {
     type Output = Location;
     fn sub(self, rhs: Location) -> Self::Output {
+        debug_assert_eq!(self.aid, rhs.aid);
         Location {
-            unit_id: self.unit_id,
             line: self.line.saturating_sub(rhs.line),
             column: self.column.saturating_sub(rhs.column),
             absolute: self.absolute.saturating_sub(rhs.absolute),
+            aid: self.aid,
         }
     }
 }
@@ -55,43 +58,8 @@ impl std::ops::Add<char> for Location {
     }
 }
 
-/// A Span with start and end location
-#[derive(Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd)]
-pub struct Span {
-    /// The starting location
-    pub start: Location,
-    /// The end location
-    pub end: Location,
-    /// start location without pp adjustment
-    pub pp_start: Location,
-    /// end location without pp adjustment
-    pub pp_end: Location,
-}
-
-impl Span {
-    pub(crate) fn new(
-        start: Location,
-        end: Location,
-        pp_start: Location,
-        pp_end: Location,
-    ) -> Self {
-        Self {
-            start,
-            end,
-            pp_start,
-            pp_end,
-        }
-    }
-    pub(crate) fn start(&self) -> Location {
-        self.start
-    }
-    pub(crate) fn end(&self) -> Location {
-        self.end
-    }
-}
-
-pub(crate) fn span(start: Location, end: Location, pp_start: Location, pp_end: Location) -> Span {
-    Span::new(start, end, pp_start, pp_end)
+pub(crate) fn span(start: Location, end: Location) -> Span {
+    Span::new(start, end)
 }
 
 /// A Spanned element, position plus element
@@ -103,86 +71,78 @@ pub struct Spanned<'tkn> {
     pub value: Token<'tkn>,
 }
 
-/// A range in a file between two locations
+/// A span in a file between two locations
 #[derive(
     Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd, Serialize, Deserialize,
 )]
-pub struct Range(pub Location, pub Location);
-impl Range {
-    pub(crate) fn expand_lines(&self, lines: usize) -> Self {
-        let mut new = *self;
-        new.0 = new.0.move_up_lines(lines);
-        new.1 = new.1.move_down_lines(lines);
-        new
-    }
-    /// The compilation unit associated with this range
-    #[must_use]
-    pub fn cu(self) -> usize {
-        self.0.unit_id
-    }
+pub struct Span {
+    pub(crate) start: Location,
+    pub(crate) end: Location,
 }
-impl From<Span> for Range {
-    fn from(s: Span) -> Self {
-        Range::from((s.start, s.end))
+
+impl Span {
+    /// New span
+    pub fn new(start: Location, end: Location) -> Self {
+        Self { start, end }
+    }
+    pub(crate) fn expand_lines(mut self, lines: usize) -> Self {
+        self.start = self.start.move_up_lines(lines);
+        self.end = self.end.move_down_lines(lines);
+        self
+    }
+    pub(crate) fn aid(self) -> arena::Index {
+        self.start.aid
+    }
+    /// start of the span
+    pub fn start(self) -> Location {
+        self.start
+    }
+    /// end of the span
+    pub fn end(self) -> Location {
+        self.end
     }
 }
 
-impl From<(Location, Location)> for Range {
-    fn from(locs: (Location, Location)) -> Self {
-        Self(locs.0, locs.1)
+impl From<(Location, Location)> for Span {
+    fn from((start, end): (Location, Location)) -> Self {
+        Self { start, end }
     }
 }
 
 impl Location {
     /// Creates a new location
     #[must_use]
-    pub fn new(line: usize, column: usize, absolute: usize, unit_id: usize) -> Self {
+    pub fn new(line: usize, column: usize, absolute: usize, aid: arena::Index) -> Self {
         Self {
-            unit_id,
             line,
             column,
             absolute,
+            aid,
         }
     }
 
     /// resets the column to zero
     #[must_use]
-    pub fn start_of_line(&self) -> Self {
-        let mut new = *self;
-        new.column = 0;
-        new
+    pub fn start_of_line(mut self) -> Self {
+        self.column = 0;
+        self
     }
     /// absolute position in the source as bytes
     #[must_use]
-    pub fn absolute(&self) -> usize {
+    pub fn absolute(self) -> usize {
         self.absolute
     }
 
     /// line of the location
     #[must_use]
-    pub fn line(&self) -> usize {
+    pub fn line(self) -> usize {
         self.line
     }
 
     /// column  (character not byte) in the current line
     #[must_use]
-    pub fn column(&self) -> usize {
+    pub fn column(self) -> usize {
         self.column
-    }
-
-    pub(crate) fn set_cu(&mut self, cu: usize) {
-        self.unit_id = cu;
-    }
-
-    /// Location for line directives
-    #[must_use]
-    pub fn for_line_directive() -> Self {
-        Self {
-            line: 0,
-            column: 0,
-            absolute: 0,
-            unit_id: 0,
-        }
     }
 
     pub(crate) fn move_down_lines(&self, lines: usize) -> Self {

@@ -84,11 +84,10 @@ use crate::errors::{Error, Result};
 pub(crate) use crate::config::Connector;
 use system::World;
 pub use tremor_pipeline::Event;
-use tremor_script::Script;
-use tremor_script::FN_REGISTRY;
 use tremor_script::{
     deploy::Deploy, highlighter::Dumb as ToStringHighlighter, highlighter::Term as TermHighlighter,
 };
+use tremor_script::{highlighter::Highlighter, FN_REGISTRY};
 
 /// Operator Config
 pub type OpConfig = tremor_value::Value<'static>;
@@ -112,21 +111,13 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
     file.read_to_string(&mut src)
         .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
     let aggr_reg = tremor_script::registry::aggr();
-    let module_path = tremor_script::path::load();
 
-    let deployable = Deploy::parse(
-        &module_path,
-        file_name,
-        &src,
-        vec![],
-        &*FN_REGISTRY.read()?,
-        &aggr_reg,
-    );
+    let deployable = Deploy::parse(src.clone(), &*FN_REGISTRY.read()?, &aggr_reg);
     let deployable = match deployable {
         Ok(deployable) => deployable,
         Err(e) => {
             let mut h = TermHighlighter::stderr();
-            if let Err(e) = Script::format_error_from_script(&src, &mut h, &e) {
+            if let Err(e) = h.format_error(&e) {
                 eprintln!("Error: {}", e);
             };
 
@@ -134,10 +125,10 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
         }
     };
 
-    let unit = deployable.deploy.as_flows()?;
-
-    for flow in &unit.instances {
+    let mut count = 0;
+    for flow in deployable.iter_flows() {
         world.start_deploy(&src, flow).await?;
+        count += 1;
     }
-    Ok(unit.instances.len())
+    Ok(count)
 }

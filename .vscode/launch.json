@@ -30,6 +30,28 @@
     {
       "type": "lldb",
       "request": "launch",
+      "name": "Debug query tests",
+      "cargo": {
+        "args": [
+          "test",
+          "--test",
+          "query",
+          "passthrough"
+        ],
+        "filter": {
+          "name": "tremor",
+          "kind": "bin"
+        }
+      },
+      "args": [],
+      "env": {
+        "TREMOR_PATH": "./tremor-script/lib"
+      },
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "lldb",
+      "request": "launch",
       "name": "Debug tremor-cli",
       "cargo": {
         "args": [

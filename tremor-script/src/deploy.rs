@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
-use crate::path::ModulePath;
-use crate::prelude::*;
-use crate::{ast, lexer::Tokenizer};
 use crate::{
-    ast::helper::Warning,
-    errors::{CompilerError, Error, Result},
+    arena::{self, Arena},
+    ast::{self, helper::Warning, DeployStmt},
+    errors::{Error, Result},
+    highlighter::{Dumb as DumbHighlighter, Highlighter},
+    lexer::{self, Tokenizer},
+    prelude::*,
 };
-use crate::{lexer, srs};
 use std::collections::BTreeSet;
 use std::io::Write;
 
@@ -28,9 +27,9 @@ use std::io::Write;
 #[derive(Debug, Clone)]
 pub struct Deploy {
     /// The deployment
-    pub deploy: srs::Deploy,
+    pub deploy: ast::Deploy<'static>,
     /// Source of the query
-    pub source: String,
+    pub aid: arena::Index,
     /// Warnings emitted by the script
     pub warnings: BTreeSet<Warning>,
     /// Number of local variables (should be 0)
@@ -42,17 +41,17 @@ where
     'script: 'event,
     'event: 'run,
 {
-    /// Borrows the query
-    #[must_use]
-    pub fn suffix(&self) -> &ast::Deploy {
-        self.deploy.suffix()
-    }
-
     /// Retrieve deployment unit
     /// # Errors
     /// If the underlying structures do not resolve to a correctly deployable unit
-    pub fn as_deployment_unit(&self) -> Result<srs::Flows> {
-        self.deploy.as_flows()
+    pub fn iter_flows(&self) -> impl Iterator<Item = &ast::DeployFlow<'static>> {
+        self.deploy.stmts.iter().filter_map(|stmt| {
+            if let DeployStmt::DeployFlowStmt(stmt) = stmt {
+                Some(stmt.as_ref())
+            } else {
+                None
+            }
+        })
     }
 
     /// Provides a `GraphViz` dot representation of the deployment graph
@@ -65,47 +64,25 @@ where
     ///
     /// # Errors
     /// if the deployment can not be parsed
-    pub fn parse(
-        _module_path: &ModulePath,
-        _file_name: &str,
-        script: &'script str,
-        cus: Vec<ast::CompilationUnit>,
-        reg: &Registry,
-        aggr_reg: &AggrRegistry,
-    ) -> std::result::Result<Self, CompilerError> {
-        let mut source = script.to_string();
-
+    pub fn parse(script: String, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
         let mut warnings = BTreeSet::new();
-        let mut locals = 0;
 
-        // TODO make lexer EOS tolerant to avoid this kludge
-        source.push('\n');
+        let (aid, script) = Arena::insert(script)?;
+        let mut helper = ast::Helper::new(reg, aggr_reg);
+        //let cu = include_stack.push(&file_name)?;
+        let tokens = Tokenizer::new(script, aid).collect::<Result<Vec<_>>>()?;
+        let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
+        let script_stage_1 = crate::parser::g::DeployParser::new().parse(filtered_tokens)?;
+        let deploy = script_stage_1.up_script(&mut helper)?;
 
-        let r = || -> Result<Self> {
-            let deploy = srs::Deploy::try_new::<Error, _>(source.clone(), |src: &mut String| {
-                let mut helper = ast::Helper::new(reg, aggr_reg, cus);
-                //let cu = include_stack.push(&file_name)?;
-                let tokens = Tokenizer::new(src.as_str()).collect::<Result<Vec<_>>>()?;
-                let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
-                let script_stage_1 =
-                    crate::parser::g::DeployParser::new().parse(filtered_tokens)?;
-                let script = script_stage_1.up_script(&mut helper)?;
+        std::mem::swap(&mut warnings, &mut helper.warnings);
+        let locals = helper.locals.len();
 
-                std::mem::swap(&mut warnings, &mut helper.warnings);
-                locals = helper.locals.len();
-                Ok(script)
-            })?;
-
-            Ok(Self {
-                deploy,
-                source,
-                warnings,
-                locals,
-            })
-        }();
-        r.map_err(|error| CompilerError {
-            error,
-            cus: Vec::new(),
+        Ok(Self {
+            deploy,
+            aid,
+            warnings,
+            locals,
         })
     }
 
@@ -118,9 +95,9 @@ where
         h: &mut H,
         emit_lines: bool,
     ) -> std::io::Result<()> {
-        let mut script = script.to_string();
-        script.push('\n');
-        let tokens: Vec<_> = lexer::Tokenizer::new(&script)
+        // let mut script = script.to_string();
+        // script.push('\n'); FIXME
+        let tokens: Vec<_> = lexer::Tokenizer::new(script, arena::Index::default())
             .tokenize_until_err()
             .collect();
         h.highlight(None, &tokens, "", emit_lines, None)
@@ -129,15 +106,10 @@ where
     /// Format an error given a script source.
     /// # Errors
     /// on io errors
-    pub fn format_error_from_script<H: Highlighter>(
-        script: &str,
-        h: &mut H,
-        e: &Error,
-    ) -> std::io::Result<()> {
-        let mut script = script.to_string();
-        script.push('\n');
+    pub fn format_error_with<H: Highlighter>(h: &mut H, e: &Error) -> std::io::Result<()> {
+        let aid = e.aid();
 
-        let tokens: Vec<_> = lexer::Tokenizer::new(&script)
+        let tokens: Vec<_> = lexer::Tokenizer::new(Arena::io_get(aid)?, aid)
             .tokenize_until_err()
             .collect();
         match e.context() {
@@ -158,7 +130,7 @@ where
     /// on io errors
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> std::io::Result<()> {
         for w in &self.warnings {
-            let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
+            let tokens: Vec<_> = lexer::Tokenizer::new(Arena::io_get(self.aid)?, self.aid)
                 .tokenize_until_err()
                 .collect();
             h.highlight_error(None, &tokens, "", true, Some(w.outer), Some(w.into()))?;
@@ -170,19 +142,11 @@ where
     #[must_use]
     pub fn format_error(&self, e: &Error) -> String {
         let mut h = DumbHighlighter::default();
-        if self.format_error_with(&mut h, e).is_ok() {
+        if Self::format_error_with(&mut h, e).is_ok() {
             h.to_string()
         } else {
             format!("Failed to extract code for error: {}", e)
         }
-    }
-
-    /// Formats an error within this script using a given highlighter
-    ///
-    /// # Errors
-    /// on io errors
-    pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> std::io::Result<()> {
-        Self::format_error_from_script(&self.source, h, e)
     }
 }
 
