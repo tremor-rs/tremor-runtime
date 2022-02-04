@@ -109,12 +109,6 @@ impl From<async_broadcast::TryRecvError> for Error {
     }
 }
 
-impl From<tremor_script::errors::CompilerError> for Error {
-    fn from(e: tremor_script::errors::CompilerError) -> Self {
-        e.error().into()
-    }
-}
-
 impl<P> From<std::sync::PoisonError<P>> for Error {
     fn from(e: std::sync::PoisonError<P>) -> Self {
         Self::from(format!("Poison Error: {:?}", e))

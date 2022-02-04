@@ -293,8 +293,8 @@ DefineFlow: FlowDefinitionRaw<'input> = {
 
 /// Root
 pub(crate) Query : QueryRaw<'input> = {
-    <config:ConfigDirectives> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: config, stmts, params: DefinitioalArgsRaw::default()},
-    <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: vec![], stmts, params: DefinitioalArgsRaw::default()},
+    <start:@L> <config:ConfigDirectives> <stmts:Stmts> "<end-of-stream>"? <end:@L>  => QueryRaw{start, end, config: config, stmts, params: DefinitioalArgsRaw::default()},
+    <start:@L> <stmts:Stmts> "<end-of-stream>"? <end:@L> => QueryRaw{start, end, config: vec![], stmts, params: DefinitioalArgsRaw::default()},
 }
 
 Stmts: StmtsRaw<'input> = {

@@ -14,7 +14,6 @@
 
 pub use super::{AggrRegistry, EventPayload, Registry, TremorFnWrapper, ValueAndMeta};
 pub use crate::ctx::{EventContext, EventOriginUri};
-pub use crate::errors::CompilerError;
 pub use crate::interpreter::{AggrType, ExecOpts};
 pub use crate::Return;
 pub use crate::{Object, Value};

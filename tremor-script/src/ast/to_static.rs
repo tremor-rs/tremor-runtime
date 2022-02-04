@@ -993,10 +993,7 @@ impl<'script> Script<'script> {
             aggregates,
             windows,
             locals,
-            node_meta,
             docs,
-            start,
-            end,
         } = self;
         Script {
             mid,
@@ -1012,10 +1009,7 @@ impl<'script> Script<'script> {
                 .map(|(k, v)| (k, v.into_static()))
                 .collect(),
             locals,
-            node_meta,
             docs,
-            start,
-            end,
         }
     }
 }

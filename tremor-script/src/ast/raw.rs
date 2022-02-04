@@ -26,13 +26,13 @@ use crate::{
         ClauseGroup, Comprehension, ComprehensionCase, Costly, DefaultCase, EmitExpr, EventPath,
         Expr, ExprPath, Expression, Field, FnDecl, Helper, Ident, IfElse, ImutExpr, Invocable,
         Invoke, InvokeAggr, InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath,
-        NodeMetas, Patch, PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record,
+        Patch, PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record,
         RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
         TestExpr, TuplePattern, UnaryExpr, UnaryOpKind,
     },
     errors::{err_generic, error_generic, error_missing_effector, Kind as ErrorKind, Result},
-    impl_expr, impl_expr_exraw, impl_expr_no_lt,
-    pos::{Location, Range},
+    impl_expr_exraw, impl_expr_no_lt, impl_expr_raw,
+    pos::{Location, Span},
     prelude::*,
     tilde::Extractor,
     KnownKey, Value,
@@ -46,7 +46,7 @@ use serde::Serialize;
 use super::{
     docs::{FnDoc, ModDoc},
     module::ModuleManager,
-    Const, Consts, NodeId,
+    Const, Consts, NodeId, NodeMeta,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -95,12 +95,12 @@ impl<'script> ScriptRaw<'script> {
                 }) => {
                     let mut expr = expr.up(helper)?;
                     ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut expr)?;
-                    let value = expr.try_into_lit(&helper.meta)?;
+                    let value = expr.try_into_lit()?;
                     let value_type = value.value_type();
 
-                    let mid = helper.add_meta_w_name(start, end, &name);
+                    let mid = NodeMeta::new_box_with_name(start, end, &name);
                     let c = Const {
-                        mid,
+                        mid: mid.clone(),
                         name: name.to_string(),
                         value: value.clone(),
                     };
@@ -129,7 +129,7 @@ impl<'script> ScriptRaw<'script> {
             if let Expr::Imut(ImutExpr::Path(Path::Event(p))) = e {
                 if p.segments.is_empty() {
                     let expr = EmitExpr {
-                        mid: p.mid(),
+                        mid: Box::new(p.meta().clone()),
                         expr: ImutExpr::Path(Path::Event(p.clone())),
                         port: None,
                     };
@@ -138,9 +138,9 @@ impl<'script> ScriptRaw<'script> {
             }
         } else {
             let expr = EmitExpr {
-                mid: 0,
+                mid: NodeMeta::todo(),
                 expr: ImutExpr::Path(Path::Event(EventPath {
-                    mid: 0,
+                    mid: NodeMeta::todo(),
                     segments: vec![],
                 })),
                 port: None,
@@ -163,27 +163,14 @@ impl<'script> ScriptRaw<'script> {
         let meta_name = "<script>".to_string();
 
         Ok(Script {
-            mid: helper.add_meta_w_name(start, end, &meta_name),
+            mid: NodeMeta::new_box_with_name(start, end, &meta_name),
             imports: vec![], // Compiled out
             exprs,
             consts: Consts::new(),
             aggregates: helper.aggregates.clone(),
             windows: HashMap::new(), //helper.windows.clone(),
             locals: helper.locals.len(),
-            node_meta: helper.meta.clone(),
             docs: helper.docs.clone(),
-            start: Location {
-                unit_id: 0,
-                line: 0,
-                column: 0,
-                absolute: 0,
-            },
-            end: Location {
-                unit_id: 0,
-                line: 0,
-                column: 0,
-                absolute: 0,
-            },
         })
     }
 }
@@ -221,7 +208,7 @@ pub struct BytesPartRaw<'script> {
     pub data_type: IdentRaw<'script>,
     pub bits: Option<i64>,
 }
-impl_expr!(BytesPartRaw);
+impl_expr_raw!(BytesPartRaw);
 
 impl<'script> Default for BytesPartRaw<'script> {
     fn default() -> Self {
@@ -258,7 +245,6 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
                     &self,
                     &self,
                     &format!("Not a valid data type: '{}'", other.join("-")),
-                    &helper.meta,
                 ))
             }
         };
@@ -268,7 +254,6 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
                     &self,
                     &self,
                     &format!("negative bits or bits > 64 are are not allowed: {}", bits),
-                    &helper.meta,
                 ));
             }
             bits as u64
@@ -280,7 +265,7 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
         };
 
         Ok(BytesPart {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             data: self.data.up(helper)?,
             data_type,
             endianess,
@@ -295,14 +280,14 @@ pub struct BytesRaw<'script> {
     pub end: Location,
     pub bytes: Vec<BytesPartRaw<'script>>,
 }
-impl_expr!(BytesRaw);
+impl_expr_raw!(BytesRaw);
 
 impl<'script> Upable<'script> for BytesRaw<'script> {
     type Target = Bytes<'script>;
 
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(Bytes {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             value: self
                 .bytes
                 .into_iter()
@@ -319,7 +304,7 @@ pub struct IdentRaw<'script> {
     pub end: Location,
     pub id: beef::Cow<'script, str>,
 }
-impl_expr!(IdentRaw);
+impl_expr_raw!(IdentRaw);
 
 impl<'script> ToString for IdentRaw<'script> {
     fn to_string(&self) -> String {
@@ -339,9 +324,9 @@ impl<'script> From<&'script str> for IdentRaw<'script> {
 
 impl<'script> Upable<'script> for IdentRaw<'script> {
     type Target = Ident<'script>;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+    fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(Self::Target {
-            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
             id: self.id,
         })
     }
@@ -361,7 +346,7 @@ impl<'script> Upable<'script> for FieldRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let name = self.name.up(helper)?;
         Ok(Field {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             name,
             value: self.value.up(helper)?,
         })
@@ -375,14 +360,14 @@ pub struct RecordRaw<'script> {
     pub(crate) end: Location,
     pub(crate) fields: FieldsRaw<'script>,
 }
-impl_expr!(RecordRaw);
+impl_expr_raw!(RecordRaw);
 
 impl<'script> Upable<'script> for RecordRaw<'script> {
     type Target = Record<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(Record {
             base: crate::Object::new(),
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             fields: self.fields.up(helper)?,
         })
     }
@@ -395,13 +380,13 @@ pub struct ListRaw<'script> {
     pub(crate) end: Location,
     pub(crate) exprs: ImutExprsRaw<'script>,
 }
-impl_expr!(ListRaw);
+impl_expr_raw!(ListRaw);
 
 impl<'script> Upable<'script> for ListRaw<'script> {
     type Target = List<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(List {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             exprs: self.exprs.up(helper)?.into_iter().collect(),
         })
     }
@@ -415,12 +400,12 @@ pub struct LiteralRaw<'script> {
     pub(crate) value: Value<'script>,
 }
 
-impl_expr!(LiteralRaw);
+impl_expr_raw!(LiteralRaw);
 impl<'script> Upable<'script> for LiteralRaw<'script> {
     type Target = Literal<'script>;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+    fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(Literal {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             value: self.value,
         })
     }
@@ -438,7 +423,7 @@ impl<'script> Upable<'script> for StringLitRaw<'script> {
     type Target = StringLit<'script>;
 
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let mid = helper.add_meta(self.start, self.end);
+        let mid = NodeMeta::new_box(self.start, self.end);
 
         let elements = self
             .elements
@@ -496,7 +481,7 @@ pub struct ConstRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     pub comment: Option<Vec<Cow<'script, str>>>,
 }
-impl_expr!(ConstRaw);
+impl_expr_raw!(ConstRaw);
 
 impl<'script> Upable<'script> for ConstRaw<'script> {
     type Target = Const<'script>;
@@ -504,9 +489,9 @@ impl<'script> Upable<'script> for ConstRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let mut expr = self.expr.up(helper)?;
         ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut expr)?;
-        let value = expr.try_into_lit(&helper.meta)?;
+        let value = expr.try_into_lit()?;
         Ok(Const {
-            mid: helper.add_meta_w_name(self.start, self.end, &self.name),
+            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.name),
             name: self.name.to_string(),
             value,
         })
@@ -605,7 +590,7 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
             },
             ExprRaw::Assign(a) => {
                 let path = a.path.up(helper)?;
-                let mid = helper.add_meta(a.start, a.end);
+                let mid = NodeMeta::new_box(a.start, a.end);
                 match a.expr.up(helper)? {
                     Expr::Imut(ImutExpr::Merge(m)) => Expr::Assign {
                         mid,
@@ -626,13 +611,10 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
             }
             ExprRaw::Comprehension(c) => Expr::Comprehension(Box::new(c.up(helper)?)),
             ExprRaw::Drop { start, end } => {
-                let mid = helper.add_meta(start, end);
+                let mid = NodeMeta::new_box(start, end);
                 if !helper.can_emit {
-                    return Err(ErrorKind::InvalidDrop(
-                        Range(start, end).expand_lines(2),
-                        Range(start, end),
-                    )
-                    .into());
+                    let r = Span::new(start, end);
+                    return Err(ErrorKind::InvalidDrop(r.expand_lines(2), r).into());
                 }
                 Expr::Drop { mid }
             }
@@ -654,7 +636,7 @@ pub struct FnDeclRaw<'script> {
     pub(crate) open: bool,
     pub(crate) inline: bool,
 }
-impl_expr!(FnDeclRaw);
+impl_expr_raw!(FnDeclRaw);
 
 impl<'script> FnDeclRaw<'script> {
     pub(crate) fn doc(&self) -> FnDoc {
@@ -694,7 +676,7 @@ impl<'script> Upable<'script> for FnDeclRaw<'script> {
         helper.can_emit = can_emit;
         let name = self.name.up(helper)?;
         Ok(FnDecl {
-            mid: helper.add_meta_w_name(self.start, self.end, &name.id),
+            mid: NodeMeta::new_box_with_name(self.start, self.end, &name.id),
             name,
             args: self.args.up(helper)?,
             body,
@@ -744,7 +726,7 @@ pub struct MatchFnDeclRaw<'script> {
     pub(crate) open: bool,
     pub(crate) inline: bool,
 }
-impl_expr!(MatchFnDeclRaw);
+impl_expr_raw!(MatchFnDeclRaw);
 
 impl<'script> MatchFnDeclRaw<'script> {
     pub(crate) fn doc(&self) -> FnDoc {
@@ -854,7 +836,7 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
         helper.can_emit = can_emit;
         let name = self.name.up(helper)?;
         Ok(FnDecl {
-            mid: helper.add_meta_w_name(self.start, self.end, &name),
+            mid: NodeMeta::new_box_with_name(self.start, self.end, &name),
             name,
             args: self.args.up(helper)?,
             body,
@@ -935,7 +917,7 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
             ImutExprRaw::Merge(m) => ImutExpr::Merge(Box::new(m.up(helper)?)),
             ImutExprRaw::Present { path, start, end } => ImutExpr::Present {
                 path: path.up(helper)?,
-                mid: helper.add_meta(start, end),
+                mid: NodeMeta::new_box(start, end),
             },
             ImutExprRaw::Path(p) => match p.up(helper)? {
                 Path::Local(LocalPath {
@@ -981,7 +963,7 @@ pub struct RecurRaw<'script> {
     pub end: Location,
     pub exprs: ImutExprsRaw<'script>,
 }
-impl_expr!(RecurRaw);
+impl_expr_raw!(RecurRaw);
 
 impl<'script> Upable<'script> for RecurRaw<'script> {
     type Target = Recur<'script>;
@@ -989,11 +971,9 @@ impl<'script> Upable<'script> for RecurRaw<'script> {
         let was_leaf = helper.possible_leaf;
         helper.possible_leaf = false;
         if !was_leaf {
-            return Err(ErrorKind::InvalidRecur(
-                self.extent(&helper.meta).expand_lines(2),
-                self.extent(&helper.meta),
-            )
-            .into());
+            return Err(
+                ErrorKind::InvalidRecur(self.extent().expand_lines(2), self.extent()).into(),
+            );
         };
         if (helper.is_open && helper.fn_argc < self.exprs.len())
             || (!helper.is_open && helper.fn_argc != self.exprs.len())
@@ -1006,14 +986,13 @@ impl<'script> Upable<'script> for RecurRaw<'script> {
                     helper.fn_argc,
                     self.exprs.len()
                 ),
-                &helper.meta,
             );
         }
         let exprs = self.exprs.up(helper)?.into_iter().collect();
         helper.possible_leaf = was_leaf;
 
         Ok(Recur {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             argc: helper.fn_argc,
             open: helper.is_open,
 
@@ -1029,20 +1008,18 @@ pub struct EmitExprRaw<'script> {
     pub expr: ImutExprRaw<'script>,
     pub port: Option<ImutExprRaw<'script>>,
 }
-impl_expr!(EmitExprRaw);
+impl_expr_raw!(EmitExprRaw);
 
 impl<'script> Upable<'script> for EmitExprRaw<'script> {
     type Target = EmitExpr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         if !helper.can_emit {
-            return Err(ErrorKind::InvalidEmit(
-                self.extent(&helper.meta).expand_lines(2),
-                self.extent(&helper.meta),
-            )
-            .into());
+            return Err(
+                ErrorKind::InvalidEmit(self.extent().expand_lines(2), self.extent()).into(),
+            );
         }
         Ok(EmitExpr {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             expr: self.expr.up(helper)?,
             port: self.port.up(helper)?,
         })
@@ -1056,7 +1033,7 @@ pub struct AssignRaw<'script> {
     pub(crate) path: PathRaw<'script>,
     pub(crate) expr: ExprRaw<'script>,
 }
-impl_expr!(AssignRaw);
+impl_expr_raw!(AssignRaw);
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1099,13 +1076,13 @@ where
             };
         }
 
-        let span = Range::from((self.start, self.end));
+        let span = Span::new(self.start, self.end);
         let last_expr = exprs
             .pop()
-            .ok_or_else(|| error_missing_effector(&span, &span, &helper.meta))?;
+            .ok_or_else(|| error_missing_effector(&span, &span))?;
 
         Ok(PredicateClause {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             pattern,
             guard,
             exprs,
@@ -1129,7 +1106,7 @@ impl<'script> Upable<'script> for PatchRaw<'script> {
         let operations = self.operations.up(helper)?;
 
         Ok(Patch {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             target: self.target.up(helper)?,
             operations,
         })
@@ -1263,7 +1240,7 @@ impl<'script> Upable<'script> for MergeRaw<'script> {
     type Target = Merge<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(Merge {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             target: self.target.up(helper)?,
             expr: self.expr.up(helper)?,
         })
@@ -1302,7 +1279,7 @@ where
         let cases = self.cases.up(helper)?;
 
         Ok(Comprehension {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             target,
             cases,
             key_id,
@@ -1356,12 +1333,12 @@ where
         // unregister them again
         helper.end_shadow_var();
         helper.end_shadow_var();
-        let span = Range::from((self.start, self.end));
+        let span = Span::new(self.start, self.end);
         let last_expr = exprs
             .pop()
-            .ok_or_else(|| error_missing_effector(&span, &span, &helper.meta))?;
+            .ok_or_else(|| error_missing_effector(&span, &span))?;
         Ok(ComprehensionCase {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             key_name: self.key_name,
             value_name: self.value_name,
             guard,
@@ -1563,7 +1540,7 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
                 }
             });
             if duplicated {
-                let extent = (self.start, self.end).into();
+                let extent = Span::new(self.start, self.end);
                 helper.warn(
                     extent,
                     extent.expand_lines(2),
@@ -1581,7 +1558,7 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
                 }
             });
             if duplicated {
-                let extent = (self.start, self.end).into();
+                let extent = Span::new(self.start, self.end);
                 helper.warn(
                     extent,
                     extent.expand_lines(2),
@@ -1591,7 +1568,7 @@ impl<'script> Upable<'script> for RecordPatternRaw<'script> {
         }
 
         Ok(RecordPattern {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             fields,
         })
     }
@@ -1636,7 +1613,7 @@ impl<'script> Upable<'script> for ArrayPatternRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let exprs = self.exprs.up(helper)?;
         Ok(ArrayPattern {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             exprs,
         })
     }
@@ -1656,7 +1633,7 @@ impl<'script> Upable<'script> for TuplePatternRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let exprs = self.exprs.up(helper)?;
         Ok(TuplePattern {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             exprs,
             open: self.open,
         })
@@ -1715,7 +1692,7 @@ impl<'script> Upable<'script> for PathRaw<'script> {
                     let c = helper
                         .get_const(&NodeId::from(&id))
                         .ok_or("invalid constant")?;
-                    let mid = helper.add_meta_w_name(p.start, p.end, &id);
+                    let mid = NodeMeta::new_box_with_name(p.start, p.end, &id);
                     Path::Expr(ExprPath {
                         expr: Box::new(ImutExpr::Literal(Literal {
                             mid: c.mid,
@@ -1763,9 +1740,9 @@ impl<'script> Upable<'script> for SegmentRangeRaw<'script> {
             end_upper,
         } = self;
 
-        let lower_mid = helper.add_meta(start_lower, end_lower);
-        let upper_mid = helper.add_meta(start_upper, end_upper);
-        let mid = helper.add_meta(start_lower, end_upper);
+        let lower_mid = NodeMeta::new_box(start_lower, end_lower);
+        let upper_mid = NodeMeta::new_box(start_upper, end_upper);
+        let mid = NodeMeta::new_box(start_lower, end_upper);
         Ok(Segment::RangeExpr {
             lower_mid,
             upper_mid,
@@ -1789,11 +1766,11 @@ impl<'script> Upable<'script> for SegmentElementRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let SegmentElementRaw { expr, start, end } = self;
         let expr = expr.up(helper)?;
-        let r = expr.extent(&helper.meta);
+        let r = expr.extent();
         match expr {
             ImutExpr::Literal(l) => match ImutExpr::Literal(l).try_into_value(helper)? {
                 Value::String(id) => {
-                    let mid = helper.add_meta_w_name(start, end, &id);
+                    let mid = NodeMeta::new_box_with_name(start, end, &id);
                     Ok(Segment::Id {
                         key: KnownKey::from(id.clone()),
                         mid,
@@ -1801,7 +1778,7 @@ impl<'script> Upable<'script> for SegmentElementRaw<'script> {
                 }
                 other => {
                     if let Some(idx) = other.as_usize() {
-                        let mid = helper.add_meta(start, end);
+                        let mid = NodeMeta::new_box(start, end);
                         Ok(Segment::Idx { idx, mid })
                     } else {
                         Err(ErrorKind::TypeConflict(
@@ -1815,7 +1792,7 @@ impl<'script> Upable<'script> for SegmentElementRaw<'script> {
                 }
             },
             expr => Ok(Segment::Element {
-                mid: helper.add_meta(start, end),
+                mid: NodeMeta::new_box(start, end),
                 expr,
             }),
         }
@@ -1898,7 +1875,7 @@ pub struct ConstPathRaw<'script> {
     pub(crate) root: IdentRaw<'script>,
     pub(crate) segments: SegmentsRaw<'script>,
 }
-impl_expr!(ConstPathRaw);
+impl_expr_raw!(ConstPathRaw);
 
 impl<'script> Upable<'script> for ConstPathRaw<'script> {
     type Target = ExprPath<'script>;
@@ -1907,7 +1884,7 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
         let segments = self.segments.up(helper)?;
         let id = self.root.up(helper)?;
 
-        let mid = helper.add_meta_w_name(self.start, self.end, &id);
+        let mid = NodeMeta::new_box_with_name(self.start, self.end, &id);
         let node_id = NodeId {
             module: self.module.iter().map(|m| m.to_string()).collect(),
             id: id.to_string(),
@@ -1916,12 +1893,12 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
         let c = helper.get_const(&node_id).ok_or_else(|| {
             dbg!(&helper.scope.modules);
             let msg = format!("The constant {node_id} (absolute path) is not defined.",);
-            err_generic(&r, &r, &msg, &helper.meta)
+            err_generic(&r, &r, &msg)
         })?;
         let var = helper.reserve_shadow();
 
         Ok(ExprPath {
-            expr: Literal::boxed_expr(mid, c.value),
+            expr: Literal::boxed_expr(mid.clone(), c.value),
             segments,
             var,
             mid,
@@ -1949,7 +1926,7 @@ impl<'script> Upable<'script> for ExprPathRaw<'script> {
             var,
             segments,
             expr,
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
         })
     }
 }
@@ -1983,7 +1960,7 @@ impl<'script> Upable<'script> for ReservedPathRaw<'script> {
                 end,
                 segments,
             } => ReservedPath::Args {
-                mid: helper.add_meta_w_name(start, end, &"args"),
+                mid: NodeMeta::new_box_with_name(start, end, &"args"),
                 segments: segments.up(helper)?,
             },
             ReservedPathRaw::Window {
@@ -1991,7 +1968,7 @@ impl<'script> Upable<'script> for ReservedPathRaw<'script> {
                 end,
                 segments,
             } => ReservedPath::Window {
-                mid: helper.add_meta_w_name(start, end, &"window"),
+                mid: NodeMeta::new_box_with_name(start, end, &"window"),
                 segments: segments.up(helper)?,
             },
             ReservedPathRaw::Group {
@@ -1999,7 +1976,7 @@ impl<'script> Upable<'script> for ReservedPathRaw<'script> {
                 end,
                 segments,
             } => ReservedPath::Group {
-                mid: helper.add_meta_w_name(start, end, &"group"),
+                mid: NodeMeta::new_box_with_name(start, end, &"group"),
                 segments: segments.up(helper)?,
             },
         };
@@ -2015,7 +1992,7 @@ pub struct LocalPathRaw<'script> {
     pub(crate) root: IdentRaw<'script>,
     pub(crate) segments: SegmentsRaw<'script>,
 }
-impl_expr!(LocalPathRaw);
+impl_expr_raw!(LocalPathRaw);
 
 impl<'script> Upable<'script> for LocalPathRaw<'script> {
     type Target = LocalPath<'script>;
@@ -2023,7 +2000,7 @@ impl<'script> Upable<'script> for LocalPathRaw<'script> {
         let id = self.root.up(helper)?;
         let segments = self.segments.up(helper)?;
 
-        let mid = helper.add_meta_w_name(self.start, self.end, &id);
+        let mid = NodeMeta::new_box_with_name(self.start, self.end, &id);
 
         Ok(LocalPath {
             idx: helper.var_id(&id.id),
@@ -2045,7 +2022,7 @@ impl<'script> Upable<'script> for MetadataPathRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let segments = self.segments.up(helper)?;
         Ok(MetadataPath {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             segments,
         })
     }
@@ -2063,7 +2040,7 @@ impl<'script> Upable<'script> for EventPathRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let segments = self.segments.up(helper)?;
         Ok(EventPath {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             segments,
         })
     }
@@ -2081,7 +2058,7 @@ impl<'script> Upable<'script> for StatePathRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let segments = self.segments.up(helper)?;
         Ok(StatePath {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             segments,
         })
     }
@@ -2101,7 +2078,7 @@ impl<'script> Upable<'script> for BinExprRaw<'script> {
     type Target = BinExpr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(BinExpr {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             kind: self.kind,
             lhs: self.lhs.up(helper)?,
             rhs: self.rhs.up(helper)?,
@@ -2122,7 +2099,7 @@ impl<'script> Upable<'script> for UnaryExprRaw<'script> {
     type Target = UnaryExpr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(UnaryExpr {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             kind: self.kind,
             expr: self.expr.up(helper)?,
         })
@@ -2186,9 +2163,10 @@ where
             .iter()
             .filter(|p| p.pattern.is_default() && p.guard.is_none())
             .count();
+        let r = Span::new(self.start, self.end);
         match defaults {
-            0 => helper.warn_with_scope(Range(self.start, self.end), &NO_DFLT),
-            x if x > 1 => helper.warn_with_scope(Range(self.start, self.end), &MULT_DFLT),
+            0 => helper.warn_with_scope(r, &NO_DFLT),
+            x if x > 1 => helper.warn_with_scope(r, &MULT_DFLT),
             _ => (),
         };
         // If the last statement is a global default we can simply remove it
@@ -2228,7 +2206,7 @@ where
         if patterns.len() == 1 {
             let patterns = patterns.into_iter().map(ClauseGroup::simple).collect();
             return Ok(Match {
-                mid: helper.add_meta(self.start, self.end),
+                mid: NodeMeta::new_box(self.start, self.end),
                 target: self.target.up(helper)?,
                 patterns,
                 default,
@@ -2279,7 +2257,7 @@ where
             }
         }
         Ok(Match {
-            mid: helper.add_meta(self.start, self.end),
+            mid: NodeMeta::new_box(self.start, self.end),
             target: self.target.up(helper)?,
             patterns,
             default,
@@ -2296,7 +2274,7 @@ pub struct InvokeRaw<'script> {
     pub(crate) fun: String,
     pub(crate) args: ImutExprsRaw<'script>,
 }
-impl_expr!(InvokeRaw);
+impl_expr_raw!(InvokeRaw);
 
 impl<'script> Upable<'script> for InvokeRaw<'script> {
     type Target = Invoke<'script>;
@@ -2306,8 +2284,8 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
             id: self.fun,
             module: self.module,
         };
-        let inner: Range = (self.start, self.end).into();
-        let outer: Range = inner.expand_lines(3);
+        let inner: Span = Span::new(self.start, self.end);
+        let outer: Span = inner.expand_lines(3);
         if node_id.module.first() == Some(&String::from("core")) && node_id.module.len() == 2 {
             // we know a second module exists
             let module = node_id.module.get(1).cloned().unwrap_or_default();
@@ -2315,11 +2293,11 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
             let invocable = helper
                 .reg
                 .find(&module, &node_id.id)
-                .map_err(|e| e.into_err(&outer, &inner, Some(helper.reg), &helper.meta))?;
+                .map_err(|e| e.into_err(&outer, &inner, Some(helper.reg)))?;
             let args = self.args.up(helper)?.into_iter().collect();
             let mf = node_id.fqn();
             Ok(Invoke {
-                mid: helper.add_meta_w_name(self.start, self.end, &mf),
+                mid: NodeMeta::new_box_with_name(self.start, self.end, &mf),
                 node_id,
                 invocable: Invocable::Intrinsic(invocable.clone()),
                 args,
@@ -2332,7 +2310,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                 let invocable = Invocable::Tremor(f.clone().into());
                 let args = self.args.up(helper)?.into_iter().collect();
                 Ok(Invoke {
-                    mid: helper.add_meta_w_name(self.start, self.end, &node_id.fqn()),
+                    mid: NodeMeta::new_box_with_name(self.start, self.end, &node_id.fqn()),
                     node_id,
                     invocable,
                     args,
@@ -2379,28 +2357,24 @@ pub struct InvokeAggrRaw<'script> {
     pub(crate) fun: String,
     pub(crate) args: ImutExprsRaw<'script>,
 }
-impl_expr!(InvokeAggrRaw);
+impl_expr_raw!(InvokeAggrRaw);
 
 impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
     type Target = InvokeAggr;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         if helper.is_in_aggr {
-            return Err(ErrorKind::AggrInAggr(
-                self.extent(&helper.meta),
-                self.extent(&helper.meta).expand_lines(2),
-            )
-            .into());
+            return Err(ErrorKind::AggrInAggr(self.extent(), self.extent().expand_lines(2)).into());
         };
         helper.is_in_aggr = true;
         let invocable = helper
             .aggr_reg
             .find(&self.module, &self.fun)
-            .map_err(|e| e.into_err(&self, &self, Some(helper.reg), &helper.meta))?
+            .map_err(|e| e.into_err(&self, &self, Some(helper.reg)))?
             .clone();
         if !invocable.valid_arity(self.args.len()) {
             return Err(ErrorKind::BadArity(
-                self.extent(&helper.meta),
-                self.extent(&helper.meta).expand_lines(2),
+                self.extent(),
+                self.extent().expand_lines(2),
                 self.module.clone(),
                 self.fun.clone(),
                 invocable.arity(),
@@ -2409,12 +2383,12 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
             .into());
         }
         if let Some(warning) = invocable.warning() {
-            helper.warn_with_scope(self.extent(&helper.meta), &warning);
+            helper.warn_with_scope(self.extent(), &warning);
         }
         let aggr_id = helper.aggregates.len();
         let args = self.args.up(helper)?.into_iter().collect();
         let mf = format!("{}::{}", self.module, self.fun);
-        let invoke_meta_id = helper.add_meta_w_name(self.start, self.end, &mf);
+        let invoke_meta_id = NodeMeta::new_box_with_name(self.start, self.end, &mf);
 
         helper.aggregates.push(InvokeAggrFn {
             mid: invoke_meta_id,
@@ -2424,7 +2398,7 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
             fun: self.fun.clone(),
         });
         helper.is_in_aggr = false;
-        let aggr_meta_id = helper.add_meta_w_name(self.start, self.end, &mf);
+        let aggr_meta_id = NodeMeta::new_box_with_name(self.start, self.end, &mf);
         Ok(InvokeAggr {
             mid: aggr_meta_id,
             module: self.module,
@@ -2445,8 +2419,8 @@ pub struct TestExprRaw {
 
 impl<'script> Upable<'script> for TestExprRaw {
     type Target = TestExpr;
-    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let mid = helper.add_meta(self.start, self.end);
+    fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        let mid = NodeMeta::new_box(self.start, self.end);
         match Extractor::new(&self.id, &self.test) {
             Ok(ex) => Ok(TestExpr {
                 id: self.id,
@@ -2455,8 +2429,8 @@ impl<'script> Upable<'script> for TestExprRaw {
                 mid,
             }),
             Err(e) => Err(ErrorKind::InvalidExtractor(
-                self.extent(&helper.meta).expand_lines(2),
-                self.extent(&helper.meta),
+                self.extent().expand_lines(2),
+                self.extent(),
                 self.id,
                 self.test,
                 e.msg,

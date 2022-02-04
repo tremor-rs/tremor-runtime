@@ -21,7 +21,7 @@ use async_std::prelude::*;
 use async_std::task::JoinHandle;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use tremor_script::{highlighter::Highlighter, srs::DeployFlow};
+use tremor_script::{ast, highlighter::Highlighter};
 
 use self::flow::{Flow, FlowId};
 
@@ -63,7 +63,11 @@ pub struct World {
 
 impl World {
     /// Instantiate a flow from
-    pub(crate) async fn start_deploy(&self, src: &str, flow: &DeployFlow) -> Result<()> {
+    pub(crate) async fn start_deploy(
+        &self,
+        src: &str,
+        flow: &ast::DeployFlow<'static>,
+    ) -> Result<()> {
         let (tx, rx) = bounded(1);
         self.system
             .send(manager::Msg::StartDeploy {
@@ -80,11 +84,7 @@ impl World {
                     _,
                 ) => {
                     let mut h = crate::ToStringHighlighter::new();
-                    tremor_script::query::Query::format_error_from_script(
-                        &src,
-                        &mut h,
-                        &tremor_script::errors::Error::from(e),
-                    )?;
+                    h.format_error(&tremor_script::errors::Error::from(e))?;
                     h.finalize()?;
                     h.to_string()
                 }
@@ -92,10 +92,10 @@ impl World {
             };
             error!(
                 "Error starting deployment of flow {}: {}",
-                flow.instance_id.id(),
+                flow.instance_alias.id(),
                 &err_str
             );
-            Err(ErrorKind::DeployFlowError(flow.instance_id.id().to_string(), err_str).into())
+            Err(ErrorKind::DeployFlowError(flow.instance_alias.id().to_string(), err_str).into())
         } else {
             Ok(())
         }

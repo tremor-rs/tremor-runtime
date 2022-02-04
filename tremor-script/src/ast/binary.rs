@@ -14,7 +14,7 @@
 
 use super::{
     raw::{BytesDataType, Endian},
-    BaseExpr, NodeMetas,
+    BaseExpr,
 };
 use crate::errors::{error_generic, Result};
 use crate::prelude::*;
@@ -195,7 +195,6 @@ fn write_bits(
 pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(
     outer: &O,
     inner: &I,
-    meta: &NodeMetas,
     data_type: BytesDataType,
     endianess: Endian,
     bits: u64,
@@ -205,7 +204,7 @@ pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(
     value: &Value<'value>,
 ) -> Result<()> {
     let err = |e: &str, v: &Value| -> Result<()> {
-        error_generic(outer, inner, &format!("{}: {}", e, v), meta)
+        error_generic(outer, inner, &format!("{}: {}", e, v))
     };
 
     match data_type {

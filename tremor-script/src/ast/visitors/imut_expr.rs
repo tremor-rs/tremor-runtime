@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::ast::Const;
+
 use super::prelude::*;
 use super::VisitRes;
 use super::VisitRes::Walk;
@@ -735,6 +737,22 @@ pub trait Visitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn leave_reserved_path(&mut self, _e: &mut ReservedPath<'script>) -> Result<()> {
+        Ok(())
+    }
+
+    /// visit a generic `Const`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn visit_const(&mut self, _e: &mut Const<'script>) -> Result<VisitRes> {
+        Ok(Walk)
+    }
+
+    /// leave a generic `Const`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_const(&mut self, _e: &mut Const<'script>) -> Result<()> {
         Ok(())
     }
 }

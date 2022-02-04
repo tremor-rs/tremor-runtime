@@ -14,13 +14,13 @@
 
 use super::super::prelude::*;
 use crate::{
-    ast::binary::extend_bytes_from_value,
+    ast::{binary::extend_bytes_from_value, NodeMeta},
     errors::{
         err_invalid_unary, err_need_int, error_array_out_of_bound, error_bad_key,
         error_decreasing_range, error_need_arr, error_need_obj,
     },
     interpreter::{exec_binary, exec_unary, Env},
-    lexer::Range,
+    lexer::Span,
     EventContext, Registry, Value, NO_AGGRS, NO_CONSTS,
 };
 use simd_json::prelude::*;
@@ -29,18 +29,19 @@ use tremor_value::KnownKey;
 
 /// Walks a AST and performs constant folding on arguments
 pub struct ConstFolder<'run> {
-    /// Node Metadata
-    pub meta: &'run NodeMetas,
     /// Function Registry
     pub reg: &'run Registry,
 }
 
-fn fake_path(mid: &usize) -> Path {
+fn fake_path(mid: &NodeMeta) -> Path {
     Path::Expr(ExprPath {
-        expr: Box::new(ImutExpr::Local { idx: 0, mid: *mid }),
+        expr: Box::new(ImutExpr::Local {
+            idx: 0,
+            mid: Box::new(mid.clone()),
+        }),
         segments: vec![],
         var: 0,
-        mid: *mid,
+        mid: Box::new(mid.clone()),
     })
 }
 impl<'run, 'script: 'run> DeployWalker<'script> for ConstFolder<'run> {}
@@ -57,7 +58,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
         use ImutExpr::Literal as Lit;
         let mut buf = Lit(Literal {
             value: Value::const_null(),
-            mid: e.mid(),
+            mid: Box::new(e.meta().clone()),
         });
         std::mem::swap(&mut buf, e);
         *e = match buf {
@@ -80,19 +81,19 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
 
             ImutExpr::Bytes(Bytes { mid, value }) if value.iter().all(BytesPart::is_lit) => {
                 let mut bytes: Vec<u8> = Vec::with_capacity(value.len());
-                let outer = e.extent(self.meta);
+                let outer = e.extent();
                 let mut used = 0;
                 let mut buf = 0;
 
                 for (value, data_type, endianess, bits, inner) in
                     value.into_iter().filter_map(|part| {
-                        let inner = part.extent(self.meta);
+                        let inner = part.extent();
                         let value = part.data.into_lit()?;
                         Some((value, part.data_type, part.endianess, part.bits, inner))
                     })
                 {
                     extend_bytes_from_value(
-                        &outer, &inner, self.meta, data_type, endianess, bits, &mut buf, &mut used,
+                        &outer, &inner, data_type, endianess, bits, &mut buf, &mut used,
                         &mut bytes, &value,
                     )?;
                 }
@@ -116,9 +117,11 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
                     ..
                 } = b.as_ref()
                 {
-                    let value = exec_binary(b.as_ref(), b.as_ref(), self.meta, *kind, lhs, rhs)?
-                        .into_owned();
-                    Lit(Literal { mid: *mid, value })
+                    let value = exec_binary(b.as_ref(), b.as_ref(), *kind, lhs, rhs)?.into_owned();
+                    Lit(Literal {
+                        mid: mid.clone(),
+                        value,
+                    })
                 } else {
                     ImutExpr::Binary(b)
                 }
@@ -133,12 +136,15 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
                 {
                     let value = exec_unary(*kind, value)
                         .ok_or_else(|| {
-                            let inner = b.extent(self.meta);
-                            let outer = b.extent(self.meta);
-                            err_invalid_unary(&outer, &inner, *kind, value, self.meta)
+                            let inner = b.extent();
+                            let outer = b.extent();
+                            err_invalid_unary(&outer, &inner, *kind, value)
                         })?
                         .into_owned();
-                    Lit(Literal { mid: *mid, value })
+                    Lit(Literal {
+                        mid: mid.clone(),
+                        value,
+                    })
                 } else {
                     ImutExpr::Unary(b)
                 }
@@ -170,10 +176,13 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
                 mid,
                 var,
             })) if expr.is_lit() => {
-                let value = expr.try_into_lit(self.meta)?;
-                let outer = e.extent(self.meta);
+                let value = expr.try_into_lit()?;
+                let outer = e.extent();
                 let (value, segments) = self.reduce_path(outer, value, segments)?;
-                let lit = ImutExpr::Literal(Literal { mid, value });
+                let lit = ImutExpr::Literal(Literal {
+                    mid: mid.clone(),
+                    value,
+                });
                 if segments.is_empty() {
                     lit
                 } else {
@@ -193,7 +202,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
             | ImutExpr::Invoke3(i)
                 if i.invocable.is_const() && i.args.iter().all(ImutExpr::is_lit) =>
             {
-                let ex = i.extent(self.meta);
+                let ex = i.extent();
 
                 let args: Vec<Value<'script>> =
                     i.args.into_iter().filter_map(ImutExpr::into_lit).collect();
@@ -202,14 +211,13 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
                     context: &EventContext::default(),
                     consts: NO_CONSTS.run(),
                     aggrs: &NO_AGGRS,
-                    meta: self.meta,
                     recursion_limit: crate::recursion_limit(),
                 };
 
                 let v = i
                     .invocable
                     .invoke(&env, &args2)
-                    .map_err(|e| e.into_err(&ex, &ex, Some(self.reg), self.meta))?;
+                    .map_err(|e| e.into_err(&ex, &ex, Some(self.reg)))?;
                 ImutExpr::Literal(Literal {
                     value: v,
                     mid: i.mid,
@@ -234,7 +242,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
     /// 2) Element lookups, if the expressionis a literal usize, becomes a idx lookup
     fn leave_segment(&mut self, segment: &mut Segment<'script>) -> Result<()> {
         let mut buf = Segment::Idx {
-            mid: segment.mid(),
+            mid: Box::new(segment.meta().clone()),
             idx: 0,
         };
         std::mem::swap(&mut buf, segment);
@@ -242,29 +250,22 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
             Segment::RangeExpr {
                 start, end, mid, ..
             } if start.is_lit() && end.is_lit() => {
-                let inner = start.extent(self.meta);
-                let start = start.try_into_lit(self.meta)?;
+                let inner = start.extent();
+                let start = start.try_into_lit()?;
                 let got = start.value_type();
                 let start = start
                     .as_usize()
-                    .ok_or_else(|| err_need_int(segment, &inner, got, self.meta))?;
+                    .ok_or_else(|| err_need_int(segment, &inner, got))?;
 
-                let inner = end.extent(self.meta);
-                let end = end.try_into_lit(self.meta)?;
+                let inner = end.extent();
+                let end = end.try_into_lit()?;
                 let got = end.value_type();
                 let end = end
                     .as_usize()
-                    .ok_or_else(|| err_need_int(segment, &inner, got, self.meta))?;
+                    .ok_or_else(|| err_need_int(segment, &inner, got))?;
 
                 if end < start {
-                    return error_decreasing_range(
-                        segment,
-                        segment,
-                        &fake_path(&mid),
-                        start,
-                        end,
-                        self.meta,
-                    );
+                    return error_decreasing_range(segment, segment, &fake_path(&mid), start, end);
                 }
                 Segment::Range { start, end, mid }
             }
@@ -300,7 +301,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
         match old {
             StrLitElement::Lit(l) => *string = StrLitElement::Lit(l),
             StrLitElement::Expr(e) if e.is_lit() => {
-                let value = e.try_into_lit(self.meta)?;
+                let value = e.try_into_lit()?;
                 match value {
                     Value::String(s) => *string = StrLitElement::Lit(s),
                     // TODO: The float scenario is different in erlang and rust
@@ -356,7 +357,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
             match field {
                 Field { name, value, .. } if name.as_str().is_some() && value.is_lit() => {
                     let k = name.into_str().ok_or("unreachable error str and not str")?;
-                    let v = value.try_into_lit(self.meta)?;
+                    let v = value.try_into_lit()?;
                     record.base.insert(k, v);
                 }
                 other => record.fields.push(other),
@@ -375,18 +376,15 @@ where
         mut expr: ImutExpr<'script>,
     ) -> Result<Value<'script>> {
         ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut expr)?;
-        expr.try_into_lit(&helper.meta)
+        expr.try_into_lit()
     }
     pub(crate) fn new(helper: &'run Helper<'script, '_>) -> Self {
-        ConstFolder {
-            meta: &helper.meta,
-            reg: helper.reg,
-        }
+        ConstFolder { reg: helper.reg }
     }
 
     pub(crate) fn reduce_path(
         &self,
-        outer: Range,
+        outer: Span,
         mut value: Value<'script>,
         segments: Vec<Segment<'script>>,
     ) -> Result<(Value<'script>, Vec<Segment<'script>>)> {
@@ -397,7 +395,7 @@ where
             match segment {
                 Segment::Id { key, mid } => {
                     if !value.is_object() {
-                        return error_need_obj(&outer, segment, value.value_type(), self.meta);
+                        return error_need_obj(&outer, segment, value.value_type());
                     }
                     if subrange.is_some() {
                         return Err("We can't index a name into a subrange.".into());
@@ -416,7 +414,6 @@ where
                                 .as_object()
                                 .map(|o| o.keys().map(ToString::to_string).collect::<Vec<_>>())
                                 .unwrap_or_default(),
-                            self.meta,
                         );
                     }
                 }
@@ -435,11 +432,10 @@ where
                                 &fake_path(mid),
                                 r,
                                 l,
-                                self.meta,
                             );
                         }
                     } else {
-                        return error_need_arr(&outer, segment, value.value_type(), self.meta);
+                        return error_need_arr(&outer, segment, value.value_type());
                     }
                 }
                 Segment::Range { start, end, mid } => {
@@ -456,12 +452,11 @@ where
                                 &fake_path(mid),
                                 r,
                                 l,
-                                self.meta,
                             );
                         }
                         subrange = array.get(start..end);
                     } else {
-                        return error_need_arr(&outer, segment, value.value_type(), self.meta);
+                        return error_need_arr(&outer, segment, value.value_type());
                     }
                 }
 

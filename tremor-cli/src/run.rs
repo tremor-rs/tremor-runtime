@@ -28,6 +28,7 @@ use tremor_runtime::{
     system::{ShutdownMode, World, WorldConfig},
 };
 use tremor_script::{
+    arena::Arena,
     ctx::EventContext,
     highlighter::{Error as HighlighterError, Highlighter, Term as TermHighlighter},
     lexer::Tokenizer,
@@ -229,13 +230,14 @@ impl Run {
             std::process::exit(1);
         }
         let raw = raw?;
+        let (aid, raw) = Arena::insert(raw)?;
 
         let env = env::setup()?;
 
-        let mut outer = TermHighlighter::stderr();
-        match Script::parse(&env.module_path, &self.script, raw.clone(), &env.fun) {
+        let mut h = TermHighlighter::stderr();
+        match Script::parse(raw, &env.fun) {
             Ok(mut script) => {
-                script.format_warnings_with(&mut outer)?;
+                script.format_warnings_with(&mut h)?;
 
                 let mut ingress = Ingress::from_args(self)?;
                 let mut egress = Egress::from_args(self)?;
@@ -259,10 +261,8 @@ impl Run {
                             Err(e) => {
                                 if let (Some(r), _) = e.context() {
                                     let mut inner = TermHighlighter::stderr();
-                                    let mut input = raw.clone();
-                                    input.push('\n'); // for nicer highlighting
                                     let tokens: Vec<_> =
-                                        Tokenizer::new(&input).tokenize_until_err().collect();
+                                        Tokenizer::new(&raw, aid).tokenize_until_err().collect();
 
                                     if let Err(highlight_error) = inner.highlight_error(
                                         Some(&src),
@@ -293,7 +293,7 @@ impl Run {
                 Ok(())
             }
             Err(e) => {
-                if let Err(e) = Script::format_error_from_script(&raw, &mut outer, &e) {
+                if let Err(e) = h.format_error(&e) {
                     eprintln!("Error: {}", e);
                 };
 
@@ -314,31 +314,23 @@ impl Run {
         let env = env::setup()?;
         let mut h = TermHighlighter::stderr();
 
-        let runnable = match Query::parse(
-            &env.module_path,
-            &self.script,
-            &raw,
-            vec![],
-            &env.fun,
-            &env.aggr,
-        ) {
+        let runnable = match Query::parse(raw.clone(), &env.fun, &env.aggr) {
             Ok(runnable) => runnable,
             Err(e) => {
-                if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
+                if let Err(e) = h.format_error(&e) {
                     eprintln!("Error: {}", e);
                 };
                 // ALLOW: main.rs
                 std::process::exit(1);
             }
         };
-        self.run_trickle_query(runnable, self.script.to_string(), raw, &mut h)
+        self.run_trickle_query(runnable, self.script.to_string(), &mut h)
     }
 
     fn run_trickle_query(
         &self,
         runnable: Query,
-        src: String,
-        raw: String,
+        file: String,
         h: &mut TermHighlighter,
     ) -> Result<()> {
         runnable.format_warnings_with(h)?;
@@ -375,13 +367,14 @@ impl Run {
                             let script_error: tremor_script::errors::Error = script_kind.into();
                             if let (Some(r), _) = script_error.context() {
                                 let mut inner = TermHighlighter::stderr();
-                                let mut input = raw.clone();
-                                input.push('\n'); // for nicer highlighting
+                                let aid = script_error.aid();
+                                let input = Arena::io_get(aid)?;
+
                                 let tokens: Vec<_> =
-                                    Tokenizer::new(&input).tokenize_until_err().collect();
+                                    Tokenizer::new(&input, aid).tokenize_until_err().collect();
 
                                 if let Err(highlight_error) = inner.highlight_error(
-                                    Some(&src),
+                                    Some(&file),
                                     &tokens,
                                     "",
                                     true,

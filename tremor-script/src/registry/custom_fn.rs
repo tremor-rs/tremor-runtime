@@ -13,7 +13,9 @@
 // limitations under the License.
 
 use super::{FResult, FunctionError, Result};
-use crate::ast::{visitors::IsConstFn, Expr, Exprs, FnDecl, ImutExpr, ImutExprs, InvokeAggrFn};
+use crate::ast::{
+    visitors::IsConstFn, Expr, Exprs, FnDecl, ImutExpr, ImutExprs, InvokeAggrFn, NodeMeta,
+};
 use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
 use crate::prelude::*;
 use crate::Value;
@@ -88,7 +90,11 @@ impl<'script> CustomFn<'script> {
 
         true
     }
-    pub(crate) fn inline(&self, args: ImutExprs<'script>, mid: usize) -> Result<ImutExpr<'script>> {
+    pub(crate) fn inline(
+        &self,
+        args: ImutExprs<'script>,
+        mid: Box<NodeMeta>,
+    ) -> Result<ImutExpr<'script>> {
         use ImutExpr::{Invoke, Invoke1, Invoke2, Invoke3};
         if self.body.len() != 1 {
             return Err(format!("can't inline {}: too large body", self.name).into());
@@ -148,7 +154,6 @@ impl<'script> CustomFn<'script> {
             context: env.context,
             consts,
             aggrs: &NO_AGGRS,
-            meta: env.meta,
             recursion_limit: env.recursion_limit,
         };
         let mut recursion_depth = 0;

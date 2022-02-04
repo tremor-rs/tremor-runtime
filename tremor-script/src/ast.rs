@@ -45,6 +45,7 @@ use self::visitors::ConstFolder;
 use self::walkers::ImutExprWalker;
 pub use crate::lexer::CompilationUnit;
 use crate::{
+    arena,
     ast::{
         eq::AstEq,
         raw::{BytesDataType, Endian},
@@ -52,6 +53,7 @@ use crate::{
     errors::{error_generic, error_no_locals, Kind as ErrorKind, Result},
     impl_expr_ex_mid, impl_expr_mid,
     interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack},
+    lexer::Span,
     pos::Location,
     prelude::*,
     registry::{CustomFn, FResult, TremorAggrFnWrapper, TremorFnWrapper},
@@ -97,92 +99,66 @@ pub trait Expression: Clone + std::fmt::Debug + PartialEq + Serialize {
     fn null_lit() -> Self;
 }
 
-#[derive(Default, Clone, Serialize, Debug, PartialEq)]
-struct NodeMeta {
-    start: Location,
-    end: Location,
+/// Node metadata
+#[derive(Default, Clone, Serialize, Debug, PartialEq, Eq)]
+pub struct NodeMeta {
+    range: Span,
     name: Option<String>,
-    /// Id of current compilation unit part
-    cu: usize,
-    terminal: bool,
 }
 
-impl From<(Location, Location, usize)> for NodeMeta {
-    fn from((start, end, cu): (Location, Location, usize)) -> Self {
-        Self {
-            start,
-            end,
-            name: None,
-            cu,
-            terminal: false,
-        }
+impl NodeMeta {
+    /// Creates a new boxed meta node
+    pub(crate) fn new_box(start: Location, end: Location) -> Box<Self> {
+        Box::new(Self::new(start, end))
     }
-}
-/// Information about node metadata
-#[derive(Serialize, Clone, Debug, PartialEq, Default)]
-pub struct NodeMetas {
-    nodes: Vec<NodeMeta>,
-    #[serde(skip)]
-    pub(crate) cus: Vec<CompilationUnit>,
-}
-
-impl<'script> NodeMetas {
-    /// Initializes meta noes with a given set of
-    #[must_use]
-    pub fn new(cus: Vec<CompilationUnit>) -> Self {
-        Self {
-            nodes: Vec::new(),
-            cus,
-        }
-    }
-
-    pub(crate) fn add_meta(&mut self, mut start: Location, mut end: Location, cu: usize) -> usize {
-        let mid = self.nodes.len();
-        start.set_cu(cu);
-        end.set_cu(cu);
-        self.nodes.push((start, end, cu).into());
-        mid
-    }
-    pub(crate) fn add_meta_w_name<S>(
-        &mut self,
-        mut start: Location,
-        mut end: Location,
-        name: &S,
-        cu: usize,
-    ) -> usize
+    /// Creates a new boxed meta node with a name
+    pub(crate) fn new_box_with_name<S>(start: Location, end: Location, name: &S) -> Box<Self>
     where
-        S: ToString,
+        S: ToString + ?Sized,
     {
-        start.set_cu(cu);
-        end.set_cu(cu);
-        let mid = self.nodes.len();
-        self.nodes.push(NodeMeta {
-            start,
-            end,
-            cu,
+        Box::new(Self::new_with_name(start, end, name))
+    }
+    /// Creates a new meta node
+    pub fn new(start: Location, end: Location) -> Self {
+        NodeMeta {
+            range: Span::new(start, end),
+            name: None,
+        }
+    }
+    /// Creates a new meta node witha  name
+    pub(crate) fn new_with_name<S>(start: Location, end: Location, name: &S) -> Self
+    where
+        S: ToString + ?Sized,
+    {
+        NodeMeta {
+            range: Span::new(start, end),
             name: Some(name.to_string()),
-            terminal: false,
-        });
-        mid
+        }
     }
-
-    pub(crate) fn start(&self, idx: usize) -> Option<Location> {
-        self.nodes.get(idx).map(|v| v.start)
+    /// FIXMER
+    pub fn todo() -> Box<Self> {
+        Box::default()
     }
-
-    pub(crate) fn end(&self, idx: usize) -> Option<Location> {
-        self.nodes.get(idx).map(|v| v.end)
+    pub(crate) fn name(&self) -> Option<&str> {
+        self.name.as_deref()
     }
-
-    pub(crate) fn name(&self, idx: usize) -> Option<&str> {
-        self.nodes
-            .get(idx)
-            .and_then(|v| v.name.as_ref())
-            .map(String::as_str)
+    pub(crate) fn name_dflt(&self) -> &str {
+        self.name().unwrap_or_default()
     }
+    pub(crate) fn end(&self) -> Location {
+        self.range.end()
+    }
+    pub(crate) fn start(&self) -> Location {
+        self.range.start()
+    }
+    pub(crate) fn aid(&self) -> arena::Index {
+        self.range.aid()
+    }
+}
 
-    pub(crate) fn name_dflt(&self, idx: usize) -> &str {
-        self.name(idx).unwrap_or("<UNKNOWN>")
+impl From<Span> for NodeMeta {
+    fn from(range: Span) -> Self {
+        Self { range, name: None }
     }
 }
 
@@ -197,7 +173,7 @@ struct Function<'script> {
 /// A section of a binary
 pub struct BytesPart<'script> {
     /// metadata id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// data
     pub data: ImutExpr<'script>,
     /// type we want to convert this to
@@ -218,7 +194,7 @@ impl<'script> BytesPart<'script> {
 /// Binary semiliteral
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Bytes<'script> {
-    mid: usize,
+    mid: Box<NodeMeta>,
     /// Bytes
     pub value: Vec<BytesPart<'script>>,
 }
@@ -290,11 +266,7 @@ impl<'script> Consts<'script> {
 /// A tremor script instance
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Script<'script> {
-    pub(crate) mid: usize,
-    /// Start
-    pub start: crate::pos::Location,
-    /// End
-    pub end: crate::pos::Location,
+    pub(crate) mid: Box<NodeMeta>,
     /// Import definitions
     pub imports: Imports,
     /// Expressions of the script
@@ -306,8 +278,6 @@ pub struct Script<'script> {
     windows: HashMap<String, WindowDefinition<'script>>,
     /// Locals
     pub locals: usize,
-    /// Node metadata
-    pub node_meta: NodeMetas,
     #[serde(skip)]
     /// Documentation from the script
     pub docs: docs::Docs,
@@ -343,7 +313,6 @@ impl<'script> Script<'script> {
             context,
             consts: self.consts.run(),
             aggrs: &self.aggregates,
-            meta: &self.node_meta,
             recursion_limit: crate::recursion_limit(),
         };
 
@@ -355,8 +324,8 @@ impl<'script> Script<'script> {
                     port: None,
                 })
             } else {
-                let e = expr.extent(&self.node_meta);
-                error_generic(&e.expand_lines(2), expr, &Self::NOT_IMUT, &self.node_meta)
+                let e = expr.extent();
+                error_generic(&e.expand_lines(2), expr, &Self::NOT_IMUT)
             }
         })
     }
@@ -387,7 +356,6 @@ impl<'script> Script<'script> {
             context,
             consts: self.consts.run(),
             aggrs: &self.aggregates,
-            meta: &self.node_meta,
             recursion_limit: crate::recursion_limit(),
         };
 
@@ -439,7 +407,7 @@ pub enum LexicalUnit {
 /// An ident
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct Ident<'script> {
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// the text of the ident
     pub id: beef::Cow<'script, str>,
 }
@@ -451,20 +419,11 @@ impl<'script> std::fmt::Display for Ident<'script> {
     }
 }
 
-impl<'script> From<&'script str> for Ident<'script> {
-    fn from(id: &'script str) -> Self {
-        Self {
-            mid: 0,
-            id: id.into(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulation of a record structure field
 pub struct Field<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Name of the field
     pub name: StringLit<'script>,
     /// Value expression for the field
@@ -476,7 +435,7 @@ impl_expr_mid!(Field);
 /// Encapsulation of a record structure
 pub struct Record<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// base (or static part of the record)
     pub base: crate::Object<'script>,
     /// Fields of this record
@@ -492,7 +451,7 @@ impl<'script> Record<'script> {
             .get(name)
             .map(|base_value| {
                 ImutExpr::Literal(Literal {
-                    mid: self.mid,
+                    mid: self.mid.clone(),
                     value: base_value.clone(),
                 })
             })
@@ -523,7 +482,7 @@ impl<'script> Record<'script> {
 /// Encapsulation of a list structure
 pub struct List<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Value expressions for list elements of this list
     pub exprs: ImutExprs<'script>,
 }
@@ -533,13 +492,13 @@ impl_expr_mid!(List);
 #[derive(Clone, Debug, PartialEq, Serialize, Default)]
 pub struct Literal<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Literal value
     pub value: Value<'script>,
 }
 
 impl<'script> Literal<'script> {
-    pub(crate) fn boxed_expr(mid: usize, value: Value<'script>) -> Box<ImutExpr<'script>> {
+    pub(crate) fn boxed_expr(mid: Box<NodeMeta>, value: Value<'script>) -> Box<ImutExpr<'script>> {
         Box::new(ImutExpr::Literal(Literal { mid, value }))
     }
 }
@@ -548,7 +507,7 @@ impl_expr_mid!(Literal);
 /// Damn you public interfaces
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FnDecl<'script> {
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     pub(crate) name: Ident<'script>,
     pub(crate) args: Vec<Ident<'script>>,
     pub(crate) body: Exprs<'script>,
@@ -561,7 +520,7 @@ impl_expr_mid!(FnDecl);
 /// A Constant
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Const<'script> {
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     pub(crate) value: Value<'script>,
     pub(crate) name: String,
 }
@@ -577,7 +536,7 @@ pub enum Expr<'script> {
     /// Assignment expression
     Assign {
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// Target
         path: Path<'script>,
         /// Value expression
@@ -586,7 +545,7 @@ pub enum Expr<'script> {
     /// Assignment from local expression
     AssignMoveLocal {
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// Target
         path: Path<'script>,
         /// Local Index
@@ -597,7 +556,7 @@ pub enum Expr<'script> {
     /// A drop expression
     Drop {
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
     },
     /// An emit expression
     Emit(Box<EmitExpr<'script>>),
@@ -627,7 +586,7 @@ impl<'script> Expression for Expr<'script> {
             Expr::Assign { path, expr, mid } => match expr.as_ref() {
                 Expr::Imut(ImutExpr::Local { idx, .. }) if idx == &replace_idx => {
                     *self = Expr::AssignMoveLocal {
-                        mid: *mid,
+                        mid: mid.clone(),
                         idx: *idx,
                         path: path.clone(),
                     };
@@ -693,7 +652,7 @@ pub enum ImutExpr<'script> {
         /// Local Index
         idx: usize,
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
     },
     /// Literal
     Literal(Literal<'script>),
@@ -702,7 +661,7 @@ pub enum ImutExpr<'script> {
         /// Path
         path: Path<'script>,
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
     },
     /// Function invocation
     Invoke1(Invoke<'script>),
@@ -739,7 +698,7 @@ impl<'script> ImutExpr<'script> {
         if let ImutExpr::Literal(Literal { value: v, .. }) = self {
             Ok(v)
         } else {
-            let e = self.extent(&helper.meta);
+            let e = self.extent();
             Err(ErrorKind::NotConstant(e, e.expand_lines(2)).into())
         }
     }
@@ -776,18 +735,9 @@ impl<'script> Expression for ImutExpr<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct StringLit<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Elements
     pub elements: StrLitElements<'script>,
-}
-
-impl<'s> From<&'s str> for StringLit<'s> {
-    fn from(s: &'s str) -> Self {
-        Self {
-            mid: 0,
-            elements: vec![StrLitElement::Lit(s.into())],
-        }
-    }
 }
 
 impl<'script> StringLit<'script> {
@@ -894,7 +844,7 @@ pub type StrLitElements<'script> = Vec<StrLitElement<'script>>;
 /// Encapsulates an emit expression
 pub struct EmitExpr<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Value expression
     pub expr: ImutExpr<'script>,
     /// Port name
@@ -906,7 +856,7 @@ impl_expr_mid!(EmitExpr);
 /// Encapsulates a function invocation expression
 pub struct Invoke<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Module path
     pub node_id: NodeId,
     /// Invocable implementation
@@ -936,7 +886,7 @@ pub enum Invocable<'script> {
 }
 
 impl<'script> Invocable<'script> {
-    fn inline(self, args: ImutExprs<'script>, mid: usize) -> Result<ImutExpr<'script>> {
+    fn inline(self, args: ImutExprs<'script>, mid: Box<NodeMeta>) -> Result<ImutExpr<'script>> {
         match self {
             Invocable::Intrinsic(_f) => Err("can't inline intrinsic".into()),
             Invocable::Tremor(f) => f.inline(args, mid),
@@ -979,7 +929,7 @@ impl<'script> Invocable<'script> {
 /// Encapsulates the tail-recursion entry-point in a tail-recursive function
 pub struct Recur<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Arity
     pub argc: usize,
     /// True, if supports variable arguments
@@ -993,7 +943,7 @@ impl_expr_mid!(Recur);
 /// Encapsulates an Aggregate function invocation
 pub struct InvokeAggr {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Module name
     pub module: String,
     /// Function name
@@ -1005,7 +955,7 @@ pub struct InvokeAggr {
 /// A Invocable aggregate function
 #[derive(Clone, Serialize)]
 pub struct InvokeAggrFn<'script> {
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// The invocable function
     #[serde(skip)]
     pub invocable: TremorAggrFnWrapper,
@@ -1020,7 +970,7 @@ impl_expr_mid!(InvokeAggrFn);
 /// Encapsulates a pluggable extractor expression form
 pub struct TestExpr {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Extractor name
     pub id: String,
     /// Extractor format
@@ -1051,7 +1001,7 @@ pub enum DefaultCase<Ex: Expression> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Match<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// The target of the match
     pub target: ImutExpr<'script>,
     /// Patterns to match against the target
@@ -1065,7 +1015,7 @@ impl_expr_ex_mid!(Match);
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct IfElse<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// The target of the match
     pub target: ImutExpr<'script>,
     /// The if case
@@ -1259,7 +1209,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
                                     if let Some((first, _)) = &first_key {
                                         first == key
                                     } else {
-                                        first_key = Some((key.clone(), *mid));
+                                        first_key = Some((key.clone(), mid.clone()));
                                         // this is the first item so we can assume so far it's all OK
                                         true
                                     }
@@ -1286,11 +1236,11 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
                     *precondition = Some(ClausePreCondition {
                         path: Path::Local(LocalPath {
                             segments: vec![Segment::Id {
-                                mid: *mid,
+                                mid: mid.clone(),
                                 key: key.clone(),
                             }],
                             idx: 0,
-                            mid: 0,
+                            mid: Box::default(), // FIXME
                         }),
                     });
 
@@ -1380,7 +1330,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
 /// Encapsulates a predicate expression form
 pub struct PredicateClause<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Predicate pattern
     pub pattern: Pattern<'script>,
     /// Optional guard expression
@@ -1415,7 +1365,7 @@ pub struct ImutClauseGroup<'script> {
 /// Encapsulates a path expression form
 pub struct Patch<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// The patch target
     pub target: ImutExpr<'script>,
     /// Operations to patch against the target
@@ -1496,7 +1446,7 @@ pub enum PatchOperation<'script> {
 /// Encapsulates a merge form
 pub struct Merge<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Target of the merge
     pub target: ImutExpr<'script>,
     /// Value expression computing content to merge into the target
@@ -1508,7 +1458,7 @@ impl_expr_mid!(Merge);
 /// Encapsulates a structure comprehension form
 pub struct Comprehension<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Key binding
     pub key_id: usize,
     /// Value binding
@@ -1524,7 +1474,7 @@ impl_expr_ex_mid!(Comprehension);
 /// Encapsulates a comprehension case application
 pub struct ComprehensionCase<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Key binding
     pub key_name: Cow<'script, str>,
     /// Value binding
@@ -1803,7 +1753,7 @@ impl<'script> PredicatePattern<'script> {
 /// Encapsulates a record pattern
 pub struct RecordPattern<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Pattern fields
     pub fields: PatternFields<'script>,
 }
@@ -1851,7 +1801,7 @@ impl<'script> ArrayPredicatePattern<'script> {
 /// Encapsulates an array pattern
 pub struct ArrayPattern<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Predicates
     pub exprs: ArrayPredicatePatterns<'script>,
 }
@@ -1872,7 +1822,7 @@ pub struct AssignPattern<'script> {
 /// Encapsulates a positional tuple pattern
 pub struct TuplePattern<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Predicates
     pub exprs: ArrayPredicatePatterns<'script>,
     /// True, if the pattern supports variable arguments
@@ -1935,26 +1885,26 @@ pub enum Segment<'script> {
         #[serde(skip)]
         key: KnownKey<'script>,
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
     },
     /// A numeric index
     Idx {
         /// Index
         idx: usize,
         /// id
-        mid: usize,
+        mid: Box<NodeMeta>,
     },
     /// An element
     Element {
         /// Value Expression
         expr: ImutExpr<'script>,
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
     },
     /// A range with know start and end values
     Range {
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// Start of range value expression
         start: usize,
         /// End of range value expression
@@ -1963,11 +1913,11 @@ pub enum Segment<'script> {
     /// A range dynamic start and end values
     RangeExpr {
         /// Lower-inclusive
-        lower_mid: usize,
+        lower_mid: Box<NodeMeta>,
         /// Max-exclusive
-        upper_mid: usize,
+        upper_mid: Box<NodeMeta>,
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// Start of range value expression
         start: Box<ImutExpr<'script>>,
         /// End of range value expression
@@ -1981,7 +1931,7 @@ pub struct LocalPath<'script> {
     /// Local Index
     pub idx: usize,
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Segments
     pub segments: Segments<'script>,
 }
@@ -1991,7 +1941,7 @@ impl_expr_mid!(LocalPath);
 /// A metadata path
 pub struct MetadataPath<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Segments
     pub segments: Segments<'script>,
 }
@@ -2003,7 +1953,7 @@ pub struct ExprPath<'script> {
     pub(crate) expr: Box<ImutExpr<'script>>,
     pub(crate) segments: Segments<'script>,
     pub(crate) var: usize,
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
 }
 impl_expr_mid!(ExprPath);
 
@@ -2013,21 +1963,21 @@ pub enum ReservedPath<'script> {
     /// `args` keyword
     Args {
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// Segments
         segments: Segments<'script>,
     },
     /// `window` keyword
     Window {
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// Segments
         segments: Segments<'script>,
     },
     /// `group` keyword
     Group {
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// Segments
         segments: Segments<'script>,
     },
@@ -2054,11 +2004,11 @@ impl<'script> ReservedPath<'script> {
 
 impl<'script> BaseExpr for ReservedPath<'script> {
     #[cfg(not(tarpaulin_include))] // this is a simple asccessor
-    fn mid(&self) -> usize {
+    fn meta(&self) -> &NodeMeta {
         match self {
             ReservedPath::Args { mid, .. }
             | ReservedPath::Window { mid, .. }
-            | ReservedPath::Group { mid, .. } => *mid,
+            | ReservedPath::Group { mid, .. } => mid,
         }
     }
 }
@@ -2067,7 +2017,7 @@ impl<'script> BaseExpr for ReservedPath<'script> {
 /// The path representing the current in-flight event
 pub struct EventPath<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Segments
     pub segments: Segments<'script>,
 }
@@ -2077,7 +2027,7 @@ impl_expr_mid!(EventPath);
 /// The path representing captured program state
 pub struct StatePath<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Segments
     pub segments: Segments<'script>,
 }
@@ -2137,7 +2087,7 @@ pub enum BinOpKind {
 /// Encapsulates a binary expression form
 pub struct BinExpr<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// The operation kind
     pub kind: BinOpKind,
     /// The Left-hand-side operand
@@ -2164,7 +2114,7 @@ pub enum UnaryOpKind {
 /// Encapsulates a unary expression form
 pub struct UnaryExpr<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// The operation kind
     pub kind: UnaryOpKind,
     /// The operand

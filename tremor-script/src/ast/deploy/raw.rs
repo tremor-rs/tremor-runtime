@@ -26,10 +26,11 @@ use crate::ast::{
         CreationalWithRaw, DefinitioalArgsRaw, DefinitioalArgsWithRaw, PipelineDefinitionRaw,
     },
     visitors::ConstFolder,
+    NodeMeta,
 };
 use crate::ast::{raw::IdentRaw, walkers::ImutExprWalker};
 use crate::errors::{Kind as ErrorKind, Result};
-use crate::impl_expr;
+use crate::impl_expr_raw;
 use crate::pos::Location;
 use crate::AggrType;
 use crate::EventContext;
@@ -51,10 +52,7 @@ use crate::Return;
 /// for use during compile time reduction
 /// # Errors
 /// If evaluation of the script fails, or a legal value cannot be evaluated by result
-pub fn run_script<'script, 'registry>(
-    helper: &Helper<'script, 'registry>,
-    expr: &Script<'script>,
-) -> Result<Value<'script>> {
+pub fn run_script<'script, 'registry>(expr: &Script<'script>) -> Result<Value<'script>> {
     // We duplicate these here as it simplifies use of the macro externally
     let ctx = EventContext::new(nanotime(), None);
     let mut event = literal!({}).into_static();
@@ -67,7 +65,6 @@ pub fn run_script<'script, 'registry>(
             expr,
             expr,
             &"Failed to evaluate script at compile time".to_string(),
-            &helper.meta,
         ),
     }
 }
@@ -100,7 +97,7 @@ impl<'script> DeployRaw<'script> {
         let mut config = HashMap::new();
         for (k, mut v) in self.config.up(helper)? {
             ConstFolder::new(helper).walk_expr(&mut v)?;
-            config.insert(k.to_string(), v.try_into_lit(&helper.meta)?);
+            config.insert(k.to_string(), v.try_into_lit()?);
         }
         Ok(Deploy {
             config,
@@ -147,7 +144,9 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
             }
             DeployStmtRaw::DeployFlow(stmt) => {
                 let stmt: DeployFlow = stmt.up(helper)?;
-                helper.instances.insert(stmt.node_id.clone(), stmt.clone());
+                helper
+                    .instances
+                    .insert(stmt.instance_alias.clone(), stmt.clone());
                 Ok(Some(DeployStmt::DeployFlowStmt(Box::new(stmt))))
             }
         }
@@ -166,14 +165,14 @@ pub struct ConnectorDefinitionRaw<'script> {
     pub(crate) params: DefinitioalArgsWithRaw<'script>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
-impl_expr!(ConnectorDefinitionRaw);
+impl_expr_raw!(ConnectorDefinitionRaw);
 
 impl<'script> Upable<'script> for ConnectorDefinitionRaw<'script> {
     type Target = ConnectorDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let query_decl = ConnectorDefinition {
             config: Value::const_null(),
-            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
             params: self.params.up(helper)?,
             builtin_kind: self.kind.to_string(),
             node_id: NodeId::new(self.id, &[]),
@@ -249,7 +248,7 @@ impl<'script> Upable<'script> for ConnectStmtRaw<'script> {
                 from,
                 to,
             } => Ok(ConnectStmt::ConnectorToPipeline {
-                mid: helper.add_meta(start, end),
+                mid: NodeMeta::new_box(start, end),
                 from: from.up(helper)?,
                 to: to.up(helper)?,
             }),
@@ -259,7 +258,7 @@ impl<'script> Upable<'script> for ConnectStmtRaw<'script> {
                 from,
                 to,
             } => Ok(ConnectStmt::PipelineToConnector {
-                mid: helper.add_meta(start, end),
+                mid: NodeMeta::new_box(start, end),
                 from: from.up(helper)?,
                 to: to.up(helper)?,
             }),
@@ -269,7 +268,7 @@ impl<'script> Upable<'script> for ConnectStmtRaw<'script> {
                 from,
                 to,
             } => Ok(ConnectStmt::PipelineToPipeline {
-                mid: helper.add_meta(start, end),
+                mid: NodeMeta::new_box(start, end),
                 from: from.up(helper)?,
                 to: to.up(helper)?,
             }),
@@ -287,7 +286,7 @@ pub struct FlowDefinitionRaw<'script> {
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
     pub(crate) atoms: Vec<FlowStmtRaw<'script>>,
 }
-impl_expr!(FlowDefinitionRaw);
+impl_expr_raw!(FlowDefinitionRaw);
 
 impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
     type Target = FlowDefinition<'script>;
@@ -322,7 +321,7 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
                 }
             }
         }
-        let mid = helper.add_meta_w_name(self.start, self.end, &self.id);
+        let mid = NodeMeta::new_box_with_name(self.start, self.end, &self.id);
         let docs = self
             .docs
             .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
@@ -380,7 +379,7 @@ pub struct CreateStmtRaw<'script> {
     /// Module of the definition
     pub(crate) kind: CreateKind,
 }
-impl_expr!(CreateStmtRaw);
+impl_expr_raw!(CreateStmtRaw);
 
 impl<'script> Upable<'script> for CreateStmtRaw<'script> {
     type Target = CreateStmt<'script>;
@@ -389,8 +388,8 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
 
         let _node_id = NodeId::new(&self.id.id, &[]); // FIXME
         let _target = self.target.clone().with_prefix(&[]); // FIXME
-        let _outer = self.extent(&helper.meta);
-        let _inner = self.id.extent(&helper.meta);
+        let _outer = self.extent();
+        let _inner = self.id.extent();
         let _params = self.params.up(helper)?;
         let _decl = match self.kind {
             CreateKind::Connector => {
@@ -432,7 +431,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         };
 
         // let create_stmt = CreateStmt {
-        //     mid: helper.add_meta_w_name(self.start, self.end, &self.id),
+        //     mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
         //     with: params,
         //     node_id: node_id.clone(),
         //     target,
@@ -455,7 +454,7 @@ pub struct DeployFlowRaw<'script> {
     pub target: NodeId,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
 }
-impl_expr!(DeployFlowRaw);
+impl_expr_raw!(DeployFlowRaw);
 
 impl<'script> Upable<'script> for DeployFlowRaw<'script> {
     type Target = DeployFlow<'script>;
@@ -469,8 +468,8 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
             artefact.clone()
         } else {
             return Err(ErrorKind::DeployArtefactNotDefined(
-                self.extent(&helper.meta),
-                self.id.extent(&helper.meta),
+                self.extent(),
+                self.id.extent(),
                 target.to_string(),
                 Vec::new(), //FIXME; helper.flow_decls.keys().map(ToString::to_string).collect(),
             )
@@ -483,10 +482,10 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
         defn.apply_args(helper)?;
 
         let create_stmt = DeployFlow {
-            mid: helper.add_meta_w_name(self.start, self.end, &self.id),
-            node_id,
-            target: self.target,
-            decl: defn,
+            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
+            instance_alias: node_id,
+            from_target: self.target,
+            defn,
             docs: self
                 .docs
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
