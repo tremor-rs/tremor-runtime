@@ -474,6 +474,7 @@ impl Source for KafkaConsumerSource {
             loop {
                 match stream.next().await {
                     Some(Ok(kafka_msg)) => {
+                        //debug!("{source_ctx} Received kafka msg: {kafka_msg:?}");
                         if let Some(tx) = connect_result_channel.take() {
                             let _ = tx.try_send(Ok(true));
                         }

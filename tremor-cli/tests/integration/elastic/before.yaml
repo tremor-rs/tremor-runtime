@@ -1,4 +1,4 @@
-{
+- {
     "dir": ".",
     "cmd": "docker",
     "args": [
@@ -19,4 +19,4 @@
         ]
     },
     "max-await-secs": 120
-}
+  }
