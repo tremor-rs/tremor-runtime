@@ -121,14 +121,6 @@ impl From<tremor_pipeline::errors::Error> for Error {
     }
 }
 
-impl From<tremor_script::prelude::CompilerError> for Error {
-    fn from(e: tremor_script::prelude::CompilerError) -> Self {
-        Self::new(
-            StatusCode::InternalServerError,
-            format!("Compiler error: {:?}", e),
-        )
-    }
-}
 impl From<PoisonError<MutexGuard<'_, tremor_script::Registry>>> for Error {
     fn from(e: PoisonError<MutexGuard<tremor_script::Registry>>) -> Self {
         Self::new(

@@ -19,7 +19,10 @@ use std::fs;
 use std::path::Path;
 use std::{ffi::OsStr, fmt};
 use tremor_common::file as cfile;
-use tremor_script::highlighter::{Highlighter, Term as TermHighlighter};
+use tremor_script::{
+    arena::Arena,
+    highlighter::{Highlighter, Term as TermHighlighter},
+};
 use tremor_script::{lexer, Value};
 
 // pub(crate) enum FormatKind {
@@ -292,7 +295,8 @@ pub(crate) fn highlight(is_pretty: bool, value: &Value) -> Result<()> {
             simd_json::to_string(&value)?
         }
     );
-    let lexed_tokens: Vec<_> = lexer::Tokenizer::new(&result)
+    let (aid, result) = Arena::insert(result)?;
+    let lexed_tokens: Vec<_> = lexer::Tokenizer::new(result, aid)
         .tokenize_until_err()
         .collect();
 

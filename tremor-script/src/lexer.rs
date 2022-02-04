@@ -15,12 +15,15 @@
 // Note: We ignore the is_* functions for coverage as they effectively are
 // only lists
 
-use crate::errors::{Error, Kind as ErrorKind, Result, ResultExt, UnfinishedToken};
 #[cfg_attr(feature = "cargo-clippy", allow(clippy::all, clippy::unwrap_used))]
 use crate::parser::g::__ToTriple;
 use crate::pos;
 pub use crate::pos::*;
 use crate::Value;
+use crate::{
+    arena,
+    errors::{Error, Kind as ErrorKind, Result, ResultExt, UnfinishedToken},
+};
 use beef::Cow;
 use simd_json::Writable;
 use std::fmt;
@@ -776,12 +779,12 @@ struct CharLocations<'input> {
 }
 
 impl<'input> CharLocations<'input> {
-    pub(crate) fn new<S>(input: &'input S) -> CharLocations<'input>
+    pub(crate) fn new<S>(input: &'input S, aid: arena::Index) -> CharLocations<'input>
     where
         S: ?Sized + ParserSource,
     {
         CharLocations {
-            location: Location::new(1, 1, input.start_index().to_usize(), 0),
+            location: Location::new(1, 1, input.start_index().to_usize(), aid),
             chars: input.src().chars().peekable(),
         }
     }
@@ -814,15 +817,14 @@ pub struct Tokenizer<'input> {
 impl<'input> Tokenizer<'input> {
     /// Creates a new tokeniser
     #[must_use]
-    pub fn new(input: &'input str) -> Self {
-        let lexer = Lexer::new(input);
+    pub fn new(input: &'input str, aid: arena::Index) -> Self {
+        let lexer = Lexer::new(input, aid);
         let start = Location::default();
         let end = Location::default();
         Tokenizer {
-            //cu: 0,
             eos: false,
             iter: lexer.peekable(),
-            pos: span(start, end, start, end),
+            pos: span(start, end),
         }
     }
 
@@ -890,9 +892,6 @@ impl fmt::Display for CompilationUnit {
 pub struct Lexer<'input> {
     input: &'input str,
     chars: CharLocations<'input>,
-    start_index: pos::Byte,
-    file_offset: Location,
-    cu: usize,
     stored_tokens: VecDeque<TokenSpan<'input>>,
 }
 
@@ -901,30 +900,22 @@ type Lexeme = Option<(Location, char)>;
 impl<'input> Lexer<'input> {
     pub(crate) fn spanned(
         &self,
-        mut start: Location,
-        mut end: Location,
+        start: Location,
+        end: Location,
         value: Token<'input>,
     ) -> Spanned<'input> {
-        start.unit_id = self.cu;
-        end.unit_id = self.cu;
         Spanned {
-            span: span(start - self.file_offset, end - self.file_offset, start, end),
+            span: span(start, end),
             value,
         }
     }
 
     /// Create a new lexer from the source string
-    pub(crate) fn new<S>(input: &'input S) -> Self
-    where
-        S: ?Sized + ParserSource,
-    {
-        let chars = CharLocations::new(input);
+    pub(crate) fn new(input: &'input str, aid: arena::Index) -> Self {
+        let chars = CharLocations::new(input, aid);
         Lexer {
             input: input.src(),
             chars,
-            start_index: input.start_index(),
-            file_offset: Location::default(),
-            cu: 0,
             stored_tokens: VecDeque::new(),
         }
     }
@@ -961,8 +952,8 @@ impl<'input> Lexer<'input> {
 
     /// Return a slice of the source string
     fn slice(&self, start: Location, end: Location) -> Option<&'input str> {
-        let start = start.absolute() - self.start_index.to_usize();
-        let end = end.absolute() - self.start_index.to_usize();
+        let start = start.absolute();
+        let end = end.absolute();
 
         // Our indexes are in characters as we are iterating over codepoints
         // string indexes however are in bytes and might lead to either
@@ -974,7 +965,7 @@ impl<'input> Lexer<'input> {
 
     /// return a slice from `start` to eol of the line `end` is on
     fn slice_full_lines(&self, start: &Location, end: &Location) -> Option<String> {
-        let start_idx = start.absolute() - self.start_index.to_usize();
+        let start_idx = start.absolute();
         let take_lines = end.line().saturating_sub(start.line()) + 1;
 
         self.input.get(start_idx..).map(|f| {
@@ -987,14 +978,14 @@ impl<'input> Lexer<'input> {
 
     /// return a slice from start to the end of the line
     fn slice_until_eol(&self, start: &Location) -> Option<&'input str> {
-        let start = start.absolute() - self.start_index.to_usize();
+        let start = start.absolute();
 
         self.input.get(start..).and_then(|f| f.split('\n').next())
     }
 
     // return a slice from start to the end of the input
     fn slice_until_eof(&self, start: &Location) -> Option<&'input str> {
-        let start = start.absolute() - self.start_index.to_usize();
+        let start = start.absolute();
         self.input.get(start..)
     }
 
@@ -1209,9 +1200,9 @@ impl<'input> Lexer<'input> {
                             e.shift(' ');
                             let token_str =
                                 self.slice_full_lines(string_start, &e).unwrap_or_default();
-                            let range = Range::from((escape_start, e));
+                            let range = Span::new(escape_start, e);
                             return Err(ErrorKind::InvalidUtf8Sequence(
-                                Range::from((start, e)).expand_lines(2),
+                                Span::new(start, e).expand_lines(2),
                                 range,
                                 UnfinishedToken::new(range, token_str),
                             )
@@ -1224,10 +1215,10 @@ impl<'input> Lexer<'input> {
                         let token_str = self
                             .slice_full_lines(string_start, &end)
                             .unwrap_or_default();
-                        let range = Range::from((escape_start, end));
+                        let range = Span::new(escape_start, end);
 
                         return Err(ErrorKind::InvalidUtf8Sequence(
-                            Range::from((escape_start, end)).expand_lines(2),
+                            Span::new(escape_start, end).expand_lines(2),
                             range,
                             UnfinishedToken::new(range, token_str),
                         )
@@ -1242,9 +1233,9 @@ impl<'input> Lexer<'input> {
                         .slice_full_lines(string_start, &end)
                         .unwrap_or_default();
                     end.shift(' ');
-                    let range = Range::from((escape_start, end));
+                    let range = Span::new(escape_start, end);
                     Err(ErrorKind::InvalidUtf8Sequence(
-                        Range::from((escape_start, end)).expand_lines(2),
+                        Span::new(escape_start, end).expand_lines(2),
                         range,
                         UnfinishedToken::new(range, token_str),
                     )
@@ -1256,9 +1247,9 @@ impl<'input> Lexer<'input> {
                     .slice_full_lines(string_start, &end)
                     .unwrap_or_default();
                 end.shift(' ');
-                let range = Range::from((start, end));
+                let range = Span::new(start, end);
                 Err(ErrorKind::UnexpectedEscapeCode(
-                    Range::from((start, end)).expand_lines(2),
+                    Span::new(start, end).expand_lines(2),
                     range,
                     UnfinishedToken::new(range, token_str),
                     ch,
@@ -1275,7 +1266,7 @@ impl<'input> Lexer<'input> {
 
         loop {
             match self.bump().ok_or_else(|| {
-                let range = Range::from((start, end));
+                let range = Span::new(start, end);
                 ErrorKind::UnterminatedIdentLiteral(
                     range.expand_lines(2),
                     range,
@@ -1297,7 +1288,7 @@ impl<'input> Lexer<'input> {
                     return Ok(self.spanned(start, end, token));
                 }
                 (end, '\n') => {
-                    let range = Range::from((start, end));
+                    let range = Span::new(start, end);
                     return Err(ErrorKind::UnterminatedIdentLiteral(
                         range.expand_lines(2),
                         range,
@@ -1326,7 +1317,7 @@ impl<'input> Lexer<'input> {
         let mut string = String::new();
 
         if let (mut end, '"') = self.lookahead().ok_or_else(|| {
-            let range = Range::from((start, start));
+            let range = Span::new(start, end);
             ErrorKind::UnterminatedStringLiteral(
                 range.expand_lines(2),
                 range,
@@ -1342,7 +1333,7 @@ impl<'input> Lexer<'input> {
                     let token_str = self
                         .slice_until_eol(&start)
                         .map_or_else(|| r#"""""#.to_string(), ToString::to_string);
-                    let range = Range::from((start, end));
+                    let range = Span::new(start, end);
                     ErrorKind::UnterminatedHereDoc(
                         range.expand_lines(2),
                         range,
@@ -1359,7 +1350,7 @@ impl<'input> Lexer<'input> {
                         let token_str = self
                             .slice_until_eol(&start)
                             .map_or_else(|| format!(r#""""{}"#, ch), ToString::to_string);
-                        let range = Range::from((start, end));
+                        let range = Span::new(start, end);
                         Err(ErrorKind::TailingHereDoc(
                             range.expand_lines(2),
                             range,
@@ -1400,8 +1391,8 @@ impl<'input> Lexer<'input> {
         // otherwise we will not get the whole heredoc in error messages
 
         let end_location = error.context().1.map_or_else(
-            || res.last().map_or(*end, |last| last.span.end),
-            |inner_error_range| inner_error_range.1,
+            || res.last().map_or(*end, |last| last.span.end()),
+            |inner_error_range| inner_error_range.end(),
         );
 
         let Error(kind, ..) = error;
@@ -1412,16 +1403,18 @@ impl<'input> Lexer<'input> {
         let mut end = total_start;
         end.shift_str(&token_str);
         let unfinished_token =
-            UnfinishedToken::new(Range::from((total_start, end_location)), token_str);
+            UnfinishedToken::new(Span::new(total_start, end_location), token_str);
         match kind {
             ErrorKind::UnterminatedExtractor(outer, location, _) => {
                 // expand to start line of heredoc, so we get a proper context
-                let outer = outer.expand_lines(outer.0.line().saturating_sub(total_start.line()));
+                let outer =
+                    outer.expand_lines(outer.start().line().saturating_sub(total_start.line()));
                 ErrorKind::UnterminatedExtractor(outer, location, unfinished_token)
             }
             ErrorKind::UnterminatedIdentLiteral(outer, location, _) => {
                 // expand to start line of heredoc, so we get a proper context
-                let outer = outer.expand_lines(outer.0.line().saturating_sub(total_start.line()));
+                let outer =
+                    outer.expand_lines(outer.start().line().saturating_sub(total_start.line()));
                 ErrorKind::UnterminatedIdentLiteral(outer, location, unfinished_token)
             }
             ErrorKind::UnterminatedHereDoc(outer, location, _)
@@ -1430,30 +1423,33 @@ impl<'input> Lexer<'input> {
                     // unterminated heredocs within interpolation are better reported
                     // as unterminated interpolation
                     ErrorKind::UnterminatedInterpolation(
-                        Range::from((total_start, end.move_down_lines(2))),
-                        Range::from((total_start, end)),
+                        Span::new(total_start, end.move_down_lines(2)),
+                        Span::new(total_start, end),
                         unfinished_token,
                     )
                 } else {
                     let outer =
-                        outer.expand_lines(outer.0.line().saturating_sub(total_start.line()));
+                        outer.expand_lines(outer.start().line().saturating_sub(total_start.line()));
 
                     ErrorKind::UnterminatedHereDoc(outer, location, unfinished_token)
                 }
             }
             ErrorKind::UnterminatedInterpolation(outer, location, _) => {
                 // expand to start line of heredoc, so we get a proper context
-                let outer = outer.expand_lines(outer.0.line().saturating_sub(total_start.line()));
+                let outer =
+                    outer.expand_lines(outer.start().line().saturating_sub(total_start.line()));
                 ErrorKind::UnterminatedInterpolation(outer, location, unfinished_token)
             }
             ErrorKind::UnexpectedEscapeCode(outer, location, _, found) => {
                 // expand to start line of heredoc, so we get a proper context
-                let outer = outer.expand_lines(outer.0.line().saturating_sub(total_start.line()));
+                let outer =
+                    outer.expand_lines(outer.start().line().saturating_sub(total_start.line()));
                 ErrorKind::UnexpectedEscapeCode(outer, location, unfinished_token, found)
             }
             ErrorKind::UnterminatedStringLiteral(outer, location, _) => {
                 // expand to start line of heredoc, so we get a proper context
-                let outer = outer.expand_lines(outer.0.line().saturating_sub(total_start.line()));
+                let outer =
+                    outer.expand_lines(outer.start().line().saturating_sub(total_start.line()));
                 if is_hd {
                     ErrorKind::UnterminatedStringLiteral(outer, location, unfinished_token)
                 } else {
@@ -1462,14 +1458,15 @@ impl<'input> Lexer<'input> {
                     toekn_end.shift('{');
                     ErrorKind::UnterminatedInterpolation(
                         outer,
-                        Range::from((*segment_start, toekn_end)),
+                        Span::new(*segment_start, toekn_end),
                         unfinished_token,
                     )
                 }
             }
             ErrorKind::InvalidUtf8Sequence(outer, location, _) => {
                 // expand to start line of heredoc, so we get a proper context
-                let outer = outer.expand_lines(outer.0.line().saturating_sub(total_start.line()));
+                let outer =
+                    outer.expand_lines(outer.start().line().saturating_sub(total_start.line()));
                 ErrorKind::InvalidUtf8Sequence(outer, location, unfinished_token)
             }
             e => e,
@@ -1521,9 +1518,9 @@ impl<'input> Lexer<'input> {
                     .slice_full_lines(&total_start, end_location)
                     .unwrap_or_else(|| format!("{}{}", error_prefix, content));
                 ErrorKind::UnterminatedInterpolation(
-                    Range::from((total_start, end.move_down_lines(2))),
-                    Range::from((*segment_start, *end)),
-                    UnfinishedToken::new(Range::from((total_start, *end_location)), token_str),
+                    Span::new(total_start, end.move_down_lines(2)),
+                    Span::new(*segment_start, *end),
+                    UnfinishedToken::new(Span::new(total_start, *end_location), token_str),
                 )
             })?;
 
@@ -1542,7 +1539,7 @@ impl<'input> Lexer<'input> {
             match &s.value {
                 Token::RBrace if pcount == 0 => {
                     let start = *segment_start;
-                    *segment_start = s.span.pp_end;
+                    *segment_start = s.span.end();
 
                     res.push(s);
                     if first {
@@ -1552,11 +1549,11 @@ impl<'input> Lexer<'input> {
                             .unwrap_or_else(|| format!("{}{}", error_prefix, content));
 
                         let unfinished_token =
-                            UnfinishedToken::new(Range::from((start, end_location)), token_str);
+                            UnfinishedToken::new(Span::new(start, end_location), token_str);
 
                         return Err(ErrorKind::EmptyInterpolation(
-                            Range::from((total_start, end_location)),
-                            Range::from((start, end_location)),
+                            Span::new(total_start, end_location),
+                            Span::new(start, end_location),
                             unfinished_token,
                         )
                         .into());
@@ -1669,7 +1666,7 @@ impl<'input> Lexer<'input> {
                 let token_str = self
                     .slice_until_eof(&heredoc_start)
                     .map_or_else(|| format!(r#""""\n{}"#, content), ToString::to_string);
-                let range = Range::from((heredoc_start, end));
+                let range = Span::new(heredoc_start, end);
                 ErrorKind::UnterminatedHereDoc(
                     range.expand_lines(2),
                     range,
@@ -1771,11 +1768,11 @@ impl<'input> Lexer<'input> {
 
                     let mut token_end = total_start;
                     token_end.shift_str(&token_str);
-                    let range = Range::from((total_start, end));
+                    let range = Span::new(total_start, end);
                     return Err(ErrorKind::UnterminatedStringLiteral(
                         range.expand_lines(2),
                         range,
-                        UnfinishedToken::new(Range::from((total_start, token_end)), token_str),
+                        UnfinishedToken::new(Span::new(total_start, token_end), token_str),
                     )
                     .into());
                 }
@@ -1806,11 +1803,11 @@ impl<'input> Lexer<'input> {
                 let token_str = format!("|{}\\{}", s, ch);
                 let mut token_end = end;
                 token_end.shift(ch);
-                let range = Range::from((end, end));
+                let range = Span::new(end, end);
                 Err(ErrorKind::UnexpectedEscapeCode(
                     range.expand_lines(2),
                     range,
-                    UnfinishedToken::new(Range::from((*start, token_end)), token_str),
+                    UnfinishedToken::new(Span::new(*start, token_end), token_str),
                     ch,
                 )
                 .into())
@@ -1824,11 +1821,11 @@ impl<'input> Lexer<'input> {
             .map_or_else(|| format!("|{}", string), ToString::to_string);
         let mut token_end = start;
         token_end.shift_str(&token_str);
-        let range = Range::from((start, token_end));
+        let range = Span::new(start, token_end);
         ErrorKind::UnterminatedExtractor(
             range.expand_lines(2),
             range,
-            UnfinishedToken::new(Range::from((start, token_end)), token_str),
+            UnfinishedToken::new(Span::new(start, token_end), token_str),
         )
     }
     fn unfinished_string(&self, string: &str, start: Location) -> ErrorKind {
@@ -1837,11 +1834,11 @@ impl<'input> Lexer<'input> {
             .map_or_else(|| format!("\"{}", string), ToString::to_string);
         let mut token_end = start;
         token_end.shift_str(&token_str);
-        let range = Range::from((start, token_end));
+        let range = Span::new(start, token_end);
         ErrorKind::UnterminatedStringLiteral(
             range.expand_lines(2),
             range,
-            UnfinishedToken::new(Range::from((start, token_end)), token_str),
+            UnfinishedToken::new(Span::new(start, token_end), token_str),
         )
     }
 
@@ -1884,7 +1881,7 @@ impl<'input> Lexer<'input> {
                     let token_str = self
                         .slice_until_eol(&total_start)
                         .map_or_else(|| format!("|{}", string), ToString::to_string);
-                    let range = Range::from((total_start, end));
+                    let range = Span::new(total_start, end);
                     return Err(ErrorKind::UnterminatedExtractor(
                         range.expand_lines(2),
                         range,
@@ -1924,10 +1921,10 @@ impl<'input> Lexer<'input> {
                         Token::FloatLiteral(
                             float.parse().chain_err(|| {
                                 ErrorKind::InvalidFloatLiteral(
-                                    Range::from((start, end)).expand_lines(2),
-                                    Range::from((start, end)),
+                                    Span::new(start, end).expand_lines(2),
+                                    Span::new(start, end),
                                     UnfinishedToken::new(
-                                        Range::from((start, end)),
+                                        Span::new(start, end),
                                         self.slice_until_eol(&start)
                                             .map_or_else(|| float.to_string(), ToString::to_string),
                                     ),
@@ -1938,10 +1935,10 @@ impl<'input> Lexer<'input> {
                     ))
                 } else {
                     Err(ErrorKind::InvalidFloatLiteral(
-                        Range::from((start, end)).expand_lines(2),
-                        Range::from((start, end)),
+                        Span::new(start, end).expand_lines(2),
+                        Span::new(start, end),
                         UnfinishedToken::new(
-                            Range::from((start, end)),
+                            Span::new(start, end),
                             self.slice_until_eol(&start)
                                 .map_or_else(|| float.to_string(), ToString::to_string),
                         ),
@@ -1950,10 +1947,10 @@ impl<'input> Lexer<'input> {
                 }
             }
             Some((end, ch)) if is_ident_start(ch) => Err(ErrorKind::UnexpectedCharacter(
-                Range::from((start, end)).expand_lines(2),
-                Range::from((end, end)),
+                Span::new(start, end).expand_lines(2),
+                Span::new(start, end),
                 UnfinishedToken::new(
-                    Range::from((start, end)),
+                    Span::new(start, end),
                     self.slice_until_eol(&start)
                         .map_or_else(|| int.to_string(), ToString::to_string),
                 ),
@@ -1966,10 +1963,10 @@ impl<'input> Lexer<'input> {
                 Token::FloatLiteral(
                     float.parse().chain_err(|| {
                         ErrorKind::InvalidFloatLiteral(
-                            Range::from((start, end)).expand_lines(2),
-                            Range::from((start, end)),
+                            Span::new(start, end).expand_lines(2),
+                            Span::new(start, end),
                             UnfinishedToken::new(
-                                Range::from((start, end)),
+                                Span::new(start, end),
                                 self.slice_until_eol(&start)
                                     .map_or_else(|| float.to_string(), ToString::to_string),
                             ),
@@ -1989,10 +1986,10 @@ impl<'input> Lexer<'input> {
         match int {
             "0" | "-0" => match self.lookahead() {
                 Some((_, ch)) if is_ident_start(ch) => Err(ErrorKind::UnexpectedCharacter(
-                    Range::from((start, end)).expand_lines(2),
-                    Range::from((start, end)),
+                    Span::new(start, end).expand_lines(2),
+                    Span::new(start, end),
                     UnfinishedToken::new(
-                        Range::from((start, end)),
+                        Span::new(start, end),
                         self.slice_until_eol(&start)
                             .map_or_else(|| hex.to_string(), ToString::to_string),
                     ),
@@ -2002,10 +1999,10 @@ impl<'input> Lexer<'input> {
                 _ => {
                     if hex.is_empty() {
                         Err(ErrorKind::InvalidHexLiteral(
-                            Range::from((start, end)).expand_lines(2),
-                            Range::from((start, end)),
+                            Span::new(start, end).expand_lines(2),
+                            Span::new(start, end),
                             UnfinishedToken::new(
-                                Range::from((start, end)),
+                                Span::new(start, end),
                                 self.slice_until_eol(&start)
                                     .map_or_else(|| hex.to_string(), ToString::to_string),
                             ),
@@ -2017,10 +2014,10 @@ impl<'input> Lexer<'input> {
                         match i64_from_hex(&hex[..], is_positive) {
                             Ok(val) => Ok(self.spanned(start, end, Token::IntLiteral(val))),
                             Err(_err) => Err(ErrorKind::InvalidHexLiteral(
-                                Range::from((start, end)).expand_lines(2),
-                                Range::from((start, end)),
+                                Span::new(start, end).expand_lines(2),
+                                Span::new(start, end),
                                 UnfinishedToken::new(
-                                    Range::from((start, end)),
+                                    Span::new(start, end),
                                     self.slice_until_eol(&start)
                                         .map_or_else(|| hex.to_string(), ToString::to_string),
                                 ),
@@ -2031,10 +2028,10 @@ impl<'input> Lexer<'input> {
                 }
             },
             _ => Err(ErrorKind::InvalidHexLiteral(
-                Range::from((start, end)).expand_lines(2),
-                Range::from((start, end)),
+                Span::new(start, end).expand_lines(2),
+                Span::new(start, end),
                 UnfinishedToken::new(
-                    Range::from((start, end)),
+                    Span::new(start, end),
                     self.slice_until_eol(&start)
                         .map_or_else(|| int.to_string(), ToString::to_string),
                 ),
@@ -2051,10 +2048,10 @@ impl<'input> Lexer<'input> {
             Some((_, '.')) => self.float(start, &int),
             Some((_, 'x')) => self.hex(start, &int),
             Some((char_loc, ch)) if is_ident_start(ch) => Err(ErrorKind::UnexpectedCharacter(
-                Range::from((start, end)).expand_lines(2),
-                Range::from((char_loc, char_loc)),
+                Span::new(start, end).expand_lines(2),
+                Span::new(char_loc, char_loc),
                 UnfinishedToken::new(
-                    Range::from((start, end)),
+                    Span::new(start, end),
                     self.slice_until_eol(&start)
                         .map_or_else(|| int.to_string(), ToString::to_string),
                 ),
@@ -2066,10 +2063,10 @@ impl<'input> Lexer<'input> {
                 .map(|val| self.spanned(start, end, Token::IntLiteral(val)))
                 .map_err(|_| {
                     Error::from(ErrorKind::InvalidIntLiteral(
-                        Range::from((start, end)).expand_lines(2),
-                        Range::from((start, end)),
+                        Span::new(start, end).expand_lines(2),
+                        Span::new(start, end),
                         UnfinishedToken::new(
-                            Range::from((start, end)),
+                            Span::new(start, end),
                             self.slice_until_eol(&start)
                                 .map_or_else(|| int.to_string(), ToString::to_string),
                         ),
@@ -2185,7 +2182,7 @@ mod tests {
 
     macro_rules! lex_ok {
         ($src:expr, $($span:expr => $token:expr,)*) => {{
-            let lexed_tokens: Vec<_> = Tokenizer::new($src).filter(|t| match t {
+            let lexed_tokens: Vec<_> = Tokenizer::new($src, arena::Index::from(0usize)).filter(|t| match t {
                 Ok(Spanned { value: Token::EndOfStream, .. }) => false,
                 Ok(Spanned { value: t, .. }) => !t.is_ignorable(),
                 Err(_) => true
@@ -2652,7 +2649,7 @@ mod tests {
         let snot = "match %{ test ~= base64|| } of default => \"badger\" end ".to_string();
 
         let mut res = String::new();
-        for b in Tokenizer::new(&snot)
+        for b in Tokenizer::new(&snot, arena::Index::default())
             .filter_map(Result::ok)
             .collect::<Vec<TokenSpan>>()
         {
@@ -2666,7 +2663,7 @@ mod tests {
     fn lexer_long_float() -> Result<()> {
         let f = 48_354_865_651_623_290_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000.0;
         let source = format!("{:.1}", f); // ensure we keep the .0
-        match Tokenizer::new(&source).next() {
+        match Tokenizer::new(&source, arena::Index::default()).next() {
             Some(Ok(token)) => match token.value {
                 Token::FloatLiteral(f_token, _) => {
                     assert_eq!(f, f_token);
@@ -2685,7 +2682,7 @@ mod tests {
         fn float_literals_precision(f in 0_f64..f64::MAX) {
             if f.round() != f {
                 let float = format!("{:.}", f);
-                for token in Tokenizer::new(& float) {
+                for token in Tokenizer::new(&float, arena::Index::default()) {
                     let _ = token?;
                 }
             }
@@ -2697,7 +2694,7 @@ mod tests {
         #[test]
         fn float_literals_scientific(f in 0_f64..f64::MAX) {
             let float = format!("{:e}", f);
-            for token in Tokenizer::new(& float) {
+            for token in Tokenizer::new(&float, arena::Index::default()) {
                 match token {
                     Ok(spanned) =>
                         match spanned.value {

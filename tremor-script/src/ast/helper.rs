@@ -15,14 +15,13 @@
 pub use super::query::*;
 use super::{
     docs::{ConstDoc, Docs, QueryDeclDoc},
-    module::{ModuleContent, ModuleManager},
+    module::{self, ModuleContent, ModuleManager},
     raw::LocalPathRaw,
     ConnectorDefinition, Const, DeployFlow, FlowDefinition, FnDecl, InvokeAggrFn, NodeId,
-    NodeMetas,
 };
 use crate::{
     errors::Result,
-    pos::{Location, Range},
+    pos::Span,
     prelude::*,
     registry::{Aggr as AggrRegistry, Registry},
 };
@@ -37,22 +36,22 @@ pub type Warnings = std::collections::BTreeSet<Warning>;
 /// A warning generated while lexing or parsing
 pub struct Warning {
     /// Outer span of the warning
-    pub outer: Range,
+    pub outer: Span,
     /// Inner span of thw warning
-    pub inner: Range,
+    pub inner: Span,
     /// Warning message
     pub msg: String,
 }
 
 impl Warning {
-    fn new<T: ToString>(inner: Range, outer: Range, msg: &T) -> Self {
+    fn new<T: ToString>(inner: Span, outer: Span, msg: &T) -> Self {
         Self {
             outer,
             inner,
             msg: msg.to_string(),
         }
     }
-    fn new_with_scope<T: ToString>(warning_scope: Range, msg: &T) -> Self {
+    fn new_with_scope<T: ToString>(warning_scope: Span, msg: &T) -> Self {
         Self::new(warning_scope, warning_scope, msg)
     }
 }
@@ -60,19 +59,20 @@ impl Warning {
 /// A scope
 #[derive(Default, Debug, Clone, Serialize, PartialEq)]
 pub struct Scope<'script> {
-    pub(crate) modules: std::collections::HashMap<String, usize>,
+    /// Module of the scope
+    pub(crate) modules: std::collections::HashMap<String, module::Index>,
     /// Content of the scope
     pub content: ModuleContent<'script>,
     pub(crate) parent: Option<Box<Scope<'script>>>,
 }
 impl<'script> Scope<'script> {
-    pub(crate) fn get_module(&self, id: &[String]) -> Option<usize> {
+    pub(crate) fn get_module(&self, id: &[String]) -> Option<module::Index> {
         let (first, rest) = id.split_first()?;
         let id = *self.modules.get(first)?;
         ModuleManager::find_module(id, rest)
     }
-    pub(crate) fn add_module_alias(&mut self, alias: String, mid: usize) {
-        self.modules.insert(alias, mid);
+    pub(crate) fn add_module_alias(&mut self, alias: String, module_id: module::Index) {
+        self.modules.insert(alias, module_id);
     }
 
     pub(crate) fn insert_flow(&mut self, flow: FlowDefinition<'script>) -> Result<()> {
@@ -123,7 +123,6 @@ where
     pub(crate) shadowed_vars: Vec<String>,
     pub(crate) locals: HashMap<String, usize>,
     /// AST Metadata
-    pub meta: NodeMetas,
     pub(crate) docs: Docs,
     pub(crate) possible_leaf: bool,
     pub(crate) fn_argc: usize,
@@ -212,7 +211,10 @@ where
     }
 
     /// resolves the local aliases for modules
-    pub(crate) fn resolve_module_alias<'n>(&self, id: &'n NodeId) -> Option<(usize, &'n str)> {
+    pub(crate) fn resolve_module_alias<'n>(
+        &self,
+        id: &'n NodeId,
+    ) -> Option<(module::Index, &'n str)> {
         if id.module.is_empty() {
             None
         } else {
@@ -253,17 +255,7 @@ where
             doc,
         });
     }
-    pub(crate) fn add_meta(&mut self, start: Location, end: Location) -> usize {
-        // FIXME: cu
-        self.meta.add_meta(start, end, 0)
-    }
-    pub(crate) fn add_meta_w_name<S>(&mut self, start: Location, end: Location, name: &S) -> usize
-    where
-        S: ToString,
-    {
-        // FIXME: self.cu
-        self.meta.add_meta_w_name(start, end, name, 0)
-    }
+
     pub(crate) fn has_locals(&self) -> bool {
         self.locals
             .iter()
@@ -281,11 +273,7 @@ where
 
     /// Creates a new AST helper
     #[must_use]
-    pub fn new(
-        reg: &'registry Registry,
-        aggr_reg: &'registry AggrRegistry,
-        cus: Vec<crate::lexer::CompilationUnit>,
-    ) -> Self {
+    pub fn new(reg: &'registry Registry, aggr_reg: &'registry AggrRegistry) -> Self {
         Helper {
             reg,
             aggr_reg,
@@ -299,7 +287,6 @@ where
             warnings: BTreeSet::new(),
             locals: HashMap::new(),
             shadowed_vars: Vec::new(),
-            meta: NodeMetas::new(cus),
             docs: Docs::default(),
             possible_leaf: false,
             fn_argc: 0,
@@ -349,10 +336,10 @@ where
         })
     }
 
-    pub(crate) fn warn<S: ToString>(&mut self, inner: Range, outer: Range, msg: &S) {
+    pub(crate) fn warn<S: ToString>(&mut self, inner: Span, outer: Span, msg: &S) {
         self.warnings.insert(Warning::new(inner, outer, msg));
     }
-    pub(crate) fn warn_with_scope<S: ToString>(&mut self, r: Range, msg: &S) {
+    pub(crate) fn warn_with_scope<S: ToString>(&mut self, r: Span, msg: &S) {
         self.warnings.insert(Warning::new_with_scope(r, msg));
     }
 }

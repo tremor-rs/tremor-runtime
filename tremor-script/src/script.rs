@@ -23,17 +23,15 @@ use crate::{
         Helper,
     },
     ctx::EventContext,
-    errors::{CompilerError, Error, Result},
-    highlighter::{Dumb as DumbHighlighter, Highlighter},
+    errors::Result,
+    highlighter::Highlighter,
     lexer::{self, Tokenizer},
     parser::g as grammar,
-    path::ModulePath,
-    pos::Range,
     registry::{Aggr as AggrRegistry, Registry},
-    srs, Value,
+    Value,
 };
 use serde::Serialize;
-use std::io::{self, Write};
+use std::io;
 
 /// Return of a script execution
 #[derive(Debug, Serialize, PartialEq)]
@@ -64,7 +62,7 @@ pub struct Script {
     /// Arena index of the string
     pub aid: crate::arena::Index,
     /// A set of warnings if any
-    pub(crate) warnings: Warnings,
+    pub warnings: Warnings,
 }
 
 impl Script {
@@ -77,37 +75,26 @@ impl Script {
     ///
     /// # Errors
     /// if the script can not be parsed
-    pub fn parse(
-        _module_path: &ModulePath,
-        _file_name: &str,
-        script: String,
-        reg: &Registry,
-    ) -> std::result::Result<Self, CompilerError> {
-        let r = || -> Result<Self> {
-            let mut warnings = Warnings::new();
-            let (aid, script) = Arena::insert(script)?;
+    pub fn parse<S: ToString>(script: S, reg: &Registry) -> Result<Self> {
+        let mut warnings = Warnings::new();
+        let (aid, script) = Arena::insert(script)?;
 
-            let tokens = Tokenizer::new(script).collect::<Result<Vec<_>>>()?;
-            let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
+        let tokens = Tokenizer::new(script, aid).collect::<Result<Vec<_>>>()?;
+        let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
 
-            let script_raw = grammar::ScriptParser::new().parse(filtered_tokens)?;
-            let fake_aggr_reg = AggrRegistry::default();
-            let mut helper = Helper::new(reg, &fake_aggr_reg, Vec::new());
-            // helper.consts.args = args.clone_static();
-            let mut screw_rust = script_raw.up_script(&mut helper)?;
-            ConstFolder::new(&helper).walk_script(&mut screw_rust)?;
-            std::mem::swap(&mut warnings, &mut helper.warnings);
-            let script = screw_rust;
+        let script_raw = grammar::ScriptParser::new().parse(filtered_tokens)?;
+        let fake_aggr_reg = AggrRegistry::default();
+        let mut helper = Helper::new(reg, &fake_aggr_reg);
+        // helper.consts.args = args.clone_static();
+        let mut screw_rust = script_raw.up_script(&mut helper)?;
+        ConstFolder::new(&helper).walk_script(&mut screw_rust)?;
+        std::mem::swap(&mut warnings, &mut helper.warnings);
+        let script = screw_rust;
 
-            Ok(Self {
-                script,
-                aid,
-                warnings,
-            })
-        }();
-        r.map_err(|error| CompilerError {
-            error,
-            cus: Vec::new(),
+        Ok(Self {
+            script,
+            aid,
+            warnings,
         })
     }
 
@@ -126,85 +113,12 @@ impl Script {
         h: &mut H,
         emit_lines: bool,
     ) -> io::Result<()> {
-        let tokens: Vec<_> = lexer::Tokenizer::new(script).tokenize_until_err().collect();
+        let (aid, script) = Arena::insert(script)?;
+        let tokens: Vec<_> = lexer::Tokenizer::new(script, aid)
+            .tokenize_until_err()
+            .collect();
         h.highlight(None, &tokens, "", emit_lines, None)?;
         io::Result::Ok(())
-    }
-
-    /// Highlights a script range with a given highlighter and line indents.
-    /// # Errors
-    /// on io errors
-    #[cfg(not(tarpaulin_include))]
-    pub fn highlight_script_with_range<H: Highlighter>(
-        script: &str,
-        r: Range,
-        h: &mut H,
-    ) -> io::Result<()> {
-        Self::highlight_script_with_range_indent("", script, r, h)
-    }
-
-    /// Highlights a script range with a given highlighter.
-    /// # Errors
-    /// on io errors
-    #[cfg(not(tarpaulin_include))]
-    pub fn highlight_script_with_range_indent<H: Highlighter>(
-        line_prefix: &str,
-        script: &str,
-        r: Range,
-        h: &mut H,
-    ) -> io::Result<()> {
-        let tokens: Vec<_> = lexer::Tokenizer::new(script).collect::<Result<_>>()?;
-        h.highlight(None, &tokens, line_prefix, true, Some(r))?;
-        io::Result::Ok(())
-    }
-
-    /// Format an error given a script source.
-    /// # Errors
-    /// on io errors
-    pub fn format_error_from_script<H: Highlighter>(
-        script: &str,
-        h: &mut H,
-        CompilerError { error, cus }: &CompilerError,
-    ) -> io::Result<()> {
-        Self::format_error_from_script_and_cus(script, h, error, cus)
-    }
-
-    /// Format an error given a script source.
-    fn format_error_from_script_and_cus<H: Highlighter>(
-        script: &str,
-        h: &mut H,
-        error: &Error,
-        cus: &[lexer::CompilationUnit],
-    ) -> io::Result<()> {
-        if let (Some(r), _) = error.context() {
-            let cu = error.cu();
-            if cu == 0 {
-                // i wanna use map_while here, but it is still unstable :(
-                let tokens: Vec<_> = lexer::Tokenizer::new(script).tokenize_until_err().collect();
-                h.highlight_error(None, &tokens, "", true, Some(r), Some(error.into()))?;
-            } else if let Some(cu) = cus.get(cu) {
-                let script = std::fs::read_to_string(cu.file_path())?;
-                let tokens: Vec<_> = lexer::Tokenizer::new(&script)
-                    .tokenize_until_err()
-                    .collect();
-                h.highlight_error(
-                    cu.file_path().to_str(),
-                    &tokens,
-                    "",
-                    true,
-                    Some(r),
-                    Some(error.into()),
-                )?;
-            } else {
-                write!(h.get_writer(), "Error: {}", error)?;
-            };
-        } else {
-            write!(h.get_writer(), "Error: {}", error)?;
-        }
-        h.finalize()
-    }
-    fn src(&self) -> io::Result<&'static str> {
-        Arena::get(self.aid)?.ok_or(io::Error::new(io::ErrorKind::NotFound, "source not found"))
     }
 
     /// Format warnings with the given `Highligher`.
@@ -212,7 +126,7 @@ impl Script {
     /// on io errors
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> io::Result<()> {
         for w in self.warnings() {
-            let tokens: Vec<_> = lexer::Tokenizer::new(self.src()?)
+            let tokens: Vec<_> = lexer::Tokenizer::new(Arena::io_get(self.aid)?, self.aid)
                 .tokenize_until_err()
                 .collect();
             h.highlight_error(None, &tokens, "", true, Some(w.outer), Some(w.into()))?;
@@ -220,32 +134,12 @@ impl Script {
         h.finalize()
     }
 
-    /// Formats an error within this script
-    #[must_use]
-    pub fn format_error(&self, e: &Error) -> String {
-        let mut h = DumbHighlighter::default();
-        if self.format_error_with(&mut h, e).is_ok() {
-            h.to_string()
-        } else {
-            format!("Failed to extract code for error: {}", e)
-        }
-    }
-
-    /// Formats an error within this script using a given highlighter
-    ///
-    /// # Errors
-    /// on io errors
-    pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> io::Result<()> {
-        let cus = &self.script.node_meta.cus;
-        Self::format_error_from_script_and_cus(self.src()?, h, e, cus)
-    }
-
     /// Runs an event through this script
     ///
     /// # Errors
     /// if the script fails to run for the given context, event state and metadata
     pub fn run<'run, 'event>(
-        &'event self,
+        &self,
         context: &'run EventContext,
         aggr: AggrType,
         event: &'run mut Value<'event>,

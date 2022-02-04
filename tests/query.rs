@@ -22,19 +22,12 @@ use tremor_script::FN_REGISTRY;
 
 use tremor_runtime::errors::*;
 use tremor_script::utils::*;
-use tremor_script::{path::ModulePath, ModuleManager};
+use tremor_script::ModuleManager;
 
-fn to_pipe(file_name: &str, query: &str) -> Result<ExecutableGraph> {
+fn to_pipe(query: String) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let mut idgen = OperatorIdGen::new();
-    let q = Query::parse(
-        &ModulePath { mounts: vec![] },
-        query,
-        file_name,
-        vec![],
-        &*FN_REGISTRY.read()?,
-        &aggr_reg,
-    )?;
+    let q = Query::parse(query, &*FN_REGISTRY.read()?, &aggr_reg)?;
     Ok(q.to_pipe(&mut idgen)?)
 }
 
@@ -59,7 +52,7 @@ macro_rules! test_cases {
                 let mut file = file::open(query_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let mut pipeline = to_pipe(query_file, &contents)?;
+                let mut pipeline = to_pipe(contents)?;
 
                 println!("Loading input: {}", in_file);
                 let in_json = load_event_file(in_file)?;
@@ -110,7 +103,7 @@ test_cases!(
     merge,
     multi_dimensions,
     mutate,
-    passthrough,
+    simple_passthrough,
     patch,
     rewrite_root,
     script_params_overwrite,

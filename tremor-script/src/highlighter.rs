@@ -15,13 +15,13 @@
 // This is terminal related for colorful printing
 #![cfg(not(tarpaulin_include))]
 
-use crate::lexer::{Token, TokenSpan};
-use crate::pos::Location;
-use crate::{ast::helper::Warning, errors::UnfinishedToken};
 use crate::{
-    errors::{CompilerError, Error as ScriptError},
-    lexer::Range,
+    arena::Arena,
+    lexer::{Token, TokenSpan},
 };
+use crate::{ast::helper::Warning, errors::UnfinishedToken};
+use crate::{errors::Error as ScriptError, lexer::Span};
+use crate::{lexer, pos::Location};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Write};
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
@@ -99,7 +99,7 @@ impl Error {
 impl From<&ScriptError> for Error {
     fn from(error: &ScriptError) -> Self {
         let (start, end) = match error.context() {
-            (_, Some(inner)) => (inner.0, inner.1),
+            (_, Some(inner)) => (inner.start(), inner.end()),
             _ => (Location::default(), Location::default()),
         };
         Self {
@@ -113,28 +113,11 @@ impl From<&ScriptError> for Error {
     }
 }
 
-impl From<&CompilerError> for Error {
-    fn from(error: &CompilerError) -> Self {
-        let error = &error.error;
-        let (start, end) = match error.context() {
-            (_, Some(inner)) => (inner.0, inner.1),
-            _ => (Location::default(), Location::default()),
-        };
-        Self {
-            start,
-            end,
-            callout: format!("{}", error),
-            hint: error.hint(),
-            level: ErrorLevel::Error,
-            token: error.token(),
-        }
-    }
-}
 impl From<&Warning> for Error {
     fn from(warning: &Warning) -> Self {
         Self {
-            start: warning.inner.0,
-            end: warning.inner.1,
+            start: warning.inner.start(),
+            end: warning.inner.end(),
             callout: warning.msg.clone(),
             hint: None,
             level: ErrorLevel::Warning,
@@ -147,6 +130,41 @@ impl From<&Warning> for Error {
 pub trait Highlighter {
     /// Writer for the highligher to write to
     type W: Write;
+
+    /// Highlights a script range
+    /// # Errors
+    /// on io errors
+    fn highlight_range(&mut self, r: Span) -> io::Result<()> {
+        self.highlight_range_with_indent("", r)
+    }
+
+    /// Highlights a script range
+    /// # Errors
+    /// on io errors
+    fn highlight_range_with_indent(&mut self, line_prefix: &str, r: Span) -> io::Result<()> {
+        let aid = r.aid();
+        let script = Arena::io_get(aid)?;
+        let tokens: Vec<_> =
+            lexer::Tokenizer::new(script, aid).collect::<crate::errors::Result<_>>()?;
+        self.highlight(None, &tokens, line_prefix, true, Some(r))?;
+        io::Result::Ok(())
+    }
+
+    /// Format an error given a script source.
+    fn format_error(&mut self, error: &crate::errors::Error) -> io::Result<()> {
+        if let (Some(r), _) = error.context() {
+            let aid = r.aid();
+            let script = Arena::io_get(aid)?;
+            // i wanna use map_while here, but it is still unstable :(
+            let tokens: Vec<_> = lexer::Tokenizer::new(script, aid)
+                .tokenize_until_err()
+                .collect();
+            self.highlight_error(None, &tokens, "", true, Some(r), Some(error.into()))?;
+        } else {
+            write!(self.get_writer(), "Error: {}", error)?;
+        }
+        self.finalize()
+    }
 
     /// sets the color
     ///
@@ -181,9 +199,11 @@ pub trait Highlighter {
         source: &str,
         ident: &str,
         emit_lines: bool,
-        range: Option<Range>,
+        range: Option<Span>,
     ) -> io::Result<()> {
-        let tokens: Vec<_> = crate::lexer::Tokenizer::new(source)
+        // FIXME: we might not want this here
+        let (aid, source) = Arena::insert(source)?;
+        let tokens: Vec<_> = crate::lexer::Tokenizer::new(source, aid)
             .filter_map(Result::ok)
             .collect();
         self.highlight(Some(source), &tokens, ident, emit_lines, range)
@@ -198,7 +218,7 @@ pub trait Highlighter {
         tokens: &[TokenSpan],
         ident: &str,
         emit_lines: bool,
-        range: Option<Range>,
+        range: Option<Span>,
     ) -> io::Result<()> {
         self.highlight_error(file, tokens, ident, emit_lines, range, None)
     }
@@ -213,12 +233,12 @@ pub trait Highlighter {
         tokens: &[TokenSpan],
         ident: &str,
         emit_linenos: bool,
-        range: Option<Range>,
+        range: Option<Span>,
         error: Option<Error>,
     ) -> io::Result<()> {
         let extracted = range.map_or_else(
             || tokens.iter().collect::<Vec<_>>(),
-            |Range(start, end)| extract(tokens, start, end),
+            |Span { start, end, .. }| extract(tokens, start, end),
         );
         self.highlight_errors_indent(ident, emit_linenos, file, &extracted, error)
     }
@@ -510,7 +530,7 @@ pub trait Highlighter {
                     // handle the case where we have no tokens, thus no line prefix has been printed yet
                     // this happens if the first expression is faulty
                     if line == 0 {
-                        line = token.range.0.line();
+                        line = token.range.start().line();
                         self.write_line_prefix(line_prefix, line, emit_linenos)?;
                     }
 

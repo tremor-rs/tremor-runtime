@@ -17,7 +17,6 @@ use beef::Cow;
 use tremor_script::{
     ast::{self, Helper},
     prelude::*,
-    srs,
 };
 #[derive(Debug)]
 pub(crate) struct TrickleOperator {
@@ -43,28 +42,23 @@ fn mk_node_config(id: String, op_type: String, config: Value) -> NodeConfig {
 }
 
 impl TrickleOperator {
-    pub fn with_stmt(operator_uid: u64, decl: &srs::Stmt, helper: &mut Helper) -> Result<Self> {
+    pub fn with_stmt(
+        operator_uid: u64,
+        decl: &ast::OperatorDefinition<'static>,
+        helper: &mut Helper,
+    ) -> Result<Self> {
         use crate::operator;
-        let stmt = decl.suffix();
-        let op: Box<dyn Operator> = match stmt {
-            ast::Stmt::OperatorDefinition(ref op) => {
-                let op = op.clone().into_static();
-                let config = mk_node_config(
-                    op.node_id.id().to_string(),
-                    format!("{}::{}", op.kind.module, op.kind.operation),
-                    op.params.generate_config(helper)?,
-                );
-                operator(operator_uid, &config)?
-            }
-            _ => {
-                return Err(ErrorKind::PipelineError(
-                    "Trying to turn a non operator into a operator".into(),
-                )
-                .into())
-            }
-        };
 
-        Ok(Self { op })
+        let op = decl.clone();
+        let config = mk_node_config(
+            op.node_id.id().to_string(),
+            format!("{}::{}", op.kind.module, op.kind.operation),
+            op.params.generate_config(helper)?,
+        );
+
+        Ok(Self {
+            op: operator(operator_uid, &config)?,
+        })
     }
 }
 

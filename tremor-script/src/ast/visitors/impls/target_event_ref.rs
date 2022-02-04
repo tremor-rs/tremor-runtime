@@ -20,17 +20,15 @@ use crate::errors::error_event_ref_not_allowed;
 ///
 /// at a later stage we will only allow expressions with event references, if they are
 /// also in the group by clause - so we can simply rewrite those to reference `group` and thus we dont need to copy.
-pub(crate) struct TargetEventRef<'script, 'meta> {
+pub(crate) struct TargetEventRef<'script> {
     rewritten: bool,
-    meta: &'meta NodeMetas,
     group_expressions: Vec<ImutExpr<'script>>,
 }
 
-impl<'script, 'meta> TargetEventRef<'script, 'meta> {
-    pub(crate) fn new(group_expressions: Vec<ImutExpr<'script>>, meta: &'meta NodeMetas) -> Self {
+impl<'script> TargetEventRef<'script> {
+    pub(crate) fn new(group_expressions: Vec<ImutExpr<'script>>) -> Self {
         Self {
             rewritten: false,
-            meta,
             group_expressions,
         }
     }
@@ -40,16 +38,19 @@ impl<'script, 'meta> TargetEventRef<'script, 'meta> {
         Ok(self.rewritten)
     }
 }
-impl<'script, 'meta> ImutExprWalker<'script> for TargetEventRef<'script, 'meta> {}
-impl<'script, 'meta> ImutExprVisitor<'script> for TargetEventRef<'script, 'meta> {
+impl<'script> ImutExprWalker<'script> for TargetEventRef<'script> {}
+impl<'script> ImutExprVisitor<'script> for TargetEventRef<'script> {
     fn visit_expr(&mut self, e: &mut ImutExpr<'script>) -> Result<VisitRes> {
         for (idx, group_expr) in self.group_expressions.iter().enumerate() {
             // check if we have an equivalent expression :)
             if e.ast_eq(group_expr) {
                 // rewrite it:
                 *e = ImutExpr::Path(Path::Reserved(crate::ast::ReservedPath::Group {
-                    mid: e.mid(),
-                    segments: vec![crate::ast::Segment::Idx { mid: e.mid(), idx }],
+                    mid: Box::new(e.meta().clone()),
+                    segments: vec![crate::ast::Segment::Idx {
+                        mid: Box::new(e.meta().clone()),
+                        idx,
+                    }],
                 }));
                 self.rewritten = true;
                 // we do not need to visit this expression further, we already replaced it.
@@ -63,7 +64,7 @@ impl<'script, 'meta> ImutExprVisitor<'script> for TargetEventRef<'script, 'meta>
             // these are the only exprs that can get a hold of the event payload or its metadata
             Path::Event(_) | Path::Meta(_) => {
                 // fail if we see an event or meta ref in the select target
-                return error_event_ref_not_allowed(path, path, self.meta);
+                return error_event_ref_not_allowed(path, path);
             }
             _ => {}
         }

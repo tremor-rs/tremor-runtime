@@ -17,7 +17,7 @@
 
 use super::{
     docs::Docs, node_id::BaseRef, raw::BaseExpr, visitors::ConstFolder, CreationalWith,
-    DefinitioalArgs, DefinitioalArgsWith,
+    DefinitioalArgs, DefinitioalArgsWith, NodeMeta,
 };
 use super::{node_id::NodeId, PipelineDefinition};
 use super::{HashMap, Value};
@@ -81,12 +81,12 @@ impl<'script> BaseRef for DeployStmt<'script> {
 
 #[cfg(not(tarpaulin_include))] // this is a simple passthrough
 impl<'script> BaseExpr for DeployStmt<'script> {
-    fn mid(&self) -> usize {
+    fn meta(&self) -> &NodeMeta {
         match self {
-            DeployStmt::PipelineDefinition(s) => s.mid(),
-            DeployStmt::ConnectorDefinition(s) => s.mid(),
-            DeployStmt::FlowDefinition(s) => s.mid(),
-            DeployStmt::DeployFlowStmt(s) => s.mid(),
+            DeployStmt::PipelineDefinition(s) => s.meta(),
+            DeployStmt::ConnectorDefinition(s) => s.meta(),
+            DeployStmt::FlowDefinition(s) => s.meta(),
+            DeployStmt::DeployFlowStmt(s) => s.meta(),
         }
     }
 }
@@ -94,7 +94,7 @@ impl<'script> BaseExpr for DeployStmt<'script> {
 /// A connector declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ConnectorDefinition<'script> {
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Identifer for the connector
     pub node_id: NodeId,
     /// Resolved argument defaults
@@ -118,7 +118,7 @@ pub enum ConnectStmt {
     /// Connector to Pipeline connection
     ConnectorToPipeline {
         /// Metadata ID
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// The instance we're connecting to
         from: DeployEndpoint,
         /// The instance being connected
@@ -127,7 +127,7 @@ pub enum ConnectStmt {
     /// Pipeline to connector connection
     PipelineToConnector {
         /// Metadata ID
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// The instance we're connecting to
         from: DeployEndpoint,
         /// The instance being connected
@@ -136,7 +136,7 @@ pub enum ConnectStmt {
     /// Pipeline to Pipeline connection
     PipelineToPipeline {
         /// Metadata ID
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// The instance we're connecting to
         from: DeployEndpoint,
         /// The instance being connected
@@ -200,7 +200,7 @@ impl DeployEndpoint {
 /// A flow declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FlowDefinition<'script> {
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Identifer for the flow
     pub node_id: NodeId,
     /// Resolved argument defaults
@@ -231,7 +231,7 @@ impl<'script> FlowDefinition<'script> {
         helper: &mut super::Helper<'script, 'registry>,
     ) -> Result<()> {
         ConstFolder::new(helper).walk_flow_definition(self)?;
-        let args = self.params.render(&helper.meta)?;
+        let args = self.params.render()?;
         for create in &mut self.creates {
             create.apply_args(&args, helper)?;
         }
@@ -251,18 +251,23 @@ pub enum CreateTargetDefinition<'script> {
 /// A create statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CreateStmt<'script> {
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Target of the artefact definition being deployed
-    pub target: NodeId,
-    /// The name of the created entity
-    pub node_id: NodeId,
+    pub from_target: NodeId,
+    /// The name of the created entity (aka local alias)
+    pub instance_alias: NodeId,
     /// creational args
     pub with: CreationalWith<'script>,
     /// Atomic unit of deployment
     pub defn: CreateTargetDefinition<'script>,
 }
 impl_expr_mid!(CreateStmt);
-impl_fqn!(CreateStmt);
+impl crate::ast::node_id::BaseRef for CreateStmt<'_> {
+    fn fqn(&self) -> String {
+        self.instance_alias.fqn()
+    }
+}
+
 impl<'script> CreateStmt<'script> {
     /// First we apply the passed args to the creational with, substituting any use
     /// of `args` in with with the value.
@@ -298,7 +303,7 @@ impl<'script> CreateStmt<'script> {
             }
             CreateTargetDefinition::Pipeline(p) => {
                 p.params.ingest_creational_with(&self.with)?;
-                let args = p.params.render(&helper.meta)?;
+                let args = p.params.render()?;
                 p.apply_args(&args, helper)
             }
         }
@@ -307,16 +312,20 @@ impl<'script> CreateStmt<'script> {
 /// A create statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DeployFlow<'script> {
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Target of the artefact definition being deployed
-    pub target: NodeId,
+    pub from_target: NodeId,
     /// Target for creation
-    pub node_id: NodeId,
+    pub instance_alias: NodeId,
     /// Atomic unit of deployment
-    pub decl: FlowDefinition<'script>,
+    pub defn: FlowDefinition<'script>,
     /// Documentation comments
     #[serde(skip)]
     pub docs: Option<String>,
 }
 impl_expr_mid!(DeployFlow);
-impl_fqn!(DeployFlow);
+impl crate::ast::node_id::BaseRef for DeployFlow<'_> {
+    fn fqn(&self) -> String {
+        self.instance_alias.fqn()
+    }
+}

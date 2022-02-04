@@ -15,7 +15,7 @@
 mod custom_fn;
 pub use self::custom_fn::CustomFn;
 pub(crate) use self::custom_fn::{RECUR_PTR, RECUR_REF};
-use crate::ast::{BaseExpr, NodeMetas};
+use crate::ast::BaseExpr;
 use crate::errors::{best_hint, Error, Kind as ErrorKind, Result};
 use crate::utils::hostname as get_hostname;
 use crate::Value;
@@ -268,13 +268,12 @@ impl FunctionError {
         outer: &O,
         inner: &I,
         registry: Option<&Registry>,
-        meta: &NodeMetas,
     ) -> crate::errors::Error {
         use FunctionError::{
             BadArity, BadType, Error, MissingFunction, MissingModule, RecursionLimit, RuntimeError,
         };
-        let outer = outer.extent(meta);
-        let inner = inner.extent(meta);
+        let outer = outer.extent();
+        let inner = inner.extent();
         match self {
             BadArity { mfa, calling_a } => {
                 ErrorKind::BadArity(outer, inner, mfa.m, mfa.f, mfa.a..=mfa.a, calling_a).into()

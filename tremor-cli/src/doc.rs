@@ -31,9 +31,7 @@ fn gen_doc(
 ) -> Result<()> {
     let rel_path = rel_path
         .ok_or_else(|| Error::from(format!("Bad relative path: {}", path.to_string_lossy())))?;
-    let dest_path = dest_path
-        .as_ref()
-        .ok_or_else(|| Error::from("Bad destination path"))?;
+    let dest_path = dest_path.ok_or_else(|| Error::from("Bad destination path"))?;
 
     if let Some(ext) = path.extension() {
         let ext = ext.to_str();
@@ -46,17 +44,14 @@ fn gen_doc(
     let mut input = crate::open_file(path, None)?;
     input.read_to_string(&mut raw)?;
 
-    let name = rel_path
-        .to_string_lossy()
-        .to_string()
+    let file_str = rel_path.to_string_lossy().to_string();
+    let name = file_str
         .rsplit('/')
         .next()
         .ok_or_else(|| Error::from("Could not isolate relative path"))?
         .replace(".tremor", "");
 
-    let path = path.to_str().ok_or_else(|| Error::from("Bad path"))?;
-
-    let runnable = Script::parse(&env.module_path, path, raw, &env.fun)?;
+    let runnable = Script::parse(raw, &env.fun)?;
     let docs = runnable.docs();
     let consts = &docs.consts;
     let fns = &docs.fns;

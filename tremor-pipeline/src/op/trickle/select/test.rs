@@ -58,16 +58,17 @@ fn test_stmt(target: ast::ImutExpr) -> ast::Select {
 fn test_query(stmt: ast::Stmt) -> ast::Query {
     let mut consts = Consts::default();
     consts.args = literal!({"snot": "badger"});
-    ast::Query {
-        stmts: vec![stmt.clone()],
-        node_meta: ast::NodeMetas::default(),
-        windows: HashMap::new(),
-        scripts: HashMap::new(),
-        operators: HashMap::new(),
-        config: HashMap::new(),
-        params: DefinitioalArgs::default(),
-        consts,
-    }
+    todo!()
+    // ast::Query {
+    //     stmts: vec![stmt.clone()],
+    //     node_meta: ast::NodeMetas::default(),
+    //     windows: HashMap::new(),
+    //     scripts: HashMap::new(),
+    //     operators: HashMap::new(),
+    //     config: HashMap::new(),
+    //     params: DefinitioalArgs::default(),
+    //     consts,
+    // }
 }
 
 fn ingest_ns(s: u64) -> u64 {
@@ -229,7 +230,6 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
             let mut f = ConstFolder {
                 meta: &mut meta,
                 reg: &reg,
-                consts: &fake_consts,
             };
             f.walk_window_decl(window_decl).unwrap();
             (
