@@ -253,9 +253,9 @@ impl DbgAst {
                 match Script::parse(&env.module_path, &data.src, data.raw.clone(), &env.fun) {
                     Ok(runnable) => {
                         let ast = if self.exprs_only {
-                            simd_json::to_string_pretty(&runnable.script.suffix().exprs)?
+                            simd_json::to_string_pretty(&runnable.script.exprs)?
                         } else {
-                            simd_json::to_string_pretty(&runnable.script.suffix())?
+                            simd_json::to_string_pretty(&runnable.script)?
                         };
                         println!();
                         Script::highlight_script_with(&ast, h, !data.opts.raw)?;
