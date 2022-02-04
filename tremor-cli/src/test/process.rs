@@ -98,12 +98,10 @@ pub(crate) async fn run_process(
     let env = test_env(tests_root_dir, test_dir);
 
     let mut before = before::BeforeController::new(test_dir, &env);
-    if let Some(mut before_process) = before.spawn().await? {
-        async_std::task::spawn(async move {
-            if let Err(e) = before_process.join().await {
-                eprintln!("Failed to capture input from before thread: {}", e);
-            };
-        });
+    let mut after = after::AfterController::new(test_dir, &env);
+    if let Err(e) = before.spawn().await {
+        after.spawn().await?;
+        return Err(e);
     }
 
     // register signal handler - to ensure we run `after` even if we do a Ctrl-C
@@ -145,7 +143,6 @@ pub(crate) async fn run_process(
     before::update_evidence(test_dir, &mut evidence)?;
 
     // As our primary process is finished, check for after hooks
-    let mut after = after::AfterController::new(test_dir, &env);
     after.spawn().await?;
     after::update_evidence(test_dir, &mut evidence)?;
     run_after.store(false, Ordering::Release);
