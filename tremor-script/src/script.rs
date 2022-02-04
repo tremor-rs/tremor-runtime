@@ -14,6 +14,7 @@
 
 pub use crate::interpreter::AggrType;
 use crate::{
+    arena::Arena,
     ast::{
         docs::Docs,
         helper::{Warning, Warnings},
@@ -58,11 +59,10 @@ pub enum Return<'event> {
 /// A tremor script
 #[derive(Debug)]
 pub struct Script {
-    // TODO: This should probably be pulled out to allow people wrapping it themselves
     /// Rental for the runnable script
-    pub script: srs::Script,
-    /// Source code for this script
-    pub source: String,
+    pub script: crate::ast::Script<'static>,
+    /// Arena index of the string
+    pub aid: crate::arena::Index,
     /// A set of warnings if any
     pub(crate) warnings: Warnings,
 }
@@ -85,24 +85,23 @@ impl Script {
     ) -> std::result::Result<Self, CompilerError> {
         let r = || -> Result<Self> {
             let mut warnings = Warnings::new();
+            let (aid, script) = Arena::insert(script)?;
 
-            let rented_script = srs::Script::try_new::<Error, _>(script.clone(), |script| {
-                let tokens = Tokenizer::new(script.as_str()).collect::<Result<Vec<_>>>()?;
-                let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
+            let tokens = Tokenizer::new(script).collect::<Result<Vec<_>>>()?;
+            let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
 
-                let script_raw = grammar::ScriptParser::new().parse(filtered_tokens)?;
-                let fake_aggr_reg = AggrRegistry::default();
-                let mut helper = Helper::new(reg, &fake_aggr_reg, Vec::new());
-                // helper.consts.args = args.clone_static();
-                let mut screw_rust = script_raw.up_script(&mut helper)?;
-                ConstFolder::new(&helper).walk_script(&mut screw_rust)?;
-                std::mem::swap(&mut warnings, &mut helper.warnings);
-                Ok(screw_rust)
-            })?;
+            let script_raw = grammar::ScriptParser::new().parse(filtered_tokens)?;
+            let fake_aggr_reg = AggrRegistry::default();
+            let mut helper = Helper::new(reg, &fake_aggr_reg, Vec::new());
+            // helper.consts.args = args.clone_static();
+            let mut screw_rust = script_raw.up_script(&mut helper)?;
+            ConstFolder::new(&helper).walk_script(&mut screw_rust)?;
+            std::mem::swap(&mut warnings, &mut helper.warnings);
+            let script = screw_rust;
 
             Ok(Self {
-                script: rented_script,
-                source: script,
+                script,
+                aid,
                 warnings,
             })
         }();
@@ -115,7 +114,7 @@ impl Script {
     /// Returns the documentation for the script
     #[must_use]
     pub fn docs(&self) -> &Docs {
-        &self.script.suffix().docs
+        &self.script.docs
     }
 
     /// Highlights a script with a given highlighter.
@@ -204,13 +203,16 @@ impl Script {
         }
         h.finalize()
     }
+    fn src(&self) -> io::Result<&'static str> {
+        Arena::get(self.aid)?.ok_or(io::Error::new(io::ErrorKind::NotFound, "source not found"))
+    }
 
     /// Format warnings with the given `Highligher`.
     /// # Errors
     /// on io errors
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> io::Result<()> {
         for w in self.warnings() {
-            let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
+            let tokens: Vec<_> = lexer::Tokenizer::new(self.src()?)
                 .tokenize_until_err()
                 .collect();
             h.highlight_error(None, &tokens, "", true, Some(w.outer), Some(w.into()))?;
@@ -234,8 +236,8 @@ impl Script {
     /// # Errors
     /// on io errors
     pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> io::Result<()> {
-        let cus = &self.script.suffix().node_meta.cus;
-        Self::format_error_from_script_and_cus(&self.source, h, e, cus)
+        let cus = &self.script.node_meta.cus;
+        Self::format_error_from_script_and_cus(self.src()?, h, e, cus)
     }
 
     /// Runs an event through this script
@@ -253,6 +255,6 @@ impl Script {
     where
         'event: 'run,
     {
-        self.script.suffix().run(context, aggr, event, state, meta)
+        self.script.run(context, aggr, event, state, meta)
     }
 }

@@ -226,7 +226,7 @@ pub(crate) fn run_suite(
             let mut h = TermHighlighter::default();
             runnable.format_warnings_with(&mut h)?;
 
-            let script = runnable.script.suffix();
+            let script = runnable.script;
 
             let context = &EventContext::new(nanotime(), None);
             let env = Env {
