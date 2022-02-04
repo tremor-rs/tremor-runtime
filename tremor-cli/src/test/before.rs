@@ -17,7 +17,8 @@ use time::Instant;
 use crate::errors::{Error, ErrorKind, Result};
 use crate::util::slurp_string;
 use crate::{job, job::TargetProcess};
-use async_std::{future, task};
+use async_std::future::timeout;
+use async_std::task;
 use std::{
     collections::HashMap,
     fs,
@@ -53,7 +54,8 @@ impl Before {
         &self,
         base: &Path,
         env: &HashMap<String, String>,
-    ) -> Result<Option<TargetProcess>> {
+        num: usize,
+    ) -> Result<TargetProcess> {
         let cmd = job::which(&self.cmd)?;
         // interpret `dir` as relative to `base`
         let current_working_dir = base.join(&self.dir).canonicalize()?;
@@ -64,8 +66,8 @@ impl Before {
         let mut process =
             job::TargetProcess::new_in_dir(&cmd, &self.args, &env, &current_working_dir)?;
 
-        let fg_out_file = base.join("before.out.log");
-        let fg_err_file = base.join("before.err.log");
+        let fg_out_file = base.join(format!("before.out.{num}.log"));
+        let fg_err_file = base.join(format!("before.err.{num}.log"));
         let _ = process.stdio_tailer(&fg_out_file, &fg_err_file).await?;
 
         debug!(
@@ -76,7 +78,7 @@ impl Before {
 
         self.block_on(&mut process, base).await?;
         debug!("Before process ready.");
-        Ok(Some(process))
+        Ok(process)
     }
 
     fn cmdline(&self) -> String {
@@ -129,7 +131,7 @@ impl Before {
                         }
                         "http-ok" => {
                             for endpoint in v {
-                                let res = task::block_on(future::timeout(
+                                let res = task::block_on(timeout(
                                     Duration::from_secs(self.until.min(5)),
                                     surf::get(endpoint).send(),
                                 ))?;
@@ -179,7 +181,8 @@ fn default_min_await_secs() -> u64 {
     0 // Wait for at least 1 seconds before starting tests that depend on background process
 }
 
-pub(crate) fn load_before(path: &Path) -> Result<Before> {
+// load all the before definitions from before.yaml files
+pub(crate) fn load_before_defs(path: &Path) -> Result<Vec<Before>> {
     let mut tags_data = slurp_string(path)?;
     match serde_yaml::from_str(&mut tags_data) {
         Ok(s) => Ok(s),
@@ -205,21 +208,40 @@ impl BeforeController {
         }
     }
 
-    pub(crate) async fn spawn(&mut self) -> Result<Option<TargetProcess>> {
+    pub(crate) async fn spawn(&mut self) -> Result<()> {
         let root = &self.base;
         let before_path = root.join("before.yaml");
         if before_path.exists() {
-            let before_yaml = load_before(&before_path);
-            match before_yaml {
-                Ok(before_yaml) => before_yaml.spawn(root, &self.env).await,
+            let before_defs = load_before_defs(&before_path);
+            match before_defs {
+                Ok(before_defs) => {
+                    for (i, before_def) in before_defs.into_iter().enumerate() {
+                        let cmdline = before_def.cmdline();
+                        let mut process = before_def.spawn(root, &self.env, i).await?;
+                        async_std::task::spawn(async move {
+                            let status = process.join().await?;
+                            match status.code() {
+                                None => {
+                                    eprintln!("Before process {cmdline} terminated by some signal");
+                                }
+                                Some(0) => (),
+                                Some(other) => {
+                                    eprintln!("Before process {cmdline} terminated with exit code {other}");
+                                }
+                            }
+                            Ok::<(), Error>(())
+                        });
+                    }
+                    Ok(())
+                }
                 Err(Error(ErrorKind::Common(tremor_common::Error::FileOpen(_, _)), _)) => {
                     // no before yaml found, all good
-                    Ok(None)
+                    Ok(())
                 }
                 Err(e) => Err(e),
             }
         } else {
-            Ok(None)
+            Ok(())
         }
     }
 }
