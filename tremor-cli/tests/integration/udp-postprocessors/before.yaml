@@ -1,22 +1,22 @@
-{
-  "dir": "./before",
-  "cmd": "tremor",
-  "args": [
-    "server",
-    "run",
-    "-p",
-    "../before.pid",
-    "-n",
-    "./config.troy"
-  ],
-  "env": {
-    "RUST_LOG": "info",
-    "TREMOR_PATH": "../../../lib:../../../../../tremor-script/lib"
-  },
-  "await": {
-    "wait-for-ms": [
-      "2000"
-    ]
-  },
-  "max-await-secs": 15
-}
+- {
+    "dir": "./before",
+    "cmd": "tremor",
+    "args": [
+      "server",
+      "run",
+      "-p",
+      "../before.pid",
+      "-n",
+      "./config.troy"
+    ],
+    "env": {
+      "RUST_LOG": "info",
+      "TREMOR_PATH": "../../../lib:../../../../../tremor-script/lib"
+    },
+    "await": {
+      "wait-for-ms": [
+        "2000"
+      ]
+    },
+    "max-await-secs": 15
+  }

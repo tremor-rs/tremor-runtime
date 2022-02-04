@@ -90,12 +90,10 @@ pub(crate) async fn suite_command(
             file::set_current_dir(&suite_root)?;
 
             let mut before = before::BeforeController::new(suite_root, &env);
-            if let Some(mut before_process) = before.spawn().await? {
-                async_std::task::spawn(async move {
-                    if let Err(e) = before_process.join().await {
-                        eprint!("Can't capture results from 'before' process: {}", e);
-                    };
-                });
+            let mut after = after::AfterController::new(suite_root, &env);
+            if let Err(e) = before.spawn().await {
+                after.spawn().await?;
+                return Err(e);
             }
 
             let suite_start = nanotime();
@@ -183,7 +181,6 @@ pub(crate) async fn suite_command(
 
             before::update_evidence(suite_root, &mut evidence)?;
 
-            let mut after = after::AfterController::new(suite_root, &env);
             after.spawn().await?;
             after::update_evidence(suite_root, &mut evidence)?;
 
