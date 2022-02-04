@@ -345,7 +345,7 @@ pub type KnownConnectors = HashMap<ConnectorType, Box<dyn ConnectorBuilder + 'st
 
 /// Spawns a connector
 pub async fn spawn(
-    alias: String,
+    alias: &str,
     connector_id_gen: &mut ConnectorIdGen,
     known_connectors: &KnownConnectors,
     config: ConnectorConfig,
@@ -354,9 +354,15 @@ pub async fn spawn(
     let builder = known_connectors
         .get(&config.connector_type)
         .ok_or_else(|| ErrorKind::UnknownConnectorType(config.connector_type.to_string()))?;
-    let connector = builder.from_config(&alias, &config).await?;
+    let connector = builder.from_config(alias, &config).await?;
 
-    Ok(connector_task(alias, connector, config, connector_id_gen.next_id()).await?)
+    Ok(connector_task(
+        alias.to_string(),
+        connector,
+        config,
+        connector_id_gen.next_id(),
+    )
+    .await?)
 }
 
 #[allow(clippy::too_many_lines)]

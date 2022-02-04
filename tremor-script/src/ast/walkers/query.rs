@@ -322,19 +322,10 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
         for d in m.functions.values_mut() {
             self.walk_fn_decl(d)?;
         }
-
         for d in m.consts.values_mut() {
-            // self.walk_const(d)?;
-            todo!()
+            self.walk_const(d)?;
         }
-        for d in m.flows.values_mut() {
-            // self.walk_flow_definition(d)?;
-            todo!()
-        }
-        for d in m.connectors.values_mut() {
-            // self.walk_connector_definition(d)?;
-            todo!()
-        }
+        // We can't have flows and connectors in query
 
         self.leave_module_content(m)
     }

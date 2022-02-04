@@ -32,12 +32,6 @@ impl<P> From<std::sync::PoisonError<P>> for Error {
     }
 }
 
-impl From<tremor_script::errors::CompilerError> for Error {
-    fn from(e: tremor_script::errors::CompilerError) -> Self {
-        e.error().into()
-    }
-}
-
 impl<T> From<async_std::channel::SendError<T>> for Error {
     fn from(_: async_std::channel::SendError<T>) -> Self {
         Self::from(format!("Send Error"))

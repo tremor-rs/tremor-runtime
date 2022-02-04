@@ -23,7 +23,7 @@ use super::{
     raw::{IdentRaw, ImutExprRaw, LiteralRaw},
     visitors::{ArgsRewriter, ConstFolder},
     walkers::QueryWalker,
-    EventPath, HashMap, Helper, Ident, ImutExpr, InvokeAggrFn, Location, NodeMetas, Path, Result,
+    EventPath, HashMap, Helper, Ident, ImutExpr, InvokeAggrFn, Location, NodeMeta, Path, Result,
     Script, Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
@@ -42,13 +42,14 @@ pub struct Query<'script> {
     pub config: HashMap<String, Value<'script>>,
     /// Statements
     pub stmts: Stmts<'script>,
-    /// Query Node Metadata
-    pub node_meta: NodeMetas,
     /// Params if this is a modular query
     pub params: DefinitioalArgs<'script>,
     /// definitions
     pub scope: Scope<'script>,
+    /// metadata
+    pub mid: Box<NodeMeta>,
 }
+impl_expr_mid!(Query);
 
 /// Query statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -75,17 +76,17 @@ pub enum Stmt<'script> {
 
 #[cfg(not(tarpaulin_include))] // this is a simple passthrough
 impl<'script> BaseExpr for Stmt<'script> {
-    fn mid(&self) -> usize {
+    fn meta(&self) -> &NodeMeta {
         match self {
-            Stmt::WindowDefinition(s) => s.mid(),
-            Stmt::StreamStmt(s) => s.mid(),
-            Stmt::OperatorDefinition(s) => s.mid(),
-            Stmt::ScriptDefinition(s) => s.mid(),
-            Stmt::PipelineDefinition(s) => s.mid(),
-            Stmt::PipelineCreate(s) => s.mid(),
-            Stmt::OperatorCreate(s) => s.mid(),
-            Stmt::ScriptCreate(s) => s.mid(),
-            Stmt::SelectStmt(s) => s.mid(),
+            Stmt::WindowDefinition(s) => s.meta(),
+            Stmt::StreamStmt(s) => s.meta(),
+            Stmt::OperatorDefinition(s) => s.meta(),
+            Stmt::ScriptDefinition(s) => s.meta(),
+            Stmt::PipelineDefinition(s) => s.meta(),
+            Stmt::PipelineCreate(s) => s.meta(),
+            Stmt::OperatorCreate(s) => s.meta(),
+            Stmt::ScriptCreate(s) => s.meta(),
+            Stmt::SelectStmt(s) => s.meta(),
         }
     }
 }
@@ -107,13 +108,11 @@ pub struct SelectStmt<'script> {
     pub consts: Consts<'script>,
     /// Number of locals
     pub locals: usize,
-    /// Node metadata nodes
-    pub node_meta: NodeMetas,
 }
 #[cfg(not(tarpaulin_include))] // this is a simple passthrough
 impl<'script> BaseExpr for SelectStmt<'script> {
-    fn mid(&self) -> usize {
-        self.stmt.mid()
+    fn meta(&self) -> &NodeMeta {
+        self.stmt.meta()
     }
 }
 
@@ -137,7 +136,7 @@ impl SelectStmt<'_> {
             .stmt
             .target
             .ast_eq(&ImutExpr::Path(Path::Event(EventPath {
-                mid: 0,
+                mid: NodeMeta::todo(),
                 segments: vec![],
             })))
             && self.stmt.maybe_group_by.is_none()
@@ -157,7 +156,7 @@ impl SelectStmt<'_> {
 /// Operator kind identifier
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorKind {
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Module of the operator
     pub module: String,
     /// Operator name
@@ -165,8 +164,8 @@ pub struct OperatorKind {
 }
 
 impl BaseExpr for OperatorKind {
-    fn mid(&self) -> usize {
-        self.mid
+    fn meta(&self) -> &NodeMeta {
+        &self.mid
     }
 }
 
@@ -176,7 +175,7 @@ pub struct OperatorDefinition<'script> {
     /// The ID and Module of the Operator
     pub node_id: NodeId,
     /// metadata id
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Type of the operator
     pub kind: OperatorKind,
     /// Parameters for the operator
@@ -191,7 +190,7 @@ pub struct OperatorCreate<'script> {
     /// The ID and Module of the Operator
     pub node_id: NodeId,
     /// metadata id
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Target of the operator
     pub target: NodeId,
     /// parameters of the instance
@@ -202,7 +201,7 @@ impl_expr_mid!(OperatorCreate);
 /// A script declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptDefinition<'script> {
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// The ID and Module of the Script
     pub node_id: NodeId,
     /// Parameters of a script declaration
@@ -219,7 +218,7 @@ pub struct ScriptCreate<'script> {
     /// The ID and Module of the Script
     pub node_id: NodeId,
     /// metadata id
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Target of the script
     pub target: NodeId,
     /// Parameters of the script statement
@@ -233,7 +232,7 @@ pub struct PipelineDefinition<'script> {
     /// The ID and Module of the SubqueryDecl
     pub node_id: NodeId,
     /// metadata id
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Parameters of a subquery declaration
     pub params: DefinitioalArgs<'script>,
     /// Input Ports
@@ -249,12 +248,6 @@ pub struct PipelineDefinition<'script> {
 }
 
 impl<'script> PipelineDefinition<'script> {
-    pub(crate) fn to_query(&self) -> Result<Query<'script>> {
-        Ok(self
-            .query
-            .clone()
-            .ok_or(format!("not a toplevel query: {}", &self.node_id.id()))?)
-    }
     /// FIXME: :sob:
     pub fn apply_args<'registry>(
         &mut self,
@@ -271,14 +264,14 @@ impl<'script> PipelineDefinition<'script> {
                 .map(|(k, v)| {
                     Ok((
                         IdentRaw {
-                            start: k.s(&helper.meta),
-                            end: k.e(&helper.meta),
+                            start: k.s(),
+                            end: k.e(),
                             id: k.id,
                         },
                         v.map(|v| -> Result<_> {
-                            let start = v.s(&helper.meta);
-                            let end = v.e(&helper.meta);
-                            let value = v.try_into_lit(&helper.meta)?;
+                            let start = v.s();
+                            let end = v.e();
+                            let value = v.try_into_lit()?;
                             Ok(ImutExprRaw::Literal(LiteralRaw { start, end, value }))
                         })
                         .transpose()?,
@@ -291,6 +284,8 @@ impl<'script> PipelineDefinition<'script> {
             config: self.raw_config.clone(),
             stmts: self.raw_stmts.clone(),
             params,
+            start: self.mid.start(),
+            end: self.mid.start(),
         }
         .up_script(helper)?;
         for stmt in &mut query.stmts {
@@ -320,7 +315,7 @@ impl_fqn!(PipelineDefinition);
 /// A pipeline creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PipelineCreate<'script> {
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// The node id of the pipeline definition we want to create
     pub node_id: NodeId,
     /// Map of pipeline ports and internal stream id
@@ -329,8 +324,8 @@ pub struct PipelineCreate<'script> {
     pub params: CreationalWith<'script>,
 }
 impl<'script> BaseExpr for PipelineCreate<'script> {
-    fn mid(&self) -> usize {
-        self.mid
+    fn meta(&self) -> &NodeMeta {
+        &self.mid
     }
 }
 
@@ -349,7 +344,7 @@ pub struct WindowDefinition<'script> {
     /// ID and Module of the Window
     pub node_id: NodeId,
     /// metadata id
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// The type of window
     pub kind: WindowKind,
     /// Parameters passed to the window
@@ -375,7 +370,7 @@ impl<'script> WindowDefinition<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Select<'script> {
     /// MetadataID of the statement
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// The from clause
     pub from: (Ident<'script>, Ident<'script>),
     /// The into claus
@@ -399,21 +394,21 @@ pub enum GroupBy<'script> {
     /// Expression based group by
     Expr {
         /// mid
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// expr
         expr: ImutExpr<'script>,
     },
     /// `set` based group by
     Set {
         /// mid
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// items
         items: Vec<GroupBy<'script>>,
     },
     /// `each` based group by
     Each {
         /// mid
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// expr
         expr: ImutExpr<'script>,
     },
@@ -422,14 +417,14 @@ pub enum GroupBy<'script> {
 /// A stream statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct StreamStmt {
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// ID if the stream
     pub id: String,
 }
 
 impl BaseExpr for StreamStmt {
-    fn mid(&self) -> usize {
-        self.mid
+    fn meta(&self) -> &NodeMeta {
+        &self.mid
     }
 }
 
@@ -449,10 +444,10 @@ impl<'script> CreationalWith<'script> {
     }
 
     /// Renders a with clause into a k/v pair
-    pub fn render(&self, meta: &NodeMetas) -> Result<Value<'script>> {
+    pub fn render(&self) -> Result<Value<'script>> {
         let mut res = Value::object();
         for (k, v) in self.with.0.iter() {
-            res.insert(k.id.clone(), v.clone().try_into_lit(meta)?.clone())?;
+            res.insert(k.id.clone(), v.clone().try_into_lit()?.clone())?;
         }
         Ok(res)
     }
@@ -530,31 +525,31 @@ impl<'script> DefinitioalArgsWith<'script> {
             .collect();
         config
     }
-    pub(crate) fn substitute_args<'registry>(
-        &mut self,
-        args: &Value<'script>,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<()> {
-        // We do NOT replace external args in the `with` part as this part will be replaced used
-        // with the internal args
-        //
-        // ```
-        //   define pipeline pipeline_name
-        //   args
-        //     pipeline_server_name
-        //   pipeline
-        //     define http connector server
-        //     args
-        //       server_name: args.pipeline_server_name # this gets replaced
-        //     with
-        //       config = {"server": args.server_name} # this does not get replaced
-        //     end;
-        //     # ...
-        //  end
-        // ```
+    // pub(crate) fn substitute_args<'registry>(
+    //     &mut self,
+    //     args: &Value<'script>,
+    //     helper: &mut Helper<'script, 'registry>,
+    // ) -> Result<()> {
+    //     // We do NOT replace external args in the `with` part as this part will be replaced used
+    //     // with the internal args
+    //     //
+    //     // ```
+    //     //   define pipeline pipeline_name
+    //     //   args
+    //     //     pipeline_server_name
+    //     //   pipeline
+    //     //     define http connector server
+    //     //     args
+    //     //       server_name: args.pipeline_server_name # this gets replaced
+    //     //     with
+    //     //       config = {"server": args.server_name} # this does not get replaced
+    //     //     end;
+    //     //     # ...
+    //     //  end
+    //     // ```
 
-        self.args.substitute_args(args, helper)
-    }
+    //     self.args.substitute_args(args, helper)
+    // }
 }
 
 /// A args block in a definitional statement
@@ -604,7 +599,7 @@ impl<'script> DefinitioalArgs<'script> {
     }
 
     /// Renders a with clause into a k/v pair
-    pub fn render(&self, meta: &NodeMetas) -> Result<Value<'script>> {
+    pub fn render(&self) -> Result<Value<'script>> {
         let mut res = Value::object();
         for (k, v) in self.args.0.iter() {
             // FIXME: hygenic error
@@ -612,7 +607,7 @@ impl<'script> DefinitioalArgs<'script> {
                 k.id.clone(),
                 v.clone()
                     .ok_or_else(|| Error::from(format!("missing key: {}", k)))?
-                    .try_into_lit(meta)?
+                    .try_into_lit()?
                     .clone(),
             )?;
         }

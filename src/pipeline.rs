@@ -162,7 +162,7 @@ impl TryFrom<connectors::Addr> for OutputTarget {
 }
 
 pub(crate) async fn spawn(
-    alias: String,
+    alias: &str,
     config: tremor_pipeline::query::Query,
     operator_id_gen: &mut OperatorIdGen,
 ) -> Result<Addr> {
@@ -191,11 +191,11 @@ pub(crate) async fn spawn(
 
     task::spawn(tick(tx.clone()));
 
-    let addr = Addr::new(tx, cf_tx, mgmt_tx, alias.clone());
+    let addr = Addr::new(tx, cf_tx, mgmt_tx, alias.to_string());
     task::Builder::new()
-        .name(format!("pipeline-{}", alias.clone()))
+        .name(format!("pipeline-{}", alias))
         .spawn(pipeline_task(
-            alias.clone(),
+            alias.to_string(),
             pipeline,
             addr.clone(),
             rx,

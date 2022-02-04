@@ -21,10 +21,7 @@ use crate::{
         self,
         identity::PassthroughFactory,
         prelude::{ERR, IN, OUT},
-        trickle::{
-            operator::TrickleOperator, script::Script, select::Select, simple_select::SimpleSelect,
-            window,
-        },
+        trickle::{operator::TrickleOperator, select::Select, simple_select::SimpleSelect, window},
     },
     ConfigGraph, Connection, NodeConfig, NodeKind, Operator, OperatorNode, PortIndexMap,
     METRICS_CHANNEL,
@@ -35,18 +32,18 @@ use indexmap::IndexMap;
 use petgraph::algo::is_cyclic_directed;
 use tremor_common::ids::OperatorIdGen;
 use tremor_script::{
+    arena::Arena,
     ast::{
-        self, BaseExpr, CompilationUnit, Helper, Ident, NodeMetas, PipelineCreate, SelectType,
-        Stmt, WindowDefinition, WindowKind,
+        self, BaseExpr, Helper, Ident, PipelineCreate, SelectType, Stmt, WindowDefinition,
+        WindowKind,
     },
     errors::{
         pipeline_unknown_port_err, query_node_duplicate_name_err, query_node_reserved_name_err,
-        query_stream_duplicate_name_err, query_stream_not_defined_err, CompilerError,
+        query_stream_duplicate_name_err, query_stream_not_defined_err,
     },
     highlighter::{Dumb, Highlighter},
-    path::ModulePath,
     prelude::*,
-    srs, AggrRegistry, Registry, Value,
+    AggrRegistry, Registry, Value,
 };
 
 const BUILTIN_NODES: [(Cow<'static, str>, NodeKind); 3] = [
@@ -60,41 +57,41 @@ struct InputPort {
     pub id: Cow<'static, str>,
     pub port: Cow<'static, str>,
     pub had_port: bool,
-    pub location: tremor_script::pos::Range,
+    pub location: tremor_script::pos::Span,
 }
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct OutputPort {
     pub id: Cow<'static, str>,
     pub port: Cow<'static, str>,
     pub had_port: bool,
-    pub location: tremor_script::pos::Range,
+    pub location: tremor_script::pos::Span,
 }
 
-fn resolve_input_port(port: &(Ident, Ident), meta: &NodeMetas) -> InputPort {
+fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
     InputPort {
         id: common_cow(&port.0.id),
         port: common_cow(&port.1.id),
         had_port: true,
-        location: port.0.extent(meta),
+        location: port.0.extent(),
     }
 }
 
-fn resolve_output_port(port: &(Ident, Ident), meta: &NodeMetas) -> OutputPort {
+fn resolve_output_port(port: &(Ident, Ident)) -> OutputPort {
     OutputPort {
         id: common_cow(&port.0.id),
         port: common_cow(&port.1.id),
         had_port: true,
-        location: port.0.extent(meta),
+        location: port.0.extent(),
     }
 }
 
-pub(crate) fn window_decl_to_impl(d: &WindowDefinition, meta: &NodeMetas) -> Result<window::Impl> {
+pub(crate) fn window_decl_to_impl(d: &WindowDefinition) -> Result<window::Impl> {
     use op::trickle::window::{TumblingOnNumber, TumblingOnTime};
     match &d.kind {
         WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
         WindowKind::Tumbling => {
             let script = if d.script.is_some() { Some(d) } else { None };
-            let with = d.params.render(meta)?;
+            let with = d.params.render()?;
             let max_groups = with
                 .get(WindowDefinition::MAX_GROUPS)
                 .and_then(Value::as_usize)
@@ -127,39 +124,22 @@ pub struct Query(pub tremor_script::query::Query);
 impl Query {
     /// Fetches the ID of the query if it was provided
     pub fn id(&self) -> Option<&str> {
-        self.0
-            .query
-            .suffix()
-            .config
-            .get("id")
-            .and_then(ValueAccess::as_str)
+        self.0.query.config.get("id").and_then(ValueAccess::as_str)
     }
 
     /// Source of the query
     #[must_use]
-    pub fn source(&self) -> &str {
-        &self.0.source
+    pub(crate) fn source(&self) -> Result<&str> {
+        Ok(Arena::io_get(self.0.query.aid())?)
     }
 
     /// Parse a query
     ///
     /// # Errors
     /// if the trickle script can not be parsed
-    pub fn parse(
-        module_path: &ModulePath,
-        script: &str,
-        file_name: &str,
-        cus: Vec<CompilationUnit>,
-        reg: &Registry,
-        aggr_reg: &AggrRegistry,
-    ) -> std::result::Result<Self, CompilerError> {
+    pub fn parse(script: String, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
         Ok(Self(tremor_script::query::Query::parse(
-            module_path,
-            file_name,
-            script,
-            cus,
-            reg,
-            aggr_reg,
+            script, reg, aggr_reg,
         )?))
     }
 
@@ -169,8 +149,8 @@ impl Query {
     /// if the graph can not be turned into a pipeline
     #[allow(clippy::too_many_lines)]
     pub fn to_pipe(&self, idgen: &mut OperatorIdGen) -> Result<crate::ExecutableGraph> {
-        let stmts = self.0.extract_stmts();
-        let src = self.source();
+        let stmts = self.0.query.stmts.clone();
+        let src = self.source()?;
         to_executable_graph(&self.0, stmts, idgen, src)
     }
 }
@@ -182,17 +162,16 @@ impl Query {
 #[allow(clippy::too_many_lines)]
 fn to_executable_graph(
     query: &tremor_script::Query,
-    stmts: Vec<tremor_script::srs::Stmt>,
+    stmts: Vec<tremor_script::ast::Stmt<'static>>,
     idgen: &mut OperatorIdGen,
     src: &str,
 ) -> Result<crate::ExecutableGraph> {
-    let query_borrowed = query.suffix();
+    let query_borrowed = query.query.clone();
     use crate::{ExecutableGraph, NodeMetrics, State};
     use std::iter;
     let aggr_reg = tremor_script::aggr_registry();
     let reg = tremor_script::FN_REGISTRY.read()?;
-    let mut helper = Helper::new(&reg, &aggr_reg, Vec::new());
-    helper.meta = query_borrowed.node_meta.clone();
+    let mut helper = Helper::new(&reg, &aggr_reg);
     helper.scope = query_borrowed.scope.clone();
     let mut pipe_graph = ConfigGraph::new();
     let mut pipe_ops = HashMap::new();
@@ -233,7 +212,6 @@ fn to_executable_graph(
                     supported_operators,
                     None,
                     None,
-                    None,
                     &mut helper,
                 )
             })?;
@@ -259,7 +237,7 @@ fn to_executable_graph(
     let has_builtin_node_name = make_builtin_node_name_checker();
 
     for (i, stmt) in stmts.into_iter().enumerate() {
-        match stmt.suffix() {
+        match &stmt {
             Stmt::SelectStmt(ref select) => {
                 // Rewrite pipeline/port to their internal streams
                 let mut select_rewrite = select.clone();
@@ -277,7 +255,6 @@ fn to_executable_graph(
                                 &sio.0,
                                 sio.0.to_string(),
                                 sio.1.to_string(),
-                                &query_borrowed.node_meta,
                             )
                             .into());
                         }
@@ -288,15 +265,11 @@ fn to_executable_graph(
                 let s: &ast::Select<'_> = &select.stmt;
 
                 if !nodes.contains_key(&s.from.0.id) {
-                    return Err(query_stream_not_defined_err(
-                        s,
-                        &s.from.0,
-                        s.from.0.to_string(),
-                        &query_borrowed.node_meta,
-                    )
-                    .into());
+                    return Err(
+                        query_stream_not_defined_err(s, &s.from.0, s.from.0.to_string()).into(),
+                    );
                 }
-                let e = select.stmt.extent(&select.node_meta);
+                let e = select.stmt.extent();
                 let mut h = Dumb::new();
                 let label = h
                     .highlight_str(src, "", false, Some(e))
@@ -307,16 +280,16 @@ fn to_executable_graph(
                     id: format!("select_{}", select_num).into(),
                     port: IN,
                     had_port: false,
-                    location: s.extent(&query_borrowed.node_meta),
+                    location: s.extent(),
                 };
                 let select_out = OutputPort {
                     id: format!("select_{}", select_num,).into(),
                     port: OUT,
                     had_port: false,
-                    location: s.extent(&query_borrowed.node_meta),
+                    location: s.extent(),
                 };
                 select_num += 1;
-                let mut from = resolve_output_port(&s.from, &query_borrowed.node_meta);
+                let mut from = resolve_output_port(&s.from);
                 if from.id == "in" && from.port != "out" {
                     let name: Cow<'static, str> = format!("in/{}", from.port).into();
                     from.id = name.clone();
@@ -338,7 +311,6 @@ fn to_executable_graph(
                                     supported_operators,
                                     None,
                                     None,
-                                    None,
                                     &mut helper,
                                 )
                             })?;
@@ -346,7 +318,7 @@ fn to_executable_graph(
                         inputs.insert(name, id);
                     }
                 }
-                let mut into = resolve_input_port(&s.into, &query_borrowed.node_meta);
+                let mut into = resolve_input_port(&s.into);
                 if into.id == "out" && into.port != "in" {
                     let name: Cow<'static, str> = format!("out/{}", into.port).into();
                     into.id = name.clone();
@@ -367,7 +339,6 @@ fn to_executable_graph(
                                 node.weight.to_op(
                                     idgen.next_id(),
                                     supported_operators,
-                                    None,
                                     None,
                                     None,
                                     &mut helper,
@@ -393,12 +364,11 @@ fn to_executable_graph(
 
                 let mut ww = HashMap::with_capacity(query_borrowed.scope.content.windows.len());
                 for (name, decl) in &query_borrowed.scope.content.windows {
-                    ww.insert(name.clone(), window_decl_to_impl(decl, &helper.meta)?);
+                    ww.insert(name.clone(), window_decl_to_impl(decl)?);
                 }
                 let op = node.to_op(
                     idgen.next_id(),
                     supported_operators,
-                    None,
                     Some(&stmt),
                     Some(ww),
                     &mut helper,
@@ -411,13 +381,7 @@ fn to_executable_graph(
                 let name = common_cow(&s.id);
                 let id = name.clone();
                 if nodes.contains_key(&id) {
-                    return Err(query_stream_duplicate_name_err(
-                        s,
-                        s,
-                        s.id.to_string(),
-                        &query_borrowed.node_meta,
-                    )
-                    .into());
+                    return Err(query_stream_duplicate_name_err(s, s, s.id.to_string()).into());
                 }
 
                 let node = NodeConfig {
@@ -431,7 +395,6 @@ fn to_executable_graph(
                 let op = node.to_op(
                     idgen.next_id(),
                     supported_operators,
-                    None,
                     Some(&stmt),
                     Some(HashMap::new()),
                     &mut helper,
@@ -450,25 +413,19 @@ fn to_executable_graph(
                     let args = Value::null();
                     p.apply_args(&args, &mut helper)?;
                     // VERY FIXME: FIXME please fixme this is a nightmare
-                    let source = query.source.clone();
+
                     let query = tremor_script::Query {
-                        query: tremor_script::srs::QueryInstance {
-                            raw: query.query.raw.clone(),
-                            query: unsafe { std::mem::transmute(p.query.unwrap().clone()) },
-                            artifact_id: p.node_id.clone(),
-                            instance_id: "FIXME: idk".to_string(),
-                        },
-                        source: source.clone(),
+                        query: p.query.unwrap(),
                         warnings: BTreeSet::new(),
                         locals: 0,
                     };
-                    let stmts = query.extract_stmts();
+                    let stmts = query.query.stmts.clone(); // FIXME this should be in in to_executable graph
 
-                    dbg!(to_executable_graph(&query, stmts, idgen, &source)?);
-                    /*
-                    add placeholder nodes
-                    later inline this graph to the other
-                    */
+                    dbg!(to_executable_graph(&query, stmts, idgen, "FIXME")?); // FIXME add source
+                                                                               /*
+                                                                               add placeholder nodes
+                                                                               later inline this graph to the other
+                                                                               */
                     panic!("inline all the things, this code needs to go away it's too bad");
                 } else {
                     return Err("oh no".into());
@@ -493,12 +450,7 @@ fn to_executable_graph(
                     } else {
                         query_node_duplicate_name_err
                     };
-                    return Err(error_func(
-                        o,
-                        o.node_id.id().to_string(),
-                        &query_borrowed.node_meta,
-                    )
-                    .into());
+                    return Err(error_func(o, o.node_id.id().to_string()).into());
                 }
 
                 let node = NodeConfig {
@@ -509,27 +461,19 @@ fn to_executable_graph(
                 };
                 let id = pipe_graph.add_node(node.clone());
 
-                let stmt_srs = srs::Stmt::try_new_from_query::<Error, _>(&query.query, |query| {
-                    let mut decl = helper
-                        .get_operator(&o.target)
-                        .ok_or("operator not found")?
-                        .clone();
-                    if let Some(Stmt::OperatorCreate(o)) = query.stmts.get(i) {
-                        decl.params.ingest_creational_with(&o.params)?;
-                    };
-                    // FIXME! we can split this up in two looking into the query and then
-                    // the heler to guarantee the lifetime is correct this transmute is just
-                    // to get things compiling quickly
-                    let inner_stmt = Stmt::OperatorDefinition(unsafe { std::mem::transmute(decl) });
+                let mut decl = helper
+                    .get_operator(&o.target)
+                    .ok_or("operator not found")?
+                    .clone();
+                if let Some(Stmt::OperatorCreate(o)) = query_borrowed.stmts.get(i) {
+                    decl.params.ingest_creational_with(&o.params)?;
+                };
 
-                    Ok(inner_stmt)
-                })?;
+                let that = Stmt::OperatorDefinition(decl);
 
-                let that = stmt_srs;
                 let op = node.to_op(
                     idgen.next_id(),
                     supported_operators,
-                    None,
                     Some(&that),
                     None,
                     &mut helper,
@@ -545,49 +489,30 @@ fn to_executable_graph(
                     } else {
                         query_node_duplicate_name_err
                     };
-                    return Err(error_func(
-                        o,
-                        o.node_id.id().to_string(),
-                        &query_borrowed.node_meta,
-                    )
-                    .into());
+                    return Err(error_func(o, o.node_id.id().to_string()).into());
                 }
 
-                let stmt_srs = srs::Stmt::try_new_from_query::<Error, _>(&query.query, |_query| {
-                    // FIXME: Better error
-                    let decl = helper
-                        .get_script(&o.target)
-                        .ok_or_else(|| format!("script not found: {}", &o.target,))?
-                        .clone();
-                    // FIXME! we can split this up in two looking into the query and then
-                    // the heler to guarantee the lifetime is correct this transmute is just
-                    // to get things compiling quickly
+                // FIXME: Better error
+                let decl = helper
+                    .get_script(&o.target)
+                    .ok_or_else(|| format!("script not found: {}", &o.target,))?
+                    .clone();
 
-                    let inner_stmt =
-                        Stmt::ScriptDefinition(Box::new(unsafe { std::mem::transmute(decl) }));
-                    Ok(inner_stmt)
-                })?;
-                let label = if let Stmt::ScriptDefinition(s) = stmt_srs.suffix() {
-                    let e = s.extent(&query_borrowed.node_meta);
-                    let mut h = Dumb::new();
-                    // We're trimming the code so no spaces are at the end then adding a newline
-                    // to ensure we're left justified (this is a dot thing, don't question it)
-                    h.highlight_str(src, "", false, Some(e))
-                        .ok()
-                        .map(|_| format!("{}\n", h.to_string().trim_end()))
-                } else {
-                    None
-                };
-
-                let that_defn = stmt_srs;
+                let e = decl.extent();
+                let mut h = Dumb::new();
+                // We're trimming the code so no spaces are at the end then adding a newline
+                // to ensure we're left justified (this is a dot thing, don't question it)
+                let label = h
+                    .highlight_str(src, "", false, Some(e))
+                    .ok()
+                    .map(|_| format!("{}\n", h.to_string().trim_end()));
+                let that_defn = Stmt::ScriptDefinition(Box::new(decl));
 
                 let node = NodeConfig {
                     id: o.node_id.id().to_string(),
                     kind: NodeKind::Script,
                     label,
                     op_type: "trickle::script".to_string(),
-                    defn: Some(that_defn.clone()),
-                    node: Some(stmt.clone()),
                     ..NodeConfig::default()
                 };
                 let id = pipe_graph.add_node(node.clone());
@@ -596,7 +521,6 @@ fn to_executable_graph(
                     idgen.next_id(),
                     supported_operators,
                     Some(&that_defn),
-                    Some(&stmt),
                     None,
                     &mut helper,
                 )?;
@@ -617,7 +541,7 @@ fn to_executable_graph(
             } else {
                 query_node_duplicate_name_err
             };
-            return Err(error_func(&stmt, id, &query_borrowed.node_meta).into());
+            return Err(error_func(&stmt, id).into());
         }
     }
 
@@ -625,20 +549,10 @@ fn to_executable_graph(
     for (from, tos) in &links {
         for to in tos {
             let from_idx = *nodes.get(&from.id).ok_or_else(|| {
-                query_stream_not_defined_err(
-                    &from.location,
-                    &from.location,
-                    from.id.to_string(),
-                    &query_borrowed.node_meta,
-                )
+                query_stream_not_defined_err(&from.location, &from.location, from.id.to_string())
             })?;
             let to_idx = *nodes.get(&to.id).ok_or_else(|| {
-                query_stream_not_defined_err(
-                    &to.location,
-                    &to.location,
-                    to.id.to_string(),
-                    &query_borrowed.node_meta,
-                )
+                query_stream_not_defined_err(&to.location, &to.location, to.id.to_string())
             })?;
 
             let from_tpl = (from_idx, from.port.clone());
@@ -762,22 +676,10 @@ fn to_executable_graph(
 fn select(
     operator_uid: u64,
     config: &NodeConfig,
-    node: Option<&srs::Stmt>,
+    node: &ast::SelectStmt<'static>,
     windows: Option<HashMap<String, window::Impl>>,
 ) -> Result<Box<dyn Operator>> {
-    let node = node.ok_or_else(|| {
-        ErrorKind::MissingOpConfig("trickle operators require a statement".into())
-    })?;
-    let select = if let tremor_script::ast::Stmt::SelectStmt(ref select) = node.suffix() {
-        select
-    } else {
-        return Err(ErrorKind::PipelineError(
-            "Trying to turn a non select into a select operator".into(),
-        )
-        .into());
-    };
-
-    let select_type = select.complexity();
+    let select_type = node.complexity();
     match select_type {
         SelectType::Passthrough => {
             let op = PassthroughFactory::new_boxed();
@@ -788,7 +690,7 @@ fn select(
             let windows = windows.ok_or_else(|| {
                 ErrorKind::MissingOpConfig("select operators require a window mapping".into())
             })?;
-            let windows: Result<Vec<(String, window::Impl)>> = select
+            let windows: Result<Vec<(String, window::Impl)>> = node
                 .stmt
                 .windows
                 .iter()
@@ -819,12 +721,9 @@ fn select(
 
 fn operator(
     operator_uid: u64,
-    node: Option<&srs::Stmt>,
+    node: &ast::OperatorDefinition<'static>,
     helper: &mut Helper,
 ) -> Result<Box<dyn Operator>> {
-    let node = node.ok_or_else(|| {
-        ErrorKind::MissingOpConfig("trickle operators require a statement".into())
-    })?;
     Ok(Box::new(TrickleOperator::with_stmt(
         operator_uid,
         node,
@@ -832,38 +731,27 @@ fn operator(
     )?))
 }
 
-fn script(
-    config: &NodeConfig,
-    defn: Option<&srs::Stmt>,
-    node: Option<&srs::Stmt>,
-    meta: &NodeMetas,
-) -> Result<Box<dyn Operator>> {
-    let node = node.ok_or_else(|| {
-        ErrorKind::MissingOpConfig("trickle operators require a statement".into())
-    })?;
-    Ok(Box::new(Script::with_stmt(
-        config.id.clone(),
-        defn.ok_or_else(|| Error::from("Script definition missing"))?,
-        node,
-        meta,
-    )?))
-}
 pub(crate) fn supported_operators(
     config: &NodeConfig,
     uid: u64,
-    defn: Option<&srs::Stmt>,
-    node: Option<&srs::Stmt>,
+    node: Option<&ast::Stmt<'static>>,
     windows: Option<HashMap<String, window::Impl>>,
     helper: &mut Helper,
 ) -> Result<OperatorNode> {
-    let name_parts: Vec<&str> = config.op_type.split("::").collect();
-
-    let op: Box<dyn op::Operator> = match name_parts.as_slice() {
-        ["trickle", "select"] => select(uid, config, node, windows)?,
-        ["trickle", "operator"] => operator(uid, node, helper)?,
-        ["trickle", "script"] => script(config, defn, node, &helper.meta)?,
+    let op: Box<dyn op::Operator> = match node {
+        Some(ast::Stmt::ScriptDefinition(script)) => Box::new(op::trickle::script::Script {
+            id: format!("FIXME: {uid}"),
+            script: tremor_script::Script {
+                script: script.script.clone(),
+                aid: script.aid(),
+                warnings: BTreeSet::new(),
+            },
+        }),
+        Some(tremor_script::ast::Stmt::SelectStmt(s)) => select(uid, config, s, windows)?,
+        Some(ast::Stmt::OperatorDefinition(o)) => operator(uid, o, helper)?,
         _ => crate::operator(uid, config)?,
     };
+
     Ok(OperatorNode {
         uid,
         id: config.id.clone(),

@@ -26,17 +26,15 @@ use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
 use halfbrown::HashMap;
 use tremor_common::stry;
-use tremor_script::{ast::Helper, srs, Value};
+use tremor_script::{ast::Helper, ast::Stmt, Value};
 
 /// Configuration for a node
-#[derive(Debug, Clone, PartialOrd, Eq, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct NodeConfig {
     pub(crate) id: String,
     pub(crate) kind: NodeKind,
     pub(crate) op_type: String,
     pub(crate) config: ConfigMap,
-    pub(crate) defn: Option<srs::Stmt>,
-    pub(crate) node: Option<srs::Stmt>,
     pub(crate) label: Option<String>,
 }
 
@@ -79,26 +77,16 @@ impl PartialEq for NodeConfig {
     }
 }
 
-// impl std::hash::Hash for NodeConfig {
-//     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-//         self.id.hash(state);
-//         self.kind.hash(state);
-//         self.op_type.hash(state);
-//         self.config.hash(state);
-//     }
-// }
-
 impl NodeConfig {
     pub(crate) fn to_op(
         &self,
         uid: u64,
         resolver: NodeLookupFn,
-        defn: Option<&srs::Stmt>,
-        node: Option<&srs::Stmt>,
+        node: Option<&Stmt<'static>>,
         window: Option<HashMap<String, window::Impl>>,
         helper: &mut Helper,
     ) -> Result<OperatorNode> {
-        resolver(self, uid, defn, node, window, helper)
+        resolver(self, uid, node, window, helper)
     }
 }
 

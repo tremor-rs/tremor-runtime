@@ -18,7 +18,7 @@ use std::borrow::Cow as SCow;
 use tremor_common::stry;
 use tremor_script::{
     self,
-    ast::{AggrSlice, Aggregates, Consts, NodeMetas, RunConsts, Select, WindowDefinition},
+    ast::{AggrSlice, Aggregates, Consts, RunConsts, Select, WindowDefinition},
     errors::Result,
     interpreter::{Env, LocalStack},
     prelude::*,
@@ -30,7 +30,6 @@ use super::select::{execute_select_and_having, NO_AGGRS};
 pub(crate) struct SelectCtx<'run, 'script, 'local> {
     pub(crate) select: &'run Select<'script>,
     pub(crate) local_stack: &'run LocalStack<'local>,
-    pub(crate) node_meta: &'run NodeMetas,
     pub(crate) opts: ExecOpts,
     pub(crate) ctx: &'run EventContext<'run>,
     pub(crate) event_id: EventId,
@@ -124,14 +123,11 @@ impl GroupWindow {
             context: ctx.ctx,
             consts,
             aggrs: &NO_AGGRS,
-            meta: ctx.node_meta,
             recursion_limit: ctx.recursion_limit,
         };
 
         let (event_data, event_meta) = data.parts();
-        let SelectCtx {
-            opts, node_meta, ..
-        } = ctx;
+        let SelectCtx { opts, .. } = ctx;
         for aggr in &mut self.aggrs {
             let invocable = &mut aggr.invocable;
             // We need two arrays to handle the we know the lenght so
@@ -160,7 +156,7 @@ impl GroupWindow {
             stry!(invocable.accumulate(argv1.as_slice()).map_err(|e| {
                 // TODO nice error
                 let r: Option<&Registry> = None;
-                e.into_err(aggr, aggr, r, node_meta)
+                e.into_err(aggr, aggr, r)
             }));
         }
         Ok(())
@@ -176,7 +172,7 @@ impl GroupWindow {
         for (this, prev) in self.aggrs.iter_mut().zip(prev.iter()) {
             stry!(this.invocable.merge(&prev.invocable).map_err(|e| {
                 let r: Option<&Registry> = None;
-                e.into_err(prev, prev, r, ctx.node_meta)
+                e.into_err(prev, prev, r)
             }));
         }
         Ok(())
@@ -244,7 +240,6 @@ impl GroupWindow {
                     context: ctx.ctx,
                     consts,
                     aggrs: &self.aggrs,
-                    meta: ctx.node_meta,
                     recursion_limit: ctx.recursion_limit,
                 };
 
@@ -343,7 +338,6 @@ impl Group {
                 context: ctx.ctx,
                 consts: run,
                 aggrs: &NO_AGGRS,
-                meta: ctx.node_meta,
                 recursion_limit: ctx.recursion_limit,
             };
             if let Some(port_and_event) = stry!(execute_select_and_having(&ctx, &env, data)) {
