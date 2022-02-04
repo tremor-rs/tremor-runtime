@@ -166,70 +166,6 @@ pub struct DeployFlow {
 ====================================
 */
 
-/// A script and it's attached source.
-///
-/// Implemention alalougous to `EventPayload`
-///
-/// It is essential to never access the parts of the struct outside of it's
-/// implementation! This will void all warenties and likely lead to errors.
-///
-/// They **must** remain private. All interactions with them have to be guarded
-/// by the implementation logic to ensure they remain sane.
-///
-
-pub struct Script {
-    /// The vector of raw input values
-    raw: Vec<Arc<Pin<Vec<u8>>>>,
-    script: ast::Script<'static>,
-}
-
-#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
-impl Debug for Script {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.script.fmt(f)
-    }
-}
-
-impl Script {
-    /// borrows the script
-    #[must_use]
-    pub fn suffix(&self) -> &ast::Script {
-        &self.script
-    }
-    /// Creates a new Payload with a given byte vector and
-    /// a function to turn it into a value and metadata set.
-    ///
-    /// The return can reference the the data it gets passed
-    /// in the function.
-    ///
-    /// Internally the lifetime will be bound to the raw part
-    /// of the struct.
-    ///
-    /// # Errors
-    /// errors if the conversion function fails
-    pub fn try_new<E, F>(mut raw: String, f: F) -> std::result::Result<Self, E>
-    where
-        F: for<'head> FnOnce(&'head mut String) -> std::result::Result<ast::Script<'head>, E>,
-    {
-        use ast::Script;
-        let structured = f(&mut raw)?;
-        // This is where the magic happens
-        // ALLOW: this is sound since we implement a self referential struct
-        let structured = unsafe { mem::transmute::<Script<'_>, Script<'static>>(structured) };
-        // This is possibl as String::into_bytes just returns the `vec` of the string
-        let raw = Pin::new(raw.into_bytes());
-        let raw = vec![Arc::new(raw)];
-        Ok(Self {
-            raw,
-            script: structured,
-        })
-    }
-}
-
-/*
-====================================
-*/
-
 /// A query and it's attached source.
 ///
 /// Implemention alalougous to `EventPayload`
@@ -1044,25 +980,6 @@ impl EventPayload {
         // that the join_f fails
         // READ: ORDER MATTERS!
         self.raw.extend_from_slice(other.raw());
-
-        // We can access `other.script` here with it's static lifetime since we did clone the `raw`
-        // into our own `raw` before. This equalizes `iref` and `head` for `self` and `other`
-        apply_f(&mut self.data, &other.script)
-    }
-
-    /// Applies another SRS into this, this functions **needs** to
-    ///
-    /// # Errors
-    /// if `join_f` errors
-    pub fn apply_script<R, F>(&mut self, other: &Script, apply_f: F) -> R
-    where
-        F: for<'iref, 'head> FnOnce(&'iref mut ValueAndMeta<'head>, &'iref ast::Script<'head>) -> R,
-        R:,
-    {
-        // We append first in the case that some data already moved into self.structured by the time
-        // that the join_f fails
-        // READ: ORDER MATTERS!
-        self.raw.extend_from_slice(&other.raw);
 
         // We can access `other.script` here with it's static lifetime since we did clone the `raw`
         // into our own `raw` before. This equalizes `iref` and `head` for `self` and `other`
