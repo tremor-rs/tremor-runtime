@@ -27,6 +27,8 @@
 #[macro_use]
 extern crate pretty_assertions;
 
+/// Memory arena for souces
+pub mod arena;
 /// The Tremor Script AST
 pub mod ast;
 mod compat;
@@ -66,7 +68,6 @@ mod std_lib;
 mod tilde;
 /// Utility functions
 pub mod utils;
-
 pub use srs::{EventPayload, ValueAndMeta};
 
 extern crate serde;
