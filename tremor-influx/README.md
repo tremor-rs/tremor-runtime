@@ -9,7 +9,7 @@ Parses a influx wire protocol into a map.
 
 ## Use as a library
 
-The influx parser was designed so that influx wire protocol style parsing could be embedded into [tremor](https://www.tremor.rs)'s [scripting](https://docs.tremor.rs/tremor-script/) language for [extract](https://docs.tremor.rs/tremor-script/extractors/influx/) operations.
+The influx parser was designed so that influx wire protocol style parsing could be embedded into [tremor](https://www.tremor.rs)'s [scripting](https://www.tremor.rs/docs/tremor-script/index) language for [extract](https://www.tremor.rs/docs/tremor-script/extractors/influx) operations.
 
 The parser can also be used standalone
 

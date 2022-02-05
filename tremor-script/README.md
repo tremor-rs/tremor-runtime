@@ -8,4 +8,4 @@ efficient structural pattern matching of nested unstructured data.
 
 ## Documentation
 
-For a basic introduction to the language consult the [reference docs](https://docs.tremor.rs/tremor-script/).
+For a basic introduction to the language consult the [reference docs](https://www.tremor.rs/docs/tremor-script/index).
