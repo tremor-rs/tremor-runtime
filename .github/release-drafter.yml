@@ -1,0 +1,43 @@
+name-template: 'Tremor v$NEXT_PATCH_VERSION'
+tag-template: 'v$NEXT_PATCH_VERSION'
+categories:
+  - title: 'Features and Enhancements '
+    labels:
+      - 'feature'
+      - 'enhancement'
+  - title: 'Tremor CLI, API and Scripts'
+    labels:
+      - 'cli'
+      - 'api'
+      - 'script'
+  - title: 'Connectors, API, Operators'
+    labels:
+      - 'component/patterns'
+      - 'component/applications'
+      - 'component/filters'
+  - title: 'Pipeline and Operators'
+    labels:
+      - 'pipeline'
+      - 'operators'      
+  - title: 'Bug Fixes'
+    labels:
+      - 'fix'
+      - 'bugfix'
+      - 'bug'
+  - title: 'Maintenance'
+    labels:
+      - 'dependencies'
+      - 'ci/cd'
+      - 'tests'
+  - title: 'Documentation'
+    label:
+      - 'notes'
+      - 'documentation'
+      - 'docs'
+  - title: 'Security'
+    label: security  
+change-template: '- $TITLE - @$AUTHOR : #$NUMBER'
+template: |
+  ## What's New
+  ## General
+  $CHANGES

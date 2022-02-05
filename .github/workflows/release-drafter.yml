@@ -1,0 +1,19 @@
+name: Tremor Release Drafter
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  update_release_draft:
+    if: github.repository == 'tremor-rs/tremor-runtime'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Drafting release
+        id: release_drafter
+        uses: release-drafter/release-drafter@v5
+        with:
+          config-name: release-drafter.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_DRAFTER_PAT }}
