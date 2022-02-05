@@ -41,3 +41,57 @@ template: |
   ## What's New
   ## General
   $CHANGES
+autolabeler:
+  - label: 'notes'
+    branch:
+      - '/tremor-notes/'
+  - label: 'packaging'
+    branch:
+      - '/packaging/'
+  - label: 'codec'
+    branch:
+      - '/src/codec'
+      - '/src/codec.rs'
+  - label: 'connectors'
+    branch:
+      - '/src/connectors'
+      - '/src/connectors.rs'
+  - label: 'onramps'
+    branch:
+      - '/src/onramp.rs'
+  - label: 'offramps'
+    branch:
+      - '/src/offramp.rs'
+  - label: 'tests'
+    branch:
+      - '/tests/'
+  - label: 'api'
+    branch:
+      - '/tremor-api/'
+  - label: 'cli'
+    branch:
+      - '/tremor-cli/'
+  - label: 'commons'
+    branch:
+      - '/tremor-commons/'
+  - label: 'erl'
+    branch:
+      - '/tremor-erl/'
+  - label: 'influx'
+    branch:
+      - '/tremor-influx/'
+  - label: 
+      - 'pipeline'
+      - 'operator'    
+    branch:
+      - '/tremor-pipeline/'
+  - label: 'operator'    
+    branch:
+      - '/tremor-pipeline/src/op'
+      - '/tremor-pipeline/src/op.rs'
+  - label: 'script'
+    branch:
+      - '/tremor-script/'
+  - label: 'value'
+    branch:
+      - '/tremor-value/'
