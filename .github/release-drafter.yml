@@ -10,11 +10,14 @@ categories:
       - 'cli'
       - 'api'
       - 'script'
-  - title: 'Connectors, API, Operators'
+  - title: 'Connectors, Codec, Ramp and Sink'
     labels:
-      - 'component/patterns'
-      - 'component/applications'
-      - 'component/filters'
+      - 'connectors'
+      - 'codec'
+      - 'sink'
+      - 'ramp'
+      - 'onramp'
+      - 'offramp'
   - title: 'Pipeline and Operators'
     labels:
       - 'pipeline'
