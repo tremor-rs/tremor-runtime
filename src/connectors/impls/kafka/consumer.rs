@@ -148,7 +148,6 @@ struct TremorConsumerContext {
 impl ClientContext for TremorConsumerContext {
     fn stats(&self, stats: rdkafka::Statistics) {
         // expose as metrics to the source
-
         if stats.client_type.eq("consumer") {
             let timestamp = stats.time as u64 * 1_000_000_000;
 
@@ -168,7 +167,7 @@ impl ClientContext for TremorConsumerContext {
             let mut consumer_lag = 0_i64;
             for (_name, topic) in &stats.topics {
                 for (_index, partition) in &topic.partitions {
-                    if partition.consumer_lag >= 0 {
+                    if partition.desired && !partition.unknown && partition.consumer_lag >= 0 {
                         consumer_lag += partition.consumer_lag;
                     }
                 }
