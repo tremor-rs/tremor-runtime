@@ -102,17 +102,15 @@ where
         let bytes_read = self.wrapped_stream.read(&mut self.buffer).await?;
         if bytes_read == 0 {
             // EOF
-            trace!("[Connector::{}] EOF", &self.alias);
+            trace!("[Connector::{}] Stream {stream} EOF", &self.alias);
             return Ok(SourceReply::EndStream {
                 origin_uri: self.origin_uri.clone(),
                 meta: Some(self.meta.clone()),
                 stream,
             });
         }
-        debug!("[Connector::{}] read {} bytes", &self.alias, bytes_read);
+        debug!("[Connector::{}] Read {} bytes", &self.alias, bytes_read);
 
-        // FIXME: meta needs to be wrapped in <RESOURCE_TYPE>.<ARTEFACT> by the source manager
-        // this is only the connector specific part, without the path mentioned above
         Ok(SourceReply::Data {
             origin_uri: self.origin_uri.clone(),
             stream,
