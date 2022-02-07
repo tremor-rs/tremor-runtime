@@ -66,7 +66,7 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "tcp_client".into()
     }
-    async fn from_config(&self, _id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+    async fn from_config(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
         if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
             let (tls_connector, tls_domain) = match config.tls.as_ref() {
@@ -92,7 +92,7 @@ impl ConnectorBuilder for Builder {
                 source_rx,
             }))
         } else {
-            Err(ErrorKind::MissingConfiguration(String::from("TcpClient")).into())
+            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
     }
 }
@@ -182,11 +182,11 @@ impl TcpClientSink {
 
 impl TcpClientSink {
     /// writing to the client socket
-    async fn write<'event>(&mut self, data: Vec<Vec<u8>>) -> Result<()> {
+    async fn write(&mut self, data: Vec<Vec<u8>>) -> Result<()> {
         let stream = self
             .wrapped_stream
             .as_mut()
-            .ok_or_else(|| Error::from("No TCP Stream available"))?; // TODO: create proper error
+            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
         for chunk in data {
             let slice: &[u8] = chunk.as_slice();
             stream.write_all(slice).await?;
@@ -241,7 +241,7 @@ impl Sink for TcpClientSink {
                 stream,
                 vec![0; buf_size],
                 ctx.alias.clone(),
-                origin_uri.clone(),
+                origin_uri,
                 meta,
             );
             self.source_runtime
@@ -265,7 +265,7 @@ impl Sink for TcpClientSink {
                 stream,
                 vec![0; buf_size],
                 ctx.alias.clone(),
-                origin_uri.clone(),
+                origin_uri,
                 meta,
             );
             self.source_runtime
@@ -286,10 +286,7 @@ impl Sink for TcpClientSink {
         for value in event.value_iter() {
             let data = serializer.serialize(value, ingest_ns)?;
             if let Err(e) = self.write(data).await {
-                error!(
-                    "{} Error sending data: {}. Initiating Reconnect...",
-                    ctx, &e
-                );
+                error!("{ctx} Error sending data: {e}. Initiating Reconnect...",);
                 // TODO: figure upon which errors to actually reconnect
                 self.tcp_stream = None;
                 self.wrapped_stream = None;

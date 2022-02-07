@@ -34,8 +34,8 @@ pub struct Config {
     // kept as a str, so it is re-resolved upon each connect
     host: String,
     port: u16,
-    // TCP: receive buffer size
     tls: Option<TLSServerConfig>,
+    // TCP: receive buffer size
     #[serde(default = "default_buf_size")]
     buf_size: usize,
 }
