@@ -60,7 +60,7 @@ url = "2"
 error-chain = "0.12"
 globwalk = "0.8"
 port_scanner = "0.1"
-shell-words = "1.0"
+shell-words = "1.1"
 tch = { version = "*", optional = true }
 termcolor = "1.1"
 [[bin]]
