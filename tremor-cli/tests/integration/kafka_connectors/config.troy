@@ -9,7 +9,7 @@ flow
     with
         metrics_interval_s = 1,
         reconnect = {
-            "custom": {
+            "retry": {
                 "interval_ms": 3000,
                 "max_retries": 10
             }
@@ -94,7 +94,7 @@ flow
     with
         metrics_interval_s = 1,
         reconnect = {
-                "custom": {
+                "retry": {
                     "interval_ms": 3000,
                     "max_retries": 10
                 }

@@ -18,7 +18,7 @@ flow
       }
     },
     reconnect = {
-      "custom": {
+      "retry": {
         "interval_ms": 500,
         "growth_rate": 2,
         "max_retries": 3,

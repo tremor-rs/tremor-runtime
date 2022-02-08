@@ -122,7 +122,7 @@ mod test {
 
         let connector_config = literal!({
             "reconnect": {
-                "custom": {
+                "retry": {
                     "interval_ms": 1000_u64,
                     "max_retries": 10_u64
                 }
