@@ -129,7 +129,5 @@
     "whrt",
     "wintel"
   ],
-  "rust-analyzer.cargo.features": [
-  ],
-  "editor.formatOnSave": true
+  "rust-analyzer.cargo.features": []
 }
