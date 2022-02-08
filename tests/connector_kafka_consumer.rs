@@ -128,7 +128,7 @@ mod test {
 
         let connector_config = literal!({
             "reconnect": {
-                "custom": {
+                "retry": {
                     "interval_ms": 1000_u64,
                     "max_retries": 10_u64
                 }
@@ -402,7 +402,7 @@ mod test {
 
         let connector_config = literal!({
             "reconnect": {
-                "custom": {
+                "retry": {
                     "interval_ms": 1000_u64,
                     "max_retries": 10_u64
                 }
@@ -661,7 +661,7 @@ mod test {
 
         let connector_config = literal!({
             "reconnect": {
-                "custom": {
+                "retry": {
                     "interval_ms": 1000_u64,
                     "max_retries": 10_u64
                 }
@@ -853,7 +853,7 @@ mod test {
         let _ = env_logger::try_init();
         let connector_config = literal!({
             "reconnect": {
-                "custom": {
+                "retry": {
                     "interval_ms": 100_u64,
                     "max_retries": 5_u64
                 }
