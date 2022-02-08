@@ -1,0 +1,102 @@
+define flow server
+flow
+  use integration;
+  use troy::pipelines;
+  use troy::connectors;
+
+  define connector server from unix_socket_server
+  with
+    preprocessors = ["lines"],
+    postprocessors = ["lines"],
+    codec = "json",
+    config = {
+      "path": "/tmp/unix-socket.sock",
+      "permissions": "=600",
+      "buf_size": 1024,
+    }
+  end;
+
+  create connector server_out from integration::write_file
+  with
+    file = "server_out.log"
+  end;
+  create connector stdio from connectors::console;
+  create connector server;
+
+  create pipeline server_side from pipelines::passthrough;
+  create pipeline debug from pipelines::passthrough;
+
+  # flow from tcp_server to file
+  connect /connector/server to /pipeline/server_side;
+  connect /connector/server/err to /pipeline/debug;
+  connect /pipeline/server_side to /connector/server_out;
+  # aaaand echo it back
+  connect /pipeline/server_side to /connector/server/in;
+
+  # debugging
+  connect /pipeline/debug to /connector/stdio;
+
+end;
+
+define flow client
+flow
+
+  use integration;
+  use troy::pipelines;
+  use troy::connectors;
+  use std::time::nanos;
+
+  define connector client from unix_socket_client
+  with
+    postprocessors = ["lines"],
+    preprocessors = ["lines"],
+    codec = "json",
+    config = {
+      "path": "/tmp/unix-socket.sock",
+      "buf_size": 1024,
+    },
+    reconnect = {
+      "custom": {
+        "interval_ms": 100,
+        "growth_rate": 2,
+        "max_retries": 3,
+      }
+    }
+  end;
+
+  # create connector instances
+  create connector in from integration::read_file;
+  create connector client;
+  create connector client_out from integration::write_file
+  with
+    file = "client_out.log"
+  end;
+  create connector stdio from connectors::console;
+  create connector exit from integration::exit;
+
+  # create pipeline instances
+  create pipeline request from pipelines::passthrough;
+  create pipeline debug from pipelines::passthrough;
+
+  create pipeline response from integration::out_or_exit;
+
+  # connect everything together
+  # from file to unix domain client
+  connect /connector/in to /pipeline/request;
+  connect /pipeline/request to /connector/client;
+
+  # send out any responses
+  connect /connector/client to /pipeline/response;
+  connect /pipeline/response to /connector/client_out;
+  connect /pipeline/response/exit to /connector/exit;
+  connect /pipeline/response/out to /connector/stdio;
+
+  # debugging
+  connect /connector/in/err to /pipeline/debug;
+  connect /connector/client/err to /pipeline/debug;
+  connect /pipeline/debug to /connector/stdio;
+end;
+
+deploy flow server;
+deploy flow client;
+

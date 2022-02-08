@@ -33,9 +33,10 @@ impl Codec for Cbor {
         _ingest_ns: u64,
     ) -> Result<Option<Value<'input>>> {
         let data: &[u8] = data;
-        ciborium::de::from_reader::<'_, Value, _>(data)
+        Ok(ciborium::de::from_reader::<'_, Value, _>(data)
             .map(Some)
-            .map_err(|e| format!("{}", e).into())
+            .unwrap())
+        //.map_err(|e| format!("{}", e).into())
     }
 
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {
@@ -56,15 +57,22 @@ mod test {
     use tremor_value::literal;
 
     #[test]
-    fn test_yaml_codec() -> Result<()> {
+    fn test_cbor_codec() -> Result<()> {
         let seed = literal!({ "snot": "badger" });
 
         let mut codec = Cbor {};
         let mut as_raw = codec.encode(&seed)?;
-        let as_json = codec.decode(as_raw.as_mut_slice(), 0);
+        let as_json = codec.decode(as_raw.as_mut_slice(), 0)?;
 
         let _ = dbg!(as_json);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_cbor() -> Result<()> {
+        Ok(ciborium::de::from_reader::<'_, Value, _>(
+            literal!({"snot": "badger"}),
+        )?)
     }
 }
