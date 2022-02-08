@@ -68,11 +68,4 @@ mod test {
 
         Ok(())
     }
-
-    #[test]
-    fn test_cbor() -> Result<()> {
-        Ok(ciborium::de::from_reader::<'_, Value, _>(
-            literal!({"snot": "badger"}),
-        )?)
-    }
 }

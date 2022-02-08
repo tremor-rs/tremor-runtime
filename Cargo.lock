@@ -1177,16 +1177,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ciborium"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de6836a1b6197d8acdaac74a01af077a26aa6953d2e9251eef061c646b0d432c"
-dependencies = [
- "half",
- "serde",
-]
-
-[[package]]
 name = "cidr-utils"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6330,7 +6320,6 @@ dependencies = [
  "byteorder",
  "bytes 1.1.0",
  "chrono",
- "ciborium",
  "cron",
  "csv",
  "either",
