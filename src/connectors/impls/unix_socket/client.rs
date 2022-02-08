@@ -113,6 +113,8 @@ impl UnixSocketClientSink {
             let slice: &[u8] = chunk.as_slice();
             stream.write_all(slice).await?;
         }
+        // TODO: necessary?
+        stream.flush().await?;
         Ok(())
     }
 

@@ -409,15 +409,13 @@ async fn spawn_task(
                     wait_for_responses(rx.clone(), start_points.len()).await?;
 
                     state = InstanceState::Running;
+                    info!("[Flow::{alias}] Started.");
                 }
                 MsgWrapper::Msg(Msg::Start) => {
-                    info!(
-                        "[Flow::{}] Ignoring Start message. Current state: {}",
-                        &alias, &state
-                    );
+                    info!("[Flow::{alias}] Ignoring Start message. Current state: {state}");
                 }
                 MsgWrapper::Msg(Msg::Pause) if state == InstanceState::Running => {
-                    info!("[Flow::{}] Pausing...", &alias);
+                    info!("[Flow::{alias}] Pausing...");
                     for source in &start_points {
                         source.pause().await?;
                     }
