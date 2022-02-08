@@ -31,23 +31,27 @@ pub(crate) type Id = String;
 pub enum Reconnect {
     /// No reconnection
     None,
-    // TODO: RandomizedBackoff
-    /// Custom configurable reconnect strategy
-    Custom {
+    /// Configurable retries
+    Retry {
         /// start interval to wait after a failing connect attempt
         interval_ms: u64,
         /// growth rate for consecutive connect attempts, will be added to interval_ms
         #[serde(default = "default_growth_rate")]
         growth_rate: f64,
-        //TODO: randomized: bool
         /// maximum number of retries to execute
-        #[serde(default = "Default::default")]
         max_retries: Option<u64>,
+        /// Randomize the growth rate
+        #[serde(default = "default_randomized")]
+        randomized: bool
     },
 }
 
 fn default_growth_rate() -> f64 {
-    1.2
+    1.5
+}
+
+fn default_randomized() -> bool {
+    true
 }
 
 impl Default for Reconnect {
@@ -274,18 +278,19 @@ mod tests {
         "#;
         let reconnect = serde_yaml::from_str::<Reconnect>(none_strategy)?;
         assert!(matches!(reconnect, Reconnect::None));
-        let custom = r#"
-        custom:
+        let retry = r#"
+        retry:
           interval_ms: 123
           growth_rate: 1.234567
         "#;
-        let reconnect = serde_yaml::from_str::<Reconnect>(custom)?;
+        let reconnect = serde_yaml::from_str::<Reconnect>(retry)?;
         assert!(matches!(
             reconnect,
-            Reconnect::Custom {
+            Reconnect::Retry {
                 interval_ms: 123,
                 growth_rate: _,
-                max_retries: None
+                max_retries: None,
+                randomized: true
             }
         ));
         Ok(())

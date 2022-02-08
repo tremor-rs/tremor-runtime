@@ -21,6 +21,8 @@ use crate::errors::{Error, Result};
 use async_std::channel::{bounded, Sender};
 use async_std::task::{self, JoinHandle};
 use futures::future::{join3, ready, FutureExt};
+use rand::{Rng, SeedableRng};
+use rand::rngs::SmallRng;
 use std::convert::identity;
 use std::fmt::Display;
 use std::time::Duration;
@@ -68,12 +70,34 @@ impl ReconnectStrategy for FailFast {
     }
 }
 
-struct SimpleBackoff {
+/// Strategy that retries failed connection attempts up to a configurable `max_retries`,
+/// and a configurable `start_interval` to wait, a `growth_rate` to grow the `start_interval`
+/// between each attempt to reconnect and a `randomized` flag to randomize the growth interval,
+/// so this can achieve randomized backoff.
+struct RetryWithBackoff {
     start_interval: u64,
     growth_rate: f64,
     max_retries: u64,
+    random: Option<SmallRng>
 }
-impl ReconnectStrategy for SimpleBackoff {
+
+impl RetryWithBackoff {
+    fn new(start_interval: u64, growth_rate: f64, max_retries: u64, randomized: bool) -> Self {
+        let random = if randomized {
+            Some(SmallRng::from_entropy())
+        } else {
+            None
+        };
+        Self {
+            start_interval,
+            growth_rate,
+            max_retries,
+            random
+        }
+    }
+}
+
+impl ReconnectStrategy for RetryWithBackoff {
     #[allow(
         clippy::cast_precision_loss,
         clippy::cast_sign_loss,
@@ -81,7 +105,20 @@ impl ReconnectStrategy for SimpleBackoff {
     )]
     fn next_interval(&mut self, current: Option<u64>, _attempt: &Attempt) -> u64 {
         match current {
-            Some(interval) => (interval as f64 * self.growth_rate) as u64,
+            Some(interval) => {
+                let growth_interval = (interval as f64 * self.growth_rate) as u64;
+                if let Some(prng) = &mut self.random {
+                    // apply randomness, interpreting the growth_interval as maximum growth
+                    let range = if self.growth_rate >= 1.0 {
+                        interval..=growth_interval
+                    } else {
+                        growth_interval..=interval
+                    };
+                    prng.gen_range(range)
+                } else {
+                    growth_interval
+                }
+            }
             None => self.start_interval,
         }
     }
@@ -203,15 +240,17 @@ impl ReconnectRuntime {
     ) -> Self {
         let strategy: Box<dyn ReconnectStrategy> = match config {
             Reconnect::None => Box::new(FailFast {}),
-            Reconnect::Custom {
+            Reconnect::Retry {
                 interval_ms,
                 growth_rate,
                 max_retries,
-            } => Box::new(SimpleBackoff {
-                start_interval: *interval_ms,
-                growth_rate: *growth_rate,
-                max_retries: max_retries.unwrap_or(u64::MAX),
-            }),
+                randomized
+            } => Box::new(RetryWithBackoff::new(
+                *interval_ms,
+                *growth_rate,
+                max_retries.unwrap_or(u64::MAX),
+                *randomized
+            )),
         };
         Self {
             attempt: Attempt::default(),
@@ -448,10 +487,11 @@ mod tests {
             sink: None,
             sender: tx.clone(),
         };
-        let config = Reconnect::Custom {
+        let config = Reconnect::Retry {
             interval_ms: 10,
             growth_rate: 2.0,
             max_retries: Some(3),
+            randomized: true
         };
         let mut runtime = ReconnectRuntime::inner(addr, alias.clone(), notifier, &config);
         let mut connector = FakeConnector {

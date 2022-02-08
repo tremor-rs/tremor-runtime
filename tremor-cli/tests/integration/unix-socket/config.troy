@@ -56,7 +56,7 @@ flow
       "buf_size": 1024,
     },
     reconnect = {
-      "custom": {
+      "retry": {
         "interval_ms": 100,
         "growth_rate": 2,
         "max_retries": 3,

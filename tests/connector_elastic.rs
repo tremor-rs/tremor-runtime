@@ -95,7 +95,7 @@ mod test {
 
         let connector_config = literal!({
             "reconnect": {
-                "custom": {
+                "retry": {
                     "interval_ms": 1000,
                     "max_retries": 10
                 }
