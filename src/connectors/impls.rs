@@ -37,7 +37,7 @@ pub(crate) mod kv;
 pub(crate) mod metrics;
 /// Metronome
 pub(crate) mod metronome;
-/// Connectors for AWS S3
+/// AWS S3 connectors
 pub(crate) mod s3;
 /// std streams connector (stdout, stderr, stdin)
 pub(crate) mod stdio;

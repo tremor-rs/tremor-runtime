@@ -16,36 +16,32 @@ use crate::connectors::prelude::*;
 use async_std::channel::{self, Receiver, Sender};
 use async_std::task::{self, JoinHandle};
 use bytes::Buf;
-use std::env;
 use std::io::Read;
 use std::mem;
 
+use super::s3_auth;
 use aws_sdk_s3 as s3;
-use aws_types::{credentials::Credentials, region::Region};
 use s3::model::Object;
 use s3::ByteStream;
 use s3::Client as S3Client;
-use s3::Endpoint;
 
 const MINCHUNKSIZE: i64 = 8 * 1024 * 1024; // 8 MBs
 
 struct S3SourceConnector {
     config: S3SourceConfig,
-    endpoint: Option<http::Uri>,
     tx: Option<Sender<SourceReply>>,
     handles: Vec<JoinHandle<Result<()>>>,
 }
 
 #[derive(Deserialize, Debug, Default)]
 pub struct S3SourceConfig {
-    #[serde(default = "S3SourceConfig::default_access_key_id")]
-    aws_access_key_id: String,
-    #[serde(default = "S3SourceConfig::default_secret_token")]
-    aws_secret_access_key: String,
     #[serde(default = "S3SourceConfig::default_aws_region")]
     aws_region: String,
-
     endpoint: Option<String>,
+    bucket: String,
+
+    prefix: Option<String>,
+    delimiter: Option<String>,
 
     /// Sourcing field names and defaults from
     /// https://docs.aws.amazon.com/cli/latest/topic/s3-config.html
@@ -56,10 +52,6 @@ pub struct S3SourceConfig {
 
     #[serde(default = "S3SourceConfig::default_max_connections")]
     max_connections: usize,
-
-    bucket: String,
-    prefix: Option<String>,
-    delimiter: Option<String>,
 }
 
 struct KeyPayload {
@@ -69,16 +61,8 @@ struct KeyPayload {
 
 // Defaults for the config.
 impl S3SourceConfig {
-    fn default_access_key_id() -> String {
-        "AWS_ACCESS_KEY_ID".to_string()
-    }
-
-    fn default_secret_token() -> String {
-        "AWS_SECRET_ACCESS_KEY".to_string()
-    }
-
     fn default_aws_region() -> String {
-        "AWS_REGION".to_string()
+        "us-east-1".to_string()
     }
 
     fn default_multipart_chunksize() -> i64 {
@@ -111,27 +95,12 @@ impl ConnectorBuilder for Builder {
         raw_config: &Option<OpConfig>,
     ) -> Result<Box<dyn Connector>> {
         if let Some(config) = raw_config {
-            let mut config = S3SourceConfig::new(config)?;
-
-            // Fetch the secrets from the env.
-            config.aws_secret_access_key = env::var(config.aws_secret_access_key)?;
-            config.aws_access_key_id = env::var(config.aws_access_key_id)?;
-            config.aws_region = env::var(config.aws_region)?;
-
-            // Check the validity of given url.
-            let endpoint = if let Some(url) = &config.endpoint {
-                let url_parsed = url.parse::<http::Uri>()?;
-                Some(url_parsed)
-            } else {
-                None
-            };
+            let config = S3SourceConfig::new(config)?;
 
             // FIXME: display a warning if chunksize lesser than some quantity
-
             Ok(Box::new(S3SourceConnector {
                 handles: Vec::with_capacity(config.max_connections),
                 config,
-                endpoint,
                 tx: None,
             }))
         } else {
@@ -157,23 +126,11 @@ impl Connector for S3SourceConnector {
     }
 
     async fn connect(&mut self, _ctx: &ConnectorContext, _attemp: &Attempt) -> Result<bool> {
-        let s3_config = s3::config::Config::builder()
-            .credentials_provider(Credentials::new(
-                self.config.aws_access_key_id.clone(),
-                self.config.aws_secret_access_key.clone(),
-                None,
-                None,
-                "Environment",
-            ))
-            .region(Region::new(self.config.aws_region.clone()));
-
-        // FIXME: Donot forget to add endpoint resolver once config is changed again.
-        let s3_config = match &self.endpoint {
-            Some(uri) => s3_config.endpoint_resolver(Endpoint::immutable(uri.clone())),
-            None => (s3_config),
-        };
-
-        let client = S3Client::from_conf(s3_config.build());
+        let client = s3_auth::get_client(
+            self.config.aws_region.clone(),
+            self.config.endpoint.as_ref(),
+        )
+        .await?;
 
         // Check the existence of the bucket.
         client
@@ -231,27 +188,30 @@ async fn fetch_keys_task(
     delim: Option<String>,
     sender: Sender<KeyPayload>,
 ) -> Result<()> {
-    // fetch first pool of keys.
-    let mut resp = client
-        .list_objects_v2()
-        .bucket(bucket.clone())
-        .set_prefix(prefix.clone())
-        .set_delimiter(delim.clone())
-        .send()
-        .await?;
+    let fetch_keys = |start_after: Option<String>| async {
+        Result::<_>::Ok(
+            client
+                .list_objects_v2()
+                .bucket(bucket.clone())
+                .set_prefix(prefix.clone())
+                .set_delimiter(delim.clone())
+                .set_start_after(start_after)
+                .send()
+                .await?,
+        )
+    };
+
+    // fetch first page of keys.
+    let mut last_key_fetched: Option<String> = None;
+    let mut resp = fetch_keys(last_key_fetched.take()).await?;
 
     let mut stream = 0; // for the Channel Source
-    let mut last_key_fetched: Option<String> = None;
     'outer: loop {
         match resp.contents.take() {
             None => {}
             Some(entries) => {
-                // FIXME: Could there be issues setting this before fetching all the keys
                 match entries.last() {
-                    None => {
-                        // No more keys/objects
-                        break 'outer;
-                    }
+                    None => break 'outer, // No more keys/objects
                     Some(obj) => last_key_fetched = obj.key.clone(),
                 }
 
@@ -267,23 +227,16 @@ async fn fetch_keys_task(
             }
         }
 
+        // No more pages to fetch.
         if !resp.is_truncated {
-            // No more entries.
             break 'outer;
         }
 
-        resp = client
-            .list_objects_v2()
-            .bucket(bucket.clone())
-            .set_prefix(prefix.clone())
-            .set_delimiter(delim.clone())
-            .set_start_after(last_key_fetched.take())
-            .send()
-            .await?;
+        resp = fetch_keys(last_key_fetched.take()).await?;
     }
-
     Ok(())
 }
+
 /*
 Gets key from the recvr
 Fetches the object from s3
@@ -296,7 +249,6 @@ async fn fetch_object_task(
     threshold: i64,
     part_size: i64,
 ) -> Result<()> {
-    
     let origin_uri = EventOriginUri {
         scheme: "s3".to_string(),
         host: hostname(),
@@ -331,7 +283,7 @@ async fn fetch_object_task(
         object_data,
         stream,
     }) = recvr.recv().await
-    {   
+    {
         info!("key: {:?}", object_data.key());
         // FIXME: usize -> i64, should be alright.
         if object_data.size() <= threshold {
@@ -344,10 +296,10 @@ async fn fetch_object_task(
                 .map_err(|e| ErrorKind::S3Error(e.to_string()))?
                 .reader()
                 .read_to_end(&mut v)?;
+
             v.truncate(bytes_read);
             let event_data = mem::take(&mut v);
             sender.send(event_from(event_data, stream)).await?;
-            
         } else {
             // Fetch multipart.
             let mut fetched_bytes = 0; // represent the next byte to fetch.

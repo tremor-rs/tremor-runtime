@@ -14,21 +14,19 @@
 use crate::connectors::prelude::*;
 use crate::Event;
 use async_std::channel;
-use std::{env, mem};
+use std::mem;
 use value_trait::ValueAccess;
 
+use super::s3_auth;
 use aws_sdk_s3 as s3;
-use aws_types::{credentials::Credentials, region::Region};
 use s3::model::{CompletedMultipartUpload, CompletedPart};
 use s3::Client as S3Client;
-use s3::Endpoint;
 
 const FIVEMBS: usize = 5 * 1024 * 1024 + 100; // Some extra bytes to keep aws happy.
 
 struct S3Connector {
     client_sender: Option<channel::Sender<S3Client>>,
     config: S3Config,
-    endpoint: Option<http::Uri>,
 }
 
 struct S3Sink {
@@ -47,17 +45,13 @@ struct S3Sink {
 
 #[derive(Deserialize, Debug, Default)]
 pub struct S3Config {
-    #[serde(default = "S3Config::default_access_key_id")]
-    aws_access_key_id: String,
-    #[serde(default = "S3Config::default_secret_token")]
-    aws_secret_access_key: String,
     #[serde(default = "S3Config::default_aws_region")]
     aws_region: String,
-
+    endpoint: Option<String>,
     bucket: String,
+
     #[serde(default = "S3Config::fivembs")]
     min_part_size: usize,
-    endpoint: Option<String>,
 }
 
 // Defaults for the config.
@@ -66,16 +60,8 @@ impl S3Config {
         FIVEMBS
     }
 
-    fn default_access_key_id() -> String {
-        "AWS_ACCESS_KEY_ID".to_string()
-    }
-
-    fn default_secret_token() -> String {
-        "AWS_SECRET_ACCESS_KEY".to_string()
-    }
-
     fn default_aws_region() -> String {
-        "AWS_REGION".to_string()
+        "us-east-1".to_string()
     }
 }
 
@@ -98,28 +84,14 @@ impl ConnectorBuilder for Builder {
         if let Some(config) = raw_config {
             let mut config = S3Config::new(config)?;
 
-            // Fetch the secrets from the env.
-            config.aws_secret_access_key = env::var(config.aws_secret_access_key)?;
-            config.aws_access_key_id = env::var(config.aws_access_key_id)?;
-            config.aws_region = env::var(config.aws_region)?;
-
             // Maintain the minimum size of 5 MBs.
             if config.min_part_size < FIVEMBS {
                 config.min_part_size = FIVEMBS;
             }
 
-            // Check the validity of given url
-            let endpoint = if let Some(url) = &config.endpoint {
-                let url_parsed = url.parse::<http::Uri>()?;
-                Some(url_parsed)
-            } else {
-                None
-            };
-
             Ok(Box::new(S3Connector {
                 client_sender: None,
                 config,
-                endpoint,
             }))
         } else {
             Err(ErrorKind::MissingConfiguration(id.to_string()).into())
@@ -266,23 +238,11 @@ impl Connector for S3Connector {
     }
 
     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        // Create the client and establish the connection.
-        let s3_config = s3::config::Config::builder()
-            .credentials_provider(Credentials::new(
-                self.config.aws_access_key_id.clone(),
-                self.config.aws_secret_access_key.clone(),
-                None,
-                None,
-                "Environment",
-            ))
-            .region(Region::new(self.config.aws_region.clone()));
-
-        let s3_config = match &self.endpoint {
-            Some(uri) => s3_config.endpoint_resolver(Endpoint::immutable(uri.clone())),
-            None => (s3_config),
-        };
-
-        let client = S3Client::from_conf(s3_config.build());
+        let client = s3_auth::get_client(
+            self.config.aws_region.clone(),
+            self.config.endpoint.as_ref(),
+        )
+        .await?;
 
         // Check for the existence of the bucket.
         client
