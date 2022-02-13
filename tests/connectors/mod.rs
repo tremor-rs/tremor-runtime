@@ -18,12 +18,15 @@
 
 use async_std::{
     channel::{bounded, Receiver},
-    prelude::FutureExt,
-    task::JoinHandle,
+    prelude::{FutureExt, StreamExt},
+    task::JoinHandle, net::TcpListener,
 };
 use beef::Cow;
 use halfbrown::HashMap;
 use log::{debug, info};
+use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
+use signal_hook_async_std::{Handle, Signals};
+use testcontainers::{clients, Docker};
 use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::{
     ids::ConnectorIdGen,
@@ -189,7 +192,7 @@ impl ConnectorHarness {
         Ok(())
     }
 
-    /// Wait for the connecte to reach the given `state`.
+    /// Wait for the connector to reach the given `state`.
     ///
     /// # Errors
     ///
@@ -241,6 +244,93 @@ impl ConnectorHarness {
 
     pub(crate) async fn send_contraflow(&self, cb: CbAction, id: EventId) -> Result<()> {
         self.addr.send_source(SourceMsg::Cb(cb, id)).await
+    }
+
+    pub(crate) async fn find_free_tcp_port() -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").await;
+        let listener = match listener {
+            Err(_) => return 65535, // TODO error handling
+            Ok(listener) => listener,
+        };
+        let port = match listener.local_addr().ok() {
+            Some(addr) => addr.port(),
+            None => return 65535,
+        };
+        info!("free port: {}", port);
+        port
+    }
+
+    pub(crate) fn handle_signals(container_id: String) -> Result<SignalHandler> {
+        SignalHandler::new(container_id)
+    }
+}
+
+pub(crate) struct SignalHandler {
+    signal_handle: Handle,
+    handle_task: Option<JoinHandle<()>>
+}
+
+impl SignalHandler {
+    pub(crate) fn new(container_id: String) -> Result<Self> {
+
+        let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
+        let signal_handle = signals.handle();
+        let handle_task = async_std::task::spawn(async move {
+            let signal_docker = clients::Cli::default();
+            while let Some(signal) = signals.next().await {
+                signal_docker.stop(container_id.as_str());
+                signal_docker.rm(container_id.as_str());
+                let _ = signal_hook::low_level::emulate_default_handler(signal);
+            }
+        });
+        Ok(Self {
+            signal_handle,
+            handle_task: Some(handle_task)
+        })
+    }
+}
+
+impl Drop for SignalHandler {
+    fn drop(&mut self) {
+        self.signal_handle.close();
+        if let Some(s) = self.handle_task.take() {
+            async_std::task::block_on(s.cancel());
+        }
+    }
+}
+
+/// Keeps track of process env manipulations and restores previous values upon drop
+pub(crate) struct EnvHelper {
+    restore: HashMap<String, String>
+}
+
+impl EnvHelper {
+    pub(crate) fn new() -> Self {
+        Self {
+            restore: HashMap::new()
+        }
+    }
+
+    pub(crate) fn set_var(&mut self, key: &str, value: &str) {
+        if let Ok(old_value) = std::env::var(key) {
+            self.restore.insert(key.to_string(), old_value);
+        }
+        std::env::set_var(key, value);
+    }
+
+    pub(crate) fn remove_var(&mut self, key: &str) {
+        if let Ok(old_value) = std::env::var(key) {
+            self.restore.insert(key.to_string(), old_value);
+        }
+        std::env::remove_var(key);
+    }
+}
+
+impl Drop for EnvHelper {
+    fn drop(&mut self) {
+        for (k, v) in &self.restore {
+            std::env::set_var(k, v);
+        }
     }
 }
 
