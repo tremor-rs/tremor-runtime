@@ -1,4 +1,4 @@
-// Copyright 2020-2021, The Tremor Team
+// Copyright 2022, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,40 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::connectors::prelude::*;
+use futures::stream::TryStreamExt;
 
 use async_std::channel::{self, Receiver, Sender};
 use async_std::task::{self, JoinHandle};
-use bytes::Buf;
-use std::env;
-use std::io::Read;
-use std::mem;
 
+use super::s3_auth;
 use aws_sdk_s3 as s3;
-use aws_types::{credentials::Credentials, region::Region};
 use s3::model::Object;
 use s3::ByteStream;
 use s3::Client as S3Client;
-use s3::Endpoint;
 
 const MINCHUNKSIZE: i64 = 8 * 1024 * 1024; // 8 MBs
 
-struct S3SourceConnector {
-    config: S3SourceConfig,
-    endpoint: Option<http::Uri>,
-    tx: Option<Sender<SourceReply>>,
-    handles: Vec<JoinHandle<Result<()>>>,
-}
+const URL_SCHEME: &str = "tremor-s3";
 
 #[derive(Deserialize, Debug, Default)]
 pub struct S3SourceConfig {
-    #[serde(default = "S3SourceConfig::default_access_key_id")]
-    aws_access_key_id: String,
-    #[serde(default = "S3SourceConfig::default_secret_token")]
-    aws_secret_access_key: String,
-    #[serde(default = "S3SourceConfig::default_aws_region")]
-    aws_region: String,
-
+    // if not provided here explicitly, the region is taken from environment variable or local AWS config
+    // NOTE: S3 will fail if NO region could be found.
+    aws_region: Option<String>,
     endpoint: Option<String>,
+    bucket: String,
+
+    /// prefix filter - if provided, it will fetch all keys with this prefix
+    prefix: Option<String>,
 
     /// Sourcing field names and defaults from
     /// https://docs.aws.amazon.com/cli/latest/topic/s3-config.html
@@ -56,10 +47,6 @@ pub struct S3SourceConfig {
 
     #[serde(default = "S3SourceConfig::default_max_connections")]
     max_connections: usize,
-
-    bucket: String,
-    prefix: Option<String>,
-    delimiter: Option<String>,
 }
 
 struct KeyPayload {
@@ -69,18 +56,6 @@ struct KeyPayload {
 
 // Defaults for the config.
 impl S3SourceConfig {
-    fn default_access_key_id() -> String {
-        "AWS_ACCESS_KEY_ID".to_string()
-    }
-
-    fn default_secret_token() -> String {
-        "AWS_SECRET_ACCESS_KEY".to_string()
-    }
-
-    fn default_aws_region() -> String {
-        "AWS_REGION".to_string()
-    }
-
     fn default_multipart_chunksize() -> i64 {
         MINCHUNKSIZE
     }
@@ -108,36 +83,27 @@ impl ConnectorBuilder for Builder {
     async fn from_config(
         &self,
         id: &str,
-        raw_config: &Option<OpConfig>,
+        raw_config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
-        if let Some(config) = raw_config {
-            let mut config = S3SourceConfig::new(config)?;
-
-            // Fetch the secrets from the env.
-            config.aws_secret_access_key = env::var(config.aws_secret_access_key)?;
-            config.aws_access_key_id = env::var(config.aws_access_key_id)?;
-            config.aws_region = env::var(config.aws_region)?;
-
-            // Check the validity of given url.
-            let endpoint = if let Some(url) = &config.endpoint {
-                let url_parsed = url.parse::<http::Uri>()?;
-                Some(url_parsed)
-            } else {
-                None
-            };
+        if let Some(config) = &raw_config.config {
+            let config = S3SourceConfig::new(config)?;
 
             // FIXME: display a warning if chunksize lesser than some quantity
-
             Ok(Box::new(S3SourceConnector {
                 handles: Vec::with_capacity(config.max_connections),
                 config,
-                endpoint,
                 tx: None,
             }))
         } else {
             Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
     }
+}
+
+struct S3SourceConnector {
+    config: S3SourceConfig,
+    tx: Option<Sender<SourceReply>>,
+    handles: Vec<JoinHandle<Result<()>>>,
 }
 
 #[async_trait::async_trait]
@@ -156,24 +122,12 @@ impl Connector for S3SourceConnector {
         Ok(Some(addr))
     }
 
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attemp: &Attempt) -> Result<bool> {
-        let s3_config = s3::config::Config::builder()
-            .credentials_provider(Credentials::new(
-                self.config.aws_access_key_id.clone(),
-                self.config.aws_secret_access_key.clone(),
-                None,
-                None,
-                "Environment",
-            ))
-            .region(Region::new(self.config.aws_region.clone()));
-
-        // FIXME: Donot forget to add endpoint resolver once config is changed again.
-        let s3_config = match &self.endpoint {
-            Some(uri) => s3_config.endpoint_resolver(Endpoint::immutable(uri.clone())),
-            None => (s3_config),
-        };
-
-        let client = S3Client::from_conf(s3_config.build());
+    async fn connect(&mut self, ctx: &ConnectorContext, _attemp: &Attempt) -> Result<bool> {
+        let client = s3_auth::get_client(
+            self.config.aws_region.clone(),
+            self.config.endpoint.as_ref(),
+        )
+        .await?;
 
         // Check the existence of the bucket.
         client
@@ -198,6 +152,7 @@ impl Connector for S3SourceConnector {
             let handle = task::Builder::new()
                 .name(format!("fetch_obj_task{}", i))
                 .spawn(fetch_object_task(
+                    ctx.clone(),
                     task_client,
                     task_bucket,
                     task_rx,
@@ -211,16 +166,15 @@ impl Connector for S3SourceConnector {
         // spawn key fetcher task
         let bucket = self.config.bucket.clone();
         let prefix = self.config.prefix.clone();
-        let delim = self.config.delimiter.clone();
         task::Builder::new()
             .name("fetch_key_task".to_owned())
-            .spawn(fetch_keys_task(client, bucket, prefix, delim, tx_key))?;
+            .spawn(fetch_keys_task(client, bucket, prefix, tx_key))?;
 
         Ok(true)
     }
 
-    fn default_codec(&self) -> &str {
-        "json"
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Required
     }
 }
 
@@ -228,33 +182,30 @@ async fn fetch_keys_task(
     client: S3Client,
     bucket: String,
     prefix: Option<String>,
-    delim: Option<String>,
     sender: Sender<KeyPayload>,
 ) -> Result<()> {
-    // fetch first pool of keys.
-    let mut resp = client
-        .list_objects_v2()
-        .bucket(bucket.clone())
-        .set_prefix(prefix.clone())
-        .set_delimiter(delim.clone())
-        .send()
-        .await?;
+    let fetch_keys = |continuation_token: Option<String>| async {
+        Result::<_>::Ok(
+            client
+                .list_objects_v2()
+                .bucket(bucket.clone())
+                .set_prefix(prefix.clone())
+                .set_continuation_token(continuation_token)
+                .send()
+                .await?,
+        )
+    };
+
+    // fetch first page of keys.
+    let mut continuation_token: Option<String> = None;
+    let mut resp = fetch_keys(continuation_token.take()).await?;
+    debug!("Fetched {} keys of {}.", resp.key_count(), resp.max_keys());
 
     let mut stream = 0; // for the Channel Source
-    let mut last_key_fetched: Option<String> = None;
     'outer: loop {
         match resp.contents.take() {
             None => {}
             Some(entries) => {
-                // FIXME: Could there be issues setting this before fetching all the keys
-                match entries.last() {
-                    None => {
-                        // No more keys/objects
-                        break 'outer;
-                    }
-                    Some(obj) => last_key_fetched = obj.key.clone(),
-                }
-
                 for object_data in entries {
                     sender
                         .send(KeyPayload {
@@ -267,38 +218,35 @@ async fn fetch_keys_task(
             }
         }
 
-        if !resp.is_truncated {
-            // No more entries.
+        if resp.is_truncated {
+            continuation_token = resp.next_continuation_token().map(ToString::to_string);
+        } else {
+            // No more pages to fetch.
             break 'outer;
         }
 
-        resp = client
-            .list_objects_v2()
-            .bucket(bucket.clone())
-            .set_prefix(prefix.clone())
-            .set_delimiter(delim.clone())
-            .set_start_after(last_key_fetched.take())
-            .send()
-            .await?;
+        resp = fetch_keys(continuation_token.take()).await?;
     }
-
     Ok(())
 }
-/*
-Gets key from the recvr
-Fetches the object from s3
-Send to the ChannelSource channel */
+
+///
+/// Receives object keys and the corresponsing stream id from the `recvr`
+/// Fetches the object from s3
+/// depending on `multipart_threshold` it downloads the object as one or in ranges.
+/// 
+/// The received data is sent to the ChannelSource channel.
 async fn fetch_object_task(
+    ctx: ConnectorContext,
     client: S3Client,
     bucket: String,
     recvr: Receiver<KeyPayload>,
     sender: Sender<SourceReply>,
-    threshold: i64,
+    multipart_threshold: i64,
     part_size: i64,
 ) -> Result<()> {
-    
     let origin_uri = EventOriginUri {
-        scheme: "s3".to_string(),
+        scheme: URL_SCHEME.to_string(),
         host: hostname(),
         port: None,
         path: vec![bucket.clone()],
@@ -312,7 +260,7 @@ async fn fetch_object_task(
         port: None,
     };
     // Set the key and range (if present)
-    let object_stream = |key, range| async {
+    let fetch_object_stream = |key, range| async {
         Result::<ByteStream>::Ok(
             client
                 .get_object()
@@ -325,67 +273,114 @@ async fn fetch_object_task(
         )
     };
 
-    let mut v = Vec::new();
-
     while let Ok(KeyPayload {
         object_data,
         stream,
     }) = recvr.recv().await
-    {   
-        info!("key: {:?}", object_data.key());
+    {
+        let Object {
+            key,
+            size,
+            ..
+        } = object_data;
+        let mut err = false; // marks an error
+        debug!("{ctx} Fetching key {key:?}...");
         // FIXME: usize -> i64, should be alright.
-        if object_data.size() <= threshold {
+        if size <= multipart_threshold {
             // Perform a single fetch.
-            let obj_stream: ByteStream = object_stream(object_data.key, None).await?;
-
-            let bytes_read = obj_stream
-                .collect()
-                .await
-                .map_err(|e| ErrorKind::S3Error(e.to_string()))?
-                .reader()
-                .read_to_end(&mut v)?;
-            v.truncate(bytes_read);
-            let event_data = mem::take(&mut v);
-            sender.send(event_from(event_data, stream)).await?;
+            match fetch_object_stream(key.clone(), None).await {
+                Ok(mut obj_stream) => {
+                    'inner: loop {
+                        // we iterate over the chunks the response provides
+                        match obj_stream.try_next().await {
+                            Ok(Some(chunk)) => {
+                                debug!("{ctx} Received chunk with {} bytes for key {key:?}.", chunk.len());
+                                // meh, we need to clone the chunk :(
+                                if sender.send(event_from(chunk.as_ref().to_vec(), stream)).await.is_err() {
+                                    error!("{ctx} Error sending data for key {key:?} to source.");
+                                    err = true;
+                                    break 'inner;
+                                }
+                            }
+                            Ok(None) => { 
+                                // stream finished
+                                break 'inner; 
+                            }
+                            Err(e) => {
+                                error!("{ctx} Error fetching data for key {key:?}: {e}");
+                                // TODO: emit event to `err` port?
+                                err = true;
+                                break 'inner; // wait for next key
+                            }
+                        }
+                    }
+                },
+                Err(e) => {
+                    error!("{ctx} Error fetching key {key:?}: {e}");
+                    err = true;
+                }
+            };
             
         } else {
             // Fetch multipart.
             let mut fetched_bytes = 0; // represent the next byte to fetch.
 
-            while fetched_bytes < object_data.size {
+            while fetched_bytes < size {
                 let fetch_till = fetched_bytes + part_size;
                 let range = Some(format!("bytes={}-{}", fetched_bytes, fetch_till - 1)); // -1 is reqd here as range is inclusive.
 
-                warn!("Fetching bytes: bytes={}-{}", fetched_bytes, fetch_till - 1);
+                debug!("{ctx} Fetching byte range: bytes={}-{} for key {key:?}", fetched_bytes, fetch_till - 1);
                 // fetch the range.
-                let obj_stream = object_stream(object_data.key.clone(), range).await?;
-
-                let bytes_read = obj_stream
-                    .collect()
-                    .await
-                    .map_err(|e| ErrorKind::S3Error(e.to_string()))?
-                    .reader()
-                    .read_to_end(&mut v)?;
-
-                v.truncate(bytes_read);
-
+                match fetch_object_stream(key.clone(), range.clone()).await {
+                    Ok(mut obj_stream) => {
+                        'inner_range: loop {
+                            // stream over the response chunks
+                            match obj_stream.try_next().await {
+                                Ok(Some(chunk)) => {
+                                    debug!("{ctx} Received chunk with {} bytes for range {range:?} for key {key:?}.", chunk.len());
+                                    // meh, we need to clone the chunk :(
+                                    if sender.send(event_from(chunk.as_ref().to_vec(), stream)).await.is_err() {
+                                        error!("{ctx} Error sending data for range {range:?} for key {key:?} to source.");
+                                        err = true;
+                                        break 'inner_range;
+                                    }
+                                }
+                                Ok(None) => {
+                                    // object range stream finished
+                                    break 'inner_range;
+                                }
+                                Err(e) => {
+                                    error!("{ctx} Error fetching data for range {range:?} for key {key:?}: {e}");
+                                    // TODO: emit event to `err` port?
+                                    err = true;
+                                    break 'inner_range; // wait for next key
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!("{ctx} Error fetching range {range:?} for key {key:?}: {e}");
+                        err = true;
+                    }
+                }
                 // update for next iteration.
                 fetched_bytes = fetch_till;
-
-                let event_data = mem::take(&mut v);
-                sender.send(event_from(event_data, stream)).await?;
             }
         }
 
         // Close the stream
-        sender
-            .send(SourceReply::EndStream {
+        let stream_finish_reply = if err {
+            SourceReply::StreamFail(stream)
+        } else {
+            SourceReply::EndStream {
                 origin_uri: origin_uri.clone(),
                 stream,
                 meta: None,
-            })
+            }
+        };
+        sender
+            .send(stream_finish_reply)
             .await?;
     }
-
     Ok(())
 }
