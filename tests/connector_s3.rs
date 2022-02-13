@@ -19,18 +19,15 @@ extern crate log;
 #[cfg(feature = "integration")]
 mod test {
     // use async_std::stream::StreamExt;
-    use futures::StreamExt;
     use rand::{distributions::Alphanumeric, Rng};
-    use std::env;
     use std::io::Read;
     use std::time::{Duration, Instant};
     // use bytes::buf::buf_impl::Buf;
     use bytes::Buf;
+    use serial_test::serial;
 
-    use super::connectors::{ConnectorHarness, TestPipeline};
-    use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
-    use signal_hook_async_std::Signals;
-    use testcontainers::clients;
+    use crate::connectors::{ConnectorHarness, TestPipeline, SignalHandler, EnvHelper};
+    use testcontainers::{clients, Container};
     use testcontainers::images::generic::GenericImage;
     use testcontainers::{Docker, RunArgs};
 
@@ -44,65 +41,181 @@ mod test {
     use s3::client::Client as S3Client;
     use s3::{Credentials, Endpoint, Region};
 
-    #[async_std::test]
-    async fn connector_s3() -> Result<()> {
-        let _ = env_logger::try_init();
-
-        // Run the mock s3 locally
-        let docker = clients::Cli::default();
-        let image = GenericImage::new("adobe/s3mock").with_env_var("initialBuckets", "tremor");
-
+    async fn spawn_docker<'d, D: Docker>(docker: &'d D, image: GenericImage) -> (Container<'d, D, GenericImage>, u16, u16) {
+        let http_port = ConnectorHarness::find_free_tcp_port().await;
+        let https_port = ConnectorHarness::find_free_tcp_port().await;
         let container = docker.run_with_args(
             image,
             RunArgs::default()
-                .with_mapped_port((9090_u16, 9090_u16))
-                .with_mapped_port((9191_u16, 9191_u16)),
+                .with_mapped_port((http_port, 9090_u16))
+                .with_mapped_port((https_port, 9191_u16)),
         );
-        // signal handling - stop and rm the container, even if we quit the test in the middle of everything
-        let container_id = container.id().to_string();
-        let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
-        let _signal_handle = signals.handle();
-        let _signal_handler_task = async_std::task::spawn(async move {
-            let signal_docker = clients::Cli::default();
-            while let Some(_signal) = signals.next().await {
-                signal_docker.stop(container_id.as_str());
-                signal_docker.rm(container_id.as_str());
+
+        (container, http_port, https_port)
+    }
+
+    fn random_bucket_name(prefix: &str) -> String {
+        format!("{}-{}", prefix, rand::thread_rng().sample_iter(Alphanumeric).map(char::from).take(10).collect::<String>())
+    }
+
+    #[async_std::test]
+    #[serial(s3)]
+    async fn connector_s3_no_connection() -> Result<()> {
+        let _ = env_logger::try_init();
+        let bucket_name = random_bucket_name("no-connection");
+        let mut env = EnvHelper::new();
+        env.set_var("AWS_ACCESS_KEY_ID", "KEY_NOT_REQD");
+        env.set_var("AWS_SECRET_ACCESS_KEY", "KEY_NOT_REQD");
+        env.set_var("AWS_DEFAULT_REGION", "eu-central-1");
+        let connector_yaml = literal!({
+            "codec": "binary",
+            "config":{
+                "bucket": bucket_name.clone(),
+                "endpoint": "http://localhost:9090",
             }
         });
 
-        let s3_client: S3Client = get_client();
+        let harness = ConnectorHarness::new("s3", connector_yaml).await?;
+        assert!(harness.start().await.is_err());
+        Ok(())
+    }
 
-        let wait_for = Duration::from_secs(30);
-        let start = Instant::now();
+    #[async_std::test]
+    #[serial(s3)]
+    async fn connector_s3_no_credentials() -> Result<()> {
+        let _ = env_logger::try_init();
+        let bucket_name = random_bucket_name("no-credentials");
+        
+        let docker = clients::Cli::default();
+        let image = GenericImage::new("adobe/s3mock").with_env_var("initialBuckets", &bucket_name);
+        let (container, http_port, _https_port) = spawn_docker(&docker, image).await;
+        
+        // signal handling - stop and rm the container, even if we quit the test in the middle of everything
+        let _signal_handler = SignalHandler::new(container.id().to_string())?;
 
-        while let Err(e) = s3_client
-            .head_bucket()
-            .bucket("tremor".to_string())
-            .send()
-            .await
-        {
-            if start.elapsed() > wait_for {
-                return Err(Error::from(e).chain_err(|| "Waiting for mock-s3 container timed out"));
+        wait_for_s3mock(http_port).await?;
+
+        let mut env = EnvHelper::new();
+        env.remove_var("AWS_ACCESS_KEY_ID");
+        env.remove_var("AWS_SECRET_ACCESS_KEY");
+        env.set_var("AWS_REGION", "eu-central-1");
+        let endpoint = format!("http://localhost:{http_port}");
+        let connector_yaml = literal!({
+            "codec": "binary",
+            "config":{
+                "bucket": bucket_name.clone(),
+                "endpoint": endpoint,
             }
+        });
 
-            async_std::task::sleep(Duration::from_secs(1)).await;
-        }
+        let harness = ConnectorHarness::new("s3", connector_yaml).await?;
+        assert!(harness.start().await.is_err());
+
+        Ok(())
+    }
+
+
+    #[async_std::test]
+    #[serial(s3)]
+    async fn connector_s3_no_region() -> Result<()> {
+        let _ = env_logger::try_init();
+        let bucket_name = random_bucket_name("no-region");
+        
+        let docker = clients::Cli::default();
+        let image = GenericImage::new("adobe/s3mock").with_env_var("initialBuckets", &bucket_name);
+        let (container, http_port, _https_port) = spawn_docker(&docker, image).await;
+        
+        // signal handling - stop and rm the container, even if we quit the test in the middle of everything
+        let _signal_handler = SignalHandler::new(container.id().to_string())?;
+
+        wait_for_s3mock(http_port).await?;
+
+        let mut env = EnvHelper::new();
+        env.set_var("AWS_ACCESS_KEY_ID", "snot");
+        env.set_var("AWS_SECRET_ACCESS_KEY", "badger");
+        env.remove_var("AWS_REGION");
+        env.remove_var("AWS_DEFAULT_REGION");
+
+        let endpoint = format!("http://localhost:{http_port}");
+        let connector_yaml = literal!({
+            "codec": "binary",
+            "config":{
+                "bucket": bucket_name.clone(),
+                "endpoint": endpoint,
+            }
+        });
+
+        let harness = ConnectorHarness::new("s3", connector_yaml).await?;
+        assert!(harness.start().await.is_err());
+
+        Ok(())
+    }
+
+    #[async_std::test]
+    #[serial(s3)]
+    async fn connector_s3_no_bucket() -> Result<()> {
+        let _ = env_logger::try_init();
+        let bucket_name = random_bucket_name("no-bucket");
+        
+        let docker = clients::Cli::default();
+        let image = GenericImage::new("adobe/s3mock");
+        let (container, http_port, _https_port) = spawn_docker(&docker, image).await;
+        
+        // signal handling - stop and rm the container, even if we quit the test in the middle of everything
+        let _signal_handler = SignalHandler::new(container.id().to_string())?;
+
+        wait_for_s3mock(http_port).await?;
+
+        let mut env = EnvHelper::new();
+        env.set_var("AWS_ACCESS_KEY_ID", "KEY_NOT_REQD");
+        env.set_var("AWS_SECRET_ACCESS_KEY", "KEY_NOT_REQD");
+        env.set_var("AWS_DEFAULT_REGION", "eu-central-1");
+        let endpoint = format!("http://localhost:{http_port}");
+        let connector_yaml = literal!({
+            "codec": "binary",
+            "config": {
+                "bucket": bucket_name.clone(),
+                "endpoint": endpoint
+            }
+        });
+        let harness = ConnectorHarness::new("s3", connector_yaml).await?;
+        assert!(harness.start().await.is_err());
+
+        Ok(())
+    }
+
+    #[async_std::test]
+    #[serial(s3)]
+    async fn connector_s3() -> Result<()> {
+        let _ = env_logger::try_init();
+
+        let bucket_name = random_bucket_name("tremor");
+
+        // Run the mock s3 locally
+        let docker = clients::Cli::default();
+        let image = GenericImage::new("adobe/s3mock").with_env_var("initialBuckets", &bucket_name);
+        let (container, http_port, _https_port) = spawn_docker(&docker, image).await;
+
+        // signal handling - stop and rm the container, even if we quit the test in the middle of everything
+        let _signal_handler = SignalHandler::new(container.id().to_string())?;
+
+        wait_for_s3mock(http_port).await?;
+
+        let s3_client = get_client(http_port);
 
         // set the needed environment variables. keys are not required for mock-s3
-        env::set_var("AWS_ACCESS_KEY_ID", "KEY_NOT_REQD");
-        env::set_var("AWS_SECRET_ACCESS_KEY", "KEY_NOT_REQD");
-        env::set_var("AWS_REGION", "ap-south-1");
+        let mut env = EnvHelper::new();
+        env.set_var("AWS_ACCESS_KEY_ID", "KEY_NOT_REQD");
+        env.set_var("AWS_SECRET_ACCESS_KEY", "KEY_NOT_REQD");
+        env.set_var("AWS_REGION", "ap-south-1");
 
         // connector setup
-        let connector_yaml = literal!(
-                {
-        "codec": "binary",
-        "config":{
-            "aws_access_token": "AWS_ACCESS_KEY_ID",
-            "aws_secret_access_key": "AWS_SECRET_ACCESS_KEY",
-            "bucket": "tremor",
-            "endpoint": "http://localhost:9090",
-        }
+        let connector_yaml = literal!({
+            "codec": "binary",
+            "config":{
+                "bucket": bucket_name.clone(),
+                "endpoint": format!("http://localhost:{http_port}"),
+            }
         });
 
         let harness = ConnectorHarness::new("s3", connector_yaml).await?;
@@ -116,57 +229,78 @@ mod test {
         assert_eq!(CbAction::Open, cf_event.cb);
 
         let (unbatched_event, unbatched_value) = get_unbatched_event();
-        verify_contraflow(&harness, &unbatched_event, in_pipe).await?;
+        send_to_sink(&harness, &unbatched_event, in_pipe).await?;
 
         let (batched_event, batched_value_0, batched_value_1, batched_value_2) =
             get_batched_event();
-        verify_contraflow(&harness, &batched_event, in_pipe).await?;
+        send_to_sink(&harness, &batched_event, in_pipe).await?;
 
         let (large_unbatched_event, large_unbatched_bytes) = large_unbatched_event();
-        verify_contraflow(&harness, &large_unbatched_event, in_pipe).await?;
+        send_to_sink(&harness, &large_unbatched_event, in_pipe).await?;
 
         let (large_batched_event, large_batched_value) = large_batched_event();
-        verify_contraflow(&harness, &large_batched_event, in_pipe).await?;
+        send_to_sink(&harness, &large_batched_event, in_pipe).await?;
 
         harness.stop().await?;
         // fetch the commited events from mock s3
 
         // verify a small unbatched event.
-        let unbatched_value_recv = get_object_value(&s3_client, "tremor", "unbatched_key").await;
+        let unbatched_value_recv = get_object_value(&s3_client, &bucket_name, "unbatched_key").await;
         assert_eq!(unbatched_value, unbatched_value_recv);
 
         // verify small and different batched events.
-        let batched_value_0_recv = get_object_value(&s3_client, "tremor", "batched_key0").await;
+        let batched_value_0_recv = get_object_value(&s3_client, &bucket_name, "batched_key0").await;
         assert_eq!(batched_value_0, batched_value_0_recv);
 
-        let batched_value_1_recv = get_object_value(&s3_client, "tremor", "batched_key1").await;
+        let batched_value_1_recv = get_object_value(&s3_client, &bucket_name, "batched_key1").await;
         assert_eq!(batched_value_1, batched_value_1_recv);
 
-        let batched_value_2_recv = get_object_value(&s3_client, "tremor", "batched_key2").await;
+        let batched_value_2_recv = get_object_value(&s3_client, &bucket_name, "batched_key2").await;
         assert_eq!(batched_value_2, batched_value_2_recv);
 
         // verify a large unbatched_event. Checked directly against the bytes.
         let large_unbatched_bytes_recv =
-            get_object(&s3_client, "tremor", "large_unbatched_event").await;
+            get_object(&s3_client, &bucket_name, "large_unbatched_event").await;
         assert_eq!(large_unbatched_bytes, large_unbatched_bytes_recv);
 
         // verify a large batched event having multiples keys for the same field.
         let large_batched_value_recv =
-            get_object(&s3_client, "tremor", "large_batched_event").await;
+            get_object(&s3_client, &bucket_name, "large_batched_event").await;
         assert_eq!(large_batched_value, large_batched_value_recv);
 
-        drop(container);
         Ok(())
     }
 
-    async fn verify_contraflow(
+    async fn wait_for_s3mock(port: u16) -> Result<()> {
+        let s3_client: S3Client = get_client(port);
+
+        let wait_for = Duration::from_secs(30);
+        let start = Instant::now();
+
+        while let Err(e) = s3_client.list_buckets()
+            .send()
+            .await
+        {
+            if start.elapsed() > wait_for {
+                return Err(Error::from(e).chain_err(|| "Waiting for mock-s3 container timed out"));
+            }
+
+            async_std::task::sleep(Duration::from_secs(1)).await;
+        }
+        Ok(())
+    }
+
+    async fn send_to_sink(
         harness: &ConnectorHarness,
         event: &Event,
         in_pipe: &TestPipeline,
     ) -> Result<()> {
         harness.send_to_sink(event.clone(), IN).await?;
-        let cf_event = in_pipe.get_contraflow().await?;
-        assert_eq!(CbAction::Ack, cf_event.cb);
+        if event.transactional {
+            let cf_event = in_pipe.get_contraflow().await?;
+            assert!(cf_event.id.is_tracking(&event.id));
+            assert_eq!(CbAction::Ack, cf_event.cb);
+        }
         Ok(())
     }
 
@@ -383,7 +517,7 @@ mod test {
     //         .collect()
     // }
 
-    fn get_client() -> S3Client {
+    fn get_client(http_port: u16) -> S3Client {
         let s3_config = s3::config::Config::builder()
             .credentials_provider(Credentials::new(
                 "KEY_NOT_REQD",
@@ -394,7 +528,7 @@ mod test {
             ))
             .region(Region::new("ap-south-1"))
             .endpoint_resolver(Endpoint::immutable(
-                "http://localhost:9090".parse().unwrap(),
+                format!("http://localhost:{http_port}").parse().unwrap(),
             ))
             .build();
 
