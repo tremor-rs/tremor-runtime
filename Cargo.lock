@@ -3878,7 +3878,7 @@ dependencies = [
  "hmac 0.9.0",
  "lazy_static",
  "rc2",
- "sha-1",
+ "sha-1 0.9.8",
  "yasna",
 ]
 
@@ -5370,6 +5370,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha-1"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "028f48d513f9678cda28f6e4064755b3fbb2af6acd672f2c209b62323f7aea0f"
+dependencies = [
+ "cfg-if 1.0.0",
+ "cpufeatures",
+ "digest 0.10.0",
+]
+
+[[package]]
 name = "sha1"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6858,7 +6869,7 @@ dependencies = [
  "tremor-pipeline",
  "tremor-script",
  "tremor-value",
- "tungstenite 0.16.0",
+ "tungstenite 0.17.0",
  "url 2.2.2",
  "value-trait",
  "xz2",
@@ -7005,7 +7016,7 @@ dependencies = [
  "input_buffer",
  "log",
  "rand 0.7.3",
- "sha-1",
+ "sha-1 0.9.8",
  "url 2.2.2",
  "utf-8",
 ]
@@ -7023,7 +7034,26 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.8.5",
- "sha-1",
+ "sha-1 0.9.8",
+ "thiserror",
+ "url 2.2.2",
+ "utf-8",
+]
+
+[[package]]
+name = "tungstenite"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4fcec9680ad5cf955f6121fd531deca071fa5f8977dda96e402f83850b6b71e2"
+dependencies = [
+ "base64 0.13.0",
+ "byteorder",
+ "bytes 1.1.0",
+ "http 0.2.6",
+ "httparse",
+ "log",
+ "rand 0.8.5",
+ "sha-1 0.10.0",
  "thiserror",
  "url 2.2.2",
  "utf-8",
