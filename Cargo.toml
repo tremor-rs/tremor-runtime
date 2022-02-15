@@ -58,7 +58,7 @@ futures = "0.3.19"
 event-listener = "2.5"
 glob = "0.3"
 halfbrown = "0.1"
-hashbrown = { version = "0.11", features = ["serde"] }
+hashbrown = { version = "0.12", features = ["serde"] }
 hex = "0.4"
 hostname = "0.3"
 http-types = "2.12"
@@ -70,9 +70,9 @@ log4rs = "1.0"
 lz4 = "1.23"
 memchr = "2.4"
 pin-project-lite = "0.2"
-rand = "0.8"
+rand = "0.8.5"
 regex = "1.4"
-rmp-serde = "0.15"
+rmp-serde = "1.0"
 serde = "1"
 serde_derive = "1"
 serde_yaml = "0.8"
@@ -92,7 +92,7 @@ tremor-script = { path = "tremor-script" }
 tremor-value = { path = "tremor-value" }
 url = "2.2"
 value-trait = "0.2"
-zstd = "0.9"
+zstd = "0.10"
 
 mapr = "0.8"
 
@@ -109,7 +109,7 @@ postgres-protocol = "0.6"
 tokio-postgres = "0.7"
 
 # amqp
-lapin = { version = "1.9.0", default-features = false, features = [
+lapin = { version = "2.0.1", default-features = false, features = [
   "rustls",
   "rustls-native-certs",
 ] }
@@ -129,7 +129,7 @@ tungstenite = { version = "0.16.0", features = ["rustls"] }
 # for tcp & ws
 async-tls = "0.11"
 rustls = "0.19"
-rustls-native-certs = "0.5"
+rustls-native-certs = "0.6"
 
 # dns
 async-std-resolver = "0.20"
@@ -184,8 +184,8 @@ tonic = { version = "0.5.2", default-features = false, features = [
 tremor-otelapis = { version = "0.2.2" }
 
 # aws-s3
-aws-sdk-s3 = "0.2.0"
-aws-types = "0.2.0"
+aws-sdk-s3 = "0.6.0"
+aws-types = "0.6.0"
 
 
 # gcp
