@@ -1163,7 +1163,7 @@ dependencies = [
  "hkdf",
  "hmac 0.10.1",
  "percent-encoding 2.1.0",
- "rand 0.8.4",
+ "rand 0.8.5",
  "sha2 0.9.8",
  "time 0.2.27",
  "version_check",
@@ -3016,7 +3016,7 @@ version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6cb1d4856e6c1b02aea6b85073b45daa15af1ba17f1750f8ca8772068915da0"
 dependencies = [
- "rand 0.8.4",
+ "rand 0.8.5",
  "siphasher",
 ]
 
@@ -3664,7 +3664,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7000c9392b545c4ba43e8abc086bf7d01cd2948690934c16980170b0549a2bd3"
 dependencies = [
  "lazy_static",
- "rand 0.8.4",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -4210,7 +4210,7 @@ dependencies = [
  "hmac 0.12.0",
  "md-5",
  "memchr",
- "rand 0.8.4",
+ "rand 0.8.5",
  "sha2 0.10.0",
  "stringprep",
 ]
@@ -4314,7 +4314,7 @@ dependencies = [
  "lazy_static",
  "num-traits",
  "quick-error 2.0.1",
- "rand 0.8.4",
+ "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rand_xorshift 0.3.0",
  "regex-syntax",
@@ -4463,14 +4463,13 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.8.4"
+version = "0.8.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e7573632e6454cf6b99d7aac4ccca54be06da05aca2ef7423d22d27d4d4bcd8"
+checksum = "34af8d1a0e25924bc5b7c43c079c942339d8f0a8b57c39049bef581b46327404"
 dependencies = [
  "libc",
  "rand_chacha 0.3.1",
  "rand_core 0.6.3",
- "rand_hc 0.3.1",
 ]
 
 [[package]]
@@ -4552,15 +4551,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca3129af7b92a17112d59ad498c6f81eaf463253766b90396d39ea7a39d6613c"
 dependencies = [
  "rand_core 0.5.1",
-]
-
-[[package]]
-name = "rand_hc"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d51e9f596de227fda2ea6c84607f5558e196eeaf43c986b724ba4fb8fdf497e7"
-dependencies = [
- "rand_core 0.6.3",
 ]
 
 [[package]]
@@ -5932,7 +5922,7 @@ checksum = "dac1c663cfc93810f88aed9b8941d48cabf856a1b111c29a40439018d870eb22"
 dependencies = [
  "cfg-if 1.0.0",
  "libc",
- "rand 0.8.4",
+ "rand 0.8.5",
  "redox_syscall 0.2.10",
  "remove_dir_all",
  "winapi 0.3.9",
@@ -6582,7 +6572,7 @@ dependencies = [
  "futures-util",
  "indexmap",
  "pin-project 1.0.8",
- "rand 0.8.4",
+ "rand 0.8.5",
  "slab",
  "tokio 1.12.0",
  "tokio-stream",
@@ -6716,7 +6706,7 @@ name = "tremor-common"
 version = "0.11.4"
 dependencies = [
  "async-std",
- "rand 0.8.4",
+ "rand 0.8.5",
 ]
 
 [[package]]
@@ -6837,7 +6827,7 @@ dependencies = [
  "postgres-protocol",
  "pretty_assertions",
  "proptest",
- "rand 0.8.4",
+ "rand 0.8.5",
  "rdkafka",
  "rdkafka-sys",
  "regex",
@@ -6906,7 +6896,7 @@ dependencies = [
  "percent-encoding 2.1.0",
  "pretty_assertions",
  "proptest",
- "rand 0.8.4",
+ "rand 0.8.5",
  "regex",
  "serde",
  "serde_derive",
@@ -6960,7 +6950,7 @@ dependencies = [
  "ipnet",
  "lazy_static",
  "log",
- "rand 0.8.4",
+ "rand 0.8.5",
  "smallvec 1.7.0",
  "thiserror",
  "tinyvec",
@@ -7032,7 +7022,7 @@ dependencies = [
  "http 0.2.6",
  "httparse",
  "log",
- "rand 0.8.4",
+ "rand 0.8.5",
  "sha-1",
  "thiserror",
  "url 2.2.2",
