@@ -584,7 +584,7 @@ pub struct FlowDefinition {
     pub params: DefinitioalArgs<'static>,
     /// Link specifications
     pub links: Vec<ConnectStmt>,
-    /// pipeleines
+    /// pipelines
     pub pipelines: Vec<QueryInstance>,
     /// connectors
     pub connectors: Vec<ConnectorDefinition>,

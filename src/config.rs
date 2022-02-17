@@ -42,7 +42,7 @@ pub enum Reconnect {
         max_retries: Option<u64>,
         /// Randomize the growth rate
         #[serde(default = "default_randomized")]
-        randomized: bool
+        randomized: bool,
     },
 }
 
