@@ -6269,7 +6269,9 @@ name = "tremor-api"
 version = "0.11.4"
 dependencies = [
  "async-std",
+ "halfbrown",
  "http-types",
+ "log",
  "serde",
  "serde_derive",
  "serde_yaml",
@@ -6318,7 +6320,6 @@ dependencies = [
  "surf",
  "tch",
  "termcolor",
- "tide",
  "tremor-api",
  "tremor-common",
  "tremor-pipeline",

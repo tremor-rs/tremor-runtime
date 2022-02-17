@@ -124,6 +124,13 @@ impl Addr {
     pub async fn resume(&self) -> Result<()> {
         self.send(Msg::Resume).await
     }
+
+    /// report status of the connector instance
+    pub async fn report_status(&self) -> Result<StatusReport> {
+        let (tx, rx) = bounded(1);
+        self.send(Msg::Report(tx)).await?;
+        Ok(rx.recv().await?)
+    }
 }
 
 /// Messages a Connector instance receives and acts upon
@@ -429,11 +436,11 @@ async fn connector_task(
         alias: alias.clone(),
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
-        notifier: notifier,
+        notifier,
     };
 
     let send_addr = connector_addr.clone();
-    let mut connector_state = InstanceState::Initialized;
+    let mut connector_state = InstanceState::Initializing;
     let mut drainage = None;
     let mut start_sender: Option<Sender<ConnectorResult<()>>> = None;
 
@@ -657,7 +664,7 @@ async fn connector_task(
                     }
                     connectivity = new;
                 }
-                Msg::Start(sender) if connector_state == InstanceState::Initialized => {
+                Msg::Start(sender) if connector_state == InstanceState::Initializing => {
                     info!("[Connector::{}] Starting...", &connector_addr.alias);
                     start_sender = Some(sender);
 

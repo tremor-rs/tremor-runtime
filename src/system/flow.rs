@@ -14,14 +14,14 @@
 
 use crate::{
     connectors::{self, ConnectorResult, KnownConnectors},
-    errors::{Error, Result},
+    errors::{Error, Kind as ErrorKind, Result},
     instance::InstanceState,
     permge::PriorityMerge,
     pipeline::{self, InputTarget},
 };
-use async_std::{channel::Receiver, prelude::*};
+use async_std::prelude::*;
 use async_std::{
-    channel::{bounded, unbounded},
+    channel::{bounded, unbounded, Sender},
     task,
 };
 use hashbrown::HashMap;
@@ -33,17 +33,19 @@ use tremor_script::{
     srs::{ConnectorDefinition, DeployFlow, QueryInstance},
 };
 
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone)]
-pub(crate) struct DeploymentId(pub String);
+/// unique identifier of a flow instance within a tremor instance
+#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize)]
+pub struct FlowId(pub String);
 
-impl From<&DeployFlow> for DeploymentId {
+impl From<&DeployFlow> for FlowId {
     fn from(f: &DeployFlow) -> Self {
-        DeploymentId(f.instance_id.id().to_string())
+        FlowId(f.instance_id.id().to_string())
     }
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash)]
-pub(crate) struct ConnectorId(String);
+/// unique identifier of a connector within a deployment
+#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize)]
+pub struct ConnectorId(String);
 
 impl From<&DeployEndpoint> for ConnectorId {
     fn from(e: &DeployEndpoint) -> Self {
@@ -93,45 +95,74 @@ pub enum Msg {
     /// resume all contained instance from pause
     Resume,
     /// stop all contained instances, and get notified via the given sender when the stop process is done
-    Stop(async_std::channel::Sender<Result<()>>),
+    Stop(Sender<Result<()>>),
     /// drain all contained instances, and get notified via the given sender when the drain process is done
-    Drain(async_std::channel::Sender<Result<()>>),
-    /// request a `StatusReport` from this instance
-    Report(async_std::channel::Sender<StatusReport>),
+    Drain(Sender<Result<()>>),
+    /// Request a `StatusReport` from this instance.
+    ///
+    /// The sender expects a Result, which makes it easier to signal errors on the message handling path to the sender
+    Report(Sender<Result<StatusReport>>),
+    /// Get the addr for a single connector
+    GetConnector(ConnectorId, Sender<Result<connectors::Addr>>),
+    /// Get the addresses for all connectors of this flow
+    GetConnectors(Sender<Result<Vec<connectors::Addr>>>),
 }
-type Addr = async_std::channel::Sender<Msg>;
+type Addr = Sender<Msg>;
 
-#[derive(Debug)]
-pub(crate) struct Deployment {
+/// A deployed Flow instance
+#[derive(Debug, Clone)]
+pub struct Flow {
     alias: String,
     addr: Addr,
 }
 
-/// Status Report for a Binding
+/// Status Report for a Flow instance
+#[derive(Serialize, Debug)]
 pub struct StatusReport {
     /// the url of the instance this report describes
     pub alias: String,
     /// the current state
     pub status: InstanceState,
+    /// the crated connectors
+    pub connectors: Vec<ConnectorId>
 }
-impl Deployment {
-    pub(crate) fn alias(&self) -> &str {
+impl Flow {
+    pub fn alias(&self) -> &str {
         self.alias.as_str()
     }
-    pub(crate) async fn stop(&self, tx: async_std::channel::Sender<Result<()>>) -> Result<()> {
+    pub(crate) async fn stop(&self, tx: Sender<Result<()>>) -> Result<()> {
         self.addr.send(Msg::Stop(tx)).await.map_err(Error::from)
     }
-    pub(crate) async fn drain(&self, tx: async_std::channel::Sender<Result<()>>) -> Result<()> {
+    pub(crate) async fn drain(&self, tx: Sender<Result<()>>) -> Result<()> {
         self.addr.send(Msg::Drain(tx)).await.map_err(Error::from)
     }
 
-    // pub(crate) async fn pause(&self) -> Result<()> {
-    //     self.addr.send(Msg::Pause).await.map_err(Error::from)
-    // }
+    pub async fn report_status(&self) -> Result<StatusReport> {
+        let (tx, rx) = bounded(1);
+        self.addr.send(Msg::Report(tx)).await?;
+        rx.recv().await?
+    }
 
-    // pub(crate) async fn resume(&self) -> Result<()> {
-    //     self.addr.send(Msg::Resume).await.map_err(Error::from)
-    // }
+    pub async fn get_connector(&self, connector_id: String) -> Result<connectors::Addr> {
+        let connector_id = ConnectorId(connector_id);
+        let (tx, rx) = bounded(1);
+        self.addr.send(Msg::GetConnector(connector_id, tx)).await?;
+        rx.recv().await?
+    }
+
+    pub async fn get_connectors(&self) -> Result<Vec<connectors::Addr>> {
+        let (tx, rx) = bounded(1);
+        self.addr.send(Msg::GetConnectors(tx)).await?;
+        rx.recv().await?
+    }
+
+    pub async fn pause(&self) -> Result<()> {
+        self.addr.send(Msg::Pause).await.map_err(Error::from)
+    }
+
+    pub async fn resume(&self) -> Result<()> {
+        self.addr.send(Msg::Resume).await.map_err(Error::from)
+    }
 
     pub(crate) async fn start(
         src: String,
@@ -179,7 +210,7 @@ impl Deployment {
 
         addr.send(Msg::Start).await?;
 
-        let this = Deployment {
+        let this = Flow {
             alias: flow.instance_id.to_string(),
             addr,
         };
@@ -303,11 +334,13 @@ async fn spawn_task(
     let (msg_tx, msg_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
     let (drain_tx, drain_rx) = unbounded();
     let (stop_tx, stop_rx) = unbounded();
+    let (start_tx, start_rx) = unbounded();
 
     #[derive(Debug)]
-    /// wrapper for all possible messages handled by the binding task
+    /// wrapper for all possible messages handled by the flow task
     enum MsgWrapper {
         Msg(Msg),
+        StartResult(ConnectorResult<()>),
         DrainResult(ConnectorResult<()>),
         StopResult(ConnectorResult<()>),
     }
@@ -316,11 +349,14 @@ async fn spawn_task(
         msg_rx.map(MsgWrapper::Msg),
         PriorityMerge::new(
             drain_rx.map(MsgWrapper::DrainResult),
-            stop_rx.map(MsgWrapper::StopResult),
+            PriorityMerge::new(
+                stop_rx.map(MsgWrapper::StopResult),
+                start_rx.map(MsgWrapper::StartResult)
+            )
         ),
     );
     let addr = msg_tx;
-    let mut state = InstanceState::Initialized;
+    let mut state = InstanceState::Initializing;
     // let registries = self.reg.clone();
 
     // extracting connectors and pipes from the links
@@ -371,45 +407,34 @@ async fn spawn_task(
     let mut drain_senders = Vec::with_capacity(1);
     let mut stop_senders = Vec::with_capacity(1);
 
-    async fn wait_for_responses(rx: Receiver<ConnectorResult<()>>, n: usize) -> Result<Vec<()>> {
-        futures::future::join_all(std::iter::repeat_with(|| rx.recv()).take(n))
-            .await
-            .into_iter()
-            .map(|r| r.map_err(Error::from))
-            .map(|res| res.and_then(|r| r.res))
-            .collect::<Result<Vec<()>>>()
-    }
-
     task::spawn::<_, Result<()>>(async move {
+        let mut wait_for_start_responses: usize = 0;
         while let Some(wrapped) = input_channel.next().await {
             match wrapped {
-                MsgWrapper::Msg(Msg::Start) if state == InstanceState::Initialized => {
+                MsgWrapper::Msg(Msg::Start) if state == InstanceState::Initializing => {
                     // start all pipelines first - order doesnt matter as connectors aren't started yet
                     for pipe in &pipelines {
                         pipe.start().await?;
                     }
-                    let (tx, rx) = unbounded();
                     // start sink connectors first
                     for conn in &end_points {
-                        conn.start(tx.clone()).await?;
+                        conn.start(start_tx.clone()).await?;
                     }
-                    wait_for_responses(rx.clone(), end_points.len()).await?;
+                    wait_for_start_responses += end_points.len();
 
                     // start source/sink connectors in random order
                     for conn in &mixed_pickles {
-                        conn.start(tx.clone()).await?;
+                        conn.start(start_tx.clone()).await?;
                     }
-                    wait_for_responses(rx.clone(), mixed_pickles.len()).await?;
+                    wait_for_start_responses += mixed_pickles.len();
 
                     // wait for mixed pickles to be connected
                     // start source only connectors
                     for conn in &start_points {
-                        conn.start(tx.clone()).await?;
+                        conn.start(start_tx.clone()).await?;
                     }
-                    wait_for_responses(rx.clone(), start_points.len()).await?;
-
-                    state = InstanceState::Running;
-                    info!("[Flow::{alias}] Started.");
+                    wait_for_start_responses += start_points.len();
+                    debug!("[Flow::{alias}] Waiting for {wait_for_start_responses} connectors to start.");
                 }
                 MsgWrapper::Msg(Msg::Start) => {
                     info!("[Flow::{alias}] Ignoring Start message. Current state: {state}");
@@ -441,7 +466,6 @@ async fn spawn_task(
                     for pipeline in &pipelines {
                         pipeline.resume().await?;
                     }
-
                     for sink in &end_points {
                         sink.resume().await?;
                     }
@@ -537,14 +561,34 @@ async fn spawn_task(
                 }
                 MsgWrapper::Msg(Msg::Report(sender)) => {
                     // TODO: aggregate states of all containing instances
+                    let connectors = connectors.keys().cloned().collect();
                     let report = StatusReport {
                         alias: alias.clone(),
                         status: state,
+                        connectors
                     };
-                    if let Err(e) = sender.send(report).await {
-                        error!("[Flow::{}] Error sending status report: {}", &alias, e);
+                    if let Err(e) = sender.send(Ok(report)).await {
+                        error!("[Flow::{alias}] Error sending status report: {e}");
                     }
                 }
+                MsgWrapper::Msg(Msg::GetConnector(connector_id, reply_tx)) => {
+                    if reply_tx
+                        .send(connectors.get(&connector_id).cloned().ok_or_else(|| {
+                            ErrorKind::ConnectorNotFound(alias.clone(), connector_id.0).into()
+                        }))
+                        .await
+                        .is_err()
+                    {
+                        error!("[Flow::{alias}] Error sending GetConnector response");
+                    }
+                }
+                MsgWrapper::Msg(Msg::GetConnectors(reply_tx)) => {
+                    let res = connectors.values().cloned().collect::<Vec<_>>();
+                    if reply_tx.send(Ok(res)).await.is_err() {
+                        error!("[Flow::{alias}] Error sending GetConnectors response")
+                    }
+                }
+
                 MsgWrapper::DrainResult(conn_res) => {
                     info!("[Flow::{}] Connector {} drained.", &alias, &conn_res.alias);
                     if let Err(e) = conn_res.res {
@@ -580,10 +624,27 @@ async fn spawn_task(
                         // upon last stop
                         for stop_sender in stop_senders.drain(..) {
                             if let Err(_) = stop_sender.send(Ok(())).await {
-                                error!("[Flow::{}] Error sending successful Stop result", &alias);
+                                error!("[Flow::{alias}] Error sending successful Stop result");
                             }
                         }
                         break;
+                    }
+                }
+                MsgWrapper::StartResult(conn_res) => {
+                    if let Err(e) = conn_res.res {
+                        error!("[Flow::{alias}] Error starting Connector {conn}: {e}", conn=conn_res.alias);
+                        if state != InstanceState::Failed {
+                            // only report failed upon the first connector failure
+                            state = InstanceState::Failed;
+                            info!("[Flow::{alias}] Failed.")
+                        }
+                    } else if state == InstanceState::Initializing {
+                        // report started flow if all connectors started
+                        wait_for_start_responses = wait_for_start_responses.saturating_sub(1);
+                        if wait_for_start_responses == 0 {
+                            state = InstanceState::Running;
+                            info!("[Flow::{alias}] Started.");
+                        }
                     }
                 }
             }
