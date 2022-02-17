@@ -79,6 +79,12 @@ impl<'script> ScriptRaw<'script> {
         mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<Script<'script>> {
         let mut exprs = vec![];
+        let start = Location::default();
+        let end = Location::default();
+
+        // TODO - Some kind of token for the source origin in a mangled name would aid debuggability
+        let meta_name = "<script>".to_string();
+        let mid = NodeMeta::new_box_with_name(start, end, &meta_name);
         for e in self.exprs {
             match e {
                 TopLevelExprRaw::Use(UseRaw { alias, module, .. }) => {
@@ -138,9 +144,9 @@ impl<'script> ScriptRaw<'script> {
             }
         } else {
             let expr = EmitExpr {
-                mid: NodeMeta::todo(),
+                mid: mid.clone(),
                 expr: ImutExpr::Path(Path::Event(EventPath {
-                    mid: NodeMeta::todo(),
+                    mid: mid.clone(),
                     segments: vec![],
                 })),
                 port: None,
@@ -155,15 +161,8 @@ impl<'script> ScriptRaw<'script> {
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         });
 
-        let start = Location::default();
-
-        let end = Location::default();
-
-        // TODO - Some kind of token for the source origin in a mangled name would aid debuggability
-        let meta_name = "<script>".to_string();
-
         Ok(Script {
-            mid: NodeMeta::new_box_with_name(start, end, &meta_name),
+            mid,
             imports: vec![], // Compiled out
             exprs,
             consts: Consts::new(),

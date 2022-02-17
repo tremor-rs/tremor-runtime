@@ -135,8 +135,9 @@ impl NodeMeta {
             name: Some(name.to_string()),
         }
     }
+    #[cfg(test)]
     /// FIXMER
-    pub fn todo() -> Box<Self> {
+    pub fn dummy() -> Box<Self> {
         Box::default()
     }
     pub(crate) fn name(&self) -> Option<&str> {
@@ -410,6 +411,13 @@ pub struct Ident<'script> {
     pub(crate) mid: Box<NodeMeta>,
     /// the text of the ident
     pub id: beef::Cow<'script, str>,
+}
+
+impl<'script> Ident<'script> {
+    /// Creates a new ident
+    pub fn new(id: beef::Cow<'script, str>, mid: Box<NodeMeta>) -> Self {
+        Self { id, mid }
+    }
 }
 impl_expr_mid!(Ident);
 
@@ -738,6 +746,17 @@ pub struct StringLit<'script> {
     pub mid: Box<NodeMeta>,
     /// Elements
     pub elements: StrLitElements<'script>,
+}
+
+// we only have this for tests as we don't get a node meta
+#[cfg(test)]
+impl From<&str> for StringLit {
+    fn from(l: &str) -> Self {
+        StringLit {
+            mid: NodeMeta::dummy(),
+            elements: vec![StrLitElement::Lit(l.into())],
+        }
+    }
 }
 
 impl<'script> StringLit<'script> {
@@ -2141,19 +2160,19 @@ mod test {
     #[test]
     fn record() {
         let f1 = super::Field {
-            mid: 0,
+            mid: NodeMeta::dummy(),
             name: "snot".into(),
             value: v("badger"),
         };
         let f2 = super::Field {
-            mid: 0,
+            mid: NodeMeta::dummy(),
             name: "badger".into(),
             value: v("snot"),
         };
 
         let r = super::Record {
             base: crate::Object::new(),
-            mid: 0,
+            mid: NodeMeta::dummy(),
             fields: vec![f1, f2],
         };
 
@@ -2184,7 +2203,7 @@ mod test {
             inline: false,
         });
         let i = Invoke {
-            mid: 0,
+            mid: NodeMeta::dummy(),
             node_id: NodeId {
                 module: Vec::new(),
                 id: "fun".to_string(),

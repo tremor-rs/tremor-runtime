@@ -77,6 +77,7 @@ extern crate serde_derive;
 pub use crate::ast::deploy::raw::run_script;
 pub use crate::ast::module::ModuleManager;
 pub use crate::ast::query::SelectType;
+pub use crate::ast::NodeMeta;
 pub use crate::ctx::{EventContext, EventOriginUri};
 pub use crate::query::Query;
 pub use crate::registry::{
@@ -131,22 +132,10 @@ mod tests {
     macro_rules! eval {
         ($src:expr, $expected:expr) => {{
             let _r: Registry = registry();
-            let mut src: String = format!("{} ", $src.to_string());
-            let src1 = src.clone();
-            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new(&mut src).collect();
-            let lexed_tokens = lexed_tokens.expect("");
-            let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
+            let (aid, src) = Arena::insert($src);
 
-            for t in lexed_tokens {
-                let keep = !t.value.is_ignorable();
-                if keep {
-                    filtered_tokens.push(Ok(t));
-                }
-            }
             let reg: Registry = registry::registry();
-            let runnable: Script =
-                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src1, &reg)
-                    .expect("parse failed");
+            let runnable: Script = Script::parse(src, &reg).expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
             let mut global_map = Value::object();
@@ -170,22 +159,9 @@ mod tests {
     macro_rules! eval_global {
         ($src:expr, $expected:expr) => {{
             let _r: Registry = registry();
-            let mut src = format!("{} ", $src).to_string();
-            let src1 = src.clone();
-            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new(&mut src).collect();
-            let lexed_tokens = lexed_tokens.expect("");
-            let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
-
-            for t in lexed_tokens {
-                let keep = !t.value.is_ignorable();
-                if keep {
-                    filtered_tokens.push(Ok(t));
-                }
-            }
+            let (aid, src) = Arena::insert($src);
             let reg: Registry = registry::registry();
-            let runnable: Script =
-                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src1, &reg)
-                    .expect("parse failed");
+            let runnable: Script = Script::parse(src, &reg).expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
             let mut global_map = Value::from(hashmap! {});
@@ -203,22 +179,9 @@ mod tests {
     macro_rules! eval_event {
         ($src:expr, $expected:expr) => {{
             let _r: Registry = registry();
-            let mut src = format!("{} ", $src).to_string();
-            let src1 = src.clone();
-            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new(&mut src).collect();
-            let lexed_tokens = lexed_tokens.expect("");
-            let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
-
-            for t in lexed_tokens {
-                let keep = !t.value.is_ignorable();
-                if keep {
-                    filtered_tokens.push(Ok(t));
-                }
-            }
+            let (aid, src) = Arena::insert($src);
             let reg: Registry = registry::registry();
-            let runnable: Script =
-                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src1, &reg)
-                    .expect("parse failed");
+            let runnable: Script = Script::parse(src, &reg).expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
             let mut global_map = Value::from(hashmap! {});

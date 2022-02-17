@@ -47,25 +47,25 @@ mod test {
     fn test_group_expr_extractor() -> Result<()> {
         let mut visitor = GroupByExprExtractor::new();
         let lit_42 = ImutExpr::Literal(Literal {
-            mid: 3,
-            value: tremor_value::Value::from(42),
+            mid: NodeMeta::dummy(),
+            value: gittremor_value::Value::from(42),
         });
         let false_array = ImutExpr::List(List {
-            mid: 5,
+            mid: NodeMeta::dummy(),
             exprs: vec![ImutExpr::Literal(Literal {
-                mid: 6,
+                mid: NodeMeta::dummy(),
                 value: tremor_value::Value::from(false),
             })],
         });
         let group_by = GroupBy::Set {
-            mid: 1,
+            mid: NodeMeta::dummy(),
             items: vec![
                 GroupBy::Expr {
-                    mid: 2,
+                    mid: NodeMeta::dummy(),
                     expr: lit_42.clone(),
                 },
                 GroupBy::Each {
-                    mid: 4,
+                    mid: NodeMeta::dummy(),
                     expr: false_array.clone(),
                 },
             ],

@@ -285,7 +285,7 @@ DefineConnector: ConnectorDefinitionRaw<'input> =  {
 
 DefineFlow: FlowDefinitionRaw<'input> = {
     // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
-    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> "flow" <atoms:FlowStmts> "end" <end:@L> => FlowDefinitionRaw { start, end, id: id.to_string(), params, atoms, docs },
+    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> "flow" <stmts:FlowStmts> "end" <end:@L> => FlowDefinitionRaw { start, end, id: id.to_string(), params, stmts, docs },
 }
 
 ////////////////////////////// Trickle statements //////////////////////////////
