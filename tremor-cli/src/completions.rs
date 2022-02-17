@@ -22,7 +22,7 @@ const ERR_MSG: &str =
 
 pub(crate) fn run_cmd(shell: Option<Shell>) -> Result<()> {
     let shell = shell.map_or_else(guess_shell, Ok)?;
-    let mut app = Cli::into_app();
+    let mut app = Cli::command();
     generate(shell, &mut app, "tremor", &mut std::io::stdout());
     Ok(())
 }
