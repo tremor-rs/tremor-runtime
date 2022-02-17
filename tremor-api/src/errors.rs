@@ -1,4 +1,4 @@
-// Copyright 2020-2021, The Tremor Team
+// Copyright 2022, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -58,10 +58,7 @@ impl std::error::Error for Error {}
 impl From<Error> for Response {
     fn from(err: Error) -> Response {
         Response::builder(err.code)
-            .header(
-                headers::CONTENT_TYPE,
-                crate::api::ResourceType::Json.as_str(),
-            )
+            .header(headers::CONTENT_TYPE, crate::api::ResourceType::Json)
             .body(format!(
                 r#"{{"code":{},"error":"{}"}}"#,
                 err.code, err.error
@@ -144,9 +141,12 @@ impl From<PoisonError<MutexGuard<'_, tremor_script::Registry>>> for Error {
 impl From<TremorError> for Error {
     fn from(e: TremorError) -> Self {
         match e.0 {
-            ErrorKind::InvalidTremorUrl(msg, url) => Error::new(
-                StatusCode::BadRequest,
-                format!("Invalid Tremor Url: {} : {}", url, msg),
+            ErrorKind::FlowNotFound(id) => {
+                Error::new(StatusCode::NotFound, format!("Flow {id} not found"))
+            }
+            ErrorKind::ConnectorNotFound(flow_id, id) => Error::new(
+                StatusCode::NotFound,
+                format!("Connector {id} not found in Flow {flow_id}"),
             ),
             _e => Error::new(
                 StatusCode::InternalServerError,

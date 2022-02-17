@@ -23,7 +23,7 @@ use futures::future;
 use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook::low_level::signal_name;
 use signal_hook_async_std::Signals;
-use std::io::Write;
+use std::io::Write;  
 use std::sync::atomic::Ordering;
 use tremor_api as api;
 use tremor_common::file;
@@ -35,35 +35,6 @@ macro_rules! log_and_print_error {
         eprintln!($($arg)*);
         error!($($arg)*);
     };
-}
-
-async fn handle_api_request<
-    G: std::future::Future<Output = api::Result<tide::Response>>,
-    F: Fn(api::Request) -> G,
->(
-    req: api::Request,
-    handler_func: F,
-) -> tide::Result {
-    let resource_type = api::accept(&req);
-
-    // Handle request. If any api error is returned, serialize it into a tide response
-    // as well, respecting the requested resource type. (and if there's error during
-    // this serialization, fall back to the error's conversion into tide response)
-    handler_func(req).await.or_else(|api_error| {
-        api::serialize_error(resource_type, api_error)
-            .or_else(|e| Ok(Into::<tide::Response>::into(e)))
-    })
-}
-
-fn api_server(world: &World) -> tide::Server<api::State> {
-    let mut app = tide::Server::with_state(api::State {
-        world: world.clone(),
-    });
-
-    app.at("/version")
-        .get(|r| handle_api_request(r, api::version::get));
-
-    app
 }
 
 async fn handle_signals(signals: Signals, world: World) {
@@ -102,6 +73,7 @@ impl ServerRun {
     #[allow(clippy::too_many_lines)]
     async fn run_dun(&self) -> Result<i32> {
         let mut result = 0;
+
         use tremor_runtime::system::WorldConfig;
 
         // Logging
@@ -179,19 +151,12 @@ impl ServerRun {
             // dummy task never finishing
             async_std::task::spawn(async move {
                 future::pending::<()>().await;
+                Ok(())
             })
         } else {
-            let host = self.api_host.clone();
-            let app = api_server(&world);
-            eprintln!("Listening at: http://{}", host);
-            info!("Listening at: http://{}", host);
-
-            async_std::task::spawn(async move {
-                if let Err(e) = app.listen(host).await {
-                    error!("API Error: {}", e);
-                }
-                warn!("API stopped.");
-            })
+            eprintln!("Listening at: http://{}", &self.api_host);
+            info!("Listening at: http://{}", &self.api_host);
+            api::serve_api(self.api_host.clone(), &world)
         };
         // waiting for either
         match future::select(handle, api_handle).await {
