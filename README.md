@@ -14,6 +14,7 @@
 [![CII Best Practices]][bestpractices]
 [![GitHub]](LICENSE)
 [![Discord]][discord-invite]
+[![Gitpod][gitpod-hook]
 
 [build status]: https://github.com/tremor-rs/tremor-runtime/workflows/Tests/badge.svg
 [actions-tests]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3ATests
@@ -34,6 +35,8 @@
 [discord-invite]: https://bit.ly/tremor-discord
 [arm builds]: https://cloud.drone.io/api/badges/tremor-rs/tremor-runtime/status.svg
 [drone.io]: https://cloud.drone.io/tremor-rs/tremor-runtime
+[gitpod]: https://gitpod.io/button/open-in-gitpod.svg
+[gitpod-hook]: https://gitpod.io/#https://github.com/tremor-rs/tremor-runtime
 
 ---
 
