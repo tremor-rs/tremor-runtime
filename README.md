@@ -4,6 +4,10 @@
 
 <hr>
 
+[![Gitpod]][gitpod-hook]
+
+<hr>
+
 [![Build Status]][actions-tests]
 [![ARM Builds]][drone.io]
 [![Quality Checks]][actions-checks]
@@ -14,7 +18,6 @@
 [![CII Best Practices]][bestpractices]
 [![GitHub]](LICENSE)
 [![Discord]][discord-invite]
-[![Gitpod]][gitpod-hook]
 
 [build status]: https://github.com/tremor-rs/tremor-runtime/workflows/Tests/badge.svg
 [actions-tests]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3ATests
