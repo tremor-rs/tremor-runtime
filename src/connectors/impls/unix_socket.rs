@@ -65,7 +65,11 @@ impl StreamReader for UnixSocketReader {
         }
         let data = self.buffer[0..bytes_read].to_vec();
         debug!("[Connector::{}] Read {bytes_read} bytes", &self.alias);
-        debug!("[Connector::{}] {}", &self.alias, String::from_utf8_lossy(&data));
+        debug!(
+            "[Connector::{}] {}",
+            &self.alias,
+            String::from_utf8_lossy(&data)
+        );
 
         Ok(SourceReply::Data {
             origin_uri: self.origin_uri.clone(),
@@ -104,7 +108,10 @@ impl StreamWriter for UnixSocketWriter {
     async fn write(&mut self, data: Vec<Vec<u8>>, _meta: Option<SinkMeta>) -> Result<()> {
         for chunk in data {
             let slice: &[u8] = &chunk;
-            debug!("[UNIX SOCKET WRITER] WRITING: {}", String::from_utf8_lossy(slice));
+            debug!(
+                "[UNIX SOCKET WRITER] WRITING: {}",
+                String::from_utf8_lossy(slice)
+            );
             self.stream.write_all(slice).await?;
         }
         // TODO: necessary?

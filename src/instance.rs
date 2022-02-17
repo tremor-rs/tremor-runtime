@@ -20,11 +20,11 @@
 use std::fmt::Display;
 
 /// Possible lifecycle states of an instance
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InstanceState {
-    /// initialized - first state after coming to life
-    Initialized,
+    /// initializing - first state after coming to life
+    Initializing,
     /// Running and consuming/producing/handling events
     Running,
     /// Paused, not consuming/producing/handling events
@@ -48,7 +48,7 @@ impl InstanceState {
 impl Display for InstanceState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
-            Self::Initialized => "initialized",
+            Self::Initializing => "initialized",
             Self::Running => "running",
             Self::Paused => "paused",
             Self::Draining => "draining",

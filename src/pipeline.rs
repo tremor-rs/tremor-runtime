@@ -425,7 +425,7 @@ pub(crate) async fn pipeline_task(
     let mut inputs: Inputs = halfbrown::HashMap::new();
     let mut eventset: Eventset = Vec::new();
 
-    let mut state: InstanceState = InstanceState::Initialized;
+    let mut state: InstanceState = InstanceState::Initializing;
 
     info!("[Pipeline::{}] Starting Pipeline.", alias);
 
@@ -573,7 +573,7 @@ pub(crate) async fn pipeline_task(
                 );
                 inputs.remove(&input_url);
             }
-            M::M(MgmtMsg::Start) if state == InstanceState::Initialized => {
+            M::M(MgmtMsg::Start) if state == InstanceState::Initializing => {
                 // No-op
                 state = InstanceState::Running;
             }

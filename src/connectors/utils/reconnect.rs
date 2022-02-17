@@ -21,8 +21,8 @@ use crate::errors::{Error, Result};
 use async_std::channel::{bounded, Sender};
 use async_std::task::{self, JoinHandle};
 use futures::future::{join3, ready, FutureExt};
-use rand::{Rng, SeedableRng};
 use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use std::convert::identity;
 use std::fmt::Display;
 use std::time::Duration;
@@ -78,7 +78,7 @@ struct RetryWithBackoff {
     start_interval: u64,
     growth_rate: f64,
     max_retries: u64,
-    random: Option<SmallRng>
+    random: Option<SmallRng>,
 }
 
 impl RetryWithBackoff {
@@ -92,7 +92,7 @@ impl RetryWithBackoff {
             start_interval,
             growth_rate,
             max_retries,
-            random
+            random,
         }
     }
 }
@@ -244,12 +244,12 @@ impl ReconnectRuntime {
                 interval_ms,
                 growth_rate,
                 max_retries,
-                randomized
+                randomized,
             } => Box::new(RetryWithBackoff::new(
                 *interval_ms,
                 *growth_rate,
                 max_retries.unwrap_or(u64::MAX),
-                *randomized
+                *randomized,
             )),
         };
         Self {
@@ -491,7 +491,7 @@ mod tests {
             interval_ms: 10,
             growth_rate: 2.0,
             max_retries: Some(3),
-            randomized: true
+            randomized: true,
         };
         let mut runtime = ReconnectRuntime::inner(addr, alias.clone(), notifier, &config);
         let mut connector = FakeConnector {

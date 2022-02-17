@@ -65,7 +65,7 @@ http-types = "2.12"
 indexmap = { version = "1", features = ["serde-1"] }
 lazy_static = "1"
 libflate = "1.1"
-log = "0.4"
+log = { version = "0.4", features = ["kv_unstable"] }
 log4rs = "1.0"
 lz4 = "1.23.3"
 memchr = "2.4"

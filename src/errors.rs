@@ -304,5 +304,13 @@ error_chain! {
             description("Producer not available")
                 display("Kafka Producer not available for Connector {}", alias)
         }
+        FlowNotFound(alias: String) {
+            description("Deployment not found")
+                display("Deployment \"{}\" not found", alias)
+        }
+        ConnectorNotFound(flow_id: String, alias: String) {
+            description("Connector not found")
+                display("Connector \"{}\" not found in Flow \"{}\"", alias, flow_id)
+        }
     }
 }
