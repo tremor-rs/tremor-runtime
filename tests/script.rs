@@ -17,7 +17,6 @@ use tremor_common::file;
 use tremor_pipeline::EventOriginUri;
 
 use tremor_runtime::errors::*;
-use tremor_script::errors::CompilerError;
 use tremor_script::prelude::*;
 use tremor_script::utils::*;
 use tremor_script::{AggrType, EventContext, ModuleManager, Return, Script, FN_REGISTRY};
@@ -41,7 +40,7 @@ macro_rules! test_cases {
 
                 ModuleManager::add_path("tremor-script/lib");
                 ModuleManager::add_path(script_dir);
-                let script = Script::parse(script_file, contents, &*FN_REGISTRY.read()?).map_err(CompilerError::error)?;
+                let script = Script::parse(contents, &*FN_REGISTRY.read()?)?;
 
                 println!("Loading input: {}", in_file);
                 let in_json = load_event_file(in_file)?;

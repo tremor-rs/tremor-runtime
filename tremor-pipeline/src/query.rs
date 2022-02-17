@@ -137,7 +137,7 @@ impl Query {
     ///
     /// # Errors
     /// if the trickle script can not be parsed
-    pub fn parse(script: String, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
+    pub fn parse<S: ToString>(script: S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
         Ok(Self(tremor_script::query::Query::parse(
             script, reg, aggr_reg,
         )?))
@@ -773,52 +773,28 @@ mod test {
     use super::*;
     #[test]
     fn query() {
-        let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in into out;";
-        let query = Query::parse(
-            module_path,
-            src,
-            "<test>",
-            Vec::new(),
-            &*crate::FN_REGISTRY.lock().unwrap(),
-            &aggr_reg,
-        )
-        .unwrap();
+        let query =
+            Query::parse(src, &*tremor_script::FN_REGISTRY.read().unwrap(), &aggr_reg).unwrap();
         assert!(query.id().is_none());
-        assert_eq!(query.source().trim_end(), src);
+        assert_eq!(query.source().unwrap(), src);
 
         // check that we can overwrite the id with a config variable
         let src = "#!config id = \"test\"\nselect event from in into out;";
-        let query = Query::parse(
-            module_path,
-            src,
-            "<test>",
-            Vec::new(),
-            &*crate::FN_REGISTRY.lock().unwrap(),
-            &aggr_reg,
-        )
-        .unwrap();
+        let query =
+            Query::parse(src, &*tremor_script::FN_REGISTRY.read().unwrap(), &aggr_reg).unwrap();
         assert_eq!(query.id().unwrap(), "test");
-        assert_eq!(query.source().trim_end(), src);
+        assert_eq!(query.source().unwrap(), src);
     }
 
     #[test]
     fn custom_port() {
-        let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in/test_in into out/test_out;";
-        let q = Query::parse(
-            module_path,
-            src,
-            "<test>",
-            Vec::new(),
-            &*crate::FN_REGISTRY.lock().unwrap(),
-            &aggr_reg,
-        )
-        .unwrap();
+        let q = Query::parse(src, &*tremor_script::FN_REGISTRY.read().unwrap(), &aggr_reg).unwrap();
 
         let mut idgen = OperatorIdGen::new();
         let first = idgen.next_id();
