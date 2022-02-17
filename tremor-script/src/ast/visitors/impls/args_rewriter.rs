@@ -26,7 +26,7 @@ pub(crate) struct ArgsRewriter<'script, 'registry, 'meta> {
 impl<'script, 'registry, 'meta> ArgsRewriter<'script, 'registry, 'meta> {
     pub(crate) fn new(args: Value<'script>, helper: &'meta mut Helper<'script, 'registry>) -> Self {
         let args: ImutExpr = Literal {
-            mid: NodeMeta::todo(),
+            mid: Box::new(NodeMeta::default()),
             value: args,
         }
         .into();

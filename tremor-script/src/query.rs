@@ -38,10 +38,10 @@ where
     'script: 'event,
     'event: 'run,
 {
-    /// FIXME
-    pub fn instance_id(&self) -> String {
-        todo!()
-    }
+    // /// FIXME
+    // pub fn instance_id(&self) -> String {
+    //     todo!()
+    // }
     /// Converts a troy embedded pipeline with resolved arguments to a runnable query
     /// # Errors
     ///   If the query fails to parse and convert correctly
@@ -60,7 +60,7 @@ where
     ///
     /// # Errors
     /// if the query can not be parsed
-    pub fn parse(script: String, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
+    pub fn parse<S: ToString>(script: S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
         let mut warnings = BTreeSet::new();
 
         let (aid, script) = Arena::insert(script)?;

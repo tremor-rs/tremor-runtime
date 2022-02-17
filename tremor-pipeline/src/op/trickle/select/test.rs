@@ -21,54 +21,53 @@ use crate::EventId;
 
 use super::*;
 
-use tremor_script::ast::{
-    visitors::ConstFolder, walkers::QueryWalker, DefinitioalArgs, Stmt, WindowDefinition,
-};
-use tremor_script::{ast::Consts, Value};
+use tremor_script::ast::{self, Ident, Literal};
+use tremor_script::{ast::Consts, NodeMeta, Value};
 use tremor_script::{
-    ast::{self, Ident, Literal},
-    path::ModulePath,
+    ast::{visitors::ConstFolder, walkers::QueryWalker, Stmt, WindowDefinition},
+    lexer::Location,
 };
 use tremor_value::literal;
 
+fn test_select_stmt<'s>(stmt: tremor_script::ast::Select<'s>) -> SelectStmt<'s> {
+    SelectStmt {
+        stmt: Box::new(stmt),
+        aggregates: vec![],
+        consts: Consts::default(),
+        locals: 0,
+    }
+}
+
+fn mid() -> Box<NodeMeta> {
+    Box::new(NodeMeta::new(Location::default(), Location::default()))
+}
+
 fn test_target<'test>() -> ast::ImutExpr<'test> {
     let target: ast::ImutExpr<'test> = ImutExpr::from(ast::Literal {
-        mid: 0,
+        mid: mid(),
         value: Value::from(42),
     });
     target
 }
 
+fn ident(id: &str) -> Ident {
+    Ident::new(id.into(), mid())
+}
+
 fn test_stmt(target: ast::ImutExpr) -> ast::Select {
     tremor_script::ast::Select {
-        mid: 0,
-        from: (Ident::from("in"), Ident::from("out")),
-        into: (Ident::from("out"), Ident::from("in")),
+        mid: mid(),
+        from: (ident("in"), ident("out")),
+        into: (ident("out"), ident("in")),
         target,
         maybe_where: Some(ImutExpr::from(ast::Literal {
-            mid: 0,
+            mid: mid(),
             value: Value::from(true),
         })),
         windows: vec![],
         maybe_group_by: None,
         maybe_having: None,
     }
-}
-
-fn test_query(stmt: ast::Stmt) -> ast::Query {
-    let mut consts = Consts::default();
-    consts.args = literal!({"snot": "badger"});
-    todo!()
-    // ast::Query {
-    //     stmts: vec![stmt.clone()],
-    //     node_meta: ast::NodeMetas::default(),
-    //     windows: HashMap::new(),
-    //     scripts: HashMap::new(),
-    //     operators: HashMap::new(),
-    //     config: HashMap::new(),
-    //     params: DefinitioalArgs::default(),
-    //     consts,
-    // }
 }
 
 fn ingest_ns(s: u64) -> u64 {
@@ -96,7 +95,7 @@ fn test_event_tx(s: u64, transactional: bool, group: u64) -> Event {
     }
 }
 
-fn test_select(uid: u64, stmt: srs::Stmt) -> Result<Select> {
+fn test_select(uid: u64, stmt: SelectStmt<'static>) -> Result<Select> {
     let windows = vec![
         (
             "w15s".into(),
@@ -149,29 +148,26 @@ fn try_enqueue_two(
     }
 }
 
-fn parse_query(file_name: String, query: &str) -> Result<crate::op::trickle::select::Select> {
+fn parse_query(query: &str) -> Result<crate::op::trickle::select::Select> {
     let reg = tremor_script::registry();
     let aggr_reg = tremor_script::aggr_registry();
-    let module_path = tremor_script::path::load();
-    let cus = vec![];
-    let query =
-        tremor_script::query::Query::parse(&module_path, &file_name, query, cus, &reg, &aggr_reg)
-            .map_err(tremor_script::errors::CompilerError::error)?;
-    let stmt = srs::Stmt::try_new_from_query(&query.query, |q| {
-        q.stmts
-            .first()
-            .cloned()
-            .ok_or_else(|| Error::from("Invalid query"))
-    })?;
+    let query = tremor_script::query::Query::parse(query, &reg, &aggr_reg)?;
+    let stmt = query
+        .query
+        .stmts
+        .into_iter()
+        .filter_map(|s| match s {
+            Stmt::SelectStmt(s) => Some(s),
+            _ => None,
+        })
+        .next()
+        .ok_or_else(|| Error::from("Invalid query"))?;
     Ok(test_select(1, stmt)?)
 }
 
 #[test]
 fn test_sum() -> Result<()> {
-    let mut op = parse_query(
-        "test.trickle".to_string(),
-        "select aggr::stats::sum(event.h2g2) from in[w15s, w30s] into out;",
-    )?;
+    let mut op = parse_query("select aggr::stats::sum(event.h2g2) from in[w15s, w30s] into out;")?;
     assert!(try_enqueue(&mut op, test_event(0))?.is_none());
     assert!(try_enqueue(&mut op, test_event(1))?.is_none());
     let (out, event) =
@@ -184,10 +180,7 @@ fn test_sum() -> Result<()> {
 
 #[test]
 fn test_count() -> Result<()> {
-    let mut op = parse_query(
-        "test.trickle".to_string(),
-        "select aggr::stats::count() from in[w15s, w30s] into out;",
-    )?;
+    let mut op = parse_query("select aggr::stats::count() from in[w15s, w30s] into out;")?;
     assert!(try_enqueue(&mut op, test_event(0))?.is_none());
     assert!(try_enqueue(&mut op, test_event(1))?.is_none());
     let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
@@ -197,17 +190,19 @@ fn test_count() -> Result<()> {
     Ok(())
 }
 
+fn as_select<'a, 'b>(stmt: &'a Stmt<'b>) -> Option<&'a SelectStmt<'b>> {
+    match stmt {
+        Stmt::SelectStmt(s) => Some(s),
+        _ => None,
+    }
+}
+
 fn select_stmt_from_query(query_str: &str) -> Result<Select> {
-    let mut meta = NodeMetas::default();
     let reg = tremor_script::registry();
     let aggr_reg = tremor_script::aggr_registry();
-    let module_path = tremor_script::path::load();
-    let cus = vec![];
-    let query =
-        tremor_script::query::Query::parse(&module_path, "fake", query_str, cus, &reg, &aggr_reg)
-            .map_err(tremor_script::errors::CompilerError::error)?;
+    let query = tremor_script::query::Query::parse(query_str, &reg, &aggr_reg)?;
     let mut window_decls: Vec<WindowDefinition<'_>> = query
-        .suffix()
+        .query
         .stmts
         .iter()
         .filter_map(|stmt| match stmt {
@@ -215,26 +210,23 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
             _ => None,
         })
         .collect();
-    let stmt = srs::Stmt::try_new_from_query(&query.query, |q| {
-        q.stmts
-            .iter()
-            .find(|stmt| matches!(*stmt, Stmt::SelectStmt(_)))
-            .cloned()
-            .ok_or_else(|| Error::from("Invalid query, expected only 1 select statement"))
-    })?;
+    let stmt = query
+        .query
+        .stmts
+        .iter()
+        .filter_map(as_select)
+        .next()
+        .cloned()
+        .ok_or_else(|| Error::from("Invalid query, expected only 1 select statement"))?;
     let windows: Vec<(String, window::Impl)> = window_decls
         .iter_mut()
         .enumerate()
         .map(|(i, window_decl)| {
-            let fake_consts = Consts::default();
-            let mut f = ConstFolder {
-                meta: &mut meta,
-                reg: &reg,
-            };
+            let mut f = ConstFolder { reg: &reg };
             f.walk_window_decl(window_decl).unwrap();
             (
                 i.to_string(),
-                window_decl_to_impl(window_decl, &meta).unwrap(), // yes, indeed!
+                window_decl_to_impl(window_decl).unwrap(), // yes, indeed!
             )
         })
         .collect();
@@ -598,13 +590,7 @@ fn select_nowin_nogrp_nowhr_nohav() -> Result<()> {
     let target = test_target();
     let stmt_ast = test_stmt(target);
 
-    let stmt_ast = test_select_stmt(stmt_ast);
-    let script = "fake".to_string();
-    let query = srs::QueryInstance::try_new::<Error, _>("target".into(), script, |_| {
-        Ok(test_query(stmt_ast.clone()))
-    })?;
-
-    let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
+    let stmt = test_select_stmt(stmt_ast);
 
     let mut op = test_select(1, stmt)?;
     assert!(try_enqueue(&mut op, test_event(0))?.is_none());
@@ -622,17 +608,11 @@ fn select_nowin_nogrp_whrt_nohav() -> Result<()> {
     let mut stmt_ast = test_stmt(target);
 
     stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
-        mid: 0,
+        mid: mid(),
         value: Value::from(true),
     }));
 
-    let stmt_ast = test_select_stmt(stmt_ast);
-    let script = "fake".to_string();
-    let query = srs::QueryInstance::try_new::<Error, _>("target".into(), script, |_| {
-        Ok(test_query(stmt_ast.clone()))
-    })?;
-
-    let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
+    let stmt = test_select_stmt(stmt_ast);
 
     let mut op = test_select(2, stmt)?;
 
@@ -650,17 +630,11 @@ fn select_nowin_nogrp_whrf_nohav() -> Result<()> {
     let target = test_target();
     let mut stmt_ast = test_stmt(target);
 
-    let script = "fake".to_string();
     stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
-        mid: 0,
+        mid: mid(),
         value: Value::from(false),
     }));
-    let stmt_ast = test_select_stmt(stmt_ast);
-    let query = srs::QueryInstance::try_new::<Error, _>("target".into(), script, |_| {
-        Ok(test_query(stmt_ast.clone()))
-    })?;
-
-    let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
+    let stmt = test_select_stmt(stmt_ast);
 
     let mut op = test_select(3, stmt)?;
     let next = try_enqueue(&mut op, test_event(0))?;
@@ -673,17 +647,11 @@ fn select_nowin_nogrp_whrbad_nohav() -> Result<()> {
     let target = test_target();
     let mut stmt_ast = test_stmt(target);
     stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
-        mid: 0,
+        mid: mid(),
         value: Value::from("snot"),
     }));
 
-    let stmt_ast = test_select_stmt(stmt_ast);
-    let script = "fake".to_string();
-    let query = srs::QueryInstance::try_new::<Error, _>("target".into(), script, |_| {
-        Ok(test_query(stmt_ast.clone()))
-    })?;
-
-    let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
+    let stmt = test_select_stmt(stmt_ast);
 
     let mut op = test_select(4, stmt)?;
 
@@ -697,21 +665,15 @@ fn select_nowin_nogrp_whrt_havt() -> Result<()> {
     let target = test_target();
     let mut stmt_ast = test_stmt(target);
     stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
-        mid: 0,
+        mid: mid(),
         value: Value::from(true),
     }));
     stmt_ast.maybe_having = Some(ImutExpr::from(ast::Literal {
-        mid: 0,
+        mid: mid(),
         value: Value::from(true),
     }));
 
-    let stmt_ast = test_select_stmt(stmt_ast);
-    let script = "fake".to_string();
-    let query = srs::QueryInstance::try_new::<Error, _>("target".into(), script, |_| {
-        Ok(test_query(stmt_ast.clone()))
-    })?;
-
-    let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
+    let stmt = test_select_stmt(stmt_ast);
 
     let mut op = test_select(5, stmt)?;
 
@@ -730,21 +692,15 @@ fn select_nowin_nogrp_whrt_havf() -> Result<()> {
     let target = test_target();
     let mut stmt_ast = test_stmt(target);
     stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
-        mid: 0,
+        mid: mid(),
         value: Value::from(true),
     }));
     stmt_ast.maybe_having = Some(ImutExpr::from(ast::Literal {
-        mid: 0,
+        mid: mid(),
         value: Value::from(false),
     }));
 
-    let stmt_ast = test_select_stmt(stmt_ast);
-    let script = "fake".to_string();
-    let query = srs::QueryInstance::try_new::<Error, _>("target".into(), script, |_| {
-        Ok(test_query(stmt_ast.clone()))
-    })?;
-
-    let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
+    let stmt = test_select_stmt(stmt_ast);
 
     let mut op = test_select(6, stmt)?;
     let event = test_event(0);
@@ -755,39 +711,23 @@ fn select_nowin_nogrp_whrt_havf() -> Result<()> {
     Ok(())
 }
 
-fn test_select_stmt(stmt: tremor_script::ast::Select) -> tremor_script::ast::Stmt {
-    let aggregates = vec![];
-    ast::Stmt::SelectStmt(SelectStmt {
-        stmt: Box::new(stmt),
-        aggregates,
-        consts: Consts::default(),
-        locals: 0,
-        node_meta: ast::NodeMetas::default(),
-    })
-}
 #[test]
 fn select_nowin_nogrp_whrt_havbad() -> Result<()> {
     use halfbrown::hashmap;
     let target = test_target();
     let mut stmt_ast = test_stmt(target);
     stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
-        mid: 0,
+        mid: mid(),
         value: Value::from(true),
     }));
     stmt_ast.maybe_having = Some(ImutExpr::from(Literal {
-        mid: 0,
+        mid: mid(),
         value: Value::from(hashmap! {
             "snot".into() => "badger".into(),
         }),
     }));
 
-    let stmt_ast = test_select_stmt(stmt_ast);
-    let script = "fake".to_string();
-    let query = srs::QueryInstance::try_new::<Error, _>("target".into(), script, |_| {
-        Ok(test_query(stmt_ast.clone()))
-    })?;
-
-    let stmt = srs::Stmt::try_new_from_query::<Error, _>(&query, |_| Ok(stmt_ast))?;
+    let stmt = test_select_stmt(stmt_ast);
 
     let mut op = test_select(7, stmt)?;
     let event = test_event(0);
@@ -843,10 +783,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
     // create a WindowDecl with a custom script
     let reg = Registry::default();
     let aggr_reg = AggrRegistry::default();
-    let module_path = ModulePath::load();
     let q = tremor_script::query::Query::parse(
-        &module_path,
-        "bar",
         r#"
             define window my_window from tumbling
             with
@@ -854,18 +791,16 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
             script
                 event.timestamp
             end;"#,
-        vec![],
         &reg,
         &aggr_reg,
-    )
-    .map_err(|ce| ce.error)?;
-    let window_decl = match q.query.suffix().stmts.first() {
+    )?;
+    let window_decl = match q.query.stmts.first() {
         Some(Stmt::WindowDefinition(decl)) => decl.as_ref(),
         other => return Err(format!("Didnt get a window decl, got: {:?}", other).into()),
     };
     let mut params = halfbrown::HashMap::with_capacity(1);
     params.insert("size".to_string(), Value::from(3));
-    let with = window_decl.params.render(&NodeMetas::default())?;
+    let with = window_decl.params.render()?;
     let interval = with
         .get("interval")
         .and_then(Value::as_u64)

@@ -410,7 +410,15 @@ impl ModuleManager {
             .get(name)
             .cloned()
     }
-
+    pub(crate) fn get_connector(module: Index, name: &str) -> Option<ConnectorDefinition<'static>> {
+        let ms = MODULES.read().unwrap();
+        ms.modules()
+            .get(module.0)?
+            .content
+            .connectors
+            .get(name)
+            .cloned()
+    }
     pub(crate) fn get_pipeline(module: Index, name: &str) -> Option<PipelineDefinition<'static>> {
         let ms = MODULES.read().unwrap();
         ms.modules()
