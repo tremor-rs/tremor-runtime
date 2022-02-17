@@ -1,0 +1,11 @@
+version: "0.1"
+environments:
+  - name: connectors
+    branch: connectors
+    mode: pull-request
+apps:
+  - name: tremor-runtime-br-connectors
+    path: ""
+    text-resources:
+      - path: /*/*.json
+        format: nested-key-value
