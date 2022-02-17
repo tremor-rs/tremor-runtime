@@ -196,16 +196,26 @@ where
         if id.module.is_empty() {
             self.scope.content.consts.get(&id.id).cloned()
         } else {
-            let (mid, id) = dbg!(self.resolve_module_alias(id))?;
+            let (mid, id) = self.resolve_module_alias(id)?;
             ModuleManager::get_const(mid, id)
         }
     }
+
+    pub(crate) fn get_connector(&self, id: &NodeId) -> Option<ConnectorDefinition<'script>> {
+        if id.module.is_empty() {
+            self.scope.content.connectors.get(&id.id).cloned()
+        } else {
+            let (mid, id) = self.resolve_module_alias(id)?;
+            ModuleManager::get_connector(mid, id)
+        }
+    }
+
     /// Finds a script
     pub fn get_script(&self, id: &NodeId) -> Option<ScriptDefinition<'script>> {
         if id.module.is_empty() {
             self.scope.content.scripts.get(&id.id).cloned()
         } else {
-            let (mid, id) = dbg!(self.resolve_module_alias(id))?;
+            let (mid, id) = self.resolve_module_alias(id)?;
             ModuleManager::get_script(mid, id)
         }
     }

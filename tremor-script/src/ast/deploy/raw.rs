@@ -15,12 +15,12 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
-use super::ConnectorDefinition;
 use super::CreateStmt;
 use super::FlowDefinition;
 use super::Value;
 use super::{BaseExpr, DeployFlow};
 use super::{ConnectStmt, DeployEndpoint};
+use super::{ConnectorDefinition, CreateTargetDefinition};
 use crate::ast::{
     query::raw::{
         CreationalWithRaw, DefinitioalArgsRaw, DefinitioalArgsWithRaw, PipelineDefinitionRaw,
@@ -284,7 +284,7 @@ pub struct FlowDefinitionRaw<'script> {
     pub(crate) id: String,
     pub(crate) params: DefinitioalArgsRaw<'script>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
-    pub(crate) atoms: Vec<FlowStmtRaw<'script>>,
+    pub(crate) stmts: Vec<FlowStmtRaw<'script>>,
 }
 impl_expr_raw!(FlowDefinitionRaw);
 
@@ -303,7 +303,7 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
 
         let mut connections = Vec::new();
         let mut creates = Vec::new();
-        for link in self.atoms {
+        for link in self.stmts {
             match link {
                 FlowStmtRaw::ConnectorDefinition(stmt) => {
                     let stmt = stmt.up(helper)?;
@@ -386,60 +386,49 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // TODO check that names across pipeline/flow/connector definitions are unique or else hygienic error
 
-        let _node_id = NodeId::new(&self.id.id, &[]); // FIXME
-        let _target = self.target.clone().with_prefix(&[]); // FIXME
-        let _outer = self.extent();
-        let _inner = self.id.extent();
-        let _params = self.params.up(helper)?;
-        let _decl = match self.kind {
+        let node_id = NodeId::new(&self.id.id, &[]); // FIXME
+        let target = self.target.clone(); // FIXME
+        let outer = self.extent();
+        let inner = self.id.extent();
+        let params = self.params.up(helper)?;
+        let decl = match self.kind {
             CreateKind::Connector => {
-                todo!();
-                // if let Some(artefact) = helper.connector_decls.get(&target) {
-                //     CreateTargetDefinition::Connector(artefact.clone())
-                // } else {
-                //     return Err(ErrorKind::DeployArtefactNotDefined(
-                //         outer,
-                //         inner,
-                //         target.to_string(),
-                //         helper
-                //             .connector_decls
-                //             .keys()
-                //             .map(ToString::to_string)
-                //             .collect(),
-                //     )
-                //     .into());
-                // }
+                if let Some(artefact) = helper.get_connector(&target) {
+                    CreateTargetDefinition::Connector(artefact)
+                } else {
+                    return Err(ErrorKind::DeployArtefactNotDefined(
+                        outer,
+                        inner,
+                        target.to_string(),
+                        vec![],
+                    )
+                    .into());
+                }
             }
             CreateKind::Pipeline => {
-                todo!();
-                // if let Some(artefact) = helper.pipeline_decls.get(&target) {
-                //     CreateTargetDefinition::Pipeline(artefact.clone())
-                // } else {
-                //     return Err(ErrorKind::DeployArtefactNotDefined(
-                //         outer,
-                //         inner,
-                //         target.to_string(),
-                //         helper
-                //             .pipeline_decls
-                //             .keys()
-                //             .map(ToString::to_string)
-                //             .collect(),
-                //     )
-                //     .into());
-                // }
+                if let Some(artefact) = helper.get_pipeline(&target) {
+                    CreateTargetDefinition::Pipeline(artefact)
+                } else {
+                    return Err(ErrorKind::DeployArtefactNotDefined(
+                        outer,
+                        inner,
+                        target.to_string(),
+                        vec![],
+                    )
+                    .into());
+                }
             }
         };
 
-        // let create_stmt = CreateStmt {
-        //     mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
-        //     with: params,
-        //     node_id: node_id.clone(),
-        //     target,
-        //     defn: decl,
-        // };
-        // helper.instances.insert(node_id, create_stmt.clone());
+        let create_stmt = CreateStmt {
+            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
+            with: params,
+            instance_alias: node_id.clone(),
+            from_target: target,
+            defn: decl,
+        };
 
-        // Ok(create_stmt)
+        Ok(create_stmt)
     }
 }
 

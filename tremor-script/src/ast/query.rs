@@ -27,10 +27,7 @@ use super::{
     Script, Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
-use crate::{
-    ast::{eq::AstEq, walkers::ImutExprWalker},
-    errors::Error,
-};
+use crate::{ast::walkers::ImutExprWalker, errors::Error};
 use crate::{impl_expr_mid, impl_fqn};
 use raw::WindowDefnRaw;
 use simd_json::{Builder, Mutable};
@@ -132,14 +129,12 @@ impl SelectStmt<'_> {
     /// Determine how complex a select statement is
     #[must_use]
     pub fn complexity(&self) -> SelectType {
-        if self
-            .stmt
-            .target
-            .ast_eq(&ImutExpr::Path(Path::Event(EventPath {
-                mid: NodeMeta::todo(),
-                segments: vec![],
-            })))
-            && self.stmt.maybe_group_by.is_none()
+        if matches!(
+            &self.stmt.target,
+            ImutExpr::Path(Path::Event(EventPath {
+                segments, ..
+            })) if segments.is_empty()
+        ) && self.stmt.maybe_group_by.is_none()
             && self.stmt.windows.is_empty()
         {
             if self.stmt.maybe_having.is_none() && self.stmt.maybe_where.is_none() {
