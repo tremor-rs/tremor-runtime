@@ -34,15 +34,9 @@ use tremor_script::ast::{self, ConnectStmt, DeployEndpoint};
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize)]
 pub struct FlowId(pub String);
 
-// impl From<&ast::DeployFlow<'_>> for DeploymentId {
-//     fn from(f: &ast::DeployFlow<'_>) -> Self {
-//         DeploymentId(f.node_id.id().to_string())
-//     }
-// }
-
-impl From<&str> for DeploymentId {
+impl From<&str> for FlowId {
     fn from(e: &str) -> Self {
-        DeploymentId(e.to_string())
+        FlowId(e.to_string())
     }
 }
 
@@ -214,7 +208,7 @@ impl Flow {
 
         addr.send(Msg::Start).await?;
 
-        let this = Deployment {
+        let this = Flow {
             alias: flow.instance_alias.to_string(),
             addr,
         };

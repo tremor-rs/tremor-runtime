@@ -21,7 +21,7 @@ use async_std::prelude::*;
 use async_std::task::{self, JoinHandle};
 use hashbrown::{hash_map::Entry, HashMap};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
-use tremor_script::srs::DeployFlow;
+use tremor_script::ast::DeployFlow;
 
 pub(crate) type Channel = Sender<Msg>;
 
@@ -32,7 +32,7 @@ pub(crate) enum Msg {
         /// deploy source
         src: String,
         /// deploy flow
-        flow: DeployFlow,
+        flow: DeployFlow<'static>,
         /// result sender
         sender: Sender<Result<()>>,
     },
