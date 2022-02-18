@@ -16,17 +16,12 @@ use tremor_common::file;
 use tremor_script::deploy::Deploy;
 use tremor_script::errors::*;
 use tremor_script::highlighter::{Dumb, Highlighter};
-use tremor_script::path::ModulePath;
+use tremor_script::ModuleManager;
 
-fn parse<'script>(
-    module_path: &ModulePath,
-    file_name: &str,
-    deploy: &str,
-) -> std::result::Result<tremor_script::deploy::Deploy, CompilerError> {
+fn parse<'script>(deploy: &str) -> tremor_script::Result<Deploy> {
     let aggr_reg = tremor_script::aggr_registry();
-    let cus = vec![];
     let reg = tremor_script::registry::registry();
-    Deploy::parse(module_path, file_name, deploy, cus, &reg, &aggr_reg)
+    Deploy::parse(deploy, &reg, &aggr_reg)
 }
 
 macro_rules! test_cases {
@@ -42,7 +37,9 @@ macro_rules! test_cases {
                 let deploy_dir = concat!("tests/deploy_errors/", stringify!($file), "/").to_string();
                 let deploy_file = concat!("tests/deploy_errors/", stringify!($file), "/deploy.troy");
                 let err_file = concat!("tests/deploy_errors/", stringify!($file), "/error.txt");
-                let module_path = &ModulePath { mounts: vec![deploy_dir, "tremor-script/lib/".to_string()] };
+                ModuleManager::add_path("tremor-script/lib")?;
+                ModuleManager::add_path(deploy_dir)?;
+
 
                 println!("Loading deployment: {}", deploy_file);
                 let mut file = file::open(deploy_file)?;
@@ -56,10 +53,10 @@ macro_rules! test_cases {
                 file.read_to_string(&mut err)?;
                 let err = err.trim();
 
-                match parse(&module_path, err_file, &contents) {
+                match parse(&contents) {
                     Err(e) => {
                         let mut h = Dumb::new();
-                        tremor_script::Script::format_error_from_script(&contents, &mut h, &e)?;
+                        h.format_error(&e)?;
                         h.finalize()?;
                         let got = h.to_string();
                         let got = got.trim();

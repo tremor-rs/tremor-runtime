@@ -34,8 +34,8 @@ use tremor_common::ids::OperatorIdGen;
 use tremor_script::{
     arena::Arena,
     ast::{
-        self, BaseExpr, Helper, Ident, PipelineCreate, SelectType, Stmt, WindowDefinition,
-        WindowKind,
+        self, BaseExpr, Helper, Ident, OperatorDefinition, PipelineCreate, PipelineDefinition,
+        ScriptDefinition, SelectType, Stmt, WindowDefinition, WindowKind,
     },
     errors::{
         pipeline_unknown_port_err, query_node_duplicate_name_err, query_node_reserved_name_err,
@@ -408,7 +408,7 @@ fn to_executable_graph(
             | Stmt::OperatorDefinition(_)
             | Stmt::PipelineDefinition(_) => {}
             Stmt::PipelineCreate(s) => {
-                if let Some(mut p) = helper.get_pipeline(&s.node_id) {
+                if let Some(mut p) = helper.get::<PipelineDefinition>(&s.node_id)? {
                     // FIXME: do args
                     let args = Value::null();
                     p.apply_args(&args, &mut helper)?;
@@ -461,10 +461,8 @@ fn to_executable_graph(
                 };
                 let id = pipe_graph.add_node(node.clone());
 
-                let mut decl = helper
-                    .get_operator(&o.target)
-                    .ok_or("operator not found")?
-                    .clone();
+                let mut decl: OperatorDefinition =
+                    helper.get(&o.target)?.ok_or("operator not found")?;
                 if let Some(Stmt::OperatorCreate(o)) = query_borrowed.stmts.get(i) {
                     decl.params.ingest_creational_with(&o.params)?;
                 };
@@ -493,10 +491,9 @@ fn to_executable_graph(
                 }
 
                 // FIXME: Better error
-                let decl = helper
-                    .get_script(&o.target)
-                    .ok_or_else(|| format!("script not found: {}", &o.target,))?
-                    .clone();
+                let decl: ScriptDefinition = helper
+                    .get(&o.target)?
+                    .ok_or_else(|| format!("script not found: {}", &o.target,))?;
 
                 let e = decl.extent();
                 let mut h = Dumb::new();

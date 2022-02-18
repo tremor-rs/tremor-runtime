@@ -18,7 +18,7 @@ use tremor_script::FN_REGISTRY;
 
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::{Dumb, Highlighter};
-use tremor_script::path::ModulePath;
+use tremor_script::ModuleManager;
 use tremor_script::Script;
 
 macro_rules! test_cases {
@@ -36,7 +36,6 @@ macro_rules! test_cases {
                 let mut file = file::open(script_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let contents2 = contents.clone();
 
                 println!("Loading error: {}", err_file);
                 let mut file = file::open(err_file)?;
@@ -44,10 +43,12 @@ macro_rules! test_cases {
                 file.read_to_string(&mut err)?;
                 let err = err.trim();
 
-                let s = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, script_file, contents2, &*FN_REGISTRY.lock()?);
+                ModuleManager::add_path(script_dir)?;
+                ModuleManager::add_path("tremor-script/lib")?;
+                let s = Script::parse(&contents, &*FN_REGISTRY.read()?);
                 if let Err(e) = s {
                     let mut h = Dumb::new();
-                    Script::format_error_from_script(&contents, &mut h, &e)?;
+                    h.format_error(&e)?;
                     h.finalize()?;
                     let got = h.to_string();
                     let got = got.trim();
@@ -78,7 +79,6 @@ macro_rules! ignored_cases {
                 let mut file = file::open(script_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let contents2 = contents.clone();
 
                 println!("Loading error: {}", err_file);
                 let mut file = file::open(err_file)?;
@@ -86,17 +86,18 @@ macro_rules! ignored_cases {
                 file.read_to_string(&mut err)?;
                 let _err = err.trim();
 
-                let s = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, script_file, contents2, &*FN_REGISTRY.lock()?);
+                ModuleManager::add_path(script_dir)?;
+                ModuleManager::add_path("tremor-script/lib")?;
+                let s = Script::parse(&contents, &*FN_REGISTRY.read()?);
                 if let Err(e) = s {
                     let mut h = Dumb::new();
-                    Script::format_error_from_script(&contents, &mut h, &e)?;
+                    h.format_error( &e)?;
                     h.finalize()?;
                     let got = h.to_string();
                     let got = got.trim();
                     println!("{}", got);
                     assert_eq!(err, got);
                 } else {
-
                     println!("Expected error, but got succeess :(");
                     assert!(false);
                 }

@@ -38,8 +38,8 @@ macro_rules! test_cases {
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
 
-                ModuleManager::add_path("tremor-script/lib");
-                ModuleManager::add_path(script_dir);
+                ModuleManager::add_path("tremor-script/lib")?;
+                ModuleManager::add_path(script_dir)?;
                 let script = Script::parse(contents, &*FN_REGISTRY.read()?)?;
 
                 println!("Loading input: {}", in_file);

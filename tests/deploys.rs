@@ -17,17 +17,12 @@ use tremor_common::file;
 use tremor_script::deploy::Deploy;
 
 use tremor_script::errors::*;
-use tremor_script::path::ModulePath;
+use tremor_script::ModuleManager;
 
-fn parse<'script>(
-    module_path: &ModulePath,
-    file_name: &str,
-    deploy: &str,
-) -> std::result::Result<tremor_script::deploy::Deploy, CompilerError> {
+fn parse<'script>(deploy: &str) -> tremor_script::Result<tremor_script::deploy::Deploy> {
     let aggr_reg = tremor_script::aggr_registry();
-    let cus = vec![];
     let reg = tremor_script::registry::registry();
-    Deploy::parse(module_path, file_name, deploy, cus, &reg, &aggr_reg)
+    Deploy::parse(deploy, &reg, &aggr_reg)
 }
 
 macro_rules! test_cases {
@@ -41,14 +36,15 @@ macro_rules! test_cases {
                 fn $file() -> Result<()> {
                     let deploy_dir = concat!("tests/deploys/", stringify!($file), "/").to_string();
                     let deploy_file = concat!("tests/deploys/", stringify!($file), "/deploy.troy");
-                    let module_path = ModulePath { mounts: vec![deploy_dir, "tremor-script/lib/".to_string()] };
+                    ModuleManager::add_path("tremor-script/lib")?;
+                    ModuleManager::add_path(deploy_dir)?;
 
                     println!("Loading deployment file: {}", deploy_file);
                     let mut file = file::open(deploy_file)?;
                     let mut contents = String::new();
                     file.read_to_string(&mut contents)?;
 
-                    match parse(&module_path, deploy_file, &contents)?.as_deployment_unit() {
+                    match parse(&contents) {
                         Ok(_) => (),
                         _otherwise => {
                             println!("Expected valid deployment file, compile phase, but got an unexpected error");
