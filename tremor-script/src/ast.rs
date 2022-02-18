@@ -750,8 +750,8 @@ pub struct StringLit<'script> {
 
 // we only have this for tests as we don't get a node meta
 #[cfg(test)]
-impl From<&str> for StringLit {
-    fn from(l: &str) -> Self {
+impl<'script> From<&'script str> for StringLit<'script> {
+    fn from(l: &'script str) -> Self {
         StringLit {
             mid: NodeMeta::dummy(),
             elements: vec![StrLitElement::Lit(l.into())],
@@ -2147,12 +2147,12 @@ mod test {
     use crate::{
         ast::{Expr, ImutExpr, Invocable, Invoke, NodeId, Record},
         prelude::*,
-        CustomFn,
+        CustomFn, NodeMeta,
     };
 
     fn v(s: &'static str) -> super::ImutExpr<'static> {
         super::ImutExpr::Literal(super::Literal {
-            mid: 0,
+            mid: NodeMeta::dummy(),
             value: Value::from(s),
         })
     }

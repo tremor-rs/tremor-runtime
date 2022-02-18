@@ -640,21 +640,22 @@ mod tests {
 
     use std::collections::BTreeMap;
 
-    use crate::ast::{ClauseGroup, Expr};
     use crate::errors::Result;
-    use crate::path::ModulePath;
     use crate::registry::registry;
+    use crate::{
+        ast::{ClauseGroup, Expr},
+        NodeMeta,
+    };
 
     use super::*;
 
     /// tests the ast equality of the two last `ImutExprInt` in the given script
     fn test_ast_eq(script: &str, check_equality: bool) -> Result<()> {
-        let module_path = ModulePath::load();
         let mut registry = registry();
         crate::std_lib::load(&mut registry);
         let script_script: crate::script::Script =
-            crate::script::Script::parse(&module_path, "test", script.to_owned(), &registry)?;
-        let script: &crate::ast::Script = script_script.script.suffix();
+            crate::script::Script::parse(script.to_owned(), &registry)?;
+        let script: &crate::ast::Script = &script_script.script;
         let imut_exprs: Vec<&ImutExpr> = script
             .exprs
             .iter()
@@ -1076,14 +1077,14 @@ mod tests {
 
     fn imut_expr() -> ImutExpr<'static> {
         ImutExpr::Path(Path::Event(EventPath {
-            mid: 1,
+            mid: NodeMeta::dummy(),
             segments: vec![],
         }))
     }
     #[test]
     fn clause_group() {
         let pc = PredicateClause {
-            mid: 0,
+            mid: NodeMeta::dummy(),
             pattern: Pattern::Default,
             guard: None,
             exprs: vec![],
@@ -1148,13 +1149,13 @@ mod tests {
     fn recur_eq_test() {
         let e: crate::ast::ImutExprs = vec![imut_expr()];
         let recur1 = Recur {
-            mid: 1,
+            mid: NodeMeta::dummy(),
             argc: 2,
             open: true,
             exprs: e.clone(),
         };
         let mut recur2 = Recur {
-            mid: 2,
+            mid: NodeMeta::dummy(),
             argc: 2,
             open: true,
             exprs: e,
@@ -1168,36 +1169,42 @@ mod tests {
     fn test_path_local_special_case() -> Result<()> {
         let path = ImutExpr::Path(Path::Local(LocalPath {
             idx: 1,
-            mid: 1,
-            segments: vec![Segment::Idx { idx: 1, mid: 15 }],
+            mid: NodeMeta::dummy(),
+            segments: vec![Segment::Idx {
+                idx: 1,
+                mid: NodeMeta::dummy(),
+            }],
         }));
-        let local = ImutExpr::Local { idx: 1, mid: 42 };
+        let local = ImutExpr::Local {
+            idx: 1,
+            mid: NodeMeta::dummy(),
+        };
         // has segments
         assert!(!path.ast_eq(&local));
         let path2 = ImutExpr::Path(Path::Local(LocalPath {
             idx: 1,
-            mid: 1_212_432,
+            mid: NodeMeta::dummy(),
             segments: vec![],
         }));
         assert!(path2.ast_eq(&local));
         // different index
         assert!(!ImutExpr::Path(Path::Local(LocalPath {
             idx: 2,
-            mid: 42,
+            mid: NodeMeta::dummy(),
             segments: vec![]
         }))
         .ast_eq(&local));
         // is_const different
         assert!(!ImutExpr::Path(Path::Local(LocalPath {
             idx: 1,
-            mid: 42,
+            mid: NodeMeta::dummy(),
             segments: vec![]
         }))
         .ast_eq(&local));
 
         assert!(Path::Local(LocalPath {
             idx: 1,
-            mid: 34_786_752_389,
+            mid: NodeMeta::dummy(),
             segments: vec![]
         })
         .ast_eq(&local));

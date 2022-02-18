@@ -39,8 +39,11 @@ impl<'script> GroupByVisitor<'script> for GroupByExprExtractor<'script> {
 
 #[cfg(test)]
 mod test {
-    use crate::ast::{GroupBy, List, Literal};
     use crate::errors::Result;
+    use crate::{
+        ast::{GroupBy, List, Literal},
+        NodeMeta,
+    };
 
     use super::*;
     #[test]
@@ -48,7 +51,7 @@ mod test {
         let mut visitor = GroupByExprExtractor::new();
         let lit_42 = ImutExpr::Literal(Literal {
             mid: NodeMeta::dummy(),
-            value: gittremor_value::Value::from(42),
+            value: tremor_value::Value::from(42),
         });
         let false_array = ImutExpr::List(List {
             mid: NodeMeta::dummy(),
