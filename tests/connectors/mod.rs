@@ -75,16 +75,11 @@ impl ConnectorHarness {
 
         let (world, handle) = World::start(WorldConfig::default()).await?;
         let raw_config =
-            config::Connector::from_defn(connector_type.clone(), connector_type.into(), defn)?;
+            config::Connector::from_config(connector_type.clone(), connector_type.into(), defn)?;
         let id = String::from("test");
         // FIXME: woohp whoop
-        let connector_addr = connectors::spawn(
-            id.clone(),
-            &mut connector_id_gen,
-            &known_connectors,
-            raw_config,
-        )
-        .await?;
+        let connector_addr =
+            connectors::spawn(&id, &mut connector_id_gen, &known_connectors, raw_config).await?;
         let mut pipes = HashMap::new();
 
         let (link_tx, link_rx) = async_std::channel::unbounded();

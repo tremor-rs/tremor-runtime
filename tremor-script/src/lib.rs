@@ -79,6 +79,7 @@ pub use crate::ast::module::ModuleManager;
 pub use crate::ast::query::SelectType;
 pub use crate::ast::NodeMeta;
 pub use crate::ctx::{EventContext, EventOriginUri};
+pub use crate::errors::{Kind as ErrorKind, Result};
 pub use crate::query::Query;
 pub use crate::registry::{
     aggr as aggr_registry, registry, Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFn,
