@@ -16,27 +16,17 @@ use regex::Regex;
 use std::io::prelude::*;
 use std::path::Path;
 use tremor_common::{file, ids::OperatorIdGen};
-
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
-use tremor_script::FN_REGISTRY;
-
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::{Dumb, Highlighter};
-use tremor_script::path::ModulePath;
+use tremor_script::ModuleManager;
+use tremor_script::FN_REGISTRY;
 
-fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<ExecutableGraph> {
+fn to_pipe(query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
-    let cus = vec![];
     let mut idgen = OperatorIdGen::new();
-    let q = Query::parse(
-        module_path,
-        query,
-        file_name,
-        cus,
-        &*FN_REGISTRY.lock()?,
-        &aggr_reg,
-    )?;
+    let q = Query::parse(query, &*FN_REGISTRY.read()?, &aggr_reg)?;
     Ok(q.to_pipe(&mut idgen)?)
 }
 
@@ -52,7 +42,9 @@ macro_rules! test_cases {
                 let query_file = concat!("tests/query_errors/", stringify!($file), "/query.trickle");
                 let err_file = concat!("tests/query_errors/", stringify!($file), "/error.txt");
                 let err_re_file = concat!("tests/query_errors/", stringify!($file), "/error.re");
-                let module_path = &ModulePath { mounts: vec![query_dir, "tremor-script/lib/".to_string()] };
+
+                ModuleManager::add_path(query_dir)?;
+                ModuleManager::add_path("tremor-script/lib")?;
 
                 println!("Loading query: {}", query_file);
                 let mut file = file::open(query_file)?;
@@ -67,7 +59,7 @@ macro_rules! test_cases {
                     let err = err.trim();
                     let re = Regex::new(err)?;
 
-                    let s = to_pipe(&module_path, err_re_file, &contents);
+                    let s = to_pipe( &contents);
                     if let Err(e) = s {
                         println!("{} ~ {}", err, format!("{}", e));
                         assert!(re.is_match(&format!("{}", e)));
@@ -82,11 +74,11 @@ macro_rules! test_cases {
                     file.read_to_string(&mut err)?;
                     let err = err.trim();
 
-                    match to_pipe(&module_path, err_file, &contents) {
+                    match to_pipe(&contents) {
                         Err(Error(ErrorKind::Pipeline(tremor_pipeline::errors::ErrorKind::Script(e)), o)) => {
                             let e = tremor_script::errors::Error(e, o);
                             let mut h = Dumb::new();
-                            tremor_script::query::Query::format_error_from_script(&contents, &mut h, &e)?;
+                            h.format_error(&e)?;
                             h.finalize()?;
                             let got = h.to_string();
                             let got = got.trim();
@@ -96,7 +88,7 @@ macro_rules! test_cases {
                         Err(Error(ErrorKind::Script(e), o)) =>{
                             let e = tremor_script::errors::Error(e, o);
                             let mut h = Dumb::new();
-                            tremor_script::query::Query::format_error_from_script(&contents, &mut h, &e)?;
+                            h.format_error(&e)?;
                             h.finalize()?;
                             let got = h.to_string();
                             let got = got.trim();

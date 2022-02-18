@@ -24,20 +24,12 @@ use tremor_script::FN_REGISTRY;
 use tremor_pipeline::errors::{Error as PipelineError, ErrorKind as PipelineErrorKind};
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::{Dumb, Highlighter};
-use tremor_script::path::ModulePath;
 use tremor_script::utils::*;
 
-fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<ExecutableGraph> {
+fn to_pipe(query: &str) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let mut idgen = OperatorIdGen::new();
-    let q = Query::parse(
-        module_path,
-        query,
-        file_name,
-        vec![],
-        &*FN_REGISTRY.lock()?,
-        &aggr_reg,
-    )?;
+    let q = Query::parse(query, &*FN_REGISTRY.read()?, &aggr_reg)?;
     Ok(q.to_pipe(&mut idgen)?)
 }
 
@@ -56,13 +48,12 @@ macro_rules! test_cases {
                 let err_file: PathBuf = [&query_dir, "error.txt"].iter().collect();
                 let in_file: PathBuf = [&query_dir, "in"].iter().collect();
                 let out_file: PathBuf = [&query_dir, "out"].iter().collect();
-                let module_path = ModulePath { mounts: vec![query_dir.to_string(), "tremor-script/lib/".to_string()] };
 
                 println!("Loading query: {}", query_file.display());
                 let mut file = file::open(&query_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let mut pipeline = to_pipe(&module_path, query_file.to_str().unwrap(), &contents)?;
+                let mut pipeline = to_pipe(&contents)?;
 
                 println!("Loading input: {}", in_file.display());
                 let in_json = load_event_file(in_file.to_str().unwrap())?;
@@ -96,7 +87,7 @@ macro_rules! test_cases {
                             if let Some(err) = err.as_ref() {
                                 let e = tremor_script::errors::Error(e, o);
                                 let mut h = Dumb::new();
-                                tremor_script::query::Query::format_error_from_script(&contents, &mut h, &e)?;
+                                h.format_error(&e)?;
                                 h.finalize()?;
                                 let got = h.to_string();
                                 let got = got.trim();

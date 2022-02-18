@@ -15,7 +15,7 @@
 pub use super::query::*;
 use super::{
     docs::{ConstDoc, Docs, QueryDeclDoc},
-    module::{self, ModuleContent, ModuleManager},
+    module::{self, GetModule, ModuleContent, ModuleManager},
     raw::LocalPathRaw,
     ConnectorDefinition, Const, DeployFlow, FlowDefinition, FnDecl, InvokeAggrFn, NodeId,
 };
@@ -66,9 +66,17 @@ pub struct Scope<'script> {
     pub(crate) parent: Option<Box<Scope<'script>>>,
 }
 impl<'script> Scope<'script> {
-    pub(crate) fn get_module(&self, id: &[String]) -> Option<module::Index> {
-        let (first, rest) = id.split_first()?;
-        let id = *self.modules.get(first)?;
+    pub(crate) fn get_module(&self, id: &[String]) -> Result<Option<module::Index>> {
+        let (first, rest) = if let Some(r) = id.split_first() {
+            r
+        } else {
+            return Ok(None);
+        };
+        let id = if let Some(i) = self.modules.get(first) {
+            *i
+        } else {
+            return Ok(None);
+        };
         ModuleManager::find_module(id, rest)
     }
     pub(crate) fn add_module_alias(&mut self, alias: String, module_id: module::Index) {
@@ -155,82 +163,31 @@ where
             Err("No parent scope".into())
         }
     }
-    pub(crate) fn get_flow_decls(&self, id: &NodeId) -> Option<FlowDefinition<'script>> {
-        if id.module.is_empty() {
-            self.scope.content.flows.get(&id.id).cloned()
+    /// Finds something from the module script
+    pub fn get<Target>(&self, id: &NodeId) -> Result<Option<Target>>
+    where
+        Target: 'script,
+        ModuleManager: module::Get<Target>,
+        ModuleContent<'script>: module::GetModule<Target>,
+    {
+        Ok(if id.module.is_empty() {
+            self.scope.content.get(&id.id)
         } else {
-            let (mid, id) = self.resolve_module_alias(id)?;
-            ModuleManager::get_flow(mid, id)
-        }
-    }
-
-    /// fetch pipeline
-    pub fn get_pipeline(&self, id: &NodeId) -> Option<PipelineDefinition<'script>> {
-        if id.module.is_empty() {
-            self.scope.content.pipelines.get(&id.id).cloned()
-        } else {
-            let (mid, id) = self.resolve_module_alias(id)?;
-            ModuleManager::get_pipeline(mid, id)
-        }
-    }
-
-    pub(crate) fn get_function(&self, id: &NodeId) -> Option<FnDecl<'script>> {
-        if id.module.is_empty() {
-            self.scope.content.functions.get(&id.id).cloned()
-        } else {
-            let (mid, id) = self.resolve_module_alias(id)?;
-            ModuleManager::get_function(mid, id)
-        }
-    }
-    /// Fetches an operator
-    pub fn get_operator(&self, id: &NodeId) -> Option<OperatorDefinition<'script>> {
-        if id.module.is_empty() {
-            self.scope.content.operators.get(&id.id).cloned()
-        } else {
-            let (mid, id) = self.resolve_module_alias(id)?;
-            ModuleManager::get_operator(mid, id)
-        }
-    }
-
-    pub(crate) fn get_const(&self, id: &NodeId) -> Option<Const<'script>> {
-        if id.module.is_empty() {
-            self.scope.content.consts.get(&id.id).cloned()
-        } else {
-            let (mid, id) = self.resolve_module_alias(id)?;
-            ModuleManager::get_const(mid, id)
-        }
-    }
-
-    pub(crate) fn get_connector(&self, id: &NodeId) -> Option<ConnectorDefinition<'script>> {
-        if id.module.is_empty() {
-            self.scope.content.connectors.get(&id.id).cloned()
-        } else {
-            let (mid, id) = self.resolve_module_alias(id)?;
-            ModuleManager::get_connector(mid, id)
-        }
-    }
-
-    /// Finds a script
-    pub fn get_script(&self, id: &NodeId) -> Option<ScriptDefinition<'script>> {
-        if id.module.is_empty() {
-            self.scope.content.scripts.get(&id.id).cloned()
-        } else {
-            let (mid, id) = self.resolve_module_alias(id)?;
-            ModuleManager::get_script(mid, id)
-        }
+            self.resolve_module_alias(id)?
+                .and_then(ModuleManager::get_tpl)
+        })
     }
 
     /// resolves the local aliases for modules
     pub(crate) fn resolve_module_alias<'n>(
         &self,
         id: &'n NodeId,
-    ) -> Option<(module::Index, &'n str)> {
-        if id.module.is_empty() {
+    ) -> Result<Option<(module::Index, &'n str)>> {
+        Ok(if id.module.is_empty() {
             None
         } else {
-            let mid = self.scope.get_module(&id.module)?;
-            Some((mid, &id.id))
-        }
+            self.scope.get_module(&id.module)?.map(|mid| (mid, id.id()))
+        })
     }
 
     pub(crate) fn is_const(&self, id: &str) -> bool {

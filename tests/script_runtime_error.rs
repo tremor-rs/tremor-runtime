@@ -17,11 +17,10 @@ use tremor_common::file;
 use tremor_script::FN_REGISTRY;
 
 use tremor_runtime::errors::*;
-use tremor_script::errors::CompilerError;
 use tremor_script::highlighter::{Dumb, Highlighter};
-use tremor_script::path::ModulePath;
 use tremor_script::prelude::*;
 use tremor_script::utils::*;
+use tremor_script::ModuleManager;
 use tremor_script::{AggrType, EventContext, Script};
 use tremor_script::{Object, Value};
 
@@ -41,9 +40,10 @@ macro_rules! test_cases {
                 let mut file = file::open(script_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let contents2 = contents.clone();
 
-                let script = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".into()] }, script_file, contents2, &*FN_REGISTRY.lock()?).map_err(CompilerError::error)?;
+                ModuleManager::add_path(script_dir)?;
+                ModuleManager::add_path("tremor-script/lib")?;
+                let script = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
 
                 println!("Loading input: {}", in_file);
                 let mut in_json = load_event_file(in_file)?;
@@ -60,7 +60,10 @@ macro_rules! test_cases {
                     let mut state = Value::null();
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta);
                     if let Err(e) = s {
-                        let got = script.format_error(&e);
+                        let mut h = Dumb::new();
+                        h.format_error(&e)?;
+                        h.finalize()?;
+                        let got = h.to_string();
                         let got = got.trim();
                         println!("{}", got);
                         assert_eq!(err, got);
@@ -92,9 +95,10 @@ macro_rules! ignore_cases {
                 let mut file = file::open(script_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let contents2 = contents.clone();
 
-                let script = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, script_file, contents2, &*FN_REGISTRY.lock()?).map_err(CompilerError::error)?;
+                ModuleManager::add_path(script_dir)?;
+                ModuleManager::add_path("tremor-script/lib")?;
+                let script = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
 
                 println!("Loading input: {}", in_file);
                 let mut in_json = load_event_file(in_file)?;
@@ -112,7 +116,7 @@ macro_rules! ignore_cases {
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta);
                     if let Err(e) = s {
                         let mut h = Dumb::new();
-                        script.format_error_with(&mut h, &e)?;
+                        h.format_error(&e)?;
                         h.finalize()?;
                         let got = h.to_string();
                         let got = got.trim();
