@@ -172,8 +172,8 @@ impl Connector {
         Connector::from_config(alias, defn.builtin_kind.clone().into(), conf)
     }
     /// Creates a connector from it's definition (aka config + settings)
-    pub fn from_config(
-        alias: &str,
+    pub fn from_config<A: ToString>(
+        alias: A,
         connector_type: ConnectorType,
         connector_config: Value<'static>,
     ) -> crate::Result<Connector> {

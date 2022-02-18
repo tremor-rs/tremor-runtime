@@ -1688,14 +1688,13 @@ impl<'script> Upable<'script> for PathRaw<'script> {
                 if helper.is_const_path(&p) {
                     let id = p.root.id;
 
-                    let c = helper
-                        .get_const(&NodeId::from(&id))
-                        .ok_or("invalid constant")?;
+                    let c: crate::ast::Const =
+                        helper.get(&NodeId::from(&id))?.ok_or("invalid constant")?;
                     let mid = NodeMeta::new_box_with_name(p.start, p.end, &id);
                     Path::Expr(ExprPath {
                         expr: Box::new(ImutExpr::Literal(Literal {
                             mid: c.mid,
-                            value: c.value.clone(),
+                            value: c.value,
                         })),
                         segments: p.segments.up(helper)?,
                         var: 0,
@@ -1889,8 +1888,7 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
             id: id.to_string(),
         };
 
-        let c = helper.get_const(&node_id).ok_or_else(|| {
-            dbg!(&helper.scope.modules);
+        let c: Const = helper.get(&node_id)?.ok_or_else(|| {
             let msg = format!("The constant {node_id} (absolute path) is not defined.",);
             err_generic(&r, &r, &msg)
         })?;
@@ -2305,8 +2303,8 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
             // Absolute locability from without a set of nested modules
 
             // of the form: [mod, mod1, name] - where the list of idents is effectively a fully qualified resource name
-            if let Some(f) = helper.get_function(&node_id) {
-                let invocable = Invocable::Tremor(f.clone().into());
+            if let Some(f) = helper.get::<FnDecl>(&node_id)? {
+                let invocable = Invocable::Tremor(f.into());
                 let args = self.args.up(helper)?.into_iter().collect();
                 Ok(Invoke {
                     mid: NodeMeta::new_box_with_name(self.start, self.end, &node_id.fqn()),

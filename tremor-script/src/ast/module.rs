@@ -321,6 +321,70 @@ impl Module {
     }
 }
 
+/// Get something from a module manager
+pub trait Get<Target> {
+    fn get(&self, m: Index, id: &str) -> Option<Target>;
+    fn get_tpl(&self, (m, id): (Index, &str)) -> Option<Target> {
+        self.get(m, id)
+    }
+}
+
+/// Get something from a module
+
+impl<'target, Target> Get<Target> for ModuleManager
+where
+    ModuleContent<'target>: GetModule<Target>,
+    Target: Clone,
+{
+    fn get(&self, module: Index, name: &str) -> Option<Target> {
+        self.modules.get(module.0)?.content.get(name)
+    }
+}
+
+pub trait GetModule<Target> {
+    fn get(&self, id: &str) -> Option<Target>;
+}
+
+impl<'module> GetModule<Const<'module>> for ModuleContent<'module> {
+    fn get(&self, name: &str) -> Option<Const<'module>> {
+        self.consts.get(name).cloned()
+    }
+}
+impl<'module> GetModule<ConnectorDefinition<'module>> for ModuleContent<'module> {
+    fn get(&self, name: &str) -> Option<ConnectorDefinition<'module>> {
+        self.connectors.get(name).cloned()
+    }
+}
+impl<'module> GetModule<ScriptDefinition<'module>> for ModuleContent<'module> {
+    fn get(&self, name: &str) -> Option<ScriptDefinition<'module>> {
+        self.scripts.get(name).cloned()
+    }
+}
+
+impl<'module> GetModule<OperatorDefinition<'module>> for ModuleContent<'module> {
+    fn get(&self, name: &str) -> Option<OperatorDefinition<'module>> {
+        self.operators.get(name).cloned()
+    }
+}
+
+impl<'module> GetModule<FnDecl<'module>> for ModuleContent<'module> {
+    fn get(&self, name: &str) -> Option<FnDecl<'module>> {
+        self.functions.get(name).cloned()
+    }
+}
+
+impl<'module> GetModule<PipelineDefinition<'module>> for ModuleContent<'module> {
+    fn get(&self, name: &str) -> Option<PipelineDefinition<'module>> {
+        self.pipelines.get(name).cloned()
+    }
+}
+
+impl<'module> GetModule<FlowDefinition<'module>> for ModuleContent<'module> {
+    fn get(&self, name: &str) -> Option<FlowDefinition<'module>> {
+        self.flows.get(name).cloned()
+    }
+}
+
 /// Global Module Manager
 #[derive(Default, Debug)]
 pub struct ModuleManager {
@@ -331,21 +395,30 @@ pub struct ModuleManager {
 // FIXME: unwraps
 impl ModuleManager {
     /// Addas a module path
-    pub fn add_path<S: ToString>(path: S) {
-        MODULES.write().unwrap().path.add(path);
+    pub fn add_path<S: ToString>(path: S) -> Result<()> {
+        MODULES.write()?.path.add(path);
+        Ok(())
     }
     /// shows modules
     pub(crate) fn modules(&self) -> &[Module] {
         &self.modules
     }
 
-    pub(crate) fn find_module(mut root: Index, nest: &[String]) -> Option<Index> {
-        let ms = MODULES.read().unwrap();
+    pub(crate) fn find_module(mut root: Index, nest: &[String]) -> Result<Option<Index>> {
+        let ms = MODULES.read()?;
         for k in nest {
-            let m = ms.modules.get(root.0)?;
-            root = *m.modules.get(k)?;
+            let m = if let Some(m) = ms.modules.get(root.0) {
+                m
+            } else {
+                return Ok(None);
+            };
+            root = if let Some(m) = m.modules.get(k) {
+                *m
+            } else {
+                return Ok(None);
+            };
         }
-        Some(root)
+        Ok(Some(root))
     }
 
     pub(crate) fn load(node_id: &NodeId) -> Result<Index> {
@@ -378,65 +451,20 @@ impl ModuleManager {
             Ok(Index(n))
         }
     }
-    pub(crate) fn get_flow(module: Index, name: &str) -> Option<FlowDefinition<'static>> {
-        let ms = MODULES.read().unwrap();
-        ms.modules().get(module.0)?.content.flows.get(name).cloned()
-    }
-    pub(crate) fn get_operator(module: Index, name: &str) -> Option<OperatorDefinition<'static>> {
-        let ms = MODULES.read().unwrap();
-        ms.modules()
-            .get(module.0)?
-            .content
-            .operators
-            .get(name)
-            .cloned()
-    }
-    pub(crate) fn get_script(module: Index, name: &str) -> Option<ScriptDefinition<'static>> {
-        let ms = MODULES.read().unwrap();
-        ms.modules()
-            .get(module.0)?
-            .content
-            .scripts
-            .get(name)
-            .cloned()
-    }
 
-    pub(crate) fn get_const(module: Index, name: &str) -> Option<Const<'static>> {
+    pub(crate) fn get<Target>(module: Index, name: &str) -> Option<Target>
+    where
+        ModuleManager: Get<Target>,
+    {
         let ms = MODULES.read().unwrap();
-        ms.modules()
-            .get(module.0)?
-            .content
-            .consts
-            .get(name)
-            .cloned()
+        ms.get(module, name)
     }
-    pub(crate) fn get_connector(module: Index, name: &str) -> Option<ConnectorDefinition<'static>> {
+    pub(crate) fn get_tpl<Target>(tpl: (Index, &str)) -> Option<Target>
+    where
+        ModuleManager: Get<Target>,
+    {
         let ms = MODULES.read().unwrap();
-        ms.modules()
-            .get(module.0)?
-            .content
-            .connectors
-            .get(name)
-            .cloned()
-    }
-    pub(crate) fn get_pipeline(module: Index, name: &str) -> Option<PipelineDefinition<'static>> {
-        let ms = MODULES.read().unwrap();
-        ms.modules()
-            .get(module.0)?
-            .content
-            .pipelines
-            .get(name)
-            .cloned()
-    }
-
-    pub(crate) fn get_function(module: Index, name: &str) -> Option<FnDecl<'static>> {
-        let ms = MODULES.read().unwrap();
-        ms.modules()
-            .get(module.0)?
-            .content
-            .functions
-            .get(name)
-            .cloned()
+        ms.get_tpl(tpl)
     }
 }
 
@@ -446,7 +474,7 @@ mod test {
 
     #[test]
     fn load_twice() -> Result<()> {
-        ModuleManager::add_path("./lib");
+        ModuleManager::add_path("./lib")?;
         let id1 = ModuleManager::load(&NodeId {
             id: "string".to_string(),
             module: vec!["std".into()],
@@ -460,7 +488,7 @@ mod test {
     }
     #[test]
     fn load_nested() -> Result<()> {
-        ModuleManager::add_path("./tests/modules");
+        ModuleManager::add_path("./tests/modules")?;
         ModuleManager::load(&NodeId {
             id: "outside".to_string(),
             module: vec![],
@@ -469,7 +497,7 @@ mod test {
     }
     #[test]
     fn load_from_id() -> Result<()> {
-        ModuleManager::add_path("./lib");
+        ModuleManager::add_path("./lib")?;
 
         ModuleManager::load(&NodeId {
             id: "string".to_string(),

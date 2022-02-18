@@ -43,10 +43,8 @@ macro_rules! test_cases {
                 let query_file = concat!("tests/queries/", stringify!($file), "/query.trickle");
                 let in_file = concat!("tests/queries/", stringify!($file), "/in");
                 let out_file = concat!("tests/queries/", stringify!($file), "/out");
-
-                ModuleManager::add_path("tremor-script/lib");
-                ModuleManager::add_path(query_dir);
-
+                ModuleManager::add_path("tremor-script/lib")?;
+                ModuleManager::add_path(query_dir)?;
 
                 println!("Loading query: {}", query_file);
                 let mut file = file::open(query_file)?;

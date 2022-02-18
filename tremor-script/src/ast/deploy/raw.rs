@@ -393,7 +393,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         let params = self.params.up(helper)?;
         let decl = match self.kind {
             CreateKind::Connector => {
-                if let Some(artefact) = helper.get_connector(&target) {
+                if let Some(artefact) = helper.get(&target)? {
                     CreateTargetDefinition::Connector(artefact)
                 } else {
                     return Err(ErrorKind::DeployArtefactNotDefined(
@@ -406,7 +406,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
                 }
             }
             CreateKind::Pipeline => {
-                if let Some(artefact) = helper.get_pipeline(&target) {
+                if let Some(artefact) = helper.get(&target)? {
                     CreateTargetDefinition::Pipeline(artefact)
                 } else {
                     return Err(ErrorKind::DeployArtefactNotDefined(
@@ -453,7 +453,7 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
         let node_id = NodeId::new(&self.id.id, &[]); // FIXME
         let target = self.target.clone().with_prefix(&[]); // FIXME
 
-        let mut defn = if let Some(artefact) = helper.get_flow_decls(&target) {
+        let mut defn = if let Some(artefact) = helper.get::<FlowDefinition>(&target)? {
             artefact.clone()
         } else {
             return Err(ErrorKind::DeployArtefactNotDefined(

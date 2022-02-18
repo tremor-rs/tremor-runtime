@@ -28,11 +28,17 @@ use hashbrown::HashMap;
 use std::{borrow::Borrow, collections::HashSet};
 use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
-use tremor_script::ast::{self, ConnectStmt, DeployEndpoint};
+use tremor_script::ast::{self, ConnectStmt, DeployEndpoint, DeployFlow};
 
 /// unique identifier of a flow instance within a tremor instance
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize)]
 pub struct FlowId(pub String);
+
+impl From<&DeployFlow<'_>> for FlowId {
+    fn from(f: &DeployFlow) -> Self {
+        FlowId(f.instance_alias.id().to_string())
+    }
+}
 
 impl From<&str> for FlowId {
     fn from(e: &str) -> Self {
