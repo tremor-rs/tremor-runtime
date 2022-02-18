@@ -68,7 +68,6 @@ mod tests {
 
     use super::*;
     use crate::ast::walkers::ExprWalker;
-    use crate::path::ModulePath;
     use crate::registry::registry;
     use tremor_value::prelude::*;
 
@@ -90,12 +89,11 @@ mod tests {
     }
 
     fn test_walk<'script>(input: &'script str, expected_42s: usize) -> Result<()> {
-        let module_path = ModulePath::load();
         let mut registry = registry();
         crate::std_lib::load(&mut registry);
         let script_script: crate::script::Script =
-            crate::script::Script::parse(&module_path, "test", input.to_owned(), &registry)?;
-        let script: &crate::ast::Script = script_script.script.suffix();
+            crate::script::Script::parse(input.to_owned(), &registry)?;
+        let script: &crate::ast::Script = &script_script.script;
         let mut visitor = Find42Visitor::default();
         for expr in &script.exprs {
             let mut expr = expr.clone();

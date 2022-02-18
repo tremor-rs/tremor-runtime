@@ -64,7 +64,7 @@ where
     ///
     /// # Errors
     /// if the deployment can not be parsed
-    pub fn parse(script: String, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
+    pub fn parse<S: ToString>(script: S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
         let mut warnings = BTreeSet::new();
 
         let (aid, script) = Arena::insert(script)?;
@@ -157,11 +157,9 @@ mod test {
     fn parse(query: &str) {
         let reg = crate::registry();
         let aggr_reg = crate::aggr_registry();
-        let module_path = crate::path::load();
-        let cus = vec![];
-        if let Err(e) = Deploy::parse(&module_path, "test.troy", query, cus, &reg, &aggr_reg) {
-            eprintln!("{}", e.error());
-            assert!(false)
+        if let Err(e) = Deploy::parse(query, &reg, &aggr_reg) {
+            eprintln!("{}", e);
+            assert!(false, "error during parsing")
         } else {
             assert!(true)
         }

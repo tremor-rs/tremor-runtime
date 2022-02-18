@@ -122,20 +122,14 @@ lazy_static! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::errors::Result;
     use crate::interpreter::AggrType;
-    use crate::lexer::TokenSpan;
-    use crate::path::ModulePath;
     use crate::prelude::*;
     use halfbrown::hashmap;
 
     macro_rules! eval {
         ($src:expr, $expected:expr) => {{
-            let _r: Registry = registry();
-            let (aid, src) = Arena::insert($src);
-
             let reg: Registry = registry::registry();
-            let runnable: Script = Script::parse(src, &reg).expect("parse failed");
+            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
             let mut global_map = Value::object();
@@ -158,10 +152,8 @@ mod tests {
 
     macro_rules! eval_global {
         ($src:expr, $expected:expr) => {{
-            let _r: Registry = registry();
-            let (aid, src) = Arena::insert($src);
             let reg: Registry = registry::registry();
-            let runnable: Script = Script::parse(src, &reg).expect("parse failed");
+            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
             let mut global_map = Value::from(hashmap! {});
@@ -178,10 +170,8 @@ mod tests {
 
     macro_rules! eval_event {
         ($src:expr, $expected:expr) => {{
-            let _r: Registry = registry();
-            let (aid, src) = Arena::insert($src);
             let reg: Registry = registry::registry();
-            let runnable: Script = Script::parse(src, &reg).expect("parse failed");
+            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
             let mut global_map = Value::from(hashmap! {});
