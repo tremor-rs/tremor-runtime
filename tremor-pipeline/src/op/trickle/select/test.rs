@@ -203,12 +203,11 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
     let query = tremor_script::query::Query::parse(query_str, &reg, &aggr_reg)?;
     let mut window_decls: Vec<WindowDefinition<'_>> = query
         .query
-        .stmts
-        .iter()
-        .filter_map(|stmt| match stmt {
-            Stmt::WindowDefinition(wd) => Some(wd.as_ref().clone()),
-            _ => None,
-        })
+        .scope
+        .content
+        .windows
+        .values()
+        .cloned()
         .collect();
     let stmt = query
         .query
@@ -217,7 +216,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
         .filter_map(as_select)
         .next()
         .cloned()
-        .ok_or_else(|| Error::from("Invalid query, expected only 1 select statement"))?;
+        .ok_or_else(|| Error::from("Invalid query, expected 1 select statement"))?;
     let windows: Vec<(String, window::Impl)> = window_decls
         .iter_mut()
         .enumerate()
@@ -538,11 +537,11 @@ fn count_tilt() -> Result<()> {
         r#"
         define window w15s from tumbling
         with
-          interval = 15 * 1000000000
+          interval = 15 * 1_000_000_000
         end;
         define window w30s from tumbling
         with
-          interval = 30 * 1000000000
+          interval = 30 * 1_000_000_000
         end;
         select aggr::stats::count() from in [w15s, w30s] into out;
         "#,
@@ -558,7 +557,7 @@ fn count_tilt() -> Result<()> {
     assert_eq!("out", out);
     assert_eq!(*event.data.suffix().value(), 2);
     // Add another event prior to 30
-    assert!(try_enqueue(&mut op, test_event(16))?.is_none());
+    assert!(try_enqueue(&mut op, test_event(17))?.is_none());
     // This emits only the initial event since the rollup
     // will only be emitted once it gets the first event
     // of the next window
@@ -794,8 +793,8 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
         &reg,
         &aggr_reg,
     )?;
-    let window_decl = match q.query.stmts.first() {
-        Some(Stmt::WindowDefinition(decl)) => decl.as_ref(),
+    let window_decl = match q.query.scope.content.windows.values().next() {
+        Some(decl) => decl,
         other => return Err(format!("Didnt get a window decl, got: {:?}", other).into()),
     };
     let mut params = halfbrown::HashMap::with_capacity(1);

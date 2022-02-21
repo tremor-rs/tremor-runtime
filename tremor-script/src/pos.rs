@@ -23,9 +23,7 @@ pub use codespan::{
     LineOffset,
 };
 /// A location in a source file
-#[derive(
-    Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd, Serialize, Deserialize,
-)]
+#[derive(Copy, Clone, Default, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct Location {
     /// The Line
     pub(crate) line: usize,
@@ -35,6 +33,12 @@ pub struct Location {
     pub(crate) absolute: usize,
     /// Absolute location in bytes starting from 0
     pub(crate) aid: arena::Index,
+}
+
+impl std::fmt::Debug for Location {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{} [{}]", self.line, self.column, self.aid)
+    }
 }
 
 impl std::ops::Sub for Location {
@@ -72,12 +76,16 @@ pub struct Spanned<'tkn> {
 }
 
 /// A span in a file between two locations
-#[derive(
-    Copy, Clone, Default, Eq, PartialEq, Debug, Hash, Ord, PartialOrd, Serialize, Deserialize,
-)]
+#[derive(Copy, Clone, Default, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct Span {
     pub(crate) start: Location,
     pub(crate) end: Location,
+}
+
+impl std::fmt::Debug for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}-{:?}", self.start, self.end)
+    }
 }
 
 impl Span {
