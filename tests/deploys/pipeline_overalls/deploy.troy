@@ -1,4 +1,5 @@
-mod test with
+define flow test
+flow
   define pipeline identity
   args
     snot = "1",
