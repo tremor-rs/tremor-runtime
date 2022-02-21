@@ -35,6 +35,8 @@ use crate::{
         walkers::{ImutExprWalker, QueryWalker},
         Consts, Ident,
     },
+    errors::{Error, Kind as ErrorKind},
+    lexer::Span,
     ModuleManager,
 };
 use crate::{
@@ -159,8 +161,21 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 Ok(None)
             }
             StmtRaw::PipelineCreate(stmt) => Ok(Some(Stmt::PipelineCreate(stmt.up(helper)?))),
-            StmtRaw::Use(UseRaw { alias, module, .. }) => {
-                let mid = ModuleManager::load(&module)?;
+            StmtRaw::Use(UseRaw {
+                alias,
+                module,
+                start,
+                end,
+            }) => {
+                let range = Span::from((start, end));
+                let mid = ModuleManager::load(&module).map_err(|err| match err {
+                    Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
+                        ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
+                        state,
+                    ),
+                    _ => err,
+                })?;
+
                 let alias = alias.unwrap_or_else(|| module.id.clone());
                 helper.scope().add_module_alias(alias, mid);
                 Ok(None)

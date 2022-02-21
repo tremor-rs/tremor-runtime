@@ -27,7 +27,7 @@ use crate::{
     arena::{self, Arena},
     errors::Result,
     impl_expr_raw,
-    lexer::{Location, Tokenizer},
+    lexer::{Location, Span, Tokenizer},
     path::ModulePath,
     FN_REGISTRY,
 };
@@ -394,6 +394,12 @@ pub struct ModuleManager {
 
 // FIXME: unwraps
 impl ModuleManager {
+    /// removes all module load locations
+    pub fn clear_path() -> Result<()> {
+        MODULES.write()?.path.clear();
+        Ok(())
+    }
+
     /// Addas a module path
     pub fn add_path<S: ToString>(path: S) -> Result<()> {
         MODULES.write()?.path.add(path);
@@ -422,12 +428,15 @@ impl ModuleManager {
     }
 
     pub(crate) fn load(node_id: &NodeId) -> Result<Index> {
-        let p = MODULES
-            .read()
-            .unwrap()
-            .path
-            .resolve_id(node_id)
-            .ok_or_else(|| format!("module {} not found", node_id))?;
+        let path = &MODULES.read().unwrap().path;
+        let p = path.resolve_id(node_id).ok_or_else(|| {
+            crate::errors::ErrorKind::ModuleNotFound(
+                Span::default(),
+                Span::default(),
+                node_id.fqn(),
+                path.mounts.clone(),
+            )
+        })?;
         let src = std::fs::read_to_string(&p)?;
         let id = ModuleId::from(src.as_bytes());
 
