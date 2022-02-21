@@ -17,7 +17,7 @@ use futures::stream::TryStreamExt;
 use async_std::channel::{self, Receiver, Sender};
 use async_std::task::{self, JoinHandle};
 
-use super::s3_auth;
+use super::auth;
 use aws_sdk_s3 as s3;
 use s3::model::Object;
 use s3::ByteStream;
@@ -25,6 +25,7 @@ use s3::Client as S3Client;
 
 const MINCHUNKSIZE: i64 = 8 * 1024 * 1024; // 8 MBs
 
+const CONNECTOR_TYPE: ConnectorType = ConnectorType::from("s3-reader");
 const URL_SCHEME: &str = "tremor-s3";
 
 #[derive(Deserialize, Debug, Default)]
@@ -77,7 +78,7 @@ pub(crate) struct Builder {}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
-        "s3-source".into()
+        CONNECTOR_TYPE
     }
 
     async fn from_config(
@@ -123,7 +124,11 @@ impl Connector for S3SourceConnector {
     }
 
     async fn connect(&mut self, ctx: &ConnectorContext, _attemp: &Attempt) -> Result<bool> {
-        let client = s3_auth::get_client(
+        // cancelling handles from previous connection, if any
+        for handle in self.handles.drain(..) {
+            handle.cancel().await;
+        }
+        let client = auth::get_client(
             self.config.aws_region.clone(),
             self.config.endpoint.as_ref(),
         )
@@ -175,6 +180,14 @@ impl Connector for S3SourceConnector {
 
     fn codec_requirements(&self) -> CodecReq {
         CodecReq::Required
+    }
+
+    async fn on_stop(&mut self, _ctx: &ConnectorContext) -> Result<()> {
+        // stop all handles
+        for handle in self.handles.drain(..) {
+            handle.cancel().await;
+        }
+        Ok(())
     }
 }
 

@@ -12,6 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod s3_auth;
-pub(crate) mod s3;
-pub(crate) mod s3_source;
+mod auth;
+pub(crate) mod writer;
+pub(crate) mod reader;
