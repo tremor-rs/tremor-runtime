@@ -36,6 +36,11 @@ impl Default for ModulePath {
 }
 
 impl ModulePath {
+    /// removes all module path
+    pub fn clear(&mut self) {
+        self.mounts.clear()
+    }
+
     /// Adds to the module path
     pub fn add<S: ToString>(&mut self, path: S) {
         let p = path.to_string();

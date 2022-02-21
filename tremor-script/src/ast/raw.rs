@@ -30,7 +30,9 @@ use crate::{
         RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
         TestExpr, TuplePattern, UnaryExpr, UnaryOpKind,
     },
-    errors::{err_generic, error_generic, error_missing_effector, Kind as ErrorKind, Result},
+    errors::{
+        err_generic, error_generic, error_missing_effector, Error, Kind as ErrorKind, Result,
+    },
     impl_expr_exraw, impl_expr_no_lt, impl_expr_raw,
     pos::{Location, Span},
     prelude::*,
@@ -86,9 +88,16 @@ impl<'script> ScriptRaw<'script> {
         let meta_name = "<script>".to_string();
         let mid = NodeMeta::new_box_with_name(start, end, &meta_name);
         for e in self.exprs {
+            let range = e.meta().range;
             match e {
                 TopLevelExprRaw::Use(UseRaw { alias, module, .. }) => {
-                    let mid = ModuleManager::load(dbg!(&module))?;
+                    let mid = ModuleManager::load(&module).map_err(|err| match err {
+                        Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
+                            ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
+                            state,
+                        ),
+                        _ => err,
+                    })?;
                     let alias = alias.unwrap_or_else(|| module.id.clone());
                     helper.scope().add_module_alias(dbg!(alias), mid);
                 }
