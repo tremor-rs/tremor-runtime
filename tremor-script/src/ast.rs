@@ -100,10 +100,19 @@ pub trait Expression: Clone + std::fmt::Debug + PartialEq + Serialize {
 }
 
 /// Node metadata
-#[derive(Default, Clone, Serialize, Debug, PartialEq, Eq)]
+#[derive(Default, Clone, Serialize, PartialEq, Eq)]
 pub struct NodeMeta {
     range: Span,
     name: Option<String>,
+}
+
+impl std::fmt::Debug for NodeMeta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(name) = &self.name {
+            write!(f, "{name}:")?;
+        }
+        self.range.fmt(f)
+    }
 }
 
 impl NodeMeta {
