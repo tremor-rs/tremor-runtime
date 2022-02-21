@@ -21,13 +21,6 @@ use super::Value;
 use super::{BaseExpr, DeployFlow};
 use super::{ConnectStmt, DeployEndpoint};
 use super::{ConnectorDefinition, CreateTargetDefinition};
-use crate::ast::{
-    query::raw::{
-        CreationalWithRaw, DefinitioalArgsRaw, DefinitioalArgsWithRaw, PipelineDefinitionRaw,
-    },
-    visitors::ConstFolder,
-    NodeMeta,
-};
 use crate::ast::{raw::IdentRaw, walkers::ImutExprWalker};
 use crate::errors::{Kind as ErrorKind, Result};
 use crate::impl_expr_raw;
@@ -40,6 +33,17 @@ use crate::{
         DeployStmt, Helper, Script, Upable,
     },
     ModuleManager,
+};
+use crate::{
+    ast::{
+        query::raw::{
+            CreationalWithRaw, DefinitioalArgsRaw, DefinitioalArgsWithRaw, PipelineDefinitionRaw,
+        },
+        visitors::ConstFolder,
+        NodeMeta,
+    },
+    errors::Error,
+    lexer::Span,
 };
 use beef::Cow;
 use halfbrown::HashMap;
@@ -125,8 +129,21 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
     type Target = Option<DeployStmt<'script>>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
-            DeployStmtRaw::Use(UseRaw { alias, module, .. }) => {
-                let mid = ModuleManager::load(dbg!(&module))?;
+            DeployStmtRaw::Use(UseRaw {
+                alias,
+                module,
+                start,
+                end,
+            }) => {
+                let range = Span::from((start, end));
+                let mid = ModuleManager::load(&module).map_err(|err| match err {
+                    Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
+                        ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
+                        state,
+                    ),
+                    _ => err,
+                })?;
+
                 let alias = alias.unwrap_or_else(|| module.id.clone());
                 helper.scope().add_module_alias(dbg!(alias), mid);
                 Ok(None)

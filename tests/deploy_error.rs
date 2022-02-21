@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use std::io::prelude::*;
+use std::{io::prelude::*, sync::Mutex};
 use tremor_common::file;
 use tremor_script::deploy::Deploy;
 use tremor_script::errors::*;
@@ -22,6 +22,11 @@ fn parse<'script>(deploy: &str) -> tremor_script::Result<Deploy> {
     let aggr_reg = tremor_script::aggr_registry();
     let reg = tremor_script::registry::registry();
     Deploy::parse(deploy, &reg, &aggr_reg)
+}
+// Since we need to run one test at a time as we do test against module path
+// we have to lineralize them :(
+lazy_static::lazy_static! {
+    static ref UNIQUE: Mutex<()> = Mutex::new(());
 }
 
 macro_rules! test_cases {
@@ -37,8 +42,10 @@ macro_rules! test_cases {
                 let deploy_dir = concat!("tests/deploy_errors/", stringify!($file), "/").to_string();
                 let deploy_file = concat!("tests/deploy_errors/", stringify!($file), "/deploy.troy");
                 let err_file = concat!("tests/deploy_errors/", stringify!($file), "/error.txt");
-                ModuleManager::add_path("tremor-script/lib")?;
+                let l = UNIQUE.lock();
+                dbg!(ModuleManager::clear_path()?);
                 ModuleManager::add_path(deploy_dir)?;
+                ModuleManager::add_path("tremor-script/lib")?;
 
 
                 println!("Loading deployment: {}", deploy_file);
@@ -70,6 +77,7 @@ macro_rules! test_cases {
                         assert!(false);
                     }
                 };
+
                 Ok(())
             }
         )*
