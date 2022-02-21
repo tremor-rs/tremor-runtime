@@ -46,8 +46,8 @@ macro_rules! test_cases {
 
                     match parse(&contents) {
                         Ok(_) => (),
-                        _otherwise => {
-                            println!("Expected valid deployment file, compile phase, but got an unexpected error");
+                        otherwise => {
+                            println!("Expected valid deployment file, compile phase, but got an unexpected error: {:?}", otherwise);
                             assert!(false);
                         }
                     }
@@ -64,5 +64,4 @@ test_cases!(
     pipeline_args,
     pipeline_with,
     pipeline_overalls, // TODO: Work through args and config
-    doc_comments,
 );
