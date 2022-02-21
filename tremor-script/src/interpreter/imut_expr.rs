@@ -767,7 +767,13 @@ impl<'script> ImutExpr<'script> {
             .aggrs
             .get(expr.aggr_id)
             .map(|a| &a.invocable)
-            .ok_or_else(|| { error_oops_err(self, 0xdead_0012, "Unknown aggregate function") }));
+            .ok_or_else(|| {
+                error_oops_err(
+                    self,
+                    0xdead_0012,
+                    &format!("Unknown aggregate function {}", expr.aggr_id),
+                )
+            }));
         // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1035
         #[allow(mutable_transmutes, clippy::transmute_ptr_to_ptr)]
         // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1035
