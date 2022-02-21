@@ -17,10 +17,12 @@ use std::{mem, error::Error as StdError};
 use value_trait::ValueAccess;
 
 
-use super::s3_auth;
+use super::auth;
 use aws_sdk_s3 as s3;
 use s3::model::{CompletedMultipartUpload, CompletedPart};
 use s3::Client as S3Client;
+
+const CONNECTOR_TYPE: ConnectorType = ConnectorType::from("s3-writer");
 
 const FIVEMBS: usize = 5 * 1024 * 1024 + 100; // Some extra bytes to keep aws happy.
 
@@ -49,7 +51,7 @@ pub(crate) struct Builder {}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
-        "s3".into()
+        CONNECTOR_TYPE
     }
 
     async fn from_config(
@@ -136,7 +138,7 @@ struct S3Sink {
 #[async_trait::async_trait]
 impl Sink for S3Sink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let client = s3_auth::get_client(
+        let client = auth::get_client(
             self.config.aws_region.clone(),
             self.config.endpoint.as_ref(),
         )
