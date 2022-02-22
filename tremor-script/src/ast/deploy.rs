@@ -22,7 +22,7 @@ use super::{
 use super::{node_id::NodeId, PipelineDefinition};
 use super::{HashMap, Value};
 use crate::ast::walkers::DeployWalker;
-use crate::{errors::Result, impl_expr_mid, impl_fqn};
+use crate::{errors::Result, impl_expr, impl_fqn};
 pub(crate) mod raw;
 
 /// A Tremor deployment
@@ -107,7 +107,7 @@ pub struct ConnectorDefinition<'script> {
     #[serde(skip)]
     pub docs: Option<String>,
 }
-impl_expr_mid!(ConnectorDefinition);
+impl_expr!(ConnectorDefinition);
 impl_fqn!(ConnectorDefinition);
 
 type DeployStmts<'script> = Vec<DeployStmt<'script>>;
@@ -213,7 +213,7 @@ pub struct FlowDefinition<'script> {
     #[serde(skip)]
     pub docs: Option<String>,
 }
-impl_expr_mid!(FlowDefinition);
+impl_expr!(FlowDefinition);
 impl_fqn!(FlowDefinition);
 
 impl<'script> FlowDefinition<'script> {
@@ -261,7 +261,7 @@ pub struct CreateStmt<'script> {
     /// Atomic unit of deployment
     pub defn: CreateTargetDefinition<'script>,
 }
-impl_expr_mid!(CreateStmt);
+impl_expr!(CreateStmt);
 impl crate::ast::node_id::BaseRef for CreateStmt<'_> {
     fn fqn(&self) -> String {
         self.instance_alias.fqn()
@@ -323,7 +323,7 @@ pub struct DeployFlow<'script> {
     #[serde(skip)]
     pub docs: Option<String>,
 }
-impl_expr_mid!(DeployFlow);
+impl_expr!(DeployFlow);
 impl crate::ast::node_id::BaseRef for DeployFlow<'_> {
     fn fqn(&self) -> String {
         self.instance_alias.fqn()

@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::prelude::*;
+use crate::lexer;
 use crate::{arena, errors::Result};
 use crate::{arena::Arena, highlighter::Highlighter};
-use crate::{ast::BaseExpr, lexer};
+use crate::{ast::base_expr::Ranged, prelude::*};
 use crate::{
     ast::{self, helper::Warning, visitors::ConstFolder, walkers::QueryWalker},
     lexer::Tokenizer,

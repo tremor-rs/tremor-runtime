@@ -15,7 +15,7 @@
 mod custom_fn;
 pub use self::custom_fn::CustomFn;
 pub(crate) use self::custom_fn::{RECUR_PTR, RECUR_REF};
-use crate::ast::BaseExpr;
+use crate::ast::base_expr::Ranged;
 use crate::errors::{best_hint, Error, Kind as ErrorKind, Result};
 use crate::utils::hostname as get_hostname;
 use crate::Value;
@@ -263,7 +263,7 @@ impl From<Error> for FunctionError {
 
 impl FunctionError {
     /// Turns a function error into a tremor script error
-    pub fn into_err<O: BaseExpr, I: BaseExpr>(
+    pub fn into_err<O: Ranged, I: Ranged>(
         self,
         outer: &O,
         inner: &I,

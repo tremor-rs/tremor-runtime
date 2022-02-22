@@ -14,9 +14,9 @@
 
 use crate::{
     ast::{
-        binary::extend_bytes_from_value, BaseExpr, BinExpr, Comprehension, ExprPath, ImutExpr,
-        Invoke, InvokeAggr, Literal, LocalPath, Match, Merge, Patch, Path, Recur, ReservedPath,
-        Segment, UnaryExpr,
+        base_expr::Ranged, binary::extend_bytes_from_value, BaseExpr, BinExpr, Comprehension,
+        ExprPath, ImutExpr, Invoke, InvokeAggr, Literal, LocalPath, Match, Merge, Patch, Path,
+        Recur, ReservedPath, Segment, UnaryExpr,
     },
     errors::Kind as ErrorKind,
     errors::{

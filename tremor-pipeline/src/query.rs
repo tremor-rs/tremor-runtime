@@ -34,7 +34,7 @@ use tremor_common::ids::OperatorIdGen;
 use tremor_script::{
     arena::Arena,
     ast::{
-        self, BaseExpr, Helper, Ident, OperatorDefinition, PipelineCreate, PipelineDefinition,
+        self, Helper, Ident, OperatorDefinition, PipelineCreate, PipelineDefinition,
         ScriptDefinition, SelectType, Stmt, WindowDefinition, WindowKind,
     },
     errors::{
@@ -43,7 +43,7 @@ use tremor_script::{
     },
     highlighter::{Dumb, Highlighter},
     prelude::*,
-    AggrRegistry, Registry, Value,
+    AggrRegistry, NodeMeta, Registry, Value,
 };
 
 const BUILTIN_NODES: [(Cow<'static, str>, NodeKind); 3] = [
@@ -57,14 +57,24 @@ struct InputPort {
     pub id: Cow<'static, str>,
     pub port: Cow<'static, str>,
     pub had_port: bool,
-    pub location: tremor_script::pos::Span,
+    pub mid: Box<NodeMeta>,
+}
+impl BaseExpr for InputPort {
+    fn meta(&self) -> &NodeMeta {
+        &self.mid
+    }
 }
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct OutputPort {
     pub id: Cow<'static, str>,
     pub port: Cow<'static, str>,
     pub had_port: bool,
-    pub location: tremor_script::pos::Span,
+    pub mid: Box<NodeMeta>,
+}
+impl BaseExpr for OutputPort {
+    fn meta(&self) -> &NodeMeta {
+        &self.mid
+    }
 }
 
 fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
@@ -72,7 +82,7 @@ fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
         id: common_cow(&port.0.id),
         port: common_cow(&port.1.id),
         had_port: true,
-        location: port.0.extent(),
+        mid: Box::new(port.0.meta().clone()),
     }
 }
 
@@ -81,7 +91,7 @@ fn resolve_output_port(port: &(Ident, Ident)) -> OutputPort {
         id: common_cow(&port.0.id),
         port: common_cow(&port.1.id),
         had_port: true,
-        location: port.0.extent(),
+        mid: Box::new(port.0.meta().clone()),
     }
 }
 
@@ -280,13 +290,13 @@ fn to_executable_graph(
                     id: format!("select_{}", select_num).into(),
                     port: IN,
                     had_port: false,
-                    location: s.extent(),
+                    mid: Box::new(s.meta().clone()),
                 };
                 let select_out = OutputPort {
                     id: format!("select_{}", select_num,).into(),
                     port: OUT,
                     had_port: false,
-                    location: s.extent(),
+                    mid: Box::new(s.meta().clone()),
                 };
                 select_num += 1;
                 let mut from = resolve_output_port(&s.from);
@@ -545,12 +555,12 @@ fn to_executable_graph(
     // Link graph edges
     for (from, tos) in &links {
         for to in tos {
-            let from_idx = *nodes.get(&from.id).ok_or_else(|| {
-                query_stream_not_defined_err(&from.location, &from.location, from.id.to_string())
-            })?;
-            let to_idx = *nodes.get(&to.id).ok_or_else(|| {
-                query_stream_not_defined_err(&to.location, &to.location, to.id.to_string())
-            })?;
+            let from_idx = *nodes
+                .get(&from.id)
+                .ok_or_else(|| query_stream_not_defined_err(from, from, from.id.to_string()))?;
+            let to_idx = *nodes
+                .get(&to.id)
+                .ok_or_else(|| query_stream_not_defined_err(to, to, to.id.to_string()))?;
 
             let from_tpl = (from_idx, from.port.clone());
             let to_tpl = (to_idx, to.port.clone());

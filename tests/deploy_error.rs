@@ -77,7 +77,7 @@ macro_rules! test_cases {
                         assert!(false);
                     }
                 };
-
+                drop(l);
                 Ok(())
             }
         )*

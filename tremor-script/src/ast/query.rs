@@ -23,12 +23,12 @@ use super::{
     raw::{IdentRaw, ImutExprRaw, LiteralRaw},
     visitors::{ArgsRewriter, ConstFolder},
     walkers::QueryWalker,
-    EventPath, HashMap, Helper, Ident, ImutExpr, InvokeAggrFn, Location, NodeMeta, Path, Result,
-    Script, Serialize, Stmts, Upable, Value,
+    EventPath, HashMap, Helper, Ident, ImutExpr, InvokeAggrFn, NodeMeta, Path, Result, Script,
+    Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
 use crate::{ast::walkers::ImutExprWalker, errors::Error};
-use crate::{impl_expr_mid, impl_fqn};
+use crate::{impl_expr, impl_fqn};
 use raw::WindowDefnRaw;
 use simd_json::{Builder, Mutable};
 
@@ -44,9 +44,9 @@ pub struct Query<'script> {
     /// definitions
     pub scope: Scope<'script>,
     /// metadata
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr_mid!(Query);
+impl_expr!(Query);
 
 /// Query statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -176,7 +176,7 @@ pub struct OperatorDefinition<'script> {
     /// Parameters for the operator
     pub params: DefinitioalArgsWith<'script>,
 }
-impl_expr_mid!(OperatorDefinition);
+impl_expr!(OperatorDefinition);
 impl_fqn!(OperatorDefinition);
 
 /// An operator creation
@@ -191,7 +191,7 @@ pub struct OperatorCreate<'script> {
     /// parameters of the instance
     pub params: CreationalWith<'script>,
 }
-impl_expr_mid!(OperatorCreate);
+impl_expr!(OperatorCreate);
 
 /// A script declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -204,7 +204,7 @@ pub struct ScriptDefinition<'script> {
     /// The script itself
     pub script: Script<'script>,
 }
-impl_expr_mid!(ScriptDefinition);
+impl_expr!(ScriptDefinition);
 impl_fqn!(ScriptDefinition);
 
 /// A script creation
@@ -219,7 +219,7 @@ pub struct ScriptCreate<'script> {
     /// Parameters of the script statement
     pub params: CreationalWith<'script>,
 }
-impl_expr_mid!(ScriptCreate);
+impl_expr!(ScriptCreate);
 
 /// A pipeline declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -259,15 +259,13 @@ impl<'script> PipelineDefinition<'script> {
                 .map(|(k, v)| {
                     Ok((
                         IdentRaw {
-                            start: k.s(),
-                            end: k.e(),
+                            mid: k.mid,
                             id: k.id,
                         },
                         v.map(|v| -> Result<_> {
-                            let start = v.s();
-                            let end = v.e();
+                            let mid = Box::new(v.meta().clone());
                             let value = v.try_into_lit()?;
-                            Ok(ImutExprRaw::Literal(LiteralRaw { start, end, value }))
+                            Ok(ImutExprRaw::Literal(LiteralRaw { mid, value }))
                         })
                         .transpose()?,
                     ))
@@ -279,8 +277,7 @@ impl<'script> PipelineDefinition<'script> {
             config: self.raw_config.clone(),
             stmts: self.raw_stmts.clone(),
             params,
-            start: self.mid.start(),
-            end: self.mid.start(),
+            mid: self.mid.clone(),
         }
         .up_script(helper)?;
         for stmt in &mut query.stmts {
@@ -304,7 +301,7 @@ impl<'script> PipelineDefinition<'script> {
         Ok(())
     }
 }
-impl_expr_mid!(PipelineDefinition);
+impl_expr!(PipelineDefinition);
 impl_fqn!(PipelineDefinition);
 
 /// A pipeline creation
@@ -347,7 +344,7 @@ pub struct WindowDefinition<'script> {
     /// The script of the window
     pub script: Option<Script<'script>>,
 }
-impl_expr_mid!(WindowDefinition);
+impl_expr!(WindowDefinition);
 impl_fqn!(WindowDefinition);
 
 impl<'script> WindowDefinition<'script> {
@@ -381,7 +378,7 @@ pub struct Select<'script> {
     /// Window
     pub windows: Vec<WindowDefnRaw>,
 }
-impl_expr_mid!(Select);
+impl_expr!(Select);
 
 /// A group by clause
 #[derive(Clone, Debug, PartialEq, Serialize)]
