@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeSet;
-
 use crate::{
     common_cow,
     errors::{Error, ErrorKind, Result},
@@ -23,13 +21,15 @@ use crate::{
         prelude::{ERR, IN, OUT},
         trickle::{operator::TrickleOperator, select::Select, simple_select::SimpleSelect, window},
     },
-    ConfigGraph, Connection, NodeConfig, NodeKind, Operator, OperatorNode, PortIndexMap,
-    METRICS_CHANNEL,
+    ConfigGraph, Connection, ExecutableGraph, NodeConfig, NodeKind, NodeMetrics, Operator,
+    OperatorNode, PortIndexMap, State, METRICS_CHANNEL,
 };
 use beef::Cow;
 use halfbrown::HashMap;
 use indexmap::IndexMap;
-use petgraph::algo::is_cyclic_directed;
+use petgraph::{algo::is_cyclic_directed, graph::NodeIndex};
+use std::collections::BTreeSet;
+use std::iter;
 use tremor_common::ids::OperatorIdGen;
 use tremor_script::{
     ast::{
@@ -37,7 +37,7 @@ use tremor_script::{
         ScriptDefinition, SelectType, Stmt, WindowDefinition, WindowKind,
     },
     errors::{
-        pipeline_unknown_port_err, query_node_duplicate_name_err, query_node_reserved_name_err,
+        query_node_duplicate_name_err, query_node_reserved_name_err,
         query_stream_duplicate_name_err, query_stream_not_defined_err,
     },
     highlighter::{Dumb, Highlighter},
@@ -151,10 +151,17 @@ impl Query {
     /// # Errors
     /// if the graph can not be turned into a pipeline
     #[allow(clippy::too_many_lines)]
-    pub fn to_pipe(&self, idgen: &mut OperatorIdGen) -> Result<crate::ExecutableGraph> {
+    pub fn to_pipe(&self, idgen: &mut OperatorIdGen) -> Result<ExecutableGraph> {
         let stmts = self.0.query.stmts.clone();
         to_executable_graph(&self.0, stmts, idgen)
     }
+}
+
+struct InlcudedGraph {
+    prefix: String,
+    graph: ExecutableGraph,
+    from_map: HashMap<String, NodeIndex>,
+    into_map: HashMap<String, NodeIndex>,
 }
 
 /// Turn a query into a executable pipeline graph
@@ -166,10 +173,8 @@ fn to_executable_graph(
     query: &tremor_script::Query,
     stmts: Vec<tremor_script::ast::Stmt<'static>>,
     idgen: &mut OperatorIdGen,
-) -> Result<crate::ExecutableGraph> {
+) -> Result<ExecutableGraph> {
     let query_borrowed = query.query.clone();
-    use crate::{ExecutableGraph, NodeMetrics, State};
-    use std::iter;
     let aggr_reg = tremor_script::aggr_registry();
     let reg = tremor_script::FN_REGISTRY.read()?;
     let mut helper = Helper::new(&reg, &aggr_reg);
@@ -179,10 +184,7 @@ fn to_executable_graph(
     let mut nodes: HashMap<Cow<'static, str>, _> = HashMap::new();
     let mut links: IndexMap<OutputPort, Vec<InputPort>> = IndexMap::new();
     let mut inputs = HashMap::new();
-    let mut outputs: Vec<petgraph::graph::NodeIndex> = Vec::new();
-    // Used to rewrite `pipeline/port` to `internal_stream`
-    let subqueries: HashMap<String, PipelineCreate> = HashMap::new();
-
+    let mut outputs: Vec<NodeIndex> = Vec::new();
     let metric_interval = query_borrowed
         .config
         .get("metrics_interval_s")
@@ -237,30 +239,34 @@ fn to_executable_graph(
 
     let has_builtin_node_name = make_builtin_node_name_checker();
 
+    let mut included_graphs: HashMap<String, InlcudedGraph> = HashMap::new();
     for (i, stmt) in stmts.into_iter().enumerate() {
         match &stmt {
+            // Ignore the definitions
+            Stmt::WindowDefinition(_)
+            | Stmt::ScriptDefinition(_)
+            | Stmt::OperatorDefinition(_)
+            | Stmt::PipelineDefinition(_) => {}
+
             Stmt::SelectStmt(ref select) => {
                 // Rewrite pipeline/port to their internal streams
                 let mut select_rewrite = select.clone();
-                for select_io in vec![&mut select_rewrite.stmt.from, &mut select_rewrite.stmt.into]
-                {
-                    if let Some(subq_stmt) = subqueries.get(&select_io.0.to_string()) {
-                        if let Some(internal_stream) =
-                            subq_stmt.port_stream_map.get(&select_io.1.to_string())
-                        {
-                            select_io.0.id = internal_stream.clone().into();
-                        } else {
-                            let sio = select_io.clone();
-                            return Err(pipeline_unknown_port_err(
-                                &select_rewrite,
-                                &sio.0,
-                                sio.0.to_string(),
-                                sio.1.to_string(),
-                            )
-                            .into());
-                        }
-                    }
+                // Note we connecto from stmt.from to graph.into
+                // and stmt.into to graph.from
+                // FIXME: error handling
+                let (node, port) = &mut select_rewrite.stmt.from;
+                if let Some(g) = included_graphs.get(node.as_str()) {
+                    let name = into_name(&g.prefix, port.as_str());
+                    node.id = name.into();
+                    port.id = "out".into();
                 }
+                let (node, port) = &mut select_rewrite.stmt.into;
+                if let Some(g) = included_graphs.get(node.as_str()) {
+                    let name = from_name(&g.prefix, port.as_str());
+                    node.id = name.into();
+                    port.id = "in".into();
+                }
+
                 let select = select_rewrite;
 
                 let s: &ast::Select<'_> = &select.stmt;
@@ -397,19 +403,17 @@ fn to_executable_graph(
                     idgen.next_id(),
                     supported_operators,
                     Some(&stmt),
-                    Some(HashMap::new()),
+                    None,
                     &mut helper,
                 )?;
                 inputs.insert(name.clone(), id);
                 pipe_ops.insert(id, op);
                 outputs.push(id);
             }
-            Stmt::WindowDefinition(_)
-            | Stmt::ScriptDefinition(_)
-            | Stmt::OperatorDefinition(_)
-            | Stmt::PipelineDefinition(_) => {}
             Stmt::PipelineCreate(s) => {
-                if let Some(mut p) = helper.get::<PipelineDefinition>(&s.node_id)? {
+                if let Some(mut p) = helper.get::<PipelineDefinition>(&s.target)? {
+                    let prefix = prefix_for(&s);
+
                     // FIXME: do args
                     let args = Value::null();
                     p.apply_args(&args, &mut helper)?;
@@ -420,30 +424,66 @@ fn to_executable_graph(
                         warnings: BTreeSet::new(),
                         locals: 0,
                     };
+                    let mut from_map = HashMap::new();
+                    for f in p.from {
+                        let name = into_name(&prefix, f.as_str());
+                        let node = NodeConfig {
+                            id: name.clone(),
+                            kind: NodeKind::Operator,
+                            op_type: "passthrough".to_string(),
+                            ..NodeConfig::default()
+                        };
+                        let id = pipe_graph.add_node(node.clone());
+                        from_map.insert(f.to_string(), id);
+                        nodes.insert(name.clone().into(), id);
+                        let op = node.to_op(
+                            idgen.next_id(),
+                            supported_operators,
+                            Some(&stmt),
+                            None,
+                            &mut helper,
+                        )?;
+                        pipe_ops.insert(id, op);
+                    }
+
+                    let mut into_map = HashMap::new();
+                    for i in p.into {
+                        let name = into_name(&prefix, i.as_str());
+                        let node = NodeConfig {
+                            id: name.clone(),
+                            kind: NodeKind::Operator,
+                            op_type: "passthrough".to_string(),
+                            ..NodeConfig::default()
+                        };
+                        let id = pipe_graph.add_node(node.clone());
+                        into_map.insert(i.to_string(), id);
+                        nodes.insert(name.clone().into(), id);
+                        let op = node.to_op(
+                            idgen.next_id(),
+                            supported_operators,
+                            Some(&stmt),
+                            None,
+                            &mut helper,
+                        )?;
+                        pipe_ops.insert(id, op);
+                    }
+                    let name = s.alias.clone();
                     let stmts = query.query.stmts.clone(); // FIXME this should be in in to_executable graph
 
-                    let _g = dbg!(to_executable_graph(&query, stmts, idgen)?); // FIXME add source
+                    let graph = dbg!(to_executable_graph(&query, stmts, idgen)?); // FIXME add source
 
-                    /*
-                    add placeholder nodes
-                    later inline this graph to the other
-                    */
-                    panic!("inline all the things, this code needs to go away it's too bad");
+                    included_graphs.insert(
+                        name,
+                        InlcudedGraph {
+                            prefix,
+                            graph,
+                            from_map,
+                            into_map,
+                        },
+                    );
                 } else {
-                    return Err("oh no".into());
+                    return Err("FIXME: oh no".into());
                 }
-
-                // // FIXME IMPORTANT - This should really be using the node id with module
-                // if subqueries.contains_key(s.node_id.id()) {
-                //     return Err(pipeline_stmt_duplicate_name_err(
-                //         s,
-                //         s,
-                //         s.node_id.id().to_string(),
-                //         &query.node_meta,
-                //     )
-                //     .into());
-                // }
-                // subqueries.insert(s.node_id.id().to_string(), s.clone());
             }
             Stmt::OperatorCreate(o) => {
                 if nodes.contains_key(&common_cow(o.node_id.id())) {
@@ -529,19 +569,6 @@ fn to_executable_graph(
                 outputs.push(id);
             }
         };
-    }
-
-    // Make sure the subq names don't conlict  with operators or
-    // reserved names in `nodes` (or vice versa).
-    for (id, stmt) in subqueries {
-        if nodes.contains_key(&common_cow(&id)) {
-            let error_func = if has_builtin_node_name(&common_cow(&id)) {
-                query_node_reserved_name_err
-            } else {
-                query_node_duplicate_name_err
-            };
-            return Err(error_func(&stmt, id).into());
-        }
     }
 
     // Link graph edges
@@ -664,11 +691,22 @@ fn to_executable_graph(
             insights: Vec::new(),
             dot: format!("{}", dot),
             metrics_channel: METRICS_CHANNEL.tx(),
+            pipe_graph,
         };
         exec.optimize();
 
         Ok(exec)
     }
+}
+
+fn prefix_for(s: &PipelineCreate) -> String {
+    format!("FIXME: this should be random {}", s.alias)
+}
+fn from_name(prefix: &str, port: &str) -> String {
+    format!("{prefix}-from/{port}")
+}
+fn into_name(prefix: &str, port: &str) -> String {
+    format!("{prefix}-into/{port}")
 }
 
 fn select(

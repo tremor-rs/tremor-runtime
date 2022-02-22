@@ -96,7 +96,7 @@ pub enum StmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     PipelineDefinition(PipelineDefinitionRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    PipelineCreate(PipelineInlineRaw<'script>),
+    PipelineCreate(PipelineCreateRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     StreamStmt(StreamStmtRaw),
     /// we're forced to make this pub because of lalrpop
@@ -285,22 +285,23 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct PipelineInlineRaw<'script> {
-    pub(crate) id: String,
+pub struct PipelineCreateRaw<'script> {
+    pub(crate) alias: String,
     pub(crate) target: NodeId,
     pub(crate) params: CreationalWithRaw<'script>,
     pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr!(PipelineInlineRaw);
+impl_expr!(PipelineCreateRaw);
 
-impl<'script> Upable<'script> for PipelineInlineRaw<'script> {
+impl<'script> Upable<'script> for PipelineCreateRaw<'script> {
     type Target = PipelineCreate<'script>;
 
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // FIXME are those correct?!?
         Ok(PipelineCreate {
-            mid: self.mid.box_with_name(&self.id),
-            node_id: self.target,
+            mid: self.mid.box_with_name(&self.alias),
+            target: self.target,
+            alias: self.alias,
             port_stream_map: HashMap::new(),
             params: self.params.up(helper)?,
         })

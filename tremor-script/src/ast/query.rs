@@ -309,11 +309,13 @@ impl_fqn!(PipelineDefinition);
 pub struct PipelineCreate<'script> {
     pub(crate) mid: Box<NodeMeta>,
     /// The node id of the pipeline definition we want to create
-    pub node_id: NodeId,
+    pub target: NodeId,
     /// Map of pipeline ports and internal stream id
     pub port_stream_map: HashMap<String, String>,
     /// With arguments
     pub params: CreationalWith<'script>,
+    /// local alias
+    pub alias: String,
 }
 impl<'script> BaseExpr for PipelineCreate<'script> {
     fn meta(&self) -> &NodeMeta {

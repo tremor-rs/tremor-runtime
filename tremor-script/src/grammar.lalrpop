@@ -380,12 +380,12 @@ CreateOperator: StmtRaw<'input> = {
 }
 
 CreatePipeline: StmtRaw<'input> = {
-    <start:@L> "create" "pipeline" <id:Ident> <params:CreationWithEnd> <end:@L>  => {
-        StmtRaw::PipelineCreate(PipelineInlineRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), target: id.into(), params })
+    <start:@L> "create" "pipeline" <alias:Ident> <params:CreationWithEnd> <end:@L>  => {
+        StmtRaw::PipelineCreate(PipelineCreateRaw { mid: NodeMeta::new_box(start, end), alias: alias.to_string(), target: alias.into(), params })
     },
     // With ModulartTarget
-    <start:@L> "create" "pipeline" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
-        StmtRaw::PipelineCreate(PipelineInlineRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), target, params })
+    <start:@L> "create" "pipeline" <alias:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
+        StmtRaw::PipelineCreate(PipelineCreateRaw { mid: NodeMeta::new_box(start, end), alias: alias.to_string(), target, params })
     }
 }
 
