@@ -13,6 +13,7 @@
 // limitations under the License.
 use crate::connectors::prelude::*;
 use futures::stream::TryStreamExt;
+use std::error::Error as StdError;
 
 use async_std::channel::{self, Receiver, Sender};
 use async_std::task::{self, JoinHandle};
@@ -139,7 +140,14 @@ impl Connector for S3SourceConnector {
             .head_bucket()
             .bucket(self.config.bucket.clone())
             .send()
-            .await?;
+            .await.map_err(|e| {
+                let msg = if let Some(err) = e.source() {
+                    format!("Failed to access Bucket \"{}\": {}.", &self.config.bucket, err)
+                } else {
+                    format!("Failed to access Bucket \"{}\".", &self.config.bucket)
+                };
+                Error::from(ErrorKind::S3Error(msg))
+            })?;
 
         let (tx_key, rx_key) = channel::bounded(QSIZE.load(Ordering::Relaxed));
 
