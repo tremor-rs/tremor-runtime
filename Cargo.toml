@@ -64,7 +64,7 @@ hex = "0.4"
 hostname = "0.3"
 http-types = "2.12"
 indexmap = { version = "1", features = ["serde-1"] }
-lapin = { version = "1.10.0", features = [
+lapin = { version = "2.0.1", features = [
   "rustls",
   "rustls-native-certs",
 ], default-features = false }
