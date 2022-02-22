@@ -447,6 +447,10 @@ impl<'script> Ident<'script> {
     pub fn new(id: beef::Cow<'script, str>, mid: Box<NodeMeta>) -> Self {
         Self { id, mid }
     }
+    /// As a string
+    pub fn as_str(&self) -> &str {
+        &self.id
+    }
 }
 impl_expr!(Ident);
 

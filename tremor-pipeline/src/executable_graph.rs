@@ -20,11 +20,12 @@ use crate::{
     errors::{Error, ErrorKind},
     metrics::metrics_value_count,
     op::{prelude::IN, trickle::window},
-    ConfigMap, ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
+    ConfigMap, Connection, ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
 use halfbrown::HashMap;
+use petgraph::Graph;
 use tremor_common::stry;
 use tremor_script::{ast::Helper, ast::Stmt, Value};
 
@@ -50,7 +51,7 @@ impl NodeConfig {
         self.label.as_deref().unwrap_or(dflt)
     }
 
-    /// Creates a `NodeConfig` from a config struct
+    /// Creates a `curlNodeConfig` from a config struct
     pub fn from_config<I>(id: &I, config: Option<tremor_value::Value<'static>>) -> Result<Self>
     where
         I: ToString,
@@ -257,6 +258,7 @@ pub struct ExecutableGraph {
     pub insights: Vec<(usize, Event)>,
     /// the dot representation of the graph
     pub dot: String,
+    pub(crate) pipe_graph: Graph<NodeConfig, Connection>,
 }
 
 /// The return of a graph execution
@@ -808,6 +810,7 @@ mod test {
             insights: vec![],
             dot: String::from(""),
             metrics_channel: METRICS_CHANNEL.tx(),
+            pipe_graph: Graph::new(),
         };
 
         // Test with one event
@@ -905,6 +908,7 @@ mod test {
             insights: vec![],
             dot: String::from(""),
             metrics_channel: METRICS_CHANNEL.tx(),
+            pipe_graph: Graph::new(),
         };
         assert!(g.optimize().is_some());
         // Test with one event
