@@ -75,7 +75,7 @@ mod test {
             }
         });
 
-        let harness = ConnectorHarness::new("s3", connector_yaml).await?;
+        let harness = ConnectorHarness::new("s3-writer", connector_yaml).await?;
         assert!(harness.start().await.is_err());
         Ok(())
     }
@@ -108,7 +108,7 @@ mod test {
             }
         });
 
-        let harness = ConnectorHarness::new("s3", connector_yaml).await?;
+        let harness = ConnectorHarness::new("s3-writer", connector_yaml).await?;
         assert!(harness.start().await.is_err());
 
         Ok(())
@@ -145,7 +145,7 @@ mod test {
             }
         });
 
-        let harness = ConnectorHarness::new("s3", connector_yaml).await?;
+        let harness = ConnectorHarness::new("s3-writer", connector_yaml).await?;
         assert!(harness.start().await.is_err());
 
         Ok(())
@@ -178,7 +178,7 @@ mod test {
                 "endpoint": endpoint
             }
         });
-        let harness = ConnectorHarness::new("s3", connector_yaml).await?;
+        let harness = ConnectorHarness::new("s3-writer", connector_yaml).await?;
         assert!(harness.start().await.is_err());
 
         Ok(())
@@ -218,7 +218,7 @@ mod test {
             }
         });
 
-        let harness = ConnectorHarness::new("s3", connector_yaml).await?;
+        let harness = ConnectorHarness::new("s3-writer", connector_yaml).await?;
         let in_pipe = harness
             .get_pipe(IN)
             .expect("No pipe connectored to port IN");

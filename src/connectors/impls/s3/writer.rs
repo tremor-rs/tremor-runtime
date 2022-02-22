@@ -22,7 +22,7 @@ use aws_sdk_s3 as s3;
 use s3::model::{CompletedMultipartUpload, CompletedPart};
 use s3::Client as S3Client;
 
-const CONNECTOR_TYPE: ConnectorType = ConnectorType::from("s3-writer");
+const CONNECTOR_TYPE: &'static str = "s3-writer";
 
 const FIVEMBS: usize = 5 * 1024 * 1024 + 100; // Some extra bytes to keep aws happy.
 
@@ -51,7 +51,7 @@ pub(crate) struct Builder {}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
-        CONNECTOR_TYPE
+        ConnectorType::from(CONNECTOR_TYPE)
     }
 
     async fn from_config(
