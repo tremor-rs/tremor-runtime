@@ -14,10 +14,7 @@
 
 use crate::op::prelude::*;
 use std::mem;
-use tremor_script::{
-    highlighter::{self, Highlighter},
-    prelude::*,
-};
+use tremor_script::{highlighter, prelude::*};
 
 #[derive(Debug)]
 pub struct Script {
@@ -55,10 +52,7 @@ impl Operator for Script {
                 }
                 Ok(Return::Drop) => None,
                 Err(e) => {
-                    let mut h = highlighter::Dumb::default();
-                    h.format_error(&e).ok()?;
-                    let s = h.to_string();
-
+                    let s = highlighter::Dumb::error_to_string(&e).unwrap_or_default();
                     let mut o = literal!({ "error": s });
                     mem::swap(&mut o, unwind_event);
                     if let Some(error) = unwind_event.as_object_mut() {

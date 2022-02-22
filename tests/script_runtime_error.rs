@@ -60,12 +60,8 @@ macro_rules! test_cases {
                     let mut state = Value::null();
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta);
                     if let Err(e) = s {
-                        let mut h = Dumb::new();
-                        h.format_error(&e)?;
-                        h.finalize()?;
-                        let got = h.to_string();
-                        let got = got.trim();
-                        println!("{}", got);
+                        let got = Dumb::error_to_string(&e)?;
+                        print!("{}", got);
                         assert_eq!(err, got);
                     } else {
                         println!("Expected error, but got succeess");
@@ -116,12 +112,9 @@ macro_rules! ignore_cases {
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta);
                     if let Err(e) = s {
                         let mut h = Dumb::new();
-                        h.format_error(&e)?;
-                        h.finalize()?;
-                        let got = h.to_string();
-                        let got = got.trim();
-                        println!("{}", got);
-                        //assert_eq!(err, got);
+                        let got = Dumb::error_to_string(&e)?;
+                        print!("{}", got);
+                        assert_eq!(err, got);
                     } else {
                         println!("Expected error, but got succeess");
                         assert!(false);

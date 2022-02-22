@@ -62,12 +62,8 @@ macro_rules! test_cases {
 
                 match parse(&contents) {
                     Err(e) => {
-                        let mut h = Dumb::new();
-                        h.format_error(&e)?;
-                        h.finalize()?;
-                        let got = h.to_string();
-                        let got = got.trim();
-                        println!("{}", got);
+                        let got = Dumb::error_to_string(&e)?;
+                        print!("{}", got);
                         println!("got wrong error: {:?}", e);
 
                         assert_eq!(err, got);

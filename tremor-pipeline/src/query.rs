@@ -32,7 +32,6 @@ use indexmap::IndexMap;
 use petgraph::algo::is_cyclic_directed;
 use tremor_common::ids::OperatorIdGen;
 use tremor_script::{
-    arena::Arena,
     ast::{
         self, Helper, Ident, OperatorDefinition, PipelineCreate, PipelineDefinition,
         ScriptDefinition, SelectType, Stmt, WindowDefinition, WindowKind,
@@ -137,12 +136,6 @@ impl Query {
         self.0.query.config.get("id").and_then(ValueAccess::as_str)
     }
 
-    /// Source of the query
-    #[must_use]
-    pub(crate) fn source(&self) -> Result<&str> {
-        Ok(Arena::io_get(self.0.query.aid())?)
-    }
-
     /// Parse a query
     ///
     /// # Errors
@@ -160,8 +153,7 @@ impl Query {
     #[allow(clippy::too_many_lines)]
     pub fn to_pipe(&self, idgen: &mut OperatorIdGen) -> Result<crate::ExecutableGraph> {
         let stmts = self.0.query.stmts.clone();
-        let src = self.source()?;
-        to_executable_graph(&self.0, stmts, idgen, src)
+        to_executable_graph(&self.0, stmts, idgen)
     }
 }
 
@@ -174,7 +166,6 @@ fn to_executable_graph(
     query: &tremor_script::Query,
     stmts: Vec<tremor_script::ast::Stmt<'static>>,
     idgen: &mut OperatorIdGen,
-    src: &str,
 ) -> Result<crate::ExecutableGraph> {
     let query_borrowed = query.query.clone();
     use crate::{ExecutableGraph, NodeMetrics, State};
@@ -282,7 +273,7 @@ fn to_executable_graph(
                 let e = select.stmt.extent();
                 let mut h = Dumb::new();
                 let label = h
-                    .highlight_str(src, "", false, Some(e))
+                    .highlight_range(e)
                     .ok()
                     .map(|_| h.to_string().trim_end().to_string());
 
@@ -431,11 +422,12 @@ fn to_executable_graph(
                     };
                     let stmts = query.query.stmts.clone(); // FIXME this should be in in to_executable graph
 
-                    dbg!(to_executable_graph(&query, stmts, idgen, "FIXME")?); // FIXME add source
-                                                                               /*
-                                                                               add placeholder nodes
-                                                                               later inline this graph to the other
-                                                                               */
+                    let _g = dbg!(to_executable_graph(&query, stmts, idgen)?); // FIXME add source
+
+                    /*
+                    add placeholder nodes
+                    later inline this graph to the other
+                    */
                     panic!("inline all the things, this code needs to go away it's too bad");
                 } else {
                     return Err("oh no".into());
@@ -510,7 +502,7 @@ fn to_executable_graph(
                 // We're trimming the code so no spaces are at the end then adding a newline
                 // to ensure we're left justified (this is a dot thing, don't question it)
                 let label = h
-                    .highlight_str(src, "", false, Some(e))
+                    .highlight_range(e)
                     .ok()
                     .map(|_| format!("{}\n", h.to_string().trim_end()));
                 let that_defn = Stmt::ScriptDefinition(Box::new(decl));
@@ -670,7 +662,6 @@ fn to_executable_graph(
             signalflow,
             metric_interval,
             insights: Vec::new(),
-            source: Some(src.to_string()),
             dot: format!("{}", dot),
             metrics_channel: METRICS_CHANNEL.tx(),
         };

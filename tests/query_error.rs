@@ -77,22 +77,14 @@ macro_rules! test_cases {
                     match to_pipe(&contents) {
                         Err(Error(ErrorKind::Pipeline(tremor_pipeline::errors::ErrorKind::Script(e)), o)) => {
                             let e = tremor_script::errors::Error(e, o);
-                            let mut h = Dumb::new();
-                            h.format_error(&e)?;
-                            h.finalize()?;
-                            let got = h.to_string();
-                            let got = got.trim();
-                            println!("{}", got);
+                            let got = Dumb::error_to_string(&e)?;
+                            print!("{}", got);
                             assert_eq!(err, got);
                         }
                         Err(Error(ErrorKind::Script(e), o)) =>{
                             let e = tremor_script::errors::Error(e, o);
-                            let mut h = Dumb::new();
-                            h.format_error(&e)?;
-                            h.finalize()?;
-                            let got = h.to_string();
-                            let got = got.trim();
-                            println!("{}", got);
+                            let got = Dumb::error_to_string(&e)?;
+                            print!("{}", got);
                             assert_eq!(err, got);
                         }
                         Err(Error(ErrorKind::Pipeline(e), _)) =>{
