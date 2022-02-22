@@ -86,12 +86,8 @@ macro_rules! test_cases {
                         Err(PipelineError(PipelineErrorKind::Script(e), o)) => {
                             if let Some(err) = err.as_ref() {
                                 let e = tremor_script::errors::Error(e, o);
-                                let mut h = Dumb::new();
-                                h.format_error(&e)?;
-                                h.finalize()?;
-                                let got = h.to_string();
-                                let got = got.trim();
-                                println!("{}", got);
+                                let got = Dumb::error_to_string(&e)?;
+                                print!("{}", got);
                                 assert_eq!(err, got);
                                 had_error = true;
                             } else {

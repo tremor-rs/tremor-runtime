@@ -47,12 +47,8 @@ macro_rules! test_cases {
                 ModuleManager::add_path("tremor-script/lib")?;
                 let s = Script::parse(&contents, &*FN_REGISTRY.read()?);
                 if let Err(e) = s {
-                    let mut h = Dumb::new();
-                    h.format_error(&e)?;
-                    h.finalize()?;
-                    let got = h.to_string();
-                    let got = got.trim();
-                    println!("{}", got);
+                    let got = Dumb::error_to_string(&e)?;
+                    print!("{}", got);
                     assert_eq!(err, got);
                 } else {
                     println!("Expected error, but got succeess :/");
@@ -90,12 +86,8 @@ macro_rules! ignored_cases {
                 ModuleManager::add_path("tremor-script/lib")?;
                 let s = Script::parse(&contents, &*FN_REGISTRY.read()?);
                 if let Err(e) = s {
-                    let mut h = Dumb::new();
-                    h.format_error( &e)?;
-                    h.finalize()?;
-                    let got = h.to_string();
-                    let got = got.trim();
-                    println!("{}", got);
+                    let got = Dumb::error_to_string(&e)?;
+                    print!("{}", got);
                     assert_eq!(err, got);
                 } else {
                     println!("Expected error, but got succeess :(");
