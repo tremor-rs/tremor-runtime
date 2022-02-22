@@ -14,7 +14,7 @@
 
 use super::super::prelude::*;
 use crate::{
-    ast::{binary::extend_bytes_from_value, NodeMeta},
+    ast::{base_expr::Ranged, binary::extend_bytes_from_value, NodeMeta},
     errors::{
         err_invalid_unary, err_need_int, error_array_out_of_bound, error_bad_key,
         error_decreasing_range, error_need_arr, error_need_obj,

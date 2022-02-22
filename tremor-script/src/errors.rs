@@ -20,7 +20,7 @@
 pub use crate::prelude::ValueType;
 use crate::{
     arena,
-    ast::{self, BaseExpr},
+    ast::{self, base_expr::Ranged, BaseExpr},
     errors, lexer,
     pos::{self, Span},
     prelude::*,
@@ -860,11 +860,11 @@ error_chain! {
 
 /// Creates a stream not defined error
 #[allow(clippy::borrowed_box)]
-pub fn query_stream_not_defined_err<S: BaseExpr, I: BaseExpr>(
-    stmt: &S,
-    inner: &I,
-    name: String,
-) -> Error {
+pub fn query_stream_not_defined_err<S, I>(stmt: &S, inner: &I, name: String) -> Error
+where
+    S: Ranged,
+    I: BaseExpr + Ranged,
+{
     // Subqueries store unmangled `name` in `meta`
     // Use `name` from `meta` if it exists.
     let name = inner.meta().name().map_or(name, |s| s.into());
@@ -872,7 +872,7 @@ pub fn query_stream_not_defined_err<S: BaseExpr, I: BaseExpr>(
 }
 
 /// Creates a query stream duplicate name error
-pub fn query_stream_duplicate_name_err<S: BaseExpr, I: BaseExpr>(
+pub fn query_stream_duplicate_name_err<S: Ranged, I: BaseExpr + Ranged>(
     stmt: &S,
     inner: &I,
     name: String,
@@ -882,7 +882,7 @@ pub fn query_stream_duplicate_name_err<S: BaseExpr, I: BaseExpr>(
 }
 
 /// Creates a pipeline stmt duplicate name error
-pub fn pipeline_stmt_duplicate_name_err<S: BaseExpr, I: BaseExpr>(
+pub fn pipeline_stmt_duplicate_name_err<S: Ranged, I: BaseExpr + Ranged>(
     stmt: &S,
     inner: &I,
     name: String,
@@ -892,7 +892,7 @@ pub fn pipeline_stmt_duplicate_name_err<S: BaseExpr, I: BaseExpr>(
 }
 
 /// Creates a pipeline unknown port error
-pub fn pipeline_unknown_port_err<S: BaseExpr, I: BaseExpr>(
+pub fn pipeline_unknown_port_err<S: Ranged, I: BaseExpr + Ranged>(
     stmt: &S,
     inner: &I,
     subq_name: String,
@@ -903,13 +903,13 @@ pub fn pipeline_unknown_port_err<S: BaseExpr, I: BaseExpr>(
 }
 
 /// Creates a query node reserved name error
-pub fn query_node_reserved_name_err<S: BaseExpr>(stmt: &S, name: String) -> Error {
+pub fn query_node_reserved_name_err<S: BaseExpr + Ranged>(stmt: &S, name: String) -> Error {
     let name = stmt.meta().name().map_or(name, |s| s.into());
     ErrorKind::QueryNodeReservedName(stmt.extent(), name).into()
 }
 
 /// Creates a query node duplicate name error
-pub fn query_node_duplicate_name_err<S: BaseExpr>(stmt: &S, name: String) -> Error {
+pub fn query_node_duplicate_name_err<S: BaseExpr + Ranged>(stmt: &S, name: String) -> Error {
     let name = stmt.meta().name().map_or(name, |s| s.into());
     ErrorKind::QueryNodeDuplicateName(stmt.extent(), name).into()
 }
@@ -919,7 +919,7 @@ pub fn query_node_duplicate_name_err<S: BaseExpr>(stmt: &S, name: String) -> Err
 /// # Errors
 /// always, this is a function to create errors
 #[allow(clippy::borrowed_box)]
-pub fn query_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
+pub fn query_guard_not_bool<T, O: Ranged, I: Ranged>(
     stmt: &O,
     inner: &I,
     got: &Value,
@@ -927,11 +927,7 @@ pub fn query_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
     error_type_conflict_mult(stmt, inner, got.value_type(), vec![ValueType::Bool])
 }
 
-pub fn query_guard_not_bool_err<O: BaseExpr, I: BaseExpr>(
-    stmt: &O,
-    inner: &I,
-    got: &Value,
-) -> Error {
+pub fn query_guard_not_bool_err<O: Ranged, I: Ranged>(stmt: &O, inner: &I, got: &Value) -> Error {
     err_type_conflict_mult(stmt, inner, got.value_type(), vec![ValueType::Bool])
 }
 
@@ -939,7 +935,7 @@ pub fn query_guard_not_bool_err<O: BaseExpr, I: BaseExpr>(
 /// We can still be polite in our error reports!
 /// # Errors
 /// The parameters transformed into a generic error
-pub fn error_generic<T, O: BaseExpr, I: BaseExpr, S: ToString>(
+pub fn error_generic<T, O: Ranged, I: Ranged, S: ToString>(
     outer: &O,
     inner: &I,
     error: &S,
@@ -947,7 +943,7 @@ pub fn error_generic<T, O: BaseExpr, I: BaseExpr, S: ToString>(
     Err(err_generic(outer, inner, error))
 }
 
-pub(crate) fn err_generic<O: BaseExpr, I: BaseExpr, S: ToString>(
+pub(crate) fn err_generic<O: Ranged, I: Ranged, S: ToString>(
     outer: &O,
     inner: &I,
     error: &S,
@@ -955,7 +951,7 @@ pub(crate) fn err_generic<O: BaseExpr, I: BaseExpr, S: ToString>(
     ErrorKind::Generic(outer.extent(), inner.extent(), error.to_string()).into()
 }
 
-pub(crate) fn error_type_conflict_mult<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_type_conflict_mult<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: ValueType,
@@ -964,7 +960,7 @@ pub(crate) fn error_type_conflict_mult<T, O: BaseExpr, I: BaseExpr>(
     Err(err_type_conflict_mult(outer, inner, got, expected))
 }
 
-pub(crate) fn err_type_conflict_mult<O: BaseExpr, I: BaseExpr>(
+pub(crate) fn err_type_conflict_mult<O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: ValueType,
@@ -973,18 +969,18 @@ pub(crate) fn err_type_conflict_mult<O: BaseExpr, I: BaseExpr>(
     ErrorKind::TypeConflict(outer.extent(), inner.extent(), got, expected).into()
 }
 
-pub(crate) fn error_no_locals<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {
+pub(crate) fn error_no_locals<T, O: Ranged, I: Ranged>(outer: &O, inner: &I) -> Result<T> {
     Err(ErrorKind::NoLocalsAllowed(outer.extent(), inner.extent()).into())
 }
 
-pub(crate) fn error_event_ref_not_allowed<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_event_ref_not_allowed<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
 ) -> Result<T> {
     Err(ErrorKind::NoEventReferencesAllowed(outer.extent(), inner.extent()).into())
 }
 
-pub(crate) fn error_need_obj<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_need_obj<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: ValueType,
@@ -992,15 +988,11 @@ pub(crate) fn error_need_obj<T, O: BaseExpr, I: BaseExpr>(
     Err(err_need_obj(outer, inner, got))
 }
 
-pub(crate) fn err_need_obj<O: BaseExpr, I: BaseExpr>(
-    outer: &O,
-    inner: &I,
-    got: ValueType,
-) -> Error {
+pub(crate) fn err_need_obj<O: Ranged, I: Ranged>(outer: &O, inner: &I, got: ValueType) -> Error {
     err_type_conflict_mult(outer, inner, got, vec![ValueType::Object])
 }
 
-pub(crate) fn error_need_arr<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_need_arr<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: ValueType,
@@ -1008,7 +1000,7 @@ pub(crate) fn error_need_arr<T, O: BaseExpr, I: BaseExpr>(
     error_type_conflict_mult(outer, inner, got, vec![ValueType::Array])
 }
 
-pub(crate) fn error_need_str<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_need_str<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: ValueType,
@@ -1016,7 +1008,7 @@ pub(crate) fn error_need_str<T, O: BaseExpr, I: BaseExpr>(
     error_type_conflict_mult(outer, inner, got, vec![ValueType::String])
 }
 
-pub(crate) fn error_need_int<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_need_int<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: ValueType,
@@ -1024,15 +1016,11 @@ pub(crate) fn error_need_int<T, O: BaseExpr, I: BaseExpr>(
     Err(err_need_int(outer, inner, got))
 }
 
-pub(crate) fn err_need_int<O: BaseExpr, I: BaseExpr>(
-    outer: &O,
-    inner: &I,
-    got: ValueType,
-) -> Error {
+pub(crate) fn err_need_int<O: Ranged, I: Ranged>(outer: &O, inner: &I, got: ValueType) -> Error {
     err_type_conflict_mult(outer, inner, got, vec![ValueType::I64])
 }
 
-pub(crate) fn error_type_conflict<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_type_conflict<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: ValueType,
@@ -1041,7 +1029,7 @@ pub(crate) fn error_type_conflict<T, O: BaseExpr, I: BaseExpr>(
     error_type_conflict_mult(outer, inner, got, vec![expected])
 }
 
-pub(crate) fn error_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_guard_not_bool<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: &Value,
@@ -1049,7 +1037,7 @@ pub(crate) fn error_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
     error_type_conflict(outer, inner, got.value_type(), ValueType::Bool)
 }
 
-pub(crate) fn error_invalid_unary<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_invalid_unary<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     op: ast::UnaryOpKind,
@@ -1058,7 +1046,7 @@ pub(crate) fn error_invalid_unary<T, O: BaseExpr, I: BaseExpr>(
     Err(err_invalid_unary(outer, inner, op, val))
 }
 
-pub(crate) fn err_invalid_unary<O: BaseExpr, I: BaseExpr>(
+pub(crate) fn err_invalid_unary<O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     op: ast::UnaryOpKind,
@@ -1067,7 +1055,7 @@ pub(crate) fn err_invalid_unary<O: BaseExpr, I: BaseExpr>(
     ErrorKind::InvalidUnary(outer.extent(), inner.extent(), op, val.value_type()).into()
 }
 
-pub(crate) fn error_invalid_binary<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_invalid_binary<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     op: ast::BinOpKind,
@@ -1084,18 +1072,15 @@ pub(crate) fn error_invalid_binary<T, O: BaseExpr, I: BaseExpr>(
     .into())
 }
 
-pub(crate) fn error_invalid_bitshift<T, O: BaseExpr, I: BaseExpr>(
-    outer: &O,
-    inner: &I,
-) -> Result<T> {
+pub(crate) fn error_invalid_bitshift<T, O: Ranged, I: Ranged>(outer: &O, inner: &I) -> Result<T> {
     Err(ErrorKind::InvalidBitshift(outer.extent(), inner.extent()).into())
 }
 
-pub(crate) fn error_no_clause_hit<T, O: BaseExpr>(outer: &O) -> Result<T> {
+pub(crate) fn error_no_clause_hit<T, O: Ranged>(outer: &O) -> Result<T> {
     Err(ErrorKind::NoClauseHit(outer.extent()).into())
 }
 
-pub(crate) fn error_oops<T, O: BaseExpr, S: ToString + ?Sized>(
+pub(crate) fn error_oops<T, O: Ranged, S: ToString + ?Sized>(
     outer: &O,
     id: u64,
     msg: &S,
@@ -1103,7 +1088,7 @@ pub(crate) fn error_oops<T, O: BaseExpr, S: ToString + ?Sized>(
     Err(error_oops_err(outer, id, msg))
 }
 
-pub(crate) fn error_oops_err<O: BaseExpr, S: ToString + ?Sized>(
+pub(crate) fn error_oops_err<O: Ranged, S: ToString + ?Sized>(
     outer: &O,
     id: u64,
     msg: &S,
@@ -1111,7 +1096,7 @@ pub(crate) fn error_oops_err<O: BaseExpr, S: ToString + ?Sized>(
     ErrorKind::Oops(outer.extent(), id, msg.to_string()).into()
 }
 
-pub(crate) fn error_patch_key_exists<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_patch_key_exists<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     key: String,
@@ -1119,7 +1104,7 @@ pub(crate) fn error_patch_key_exists<T, O: BaseExpr, I: BaseExpr>(
     Err(ErrorKind::PatchKeyExists(outer.extent(), inner.extent(), key).into())
 }
 
-pub(crate) fn error_patch_update_key_missing<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_patch_update_key_missing<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     key: String,
@@ -1127,10 +1112,10 @@ pub(crate) fn error_patch_update_key_missing<T, O: BaseExpr, I: BaseExpr>(
     Err(ErrorKind::UpdateKeyMissing(outer.extent(), inner.extent(), key).into())
 }
 
-pub(crate) fn error_missing_effector<O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Error {
+pub(crate) fn error_missing_effector<O: Ranged, I: Ranged>(outer: &O, inner: &I) -> Error {
     ErrorKind::MissingEffectors(outer.extent(), inner.extent()).into()
 }
-pub(crate) fn error_patch_merge_type_conflict<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_patch_merge_type_conflict<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     key: String,
@@ -1139,20 +1124,20 @@ pub(crate) fn error_patch_merge_type_conflict<T, O: BaseExpr, I: BaseExpr>(
     Err(ErrorKind::MergeTypeConflict(outer.extent(), inner.extent(), key, val.value_type()).into())
 }
 
-pub(crate) fn error_assign_array<T, O: BaseExpr, I: BaseExpr>(outer: &O, inner: &I) -> Result<T> {
+pub(crate) fn error_assign_array<T, O: Ranged, I: Ranged>(outer: &O, inner: &I) -> Result<T> {
     Err(ErrorKind::AssignIntoArray(outer.extent(), inner.extent()).into())
 }
-pub(crate) fn error_invalid_assign_target<T, O: BaseExpr>(outer: &O) -> Result<T> {
+pub(crate) fn error_invalid_assign_target<T, O: Ranged>(outer: &O) -> Result<T> {
     let inner: Span = outer.extent();
 
     Err(ErrorKind::InvalidAssign(inner.expand_lines(2), inner).into())
 }
-pub(crate) fn error_assign_to_const<T, O: BaseExpr>(outer: &O) -> Result<T> {
+pub(crate) fn error_assign_to_const<T, O: Ranged>(outer: &O) -> Result<T> {
     let inner: Span = outer.extent();
 
     Err(ErrorKind::AssignToConst(inner.expand_lines(2), inner).into())
 }
-pub(crate) fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_array_out_of_bound<'script, T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     path: &ast::Path<'script>,
@@ -1173,7 +1158,7 @@ pub(crate) fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr>(
     })
 }
 
-pub(crate) fn error_bad_array_index<'script, 'idx, T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_bad_array_index<'script, 'idx, T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     path: &ast::Path<'script>,
@@ -1191,7 +1176,7 @@ pub(crate) fn error_bad_array_index<'script, 'idx, T, O: BaseExpr, I: BaseExpr>(
         | ast::Path::Expr(_) => ErrorKind::BadArrayIndex(expr, inner.extent(), idx, len).into(),
     })
 }
-pub(crate) fn error_decreasing_range<'script, T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_decreasing_range<'script, T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     path: &ast::Path<'script>,
@@ -1211,7 +1196,7 @@ pub(crate) fn error_decreasing_range<'script, T, O: BaseExpr, I: BaseExpr>(
     })
 }
 
-pub(crate) fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_bad_key<'script, T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     path: &ast::Path<'script>,
@@ -1221,7 +1206,7 @@ pub(crate) fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr>(
     Err(error_bad_key_err(outer, inner, path, key, options))
 }
 
-pub(crate) fn error_bad_key_err<'script, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_bad_key_err<'script, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     path: &ast::Path<'script>,

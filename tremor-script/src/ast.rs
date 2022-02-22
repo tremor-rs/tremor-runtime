@@ -41,8 +41,8 @@ pub mod walkers;
 
 pub use self::helper::Helper;
 pub use self::node_id::{BaseRef, NodeId};
-use self::visitors::ConstFolder;
 use self::walkers::ImutExprWalker;
+use self::{base_expr::Ranged, visitors::ConstFolder};
 pub use crate::lexer::CompilationUnit;
 use crate::{
     arena,
@@ -51,7 +51,7 @@ use crate::{
         raw::{BytesDataType, Endian},
     },
     errors::{error_generic, error_no_locals, Kind as ErrorKind, Result},
-    impl_expr_ex_mid, impl_expr_mid,
+    impl_expr, impl_expr_ex, impl_expr_no_lt,
     interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack},
     lexer::Span,
     pos::Location,
@@ -100,7 +100,7 @@ pub trait Expression: Clone + std::fmt::Debug + PartialEq + Serialize {
 }
 
 /// Node metadata
-#[derive(Default, Clone, Serialize, PartialEq, Eq)]
+#[derive(Default, Clone, Serialize, PartialEq, Eq, Hash)]
 pub struct NodeMeta {
     range: Span,
     name: Option<String>,
@@ -152,6 +152,26 @@ impl NodeMeta {
     pub(crate) fn name(&self) -> Option<&str> {
         self.name.as_deref()
     }
+    pub(crate) fn set_name<S>(&mut self, name: &S)
+    where
+        S: ToString + ?Sized,
+    {
+        self.name = Some(name.to_string())
+    }
+    pub(crate) fn with_name<S>(mut self, name: S) -> Self
+    where
+        S: ToString,
+    {
+        self.name = Some(name.to_string());
+        self
+    }
+    pub(crate) fn box_with_name<S>(self, name: S) -> Box<Self>
+    where
+        S: ToString,
+    {
+        Box::new(self.with_name(name))
+    }
+
     pub(crate) fn name_dflt(&self) -> &str {
         self.name().unwrap_or_default()
     }
@@ -183,7 +203,7 @@ struct Function<'script> {
 /// A section of a binary
 pub struct BytesPart<'script> {
     /// metadata id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// data
     pub data: ImutExpr<'script>,
     /// type we want to convert this to
@@ -193,7 +213,7 @@ pub struct BytesPart<'script> {
     /// bits allocated for this
     pub bits: u64,
 }
-impl_expr_mid!(BytesPart);
+impl_expr!(BytesPart);
 
 impl<'script> BytesPart<'script> {
     pub(crate) fn is_lit(&self) -> bool {
@@ -208,7 +228,7 @@ pub struct Bytes<'script> {
     /// Bytes
     pub value: Vec<BytesPart<'script>>,
 }
-impl_expr_mid!(Bytes);
+impl_expr!(Bytes);
 
 /// Constants and special keyword values
 #[derive(Clone, Copy, Debug)]
@@ -292,7 +312,7 @@ pub struct Script<'script> {
     /// Documentation from the script
     pub docs: docs::Docs,
 }
-impl_expr_mid!(Script);
+impl_expr!(Script);
 
 impl<'script> Script<'script> {
     const NOT_IMUT: &'static str = "Not an imutable expression";
@@ -428,7 +448,7 @@ impl<'script> Ident<'script> {
         Self { id, mid }
     }
 }
-impl_expr_mid!(Ident);
+impl_expr!(Ident);
 
 impl<'script> std::fmt::Display for Ident<'script> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -440,25 +460,25 @@ impl<'script> std::fmt::Display for Ident<'script> {
 /// Encapsulation of a record structure field
 pub struct Field<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Name of the field
     pub name: StringLit<'script>,
     /// Value expression for the field
     pub value: ImutExpr<'script>,
 }
-impl_expr_mid!(Field);
+impl_expr!(Field);
 
 #[derive(Clone, Debug, PartialEq, Serialize, Default)]
 /// Encapsulation of a record structure
 pub struct Record<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// base (or static part of the record)
     pub base: crate::Object<'script>,
     /// Fields of this record
     pub fields: Fields<'script>,
 }
-impl_expr_mid!(Record);
+impl_expr!(Record);
 impl<'script> Record<'script> {
     /// Gets the expression for a given name
     /// Attention: Clones its values!
@@ -499,11 +519,11 @@ impl<'script> Record<'script> {
 /// Encapsulation of a list structure
 pub struct List<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Value expressions for list elements of this list
     pub exprs: ImutExprs<'script>,
 }
-impl_expr_mid!(List);
+impl_expr!(List);
 
 /// A Literal
 #[derive(Clone, Debug, PartialEq, Serialize, Default)]
@@ -519,7 +539,7 @@ impl<'script> Literal<'script> {
         Box::new(ImutExpr::Literal(Literal { mid, value }))
     }
 }
-impl_expr_mid!(Literal);
+impl_expr!(Literal);
 
 /// Damn you public interfaces
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -532,7 +552,7 @@ pub struct FnDecl<'script> {
     pub(crate) open: bool,
     pub(crate) inline: bool,
 }
-impl_expr_mid!(FnDecl);
+impl_expr!(FnDecl);
 
 /// A Constant
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -541,7 +561,7 @@ pub struct Const<'script> {
     pub(crate) value: Value<'script>,
     pub(crate) name: String,
 }
-impl_expr_mid!(Const);
+impl_expr!(Const);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Legal expression forms
@@ -752,7 +772,7 @@ impl<'script> Expression for ImutExpr<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct StringLit<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Elements
     pub elements: StrLitElements<'script>,
 }
@@ -838,7 +858,7 @@ impl<'script> StringLit<'script> {
         Ok(Cow::owned(out))
     }
 }
-impl_expr_mid!(StringLit);
+impl_expr!(StringLit);
 
 /// A part of a string literal with interpolation
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -872,19 +892,19 @@ pub type StrLitElements<'script> = Vec<StrLitElement<'script>>;
 /// Encapsulates an emit expression
 pub struct EmitExpr<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Value expression
     pub expr: ImutExpr<'script>,
     /// Port name
     pub port: Option<ImutExpr<'script>>,
 }
-impl_expr_mid!(EmitExpr);
+impl_expr!(EmitExpr);
 
 #[derive(Clone, Serialize)]
 /// Encapsulates a function invocation expression
 pub struct Invoke<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Module path
     pub node_id: NodeId,
     /// Invocable implementation
@@ -893,7 +913,7 @@ pub struct Invoke<'script> {
     /// Arguments
     pub args: ImutExprs<'script>,
 }
-impl_expr_mid!(Invoke);
+impl_expr!(Invoke);
 
 impl<'script> Invoke<'script> {
     fn inline(self) -> Result<ImutExpr<'script>> {
@@ -957,7 +977,7 @@ impl<'script> Invocable<'script> {
 /// Encapsulates the tail-recursion entry-point in a tail-recursive function
 pub struct Recur<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Arity
     pub argc: usize,
     /// True, if supports variable arguments
@@ -965,13 +985,13 @@ pub struct Recur<'script> {
     /// Capture of argument value expressions
     pub exprs: ImutExprs<'script>,
 }
-impl_expr_mid!(Recur);
+impl_expr!(Recur);
 
 #[derive(Clone, Serialize, PartialEq)]
 /// Encapsulates an Aggregate function invocation
 pub struct InvokeAggr {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Module name
     pub module: String,
     /// Function name
@@ -979,6 +999,7 @@ pub struct InvokeAggr {
     /// Unique Id of this instance
     pub aggr_id: usize,
 }
+impl_expr_no_lt!(InvokeAggr);
 
 /// A Invocable aggregate function
 #[derive(Clone, Serialize)]
@@ -992,13 +1013,13 @@ pub struct InvokeAggrFn<'script> {
     /// Arguments passed to the function
     pub args: ImutExprs<'script>,
 }
-impl_expr_mid!(InvokeAggrFn);
+impl_expr!(InvokeAggrFn);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a pluggable extractor expression form
 pub struct TestExpr {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Extractor name
     pub id: String,
     /// Extractor format
@@ -1006,6 +1027,7 @@ pub struct TestExpr {
     /// Extractor plugin
     pub extractor: Extractor,
 }
+impl_expr_no_lt!(TestExpr);
 
 /// default case for a match expression
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1029,7 +1051,7 @@ pub enum DefaultCase<Ex: Expression> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Match<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// The target of the match
     pub target: ImutExpr<'script>,
     /// Patterns to match against the target
@@ -1037,13 +1059,13 @@ pub struct Match<'script, Ex: Expression + 'script> {
     /// Default case
     pub default: DefaultCase<Ex>,
 }
-impl_expr_ex_mid!(Match);
+impl_expr_ex!(Match);
 
 /// If / Else style match
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct IfElse<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// The target of the match
     pub target: ImutExpr<'script>,
     /// The if case
@@ -1051,7 +1073,7 @@ pub struct IfElse<'script, Ex: Expression + 'script> {
     /// Default/else case
     pub else_clause: DefaultCase<Ex>,
 }
-impl_expr_ex_mid!(IfElse);
+impl_expr_ex!(IfElse);
 
 /// Precondition for a case group
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1358,7 +1380,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
 /// Encapsulates a predicate expression form
 pub struct PredicateClause<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Predicate pattern
     pub pattern: Pattern<'script>,
     /// Optional guard expression
@@ -1380,7 +1402,7 @@ impl<'script, Ex: Expression + 'script> PredicateClause<'script, Ex> {
         }
     }
 }
-impl_expr_ex_mid!(PredicateClause);
+impl_expr_ex!(PredicateClause);
 
 /// A group of case statements
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1393,13 +1415,13 @@ pub struct ImutClauseGroup<'script> {
 /// Encapsulates a path expression form
 pub struct Patch<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// The patch target
     pub target: ImutExpr<'script>,
     /// Operations to patch against the target
     pub operations: PatchOperations<'script>,
 }
-impl_expr_mid!(Patch);
+impl_expr!(Patch);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates patch operation forms
@@ -1474,19 +1496,19 @@ pub enum PatchOperation<'script> {
 /// Encapsulates a merge form
 pub struct Merge<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Target of the merge
     pub target: ImutExpr<'script>,
     /// Value expression computing content to merge into the target
     pub expr: ImutExpr<'script>,
 }
-impl_expr_mid!(Merge);
+impl_expr!(Merge);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a structure comprehension form
 pub struct Comprehension<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Key binding
     pub key_id: usize,
     /// Value binding
@@ -1496,13 +1518,13 @@ pub struct Comprehension<'script, Ex: Expression + 'script> {
     /// Case applications against target elements
     pub cases: ComprehensionCases<'script, Ex>,
 }
-impl_expr_ex_mid!(Comprehension);
+impl_expr_ex!(Comprehension);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a comprehension case application
 pub struct ComprehensionCase<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Key binding
     pub key_name: Cow<'script, str>,
     /// Value binding
@@ -1514,7 +1536,7 @@ pub struct ComprehensionCase<'script, Ex: Expression + 'script> {
     /// Last case application against target on passing guard
     pub last_expr: Ex,
 }
-impl_expr_ex_mid!(ComprehensionCase);
+impl_expr_ex!(ComprehensionCase);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates predicate pattern form
@@ -1781,7 +1803,7 @@ impl<'script> PredicatePattern<'script> {
 /// Encapsulates a record pattern
 pub struct RecordPattern<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Pattern fields
     pub fields: PatternFields<'script>,
 }
@@ -1799,7 +1821,7 @@ impl<'script> RecordPattern<'script> {
         }
     }
 }
-impl_expr_mid!(RecordPattern);
+impl_expr!(RecordPattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an array predicate pattern
@@ -1829,11 +1851,11 @@ impl<'script> ArrayPredicatePattern<'script> {
 /// Encapsulates an array pattern
 pub struct ArrayPattern<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Predicates
     pub exprs: ArrayPredicatePatterns<'script>,
 }
-impl_expr_mid!(ArrayPattern);
+impl_expr!(ArrayPattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an assignment pattern
@@ -1850,13 +1872,13 @@ pub struct AssignPattern<'script> {
 /// Encapsulates a positional tuple pattern
 pub struct TuplePattern<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Predicates
     pub exprs: ArrayPredicatePatterns<'script>,
     /// True, if the pattern supports variable arguments
     pub open: bool,
 }
-impl_expr_mid!(TuplePattern);
+impl_expr!(TuplePattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Represents a path-like-structure
@@ -1959,21 +1981,21 @@ pub struct LocalPath<'script> {
     /// Local Index
     pub idx: usize,
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Segments
     pub segments: Segments<'script>,
 }
-impl_expr_mid!(LocalPath);
+impl_expr!(LocalPath);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// A metadata path
 pub struct MetadataPath<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Segments
     pub segments: Segments<'script>,
 }
-impl_expr_mid!(MetadataPath);
+impl_expr!(MetadataPath);
 
 /// A expression path
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1983,7 +2005,7 @@ pub struct ExprPath<'script> {
     pub(crate) var: usize,
     pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr_mid!(ExprPath);
+impl_expr!(ExprPath);
 
 /// Reserved keyword path
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -2045,21 +2067,21 @@ impl<'script> BaseExpr for ReservedPath<'script> {
 /// The path representing the current in-flight event
 pub struct EventPath<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Segments
     pub segments: Segments<'script>,
 }
-impl_expr_mid!(EventPath);
+impl_expr!(EventPath);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// The path representing captured program state
 pub struct StatePath<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// Segments
     pub segments: Segments<'script>,
 }
-impl_expr_mid!(StatePath);
+impl_expr!(StatePath);
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
@@ -2115,7 +2137,7 @@ pub enum BinOpKind {
 /// Encapsulates a binary expression form
 pub struct BinExpr<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// The operation kind
     pub kind: BinOpKind,
     /// The Left-hand-side operand
@@ -2123,7 +2145,7 @@ pub struct BinExpr<'script> {
     /// The Right-hand-side operand
     pub rhs: ImutExpr<'script>,
 }
-impl_expr_mid!(BinExpr);
+impl_expr!(BinExpr);
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
@@ -2142,13 +2164,13 @@ pub enum UnaryOpKind {
 /// Encapsulates a unary expression form
 pub struct UnaryExpr<'script> {
     /// Id
-    pub mid: Box<NodeMeta>,
+    pub(crate) mid: Box<NodeMeta>,
     /// The operation kind
     pub kind: UnaryOpKind,
     /// The operand
     pub expr: ImutExpr<'script>,
 }
-impl_expr_mid!(UnaryExpr);
+impl_expr!(UnaryExpr);
 
 #[cfg(test)]
 mod test {
