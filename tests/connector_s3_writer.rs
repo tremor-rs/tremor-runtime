@@ -1,4 +1,4 @@
-// Copyright 2021, The Tremor Team
+// Copyright 2022, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -41,22 +41,7 @@ mod test {
     use s3::client::Client as S3Client;
     use s3::{Credentials, Endpoint, Region};
 
-    async fn spawn_docker<'d, D: Docker>(docker: &'d D, image: GenericImage) -> (Container<'d, D, GenericImage>, u16, u16) {
-        let http_port = ConnectorHarness::find_free_tcp_port().await;
-        let https_port = ConnectorHarness::find_free_tcp_port().await;
-        let container = docker.run_with_args(
-            image,
-            RunArgs::default()
-                .with_mapped_port((http_port, 9090_u16))
-                .with_mapped_port((https_port, 9191_u16)),
-        );
-
-        (container, http_port, https_port)
-    }
-
-    fn random_bucket_name(prefix: &str) -> String {
-        format!("{}-{}", prefix, rand::thread_rng().sample_iter(Alphanumeric).map(char::from).take(10).collect::<String>())
-    }
+    
 
     #[async_std::test]
     #[serial(s3)]
@@ -534,4 +519,22 @@ mod test {
 
         S3Client::from_conf(s3_config)
     }
+    
+    async fn spawn_docker<'d, D: Docker>(docker: &'d D, image: GenericImage) -> (Container<'d, D, GenericImage>, u16, u16) {
+        let http_port = ConnectorHarness::find_free_tcp_port().await;
+        let https_port = ConnectorHarness::find_free_tcp_port().await;
+        let container = docker.run_with_args(
+            image,
+            RunArgs::default()
+                .with_mapped_port((http_port, 9090_u16))
+                .with_mapped_port((https_port, 9191_u16)),
+        );
+
+        (container, http_port, https_port)
+    }
+
+    fn random_bucket_name(prefix: &str) -> String {
+        format!("{}-{}", prefix, rand::thread_rng().sample_iter(Alphanumeric).map(char::from).take(10).collect::<String>())
+    }
 }
+
