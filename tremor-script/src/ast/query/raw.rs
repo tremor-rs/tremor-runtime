@@ -596,7 +596,7 @@ pub struct OperatorKindRaw {
     pub(crate) module: String,
     pub(crate) operation: String,
 }
-
+impl_expr_no_lt!(OperatorKindRaw);
 impl<'script> Upable<'script> for OperatorKindRaw {
     type Target = OperatorKind;
     fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {

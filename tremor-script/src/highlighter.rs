@@ -194,20 +194,15 @@ pub trait Highlighter {
     ///
     /// # Errors
     /// on io errors
-    fn highlight_str(
-        &mut self,
-        source: &str,
-        ident: &str,
-        emit_lines: bool,
-        range: Option<Span>,
-    ) -> io::Result<()> {
+    fn highlight_str(&mut self, source: &str, ident: &str, emit_lines: bool) -> io::Result<()> {
         // FIXME: we might not want this here
         let (aid, source) = Arena::insert(source)?;
         let tokens: Vec<_> = crate::lexer::Tokenizer::new(source, aid)
             .filter_map(Result::ok)
             .collect();
-        self.highlight(Some(source), &tokens, ident, emit_lines, range)
+        self.highlight(Some(source), &tokens, ident, emit_lines, None)
     }
+
     /// highlights a token stream with line numbers
     ///
     /// # Errors
@@ -576,6 +571,15 @@ pub struct Dumb {
     buff: Vec<u8>,
 }
 impl Dumb {
+    /// Takes a error and creates a highlighted version
+    #[must_use]
+    pub fn error_to_string(e: &crate::errors::Error) -> io::Result<String> {
+        let mut h = Dumb::default();
+        h.format_error(e)?;
+        h.finalize()?;
+
+        Ok(h.to_string())
+    }
     /// Creates a new highlighter
     #[must_use]
     pub fn new() -> Self {
