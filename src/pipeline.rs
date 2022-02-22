@@ -26,7 +26,7 @@ use std::{fmt, sync::atomic::Ordering};
 use tremor_common::{ids::OperatorIdGen, time::nanotime};
 use tremor_pipeline::errors::ErrorKind as PipelineErrorKind;
 use tremor_pipeline::{CbAction, Event, ExecutableGraph, SignalKind};
-use tremor_script::ast::DeployEndpoint;
+use tremor_script::{ast::DeployEndpoint, highlighter::Dumb};
 
 const TICK_MS: u64 = 100;
 type Inputs = halfbrown::HashMap<DeployEndpoint, (bool, InputTarget)>;
@@ -449,15 +449,7 @@ pub(crate) async fn pipeline_task(
                     Err(e) => {
                         let err_str = if let PipelineErrorKind::Script(script_kind) = e.0 {
                             let script_error = tremor_script::errors::Error(script_kind, e.1);
-                            // possibly a hygienic error
-                            pipeline
-                                .source
-                                .as_ref()
-                                .and_then(|s| script_error.locate_in_source(s))
-                                .map_or_else(
-                                    || format!(" {:?}", script_error),
-                                    |located| format!("\n{}", located),
-                                ) // add a newline to have the error nicely formatted in the log
+                            Dumb::error_to_string(&script_error)?
                         } else {
                             format!(" {}", e)
                         };
@@ -469,15 +461,7 @@ pub(crate) async fn pipeline_task(
                 if let Err(e) = pipeline.enqueue_signal(signal.clone(), &mut eventset) {
                     let err_str = if let PipelineErrorKind::Script(script_kind) = e.0 {
                         let script_error = tremor_script::errors::Error(script_kind, e.1);
-                        // possibly a hygienic error
-                        pipeline
-                            .source
-                            .as_ref()
-                            .and_then(|s| script_error.locate_in_source(s))
-                            .map_or_else(
-                                || format!(" {:?}", script_error),
-                                |located| format!("\n{}", located),
-                            ) // add a newline to have the error nicely formatted in the log
+                        Dumb::error_to_string(&script_error)?
                     } else {
                         format!(" {:?}", e)
                     };

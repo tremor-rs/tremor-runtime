@@ -1221,8 +1221,6 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
 
     // allow this otherwise clippy complains after telling us to use matches
     #[allow(
-        // clippy::blocks_in_if_conditions,
-        clippy::too_many_lines,
         // we allow this because of the borrow checker
         clippy::option_if_let_else
     )]
