@@ -23,7 +23,6 @@ use std::io::Read;
 use std::{collections::HashMap, path::Path};
 use test::tag;
 use tremor_common::time::nanotime;
-use tremor_script::ast::base_expr::BaseExpr;
 use tremor_script::ast::{Expr, ImutExpr, Invoke, List, Record};
 use tremor_script::ctx::EventContext;
 use tremor_script::highlighter::{Dumb as DumbHighlighter, Highlighter, Term as TermHighlighter};

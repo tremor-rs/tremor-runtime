@@ -22,7 +22,7 @@ use super::{
     ArgsExprs, CreationalWith, DefinitioalArgs, DefinitioalArgsWith, WithExprs,
 };
 use super::{
-    error_generic, error_no_locals, GroupBy, HashMap, Helper, Location, OperatorCreate,
+    error_generic, error_no_locals, BaseExpr, GroupBy, HashMap, Helper, OperatorCreate,
     OperatorDefinition, OperatorKind, PipelineCreate, PipelineDefinition, Query, Result,
     ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamStmt, Upable,
     WindowDefinition, WindowKind,
@@ -36,20 +36,18 @@ use crate::{
         Consts, Ident,
     },
     errors::{Error, Kind as ErrorKind},
-    lexer::Span,
-    ModuleManager,
+    impl_expr_no_lt, ModuleManager,
 };
 use crate::{
     ast::{InvokeAggrFn, NodeMeta},
-    impl_expr_raw,
+    impl_expr,
 };
 use beef::Cow;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
 pub struct QueryRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
+    pub(crate) mid: Box<NodeMeta>,
     pub(crate) config: ConfigRaw<'script>,
     pub(crate) stmts: StmtsRaw<'script>,
     pub(crate) params: DefinitioalArgsRaw<'script>,
@@ -77,7 +75,7 @@ impl<'script> QueryRaw<'script> {
             config.insert(k.to_string(), v.try_into_lit()?);
         }
         Ok(Query {
-            mid: NodeMeta::new_box(self.start, self.end),
+            mid: self.mid,
             params,
             config,
             stmts,
@@ -161,14 +159,9 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 Ok(None)
             }
             StmtRaw::PipelineCreate(stmt) => Ok(Some(Stmt::PipelineCreate(stmt.up(helper)?))),
-            StmtRaw::Use(UseRaw {
-                alias,
-                module,
-                start,
-                end,
-            }) => {
-                let range = Span::from((start, end));
-                let mid = ModuleManager::load(&module).map_err(|err| match err {
+            StmtRaw::Use(UseRaw { alias, module, mid }) => {
+                let range = mid.range;
+                let module_id = ModuleManager::load(&module).map_err(|err| match err {
                     Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
                         ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
                         state,
@@ -177,7 +170,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 })?;
 
                 let alias = alias.unwrap_or_else(|| module.id.clone());
-                helper.scope().add_module_alias(alias, mid);
+                helper.scope().add_module_alias(alias, module_id);
                 Ok(None)
             }
         }
@@ -187,20 +180,19 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorDefinitionRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
     pub(crate) kind: OperatorKindRaw,
     pub(crate) id: String,
     pub(crate) params: DefinitioalArgsWithRaw<'script>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
+    pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr_raw!(OperatorDefinitionRaw);
+impl_expr!(OperatorDefinitionRaw);
 
 impl<'script> Upable<'script> for OperatorDefinitionRaw<'script> {
     type Target = OperatorDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let operator_decl = OperatorDefinition {
-            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
+            mid: self.mid.box_with_name(&self.id),
             node_id: NodeId::new(self.id, &[]),
             kind: self.kind.up(helper)?,
             params: self.params.up(helper)?,
@@ -213,8 +205,6 @@ impl<'script> Upable<'script> for OperatorDefinitionRaw<'script> {
 /// we're forced to make this pub because of lalrpop
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct PipelineDefinitionRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) config: ConfigRaw<'script>,
     pub(crate) params: DefinitioalArgsRaw<'script>,
@@ -222,25 +212,26 @@ pub struct PipelineDefinitionRaw<'script> {
     pub(crate) from: Option<Vec<IdentRaw<'script>>>,
     pub(crate) into: Option<Vec<IdentRaw<'script>>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
+    pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr_raw!(PipelineDefinitionRaw);
+impl_expr!(PipelineDefinitionRaw);
 
 impl<'script> PipelineDefinitionRaw<'script> {
     const STREAM_PORT_CONFILCT: &'static str = "Streams cannot share names with from/into ports";
     fn dflt_in_ports<'ident>(&self) -> Vec<Ident<'ident>> {
         vec![Ident {
-            mid: NodeMeta::new_box_with_name(self.start, self.end, "in"),
+            mid: self.mid.clone().box_with_name("in"),
             id: "in".into(),
         }]
     }
     fn dflt_out_ports<'ident>(&self) -> Vec<Ident<'ident>> {
         vec![
             Ident {
-                mid: NodeMeta::new_box_with_name(self.start, self.end, "out"),
+                mid: self.mid.clone().box_with_name("out"),
                 id: "in".into(),
             },
             Ident {
-                mid: NodeMeta::new_box_with_name(self.start, self.end, "err"),
+                mid: self.mid.clone().box_with_name("err"),
                 id: "in".into(),
             },
         ]
@@ -272,7 +263,7 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
             }
         }
 
-        let mid = NodeMeta::new_box_with_name(self.start, self.end, &self.id);
+        let mid = self.mid.box_with_name(&self.id);
         helper.leave_scope()?;
         let params = self.params.up(helper)?;
 
@@ -295,13 +286,12 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PipelineInlineRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) target: NodeId,
     pub(crate) params: CreationalWithRaw<'script>,
+    pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr_raw!(PipelineInlineRaw);
+impl_expr!(PipelineInlineRaw);
 
 impl<'script> Upable<'script> for PipelineInlineRaw<'script> {
     type Target = PipelineCreate<'script>;
@@ -309,7 +299,7 @@ impl<'script> Upable<'script> for PipelineInlineRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // FIXME are those correct?!?
         Ok(PipelineCreate {
-            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
+            mid: self.mid.box_with_name(&self.id),
             node_id: self.target,
             port_stream_map: HashMap::new(),
             params: self.params.up(helper)?,
@@ -320,20 +310,19 @@ impl<'script> Upable<'script> for PipelineInlineRaw<'script> {
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorCreateRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) target: NodeId,
     pub(crate) params: CreationalWithRaw<'script>,
+    pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr_raw!(OperatorCreateRaw);
+impl_expr!(OperatorCreateRaw);
 
 impl<'script> Upable<'script> for OperatorCreateRaw<'script> {
     type Target = OperatorCreate<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let params = self.params.up(helper)?;
         Ok(OperatorCreate {
-            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
+            mid: self.mid.box_with_name(&self.id),
             node_id: NodeId::new(self.id, &[]),
             target: self.target.with_prefix(&[]), // FIXME
             params,
@@ -344,14 +333,13 @@ impl<'script> Upable<'script> for OperatorCreateRaw<'script> {
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptDefinitionRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) params: DefinitioalArgsRaw<'script>,
     pub(crate) script: ScriptRaw<'script>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
+    pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr_raw!(ScriptDefinitionRaw);
+impl_expr!(ScriptDefinitionRaw);
 
 impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
     type Target = ScriptDefinition<'script>;
@@ -368,7 +356,7 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         // Handle the content of the script in it's own module
         helper.enter_scope();
         let script = self.script.up_script(helper)?;
-        let mid = NodeMeta::new_box_with_name(self.start, self.end, &self.id);
+        let mid = self.mid.box_with_name(&self.id);
         helper.leave_scope()?;
         // Handle the params in the outside module
         let params = self.params;
@@ -393,19 +381,19 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptCreateRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) target: NodeId,
     pub(crate) params: CreationalWithRaw<'script>,
+    pub(crate) mid: Box<NodeMeta>,
 }
+impl_expr!(ScriptCreateRaw);
 
 impl<'script> Upable<'script> for ScriptCreateRaw<'script> {
     type Target = ScriptCreate<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let params = self.params.up(helper)?;
         Ok(ScriptCreate {
-            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
+            mid: self.mid.box_with_name(&self.id),
             node_id: NodeId::new(self.id, &[]),
             params,
             target: self.target.with_prefix(&[]), // FIXME
@@ -416,8 +404,6 @@ impl<'script> Upable<'script> for ScriptCreateRaw<'script> {
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct WindowDefinitionRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) kind: WindowKind,
     // Yes it is odd that we use the `creational` here but windows are not crates
@@ -425,8 +411,9 @@ pub struct WindowDefinitionRaw<'script> {
     pub(crate) params: CreationalWithRaw<'script>,
     pub(crate) script: Option<ScriptRaw<'script>>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
+    pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr_raw!(WindowDefinitionRaw);
+impl_expr!(WindowDefinitionRaw);
 
 impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
     type Target = WindowDefinition<'script>;
@@ -436,7 +423,7 @@ impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
         // warn params if `emit_empty_windows` is defined, but neither `max_groups` nor `evicition_period` is defined
 
         let window_decl = WindowDefinition {
-            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
+            mid: self.mid.box_with_name(&self.id),
             node_id: NodeId::new(self.id, &[]),
             kind: self.kind,
             params: self.params.up(helper)?,
@@ -454,17 +441,14 @@ impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct WindowDefnRaw {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
     /// Identity of the window definition
     pub id: NodeId,
+    pub(crate) mid: Box<NodeMeta>,
 }
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct SelectRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
     pub(crate) from: (IdentRaw<'script>, Option<IdentRaw<'script>>),
     pub(crate) into: (IdentRaw<'script>, Option<IdentRaw<'script>>),
     pub(crate) target: ImutExprRaw<'script>,
@@ -472,8 +456,9 @@ pub struct SelectRaw<'script> {
     pub(crate) maybe_having: Option<ImutExprRaw<'script>>,
     pub(crate) maybe_group_by: Option<GroupByRaw<'script>>,
     pub(crate) windows: Option<Vec<WindowDefnRaw>>,
+    pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr_raw!(SelectRaw);
+impl_expr!(SelectRaw);
 
 impl<'script> Upable<'script> for SelectRaw<'script> {
     type Target = Select<'script>;
@@ -481,26 +466,26 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
         let mut target = self.target.up(helper)?;
 
         if helper.has_locals() {
-            return error_no_locals(&(self.start, self.end), &target);
+            return error_no_locals(&self.mid.range, &target);
         };
 
         let maybe_having = self.maybe_having.up(helper)?;
         if helper.has_locals() {
             if let Some(definitely) = maybe_having {
-                return error_no_locals(&(self.start, self.end), &definitely);
+                return error_no_locals(&self.mid.range, &definitely);
             }
         };
 
         let maybe_where = self.maybe_where.up(helper)?;
         if helper.has_locals() {
             if let Some(definitely) = maybe_where {
-                return error_no_locals(&(self.start, self.end), &definitely);
+                return error_no_locals(&self.mid.range, &definitely);
             }
         };
         let maybe_group_by = self.maybe_group_by.up(helper)?;
         if helper.has_locals() {
             if let Some(definitely) = maybe_group_by {
-                return error_no_locals(&(self.start, self.end), &definitely);
+                return error_no_locals(&self.mid.range, &definitely);
             }
         };
 
@@ -546,7 +531,7 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
             (stream, Some(port)) => (stream, port),
         };
         Ok(Select {
-            mid: NodeMeta::new_box(self.start, self.end),
+            mid: self.mid,
             from: (from.0.up(helper)?, from.1.up(helper)?),
             into: (into.0.up(helper)?, into.1.up(helper)?),
             target,
@@ -564,29 +549,23 @@ pub enum GroupByRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Expr {
         /// we're forced to make this pub because of lalrpop
-        start: Location,
-        /// we're forced to make this pub because of lalrpop
-        end: Location,
-        /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
+        mid: Box<NodeMeta>,
     },
     /// we're forced to make this pub because of lalrpop
     Set {
         /// we're forced to make this pub because of lalrpop
-        start: Location,
-        /// we're forced to make this pub because of lalrpop
-        end: Location,
-        /// we're forced to make this pub because of lalrpop
         items: Vec<GroupByRaw<'script>>,
+        /// we're forced to make this pub because of lalrpop
+        mid: Box<NodeMeta>,
     },
     /// we're forced to make this pub because of lalrpop
     Each {
         /// we're forced to make this pub because of lalrpop
-        start: Location,
-        /// we're forced to make this pub because of lalrpop
-        end: Location,
-        /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
+        mid: Box<NodeMeta>,
     },
 }
 
@@ -594,16 +573,16 @@ impl<'script> Upable<'script> for GroupByRaw<'script> {
     type Target = GroupBy<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
-            GroupByRaw::Expr { start, end, expr } => GroupBy::Expr {
-                mid: NodeMeta::new_box(start, end),
+            GroupByRaw::Expr { mid, expr } => GroupBy::Expr {
+                mid,
                 expr: expr.up(helper)?,
             },
-            GroupByRaw::Each { start, end, expr } => GroupBy::Each {
-                mid: NodeMeta::new_box(start, end),
+            GroupByRaw::Each { mid, expr } => GroupBy::Each {
+                mid,
                 expr: expr.up(helper)?,
             },
-            GroupByRaw::Set { start, end, items } => GroupBy::Set {
-                mid: NodeMeta::new_box(start, end),
+            GroupByRaw::Set { mid, items } => GroupBy::Set {
+                mid,
                 items: items.up(helper)?,
             },
         })
@@ -613,8 +592,7 @@ impl<'script> Upable<'script> for GroupByRaw<'script> {
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorKindRaw {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
+    pub(crate) mid: Box<NodeMeta>,
     pub(crate) module: String,
     pub(crate) operation: String,
 }
@@ -623,11 +601,9 @@ impl<'script> Upable<'script> for OperatorKindRaw {
     type Target = OperatorKind;
     fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(OperatorKind {
-            mid: NodeMeta::new_box_with_name(
-                self.start,
-                self.end,
-                &format!("{}::{}", self.module, self.operation),
-            ),
+            mid: self
+                .mid
+                .box_with_name(format!("{}::{}", self.module, self.operation)),
             module: self.module,
             operation: self.operation,
         })
@@ -637,15 +613,16 @@ impl<'script> Upable<'script> for OperatorKindRaw {
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct StreamStmtRaw {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
+    pub(crate) mid: Box<NodeMeta>,
     pub(crate) id: String,
 }
+impl_expr_no_lt!(StreamStmtRaw);
+
 impl<'script> Upable<'script> for StreamStmtRaw {
     type Target = StreamStmt;
     fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(StreamStmt {
-            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
+            mid: self.mid.box_with_name(&self.id),
             id: self.id,
         })
     }

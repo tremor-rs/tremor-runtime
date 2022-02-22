@@ -14,37 +14,16 @@
 
 // Don't cover this file it's only getters
 #![cfg(not(tarpaulin_include))]
-
 use crate::{
     arena,
     ast::{
-        query::raw::{OperatorKindRaw, StmtRaw},
-        raw::{AnyFnRaw, ExprRaw, GroupBy, ImutExprRaw, PathRaw, ReservedPathRaw, TestExprRaw},
-        Expr, ImutExpr, InvokeAggr, NodeMeta, Path, Segment, TestExpr,
+        query::raw::StmtRaw,
+        raw::{AnyFnRaw, ExprRaw, GroupBy, ImutExprRaw, PathRaw, ReservedPathRaw, TopLevelExprRaw},
+        Expr, ImutExpr, NodeMeta, Path, Segment,
     },
     pos::{Location, Span},
 };
 
-use super::raw::TopLevelExprRaw;
-
-#[doc(hidden)]
-/// Implements the BaseExpr trait for a given expression
-#[macro_export]
-macro_rules! impl_expr_raw {
-    ($name:ident) => {
-        impl<'script> crate::ast::base_expr::BaseExpr for $name<'script> {
-            fn s(&self) -> Location {
-                self.start
-            }
-            fn e(&self) -> Location {
-                self.end
-            }
-            fn meta(&self) -> &crate::ast::NodeMeta {
-                todo!()
-            }
-        }
-    };
-}
 #[doc(hidden)]
 /// Implements the BaseExpr trait for a given expression
 #[macro_export]
@@ -55,15 +34,8 @@ macro_rules! impl_expr_exraw {
             <Ex as Upable<'script>>::Target: Expression + 'script,
             Ex: ExpressionRaw<'script> + 'script,
         {
-            fn s(&self) -> Location {
-                self.start
-            }
-
-            fn e(&self) -> Location {
-                self.end
-            }
             fn meta(&self) -> &crate::ast::NodeMeta {
-                todo!()
+                &self.mid
             }
         }
     };
@@ -75,38 +47,17 @@ macro_rules! impl_expr_exraw {
 macro_rules! impl_expr_no_lt {
     ($name:ident) => {
         impl BaseExpr for $name {
-            fn s(&self) -> Location {
-                self.start
-            }
-            fn e(&self) -> Location {
-                self.end
-            }
             fn meta(&self) -> &crate::ast::NodeMeta {
-                todo!()
+                &self.mid
             }
         }
     };
 }
 
-impl BaseExpr for Span {
-    fn s(&self) -> Location {
-        self.start()
-    }
-    fn e(&self) -> Location {
-        self.end()
-    }
-    fn aid(&self) -> arena::Index {
-        self.start().aid
-    }
-    fn meta(&self) -> &crate::ast::NodeMeta {
-        todo!()
-    }
-}
-
 #[doc(hidden)]
 /// Implements the BaseExpr trait for a given expression
 #[macro_export]
-macro_rules! impl_expr_mid {
+macro_rules! impl_expr {
     ($name:ident) => {
         impl<'script> BaseExpr for $name<'script> {
             fn meta(&self) -> &NodeMeta {
@@ -119,7 +70,7 @@ macro_rules! impl_expr_mid {
 #[doc(hidden)]
 /// Implements the BaseExpr trait for a given expression that generalizes over Expression
 #[macro_export]
-macro_rules! impl_expr_ex_mid {
+macro_rules! impl_expr_ex {
     ($name:ident) => {
         impl<'script, Ex: Expression + 'script> BaseExpr for $name<'script, Ex> {
             fn meta(&self) -> &NodeMeta {
@@ -129,11 +80,36 @@ macro_rules! impl_expr_ex_mid {
     };
 }
 
-/// A Basic expression that can be turned into a location
-pub trait BaseExpr: Clone {
-    /// Fetches the node meta
-    fn meta(&self) -> &NodeMeta;
+/// Something that has a start, end and a arena ID
+pub trait Ranged {
+    /// The start location of the expression
+    fn s(&self) -> Location;
+    /// The end location of the expression
+    fn e(&self) -> Location;
+    /// The end location of the expression
+    fn aid(&self) -> arena::Index;
+    /// The span (range) of the expression
+    fn extent(&self) -> Span {
+        Span::new(self.s(), self.e())
+    }
+}
 
+impl Ranged for Span {
+    fn s(&self) -> Location {
+        self.start()
+    }
+    fn e(&self) -> Location {
+        self.end()
+    }
+    fn aid(&self) -> arena::Index {
+        self.start().aid
+    }
+}
+
+impl<T> Ranged for T
+where
+    T: BaseExpr,
+{
     /// The start location of the expression
     fn s(&self) -> Location {
         self.meta().start()
@@ -147,79 +123,33 @@ pub trait BaseExpr: Clone {
     fn aid(&self) -> arena::Index {
         self.meta().aid()
     }
+}
 
-    /// The span (range) of the expression
-    fn extent(&self) -> Span {
-        Span::new(self.s(), self.e())
-    }
+/// A Basic expression that can be turned into a location
+pub trait BaseExpr: Clone {
+    /// Fetches the node meta
+    fn meta(&self) -> &NodeMeta;
     /// Name of the element
     fn name(&self) -> Option<&str> {
         self.meta().name.as_deref()
     }
 }
 
-impl BaseExpr for (Location, Location) {
+impl Ranged for (Location, Location) {
     fn s(&self) -> Location {
         self.0
     }
     fn e(&self) -> Location {
         self.1
     }
-    fn meta(&self) -> &NodeMeta {
-        todo!()
+
+    fn aid(&self) -> arena::Index {
+        self.0.aid
     }
 }
 
 // This is a simple accessor
-#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for ImutExpr<'script> {
-    fn s(&self) -> Location {
-        match self {
-            ImutExpr::Binary(e) => e.s(),
-            ImutExpr::Comprehension(e) => e.s(),
-            ImutExpr::Invoke(e)
-            | ImutExpr::Invoke1(e)
-            | ImutExpr::Invoke2(e)
-            | ImutExpr::Invoke3(e) => e.s(),
-            ImutExpr::InvokeAggr(e) => e.s(),
-            ImutExpr::List(e) => e.s(),
-            ImutExpr::Literal(e) => e.s(),
-            ImutExpr::Recur(e) => e.s(),
-            ImutExpr::Local { mid, .. } | ImutExpr::Present { mid, .. } => mid.start(),
-            ImutExpr::Match(e) => e.s(),
-            ImutExpr::Merge(e) => e.s(),
-            ImutExpr::Patch(e) => e.s(),
-            ImutExpr::Path(e) => e.s(),
-            ImutExpr::Record(e) => e.s(),
-            ImutExpr::Unary(e) => e.s(),
-            ImutExpr::Bytes(e) => e.s(),
-            ImutExpr::String(e) => e.s(),
-        }
-    }
-
-    fn e(&self) -> Location {
-        match self {
-            ImutExpr::Binary(e) => e.e(),
-            ImutExpr::Comprehension(e) => e.e(),
-            ImutExpr::Invoke(e)
-            | ImutExpr::Invoke1(e)
-            | ImutExpr::Invoke2(e)
-            | ImutExpr::Invoke3(e) => e.e(),
-            ImutExpr::InvokeAggr(e) => e.e(),
-            ImutExpr::List(e) => e.e(),
-            ImutExpr::Literal(e) => e.e(),
-            ImutExpr::Match(e) => e.e(),
-            ImutExpr::Merge(e) => e.e(),
-            ImutExpr::Patch(e) => e.e(),
-            ImutExpr::Path(e) => e.e(),
-            ImutExpr::Recur(e) => e.e(),
-            ImutExpr::Local { mid, .. } | ImutExpr::Present { mid, .. } => mid.end(),
-            ImutExpr::Record(e) => e.e(),
-            ImutExpr::Unary(e) => e.e(),
-            ImutExpr::Bytes(e) => e.e(),
-            ImutExpr::String(e) => e.e(),
-        }
-    }
     fn meta(&self) -> &NodeMeta {
         match self {
             ImutExpr::Binary(e) => e.meta(),
@@ -246,7 +176,6 @@ impl<'script> BaseExpr for ImutExpr<'script> {
 }
 
 // This is a simple accessor
-#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for Expr<'script> {
     fn meta(&self) -> &NodeMeta {
         match self {
@@ -263,37 +192,21 @@ impl<'script> BaseExpr for Expr<'script> {
 }
 
 // This is a simple accessor
-#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for PathRaw<'script> {
-    fn s(&self) -> Location {
-        match self {
-            PathRaw::Local(e) => e.s(),
-            PathRaw::Const(e) => e.s(),
-            PathRaw::Meta(e) => e.start,
-            PathRaw::Event(e) => e.start,
-            PathRaw::State(e) => e.start,
-            PathRaw::Expr(e) => e.start,
-            PathRaw::Reserved(e) => e.s(),
-        }
-    }
-    fn e(&self) -> Location {
-        match self {
-            PathRaw::Local(e) => e.e(),
-            PathRaw::Const(e) => e.e(),
-            PathRaw::Meta(e) => e.end,
-            PathRaw::Event(e) => e.end,
-            PathRaw::State(e) => e.end,
-            PathRaw::Expr(e) => e.end,
-            PathRaw::Reserved(e) => e.e(),
-        }
-    }
     fn meta(&self) -> &NodeMeta {
-        todo!()
+        match self {
+            PathRaw::Local(e) => e.meta(),
+            PathRaw::Const(e) => e.meta(),
+            PathRaw::Meta(e) => &e.mid,
+            PathRaw::Event(e) => &e.mid,
+            PathRaw::State(e) => &e.mid,
+            PathRaw::Expr(e) => &e.mid,
+            PathRaw::Reserved(e) => e.meta(),
+        }
     }
 }
 
 // This is a simple accessor
-#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for Path<'script> {
     fn meta(&self) -> &NodeMeta {
         match self {
@@ -308,7 +221,6 @@ impl<'script> BaseExpr for Path<'script> {
 }
 
 // This is a simple accessor
-#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for Segment<'script> {
     fn meta(&self) -> &NodeMeta {
         match self {
@@ -322,84 +234,29 @@ impl<'script> BaseExpr for Segment<'script> {
 }
 
 // This is a simple accessor
-#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for ImutExprRaw<'script> {
     fn meta(&self) -> &NodeMeta {
-        todo!()
-    }
-    fn s(&self) -> Location {
         match self {
-            ImutExprRaw::Binary(e) => e.start,
-            ImutExprRaw::Comprehension(e) => e.start,
-            ImutExprRaw::Invoke(e) => e.s(),
-            ImutExprRaw::List(e) => e.s(),
-            ImutExprRaw::Literal(e) => e.s(),
-            ImutExprRaw::Match(e) => e.start,
-            ImutExprRaw::Merge(e) => e.start,
-            ImutExprRaw::Patch(e) => e.start,
-            ImutExprRaw::Path(e) => e.s(),
-            ImutExprRaw::Present { start, .. } => *start,
-            ImutExprRaw::Record(e) => e.s(),
-            ImutExprRaw::Recur(e) => e.s(),
-            ImutExprRaw::String(e) => e.start,
-            ImutExprRaw::Unary(e) => e.start,
-            ImutExprRaw::Bytes(e) => e.start,
-        }
-    }
-    fn e(&self) -> Location {
-        match self {
-            ImutExprRaw::Binary(e) => e.end,
-            ImutExprRaw::Comprehension(e) => e.end,
-            ImutExprRaw::Invoke(e) => e.e(),
-            ImutExprRaw::List(e) => e.e(),
-            ImutExprRaw::Literal(e) => e.e(),
-            ImutExprRaw::Match(e) => e.end,
-            ImutExprRaw::Merge(e) => e.end,
-            ImutExprRaw::Patch(e) => e.end,
-            ImutExprRaw::Path(e) => e.e(),
-            ImutExprRaw::Present { end, .. } => *end,
-            ImutExprRaw::Record(e) => e.e(),
-            ImutExprRaw::Recur(e) => e.e(),
-            ImutExprRaw::String(e) => e.end,
-            ImutExprRaw::Unary(e) => e.end,
-            ImutExprRaw::Bytes(e) => e.end,
+            ImutExprRaw::Binary(e) => &e.mid,
+            ImutExprRaw::Comprehension(e) => &e.mid,
+            ImutExprRaw::Invoke(e) => e.meta(),
+            ImutExprRaw::List(e) => e.meta(),
+            ImutExprRaw::Literal(e) => e.meta(),
+            ImutExprRaw::Match(e) => &e.mid,
+            ImutExprRaw::Merge(e) => &e.mid,
+            ImutExprRaw::Patch(e) => &e.mid,
+            ImutExprRaw::Path(e) => e.meta(),
+            ImutExprRaw::Present { mid, .. } => mid,
+            ImutExprRaw::Record(e) => e.meta(),
+            ImutExprRaw::Recur(e) => e.meta(),
+            ImutExprRaw::String(e) => &e.mid,
+            ImutExprRaw::Unary(e) => &e.mid,
+            ImutExprRaw::Bytes(e) => &e.mid,
         }
     }
 }
 
 // This is a simple accessor
-#[cfg(not(tarpaulin_include))]
-impl BaseExpr for TestExpr {
-    fn meta(&self) -> &NodeMeta {
-        &self.mid
-    }
-}
-
-// This is a simple accessor
-#[cfg(not(tarpaulin_include))]
-impl BaseExpr for TestExprRaw {
-    fn s(&self) -> Location {
-        self.start
-    }
-
-    fn e(&self) -> Location {
-        self.end
-    }
-    fn meta(&self) -> &NodeMeta {
-        todo!()
-    }
-}
-
-// This is a simple accessor
-#[cfg(not(tarpaulin_include))]
-impl BaseExpr for InvokeAggr {
-    fn meta(&self) -> &NodeMeta {
-        &self.mid
-    }
-}
-
-// This is a simple accessor
-#[cfg(not(tarpaulin_include))]
 impl<'script> BaseExpr for GroupBy<'script> {
     fn meta(&self) -> &NodeMeta {
         match self {
@@ -411,139 +268,61 @@ impl<'script> BaseExpr for GroupBy<'script> {
 }
 
 impl<'script> BaseExpr for ReservedPathRaw<'script> {
-    fn s(&self) -> Location {
-        match self {
-            ReservedPathRaw::Args { start, .. }
-            | ReservedPathRaw::Window { start, .. }
-            | ReservedPathRaw::Group { start, .. } => *start,
-        }
-    }
-
-    fn e(&self) -> Location {
-        match self {
-            ReservedPathRaw::Args { end, .. }
-            | ReservedPathRaw::Window { end, .. }
-            | ReservedPathRaw::Group { end, .. } => *end,
-        }
-    }
-
     fn meta(&self) -> &NodeMeta {
-        todo!()
+        match self {
+            ReservedPathRaw::Args { mid, .. }
+            | ReservedPathRaw::Window { mid, .. }
+            | ReservedPathRaw::Group { mid, .. } => mid,
+        }
     }
 }
 
 impl<'script> BaseExpr for TopLevelExprRaw<'script> {
     fn meta(&self) -> &NodeMeta {
-        todo!()
-    }
-
-    fn s(&self) -> Location {
         match self {
-            TopLevelExprRaw::Const(c) => c.s(),
-            TopLevelExprRaw::FnDecl(e) => e.s(),
-            TopLevelExprRaw::Use(e) => e.s(),
-            TopLevelExprRaw::Expr(e) => e.s(),
-        }
-    }
-
-    fn e(&self) -> Location {
-        match self {
-            TopLevelExprRaw::Const(c) => c.e(),
-            TopLevelExprRaw::FnDecl(e) => e.e(),
-            TopLevelExprRaw::Use(e) => e.e(),
-            TopLevelExprRaw::Expr(e) => e.e(),
+            TopLevelExprRaw::Const(c) => c.meta(),
+            TopLevelExprRaw::FnDecl(e) => e.meta(),
+            TopLevelExprRaw::Use(e) => e.meta(),
+            TopLevelExprRaw::Expr(e) => e.meta(),
         }
     }
 }
 
 impl<'script> BaseExpr for ExprRaw<'script> {
     fn meta(&self) -> &NodeMeta {
-        todo!()
-    }
-
-    fn s(&self) -> Location {
         match self {
-            ExprRaw::Drop { start, .. } => *start,
-            ExprRaw::MatchExpr(e) => e.s(),
-            ExprRaw::Assign(e) => e.s(),
-            ExprRaw::Comprehension(e) => e.s(),
-            ExprRaw::Emit(e) => e.s(),
-            ExprRaw::Imut(e) => e.s(),
-        }
-    }
-
-    fn e(&self) -> Location {
-        match self {
-            ExprRaw::Drop { end, .. } => *end,
-            ExprRaw::MatchExpr(e) => e.e(),
-            ExprRaw::Assign(e) => e.e(),
-            ExprRaw::Comprehension(e) => e.e(),
-            ExprRaw::Emit(e) => e.e(),
-            ExprRaw::Imut(e) => e.e(),
+            ExprRaw::Drop { mid, .. } => mid,
+            ExprRaw::MatchExpr(e) => e.meta(),
+            ExprRaw::Assign(e) => e.meta(),
+            ExprRaw::Comprehension(e) => e.meta(),
+            ExprRaw::Emit(e) => e.meta(),
+            ExprRaw::Imut(e) => e.meta(),
         }
     }
 }
 
 impl<'script> BaseExpr for AnyFnRaw<'script> {
     fn meta(&self) -> &NodeMeta {
-        todo!()
-    }
-    fn s(&self) -> Location {
         match self {
-            AnyFnRaw::Match(m) => m.start,
-            AnyFnRaw::Normal(m) => m.start,
-        }
-    }
-    fn e(&self) -> Location {
-        match self {
-            AnyFnRaw::Match(m) => m.end,
-            AnyFnRaw::Normal(m) => m.end,
+            AnyFnRaw::Match(m) => m.meta(),
+            AnyFnRaw::Normal(m) => m.meta(),
         }
     }
 }
 
 impl<'script> BaseExpr for StmtRaw<'script> {
     fn meta(&self) -> &NodeMeta {
-        todo!()
-    }
-    fn s(&self) -> Location {
         match self {
-            StmtRaw::OperatorCreate(s) => s.start,
-            StmtRaw::OperatorDefinition(s) => s.start,
-            StmtRaw::ScriptCreate(s) => s.start,
-            StmtRaw::ScriptDefinition(s) => s.start,
-            StmtRaw::PipelineDefinition(s) => s.start,
-            StmtRaw::PipelineCreate(s) => s.start,
-            StmtRaw::SelectStmt(s) => s.start,
-            StmtRaw::StreamStmt(s) => s.start,
-            StmtRaw::WindowDefinition(s) => s.start,
-            StmtRaw::Use(s) => s.s(),
+            StmtRaw::OperatorCreate(s) => s.meta(),
+            StmtRaw::OperatorDefinition(s) => s.meta(),
+            StmtRaw::ScriptCreate(s) => s.meta(),
+            StmtRaw::ScriptDefinition(s) => s.meta(),
+            StmtRaw::PipelineDefinition(s) => s.meta(),
+            StmtRaw::PipelineCreate(s) => s.meta(),
+            StmtRaw::SelectStmt(s) => s.meta(),
+            StmtRaw::StreamStmt(s) => s.meta(),
+            StmtRaw::WindowDefinition(s) => s.meta(),
+            StmtRaw::Use(s) => s.meta(),
         }
-    }
-    fn e(&self) -> Location {
-        match self {
-            StmtRaw::OperatorCreate(e) => e.end,
-            StmtRaw::OperatorDefinition(e) => e.end,
-            StmtRaw::ScriptCreate(e) => e.end,
-            StmtRaw::ScriptDefinition(e) => e.end,
-            StmtRaw::PipelineDefinition(e) => e.end,
-            StmtRaw::PipelineCreate(e) => e.end,
-            StmtRaw::SelectStmt(e) => e.end,
-            StmtRaw::StreamStmt(e) => e.end,
-            StmtRaw::WindowDefinition(e) => e.end,
-            StmtRaw::Use(e) => e.e(),
-        }
-    }
-}
-
-impl BaseExpr for OperatorKindRaw {
-    fn s(&self) -> Location {
-        self.start
-    }
-    fn e(&self) -> Location {
-        self.end
-    }
-    fn meta(&self) -> &NodeMeta {
-        todo!()
     }
 }
