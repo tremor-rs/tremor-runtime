@@ -25,7 +25,7 @@ use s3::Client as S3Client;
 
 const MINCHUNKSIZE: i64 = 8 * 1024 * 1024; // 8 MBs
 
-const CONNECTOR_TYPE: ConnectorType = ConnectorType::from("s3-reader");
+const CONNECTOR_TYPE: &'static str = "s3-reader";
 const URL_SCHEME: &str = "tremor-s3";
 
 #[derive(Deserialize, Debug, Default)]
@@ -78,7 +78,7 @@ pub(crate) struct Builder {}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
-        CONNECTOR_TYPE
+        ConnectorType::from(CONNECTOR_TYPE)
     }
 
     async fn from_config(
