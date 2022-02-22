@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use super::{
+    base_expr::Ranged,
     raw::{BytesDataType, Endian},
-    BaseExpr,
 };
 use crate::errors::{error_generic, Result};
 use crate::prelude::*;
@@ -192,7 +192,7 @@ fn write_bits(
     clippy::cast_sign_loss,
     clippy::too_many_arguments
 )]
-pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn extend_bytes_from_value<'value, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     data_type: BytesDataType,

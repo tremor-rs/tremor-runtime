@@ -15,42 +15,32 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
-use super::CreateStmt;
-use super::FlowDefinition;
-use super::Value;
-use super::{BaseExpr, DeployFlow};
-use super::{ConnectStmt, DeployEndpoint};
-use super::{ConnectorDefinition, CreateTargetDefinition};
-use crate::ast::{raw::IdentRaw, walkers::ImutExprWalker};
-use crate::errors::{Kind as ErrorKind, Result};
-use crate::impl_expr_raw;
-use crate::pos::Location;
-use crate::AggrType;
-use crate::EventContext;
-use crate::{
-    ast::{
-        docs::ModDoc, error_generic, node_id::NodeId, query::raw::ConfigRaw, raw::UseRaw, Deploy,
-        DeployStmt, Helper, Script, Upable,
-    },
-    ModuleManager,
+use super::{
+    BaseExpr, ConnectStmt, ConnectorDefinition, CreateStmt, CreateTargetDefinition, DeployEndpoint,
+    DeployFlow, FlowDefinition, Value,
 };
 use crate::{
     ast::{
+        base_expr::Ranged,
+        docs::ModDoc,
+        error_generic,
+        node_id::NodeId,
         query::raw::{
-            CreationalWithRaw, DefinitioalArgsRaw, DefinitioalArgsWithRaw, PipelineDefinitionRaw,
+            ConfigRaw, CreationalWithRaw, DefinitioalArgsRaw, DefinitioalArgsWithRaw,
+            PipelineDefinitionRaw,
         },
+        raw::{IdentRaw, UseRaw},
         visitors::ConstFolder,
-        NodeMeta,
+        walkers::ImutExprWalker,
+        Deploy, DeployStmt, Helper, NodeMeta, Script, Upable,
     },
-    errors::Error,
-    lexer::Span,
+    errors::{Error, Kind as ErrorKind, Result},
+    impl_expr, AggrType, EventContext, ModuleManager, Return,
 };
 use beef::Cow;
 use halfbrown::HashMap;
 use tremor_common::time::nanotime;
 use tremor_value::literal;
-
-use crate::Return;
 
 /// Evaluate a script expression at compile time with an empty state context
 /// for use during compile time reduction
@@ -129,14 +119,9 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
     type Target = Option<DeployStmt<'script>>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
-            DeployStmtRaw::Use(UseRaw {
-                alias,
-                module,
-                start,
-                end,
-            }) => {
-                let range = Span::from((start, end));
-                let mid = ModuleManager::load(&module).map_err(|err| match err {
+            DeployStmtRaw::Use(UseRaw { alias, module, mid }) => {
+                let range = mid.range;
+                let module_id = ModuleManager::load(&module).map_err(|err| match err {
                     Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
                         ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
                         state,
@@ -145,7 +130,7 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
                 })?;
 
                 let alias = alias.unwrap_or_else(|| module.id.clone());
-                helper.scope().add_module_alias(dbg!(alias), mid);
+                helper.scope().add_module_alias(dbg!(alias), module_id);
                 Ok(None)
             }
             DeployStmtRaw::FlowDefinition(stmt) => {
@@ -175,21 +160,20 @@ pub type DeployStmtsRaw<'script> = Vec<DeployStmtRaw<'script>>;
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ConnectorDefinitionRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) kind: IdentRaw<'script>,
     pub(crate) params: DefinitioalArgsWithRaw<'script>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
+    pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr_raw!(ConnectorDefinitionRaw);
+impl_expr!(ConnectorDefinitionRaw);
 
 impl<'script> Upable<'script> for ConnectorDefinitionRaw<'script> {
     type Target = ConnectorDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let query_decl = ConnectorDefinition {
             config: Value::const_null(),
-            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
+            mid: self.mid.box_with_name(&self.id),
             params: self.params.up(helper)?,
             builtin_kind: self.kind.to_string(),
             node_id: NodeId::new(self.id, &[]),
@@ -226,69 +210,54 @@ impl<'script> Upable<'script> for DeployEndpointRaw<'script> {
 pub enum ConnectStmtRaw<'script> {
     ConnectorToPipeline {
         /// The instance we're connecting to
-        start: Location,
-        /// The instance we're connecting to
-        end: Location,
-        /// The instance we're connecting to
         from: DeployEndpointRaw<'script>,
         /// The instance being connected
         to: DeployEndpointRaw<'script>,
+        /// The instance we're connecting to
+        mid: Box<NodeMeta>,
     },
     PipelineToConnector {
         /// The instance we're connecting to
-        start: Location,
-        /// The instance we're connecting to
-        end: Location,
-        /// The instance we're connecting to
         from: DeployEndpointRaw<'script>,
         /// The instance being connected
         to: DeployEndpointRaw<'script>,
+        /// The instance we're connecting to
+        mid: Box<NodeMeta>,
     },
     PipelineToPipeline {
         /// The instance we're connecting to
-        start: Location,
-        /// The instance we're connecting to
-        end: Location,
-        /// The instance we're connecting to
         from: DeployEndpointRaw<'script>,
         /// The instance being connected
         to: DeployEndpointRaw<'script>,
+        /// The instance we're connecting to
+        mid: Box<NodeMeta>,
     },
 }
 impl<'script> Upable<'script> for ConnectStmtRaw<'script> {
     type Target = ConnectStmt;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
-            ConnectStmtRaw::ConnectorToPipeline {
-                start,
-                end,
-                from,
-                to,
-            } => Ok(ConnectStmt::ConnectorToPipeline {
-                mid: NodeMeta::new_box(start, end),
-                from: from.up(helper)?,
-                to: to.up(helper)?,
-            }),
-            ConnectStmtRaw::PipelineToConnector {
-                start,
-                end,
-                from,
-                to,
-            } => Ok(ConnectStmt::PipelineToConnector {
-                mid: NodeMeta::new_box(start, end),
-                from: from.up(helper)?,
-                to: to.up(helper)?,
-            }),
-            ConnectStmtRaw::PipelineToPipeline {
-                start,
-                end,
-                from,
-                to,
-            } => Ok(ConnectStmt::PipelineToPipeline {
-                mid: NodeMeta::new_box(start, end),
-                from: from.up(helper)?,
-                to: to.up(helper)?,
-            }),
+            ConnectStmtRaw::ConnectorToPipeline { mid, from, to } => {
+                Ok(ConnectStmt::ConnectorToPipeline {
+                    mid,
+                    from: from.up(helper)?,
+                    to: to.up(helper)?,
+                })
+            }
+            ConnectStmtRaw::PipelineToConnector { mid, from, to } => {
+                Ok(ConnectStmt::PipelineToConnector {
+                    mid,
+                    from: from.up(helper)?,
+                    to: to.up(helper)?,
+                })
+            }
+            ConnectStmtRaw::PipelineToPipeline { mid, from, to } => {
+                Ok(ConnectStmt::PipelineToPipeline {
+                    mid,
+                    from: from.up(helper)?,
+                    to: to.up(helper)?,
+                })
+            }
         }
     }
 }
@@ -296,14 +265,13 @@ impl<'script> Upable<'script> for ConnectStmtRaw<'script> {
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FlowDefinitionRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
     pub(crate) id: String,
     pub(crate) params: DefinitioalArgsRaw<'script>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
     pub(crate) stmts: Vec<FlowStmtRaw<'script>>,
+    pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr_raw!(FlowDefinitionRaw);
+impl_expr!(FlowDefinitionRaw);
 
 impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
     type Target = FlowDefinition<'script>;
@@ -338,7 +306,7 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
                 }
             }
         }
-        let mid = NodeMeta::new_box_with_name(self.start, self.end, &self.id);
+        let mid = self.mid.box_with_name(&self.id);
         let docs = self
             .docs
             .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
@@ -387,16 +355,15 @@ pub enum CreateKind {
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CreateStmtRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
     pub(crate) id: IdentRaw<'script>,
     pub(crate) params: CreationalWithRaw<'script>,
     /// Id of the definition
     pub target: NodeId,
     /// Module of the definition
     pub(crate) kind: CreateKind,
+    pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr_raw!(CreateStmtRaw);
+impl_expr!(CreateStmtRaw);
 
 impl<'script> Upable<'script> for CreateStmtRaw<'script> {
     type Target = CreateStmt<'script>;
@@ -438,7 +405,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         };
 
         let create_stmt = CreateStmt {
-            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
+            mid: self.mid.box_with_name(&self.id.id),
             with: params,
             instance_alias: node_id.clone(),
             from_target: target,
@@ -452,15 +419,14 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DeployFlowRaw<'script> {
-    pub(crate) start: Location,
-    pub(crate) end: Location,
     pub(crate) id: IdentRaw<'script>,
     pub(crate) params: CreationalWithRaw<'script>,
     /// Id of the definition
     pub target: NodeId,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
+    pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr_raw!(DeployFlowRaw);
+impl_expr!(DeployFlowRaw);
 
 impl<'script> Upable<'script> for DeployFlowRaw<'script> {
     type Target = DeployFlow<'script>;
@@ -488,7 +454,7 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
         defn.apply_args(helper)?;
 
         let create_stmt = DeployFlow {
-            mid: NodeMeta::new_box_with_name(self.start, self.end, &self.id),
+            mid: self.mid.box_with_name(&self.id.id),
             instance_alias: node_id,
             from_target: self.target,
             defn,

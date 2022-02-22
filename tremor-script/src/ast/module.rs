@@ -26,8 +26,8 @@ use super::{
 use crate::{
     arena::{self, Arena},
     errors::Result,
-    impl_expr_raw,
-    lexer::{Location, Span, Tokenizer},
+    impl_expr,
+    lexer::{Span, Tokenizer},
     path::ModulePath,
     FN_REGISTRY,
 };
@@ -64,34 +64,16 @@ pub enum ModuleStmtRaw<'script> {
 }
 impl<'script> BaseExpr for ModuleStmtRaw<'script> {
     fn meta(&self) -> &NodeMeta {
-        todo!()
-    }
-
-    fn s(&self) -> Location {
         match self {
-            ModuleStmtRaw::Flow(e) => e.s(),
-            ModuleStmtRaw::Connector(e) => e.s(),
-            ModuleStmtRaw::Const(e) => e.s(),
-            ModuleStmtRaw::FnDecl(e) => e.s(),
-            ModuleStmtRaw::Pipeline(e) => e.s(),
-            ModuleStmtRaw::Use(e) => e.s(),
-            ModuleStmtRaw::Window(e) => e.s(),
-            ModuleStmtRaw::Operator(e) => e.s(),
-            ModuleStmtRaw::Script(e) => e.s(),
-        }
-    }
-
-    fn e(&self) -> Location {
-        match self {
-            ModuleStmtRaw::Flow(e) => e.e(),
-            ModuleStmtRaw::Connector(e) => e.e(),
-            ModuleStmtRaw::Const(e) => e.e(),
-            ModuleStmtRaw::FnDecl(e) => e.e(),
-            ModuleStmtRaw::Pipeline(e) => e.e(),
-            ModuleStmtRaw::Use(e) => e.e(),
-            ModuleStmtRaw::Window(e) => e.e(),
-            ModuleStmtRaw::Operator(e) => e.e(),
-            ModuleStmtRaw::Script(e) => e.e(),
+            ModuleStmtRaw::Flow(e) => e.meta(),
+            ModuleStmtRaw::Connector(e) => e.meta(),
+            ModuleStmtRaw::Const(e) => e.meta(),
+            ModuleStmtRaw::FnDecl(e) => e.meta(),
+            ModuleStmtRaw::Pipeline(e) => e.meta(),
+            ModuleStmtRaw::Use(e) => e.meta(),
+            ModuleStmtRaw::Window(e) => e.meta(),
+            ModuleStmtRaw::Operator(e) => e.meta(),
+            ModuleStmtRaw::Script(e) => e.meta(),
         }
     }
 }
@@ -101,13 +83,12 @@ pub type ModuleStmtsRaw<'script> = Vec<ModuleStmtRaw<'script>>;
 /// we're forced to make this pub because of lalrpop
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct ModuleRaw<'script> {
-    pub start: Location,
-    pub end: Location,
     pub name: IdentRaw<'script>,
     pub stmts: ModuleStmtsRaw<'script>,
     pub doc: Option<Vec<Cow<'script, str>>>,
+    pub mid: Box<NodeMeta>,
 }
-impl_expr_raw!(ModuleRaw);
+impl_expr!(ModuleRaw);
 
 /// module id
 #[derive(Debug, Clone, PartialEq)]
