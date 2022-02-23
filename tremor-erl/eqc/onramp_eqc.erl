@@ -12,7 +12,7 @@
 -include_lib("eqc/include/eqc_component.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
--compile(export_all).
+%-compile(export_all).
 
 -record(state,{
                connection,
