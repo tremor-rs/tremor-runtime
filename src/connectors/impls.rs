@@ -39,6 +39,8 @@ pub(crate) mod metrics;
 pub(crate) mod metronome;
 /// AWS S3 connectors
 pub(crate) mod s3;
+/// HTTP
+pub(crate) mod http;
 /// std streams connector (stdout, stderr, stdin)
 pub(crate) mod stdio;
 /// tcp server and client connector impls

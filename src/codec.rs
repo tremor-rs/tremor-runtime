@@ -16,6 +16,7 @@ use crate::{
     config,
     errors::{Kind as ErrorKind, Result},
 };
+use std::fmt::{Debug, Display};
 use tremor_script::Value;
 pub(crate) mod binary;
 pub(crate) mod binflux;
@@ -28,17 +29,6 @@ pub(crate) mod statsd;
 pub(crate) mod string;
 pub(crate) mod syslog;
 pub(crate) mod yaml;
-
-const MIME_TYPES: [&str; 8] = [
-    "application/json",
-    "application/yaml",
-    "text/plain",
-    "text/html",
-    "application/msgpack",
-    "application/x-msgpack",
-    "application/vnd.msgpack",
-    "application/octet-stream",
-];
 
 mod prelude {
     pub use super::Codec;
@@ -97,6 +87,18 @@ pub trait Codec: Send + Sync {
     fn boxed_clone(&self) -> Box<dyn Codec>;
 }
 
+impl Display for dyn Codec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Codec: {}", self.name())
+    }
+}
+
+impl Debug for dyn Codec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Codec: {}", self.name())
+    }
+}
+
 /// resolve a codec from either a codec name of a full-blown config
 ///
 /// # Errors
@@ -119,36 +121,6 @@ pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
     }
 }
 
-/// Map from Mime types to codecs for all builtin codecs mappable to Mime types
-/// these are all safe mappings
-/// if you have a specific codec to be used for a more unspecific mime type
-/// like statsd for text/plain
-/// these must be specified in a source specific `codec_map`
-#[must_use]
-pub fn builtin_codec_map() -> halfbrown::HashMap<String, Box<dyn Codec>> {
-    MIME_TYPES
-        .iter()
-        .filter_map(|t| Some(((*t).to_string(), by_mime_type(t).ok()?)))
-        .collect()
-}
-
-/// lookup a codec by mime type
-///
-/// # Errors
-/// if no codec could be found for the given mime type
-pub fn by_mime_type(mime: &str) -> Result<Box<dyn Codec>> {
-    match mime {
-        "application/json" => Ok(Box::new(json::Json::<json::Unsorted>::default())),
-        "application/yaml" => Ok(Box::new(yaml::Yaml {})),
-        "text/plain" | "text/html" => Ok(Box::new(string::String {})),
-        "application/msgpack" | "application/x-msgpack" | "application/vnd.msgpack" => {
-            Ok(Box::new(msgpack::MsgPack {}))
-        }
-        "application/octet-stream" => Ok(Box::new(binary::Binary {})),
-        _ => Err(format!("No codec found for mime type '{}'", mime).into()),
-    }
-}
-
 #[cfg(test)]
 mod test {
 
@@ -168,27 +140,5 @@ mod test {
             super::resolve(&"snot".into()).err().unwrap().to_string(),
             "Codec \"snot\" not found."
         )
-    }
-
-    #[test]
-    fn builtin_codec_map() {
-        let map = super::builtin_codec_map();
-
-        for t in super::MIME_TYPES.iter() {
-            assert!(map.contains_key(*t));
-        }
-    }
-    #[test]
-    fn by_mime_type() {
-        for t in super::MIME_TYPES.iter() {
-            assert!(super::by_mime_type(t).is_ok());
-        }
-        assert_eq!(
-            super::by_mime_type("application/badger")
-                .err()
-                .unwrap()
-                .to_string(),
-            "No codec found for mime type 'application/badger'"
-        );
     }
 }
