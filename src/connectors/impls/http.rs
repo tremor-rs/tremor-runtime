@@ -1,4 +1,4 @@
-// Copyright 2021, The Tremor Team
+// Copyright 2022, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,17 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Metrics facilities
-pub(crate) mod metrics;
-
-/// Quiescence support facilities
-pub(crate) mod quiescence;
-
-/// Reconnection facilities
-pub(crate) mod reconnect;
-
-/// Transport Level Security facilities
-pub(crate) mod tls;
-
-/// MIME encoding utilities
-pub(crate) mod mime;
+pub(crate) mod auth;
+pub(crate) mod client;
+pub(crate) mod meta;
+pub(crate) mod server;
+pub(crate) mod utils;
