@@ -1,0 +1,68 @@
+define flow main
+flow
+  use integration;
+  use troy::pipelines;
+  use troy::connectors;
+
+  define connector http_client from http_client
+  with
+#    preprocessors = ["lines"],
+    postprocessors = ["lines"],
+    codec = "json",
+    config = {
+      "url": "http://localhost:65535/",
+      "method": "post",
+    },
+    reconnect = {
+      "retry": {
+        "interval_ms": 100,
+        "growth_rate": 2,
+        "max_retries": 3,
+      }
+    }
+  end;
+
+  define connector http_server from http_server
+  with
+    preprocessors = ["lines"],
+    postprocessors = ["lines"],
+    codec = "json",
+    config = {
+      "url": "http://localhost:65535/",
+    }
+  end;
+
+#  define pipeline instrument
+#  pipeline
+#    select { "event": event, "meta": $ } from in into out
+#  end;
+
+  create connector data_in from integration::read_file;
+  create connector data_out from integration::write_file;
+  create connector exit from integration::exit;
+  create connector stdio from connectors::console;
+  create connector https from http_server;
+  create connector httpc from http_client;
+  create connector exit from connectors::exit;
+
+  create pipeline echo from pipelines::passthrough;
+  create pipeline replay from pipelines::passthrough;
+  create pipeline record from integration::out_and_exit;
+
+  # Echo http server: <http:req> -> server -> server_side -> <http:resp>
+  connect /connector/https to /pipeline/echo;
+  connect /pipeline/echo to /connector/https;
+
+  # Replay recorded events over http to server
+  connect /connector/data_in to /pipeline/replay;
+  connect /pipeline/replay to /connector/httpc;
+  connect /pipeline/record to /connector/data_out;
+  connect /connector/httpc/out to /pipeline/record;
+
+
+  # Terminate at end via `exit` event
+  connect /pipeline/record/exit to /connector/exit;
+
+end;
+
+deploy flow main;
