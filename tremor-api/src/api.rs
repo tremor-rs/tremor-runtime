@@ -198,23 +198,27 @@ async fn handle_api_request<
 
 /// server the tremor API in a separately spawned task
 pub fn serve_api(host: String, world: &World) -> JoinHandle<Result<()>> {
-    let mut app = tide::Server::with_state(State {
+    let mut v1_app = tide::Server::with_state(State {
         world: world.clone(),
     });
-    app.at("/version")
+    v1_app.at("/version")
         .get(|r| handle_api_request(r, version::get));
-    app.at("/status")
+    v1_app.at("/status")
         .get(|r| handle_api_request(r, status::get_runtime_status));
-    app.at("/flows")
+    v1_app.at("/flows")
         .get(|r| handle_api_request(r, flow::list_flows));
-    app.at("/flows/:id")
+    v1_app.at("/flows/:id")
         .get(|r| handle_api_request(r, flow::get_flow))
         .patch(|r| handle_api_request(r, flow::patch_flow_status));
-    app.at("/flows/:id/connectors")
+    v1_app.at("/flows/:id/connectors")
         .get(|r| handle_api_request(r, flow::get_flow_connectors));
-    app.at("/flows/:id/connectors/:connector")
+    v1_app.at("/flows/:id/connectors/:connector")
         .get(|r| handle_api_request(r, flow::get_flow_connector_status))
         .patch(|r| handle_api_request(r, flow::patch_flow_connector_status));
+
+    let mut app = tide::Server::new();    
+    app.at("/v1").nest(v1_app);
+
     // spawn API listener
     async_std::task::spawn(async move {
         let res = app.listen(host).await;
