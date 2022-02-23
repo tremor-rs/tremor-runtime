@@ -33,3 +33,13 @@ pipeline
     select event from in where event != "exit" into out/out;
     select {"exit": 0, "delay": args.delay} from in where event == "exit" into out/exit;
 end;
+
+define pipeline out_and_exit
+into 
+    out, exit
+args
+  delay = 0
+pipeline
+    select event from in into out; # include 'exit'
+    select {"exit": 0, "delay": args.delay} from in where event == "exit" into out/exit;
+end;
