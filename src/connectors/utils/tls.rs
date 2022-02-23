@@ -37,8 +37,8 @@ lazy_static! {
 #[derive(Debug, Clone, Deserialize)]
 pub struct TLSServerConfig {
     // FIXME we call this cafile and cert in different places this is a bit odd
-    cert: PathBuf,
-    key: PathBuf,
+    pub(crate) cert: PathBuf,
+    pub(crate) key: PathBuf,
 }
 
 #[derive(Deserialize, Debug, Default, Clone)]

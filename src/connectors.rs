@@ -1172,6 +1172,8 @@ pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
         Box::new(impls::unix_socket::server::Builder::default()),
         #[cfg(unix)]
         Box::new(impls::unix_socket::client::Builder::default()),
+        Box::new(impls::http::client::Builder::default()),
+        Box::new(impls::http::server::Builder::default()),
     ]
 }
 
@@ -1200,5 +1202,7 @@ pub async fn register_builtin_connector_types(world: &World, debug: bool) -> Res
     }
     world
         .register_builtin_connector_type(Box::new(impls::exit::Builder::new(world)))
-        .await
+        .await?;
+
+    Ok(())
 }
