@@ -182,7 +182,7 @@ pretty_assertions = "1.1.0"
 proptest = "1.0"
 regex = "1"
 tempfile = { version = "3.2" }
-test-case = "1.2"
+test-case = "2.0"
 
 
 [features]
