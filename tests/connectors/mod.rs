@@ -27,6 +27,8 @@ use log::{debug, info};
 use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook_async_std::{Handle, Signals};
 use testcontainers::{clients, Docker};
+use std::process::Stdio;
+use std::sync::Once;
 use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::{
     ids::ConnectorIdGen,
@@ -415,4 +417,46 @@ impl TestPipeline {
             }
         }
     }
+}
+
+/// Find free TCP port for use in test server endpoints
+pub(crate) async fn find_free_tcp_port() -> u16 {
+    let listener = TcpListener::bind("127.0.0.1:0").await;
+    let listener = match listener {
+        Err(_) => return 65535, // TODO error handling
+        Ok(listener) => listener,
+    };
+    let port = match listener.local_addr().ok() {
+        Some(addr) => addr.port(),
+        None => return 65535,
+    };
+    info!("free port: {}", port);
+    port
+}
+
+/// Find free TCP host:port for use in test server endpoints
+pub(crate) async fn find_free_tcp_endpoint_str() -> String {
+    let port = find_free_tcp_port().await.to_string();
+    format!("{}:{}", "localhost", port) // NOTE we use localhost rather than an IP for cmopat with TLS
+}
+
+static TLS_SETUP: Once = Once::new();
+
+pub(crate) fn setup_for_tls() {
+    use std::process::Command;
+
+    // create TLS cert and key only once at the beginning of the test execution to avoid
+    // multiple threads stepping on each others toes
+    TLS_SETUP.call_once(|| {
+        let mut cmd = Command::new("./tests/refresh_tls_cert.sh")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("Unable to spawn ./tests/refresh_tls_cert.sh");
+        let out = cmd.wait().expect("Failed top refresh certs/keys");
+        match out.code() {
+            Some(0) => {}
+            _ => panic!("Error creating tls certificate for connector_ws test"),
+        }
+    });
 }

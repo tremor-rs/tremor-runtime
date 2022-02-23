@@ -24,13 +24,16 @@ async fn connector_crononome_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
     let defn = literal!({
+    "id": "my_cron",
+    "type": "crononome",
     "config": {
-      "entries":[{
-        "name": "test",
-        "expr": "* * * * * * *",
-        "payload": "snot badger"
-      }]
-    }});
+        "entries":[{
+          "name": "test",
+          "expr": "* * * * * * *",
+          "payload": "snot badger"
+        }],
+      },
+    });
 
     let harness = ConnectorHarness::new("crononome", defn).await?;
     let out_pipeline = harness

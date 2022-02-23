@@ -80,8 +80,8 @@ simd-json = { version = "0.4", features = ["known-key"] }
 simd-json-derive = "0.2"
 snap = "1"
 surf = { version = "=2.3.2", default-features = false, features = [
+  "curl-client",  # this will stop us from doing http2 :(
   "encoding",          # this was a default feature, so we keep it
-  "h1-client-rustls",  # this will stop us from doing http2 :(
   "middleware-logger", # default feature, so we keep it
 ] }
 syslog_loose = "0.16"
@@ -156,9 +156,10 @@ grok = "1"
 
 # rest onramp
 tide = "0.16"
+tide-rustls = "0.3"
 
 # sse-onramp
-surf-sse = { git = "https://github.com/dak-x/surf-sse", tag = "2.0", default-features = false }
+#surf-sse = { git = "https://github.com/dak-x/surf-sse", tag = "2.0", default-features = false }
 
 # nats
 async-nats = "0.10.1"
@@ -199,6 +200,9 @@ reqwest = { version = "0.11.9", default-features = false, features = [
   "rustls-tls",
   "rustls-tls-native-roots",
 ] }
+
+# http
+uuid = { version = "0.8", features = [ "v4" ] }
 
 # wal
 qwal = { git = "https://github.com/tremor-rs/qwal" }

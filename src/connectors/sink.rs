@@ -452,7 +452,7 @@ pub(crate) fn builder(
 /// Attention: Take care to clear out data for streams that are not used
 pub struct EventSerializer {
     // default stream handling
-    codec: Box<dyn Codec>,
+    pub(crate) codec: Box<dyn Codec>,
     postprocessors: Postprocessors,
     // creation templates for stream handling
     codec_config: CodecConfig,
