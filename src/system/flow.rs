@@ -453,6 +453,8 @@ async fn spawn_task(
                     for pipeline in &pipelines {
                         pipeline.pause().await?;
                     }
+                    state = InstanceState::Paused;
+                    info!("[Flow::{alias}] Paused.");
                 }
                 MsgWrapper::Msg(Msg::Pause) => {
                     info!(
@@ -475,6 +477,8 @@ async fn spawn_task(
                     for source in &start_points {
                         source.resume().await?;
                     }
+                    state = InstanceState::Running;
+                    info!("[Flow::{alias}] Resumed.");
                 }
                 MsgWrapper::Msg(Msg::Resume) => {
                     info!(
@@ -531,6 +535,7 @@ async fn spawn_task(
                             expected_drains += 1;
                         }
                     }
+                    state = InstanceState::Draining;
                 }
                 MsgWrapper::Msg(Msg::Stop(sender)) => {
                     info!("[Flow::{}] Stopping...", &alias);
@@ -558,6 +563,7 @@ async fn spawn_task(
                             );
                         }
                     }
+                    state = InstanceState::Stopped;
                 }
                 MsgWrapper::Msg(Msg::Report(sender)) => {
                     // TODO: aggregate states of all containing instances

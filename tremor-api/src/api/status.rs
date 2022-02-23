@@ -44,6 +44,7 @@ pub(crate) async fn get_runtime_status(req: Request) -> Result<Response> {
     let flows = world.get_flows().await?;
     let mut runtime_status = RuntimeStatus::default();
     runtime_status.num_flows = flows.len();
+    let mut all_in_good_state: bool = true;
     
     for flow in &flows {
         let status = flow.report_status().await?;
@@ -51,8 +52,9 @@ pub(crate) async fn get_runtime_status(req: Request) -> Result<Response> {
 
         // report OK if all flows are in a good/intended state (Running)
         runtime_status.all_running = runtime_status.all_running && status.status == InstanceState::Running;
+        all_in_good_state = all_in_good_state && matches!(status.status, InstanceState::Running | InstanceState::Paused | InstanceState::Initializing);
     }
-    let code = if runtime_status.all_running {
+    let code = if all_in_good_state {
         StatusCode::Ok
     } else {
         StatusCode::ServiceUnavailable
