@@ -1,7 +1,21 @@
+%% Copyright 2022, The Tremor Team
+%%
+%% Licensed under the Apache License, Version 2.0 (the "License");
+%% you may not use this file except in compliance with the License.
+%% You may obtain a copy of the License at
+%%
+%%     http://www.apache.org/licenses/LICENSE-2.0
+%%
+%% Unless required by applicable law or agreed to in writing, software
+%% distributed under the License is distributed on an "AS IS" BASIS,
+%% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+%% See the License for the specific language governing permissions and
+%% limitations under the License.
+%% 
 %% taken from: https://gitlab.com/Project-FiFo/FiFo/fifo_api/blob/master/src/fifo_api_http.erl
 -module(tremor_http).
 
--export([new/1, get/2, get/3, post/3, post_raw/4, put/3, url/2,
+-export([new/1, get/2, get/3, post/3, post_raw/4, put/3, patch/3, url/2,
         delete/2, delete/3, connect/1, close/1, decode/1]).
 
 -export([take_last/1, full_list/1]).
@@ -190,13 +204,15 @@ post(Path, Body, C) ->
     ReqBody = encode(Body),
     post_raw(Path, ReqBody, C, ?ENCODING).
 
-put(Path, Body, C) ->
+put(Path, Body, C) -> put_(put, Path, Body, C).
+patch(Path, Body, C) -> put_(patch, Path, Body, C).
+put_(Method, Path, Body, C) ->
     ConnPid = connect(C),
     URL = url(Path, C),
     ReqHeaders = [{<<"accept">>, ?ENCODING},
                   {<<"content-type">>, ?ENCODING}],
     ReqBody = encode(Body),
-    StreamRef = gun:put(ConnPid, URL, ReqHeaders),
+    StreamRef = gun:Method(ConnPid, URL, ReqHeaders),
     gun:data(ConnPid, StreamRef, fin, ReqBody),
     case gun:await(ConnPid, StreamRef) of
         {response, fin, Code, _Hdrs} when Code >= 400 ->
@@ -226,6 +242,7 @@ put(Path, Body, C) ->
             gun:close(ConnPid),
             Error
     end.
+
 
 url([$/ | Path], C) ->
     url(Path, C);
