@@ -37,7 +37,7 @@ use tremor_script::{
         ScriptDefinition, SelectType, Stmt, WindowDefinition, WindowKind,
     },
     errors::{
-        query_node_duplicate_name_err, query_node_reserved_name_err,
+        err_generic, query_node_duplicate_name_err, query_node_reserved_name_err,
         query_stream_duplicate_name_err, query_stream_not_defined_err,
     },
     highlighter::{Dumb, Highlighter},
@@ -411,22 +411,20 @@ fn to_executable_graph(
                 outputs.push(id);
             }
             Stmt::PipelineCreate(s) => {
-                if let Some(mut p) = helper.get::<PipelineDefinition>(&s.target)? {
+                if let Some(mut pd) = helper.get::<PipelineDefinition>(&s.target)? {
                     let prefix = prefix_for(&s);
 
-                    // FIXME: do args
-                    let args = Value::null();
-                    p.apply_args(&args, &mut helper)?;
+                    pd.apply_args(&s.params.render()?, &mut helper)?;
                     // VERY FIXME: FIXME please fixme this is a nightmare
 
                     let query = tremor_script::Query {
-                        query: p.query.unwrap(),
+                        query: pd.query.unwrap(),
                         warnings: BTreeSet::new(),
                         locals: 0,
                     };
                     let mut from_map = HashMap::new();
-                    for f in p.from {
-                        let name = into_name(&prefix, f.as_str());
+                    for f in pd.from {
+                        let name = from_name(&prefix, f.as_str());
                         let node = NodeConfig {
                             id: name.clone(),
                             kind: NodeKind::Operator,
@@ -447,7 +445,7 @@ fn to_executable_graph(
                     }
 
                     let mut into_map = HashMap::new();
-                    for i in p.into {
+                    for i in pd.into {
                         let name = into_name(&prefix, i.as_str());
                         let node = NodeConfig {
                             id: name.clone(),
@@ -470,19 +468,32 @@ fn to_executable_graph(
                     let name = s.alias.clone();
                     let stmts = query.query.stmts.clone(); // FIXME this should be in in to_executable graph
 
-                    let graph = dbg!(to_executable_graph(&query, stmts, idgen)?); // FIXME add source
+                    let graph = to_executable_graph(&query, stmts, idgen)?; // FIXME add source
 
-                    included_graphs.insert(
-                        name,
-                        InlcudedGraph {
-                            prefix,
-                            graph,
-                            from_map,
-                            into_map,
-                        },
-                    );
+                    if included_graphs
+                        .insert(
+                            name,
+                            InlcudedGraph {
+                                prefix,
+                                graph,
+                                from_map,
+                                into_map,
+                            },
+                        )
+                        .is_some()
+                    {
+                        return Err(Error::from(err_generic(
+                            &s.extent(),
+                            &s.extent(),
+                            &format!("Can't create the pipeline `{}` twice", s.alias),
+                        )));
+                    }
                 } else {
-                    return Err("FIXME: oh no".into());
+                    return Err(Error::from(err_generic(
+                        &s.extent(),
+                        &s.extent(),
+                        &format!("Unknown pipeline `{}`", s.target),
+                    )));
                 }
             }
             Stmt::OperatorCreate(o) => {
@@ -602,6 +613,71 @@ fn to_executable_graph(
         }
     }
 
+    for (_ig_name, ig) in included_graphs {
+        let mut old_index_to_new_index = HashMap::new();
+
+        let mut inputs = BTreeSet::new();
+
+        for (old_idx, node) in ig.graph.graph.into_iter().enumerate() {
+            if let NodeKind::Output(port) = &node.kind {
+                let port: &str = &port;
+                let new_idx = ig.into_map.get(port).cloned().ok_or(format!(
+                    "FIXME: invalid graph bad output port {}, availabile: {:?}",
+                    port,
+                    ig.into_map.keys().collect::<Vec<_>>()
+                ))?;
+                old_index_to_new_index.insert(old_idx, new_idx);
+            } else if let NodeKind::Input { .. } = &node.kind {
+                inputs.insert(old_idx);
+                dbg!(&node);
+            } else {
+                let new_idx = pipe_graph.add_node(node.config.clone());
+                pipe_ops.insert(new_idx, node);
+                old_index_to_new_index.insert(old_idx, new_idx);
+            }
+        }
+
+        for ((from_id, from_port), tos) in ig.graph.port_indexes {
+            if inputs.contains(&from_id) {
+                // skip the classical inputs
+                continue;
+            };
+            let from_id = old_index_to_new_index
+                .get(&from_id)
+                .copied()
+                .ok_or("FIXME: invalid graph unknown from_id")?;
+            for (to_id, to_port) in tos {
+                let to_id = old_index_to_new_index
+                    .get(&to_id)
+                    .copied()
+                    .ok_or("FIXME: invalid graph unknown to_id")?;
+                let con = Connection {
+                    from: from_port.clone(),
+                    to: to_port,
+                };
+                pipe_graph.add_edge(from_id, to_id, con);
+            }
+        }
+        for (input, target) in ig.graph.inputs {
+            let to_id = old_index_to_new_index
+                .get(&target)
+                .copied()
+                .ok_or("FIXME: invalid graph unknown input target")?;
+            let input: &str = &input;
+            let from_id = ig
+                .from_map
+                .get(input)
+                .cloned()
+                .ok_or("FIXME: invalid graph unknown input from_id")?;
+            // FIXME: what is the to port here?
+            let con = Connection {
+                from: "out".into(),
+                to: "in".into(),
+            };
+            pipe_graph.add_edge(from_id, to_id, con);
+        }
+    }
+
     let dot = petgraph::dot::Dot::with_attr_getters(
         &pipe_graph,
         &[],
@@ -691,7 +767,6 @@ fn to_executable_graph(
             insights: Vec::new(),
             dot: format!("{}", dot),
             metrics_channel: METRICS_CHANNEL.tx(),
-            pipe_graph,
         };
         exec.optimize();
 
@@ -794,6 +869,7 @@ pub(crate) fn supported_operators(
         kind: config.kind.clone(),
         op_type: config.op_type.clone(),
         op,
+        config: config.clone(),
     })
 }
 
@@ -815,14 +891,12 @@ mod test {
         let query =
             Query::parse(src, &*tremor_script::FN_REGISTRY.read().unwrap(), &aggr_reg).unwrap();
         assert!(query.id().is_none());
-        assert_eq!(query.source().unwrap(), src);
 
         // check that we can overwrite the id with a config variable
         let src = "#!config id = \"test\"\nselect event from in into out;";
         let query =
             Query::parse(src, &*tremor_script::FN_REGISTRY.read().unwrap(), &aggr_reg).unwrap();
         assert_eq!(query.id().unwrap(), "test");
-        assert_eq!(query.source().unwrap(), src);
     }
 
     #[test]

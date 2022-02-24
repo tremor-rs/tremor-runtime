@@ -19,7 +19,7 @@ use tremor_common::{file, ids::OperatorIdGen};
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
 use tremor_runtime::errors::*;
-use tremor_script::highlighter::{Dumb, Highlighter};
+use tremor_script::highlighter::Dumb;
 use tremor_script::ModuleManager;
 use tremor_script::FN_REGISTRY;
 
@@ -72,24 +72,21 @@ macro_rules! test_cases {
                     let mut file = file::open(err_file)?;
                     let mut err = String::new();
                     file.read_to_string(&mut err)?;
-                    let err = err.trim();
 
                     match to_pipe(&contents) {
                         Err(Error(ErrorKind::Pipeline(tremor_pipeline::errors::ErrorKind::Script(e)), o)) => {
                             let e = tremor_script::errors::Error(e, o);
                             let got = Dumb::error_to_string(&e)?;
-                            print!("{}", got);
-                            assert_eq!(err, got);
+                            assert_eq!(err.trim(), got.trim(), "unexpected error message: {}", got);
                         }
                         Err(Error(ErrorKind::Script(e), o)) =>{
                             let e = tremor_script::errors::Error(e, o);
                             let got = Dumb::error_to_string(&e)?;
-                            print!("{}", got);
-                            assert_eq!(err, got);
+                            assert_eq!(err.trim(), got.trim(), "unexpected error message: {}", got);
                         }
                         Err(Error(ErrorKind::Pipeline(e), _)) =>{
                             let got = format!("{}", e);
-                            assert_eq!(err, got, "unexpected error message: {}", got);
+                            assert_eq!(err.trim(), got.trim(), "unexpected error message: {}", got);
                         }
                         Err(e) => {
                             println!("got wrong error: {:?}", e);

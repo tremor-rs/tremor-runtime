@@ -80,7 +80,7 @@ simd-json = { version = "0.4", features = ["known-key"] }
 simd-json-derive = "0.2"
 snap = "1"
 surf = { version = "=2.3.2", default-features = false, features = [
-  "curl-client",  # this will stop us from doing http2 :(
+  "h1-client-rustls",  # this will stop us from doing http2 :(
   "encoding",          # this was a default feature, so we keep it
   "middleware-logger", # default feature, so we keep it
 ] }
@@ -202,7 +202,7 @@ reqwest = { version = "0.11.10", default-features = false, features = [
 ] }
 
 # http
-uuid = { version = "0.8", features = [ "v4" ] }
+uuid = { version = "0.8", features = ["v4"] }
 
 # wal
 qwal = { git = "https://github.com/tremor-rs/qwal" }
