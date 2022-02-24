@@ -133,14 +133,6 @@ the issue in question.
 
 [closing-keywords]: https://help.github.com/en/articles/closing-issues-using-keywords
 
-Please make sure your pull request is in compliance with Tremor's style
-guidelines by running
-
-    $ sh ./contrib/pre-commit
-
-Make this check before every pull request (and every new commit in a pull
-request); you can add [git hooks](https://git-scm.com/book/en/v2/Customizing-Git-Git-Hooks)
-before every push to make sure you never forget to make this check.
 
 All pull requests are reviewed by another person.
 
