@@ -16,7 +16,16 @@
 
 -define(API_VERSION, "v1").
 -define(ENDPOINT, "flows").
--export([ list/1, get/2, pause/2, resume/2]).
+-export([ 
+    list/1, 
+    get/2, 
+    pause/2, 
+    resume/2, 
+    list_connectors/2, 
+    get_connector/3, 
+    pause_connector/3, 
+    resume_connector/3
+]).
 
 %%------------------------------------------------------------------------
 %% @doc
@@ -56,4 +65,41 @@ resume(Alias, Conn) ->
     tremor_http:patch([?API_VERSION, $/, ?ENDPOINT, $/, Alias], #{ status => <<"running">> }, Conn).
 
 
+%%------------------------------------------------------------------------
+%% @doc
+%% Get all the connectors created within the flow identified by `FlowAlias`
+%% @end
+%%------------------------------------------------------------------------
+-spec list_connectors(FlowAlias :: binary(), tremor_api:connection()) -> {ok, JSON::binary()}.
+list_connectors(FlowAlias, Conn) ->
+    tremor_http:get([?API_VERSION, $/, ?ENDPOINT, $/, FlowAlias , $/, <<"connectors">>], Conn).
 
+%%------------------------------------------------------------------------
+%% @doc
+%% Get the connector identified by `ConnectorAlias` 
+%% created within the flow identified by `FlowAlias`
+%% @end
+%%------------------------------------------------------------------------
+-spec get_connector(FlowAlias :: binary(), ConnectorAlias :: binary(), tremor_api:connection()) -> {ok, JSON::binary()}.
+get_connector(FlowAlias, ConnectorAlias, Conn) ->
+    tremor_http:get([?API_VERSION, $/, ?ENDPOINT, $/, FlowAlias, $/, <<"connectors">>, $/, ConnectorAlias], Conn).
+
+%%------------------------------------------------------------------------
+%% @doc
+%% Pause the connector identified by `ConnectorAlias`
+%% created within the flow identified by `FlowAlias`.
+%% @end
+%%------------------------------------------------------------------------
+-spec pause_connector(FlowAlias :: binary(), ConnectorAlias :: binary(), tremor_api:connection()) -> {ok, JSON::binary()}.
+pause_connector(FlowAlias, ConnectorAlias, Conn) ->
+    tremor_http:patch([?API_VERSION, $/, ?ENDPOINT, $/, FlowAlias, $/, <<"connectors">>, $/, ConnectorAlias], #{status => <<"paused">>}, Conn).
+
+%%------------------------------------------------------------------------
+%% @doc
+%% Resume the connector identified by `ConnectorAlias`
+%% created within the flow identified by `FlowAlias`.
+%% @end
+%%------------------------------------------------------------------------
+-spec resume_connector(FlowAlias :: binary(), ConnectorAlias :: binary(), tremor_api:connection()) -> {ok, JSON::binary()}.
+resume_connector(FlowAlias, ConnectorAlias, Conn) ->
+    tremor_http:patch([?API_VERSION, $/, ?ENDPOINT, $/, FlowAlias, $/, <<"connectors">>, $/, ConnectorAlias], #{status => <<"running">>}, Conn).
