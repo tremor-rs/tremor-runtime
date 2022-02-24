@@ -10,8 +10,13 @@ version = "0.11.4"
 default-target = "x86_64-unknown-linux-gnu"
 
 [build-dependencies]
+clap = { version = "3", features = ["derive", "cargo", "env"] }
+clap_complete = "3"
+clap_mangen = "0.1"
 lalrpop = "0.19"
 matches = "0.1.9"
+serde = "1"
+serde_derive = "1"
 
 [dev-dependencies]
 criterion = "0.3"
@@ -22,7 +27,7 @@ pretty_assertions = "1.1.0"
 [dependencies]
 anyhow = "1"
 async-std = { version = "1.10", features = ["unstable"] }
-clap = { version = "3", features = ["color", "derive"] }
+clap = { version = "3", features = ["derive", "color"] }
 clap_complete = "3"
 difference = "2"
 dirs-next = "2"

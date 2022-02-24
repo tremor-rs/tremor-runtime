@@ -54,7 +54,7 @@ else
 
     if [ ! -z "${ARTEFACTS}" ]
     then
-        ARGS="${ARGS} -f ${ARTEFACTS}"
+        ARGS="${ARGS} ${ARTEFACTS}"
     fi
 fi
 
