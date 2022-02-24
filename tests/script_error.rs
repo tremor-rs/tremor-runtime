@@ -17,7 +17,7 @@ use tremor_common::file;
 use tremor_script::FN_REGISTRY;
 
 use tremor_runtime::errors::*;
-use tremor_script::highlighter::{Dumb, Highlighter};
+use tremor_script::highlighter::{Dumb};
 use tremor_script::ModuleManager;
 use tremor_script::Script;
 

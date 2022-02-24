@@ -17,7 +17,7 @@ use tremor_common::file;
 use tremor_script::FN_REGISTRY;
 
 use tremor_runtime::errors::*;
-use tremor_script::highlighter::{Dumb, Highlighter};
+use tremor_script::highlighter::{Dumb};
 use tremor_script::prelude::*;
 use tremor_script::utils::*;
 use tremor_script::ModuleManager;
@@ -111,7 +111,6 @@ macro_rules! ignore_cases {
                     let mut meta = Value::object();
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta);
                     if let Err(e) = s {
-                        let mut h = Dumb::new();
                         let got = Dumb::error_to_string(&e)?;
                         print!("{}", got);
                         assert_eq!(err, got);

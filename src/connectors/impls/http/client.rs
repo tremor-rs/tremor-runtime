@@ -339,8 +339,8 @@ mod tests {
             "preprocessors": [ "lines" ],
             "postprocessors": [ "lines" ],
         });
-        let config: ConnectorConfig = crate::config::Connector::from_defn(
-            "snot".into(),
+        let config: ConnectorConfig = crate::config::Connector::from_config(
+            "snot",
             ConnectorType("rest_client".into()),
             with_processors,
         )?;
@@ -361,8 +361,8 @@ mod tests {
             },
             "preprocessors": [ "lines" ]
         });
-        let config: ConnectorConfig = crate::config::Connector::from_defn(
-            "snot".into(),
+        let config: ConnectorConfig = crate::config::Connector::from_config(
+            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
@@ -382,8 +382,8 @@ mod tests {
             "codec": "msgpack",
             "preprocessors": [ "lines" ]
         });
-        let config: ConnectorConfig = crate::config::Connector::from_defn(
-            "snot".into(),
+        let config: ConnectorConfig = crate::config::Connector::from_config(
+            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
@@ -403,8 +403,8 @@ mod tests {
             },
             "preprocessors": [ "lines" ]
         });
-        let config: ConnectorConfig = crate::config::Connector::from_defn(
-            "snot".into(),
+        let config: ConnectorConfig = crate::config::Connector::from_config(
+            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
@@ -419,8 +419,8 @@ mod tests {
             },
             "preprocessors": [ "lines" ]
         });
-        let config: ConnectorConfig = crate::config::Connector::from_defn(
-            "snot".into(),
+        let config: ConnectorConfig = crate::config::Connector::from_config(
+            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
@@ -439,8 +439,8 @@ mod tests {
             },
             "preprocessors": [ "lines" ]
         });
-        let config: ConnectorConfig = crate::config::Connector::from_defn(
-            "snot".into(),
+        let config: ConnectorConfig = crate::config::Connector::from_config(
+            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
@@ -458,8 +458,8 @@ mod tests {
             },
             "preprocessors": [ "lines" ]
         });
-        let config: ConnectorConfig = crate::config::Connector::from_defn(
-            "snot".into(),
+        let config: ConnectorConfig = crate::config::Connector::from_config(
+            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
@@ -481,8 +481,8 @@ mod tests {
                     },
                     "preprocessors": [ "lines" ]
                 });
-        let config: ConnectorConfig = crate::config::Connector::from_defn(
-            "snot".into(),
+        let config: ConnectorConfig = crate::config::Connector::from_config(
+            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
@@ -504,8 +504,8 @@ mod tests {
             },
             "preprocessors": [ "lines" ]
         });
-        let config: ConnectorConfig = crate::config::Connector::from_defn(
-            "snot".into(),
+        let config: ConnectorConfig = crate::config::Connector::from_config(
+            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
