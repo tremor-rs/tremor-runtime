@@ -20,12 +20,11 @@ use crate::{
     errors::{Error, ErrorKind},
     metrics::metrics_value_count,
     op::{prelude::IN, trickle::window},
-    ConfigMap, Connection, ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
+    ConfigMap, ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
 use halfbrown::HashMap;
-use petgraph::Graph;
 use tremor_common::stry;
 use tremor_script::{ast::Helper, ast::Stmt, Value};
 
@@ -117,6 +116,8 @@ pub struct OperatorNode {
     pub op: Box<dyn Operator>,
     /// Tremor unique identifyer
     pub uid: u64,
+    /// The original config
+    pub config: NodeConfig,
 }
 
 impl Operator for OperatorNode {
@@ -258,7 +259,6 @@ pub struct ExecutableGraph {
     pub insights: Vec<(usize, Event)>,
     /// the dot representation of the graph
     pub dot: String,
-    pub(crate) pipe_graph: Graph<NodeConfig, Connection>,
 }
 
 /// The return of a graph execution
@@ -602,13 +602,16 @@ mod test {
     };
     use tremor_script::prelude::*;
     fn pass(uid: u64, id: &'static str) -> OperatorNode {
-        let c = NodeConfig::from_config(&"passthrough", None).unwrap();
+        let config = NodeConfig::from_config(&"passthrough", None).unwrap();
         OperatorNode {
             id: id.into(),
             kind: NodeKind::Operator,
             op_type: id.into(),
-            op: PassthroughFactory::new_boxed().from_node(uid, &c).unwrap(),
+            op: PassthroughFactory::new_boxed()
+                .from_node(uid, &config)
+                .unwrap(),
             uid,
+            config,
         }
     }
     #[test]
@@ -709,6 +712,7 @@ mod test {
             op_type: "test".into(),
             op: Box::new(AllOperator {}),
             uid: 0,
+            config: NodeConfig::default(),
         }
     }
 
@@ -810,7 +814,6 @@ mod test {
             insights: vec![],
             dot: String::from(""),
             metrics_channel: METRICS_CHANNEL.tx(),
-            pipe_graph: Graph::new(),
         };
 
         // Test with one event
@@ -908,7 +911,6 @@ mod test {
             insights: vec![],
             dot: String::from(""),
             metrics_channel: METRICS_CHANNEL.tx(),
-            pipe_graph: Graph::new(),
         };
         assert!(g.optimize().is_some());
         // Test with one event

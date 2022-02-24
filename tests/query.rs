@@ -11,10 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use async_std::sync::Mutex;
 use pretty_assertions::assert_eq;
 use std::io::prelude::*;
 use tremor_common::{file, ids::OperatorIdGen};
-
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
 use tremor_pipeline::{Event, EventId};
@@ -23,6 +23,10 @@ use tremor_script::FN_REGISTRY;
 use tremor_runtime::errors::*;
 use tremor_script::utils::*;
 use tremor_script::ModuleManager;
+
+lazy_static::lazy_static! {
+    static ref UNIQUE: Mutex<()> = Mutex::new(());
+}
 
 fn to_pipe(query: String) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
@@ -43,14 +47,20 @@ macro_rules! test_cases {
                 let query_file = concat!("tests/queries/", stringify!($file), "/query.trickle");
                 let in_file = concat!("tests/queries/", stringify!($file), "/in");
                 let out_file = concat!("tests/queries/", stringify!($file), "/out");
-                ModuleManager::add_path("tremor-script/lib")?;
-                ModuleManager::add_path(query_dir)?;
+                // let l = UNIQUE.lock().await;
+                let pipeline = (||{
+                    // ModuleManager::clear_path()?;
+                    // ModuleManager::add_path("tremor-script/lib")?;
+                    ModuleManager::add_path(query_dir)?;
 
-                println!("Loading query: {}", query_file);
-                let mut file = file::open(query_file)?;
-                let mut contents = String::new();
-                file.read_to_string(&mut contents)?;
-                let mut pipeline = to_pipe(contents)?;
+                    println!("Loading query: {}", query_file);
+                    let mut file = file::open(query_file)?;
+                    let mut contents = String::new();
+                    file.read_to_string(&mut contents)?;
+                    to_pipe(contents)
+                })();
+                // drop(l);
+                let mut pipeline = pipeline?;
 
                 println!("Loading input: {}", in_file);
                 let in_json = load_event_file(in_file)?;

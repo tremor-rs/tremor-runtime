@@ -943,11 +943,7 @@ pub fn error_generic<T, O: Ranged, I: Ranged, S: ToString>(
     Err(err_generic(outer, inner, error))
 }
 
-pub(crate) fn err_generic<O: Ranged, I: Ranged, S: ToString>(
-    outer: &O,
-    inner: &I,
-    error: &S,
-) -> Error {
+pub fn err_generic<O: Ranged, I: Ranged, S: ToString>(outer: &O, inner: &I, error: &S) -> Error {
     ErrorKind::Generic(outer.extent(), inner.extent(), error.to_string()).into()
 }
 
