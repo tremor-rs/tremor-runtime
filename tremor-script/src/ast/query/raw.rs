@@ -228,11 +228,11 @@ impl<'script> PipelineDefinitionRaw<'script> {
         vec![
             Ident {
                 mid: self.mid.clone().box_with_name("out"),
-                id: "in".into(),
+                id: "out".into(),
             },
             Ident {
                 mid: self.mid.clone().box_with_name("err"),
-                id: "in".into(),
+                id: "err".into(),
             },
         ]
     }

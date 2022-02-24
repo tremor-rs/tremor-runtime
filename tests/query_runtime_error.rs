@@ -23,7 +23,7 @@ use tremor_script::FN_REGISTRY;
 
 use tremor_pipeline::errors::{Error as PipelineError, ErrorKind as PipelineErrorKind};
 use tremor_runtime::errors::*;
-use tremor_script::highlighter::{Dumb, Highlighter};
+use tremor_script::highlighter::{Dumb};
 use tremor_script::utils::*;
 
 fn to_pipe(query: &str) -> Result<ExecutableGraph> {
@@ -88,7 +88,7 @@ macro_rules! test_cases {
                                 let e = tremor_script::errors::Error(e, o);
                                 let got = Dumb::error_to_string(&e)?;
                                 print!("{}", got);
-                                assert_eq!(err, got);
+                                assert_eq!(err, &got);
                                 had_error = true;
                             } else {
                                 println!("Got unexpected error: {:?}", e);

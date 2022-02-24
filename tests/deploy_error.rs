@@ -15,7 +15,7 @@ use std::{io::prelude::*, sync::Mutex};
 use tremor_common::file;
 use tremor_script::deploy::Deploy;
 use tremor_script::errors::*;
-use tremor_script::highlighter::{Dumb, Highlighter};
+use tremor_script::highlighter::Dumb;
 use tremor_script::ModuleManager;
 
 fn parse<'script>(deploy: &str) -> tremor_script::Result<Deploy> {
@@ -43,7 +43,7 @@ macro_rules! test_cases {
                 let deploy_file = concat!("tests/deploy_errors/", stringify!($file), "/deploy.troy");
                 let err_file = concat!("tests/deploy_errors/", stringify!($file), "/error.txt");
                 let l = UNIQUE.lock();
-                dbg!(ModuleManager::clear_path()?);
+                ModuleManager::clear_path()?;
                 ModuleManager::add_path(deploy_dir)?;
                 ModuleManager::add_path("tremor-script/lib")?;
 
@@ -58,7 +58,6 @@ macro_rules! test_cases {
                 let mut file = file::open(err_file)?;
                 let mut err = String::new();
                 file.read_to_string(&mut err)?;
-                let err = err.trim();
 
                 match parse(&contents) {
                     Err(e) => {
@@ -66,7 +65,7 @@ macro_rules! test_cases {
                         print!("{}", got);
                         println!("got wrong error: {:?}", e);
 
-                        assert_eq!(err, got);
+                        assert_eq!(err.trim(), got.trim());
                     }
                     _ =>{
                         println!("Expected error, but got succeess");
