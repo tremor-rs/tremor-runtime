@@ -93,9 +93,9 @@ get_(URL, Opts, C) ->
         {response, nofin, Code, _Hdrs} when Code >= 400 ->
             case  gun:await_body(ConnPid, StreamRef) of
                 {ok, Body1} ->
-                    _Body2 = decode(Body1),
+                    Body2 = decode(Body1),
                     gun:close(ConnPid),
-                    {error, Code};
+                    {error, Code, Body2};
                 E1 ->
                     gun:close(ConnPid),
                     E1
@@ -130,9 +130,9 @@ delete(Path, Opts, C) ->
         {response, nofin, Code, _Hdrs} when Code >= 400 ->
             case  gun:await_body(ConnPid, StreamRef) of
                 {ok, Body1} ->
-                    _Body2 = decode(Body1),
+                    Body2 = decode(Body1),
                     gun:close(ConnPid),
-                    {error, Code};
+                    {error, Code, Body2};
                 E1 ->
                     gun:close(ConnPid),
                     E1
@@ -175,9 +175,9 @@ post_raw(Path, Body, C, ContentType) ->
         {response, nofin, Code, _Hdrs} when Code >= 400 ->
             case gun:await_body(ConnPid, StreamRef) of
                 {ok, Body1} ->
-                    _ = decode(Body1),
+                    Body2 = decode(Body1),
                     gun:close(ConnPid),
-                    {error, Code};
+                    {error, Code, Body2};
                 E1 ->
                     gun:close(ConnPid),
                     E1
@@ -224,7 +224,17 @@ put_(Method, Path, Body, C) ->
         {response, _, 204, _Hdrs}  ->
             gun:close(ConnPid),
             ok;
-        {response, nofin, 200, _Hdrs} ->
+        {response, nofin, Code, _Hdrs} when Code >= 400 ->
+            case gun:await_body(ConnPid, StreamRef) of
+                {ok, Body1} ->
+                    Body2 = decode(Body1),
+                    gun:close(ConnPid),
+                    {error, Code, Body2};
+                E1 ->
+                    gun:close(ConnPid),
+                    E1
+            end;
+        {response, nofin, Code, _Hdrs} when Code == 200 orelse Code == 201 ->
             case gun:await_body(ConnPid, StreamRef) of
                 {ok, Body1} ->
                     Body2 = decode(Body1),
