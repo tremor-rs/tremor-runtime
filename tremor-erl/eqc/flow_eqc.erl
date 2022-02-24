@@ -33,7 +33,7 @@ initial_state() ->
     Client = tremor_api:new(),
     {ok, Flows} = tremor_flow:list(Client),
     #state{
-        connection = tremor_api:new(),
+        connection = Client,
         root = Root,
         flows = Flows
     }.
@@ -43,6 +43,32 @@ command_precondition_common(_S, _Command) ->
 
 precondition_common(_S, _Call) ->
     true.
+
+%% -----------------------------------------------------------------------------
+
+get_runtime_status_args(#state{connection = C}) ->
+    [C].
+
+get_runtime_status_pre(#state{}) ->
+    true.
+
+get_runtime_status(C) ->
+    tremor_status:get(C).
+
+get_runtime_status_post(#state{flows = Flows, root = Root}, _Args, {ok, Resp = #{<<"num_flows">> := NumFlows, <<"flows">> := FlowStatus, <<"all_running">> := AllRunning}}) ->
+    {ok, Schema} = jsg_jsonref:deref(["components", "schemas", "runtime_status"], Root),
+    Validated = jesse_validator:validate(Schema, Root, jsone:encode(Resp)),
+    ExpectedNumFlows = length(Flows),
+    ExpectedFlowStatus = lists:foldl(
+        fun({Status, _Count}, Map) -> maps:put(Status, maps:get(Status, Map, 0) + 1, Map) end, 
+        #{}, 
+        [ {Status, 1} || #{<<"status">> := Status} <- Flows]
+    ),
+    ExpectedAllRunning = length([{} || #{<<"status">> := <<"running">>} <- Flows]) == ExpectedNumFlows,
+    Validated and (FlowStatus == ExpectedFlowStatus) and (NumFlows == ExpectedNumFlows) == (AllRunning == ExpectedAllRunning).
+
+get_runtime_status_next(S, _, _) ->
+    S.
 
 %% -----------------------------------------------------------------------------
 
@@ -86,6 +112,9 @@ get_flow_post(#state{root = Root}, [_, Flow = #{<<"alias">> := Alias}], {ok, Res
 get_flow_post(_, _, _) ->
     io:format("Error: unexpected GET flow body"),
     false.
+
+get_flow_next(S, _, _) ->
+    S.
 
 %% -----------------------------------------------------------------------------
 
