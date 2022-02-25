@@ -36,7 +36,7 @@ use executable_graph::NodeConfig;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
 use op::trickle::window;
-use petgraph::graph::{self, NodeIndex};
+use petgraph::graph::{self};
 use simd_json::OwnedValue;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
@@ -69,8 +69,6 @@ pub use crate::executable_graph::{ExecutableGraph, OperatorNode};
 pub(crate) use crate::executable_graph::{NodeMetrics, State};
 pub use op::{ConfigImpl, InitializableOperator, Operator};
 pub use tremor_script::prelude::EventOriginUri;
-pub(crate) type PortIndexMap =
-    HashMap<(NodeIndex, Cow<'static, str>), Vec<(NodeIndex, Cow<'static, str>)>>;
 pub(crate) type ExecPortIndexMap =
     HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
 
@@ -82,7 +80,7 @@ pub type NodeLookupFn = fn(
     config: &NodeConfig,
     uid: u64,
     node: Option<&ast::Stmt<'static>>,
-    windows: Option<HashMap<String, window::Impl>>,
+    windows: Option<&HashMap<String, window::Impl>>,
     helper: &mut Helper,
 ) -> Result<OperatorNode>;
 
@@ -871,7 +869,7 @@ fn operator(uid: u64, node: &NodeConfig) -> Result<Box<dyn Operator + 'static>> 
     factory(node)?.from_node(uid, node)
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct Connection {
     from: Cow<'static, str>,
     to: Cow<'static, str>,
