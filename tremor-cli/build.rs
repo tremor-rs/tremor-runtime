@@ -9,7 +9,6 @@ use std::{
 
 include!("src/cli.rs");
 
-
 fn build_manpages(outdir: &Path) -> Result<(), Error> {
     let app = Cli::command();
 
