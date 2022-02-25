@@ -96,9 +96,7 @@ impl<'script> DeployRaw<'script> {
         Ok(Deploy {
             config,
             stmts,
-            connector_decls: HashMap::new(), // FIXME
-            pipeline_decls: HashMap::new(),  // FIXME
-            flow_decls: HashMap::new(),      // FIXME
+            scope: helper.scope.clone(),
             docs: helper.docs.clone(),
         })
     }
@@ -137,11 +135,7 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
                 // FIXME we don't have flow docs!
                 // helper.docs.flows.push(stmt.doc());
                 let stmt: FlowDefinition<'script> = stmt.up(helper)?;
-                // FIXME do we want to do this here?
-                // ExprWalker::walk_fn_decl(&mut ConstFolder::new(helper), &mut f)?;
                 helper.scope.insert_flow(stmt)?;
-                //FIXME: helper.flow_decls.insert(stmt.node_id.clone(), stmt.clone());
-                // Ok(Some(DeployStmt::FlowDefinition(Box::new(stmt))))
                 Ok(None)
             }
             DeployStmtRaw::DeployFlow(stmt) => {

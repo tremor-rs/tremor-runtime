@@ -28,7 +28,7 @@ use hashbrown::HashMap;
 use std::{borrow::Borrow, collections::HashSet};
 use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
-use tremor_script::ast::{self, ConnectStmt, DeployEndpoint, DeployFlow};
+use tremor_script::ast::{self, ConnectStmt, DeployEndpoint, DeployFlow, Helper};
 
 /// unique identifier of a flow instance within a tremor instance
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize)]
@@ -189,9 +189,17 @@ impl Flow {
                     );
                 }
                 ast::CreateTargetDefinition::Pipeline(defn) => {
-                    let query = defn.query.as_ref().unwrap();
+                    let args = defn.params.render()?;
+
+                    let query = {
+                        let aggr_reg = tremor_script::aggr_registry();
+                        let reg = tremor_script::FN_REGISTRY.read()?;
+                        let mut helper = Helper::new(&reg, &aggr_reg);
+
+                        defn.to_query(&args, &mut helper)?
+                    };
                     let pipeline = tremor_pipeline::query::Query(
-                        tremor_script::query::Query::from_query(query)?,
+                        tremor_script::query::Query::from_query(query),
                     );
                     let addr = pipeline::spawn(alias, pipeline, oidgen).await?;
                     pipelines.insert(PipelineId::from(alias), addr);

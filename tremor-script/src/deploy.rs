@@ -86,23 +86,6 @@ where
         })
     }
 
-    /// Highlights a script with a given highlighter.
-    /// # Errors
-    /// on io errors
-    #[cfg(not(tarpaulin_include))]
-    pub fn highlight_script_with<H: Highlighter>(
-        script: &str,
-        h: &mut H,
-        emit_lines: bool,
-    ) -> std::io::Result<()> {
-        // let mut script = script.to_string();
-        // script.push('\n'); FIXME
-        let tokens: Vec<_> = lexer::Tokenizer::new(script, arena::Index::default())
-            .tokenize_until_err()
-            .collect();
-        h.highlight(None, &tokens, "", emit_lines, None)
-    }
-
     /// Format an error given a script source.
     /// # Errors
     /// on io errors

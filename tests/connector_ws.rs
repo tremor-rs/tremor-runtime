@@ -180,16 +180,6 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
     }
 }
 
-impl<S> TestClient<S> {
-    // fn print_headers(&self) {
-    //     println!("Response HTTP code: {}", self.http_response.status());
-    //     println!("Response contains the following headers:");
-    //     for (ref header, _value) in self.http_response.headers() {
-    //         println!("* {}", header);
-    //     }
-    // }
-}
-
 /// A minimal websocket server endpoint test harness
 struct TestServer {
     endpoint: String,

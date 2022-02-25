@@ -195,11 +195,7 @@ test_cases!(
     escape_in_extractor,
     const_of_const,
     fn_extractors,
-    // mod_access_const, //FIXME mod is gone
-    // module, // FIXME mod is gone
     fn_fib,
-    // fn_nest2_fib, // FIXME mod is gone
-    // fn_nest2_abs_fib, // FIXME mod is gone
     pp_fn_fib,
     heredoc_interpolation,
     heredoc_usefn_interpolation,

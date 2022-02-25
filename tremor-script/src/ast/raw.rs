@@ -128,9 +128,7 @@ impl<'script> ScriptRaw<'script> {
                     helper.scope.insert_function(f)?;
                 }
                 TopLevelExprRaw::Expr(expr) => {
-                    let expr = expr.up(&mut helper)?;
-                    // ExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut other)?;
-                    exprs.push(expr);
+                    exprs.push(expr.up(&mut helper)?);
                 }
             }
         }
@@ -1773,19 +1771,6 @@ impl<'script> From<IdentRaw<'script>> for SegmentRaw<'script> {
 }
 
 impl<'script> SegmentRaw<'script> {
-    pub fn from_id(id: IdentRaw<'script>) -> Self {
-        id.into()
-    }
-    pub fn from_str(id: &'script str, start: Location, end: Location) -> Self {
-        let mid = NodeMeta::new_box(start, end);
-        SegmentRaw::Element(Box::new(SegmentElementRaw {
-            mid: mid.clone(),
-            expr: ImutExprRaw::Literal(LiteralRaw {
-                mid,
-                value: Value::from(id),
-            }),
-        }))
-    }
     pub fn from_usize(id: usize, mid: Box<NodeMeta>) -> Self {
         SegmentRaw::Element(Box::new(SegmentElementRaw {
             mid: mid.clone(),

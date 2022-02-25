@@ -50,10 +50,6 @@ impl TremorAggrFn for Count {
         self.0 += 1;
         Ok(())
     }
-    // fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-    //     self.0 -= 1;
-    //     Ok(())
-    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::from(self.0))
     }
@@ -93,19 +89,7 @@ impl TremorAggrFn for Sum {
             },
         )
     }
-    // fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-    //     args.first().cast_f64().map_or_else(
-    //         || {
-    //             Err(FunctionError::BadType {
-    //                 mfa: mfa("stats", "sum", 1),
-    //             })
-    //         },
-    //         |v| {
-    //             self.0 -= v;
-    //             Ok(())
-    //         },
-    //     )
-    // }
+
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::from(self.0))
     }
@@ -146,20 +130,6 @@ impl TremorAggrFn for Mean {
             },
         )
     }
-    // fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-    //     self.0 -= 1;
-    //     args.first().cast_f64().map_or_else(
-    //         || {
-    //             Err(FunctionError::BadType {
-    //                 mfa: mfa("stats", "mean", 1),
-    //             })
-    //         },
-    //         |v| {
-    //             self.1 -= v;
-    //             Ok(())
-    //         },
-    //     )
-    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         if self.0 == 0 {
             Ok(Value::null())
@@ -207,24 +177,7 @@ impl TremorAggrFn for Min {
             },
         )
     }
-    // fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-    //     // TODO: how?
-    //     // [a, b, c, d, e, f, g, h, i, j];
-    //     // a -> [(0, a)]
-    //     // b -> [(0, a), (1, b)]
-    //     // c -> [(0, a), (1, b), (2, c)]  ...
 
-    //     // [d, t, u, a, t, u, b, c, 6];
-    //     // d -> [(0, d)]
-    //     // t -> [(0, d), (1, t)]
-    //     // u -> [(0, d), (1, t), (2, u)]  ...
-    //     // a -> [(3, a)]  ...
-    //     // t -> [(3, a), (4, t)]  ...
-    //     // u -> [(3, a), (4, t), (5, u)]  ...
-    //     // b -> [(3, a), (5, b)]  ...
-
-    //     Ok(())
-    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::from(self.0.unwrap_or_default()))
     }
@@ -268,10 +221,6 @@ impl TremorAggrFn for Max {
             },
         )
     }
-    // fn compensate<'event>(&mut self, _args: &[&Value<'event>]) -> FResult<()> {
-    //     // TODO: how?
-    //     Ok(())
-    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         Ok(Value::from(self.0.unwrap_or_default()))
     }
@@ -324,21 +273,6 @@ impl TremorAggrFn for Var {
             },
         )
     }
-    // fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-    //     args.first().cast_f64().map_or_else(
-    //         || {
-    //             Err(FunctionError::BadType {
-    //                 mfa: mfa("stats", "var", 1),
-    //             })
-    //         },
-    //         |v| {
-    //             self.n -= 1;
-    //             self.ex -= v - self.k;
-    //             self.ex2 -= (v - self.k) * (v - self.k);
-    //             Ok(())
-    //         },
-    //     )
-    // }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         if self.n == 0 {
             Ok(Value::from(0.0))
@@ -380,9 +314,7 @@ impl TremorAggrFn for Stdev {
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.0.accumulate(args)
     }
-    // fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-    //     self.0.compensate(args)
-    // }
+
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
         self.0
             .emit()

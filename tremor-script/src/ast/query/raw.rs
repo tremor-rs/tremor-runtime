@@ -106,10 +106,6 @@ pub enum StmtRaw<'script> {
     SelectStmt(Box<SelectRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
     Use(UseRaw),
-    // /// we're forced to make this pub because of lalrpop
-    // Const(ConstRaw<'script>),
-    // /// we're forced to make this pub because of lalrpop
-    // FnDecl(FnDeclRaw<'script>),
 }
 
 impl<'script> Upable<'script> for StmtRaw<'script> {
@@ -369,9 +365,6 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
             script,
         };
 
-        // FIXME: helper
-        // .scripts
-        // .insert(script_decl.node_id.fqn(), script_decl.clone());
         helper.add_query_decl_doc(&script_decl.node_id.id(), self.doc);
         Ok(script_decl)
     }
@@ -498,15 +491,7 @@ impl<'script> Upable<'script> for SelectRaw<'script> {
         } else {
             vec![]
         };
-        let windows: Vec<_> = self
-            .windows
-            .unwrap_or_default()
-            .into_iter()
-            // .map(|mut w| {
-            //     w.id = w.id.with_prefix(&helper.module);
-            //     w
-            // })
-            .collect();
+        let windows: Vec<_> = self.windows.unwrap_or_default().into_iter().collect();
         if !windows.is_empty() {
             // if we have windows we need to forbid free event references in the target if they are not
             // inside an aggregate function or can be rewritten to a group reference
