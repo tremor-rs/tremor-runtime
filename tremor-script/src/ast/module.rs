@@ -311,7 +311,6 @@ pub trait Get<Target> {
 }
 
 /// Get something from a module
-
 impl<'target, Target> Get<Target> for ModuleManager
 where
     ModuleContent<'target>: GetModule<Target>,
@@ -324,6 +323,12 @@ where
 
 pub trait GetModule<Target> {
     fn get(&self, id: &str) -> Option<Target>;
+}
+
+impl<'module> GetModule<WindowDefinition<'module>> for ModuleContent<'module> {
+    fn get(&self, name: &str) -> Option<WindowDefinition<'module>> {
+        self.windows.get(name).cloned()
+    }
 }
 
 impl<'module> GetModule<Const<'module>> for ModuleContent<'module> {

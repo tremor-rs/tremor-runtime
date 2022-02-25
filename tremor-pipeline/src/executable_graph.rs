@@ -19,7 +19,7 @@ use crate::{
     errors::Result,
     errors::{Error, ErrorKind},
     metrics::metrics_value_count,
-    op::{prelude::IN, trickle::window},
+    op::prelude::IN,
     ConfigMap, ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
@@ -37,7 +37,6 @@ pub struct NodeConfig {
     pub(crate) config: ConfigMap,
     pub(crate) label: Option<String>,
     pub(crate) stmt: Option<Stmt<'static>>,
-    pub(crate) windows: Option<HashMap<String, window::Impl>>,
 }
 
 impl Display for NodeConfig {
@@ -86,7 +85,7 @@ impl NodeConfig {
         resolver: NodeLookupFn,
         helper: &mut Helper,
     ) -> Result<OperatorNode> {
-        resolver(self, uid, self.stmt.as_ref(), self.windows.as_ref(), helper)
+        resolver(self, uid, self.stmt.as_ref(), helper)
     }
 }
 
