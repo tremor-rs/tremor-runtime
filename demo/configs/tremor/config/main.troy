@@ -5,6 +5,8 @@ flow
 
     define pipeline loadgen
     pipeline
+        #!config metrics_interval_s = 5
+
         define script route_load
         script
             match event of
@@ -36,6 +38,7 @@ flow
 
     define connector blaster from bench
     with
+        metrics_interval_s = 5,
         codec = "json",
         config = {
             "source": "/data/data.json.xz",
@@ -99,6 +102,8 @@ flow
 
     define pipeline demo
     pipeline
+        #!config metrics_interval_s = 5
+
         define script runtime
         script
             let $elastic = {"_index": "tremor", "_type": "log"};
@@ -173,6 +178,7 @@ flow
 
     define connector elastic from elastic
     with
+        metrics_interval_s = 5,
         reconnect = {
             "retry": {
                 "interval_ms": 1000,
@@ -206,6 +212,7 @@ flow
 
     define pipeline enrich
     pipeline
+        #!config metrics_interval_s = 5
         define script runtime
         script
             use tremor::system;
@@ -255,9 +262,11 @@ flow
 
     connect /connector/metrics/out to /pipeline/enrich/in;
     connect /pipeline/enrich/out to /connector/influxdb;
-    connect /pipeline/enrich/out to /connector/console;
+    # for viewing the metrics on the console
+    # connect /pipeline/enrich/out to /connector/console;
 
-    connect /connector/influxdb to /pipeline/passthrough;
+    # for viewing influx responses on the console
+    # connect /connector/influxdb to /pipeline/passthrough;
     connect /connector/influxdb/err to /pipeline/passthrough;
     connect /pipeline/passthrough to /connector/console;
 end;
