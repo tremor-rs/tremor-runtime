@@ -38,23 +38,15 @@ else
     # correctly
 
 
-    # Load *.yaml files
-    YAMLS=$(find ${CFG_DIR} -name '*.yaml' -print 2>/dev/null | sort)
-    [ ! -z "$YAMLS" ] && ARTEFACTS="$ARTEFACTS $YAMLS"
-
-    # Load *.yml files
-    YMLS=$(find ${CFG_DIR} -name '*.yml' -print 2>/dev/null | sort)
-    [ ! -z "$YMLS" ] && ARTEFACTS="$ARTEFACTS $YMLS"
-
-    # Load *.trickle files
-    QUERIES=$(find ${CFG_DIR}/ -name '*.trickle' -print 2>/dev/null | sort)
-    [ ! -z "$QUERIES" ] && ARTEFACTS="$ARTEFACTS $QUERIES"
+    # Load *.troy files
+    TROYS=$(find ${CFG_DIR} -name '*.troy' -print 2>/dev/null | sort)
+    [ ! -z "$TROYS" ] && ARTEFACTS="$ARTEFACTS $TROYS"
 
     ARGS="server run --logger-config ${LOGGER_FILE}"
 
     if [ ! -z "${ARTEFACTS}" ]
     then
-        ARGS="${ARGS} -f ${ARTEFACTS}"
+        ARGS="${ARGS} ${ARTEFACTS}"
     fi
 fi
 
