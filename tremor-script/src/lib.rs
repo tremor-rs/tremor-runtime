@@ -98,6 +98,8 @@ pub use tremor_value::{literal, KnownKey, Object, Value};
 
 /// Default recursion limit
 pub static RECURSION_LIMIT: AtomicU32 = AtomicU32::new(1024);
+/// No aggregates
+pub const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 
 /// recursion limit
 #[inline]
@@ -105,9 +107,9 @@ pub fn recursion_limit() -> u32 {
     RECURSION_LIMIT.load(Ordering::Relaxed)
 }
 
-pub(crate) const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 lazy_static! {
-    static ref NO_CONSTS: Consts<'static> = Consts::new();
+    /// No Constants
+    pub static ref NO_CONSTS: Consts<'static> = Consts::new();
 }
 
 lazy_static! {

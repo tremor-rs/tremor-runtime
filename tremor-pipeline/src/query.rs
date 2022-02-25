@@ -179,21 +179,22 @@ fn to_executable_graph(
     stmts: Vec<tremor_script::ast::Stmt<'static>>,
     idgen: &mut OperatorIdGen,
 ) -> Result<ExecutableGraph> {
-    let query_borrowed = query.query.clone();
     let aggr_reg = tremor_script::aggr_registry();
     let reg = tremor_script::FN_REGISTRY.read()?;
     let mut helper = Helper::new(&reg, &aggr_reg);
-    helper.scope = query_borrowed.scope.clone();
+    helper.scope = query.query.scope.clone();
     let mut pipe_graph = ConfigGraph::new();
     let mut nodes_by_name: HashMap<Cow<'static, str>, _> = HashMap::new();
     let mut links: IndexMap<OutputPort, Vec<InputPort>> = IndexMap::new();
-    let metric_interval = query_borrowed
+    let metric_interval = query
+        .query
         .config
         .get("metrics_interval_s")
         .and_then(Value::as_u64)
         .map(|i| i * 1_000_000_000);
 
-    let pipeline_id = query_borrowed
+    let pipeline_id = query
+        .query
         .config
         .get("id")
         .and_then(Value::as_str)
@@ -301,18 +302,12 @@ fn to_executable_graph(
                 links.entry(from).or_default().push(select_in.clone());
                 links.entry(select_out).or_default().push(into);
 
-                let mut ww = HashMap::with_capacity(query_borrowed.scope.content.windows.len());
-                for (name, decl) in &query_borrowed.scope.content.windows {
-                    ww.insert(name.clone(), window_decl_to_impl(decl)?);
-                }
-
                 let node = NodeConfig {
                     id: select_in.id.to_string(),
                     label,
                     kind: NodeKind::Select,
                     op_type: "trickle::select".to_string(),
                     stmt: Some(stmt),
-                    windows: Some(ww),
                     ..NodeConfig::default()
                 };
                 let id = pipe_graph.add_node(node.clone());
@@ -420,7 +415,7 @@ fn to_executable_graph(
 
                 let mut decl: OperatorDefinition =
                     helper.get(&o.target)?.ok_or("operator not found")?;
-                if let Some(Stmt::OperatorCreate(o)) = query_borrowed.stmts.get(i) {
+                if let Some(Stmt::OperatorCreate(o)) = query.query.stmts.get(i) {
                     decl.params.ingest_creational_with(&o.params)?;
                 };
 
@@ -725,7 +720,7 @@ fn select(
     operator_uid: u64,
     config: &NodeConfig,
     node: &ast::SelectStmt<'static>,
-    windows: Option<&HashMap<String, window::Impl>>,
+    helper: &Helper,
 ) -> Result<Box<dyn Operator>> {
     let select_type = node.complexity();
     match select_type {
@@ -735,25 +730,17 @@ fn select(
         }
         SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(config.id.clone(), node)?)),
         SelectType::Normal => {
-            let windows = windows.ok_or_else(|| {
-                ErrorKind::MissingOpConfig("select operators require a window mapping".into())
-            })?;
             let windows: Result<Vec<(String, window::Impl)>> = node
                 .stmt
                 .windows
                 .iter()
                 .map(|w| {
-                    let fqwn = w.id.fqn();
-                    Ok(windows
-                        .get(&fqwn)
-                        .map(|imp| (w.id.id().to_string(), imp.clone()))
+                    Ok(helper
+                        .get::<WindowDefinition>(&w.id)?
                         .ok_or_else(|| {
-                            ErrorKind::BadOpConfig(format!(
-                                "Unknown window: {} available: {}",
-                                &fqwn,
-                                windows.keys().cloned().collect::<Vec<_>>().join(", ")
-                            ))
-                        })?)
+                            ErrorKind::BadOpConfig(format!("Unknown window: {} available", &w.id,))
+                        })
+                        .and_then(|imp| Ok((w.id.id().to_string(), window_decl_to_impl(&imp)?)))?)
                 })
                 .collect();
 
@@ -783,7 +770,6 @@ pub(crate) fn supported_operators(
     config: &NodeConfig,
     uid: u64,
     node: Option<&ast::Stmt<'static>>,
-    windows: Option<&HashMap<String, window::Impl>>,
     helper: &mut Helper,
 ) -> Result<OperatorNode> {
     let op: Box<dyn op::Operator> = match node {
@@ -795,7 +781,7 @@ pub(crate) fn supported_operators(
                 warnings: BTreeSet::new(),
             },
         }),
-        Some(tremor_script::ast::Stmt::SelectStmt(s)) => select(uid, config, s, windows)?,
+        Some(tremor_script::ast::Stmt::SelectStmt(s)) => select(uid, config, s, helper)?,
         Some(ast::Stmt::OperatorDefinition(o)) => operator(uid, o, helper)?,
         _ => crate::operator(uid, config)?,
     };

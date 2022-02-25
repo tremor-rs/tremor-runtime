@@ -35,8 +35,7 @@ use beef::Cow;
 use executable_graph::NodeConfig;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
-use op::trickle::window;
-use petgraph::graph::{self};
+use petgraph::graph;
 use simd_json::OwnedValue;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashSet};
@@ -80,7 +79,6 @@ pub type NodeLookupFn = fn(
     config: &NodeConfig,
     uid: u64,
     node: Option<&ast::Stmt<'static>>,
-    windows: Option<&HashMap<String, window::Impl>>,
     helper: &mut Helper,
 ) -> Result<OperatorNode>;
 

@@ -22,10 +22,10 @@ use tremor_script::{
     errors::Result,
     interpreter::{Env, LocalStack},
     prelude::*,
-    Value,
+    Value, NO_AGGRS,
 };
 
-use super::select::{execute_select_and_having, NO_AGGRS};
+use super::select::execute_select_and_having;
 
 pub(crate) struct SelectCtx<'run, 'script, 'local> {
     pub(crate) select: &'run Select<'script>,
