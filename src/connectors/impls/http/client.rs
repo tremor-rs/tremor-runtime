@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::time::Duration;
-
-use async_std::channel::{bounded, Receiver, Sender};
-use async_std::prelude::*;
+use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use tremor_value::{literal, structurize};
 
 use super::meta::*;
@@ -32,10 +29,7 @@ pub struct HttpClient {
     max_concurrency: usize,
     response_tx: Sender<SourceReply>,
     response_rx: Receiver<SourceReply>,
-    clients_tx: Sender<Vec<SurfClient>>,
-    clients_rx: Receiver<Vec<SurfClient>>,
     connector_config: ConnectorConfig,
-    codec_name: String,
 }
 
 impl std::fmt::Debug for HttpClient {
@@ -60,11 +54,6 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let _preprocessor_configs = connector_config.preprocessors.clone().unwrap_or_default();
         let _postprocessor_configs = connector_config.postprocessors.clone().unwrap_or_default();
-        let codec_name = if let Some(codec_name) = &connector_config.codec {
-            codec_name.name.clone()
-        } else {
-            "json".to_string()
-        };
         if let Some(config) = &connector_config.config {
             let config = Config::new(&config)?;
             let _codec_map: MimeCodecMap =
@@ -74,16 +63,12 @@ impl ConnectorBuilder for Builder {
                 } else {
                     MimeCodecMap::with_builtin()
                 };
-            let (clients_tx, clients_rx) = bounded(128);
             let (response_tx, response_rx) = bounded(128);
             Ok(Box::new(HttpClient {
                 max_concurrency: config.concurrency,
                 response_tx,
                 response_rx,
-                clients_tx,
-                clients_rx,
                 connector_config: connector_config.clone(),
-                codec_name,
             }))
         } else {
             Err(ErrorKind::MissingConfiguration(String::from("HttpClient")).into())
@@ -94,10 +79,7 @@ impl ConnectorBuilder for Builder {
 #[async_trait::async_trait]
 impl Connector for HttpClient {
     fn codec_requirements(&self) -> CodecReq {
-        // FIXME Optional should be Optional(String)
-        let codec_name = self.codec_name.clone();
-        let codec_name = Box::leak(codec_name.into_boxed_str());
-        CodecReq::Optional(codec_name)
+        CodecReq::Optional("json")
     }
 
     async fn create_source(
@@ -118,7 +100,6 @@ impl Connector for HttpClient {
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = HttpRequestSink::new(
-            self.clients_rx.clone(),
             self.response_tx.clone(),
             builder.reply_tx(),
             self.max_concurrency,
@@ -127,22 +108,8 @@ impl Connector for HttpClient {
         builder.spawn(sink, sink_context).map(Some)
     }
 
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        let mut clients = Vec::with_capacity(self.max_concurrency);
-
-        for _i in 1..self.max_concurrency {
-            clients.push(SurfClient {
-                client: surf::client(),
-            });
-        }
-
-        self.clients_tx.send(clients).await?;
-        Ok(true)
-    }
+    
 }
-
-/// Time to await an answer before handing control back to the source manager
-const SOURCE_RECV_TIMEOUT: Duration = Duration::from_millis(100);
 
 struct HttpRequestSource {
     #[allow(dead_code)]
@@ -152,10 +119,15 @@ struct HttpRequestSource {
 
 #[async_trait::async_trait()]
 impl Source for HttpRequestSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        match self.rx.recv().timeout(SOURCE_RECV_TIMEOUT).await? {
+    async fn pull_data(&mut self, _pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+        match self.rx.try_recv() {
             Ok(receiver) => Ok(receiver),
-            Err(e) => Err(e.into()),
+            Err(TryRecvError::Empty) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
+            Err(TryRecvError::Closed) => {
+                // shit is on fire, we gotta reconnect
+                ctx.notifier().notify().await?;
+                Err("HTTP Request Source channel is closed, we gotta reconnect.".into())  
+            }
         }
     }
 
@@ -203,8 +175,8 @@ impl SurfClients {
 
 struct HttpRequestSink {
     clients: SurfClients,
-    clients_rx: Receiver<Vec<SurfClient>>,
     response_tx: Sender<SourceReply>,
+    max_concurrency: usize,
     // reply_tx: Sender<AsyncSinkReply>,
     concurrency_cap: ConcurrencyCap,
     origin_uri: EventOriginUri,
@@ -213,7 +185,6 @@ struct HttpRequestSink {
 
 impl HttpRequestSink {
     fn new(
-        clients_rx: Receiver<Vec<SurfClient>>,
         response_tx: Sender<SourceReply>,
         reply_tx: Sender<AsyncSinkReply>,
         max_in_flight_requests: usize,
@@ -221,12 +192,12 @@ impl HttpRequestSink {
     ) -> Self {
         Self {
             clients: SurfClients::new(vec![]),
-            clients_rx,
             response_tx,
+            max_concurrency: max_in_flight_requests,
             // reply_tx: reply_tx.clone(),
             concurrency_cap: ConcurrencyCap::new(max_in_flight_requests, reply_tx),
             origin_uri: EventOriginUri {
-                scheme: String::from("rest_client"),
+                scheme: String::from("http_client"),
                 host: String::from("dummy"), // will be replaced in `on_event`
                 port: None,
                 path: vec![],
@@ -234,19 +205,24 @@ impl HttpRequestSink {
             http_meta,
         }
     }
-
-    async fn refresh_clients(&mut self, ctx: &SinkContext) -> Result<()> {
-        // check for a client refresh
-        if let Ok(new_clients) = self.clients_rx.try_recv() {
-            info!("{} Received new clients", ctx);
-            self.clients = SurfClients::new(new_clients);
-        }
-        Ok(())
-    }
 }
 
 #[async_trait::async_trait()]
 impl Sink for HttpRequestSink {
+
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+        let mut clients = Vec::with_capacity(self.max_concurrency);
+
+        for _i in 1..self.max_concurrency {
+            clients.push(SurfClient {
+                client: surf::client(),
+            });
+        }
+        self.clients = SurfClients::new(clients);
+
+        Ok(true)
+    }
+
     async fn on_event(
         &mut self,
         _input: &str,
@@ -255,7 +231,6 @@ impl Sink for HttpRequestSink {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        self.refresh_clients(ctx).await?;
         // constrain to max concurrency - propagate CB close on hitting limit
         let guard = self.concurrency_cap.inc_for(&event).await?;
 
@@ -267,6 +242,7 @@ impl Sink for HttpRequestSink {
             let (request, request_meta) = self.http_meta.process(&event)?;
 
             let mut codec = self.http_meta.codec.boxed_clone();
+            // TODO: move processor loading outside of event handling
             let mut preprocessors: Preprocessors =
                 Vec::with_capacity(self.http_meta.preprocessors.len());
             for p in &self.http_meta.preprocessors {
@@ -327,24 +303,19 @@ impl Sink for HttpRequestSink {
                             )
                         }
                     };
+                    drop(guard);
                     Ok(())
                 })?;
         } else {
-            error!("{} No rest client available.", &ctx);
+            error!("{} No http client available.", &ctx);
             return Ok(SinkReply::FAIL);
         }
 
         Ok(SinkReply::NONE)
     }
 
-    async fn on_signal(
-        &mut self,
-        _signal: Event,
-        ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
-        self.refresh_clients(ctx).await?;
-        Ok(SinkReply::default())
+    fn asynchronous(&self) -> bool {
+        true
     }
 
     fn auto_ack(&self) -> bool {

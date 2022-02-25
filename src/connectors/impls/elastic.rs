@@ -271,7 +271,7 @@ impl Sink for ElasticSink {
         let guard = self.concurrency_cap.inc_for(&event).await?;
 
         if let Some(client) = self.clients.next() {
-            debug!("{} sending event [{}] to {}", ctx, event.id, client.url);
+            trace!("{} sending event [{}] to {}", ctx, event.id, client.url);
 
             // create task for awaiting the sending and handling the response
             let response_tx = self.response_tx.clone();

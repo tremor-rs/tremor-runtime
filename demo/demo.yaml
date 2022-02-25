@@ -16,35 +16,35 @@ services:
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
   elastic:
-    image: "docker.elastic.co/elasticsearch/elasticsearch:6.6.1"
+    image: "docker.elastic.co/elasticsearch/elasticsearch:7.17.0"
     ports:
       - "9200:9200"
       - "9300:9300"
     environment:
       discovery.type: single-node
   kibana:
-    image: "docker.elastic.co/kibana/kibana:6.6.1"
+    image: "docker.elastic.co/kibana/kibana:7.17.0"
     ports:
       - "5601:5601"
     depends_on:
       - elastic
     environment:
-      ELASTICSEARCH_URL: "http://elastic:9200"
+      ELASTICSEARCH_HOSTS: "http://elastic:9200"
     links:
       - elastic
   influx:
-    image: influxdb:1.7
+    image: influxdb:2.1
     ports:
       - "8086:8086"
       - "8083:8083"
     environment:
-      INFLUXDB_DB: "tremor"
-  chronograf:
-    image: chronograf:1.7
-    ports:
-      - "8888:8888"
-    depends_on:
-      - influx
+      DOCKER_INFLUXDB_INIT_MODE: "setup"
+      DOCKER_INFLUXDB_INIT_USERNAME: "tremor"
+      DOCKER_INFLUXDB_INIT_PASSWORD: "snotbadger"
+      DOCKER_INFLUXDB_INIT_ORG: "tremor"
+      DOCKER_INFLUXDB_INIT_BUCKET: "tremor"
+      DOCKER_INFLUXDB_INIT_RETENTION: "1d"
+      DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: "snotbadger"
   tremor:
     image: tremorproject/tremor:latest
     depends_on:
@@ -54,10 +54,11 @@ services:
     ports:
       - 9898:9898
     environment:
-      - SLEEP=20
       - RUST_BACKTRACE=1
-      - RUST_LOG=info
+      - RUST_LOG=debug
     volumes:
       - ./configs/tremor:/etc/tremor:ro
       - ./logs:/logs:rw
       - ./data:/data:ro
+    working_dir: "/"
+    command: server run -d -l /etc/tremor/logger.yaml /etc/tremor/config/main.troy

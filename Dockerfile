@@ -76,4 +76,4 @@ ENV TREMOR_PATH="/usr/local/share/tremor:/usr/share/tremor/lib"
 
 ENTRYPOINT ["/entrypoint.sh"]
 
-HEALTHCHECK --interval=30s --timeout=1s --start-period=5s --retries=3 CMD curl -f http://localhost:9898/version || exit 1
+HEALTHCHECK --interval=30s --timeout=1s --start-period=5s --retries=3 CMD curl -f http://localhost:9898/v1/status || exit 1

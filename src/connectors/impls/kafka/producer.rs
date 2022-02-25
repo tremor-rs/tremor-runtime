@@ -394,7 +394,6 @@ async fn wait_for_delivery(
 ) -> Result<()> {
     let cb = match futures::future::try_join_all(futures).await {
         Ok(results) => {
-            // FIXME: only Fail on KafkaError::Transaction ??
             if let Some((kafka_error, _)) = results.into_iter().find_map(std::result::Result::err) {
                 error!("{ctx} Error delivering kafka record: {kafka_error}");
                 if is_fatal(&kafka_error) {
