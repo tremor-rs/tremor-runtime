@@ -17,10 +17,11 @@
 use crate::{errors::Result, op::prelude::*, Event, Operator};
 use tremor_script::{
     self,
-    ast::{self, InvokeAggrFn, Select, SelectStmt},
+    ast::{self, Select, SelectStmt},
     errors::query_guard_not_bool,
     interpreter::{Env, LocalStack},
     prelude::*,
+    NO_AGGRS,
 };
 
 /// optimized variant for a simple select of the form:
@@ -32,8 +33,6 @@ pub struct SimpleSelect {
     pub(crate) select: ast::SelectStmt<'static>,
     recursion_limit: u32,
 }
-
-const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 
 impl SimpleSelect {
     pub fn with_stmt(id: String, stmt: &ast::SelectStmt<'static>) -> Result<Self> {

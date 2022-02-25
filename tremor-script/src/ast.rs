@@ -60,7 +60,7 @@ use crate::{
     script::Return,
     stry,
     tilde::Extractor,
-    KnownKey, Value,
+    KnownKey, Value, NO_AGGRS, NO_CONSTS,
 };
 pub(crate) use analyzer::*;
 pub use base_expr::BaseExpr;
@@ -282,7 +282,7 @@ impl<'script> Consts<'script> {
             window: &self.window,
         }
     }
-    pub(crate) fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Consts {
             args: Value::const_null(),
             group: Value::const_null(),
@@ -297,15 +297,8 @@ impl<'script> Consts<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Script<'script> {
     pub(crate) mid: Box<NodeMeta>,
-    /// Import definitions
-    pub imports: Imports,
     /// Expressions of the script
     pub exprs: Exprs<'script>,
-    /// Constants defined in this script
-    pub consts: Consts<'script>,
-    /// Aggregate functions
-    pub aggregates: Vec<InvokeAggrFn<'script>>,
-    windows: HashMap<String, WindowDefinition<'script>>,
     /// Locals
     pub locals: usize,
     #[serde(skip)]
@@ -341,8 +334,8 @@ impl<'script> Script<'script> {
 
         let env = Env {
             context,
-            consts: self.consts.run(),
-            aggrs: &self.aggregates,
+            consts: NO_CONSTS.run(),
+            aggrs: &NO_AGGRS,
             recursion_limit: crate::recursion_limit(),
         };
 
@@ -384,8 +377,8 @@ impl<'script> Script<'script> {
 
         let env = Env {
             context,
-            consts: self.consts.run(),
-            aggrs: &self.aggregates,
+            consts: NO_CONSTS.run(),
+            aggrs: &NO_AGGRS,
             recursion_limit: crate::recursion_limit(),
         };
 

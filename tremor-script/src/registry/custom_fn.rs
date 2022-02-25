@@ -13,12 +13,13 @@
 // limitations under the License.
 
 use super::{FResult, FunctionError, Result};
-use crate::ast::{
-    visitors::IsConstFn, Expr, Exprs, FnDecl, ImutExpr, ImutExprs, InvokeAggrFn, NodeMeta,
-};
 use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
 use crate::prelude::*;
 use crate::Value;
+use crate::{
+    ast::{visitors::IsConstFn, Expr, Exprs, FnDecl, ImutExpr, ImutExprs, NodeMeta},
+    NO_AGGRS,
+};
 use beef::Cow;
 //use std::mem;
 const RECUR_STR: &str = "recur";
@@ -132,8 +133,6 @@ impl<'script> CustomFn<'script> {
     where
         'script: 'event,
     {
-        const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
-
         let args_const = Value::from(
             args.iter()
                 .skip(self.locals)

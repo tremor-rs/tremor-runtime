@@ -49,7 +49,7 @@ use super::{
     base_expr::Ranged,
     docs::{FnDoc, ModDoc},
     module::ModuleManager,
-    Const, Consts, NodeId, NodeMeta,
+    Const, NodeId, NodeMeta,
 };
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -170,11 +170,7 @@ impl<'script> ScriptRaw<'script> {
 
         Ok(Script {
             mid,
-            imports: vec![], // Compiled out
             exprs,
-            consts: Consts::new(),
-            aggregates: helper.aggregates.clone(),
-            windows: HashMap::new(), //helper.windows.clone(),
             locals: helper.locals.len(),
             docs: helper.docs.clone(),
         })

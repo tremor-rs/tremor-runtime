@@ -18,7 +18,7 @@
 use super::{
     query::WindowDefinition, ArgsExprs, ArrayPattern, ArrayPredicatePattern, AssignPattern,
     BinExpr, Bytes, BytesPart, ClauseGroup, ClausePreCondition, Comprehension, ComprehensionCase,
-    ConnectorDefinition, Consts, CreationalWith, DefaultCase, DefinitioalArgs, DefinitioalArgsWith,
+    ConnectorDefinition, CreationalWith, DefaultCase, DefinitioalArgs, DefinitioalArgsWith,
     EmitExpr, EventPath, Expr, ExprPath, Field, Ident, IfElse, ImutExpr, Invocable, Invoke,
     InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath, OperatorDefinition, Patch,
     PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record, RecordPattern, Recur,
@@ -987,44 +987,15 @@ impl<'script> Script<'script> {
     pub(crate) fn into_static(self) -> Script<'static> {
         let Script {
             mid,
-            imports,
             exprs,
-            consts,
-            aggregates,
-            windows,
             locals,
             docs,
         } = self;
         Script {
             mid,
-            imports,
             exprs: exprs.into_iter().map(Expr::into_static).collect(),
-            consts: consts.into_static(),
-            aggregates: aggregates
-                .into_iter()
-                .map(InvokeAggrFn::into_static)
-                .collect(),
-            windows: windows
-                .into_iter()
-                .map(|(k, v)| (k, v.into_static()))
-                .collect(),
             locals,
             docs,
-        }
-    }
-}
-
-impl<'script> Consts<'script> {
-    pub(crate) fn into_static(self) -> Consts<'static> {
-        let Consts {
-            args,
-            group,
-            window,
-        } = self;
-        Consts {
-            args: args.into_static(),
-            group: group.into_static(),
-            window: window.into_static(),
         }
     }
 }
