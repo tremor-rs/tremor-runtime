@@ -18,13 +18,14 @@ use crate::{ast::NodeMeta, Value};
 /// Rewrites a path to `args` or an element of `args` inside a script/query
 /// into an expression referencing the concrete `args` values
 /// in order to not leak the current `args` into other scopes upon nesting modules or subqueries, all referencing `args`
-pub(crate) struct ArgsRewriter<'script, 'registry, 'meta> {
+pub struct ArgsRewriter<'script, 'registry, 'meta> {
     args: ImutExpr<'script>,
     helper: &'meta mut Helper<'script, 'registry>,
 }
 
 impl<'script, 'registry, 'meta> ArgsRewriter<'script, 'registry, 'meta> {
-    pub(crate) fn new(args: Value<'script>, helper: &'meta mut Helper<'script, 'registry>) -> Self {
+    /// New rewriter
+    pub fn new(args: Value<'script>, helper: &'meta mut Helper<'script, 'registry>) -> Self {
         let args: ImutExpr = Literal {
             mid: Box::new(NodeMeta::default()),
             value: args,
@@ -37,20 +38,6 @@ impl<'script, 'registry, 'meta> ArgsRewriter<'script, 'registry, 'meta> {
         ImutExprWalker::walk_expr(self, expr)?;
         Ok(())
     }
-
-    // pub(crate) fn rewrite_group_by(&mut self, group_by: &mut GroupBy<'script>) -> Result<()> {
-    //     match group_by {
-    //         GroupBy::Expr { expr, .. } | GroupBy::Each { expr, .. } => {
-    //             self.rewrite_expr(expr)?;
-    //         }
-    //         GroupBy::Set { items, .. } => {
-    //             for inner_group_by in items {
-    //                 self.rewrite_group_by(inner_group_by)?;
-    //             }
-    //         }
-    //     }
-    //     Ok(())
-    // }
 }
 
 impl<'script, 'registry, 'meta> ImutExprWalker<'script>

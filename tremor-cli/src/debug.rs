@@ -99,16 +99,9 @@ impl DbgSrc {
         banner(h, opts, "Source", "Source code listing")?;
 
         match &data.kind {
-            SourceKind::Tremor | SourceKind::Json => {
-                Script::highlight_script_with(&data.raw, h, !&data.opts.raw)?;
+            SourceKind::Troy | SourceKind::Trickle | SourceKind::Tremor | SourceKind::Json => {
+                h.highlight_str(&data.raw, "", !&data.opts.raw)?;
             }
-            SourceKind::Trickle => {
-                Query::highlight_script_with(&data.raw, h, !data.opts.raw)?;
-            }
-            SourceKind::Troy => {
-                Deploy::highlight_script_with(&data.raw, h, !data.opts.raw)?;
-            }
-
             SourceKind::Unsupported(Some(t)) => error!("Unsupported: {}", t),
             SourceKind::Unsupported(None) => error!("Unsupported: no file type"),
         }
@@ -215,7 +208,7 @@ impl DbgAst {
                             simd_json::to_string_pretty(&runnable.script)?
                         };
                         println!();
-                        Script::highlight_script_with(&ast, h, !data.opts.raw)?;
+                        h.highlight_str(&ast, "", !data.opts.raw)?;
                     }
                     Err(e) => {
                         if let Err(e) = h.format_error(&e) {
@@ -229,7 +222,7 @@ impl DbgAst {
                     Ok(runnable) => {
                         let ast = simd_json::to_string_pretty(&runnable.query)?;
                         println!();
-                        Script::highlight_script_with(&ast, h, !data.opts.raw)?;
+                        h.highlight_str(&ast, "", !data.opts.raw)?;
                     }
                     Err(e) => {
                         if let Err(e) = h.format_error(&e) {
@@ -243,7 +236,7 @@ impl DbgAst {
                     Ok(runnable) => {
                         let ast = simd_json::to_string_pretty(&runnable.deploy)?;
                         println!();
-                        Script::highlight_script_with(&ast, h, !data.opts.raw)?;
+                        h.highlight_str(&ast, "", !data.opts.raw)?;
                     }
                     Err(e) => {
                         if let Err(e) = h.format_error(&e) {

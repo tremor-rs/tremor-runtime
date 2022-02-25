@@ -16,13 +16,12 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::{
-    docs::Docs, node_id::BaseRef, raw::BaseExpr, visitors::ConstFolder, CreationalWith,
-    DefinitioalArgs, DefinitioalArgsWith, NodeMeta,
+    docs::Docs, helper::Scope, node_id::BaseRef, raw::BaseExpr, CreationalWith, DefinitioalArgs,
+    DefinitioalArgsWith, NodeMeta,
 };
 use super::{node_id::NodeId, PipelineDefinition};
 use super::{HashMap, Value};
-use crate::ast::walkers::DeployWalker;
-use crate::{errors::Result, impl_expr, impl_fqn};
+use crate::{impl_expr, impl_fqn};
 pub(crate) mod raw;
 
 /// A Tremor deployment
@@ -33,12 +32,8 @@ pub struct Deploy<'script> {
     pub config: HashMap<String, Value<'script>>,
     /// Statements
     pub stmts: DeployStmts<'script>,
-    /// Flow Definitions
-    pub flow_decls: HashMap<NodeId, FlowDefinition<'script>>,
-    /// Connector Definitions
-    pub connector_decls: HashMap<NodeId, ConnectorDefinition<'script>>,
-    /// Pipeline Definitions
-    pub pipeline_decls: HashMap<NodeId, PipelineDefinition<'script>>,
+    /// Scope
+    pub scope: Scope<'script>,
     #[serde(skip)]
     /// Documentation comments
     pub docs: Docs,
@@ -216,30 +211,6 @@ pub struct FlowDefinition<'script> {
 impl_expr!(FlowDefinition);
 impl_fqn!(FlowDefinition);
 
-impl<'script> FlowDefinition<'script> {
-    /// Take the parameters of the `define flow` statement, which at this point should have been
-    /// combined with the ones from the `deploy flow` statement and propagate them down into each
-    /// `create *` statement inside this flow so that the `args` section of the `create` has
-    /// all occurences place and can resolve it's with satement
-    ///
-    /// ```text
-    ///                      v
-    /// deploy flow -> define flow -> create * -> define * -> <body>
-    /// ```
-    fn apply_args<'registry>(
-        &mut self,
-        helper: &mut super::Helper<'script, 'registry>,
-    ) -> Result<()> {
-        ConstFolder::new(helper).walk_flow_definition(self)?;
-        let args = self.params.render()?;
-        for create in &mut self.creates {
-            create.apply_args(&args, helper)?;
-        }
-        ConstFolder::new(helper).walk_flow_definition(self)?;
-        Ok(())
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// A connect target
 pub enum CreateTargetDefinition<'script> {
@@ -268,47 +239,6 @@ impl crate::ast::node_id::BaseRef for CreateStmt<'_> {
     }
 }
 
-impl<'script> CreateStmt<'script> {
-    /// First we apply the passed args to the creational with, substituting any use
-    /// of `args` in with with the value.
-    ///
-    /// Second we takle this newly substutated with and ingest it into the definitional
-    /// args of the definitions this create statment reffeences./
-    /// ```text
-    ///                                v
-    /// deploy flow -> define flow -> create * -> define * -> <body>
-    /// ```
-
-    fn apply_args<'registry>(
-        &mut self,
-        args: &Value<'script>,
-        helper: &mut super::Helper<'script, 'registry>,
-    ) -> Result<()> {
-        // replace any reference to the `args` path in the `with` statement of the receate
-        // with the value provided by the outer statement
-        self.with.substitute_args(args, helper)?;
-        // Since the `with` statement is now purely literals, we ingest the statement into
-        // the definitions `args` statment next by using `ingest_creational_with`.
-        // Finally we create the combined new `args` of the ingested creational with into the
-        // definitional args and definiitional with to apply it to all sub statements
-        match &mut self.defn {
-            CreateTargetDefinition::Connector(c) => {
-                // include creational with into definitional args
-                c.params.ingest_creational_with(&self.with)?;
-                c.config = c.params.generate_config(helper)?;
-                // We are done now since there are no statements inside of a connector
-                // the rendering will be handled once we deploy the pipeline and spawn
-                // the connector
-                Ok(())
-            }
-            CreateTargetDefinition::Pipeline(p) => {
-                p.params.ingest_creational_with(&self.with)?;
-                let args = p.params.render()?;
-                p.apply_args(&args, helper)
-            }
-        }
-    }
-}
 /// A create statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DeployFlow<'script> {

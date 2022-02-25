@@ -15,32 +15,6 @@
 use port_scanner::scan_port_addr;
 use tremor_common::time::nanotime;
 
-// /// create an `ack` insight from the given event
-// /// The insight is reporting successful handling of the given event to upstream components (pipelines, operators, onramps, connectors).
-// pub fn ack(event: &mut Event) -> sink::Reply {
-//     sink::Reply::Insight(event.insight_ack())
-// }
-
-// /// create a `fail` insight from the given event
-// /// The insight is reporting failed handling of the given event to upstream components (pipelines, operators, onramps, connectors).
-// pub fn fail(event: &mut Event) -> sink::Reply {
-//     sink::Reply::Insight(event.insight_fail())
-// }
-
-// /// create a CB trigger/close insight for the given event
-// /// The insight is reporting that the downstream components should not receive any further events.
-// /// The circuit breaker for the following downstream components is _triggered_
-// pub fn close(event: &mut Event) -> sink::Reply {
-//     sink::Reply::Insight(event.insight_trigger())
-// }
-
-// /// create a CB restore/open insight for the given event
-// /// The insight is reporting that the downstream components can now again receive events.
-// /// The circuit breaker for the following downstream components is _restored_
-// pub fn open(event: &mut Event) -> sink::Reply {
-//     sink::Reply::Insight(event.insight_restore())
-// }
-
 /// Canary probe
 pub trait CanaryProbe: Send + Sync {
     /// Executes a canary probe returning:
