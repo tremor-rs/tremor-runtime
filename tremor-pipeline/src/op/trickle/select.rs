@@ -29,12 +29,12 @@ use tremor_common::stry;
 
 use tremor_script::{
     self,
-    ast::{self, ImutExpr, InvokeAggrFn, RunConsts, SelectStmt},
+    ast::{self, ImutExpr, RunConsts, SelectStmt},
     errors::Result as TSResult,
     interpreter::{Env, LocalStack},
     prelude::*,
     utils::sorted_serialize,
-    Value,
+    Value, NO_AGGRS,
 };
 
 #[derive(Debug)]
@@ -48,8 +48,6 @@ pub struct Select {
     dflt_group: Group,
     max_groups: usize,
 }
-
-pub(crate) const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 
 impl Select {
     //FIXME rename

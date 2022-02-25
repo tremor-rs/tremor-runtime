@@ -23,12 +23,15 @@ use std::io::Read;
 use std::{collections::HashMap, path::Path};
 use test::tag;
 use tremor_common::time::nanotime;
-use tremor_script::ast::{Expr, ImutExpr, Invoke, List, Record};
-use tremor_script::ctx::EventContext;
+use tremor_script::{ctx::EventContext, NO_CONSTS};
 use tremor_script::highlighter::{Dumb as DumbHighlighter, Highlighter, Term as TermHighlighter};
 use tremor_script::interpreter::{AggrType, Env, ExecOpts, LocalStack};
 use tremor_script::prelude::*;
 use tremor_script::Value;
+use tremor_script::{
+    ast::{Expr, ImutExpr, Invoke, List, Record},
+    NO_AGGRS,
+};
 
 use super::TestConfig;
 const EXEC_OPTS: ExecOpts = ExecOpts {
@@ -226,8 +229,8 @@ pub(crate) fn run_suite(
             let context = &EventContext::new(nanotime(), None);
             let env = Env {
                 context,
-                consts: script.consts.run(),
-                aggrs: &script.aggregates,
+                consts: NO_CONSTS.run(),
+                aggrs: &NO_AGGRS,
                 recursion_limit: tremor_script::recursion_limit(),
             };
 
