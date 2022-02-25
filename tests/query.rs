@@ -41,25 +41,23 @@ macro_rules! test_cases {
         $(
             #[async_std::test]
             async fn $file() -> Result<()> {
-
                 tremor_runtime::functions::load()?;
                 let query_dir = concat!("tests/queries/", stringify!($file), "/").to_string();
                 let query_file = concat!("tests/queries/", stringify!($file), "/query.trickle");
                 let in_file = concat!("tests/queries/", stringify!($file), "/in");
                 let out_file = concat!("tests/queries/", stringify!($file), "/out");
-                // let l = UNIQUE.lock().await;
+                let l = UNIQUE.lock().await;
                 let pipeline = (||{
-                    // ModuleManager::clear_path()?;
-                    // ModuleManager::add_path("tremor-script/lib")?;
+                    ModuleManager::clear_path()?;
+                    ModuleManager::add_path("tremor-script/lib")?;
                     ModuleManager::add_path(query_dir)?;
-
                     println!("Loading query: {}", query_file);
                     let mut file = file::open(query_file)?;
                     let mut contents = String::new();
                     file.read_to_string(&mut contents)?;
                     to_pipe(contents)
                 })();
-                // drop(l);
+                drop(l);
                 let mut pipeline = pipeline?;
 
                 println!("Loading input: {}", in_file);

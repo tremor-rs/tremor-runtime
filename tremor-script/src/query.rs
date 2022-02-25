@@ -63,11 +63,9 @@ where
         let mut helper = ast::Helper::new(reg, aggr_reg);
         let tokens = Tokenizer::new(script, aid).collect::<Result<Vec<_>>>()?;
         let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
-        let script_stage_1 = crate::parser::g::QueryParser::new().parse(filtered_tokens)?;
-        let mut query = script_stage_1.up_script(&mut helper)?;
-
+        let query_stage_1 = crate::parser::g::QueryParser::new().parse(filtered_tokens)?;
+        let mut query = query_stage_1.up_script(&mut helper)?;
         ConstFolder::new(&helper).walk_query(&mut query)?;
-
         std::mem::swap(&mut warnings, &mut helper.warnings);
         let locals = helper.locals.len();
 

@@ -409,7 +409,9 @@ impl ModuleManager {
     }
 
     pub(crate) fn load(node_id: &NodeId) -> Result<Index> {
-        let path = &MODULES.read().unwrap().path;
+        let m = MODULES.read()?;
+        let path = &m.path;
+
         let p = path.resolve_id(node_id).ok_or_else(|| {
             crate::errors::ErrorKind::ModuleNotFound(
                 Span::default(),
@@ -418,26 +420,32 @@ impl ModuleManager {
                 path.mounts.clone(),
             )
         })?;
+        drop(m);
+
         let src = std::fs::read_to_string(&p)?;
         let id = ModuleId::from(src.as_bytes());
 
-        let maybe_id = MODULES
-            .read()
-            .unwrap()
+        let m = MODULES.read()?;
+        let maybe_id = m
             .modules()
             .iter()
             .enumerate()
             .find(|(_, m)| m.id == id)
             .map(|(i, _)| i);
+        drop(m);
+
         if let Some(id) = maybe_id {
             Ok(Index(id))
         } else {
             let mid = node_id.to_vec();
             let (aid, src) = Arena::insert(src)?;
             let m = Module::load(id, aid, src, mid)?;
-            let mut mm = MODULES.write().unwrap(); // FIXME
+
+            let mut mm = MODULES.write()?;
+
             let n = mm.modules.len();
             mm.modules.push(m);
+
             Ok(Index(n))
         }
     }
