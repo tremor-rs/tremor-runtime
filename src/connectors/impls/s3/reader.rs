@@ -21,7 +21,7 @@ use async_std::task::{self, JoinHandle};
 use super::auth;
 use aws_sdk_s3 as s3;
 use s3::model::Object;
-use s3::ByteStream;
+use s3::types::ByteStream;
 use s3::Client as S3Client;
 
 const MINCHUNKSIZE: i64 = 8 * 1024 * 1024; // 8 MBs
