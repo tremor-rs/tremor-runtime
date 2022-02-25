@@ -13,12 +13,12 @@ root:
 
 loggers:
   tremor_runtime:
-    level: info
+    level: debug
     appenders:
       - stdout
     additive: false
   tremor:
-    level: info
+    level: debug
     appenders:
       - stdout
     additive: false

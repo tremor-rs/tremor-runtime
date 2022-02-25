@@ -127,8 +127,8 @@ impl HttpResponseMeta {
                 let body = body?.unwrap_or_else(Value::object);
                 Ok(ValueAndMeta::from_parts(body, meta.clone()))
             });
-            if payload.is_err() {
-                error!("Failed to preprocess event - decoding error during processing");
+            if let Err(e) = payload {
+                error!("Failed to preprocess event - decoding error during processing: {}", e);
                 return Ok(ResponseEventCont::CodecError);
             }
             events.push(SourceReply::Structured {
