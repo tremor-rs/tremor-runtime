@@ -104,23 +104,6 @@ impl Script {
         &self.script.docs
     }
 
-    /// Highlights a script with a given highlighter.
-    /// # Errors
-    /// on io errors
-    #[cfg(not(tarpaulin_include))]
-    pub fn highlight_script_with<H: Highlighter>(
-        script: &str,
-        h: &mut H,
-        emit_lines: bool,
-    ) -> io::Result<()> {
-        let (aid, script) = Arena::insert(script)?;
-        let tokens: Vec<_> = lexer::Tokenizer::new(script, aid)
-            .tokenize_until_err()
-            .collect();
-        h.highlight(None, &tokens, "", emit_lines, None)?;
-        io::Result::Ok(())
-    }
-
     /// Format warnings with the given `Highligher`.
     /// # Errors
     /// on io errors

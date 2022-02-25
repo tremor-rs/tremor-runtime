@@ -519,31 +519,6 @@ impl<'script> DefinitioalArgsWith<'script> {
             .collect();
         config
     }
-    // pub(crate) fn substitute_args<'registry>(
-    //     &mut self,
-    //     args: &Value<'script>,
-    //     helper: &mut Helper<'script, 'registry>,
-    // ) -> Result<()> {
-    //     // We do NOT replace external args in the `with` part as this part will be replaced used
-    //     // with the internal args
-    //     //
-    //     // ```
-    //     //   define pipeline pipeline_name
-    //     //   args
-    //     //     pipeline_server_name
-    //     //   pipeline
-    //     //     define http connector server
-    //     //     args
-    //     //       server_name: args.pipeline_server_name # this gets replaced
-    //     //     with
-    //     //       config = {"server": args.server_name} # this does not get replaced
-    //     //     end;
-    //     //     # ...
-    //     //  end
-    //     // ```
-
-    //     self.args.substitute_args(args, helper)
-    // }
 }
 
 /// A args block in a definitional statement
