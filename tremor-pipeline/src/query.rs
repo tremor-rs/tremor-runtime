@@ -21,13 +21,18 @@ use crate::{
         prelude::{ERR, IN, OUT},
         trickle::{operator::TrickleOperator, select::Select, simple_select::SimpleSelect, window},
     },
-    ConfigGraph, Connection, ExecutableGraph, NodeConfig, NodeKind, NodeMetrics, Operator,
-    OperatorNode, PortIndexMap, State, METRICS_CHANNEL,
+    ConfigGraph, Connection, ExecPortIndexMap, ExecutableGraph, NodeConfig, NodeKind, NodeMetrics,
+    Operator, OperatorNode, State, METRICS_CHANNEL,
 };
 use beef::Cow;
 use halfbrown::HashMap;
 use indexmap::IndexMap;
-use petgraph::{algo::is_cyclic_directed, graph::NodeIndex};
+use petgraph::{
+    algo::is_cyclic_directed,
+    graph::NodeIndex,
+    EdgeDirection::{Incoming, Outgoing},
+    Graph,
+};
 use std::collections::BTreeSet;
 use std::iter;
 use tremor_common::ids::OperatorIdGen;
@@ -180,11 +185,8 @@ fn to_executable_graph(
     let mut helper = Helper::new(&reg, &aggr_reg);
     helper.scope = query_borrowed.scope.clone();
     let mut pipe_graph = ConfigGraph::new();
-    let mut pipe_ops = HashMap::new();
-    let mut nodes: HashMap<Cow<'static, str>, _> = HashMap::new();
+    let mut nodes_by_name: HashMap<Cow<'static, str>, _> = HashMap::new();
     let mut links: IndexMap<OutputPort, Vec<InputPort>> = IndexMap::new();
-    let mut inputs = HashMap::new();
-    let mut outputs: Vec<NodeIndex> = Vec::new();
     let metric_interval = query_borrowed
         .config
         .get("metrics_interval_s")
@@ -204,37 +206,9 @@ fn to_executable_graph(
             op_type: "passthrough".to_string(),
             ..NodeConfig::default()
         });
-        nodes.insert(name.clone(), id);
-        let op = pipe_graph
-            .raw_nodes()
-            .get(id.index())
-            .ok_or_else(|| Error::from("Error finding freshly added node."))
-            .and_then(|node| {
-                node.weight.to_op(
-                    idgen.next_id(),
-                    supported_operators,
-                    None,
-                    None,
-                    &mut helper,
-                )
-            })?;
-        pipe_ops.insert(id, op);
-        match node_kind {
-            NodeKind::Input => {
-                inputs.insert(name.clone(), id);
-            }
-            NodeKind::Output(_) => outputs.push(id),
-            _ => {
-                return Err(format!(
-                    "Builtin node {} has unsupported node kind: {:?}",
-                    name, node_kind
-                )
-                .into())
-            }
-        }
+        nodes_by_name.insert(name.clone(), id);
     }
 
-    let mut port_indexes: PortIndexMap = HashMap::new();
     let mut select_num = 0;
 
     let has_builtin_node_name = make_builtin_node_name_checker();
@@ -250,28 +224,26 @@ fn to_executable_graph(
 
             Stmt::SelectStmt(ref select) => {
                 // Rewrite pipeline/port to their internal streams
-                let mut select_rewrite = select.clone();
+                let mut select = select.clone();
                 // Note we connecto from stmt.from to graph.into
                 // and stmt.into to graph.from
                 // FIXME: error handling
-                let (node, port) = &mut select_rewrite.stmt.from;
+                let (node, port) = &mut select.stmt.from;
                 if let Some(g) = included_graphs.get(node.as_str()) {
                     let name = into_name(&g.prefix, port.as_str());
                     node.id = name.into();
                     port.id = "out".into();
                 }
-                let (node, port) = &mut select_rewrite.stmt.into;
+                let (node, port) = &mut select.stmt.into;
                 if let Some(g) = included_graphs.get(node.as_str()) {
                     let name = from_name(&g.prefix, port.as_str());
                     node.id = name.into();
                     port.id = "in".into();
                 }
 
-                let select = select_rewrite;
-
                 let s: &ast::Select<'_> = &select.stmt;
 
-                if !nodes.contains_key(&s.from.0.id) {
+                if !nodes_by_name.contains_key(&s.from.0.id) {
                     return Err(
                         query_stream_not_defined_err(s, &s.from.0, s.from.0.to_string()).into(),
                     );
@@ -300,36 +272,21 @@ fn to_executable_graph(
                 if from.id == "in" && from.port != "out" {
                     let name: Cow<'static, str> = format!("in/{}", from.port).into();
                     from.id = name.clone();
-                    if !nodes.contains_key(&name) {
+                    if !nodes_by_name.contains_key(&name) {
                         let id = pipe_graph.add_node(NodeConfig {
                             id: name.to_string(),
                             kind: NodeKind::Input,
                             op_type: "passthrough".to_string(),
                             ..NodeConfig::default()
                         });
-                        nodes.insert(name.clone(), id);
-                        let op = pipe_graph
-                            .raw_nodes()
-                            .get(id.index())
-                            .ok_or_else(|| Error::from("Error finding freshly added node."))
-                            .and_then(|node| {
-                                node.weight.to_op(
-                                    idgen.next_id(),
-                                    supported_operators,
-                                    None,
-                                    None,
-                                    &mut helper,
-                                )
-                            })?;
-                        pipe_ops.insert(id, op);
-                        inputs.insert(name, id);
+                        nodes_by_name.insert(name.clone(), id);
                     }
                 }
                 let mut into = resolve_input_port(&s.into);
                 if into.id == "out" && into.port != "in" {
                     let name: Cow<'static, str> = format!("out/{}", into.port).into();
                     into.id = name.clone();
-                    if !nodes.contains_key(&name) {
+                    if !nodes_by_name.contains_key(&name) {
                         let id = pipe_graph.add_node(NodeConfig {
                             id: name.to_string(),
                             label: Some(name.to_string()),
@@ -337,57 +294,35 @@ fn to_executable_graph(
                             op_type: "passthrough".to_string(),
                             ..NodeConfig::default()
                         });
-                        nodes.insert(name, id);
-                        let op = pipe_graph
-                            .raw_nodes()
-                            .get(id.index())
-                            .ok_or_else(|| Error::from("Error finding freshly added node."))
-                            .and_then(|node| {
-                                node.weight.to_op(
-                                    idgen.next_id(),
-                                    supported_operators,
-                                    None,
-                                    None,
-                                    &mut helper,
-                                )
-                            })?;
-
-                        pipe_ops.insert(id, op);
-                        outputs.push(id);
+                        nodes_by_name.insert(name, id);
                     }
                 }
 
                 links.entry(from).or_default().push(select_in.clone());
                 links.entry(select_out).or_default().push(into);
 
+                let mut ww = HashMap::with_capacity(query_borrowed.scope.content.windows.len());
+                for (name, decl) in &query_borrowed.scope.content.windows {
+                    ww.insert(name.clone(), window_decl_to_impl(decl)?);
+                }
+
                 let node = NodeConfig {
                     id: select_in.id.to_string(),
                     label,
                     kind: NodeKind::Select,
                     op_type: "trickle::select".to_string(),
+                    stmt: Some(stmt),
+                    windows: Some(ww),
                     ..NodeConfig::default()
                 };
                 let id = pipe_graph.add_node(node.clone());
 
-                let mut ww = HashMap::with_capacity(query_borrowed.scope.content.windows.len());
-                for (name, decl) in &query_borrowed.scope.content.windows {
-                    ww.insert(name.clone(), window_decl_to_impl(decl)?);
-                }
-                let op = node.to_op(
-                    idgen.next_id(),
-                    supported_operators,
-                    Some(&stmt),
-                    Some(ww),
-                    &mut helper,
-                )?;
-                pipe_ops.insert(id, op);
-                nodes.insert(select_in.id.clone(), id);
-                outputs.push(id);
+                nodes_by_name.insert(select_in.id.clone(), id);
             }
             Stmt::StreamStmt(s) => {
                 let name = common_cow(&s.id);
                 let id = name.clone();
-                if nodes.contains_key(&id) {
+                if nodes_by_name.contains_key(&id) {
                     return Err(query_stream_duplicate_name_err(s, s, s.id.to_string()).into());
                 }
 
@@ -395,20 +330,11 @@ fn to_executable_graph(
                     id: id.to_string(),
                     kind: NodeKind::Operator,
                     op_type: "passthrough".to_string(),
+                    stmt: Some(stmt),
                     ..NodeConfig::default()
                 };
                 let id = pipe_graph.add_node(node.clone());
-                nodes.insert(name.clone(), id);
-                let op = node.to_op(
-                    idgen.next_id(),
-                    supported_operators,
-                    Some(&stmt),
-                    None,
-                    &mut helper,
-                )?;
-                inputs.insert(name.clone(), id);
-                pipe_ops.insert(id, op);
-                outputs.push(id);
+                nodes_by_name.insert(name.clone(), id);
             }
             Stmt::PipelineCreate(s) => {
                 if let Some(mut pd) = helper.get::<PipelineDefinition>(&s.target)? {
@@ -429,19 +355,12 @@ fn to_executable_graph(
                             id: name.clone(),
                             kind: NodeKind::Operator,
                             op_type: "passthrough".to_string(),
+                            stmt: Some(stmt.clone()),
                             ..NodeConfig::default()
                         };
                         let id = pipe_graph.add_node(node.clone());
                         from_map.insert(f.to_string(), id);
-                        nodes.insert(name.clone().into(), id);
-                        let op = node.to_op(
-                            idgen.next_id(),
-                            supported_operators,
-                            Some(&stmt),
-                            None,
-                            &mut helper,
-                        )?;
-                        pipe_ops.insert(id, op);
+                        nodes_by_name.insert(name.clone().into(), id);
                     }
 
                     let mut into_map = HashMap::new();
@@ -451,19 +370,12 @@ fn to_executable_graph(
                             id: name.clone(),
                             kind: NodeKind::Operator,
                             op_type: "passthrough".to_string(),
+                            stmt: Some(stmt.clone()),
                             ..NodeConfig::default()
                         };
                         let id = pipe_graph.add_node(node.clone());
                         into_map.insert(i.to_string(), id);
-                        nodes.insert(name.clone().into(), id);
-                        let op = node.to_op(
-                            idgen.next_id(),
-                            supported_operators,
-                            Some(&stmt),
-                            None,
-                            &mut helper,
-                        )?;
-                        pipe_ops.insert(id, op);
+                        nodes_by_name.insert(name.clone().into(), id);
                     }
                     let name = s.alias.clone();
                     let stmts = query.query.stmts.clone(); // FIXME this should be in in to_executable graph
@@ -497,7 +409,7 @@ fn to_executable_graph(
                 }
             }
             Stmt::OperatorCreate(o) => {
-                if nodes.contains_key(&common_cow(o.node_id.id())) {
+                if nodes_by_name.contains_key(&common_cow(o.node_id.id())) {
                     let error_func = if has_builtin_node_name(&common_cow(o.node_id.id())) {
                         query_node_reserved_name_err
                     } else {
@@ -506,14 +418,6 @@ fn to_executable_graph(
                     return Err(error_func(o, o.node_id.id().to_string()).into());
                 }
 
-                let node = NodeConfig {
-                    id: o.node_id.id().to_string(),
-                    kind: NodeKind::Operator,
-                    op_type: "trickle::operator".to_string(),
-                    ..NodeConfig::default()
-                };
-                let id = pipe_graph.add_node(node.clone());
-
                 let mut decl: OperatorDefinition =
                     helper.get(&o.target)?.ok_or("operator not found")?;
                 if let Some(Stmt::OperatorCreate(o)) = query_borrowed.stmts.get(i) {
@@ -521,20 +425,19 @@ fn to_executable_graph(
                 };
 
                 let that = Stmt::OperatorDefinition(decl);
+                let node = NodeConfig {
+                    id: o.node_id.id().to_string(),
+                    kind: NodeKind::Operator,
+                    op_type: "trickle::operator".to_string(),
+                    stmt: Some(that),
+                    ..NodeConfig::default()
+                };
+                let id = pipe_graph.add_node(node.clone());
 
-                let op = node.to_op(
-                    idgen.next_id(),
-                    supported_operators,
-                    Some(&that),
-                    None,
-                    &mut helper,
-                )?;
-                pipe_ops.insert(id, op);
-                nodes.insert(common_cow(o.node_id.id()), id);
-                outputs.push(id);
+                nodes_by_name.insert(common_cow(o.node_id.id()), id);
             }
             Stmt::ScriptCreate(o) => {
-                if nodes.contains_key(&common_cow(o.node_id.id())) {
+                if nodes_by_name.contains_key(&common_cow(o.node_id.id())) {
                     let error_func = if has_builtin_node_name(&common_cow(o.node_id.id())) {
                         query_node_reserved_name_err
                     } else {
@@ -563,21 +466,12 @@ fn to_executable_graph(
                     kind: NodeKind::Script,
                     label,
                     op_type: "trickle::script".to_string(),
+                    stmt: Some(that_defn),
                     ..NodeConfig::default()
                 };
                 let id = pipe_graph.add_node(node.clone());
 
-                let op = node.to_op(
-                    idgen.next_id(),
-                    supported_operators,
-                    Some(&that_defn),
-                    None,
-                    &mut helper,
-                )?;
-
-                pipe_ops.insert(id, op);
-                nodes.insert(common_cow(o.node_id.id()), id);
-                outputs.push(id);
+                nodes_by_name.insert(common_cow(o.node_id.id()), id);
             }
         };
     }
@@ -585,23 +479,13 @@ fn to_executable_graph(
     // Link graph edges
     for (from, tos) in &links {
         for to in tos {
-            let from_idx = *nodes
+            let from_idx = *nodes_by_name
                 .get(&from.id)
                 .ok_or_else(|| query_stream_not_defined_err(from, from, from.id.to_string()))?;
-            let to_idx = *nodes
+            let to_idx = *nodes_by_name
                 .get(&to.id)
                 .ok_or_else(|| query_stream_not_defined_err(to, to, to.id.to_string()))?;
 
-            let from_tpl = (from_idx, from.port.clone());
-            let to_tpl = (to_idx, to.port.clone());
-            match port_indexes.get_mut(&from_tpl) {
-                None => {
-                    port_indexes.insert(from_tpl, vec![to_tpl]);
-                }
-                Some(ports) => {
-                    ports.push(to_tpl);
-                }
-            }
             pipe_graph.add_edge(
                 from_idx,
                 to_idx,
@@ -629,10 +513,8 @@ fn to_executable_graph(
                 old_index_to_new_index.insert(old_idx, new_idx);
             } else if let NodeKind::Input { .. } = &node.kind {
                 inputs.insert(old_idx);
-                dbg!(&node);
             } else {
                 let new_idx = pipe_graph.add_node(node.config.clone());
-                pipe_ops.insert(new_idx, node);
                 old_index_to_new_index.insert(old_idx, new_idx);
             }
         }
@@ -678,32 +560,43 @@ fn to_executable_graph(
         }
     }
 
+    loop {
+        let mut unused = Vec::new();
+        for idx in pipe_graph.externals(Incoming) {
+            if !matches!(
+                pipe_graph.node_weight(idx),
+                Some(NodeConfig {
+                    kind: NodeKind::Input | NodeKind::Output(_),
+                    ..
+                })
+            ) {
+                unused.push(idx);
+            }
+        }
+        for idx in pipe_graph.externals(Outgoing) {
+            if !matches!(
+                pipe_graph.node_weight(idx),
+                Some(NodeConfig {
+                    kind: NodeKind::Input | NodeKind::Output(_),
+                    ..
+                })
+            ) {
+                unused.push(idx);
+            }
+        }
+        if unused.is_empty() {
+            break;
+        }
+        for idx in unused.drain(..) {
+            pipe_graph.remove_node(idx);
+        }
+    }
+
     let dot = petgraph::dot::Dot::with_attr_getters(
         &pipe_graph,
         &[],
         &|_g, _r| "".to_string(),
-        &|_g, (_i, c)| match c {
-            NodeConfig {
-                kind: NodeKind::Input,
-                ..
-            } => r#"shape = "rarrow""#.to_string(),
-            NodeConfig {
-                kind: NodeKind::Output(_),
-                ..
-            } => r#"shape = "larrow""#.to_string(),
-            NodeConfig {
-                kind: NodeKind::Select,
-                ..
-            } => r#"shape = "box""#.to_string(),
-            NodeConfig {
-                kind: NodeKind::Script,
-                ..
-            } => r#"shape = "note""#.to_string(),
-            NodeConfig {
-                kind: NodeKind::Operator,
-                ..
-            } => "".to_string(),
-        },
+        &node_to_dot,
     );
 
     // iff cycles, fail and bail
@@ -717,9 +610,10 @@ fn to_executable_graph(
         // Nodes that handle signals
         let mut signalflow = Vec::new();
         for (i, nx) in pipe_graph.node_indices().enumerate() {
-            let op = pipe_ops
-                .remove(&nx)
-                .ok_or_else(|| format!("Invalid pipeline can't find node {:?}", &nx))?;
+            let op = pipe_graph
+                .node_weight(nx)
+                .ok_or_else(|| Error::from(format!("Invalid pipeline can't find node {:?}", &nx)))
+                .and_then(|node| node.to_op(idgen.next_id(), supported_operators, &mut helper))?;
             i2pos.insert(nx, i);
             if op.handles_contraflow() {
                 contraflow.push(i);
@@ -734,20 +628,38 @@ fn to_executable_graph(
 
         //pub type PortIndexMap = HashMap<(NodeIndex, String), Vec<(NodeIndex, String)>>;
 
-        let mut port_indexes2 = HashMap::new();
-        for ((i1, s1), connections) in &port_indexes {
-            let connections = connections
-                .iter()
-                .filter_map(|(i, s)| Some((*i2pos.get(i)?, s.clone())))
-                .collect();
-            let k = *i2pos.get(i1).ok_or_else(|| Error::from("Invalid graph"))?;
-            port_indexes2.insert((k, s1.clone()), connections);
+        let mut port_indexes: ExecPortIndexMap = HashMap::new();
+        for idx in pipe_graph.edge_indices() {
+            let (from, to) = pipe_graph.edge_endpoints(idx).ok_or("invalid edge")?;
+            let ports = pipe_graph.edge_weight(idx).cloned().ok_or("invalid edge")?;
+            let from = *i2pos
+                .get(&from)
+                .ok_or_else(|| Error::from("Invalid graph - failed to build connections"))?;
+            let to = *i2pos
+                .get(&to)
+                .ok_or_else(|| Error::from("Invalid graph - failed to build connections"))?;
+            let from = (from, ports.from);
+            let to = (to, ports.to);
+            if let Some(connections) = port_indexes.get_mut(&from) {
+                connections.push(to);
+            } else {
+                port_indexes.insert(from, vec![to]);
+            }
         }
 
-        let mut inputs2: HashMap<beef::Cow<'static, str>, usize> = HashMap::new();
-        for (k, idx) in &inputs {
-            let v = *i2pos.get(idx).ok_or_else(|| Error::from("Invalid graph"))?;
-            inputs2.insert(k.clone(), v);
+        let mut inputs: HashMap<beef::Cow<'static, str>, usize> = HashMap::new();
+        for idx in pipe_graph.externals(Incoming) {
+            if let Some(NodeConfig {
+                kind: NodeKind::Input,
+                id,
+                ..
+            }) = pipe_graph.node_weight(idx)
+            {
+                let v = *i2pos
+                    .get(&idx)
+                    .ok_or_else(|| Error::from("Invalid graph - failed to build inputs"))?;
+                inputs.insert(id.clone().into(), v);
+            }
         }
 
         let mut exec = ExecutableGraph {
@@ -759,8 +671,8 @@ fn to_executable_graph(
             last_metrics: 0,
             state: State::new(iter::repeat(Value::null()).take(graph.len()).collect()),
             graph,
-            inputs: inputs2,
-            port_indexes: port_indexes2,
+            inputs,
+            port_indexes,
             contraflow,
             signalflow,
             metric_interval,
@@ -771,6 +683,31 @@ fn to_executable_graph(
         exec.optimize();
 
         Ok(exec)
+    }
+}
+
+fn node_to_dot(_g: &Graph<NodeConfig, Connection>, (_, c): (NodeIndex, &NodeConfig)) -> String {
+    match c {
+        NodeConfig {
+            kind: NodeKind::Input,
+            ..
+        } => r#"shape = "rarrow""#.to_string(),
+        NodeConfig {
+            kind: NodeKind::Output(_),
+            ..
+        } => r#"shape = "larrow""#.to_string(),
+        NodeConfig {
+            kind: NodeKind::Select,
+            ..
+        } => r#"shape = "box""#.to_string(),
+        NodeConfig {
+            kind: NodeKind::Script,
+            ..
+        } => r#"shape = "note""#.to_string(),
+        NodeConfig {
+            kind: NodeKind::Operator,
+            ..
+        } => "".to_string(),
     }
 }
 
@@ -788,7 +725,7 @@ fn select(
     operator_uid: u64,
     config: &NodeConfig,
     node: &ast::SelectStmt<'static>,
-    windows: Option<HashMap<String, window::Impl>>,
+    windows: Option<&HashMap<String, window::Impl>>,
 ) -> Result<Box<dyn Operator>> {
     let select_type = node.complexity();
     match select_type {
@@ -846,7 +783,7 @@ pub(crate) fn supported_operators(
     config: &NodeConfig,
     uid: u64,
     node: Option<&ast::Stmt<'static>>,
-    windows: Option<HashMap<String, window::Impl>>,
+    windows: Option<&HashMap<String, window::Impl>>,
     helper: &mut Helper,
 ) -> Result<OperatorNode> {
     let op: Box<dyn op::Operator> = match node {

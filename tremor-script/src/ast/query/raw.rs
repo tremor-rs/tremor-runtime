@@ -65,7 +65,6 @@ impl<'script> QueryRaw<'script> {
             .into_iter()
             .filter_map(|stmt| stmt.up(&mut helper).transpose())
             .collect::<Result<_>>()?;
-
         for stmt in &mut stmts {
             ConstFolder::new(helper).walk_stmt(stmt)?;
         }
@@ -168,7 +167,6 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                     ),
                     _ => err,
                 })?;
-
                 let alias = alias.unwrap_or_else(|| module.id.clone());
                 helper.scope().add_module_alias(alias, module_id);
                 Ok(None)

@@ -36,6 +36,8 @@ pub struct NodeConfig {
     pub(crate) op_type: String,
     pub(crate) config: ConfigMap,
     pub(crate) label: Option<String>,
+    pub(crate) stmt: Option<Stmt<'static>>,
+    pub(crate) windows: Option<HashMap<String, window::Impl>>,
 }
 
 impl Display for NodeConfig {
@@ -82,11 +84,9 @@ impl NodeConfig {
         &self,
         uid: u64,
         resolver: NodeLookupFn,
-        node: Option<&Stmt<'static>>,
-        window: Option<HashMap<String, window::Impl>>,
         helper: &mut Helper,
     ) -> Result<OperatorNode> {
-        resolver(self, uid, node, window, helper)
+        resolver(self, uid, self.stmt.as_ref(), self.windows.as_ref(), helper)
     }
 }
 

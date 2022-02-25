@@ -99,7 +99,7 @@ impl<'script> ScriptRaw<'script> {
                         _ => err,
                     })?;
                     let alias = alias.unwrap_or_else(|| module.id.clone());
-                    helper.scope().add_module_alias(dbg!(alias), mid);
+                    helper.scope().add_module_alias(alias, mid);
                 }
                 TopLevelExprRaw::Const(ConstRaw {
                     name,
