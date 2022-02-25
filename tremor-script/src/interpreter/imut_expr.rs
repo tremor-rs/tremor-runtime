@@ -72,7 +72,6 @@ impl<'script> ImutExpr<'script> {
     ///   * If this is not a literal
     #[inline]
     pub fn try_into_lit(self) -> Result<Value<'script>> {
-        // FIXME: Better error
         match self {
             ImutExpr::Literal(Literal { value, .. }) => Ok(value),
             other => {
@@ -97,7 +96,6 @@ impl<'script> ImutExpr<'script> {
     ///   * If this is not a literal
     #[inline]
     pub fn try_as_lit(&self) -> Result<&Value<'script>> {
-        // FIXME: Better error
         self.as_lit().ok_or_else(|| {
             ErrorKind::NotConstant(self.extent(), self.extent().expand_lines(2)).into()
         })

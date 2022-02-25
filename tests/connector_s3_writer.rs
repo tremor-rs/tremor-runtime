@@ -490,13 +490,6 @@ mod test {
             .collect()
     }
 
-    // fn random_num_vector(vec_size: usize) -> Vec<usize> {
-    //     rand::thread_rnd()
-    //         .sample_iter(&Standard)
-    //         .take(vec_size)
-    //         .collect()
-    // }
-
     fn get_client(http_port: u16) -> S3Client {
         let s3_config = s3::config::Config::builder()
             .credentials_provider(Credentials::new(

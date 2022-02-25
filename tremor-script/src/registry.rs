@@ -35,11 +35,6 @@ pub trait TremorAggrFn: DowncastSync + Sync + Send {
     /// # Errors
     /// if the data can not be acumulated
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
-    /// Compensate for a value being removed
-    ///
-    /// # Errors
-    /// if the function can not compensate the data
-    // fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
     /// Emits the function
     ///
     /// # Errors
@@ -740,15 +735,6 @@ impl TremorAggrFnWrapper {
     pub fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
         self.fun.accumulate(args)
     }
-
-    // /// Compensate for a value being removed
-    // ///
-    // /// # Errors
-    // /// if compensating the function fails
-    // #[cfg(not(tarpaulin_include))] // just a passthrough
-    // pub fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-    //     self.fun.compensate(args)
-    // }
 
     /// Emits the function
     ///

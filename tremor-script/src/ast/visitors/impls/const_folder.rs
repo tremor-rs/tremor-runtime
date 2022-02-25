@@ -378,7 +378,8 @@ where
         ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut expr)?;
         expr.try_into_lit()
     }
-    pub(crate) fn new(helper: &'run Helper<'script, '_>) -> Self {
+    /// New folder
+    pub fn new(helper: &'run Helper<'script, '_>) -> Self {
         ConstFolder { reg: helper.reg }
     }
 
