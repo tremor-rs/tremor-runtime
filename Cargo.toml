@@ -43,7 +43,7 @@ async-std = { version = "1.10.0", features = [
   "tokio03",
   "tokio1",
 ] }
-async-std-resolver = "0.20"
+async-std-resolver = "0.21"
 async-trait = "0.1"
 async-tungstenite = { version = "0.16.1", features = ["async-std-runtime"] }
 base64 = "0.13"
