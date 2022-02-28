@@ -108,7 +108,7 @@ fn rdata_to_value(r: &RData) -> Option<Value<'static>> {
         RData::TLSA(v) => literal!({ "TLSA": v.to_string() }),
         RData::CSYNC(v) => literal!({"CSYNC": v.to_string() }),
         // RDATA is marked as non_exhaustive :(
-        RData::OPT(_) | RData::Unknown { .. } | _ => return None,
+        _ => return None,
     })
 }
 fn lookup_to_value(l: &Lookup) -> Value<'static> {
