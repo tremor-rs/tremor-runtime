@@ -63,6 +63,7 @@ fn str_to_record_type(s: &str) -> Result<RecordType> {
         "AXFR" => Ok(RecordType::AXFR),
         "CAA" => Ok(RecordType::CAA),
         "CNAME" => Ok(RecordType::CNAME),
+        "CSYNC" => Ok(RecordType::CSYNC),
         "HINFO" => Ok(RecordType::HINFO),
         "HTTPS" => Ok(RecordType::HTTPS),
         "IXFR" => Ok(RecordType::IXFR),
@@ -105,13 +106,15 @@ fn rdata_to_value(r: &RData) -> Option<Value<'static>> {
         RData::SSHFP(v) => literal!({ "SSHFP": v.to_string() }),
         RData::SVCB(v) => literal!({ "SVCB": v.to_string() }),
         RData::TLSA(v) => literal!({ "TLSA": v.to_string() }),
-        RData::OPT(_) | RData::Unknown { .. } | RData::ZERO => return None,
+        RData::CSYNC(v) => literal!({"CSYNC": v.to_string() }),
+        // RDATA is marked as non_exhaustive :(
+        RData::OPT(_) | RData::Unknown { .. } | _ => return None,
     })
 }
 fn lookup_to_value(l: &Lookup) -> Value<'static> {
     l.record_iter()
         .filter_map(|r| {
-            let mut v = rdata_to_value(r.rdata())?;
+            let mut v = r.data().and_then(rdata_to_value)?;
             v.try_insert("ttl", r.ttl());
             Some(v)
         })
