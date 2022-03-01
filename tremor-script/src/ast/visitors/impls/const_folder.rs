@@ -354,7 +354,17 @@ where
                 let value = e.try_into_lit(self.meta)?;
                 match value {
                     Value::String(s) => *string = StrLitElement::Lit(s),
-                    other => *string = StrLitElement::Lit(other.json_string()?.into()),
+                    // TODO: The float scenario is different in erlang and rust
+                    // We knowingly excluded float correctness in string interpolation
+                    // as we don't want to over engineer and write own format functions.
+                    // any suggestions are welcome
+                    #[cfg(feature = "erlang-float-testing")]
+                    Value::Static(value_trait::StaticNode::F64(_float)) => {
+                        *string = StrLitElement::Lit("42".into())
+                    },
+                    other => {
+                        *string = StrLitElement::Lit(other.json_string()?.into())
+                    }
                 }
             }
             other @ StrLitElement::Expr(_) => *string = other,

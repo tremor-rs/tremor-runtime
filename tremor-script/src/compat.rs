@@ -51,7 +51,7 @@ fn eval(src: &str) -> Result<String> {
 
 #[no_mangle]
 
-pub extern "C" fn tremor_script_c_eval(script: *const c_char, dst: *mut u8, len: usize) -> usize {
+pub extern "C" fn tremor_script_c_eval(script: *const c_char, dst: *mut c_char, len: usize) -> usize {
     let cstr = unsafe { CStr::from_ptr(script) };
     match cstr
         .to_str()
@@ -61,7 +61,7 @@ pub extern "C" fn tremor_script_c_eval(script: *const c_char, dst: *mut u8, len:
         Ok(result) => {
             if result.len() < len {
                 unsafe {
-                    let src = result.as_ptr().cast::<u8>();
+                    let src = result.as_ptr().cast::<c_char>();
                     ptr::copy_nonoverlapping(src, dst, result.len());
                     *dst.add(result.len()) = 0;
                     0
