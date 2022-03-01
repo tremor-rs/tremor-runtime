@@ -514,7 +514,7 @@ impl Source for KafkaConsumerSource {
 
                                 if let Some(tx) = connect_result_channel.take() {
                                     if tx.try_send(Err("Subscription failed".into())).is_err() {
-                                        // in case the connect_result_channel has already been closed, 
+                                        // in case the connect_result_channel has already been closed,
                                         // lets initiate a reconnect via the notifier
                                         // this might happen when we subscribe to multiple topics
                                         source_ctx.notifier().notify().await?;

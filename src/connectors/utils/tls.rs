@@ -28,7 +28,9 @@ lazy_static! {
     static ref SYSTEM_ROOT_CERTS: RootCertStore = {
         let mut roots = RootCertStore::empty();
         for cert in load_native_certs().expect("Unable to load system TLS certificates.") {
-            roots.add(&Certificate(cert.0)).expect("Unable to add root TLS certificate to RootCertStore")
+            roots
+                .add(&Certificate(cert.0))
+                .expect("Unable to add root TLS certificate to RootCertStore")
         }
         roots
     };
