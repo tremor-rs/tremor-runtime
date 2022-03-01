@@ -491,29 +491,6 @@ pub struct StringLitRaw<'script> {
     pub(crate) elements: StrLitElementsRaw<'script>,
 }
 
-// TODO: The float scenario is different in erlang and rust
-// We knowingly excluded float correctness in string interpolation
-// as we don't want to over engineer and write own format functions.
-// any suggestions are welcome
-#[cfg(feature = "erlang-float-testing")]
-#[cfg(not(tarpaulin_include))]
-fn to_strl_elem(l: &Literal) -> StrLitElement<'static> {
-    l.value.as_str().map_or_else(
-        || {
-            if let Some(_f) = l.value.as_f64() {
-                StrLitElement::Lit("42".into())
-            } else {
-                StrLitElement::Lit(
-                    crate::utils::sorted_serialize(&l.value)
-                        .unwrap_or_default()
-                        .into(),
-                )
-            }
-        },
-        |s| StrLitElement::Lit(s.to_string().into()),
-    )
-}
-
 impl<'script> Upable<'script> for StringLitRaw<'script> {
     type Target = StringLit<'script>;
 
