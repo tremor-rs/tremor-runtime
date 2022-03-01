@@ -13,9 +13,8 @@
 // limitations under the License.
 use crate::connectors::prelude::*;
 use crate::Event;
-use std::{mem, error::Error as StdError};
+use std::{error::Error as StdError, mem};
 use value_trait::ValueAccess;
-
 
 use super::auth;
 use aws_sdk_s3 as s3;
@@ -68,9 +67,7 @@ impl ConnectorBuilder for Builder {
                 config.min_part_size = FIVEMBS;
             }
 
-            Ok(Box::new(S3Connector {
-                config,
-            }))
+            Ok(Box::new(S3Connector { config }))
         } else {
             Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
@@ -98,7 +95,6 @@ impl Connector for S3Connector {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-
         let s3_sink = S3Sink {
             config: self.config.clone(),
             client: None,
@@ -134,7 +130,6 @@ struct S3Sink {
     parts: Vec<CompletedPart>,
 }
 
-
 #[async_trait::async_trait]
 impl Sink for S3Sink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
@@ -149,9 +144,13 @@ impl Sink for S3Sink {
             .head_bucket()
             .bucket(self.config.bucket.clone())
             .send()
-            .await.map_err(|e| {
+            .await
+            .map_err(|e| {
                 let msg = if let Some(err) = e.source() {
-                    format!("Failed to access Bucket \"{}\": {}.", &self.config.bucket, err)
+                    format!(
+                        "Failed to access Bucket \"{}\": {}.",
+                        &self.config.bucket, err
+                    )
                 } else {
                     format!("Failed to access Bucket \"{}\".", &self.config.bucket)
                 };
@@ -262,23 +261,22 @@ impl S3Sink {
             .send()
             .await?;
 
-        self.upload_id = resp
-            .upload_id
-            .ok_or(ErrorKind::S3Error(format!("Failed to initiate multipart upload for key \"{}\": upload id not found in response.", &self.current_key)))?;
+        self.upload_id = resp.upload_id.ok_or(ErrorKind::S3Error(format!(
+            "Failed to initiate multipart upload for key \"{}\": upload id not found in response.",
+            &self.current_key
+        )))?;
 
         Ok(())
     }
 
     async fn upload_part(&mut self, ctx: &SinkContext) -> Result<()> {
-
         let mut buf = Vec::with_capacity(self.min_part_size);
         mem::swap(&mut buf, &mut self.buffer);
         self.part_number += 1; // the upload part number needs to be >= 1, so we increment before uploading
 
         debug!(
             "{ctx} key: {} uploading part {}",
-            &self.current_key,
-            self.part_number,
+            &self.current_key, self.part_number,
         );
 
         // Upload the part
@@ -297,7 +295,10 @@ impl S3Sink {
         if let Some(e_tag) = resp.e_tag.as_ref() {
             completed = completed.e_tag(e_tag);
         }
-        debug!("{ctx} Key {} part {} uploaded.", &self.current_key, &self.part_number);
+        debug!(
+            "{ctx} Key {} part {} uploaded.",
+            &self.current_key, &self.part_number
+        );
         // Insert into the list of completed parts
         self.parts.push(completed.build());
         Ok(())

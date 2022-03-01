@@ -55,7 +55,14 @@ get_runtime_status_pre(#state{}) ->
 get_runtime_status(C) ->
     tremor_status:get(C).
 
-get_runtime_status_post(#state{flows = Flows, root = Root}, _Args, {ok, Resp = #{<<"num_flows">> := NumFlows, <<"flows">> := FlowStatus, <<"all_running">> := AllRunning}}) ->
+get_runtime_status_post(#state{flows = Flows, root = Root}, _Args, {ok, Resp = #{}}) ->
+    get_runtime_status_post_(Flows, Root, Resp);
+get_runtime_status_post(#state{flows = Flows, root = Root}, _Args, {error, 503, Resp = #{}}) ->
+    get_runtime_status_post_(Flows, Root, Resp);
+get_runtime_status_post(#state{}, _Args, _) ->
+    false.
+
+get_runtime_status_post_(Flows, Root, Resp = #{<<"num_flows">> := NumFlows, <<"flows">> := FlowStatus, <<"all_running">> := AllRunning}) ->
     {ok, Schema} = jsg_jsonref:deref(["components", "schemas", "runtime_status"], Root),
     Validated = jesse_validator:validate(Schema, Root, jsone:encode(Resp)),
     ExpectedNumFlows = length(Flows),
@@ -127,7 +134,8 @@ pause_flow_pre(#state{}) ->
     true.
 
 pause_flow_pre(#state{flows = Flows}, [_C, Flow]) ->
-    lists:member(Flow, Flows).
+    #{<<"status">> := Status} = Flow,
+    (Status == <<"running">>) and lists:member(Flow, Flows).
 
 pause_flow(C, _Flow = #{<<"alias">> := Alias}) ->
     tremor_flow:pause(Alias, C).
@@ -155,7 +163,8 @@ resume_flow_pre(#state{}) ->
     true.
 
 resume_flow_pre(#state{flows = Flows}, [_c, Flow]) ->
-    lists:member(Flow, Flows).
+    #{<<"status">> := Status} = Flow,
+    ((Status == <<"paused">>) or (Status == <<"running">>)) and lists:member(Flow, Flows).
 
 resume_flow(C, _Flow = #{<<"alias">> := Alias}) ->
     tremor_flow:resume(Alias, C).
