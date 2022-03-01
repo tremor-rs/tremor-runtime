@@ -445,8 +445,6 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
 
         defn.params.ingest_creational_with(&params)?;
 
-        defn.apply_args(helper)?;
-
         let create_stmt = DeployFlow {
             mid: self.mid.box_with_name(&self.id.id),
             instance_alias: node_id,

@@ -1,21 +1,12 @@
-define pipeline subq
-pipeline
-  define window by_10 from tumbling
-  with
-    size = 10
-  end;
-
-  select {
-    "g": group,
-    "c": aggr::stats::sum(event.c)
-  }
-  from in[by_10]
-  group by event.g
-  into out;
-
+define window by_10 from tumbling
+with
+  size = 10
 end;
 
-create pipeline subq;
-
-select event from in into subq;
-select event from subq into out;
+select {
+  "g": group,
+  "c": aggr::stats::sum(event.c)
+}
+from in[by_10]
+group by event.g
+into out;

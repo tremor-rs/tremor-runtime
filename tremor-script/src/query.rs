@@ -41,15 +41,14 @@ where
     /// Converts a troy embedded pipeline with resolved arguments to a runnable query
     /// # Errors
     ///   If the query fails to parse and convert correctly
-    pub fn from_query(query: &ast::Query<'static>) -> Result<Self> {
+    pub fn from_query(query: ast::Query<'static>) -> Self {
         let warnings = BTreeSet::new();
         let locals = 0;
-        let query = query.clone();
-        Ok(Self {
+        Self {
             query,
             warnings,
             locals,
-        })
+        }
     }
 
     /// Parses a string into a query supporting query arguments
