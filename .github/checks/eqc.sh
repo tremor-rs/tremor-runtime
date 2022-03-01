@@ -2,6 +2,7 @@
 set -xeo pipefail
 
 PIDFILE="$PWD/tremor.pid"
+export TREMOR_PATH="$PWD/tremor-script/lib:$TREMOR_PATH"
 
 for TROY_SAMPLE in $(ls tremor-erl/samples/*.troy)
 do
