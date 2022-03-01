@@ -189,14 +189,12 @@ impl Flow {
                     );
                 }
                 ast::CreateTargetDefinition::Pipeline(defn) => {
-                    let args = defn.params.render()?;
-
                     let query = {
                         let aggr_reg = tremor_script::aggr_registry();
                         let reg = tremor_script::FN_REGISTRY.read()?;
                         let mut helper = Helper::new(&reg, &aggr_reg);
 
-                        defn.to_query(&args, &mut helper)?
+                        defn.to_query(&create.with, &mut helper)?
                     };
                     let pipeline = tremor_pipeline::query::Query(
                         tremor_script::query::Query::from_query(query),

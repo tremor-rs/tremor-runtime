@@ -106,7 +106,7 @@ CreationWith: CreationalWithRaw<'input> = {
 }
 
 WithClause: WithExprsRaw<'input> = {
-    "with" <exprs:WithExprs> => WithExprsRaw(<>)
+    <start:@L> "with" <exprs:WithExprs> <end:@L> => WithExprsRaw{exprs, mid: NodeMeta::new_box(start, end) }
 }
 
 WithEndClause: WithExprsRaw<'input> = {

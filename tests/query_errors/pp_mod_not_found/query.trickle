@@ -10,5 +10,5 @@ end;
 
 create script snot;
 
-select from in into snot;
-select from snot into out;
+select event from in into snot;
+select event  from snot into out;
