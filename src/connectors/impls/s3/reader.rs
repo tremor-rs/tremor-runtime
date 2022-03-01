@@ -140,9 +140,13 @@ impl Connector for S3SourceConnector {
             .head_bucket()
             .bucket(self.config.bucket.clone())
             .send()
-            .await.map_err(|e| {
+            .await
+            .map_err(|e| {
                 let msg = if let Some(err) = e.source() {
-                    format!("Failed to access Bucket \"{}\": {}.", &self.config.bucket, err)
+                    format!(
+                        "Failed to access Bucket \"{}\": {}.",
+                        &self.config.bucket, err
+                    )
                 } else {
                     format!("Failed to access Bucket \"{}\".", &self.config.bucket)
                 };
@@ -255,7 +259,7 @@ async fn fetch_keys_task(
 /// Receives object keys and the corresponsing stream id from the `recvr`
 /// Fetches the object from s3
 /// depending on `multipart_threshold` it downloads the object as one or in ranges.
-/// 
+///
 /// The received data is sent to the ChannelSource channel.
 async fn fetch_object_task(
     ctx: ConnectorContext,
@@ -299,11 +303,7 @@ async fn fetch_object_task(
         stream,
     }) = recvr.recv().await
     {
-        let Object {
-            key,
-            size,
-            ..
-        } = object_data;
+        let Object { key, size, .. } = object_data;
         let mut err = false; // marks an error
         debug!("{ctx} Fetching key {key:?}...");
         // FIXME: usize -> i64, should be alright.
@@ -315,17 +315,24 @@ async fn fetch_object_task(
                         // we iterate over the chunks the response provides
                         match obj_stream.try_next().await {
                             Ok(Some(chunk)) => {
-                                debug!("{ctx} Received chunk with {} bytes for key {key:?}.", chunk.len());
+                                debug!(
+                                    "{ctx} Received chunk with {} bytes for key {key:?}.",
+                                    chunk.len()
+                                );
                                 // meh, we need to clone the chunk :(
-                                if sender.send(event_from(chunk.as_ref().to_vec(), stream)).await.is_err() {
+                                if sender
+                                    .send(event_from(chunk.as_ref().to_vec(), stream))
+                                    .await
+                                    .is_err()
+                                {
                                     error!("{ctx} Error sending data for key {key:?} to source.");
                                     err = true;
                                     break 'inner;
                                 }
                             }
-                            Ok(None) => { 
+                            Ok(None) => {
                                 // stream finished
-                                break 'inner; 
+                                break 'inner;
                             }
                             Err(e) => {
                                 error!("{ctx} Error fetching data for key {key:?}: {e}");
@@ -335,13 +342,12 @@ async fn fetch_object_task(
                             }
                         }
                     }
-                },
+                }
                 Err(e) => {
                     error!("{ctx} Error fetching key {key:?}: {e}");
                     err = true;
                 }
             };
-            
         } else {
             // Fetch multipart.
             let mut fetched_bytes = 0; // represent the next byte to fetch.
@@ -350,7 +356,11 @@ async fn fetch_object_task(
                 let fetch_till = fetched_bytes + part_size;
                 let range = Some(format!("bytes={}-{}", fetched_bytes, fetch_till - 1)); // -1 is reqd here as range is inclusive.
 
-                debug!("{ctx} Fetching byte range: bytes={}-{} for key {key:?}", fetched_bytes, fetch_till - 1);
+                debug!(
+                    "{ctx} Fetching byte range: bytes={}-{} for key {key:?}",
+                    fetched_bytes,
+                    fetch_till - 1
+                );
                 // fetch the range.
                 match fetch_object_stream(key.clone(), range.clone()).await {
                     Ok(mut obj_stream) => {
@@ -360,7 +370,11 @@ async fn fetch_object_task(
                                 Ok(Some(chunk)) => {
                                     debug!("{ctx} Received chunk with {} bytes for range {range:?} for key {key:?}.", chunk.len());
                                     // meh, we need to clone the chunk :(
-                                    if sender.send(event_from(chunk.as_ref().to_vec(), stream)).await.is_err() {
+                                    if sender
+                                        .send(event_from(chunk.as_ref().to_vec(), stream))
+                                        .await
+                                        .is_err()
+                                    {
                                         error!("{ctx} Error sending data for range {range:?} for key {key:?} to source.");
                                         err = true;
                                         break 'inner_range;
@@ -399,9 +413,7 @@ async fn fetch_object_task(
                 meta: None,
             }
         };
-        sender
-            .send(stream_finish_reply)
-            .await?;
+        sender.send(stream_finish_reply).await?;
     }
     Ok(())
 }

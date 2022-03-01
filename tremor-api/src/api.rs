@@ -183,16 +183,15 @@ async fn handle_api_request<
         Err(e) => {
             error!("[API {method} {path}] Timeout");
             Err(e.into())
-        },
+        }
         Ok(Err(e)) => {
             error!("[API {method} {path}] Error: {e}");
             Err(e)
-        },
-        Ok(Ok(r)) => Ok(r)
+        }
+        Ok(Ok(r)) => Ok(r),
     };
     r.or_else(|api_error| {
-        serialize_error(resource_type, api_error)
-            .or_else(|e| Ok(Into::<tide::Response>::into(e)))
+        serialize_error(resource_type, api_error).or_else(|e| Ok(Into::<tide::Response>::into(e)))
     })
 }
 
@@ -201,22 +200,28 @@ pub fn serve_api(host: String, world: &World) -> JoinHandle<Result<()>> {
     let mut v1_app = tide::Server::with_state(State {
         world: world.clone(),
     });
-    v1_app.at("/version")
+    v1_app
+        .at("/version")
         .get(|r| handle_api_request(r, version::get));
-    v1_app.at("/status")
+    v1_app
+        .at("/status")
         .get(|r| handle_api_request(r, status::get_runtime_status));
-    v1_app.at("/flows")
+    v1_app
+        .at("/flows")
         .get(|r| handle_api_request(r, flow::list_flows));
-    v1_app.at("/flows/:id")
+    v1_app
+        .at("/flows/:id")
         .get(|r| handle_api_request(r, flow::get_flow))
         .patch(|r| handle_api_request(r, flow::patch_flow_status));
-    v1_app.at("/flows/:id/connectors")
+    v1_app
+        .at("/flows/:id/connectors")
         .get(|r| handle_api_request(r, flow::get_flow_connectors));
-    v1_app.at("/flows/:id/connectors/:connector")
+    v1_app
+        .at("/flows/:id/connectors/:connector")
         .get(|r| handle_api_request(r, flow::get_flow_connector_status))
         .patch(|r| handle_api_request(r, flow::patch_flow_connector_status));
 
-    let mut app = tide::Server::new();    
+    let mut app = tide::Server::new();
     app.at("/v1").nest(v1_app);
 
     // spawn API listener

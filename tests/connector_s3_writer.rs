@@ -26,9 +26,9 @@ mod test {
     use bytes::Buf;
     use serial_test::serial;
 
-    use crate::connectors::{ConnectorHarness, TestPipeline, SignalHandler, EnvHelper};
-    use testcontainers::{clients, Container};
+    use crate::connectors::{ConnectorHarness, EnvHelper, SignalHandler, TestPipeline};
     use testcontainers::images::generic::GenericImage;
+    use testcontainers::{clients, Container};
     use testcontainers::{Docker, RunArgs};
 
     use tremor_common::url::ports::IN;
@@ -40,8 +40,6 @@ mod test {
     use aws_sdk_s3 as s3;
     use s3::client::Client as S3Client;
     use s3::{Credentials, Endpoint, Region};
-
-    
 
     #[async_std::test]
     #[serial(s3)]
@@ -70,11 +68,11 @@ mod test {
     async fn connector_s3_no_credentials() -> Result<()> {
         let _ = env_logger::try_init();
         let bucket_name = random_bucket_name("no-credentials");
-        
+
         let docker = clients::Cli::default();
         let image = GenericImage::new("adobe/s3mock").with_env_var("initialBuckets", &bucket_name);
         let (container, http_port, _https_port) = spawn_docker(&docker, image).await;
-        
+
         // signal handling - stop and rm the container, even if we quit the test in the middle of everything
         let _signal_handler = SignalHandler::new(container.id().to_string())?;
 
@@ -99,17 +97,16 @@ mod test {
         Ok(())
     }
 
-
     #[async_std::test]
     #[serial(s3)]
     async fn connector_s3_no_region() -> Result<()> {
         let _ = env_logger::try_init();
         let bucket_name = random_bucket_name("no-region");
-        
+
         let docker = clients::Cli::default();
         let image = GenericImage::new("adobe/s3mock").with_env_var("initialBuckets", &bucket_name);
         let (container, http_port, _https_port) = spawn_docker(&docker, image).await;
-        
+
         // signal handling - stop and rm the container, even if we quit the test in the middle of everything
         let _signal_handler = SignalHandler::new(container.id().to_string())?;
 
@@ -141,11 +138,11 @@ mod test {
     async fn connector_s3_no_bucket() -> Result<()> {
         let _ = env_logger::try_init();
         let bucket_name = random_bucket_name("no-bucket");
-        
+
         let docker = clients::Cli::default();
         let image = GenericImage::new("adobe/s3mock");
         let (container, http_port, _https_port) = spawn_docker(&docker, image).await;
-        
+
         // signal handling - stop and rm the container, even if we quit the test in the middle of everything
         let _signal_handler = SignalHandler::new(container.id().to_string())?;
 
@@ -230,7 +227,8 @@ mod test {
         // fetch the commited events from mock s3
 
         // verify a small unbatched event.
-        let unbatched_value_recv = get_object_value(&s3_client, &bucket_name, "unbatched_key").await;
+        let unbatched_value_recv =
+            get_object_value(&s3_client, &bucket_name, "unbatched_key").await;
         assert_eq!(unbatched_value, unbatched_value_recv);
 
         // verify small and different batched events.
@@ -262,10 +260,7 @@ mod test {
         let wait_for = Duration::from_secs(30);
         let start = Instant::now();
 
-        while let Err(e) = s3_client.list_buckets()
-            .send()
-            .await
-        {
+        while let Err(e) = s3_client.list_buckets().send().await {
             if start.elapsed() > wait_for {
                 return Err(Error::from(e).chain_err(|| "Waiting for mock-s3 container timed out"));
             }
@@ -519,8 +514,11 @@ mod test {
 
         S3Client::from_conf(s3_config)
     }
-    
-    async fn spawn_docker<'d, D: Docker>(docker: &'d D, image: GenericImage) -> (Container<'d, D, GenericImage>, u16, u16) {
+
+    async fn spawn_docker<'d, D: Docker>(
+        docker: &'d D,
+        image: GenericImage,
+    ) -> (Container<'d, D, GenericImage>, u16, u16) {
         let http_port = ConnectorHarness::find_free_tcp_port().await;
         let https_port = ConnectorHarness::find_free_tcp_port().await;
         let container = docker.run_with_args(
@@ -534,7 +532,14 @@ mod test {
     }
 
     fn random_bucket_name(prefix: &str) -> String {
-        format!("{}-{}", prefix, rand::thread_rng().sample_iter(Alphanumeric).map(char::from).take(10).collect::<String>())
+        format!(
+            "{}-{}",
+            prefix,
+            rand::thread_rng()
+                .sample_iter(Alphanumeric)
+                .map(char::from)
+                .take(10)
+                .collect::<String>()
+        )
     }
 }
-

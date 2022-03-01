@@ -46,10 +46,13 @@ precondition_common(_S, _Call) ->
     true.
 
 %% -----------------------------------------------------------------------------
+%% FIXME
 
 list_flow_connectors_args(#state{connection = C, connectors = ConnectorsMap}) ->
     [C, eqc_gen:elements(maps:to_list(ConnectorsMap))].
 
+list_flow_connectors_pre(#state{connectors = ConnectorsMap = #{}}) when map_size(ConnectorsMap) == 0 ->
+    false;
 list_flow_connectors_pre(#state{}) ->
     true.
 
@@ -67,7 +70,13 @@ list_flows_next(S, _, _) ->
 %% -----------------------------------------------------------------------------
 
 get_flow_connector_args(#state{connection = C, connectors = Connectors}) ->
-    Gen = ?LET({Alias, FlowConnectors}, eqc_gen:elements(maps:to_list(Connectors)), elements([{Alias, Connector} || Connector <- FlowConnectors])),
+    % filter out flows without connectors
+    ConnectorsList = [{FlowAlias, FlowConnectors} || {FlowAlias, FlowConnectors} <- maps:to_list(Connectors), length(FlowConnectors) > 0],
+    Gen = case ConnectorsList of
+        [] -> noconnector; % this happens when there is no flow with a connector
+        ConnectorsList ->
+            ?LET({Alias, FlowConnectors}, elements(ConnectorsList), elements([{Alias, Connector} || Connector <- FlowConnectors]))
+    end,
     [C, Gen].
 
 get_flow_connector_pre(#state{connectors = Connectors = #{}}) when map_size(Connectors) == 0 ->
@@ -75,6 +84,8 @@ get_flow_connector_pre(#state{connectors = Connectors = #{}}) when map_size(Conn
 get_flow_connector_pre(#state{}) ->
     true.
 
+get_flow_connector_pre(#state{}, [_C, noconnector]) ->
+    false;
 get_flow_connector_pre(#state{connectors = Connectors}, [_C, {Flow, Connector}]) ->
     FlowConnectors = maps:get(Flow, Connectors, []),
     lists:member(Connector, FlowConnectors).
@@ -96,10 +107,13 @@ get_flow_connector_next(S, _, _) ->
 %% -----------------------------------------------------------------------------
 
 pause_flow_connector_args(#state{connection = C, connectors = Connectors}) ->
-    Gen = ?LET({Alias, FlowConnectors}, 
-        eqc_gen:elements(maps:to_list(Connectors)), 
-        elements([{Alias, Connector} || Connector <- FlowConnectors])
-    ),
+    % filter out flows without connectors
+    ConnectorsList = [{FlowAlias, FlowConnectors} || {FlowAlias, FlowConnectors} <- maps:to_list(Connectors), length(FlowConnectors) > 0],
+    Gen = case ConnectorsList of
+        [] -> noconnector; % this happens when there is no flow with a connector
+        ConnectorsList ->
+            ?LET({Alias, FlowConnectors}, elements(ConnectorsList), elements([{Alias, Connector} || Connector <- FlowConnectors]))
+    end,
     [C, Gen].
 
 pause_flow_connector_pre(#state{connectors = Connectors = #{}}) when map_size(Connectors) == 0 ->
@@ -107,6 +121,8 @@ pause_flow_connector_pre(#state{connectors = Connectors = #{}}) when map_size(Co
 pause_flow_connector_pre(#state{}) ->
     true.
 
+pause_flow_connector_pre(#state{}, [_c, noconnector]) ->
+    false;
 pause_flow_connector_pre(#state{connectors = ConnectorsMap}, [_c, {Flow, Connector}]) ->
     FlowConnectors = maps:get(Flow, ConnectorsMap, []),
     lists:member(Connector, FlowConnectors).
@@ -117,12 +133,17 @@ pause_flow_connector(C, {Flow, _Connector = #{<<"alias">> := Alias}}) ->
 pause_flow_connector_post(#state{root = Root}, [_C, {_Flow, _Connector = #{<<"alias">> := Alias}}], {ok, Resp = #{<<"alias">> := Alias, <<"status">> := <<"paused">> }}) ->
     {ok, Schema} = jsg_jsonref:deref(["components", "schemas", "connector"], Root),
     jesse_validator:validate(Schema, Root, jsone:encode(Resp));
+pause_flow_connector_post(#state{root = Root}, [_C, {_Flow, _Connector = #{<<"status">> := Status}}], {error, 400, ErrorResponse}) when (Status /= <<"running">>) and (Status /= <<"paused">>) ->
+    {ok, Schema} = jsg_jsonref:deref(["components", "schemas", "error"], Root),
+    jesse_validator:validate(Schema, Root, jsone:encode(ErrorResponse));
 
 pause_flow_connector_post(_, _, Res) ->
     io:format("Error: unexpected pause flow connector body response ~p~n", [Res]),
     false.
 
-pause_flow_next(S = #state{connectors = ConnectorsMap}, _Res, [_C, {Flow, Paused}]) ->
+pause_flow_connector_next(S = #state{}, _Res, [_C, {_Flow, Paused = #{<<"status">> := Status} }]) when (Status /= <<"paused">>) and (Status /= <<"running">>) ->
+    S;
+pause_flow_connector_next(S = #state{connectors = ConnectorsMap}, _Res, [_C, {Flow, Paused}]) ->
     FlowConnectors = maps:get(Flow, ConnectorsMap, []),
     FlowConnectors2 = [maps:put(<<"status">>, <<"paused">>, Paused) | lists:delete(Paused, FlowConnectors)],
     S#state{connectors = maps:put(Flow, FlowConnectors2, ConnectorsMap)}.
@@ -130,17 +151,22 @@ pause_flow_next(S = #state{connectors = ConnectorsMap}, _Res, [_C, {Flow, Paused
 %% -----------------------------------------------------------------------------
 
 resume_flow_connector_args(#state{connection = C, connectors = Connectors}) ->
-    Gen = ?LET({Alias, FlowConnectors}, 
-        eqc_gen:elements(maps:to_list(Connectors)), 
-        elements([{Alias, Connector} || Connector <- FlowConnectors])
-    ),
+    % filter out flows without connectors
+    ConnectorsList = [{FlowAlias, FlowConnectors} || {FlowAlias, FlowConnectors} <- maps:to_list(Connectors), length(FlowConnectors) > 0],
+    Gen = case ConnectorsList of
+        [] -> noconnector; % this happens when there is no flow with a connector
+        ConnectorsList ->
+            ?LET({Alias, FlowConnectors}, elements(ConnectorsList), elements([{Alias, Connector} || Connector <- FlowConnectors]))
+    end,
     [C, Gen].
 
-resume_flow_connector_pre(#state{connectors = #{}}) ->
+resume_flow_connector_pre(#state{connectors = Connectors}) when map_size(Connectors) == 0 ->
     false;
 resume_flow_connector_pre(#state{}) ->
     true.
 
+resume_flow_connector_pre(#state{}, [_c, noconnector]) ->
+    false;
 resume_flow_connector_pre(#state{connectors = ConnectorsMap}, [_c, {Flow, Connector}]) ->
     FlowConnectors = maps:get(Flow, ConnectorsMap, []),
     lists:member(Connector, FlowConnectors).
@@ -148,15 +174,20 @@ resume_flow_connector_pre(#state{connectors = ConnectorsMap}, [_c, {Flow, Connec
 resume_flow_connector(C, {Flow, _Connector = #{<<"alias">> := Alias}}) ->
     tremor_flow:resume_connector(Flow, Alias, C).
 
-resume_flow_connector_post(#state{root = Root}, [_C, {_Flow, _Connector = #{<<"alias">> := Alias}}], {ok, Resp = #{<<"alias">> := Alias, <<"status">> := <<"paused">> }}) ->
+resume_flow_connector_post(#state{root = Root}, [_C, {_Flow, _Connector = #{<<"alias">> := Alias}}], {ok, Resp = #{<<"alias">> := Alias, <<"status">> := <<"running">> }}) ->
     {ok, Schema} = jsg_jsonref:deref(["components", "schemas", "connector"], Root),
     jesse_validator:validate(Schema, Root, jsone:encode(Resp));
 
+resume_flow_connector_post(#state{root = Root}, [_C, {_Flow, _Connector = #{<<"status">> := Status}}], {error, 400, ErrorResponse}) when (Status /= <<"paused">>) and (Status /= <<"running">>) ->
+    {ok, Schema} = jsg_jsonref:deref(["components", "schemas", "error"], Root),
+    jesse_validator:validate(Schema, Root, jsone:encode(ErrorResponse));
 resume_flow_connector_post(_, _, Res) ->
     io:format("Error: unexpected resume flow connector body response ~p", [Res]),
     false.
 
-resume_flow_next(S = #state{connectors = ConnectorsMap}, _Res, [_C, {Flow, Resumed}]) ->
+resume_flow_connector_next(S = #state{}, _Res, [_C, {_Flow, _Resumed = #{<<"status">> := Status} }]) when (Status /= <<"paused">>) and (Status /= <<"running">>) ->
+    S;
+resume_flow_connector_next(S = #state{connectors = ConnectorsMap}, _Res, [_C, {Flow, Resumed}]) ->
     FlowConnectors = maps:get(Flow, ConnectorsMap, []),
     FlowConnectors2 = [maps:put(<<"status">>, <<"running">>, Resumed) | lists:delete(Resumed, FlowConnectors)],
     S#state{connectors = maps:put(Flow, FlowConnectors2, ConnectorsMap)}.

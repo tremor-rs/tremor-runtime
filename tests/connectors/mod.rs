@@ -18,18 +18,19 @@
 
 use async_std::{
     channel::{bounded, Receiver},
+    net::TcpListener,
     prelude::{FutureExt, StreamExt},
-    task::JoinHandle, net::TcpListener,
+    task::JoinHandle,
 };
 use beef::Cow;
 use halfbrown::HashMap;
 use log::{debug, info};
 use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook_async_std::{Handle, Signals};
-use testcontainers::{clients, Docker};
 use std::process::Stdio;
 use std::sync::Once;
 use std::{sync::atomic::Ordering, time::Duration};
+use testcontainers::{clients, Docker};
 use tremor_common::{
     ids::ConnectorIdGen,
     url::ports::{ERR, IN, OUT},
@@ -269,12 +270,11 @@ impl ConnectorHarness {
 
 pub(crate) struct SignalHandler {
     signal_handle: Handle,
-    handle_task: Option<JoinHandle<()>>
+    handle_task: Option<JoinHandle<()>>,
 }
 
 impl SignalHandler {
     pub(crate) fn new(container_id: String) -> Result<Self> {
-
         let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
         let signal_handle = signals.handle();
         let handle_task = async_std::task::spawn(async move {
@@ -287,7 +287,7 @@ impl SignalHandler {
         });
         Ok(Self {
             signal_handle,
-            handle_task: Some(handle_task)
+            handle_task: Some(handle_task),
         })
     }
 }
@@ -303,13 +303,13 @@ impl Drop for SignalHandler {
 
 /// Keeps track of process env manipulations and restores previous values upon drop
 pub(crate) struct EnvHelper {
-    restore: HashMap<String, String>
+    restore: HashMap<String, String>,
 }
 
 impl EnvHelper {
     pub(crate) fn new() -> Self {
         Self {
-            restore: HashMap::new()
+            restore: HashMap::new(),
         }
     }
 

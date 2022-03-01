@@ -155,7 +155,7 @@ cron = "0.10.0"
 grok = "1"
 
 # rest onramp
-tide = "0.16"
+tide = { version = "0.16", default-features = false, features = ["h1-server"]} # no logger, no session, no cookies
 tide-rustls = "0.3"
 
 # sse-onramp

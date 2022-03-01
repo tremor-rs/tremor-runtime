@@ -13,5 +13,5 @@
 // limitations under the License.
 
 mod auth;
-pub(crate) mod writer;
 pub(crate) mod reader;
+pub(crate) mod writer;

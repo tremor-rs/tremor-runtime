@@ -129,6 +129,16 @@ paths:
             application/yaml:
               schema:
                 $ref: '#/components/schemas/flow'
+        '400':
+          description: Error during patch operation, due to invalid status transition.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+            application/yaml:
+              schema:
+                $ref: '#/components/schemas/error'
+
         '404':
           description: The flow 'flow-id' wasnt found. It is thus not deployed in the runtime.
   /v1/flows/{flow-id}/connectors:
@@ -215,8 +225,25 @@ paths:
             application/yaml:
                 schema:
                   $ref: '#/components/schemas/connector'
+        '400':
+          description: Error during patch operation, due to invalid status transition.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+            application/yaml:
+              schema:
+                $ref: '#/components/schemas/error'
         '404':
           description: The flow 'flow-id' or the connector 'connector-id' within flow `flow-id' wasnt found. It is thus not deployed in the
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/error'
+            application/yaml:
+              schema:
+                $ref: '#/components/schemas/error'
+
   
 components:
   schemas:
@@ -403,4 +430,20 @@ components:
           out:
             - alias: pass
               port: in
-              
+    error:
+      description: Error Payload
+      type: object
+      properties:
+        code:
+          type: number
+          description: Same as HTTP Status code
+        error:
+          type: string
+          description: Human-readable error message
+      additionalProperties: false
+      required:
+        - code
+        - error
+      example:
+        code: 400
+        error: "Cannot patch status of connector non_existent_file in flow flow_02 from failed to running"       
