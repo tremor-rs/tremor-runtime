@@ -436,6 +436,12 @@ pub struct Ident<'script> {
 }
 
 impl<'script> Ident<'script> {
+    pub(crate) fn from_str(id: &'script str) -> Self {
+        Self {
+            id: id.into(),
+            mid: Box::default(),
+        }
+    }
     /// Creates a new ident
     pub fn new(id: beef::Cow<'script, str>, mid: Box<NodeMeta>) -> Self {
         Self { id, mid }

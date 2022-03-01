@@ -43,6 +43,7 @@ use crate::{
     impl_expr,
 };
 use beef::Cow;
+use simd_json::ValueAccess;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 #[allow(clippy::module_name_repetitions)]
@@ -55,27 +56,58 @@ pub struct QueryRaw<'script> {
 impl<'script> QueryRaw<'script> {
     pub(crate) fn up_script<'registry>(
         self,
-        mut helper: &mut Helper<'script, 'registry>,
+        helper: &mut Helper<'script, 'registry>,
     ) -> Result<Query<'script>> {
         let params = self.params.up(helper)?;
         // let args = params.render()?; FIXME
-
         let mut stmts: Vec<_> = self
             .stmts
             .into_iter()
-            .filter_map(|stmt| stmt.up(&mut helper).transpose())
+            .filter_map(|stmt| stmt.up(helper).transpose())
             .collect::<Result<_>>()?;
         for stmt in &mut stmts {
             ConstFolder::new(helper).walk_stmt(stmt)?;
         }
+        let mut from = Vec::new();
+        let mut into = Vec::new();
         let mut config = HashMap::new();
         for (k, mut v) in self.config.up(helper)? {
             ConstFolder::new(helper).walk_expr(&mut v)?;
-            config.insert(k.to_string(), v.try_into_lit()?);
+            let mid = v.meta().clone();
+            let v = v.try_into_lit()?;
+            match (k.as_str(), v.as_str()) {
+                ("from", Some(v)) => {
+                    for v in v.split(',') {
+                        from.push(Ident::new(
+                            v.trim().to_string().into(),
+                            Box::new(mid.clone()),
+                        ))
+                    }
+                }
+                ("into", Some(v)) => {
+                    for v in v.split(',') {
+                        into.push(Ident::new(
+                            v.trim().to_string().into(),
+                            Box::new(mid.clone()),
+                        ))
+                    }
+                }
+                _ => {}
+            };
+            config.insert(k.to_string(), v);
+        }
+        if from.is_empty() {
+            from.push(Ident::from_str("in"));
+        }
+        if into.is_empty() {
+            into.push(Ident::from_str("out"));
+            into.push(Ident::from_str("err"));
         }
         Ok(Query {
             mid: self.mid,
             params,
+            from,
+            into,
             config,
             stmts,
             scope: helper.scope.clone(),
@@ -662,20 +694,23 @@ pub struct CreationalWithRaw<'script> {
 impl<'script> Upable<'script> for CreationalWithRaw<'script> {
     type Target = CreationalWith<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        Ok(CreationalWith {
-            with: self.with.up(helper)?,
-        })
+        let mid = self.with.mid.clone();
+        let with = self.with.up(helper)?;
+        Ok(CreationalWith { mid, with })
     }
 }
 
 pub type ConfigRaw<'script> = Vec<(IdentRaw<'script>, ImutExprRaw<'script>)>;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Default)]
-pub struct WithExprsRaw<'script>(pub Vec<(IdentRaw<'script>, ImutExprRaw<'script>)>);
+pub struct WithExprsRaw<'script> {
+    pub(crate) mid: Box<NodeMeta>,
+    pub exprs: Vec<(IdentRaw<'script>, ImutExprRaw<'script>)>,
+}
 impl<'script> Upable<'script> for WithExprsRaw<'script> {
     type Target = WithExprs<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        Ok(WithExprs(self.0.up(helper)?))
+        Ok(WithExprs(self.exprs.up(helper)?))
     }
 }
 

@@ -216,13 +216,13 @@ impl Query {
                     if let Some(g) = included_graphs.get(node.as_str()) {
                         let name = into_name(&g.prefix, port.as_str());
                         node.id = name.into();
-                        port.id = "out".into();
+                        // port.id = "out".into();
                     }
                     let (node, port) = &mut select.stmt.into;
                     if let Some(g) = included_graphs.get(node.as_str()) {
                         let name = from_name(&g.prefix, port.as_str());
                         node.id = name.into();
-                        port.id = "in".into();
+                        // port.id = "in".into();
                     }
 
                     let s: &ast::Select<'_> = &select.stmt;
@@ -232,6 +232,7 @@ impl Query {
                             s,
                             &s.from.0,
                             s.from.0.to_string(),
+                            s.from.1.to_string(),
                         )
                         .into());
                     }
@@ -318,13 +319,23 @@ impl Query {
                     nodes_by_name.insert(name.clone(), id);
                 }
                 Stmt::PipelineCreate(s) => {
+                    let name = s.alias.clone();
+                    if nodes_by_name.contains_key(name.as_str()) {
+                        let error_func = if has_builtin_node_name(name.as_str()) {
+                            query_node_reserved_name_err
+                        } else {
+                            query_node_duplicate_name_err
+                        };
+                        return Err(error_func(s, name).into());
+                    }
+                    // This is just a placeholder!
+                    nodes_by_name.insert(name.clone().into(), NodeIndex::default());
+
                     if let Some(pd) = helper.get::<PipelineDefinition>(&s.target)? {
                         let prefix = prefix_for(&s);
 
-                        // VERY FIXME: FIXME please fixme this is a nightmare
-                        let args = s.params.render()?;
                         let query = Query(tremor_script::Query::from_query(
-                            pd.to_query(&args, &mut helper)?,
+                            pd.to_query(&s.params, &mut helper)?,
                         ));
 
                         let mut from_map = HashMap::new();
@@ -356,7 +367,6 @@ impl Query {
                             into_map.insert(i.to_string(), id);
                             nodes_by_name.insert(name.clone().into(), id);
                         }
-                        let name = s.alias.clone();
 
                         let mut graph = query.to_pipe(idgen)?;
                         graph.optimize();
@@ -461,12 +471,17 @@ impl Query {
         // Link graph edges
         for (from, tos) in &links {
             for to in tos {
-                let from_idx = *nodes_by_name
-                    .get(&from.id)
-                    .ok_or_else(|| query_stream_not_defined_err(from, from, from.id.to_string()))?;
-                let to_idx = *nodes_by_name
-                    .get(&to.id)
-                    .ok_or_else(|| query_stream_not_defined_err(to, to, to.id.to_string()))?;
+                let from_idx = *nodes_by_name.get(&from.id).ok_or_else(|| {
+                    query_stream_not_defined_err(
+                        from,
+                        from,
+                        from.id.to_string(),
+                        from.port.to_string(),
+                    )
+                })?;
+                let to_idx = *nodes_by_name.get(&to.id).ok_or_else(|| {
+                    query_stream_not_defined_err(to, to, to.id.to_string(), to.port.to_string())
+                })?;
 
                 pipe_graph.add_edge(
                     from_idx,
@@ -778,11 +793,10 @@ pub(crate) fn supported_operators(
     })
 }
 
-pub(crate) fn make_builtin_node_name_checker() -> impl Fn(&Cow<'static, str>) -> bool {
+pub(crate) fn make_builtin_node_name_checker() -> impl Fn(&str) -> bool {
     // saving these names for reuse
-    let builtin_node_names: Vec<Cow<'static, str>> =
-        BUILTIN_NODES.iter().map(|(n, _)| n.clone()).collect();
-    move |name| builtin_node_names.contains(name)
+
+    move |name| BUILTIN_NODES.iter().any(|k| k.0 == name)
 }
 
 #[cfg(test)]

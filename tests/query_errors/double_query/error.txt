@@ -1,3 +1,5 @@
 Error: 
+    4 | end;
+    5 | create pipeline add;
     6 | create pipeline add;
-      | ^^^^^^^^^^^^^^^^^^^ Can't create the pipeline `add` twice
+      | ^^^^^^^^^^^^^^^^^^^ Name `add` is already in use for another node, please use another name.
