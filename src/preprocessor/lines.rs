@@ -206,7 +206,7 @@ impl Preprocessor for Lines {
                 last_idx = split_point + 1;
             }
             // push the rest out, if finished or not
-            if last_idx <= data.len() {
+            if last_idx < data.len() {
                 events.push(data[last_idx..].to_vec());
             }
         }
@@ -566,6 +566,44 @@ mod test {
         assert_eq!(r.pop().unwrap(), b"456");
         assert!(r.is_empty());
         assert!(pp.buffer.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn test_max_length_unbuffered() -> Result<()> {
+        let mut pp = Lines::new(DEFAULT_SEPARATOR, 0, false);
+        let mut ingest_ns = 0_u64;
+
+        let mut data = [b'A'; 10000];
+        data[9998] = b'\n';
+        let r = pp.process(&mut ingest_ns, &data)?;
+        assert_eq!(2, r.len());
+        assert_eq!(9998, r[0].len());
+        assert_eq!(1, r[1].len());
+        let r = pp.finish(&[])?;
+        assert_eq!(0, dbg!(r).len());
+        Ok(())
+    }
+
+    #[test]
+    fn from_config_len() -> Result<()> {
+        let config = Some(literal!({
+            "separator": "\n",
+            "max_length": 12345
+        }));
+        let mut pp = Lines::from_config(&config)?;
+        assert_eq!(NonZeroUsize::new(12345), pp.max_length);
+        let mut ingest_ns = 0_u64;
+
+        let mut data = [b'A'; 10000];
+        data[9998] = b'\n';
+        let r = pp.process(&mut ingest_ns, &data)?;
+        assert_eq!(1, r.len());
+        assert_eq!(9998, r[0].len());
+
+        let r = pp.finish(&[])?;
+        assert_eq!(1, r.len());
+        assert_eq!(1, r[0].len());
         Ok(())
     }
 }
