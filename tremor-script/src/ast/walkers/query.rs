@@ -205,10 +205,6 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
             self.leave_pipeline_definition(defn)
         );
 
-        if let Some(query) = &mut defn.query {
-            self.walk_query(query)?
-        }
-
         self.walk_definitinal_args(&mut defn.params)?;
         self.leave_pipeline_definition(defn)
     }
@@ -226,13 +222,13 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_operator_stmt(&mut self, stmt: &mut OperatorCreate<'script>) -> Result<()> {
+    fn walk_operator_create(&mut self, stmt: &mut OperatorCreate<'script>) -> Result<()> {
         stop!(
-            self.visit_operator_stmt(stmt),
-            self.leave_operator_stmt(stmt)
+            self.visit_operator_create(stmt),
+            self.leave_operator_create(stmt)
         );
         self.walk_creational_with(&mut stmt.params)?;
-        self.leave_operator_stmt(stmt)
+        self.leave_operator_create(stmt)
     }
 
     /// walks a `ScriptCreate`
@@ -279,7 +275,7 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
             Stmt::ScriptDefinition(d) => self.walk_script_decl(d.as_mut())?,
             Stmt::PipelineDefinition(d) => self.walk_pipeline_definition(d.as_mut())?,
             Stmt::StreamStmt(s) => self.walk_stream_stmt(s)?,
-            Stmt::OperatorCreate(s) => self.walk_operator_stmt(s)?,
+            Stmt::OperatorCreate(s) => self.walk_operator_create(s)?,
             Stmt::ScriptCreate(s) => self.walk_script_stmt(s)?,
             Stmt::PipelineCreate(s) => self.walk_pipeline_stmt(s)?,
             Stmt::SelectStmt(s) => self.walk_select_stmt(s)?,

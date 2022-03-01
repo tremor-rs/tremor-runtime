@@ -1,6 +1,4 @@
 #!config metrics_interval_s = 10
-
-use foo::bar;
-
+use foo4::bar;
 
 select aggr::win::collect_flattened(event) from in[bar::by_two] into out;

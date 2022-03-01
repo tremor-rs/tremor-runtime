@@ -86,10 +86,10 @@ impl Script {
         let fake_aggr_reg = AggrRegistry::default();
         let mut helper = Helper::new(reg, &fake_aggr_reg);
         // helper.consts.args = args.clone_static();
-        let mut screw_rust = script_raw.up_script(&mut helper)?;
-        ConstFolder::new(&helper).walk_script(&mut screw_rust)?;
+        let mut script = script_raw.up_script(&mut helper)?;
+        ConstFolder::new(&helper).walk_script(&mut script)?;
         std::mem::swap(&mut warnings, &mut helper.warnings);
-        let script = screw_rust;
+        let script = script;
 
         Ok(Self {
             script,
