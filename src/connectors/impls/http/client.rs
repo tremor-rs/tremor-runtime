@@ -107,8 +107,6 @@ impl Connector for HttpClient {
         );
         builder.spawn(sink, sink_context).map(Some)
     }
-
-    
 }
 
 struct HttpRequestSource {
@@ -126,7 +124,7 @@ impl Source for HttpRequestSource {
             Err(TryRecvError::Closed) => {
                 // shit is on fire, we gotta reconnect
                 ctx.notifier().notify().await?;
-                Err("HTTP Request Source channel is closed, we gotta reconnect.".into())  
+                Err("HTTP Request Source channel is closed, we gotta reconnect.".into())
             }
         }
     }
@@ -209,7 +207,6 @@ impl HttpRequestSink {
 
 #[async_trait::async_trait()]
 impl Sink for HttpRequestSink {
-
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let mut clients = Vec::with_capacity(self.max_concurrency);
 

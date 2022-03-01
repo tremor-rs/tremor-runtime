@@ -53,7 +53,7 @@ use tremor_pipeline::{
 use tremor_value::{literal, Value};
 use value_trait::Builder;
 
-use super::CodecReq;
+use super::{CodecReq, Connectivity};
 
 /// The default poll interval for `try_recv` on channels in connectors
 pub const DEFAULT_POLL_INTERVAL: u64 = 10;
@@ -547,6 +547,7 @@ where
     // this way we can explicitly resume a Cb triggered source if need be
     // but also an explicitly paused source might receive a Cb open and continue sending data :scream:
     state: SourceState,
+    connectivity: Connectivity,
     // if set we can use .elapsed() to check agains `pull_wait` if we are done waiting
     pull_wait_start: Option<Instant>,
     pull_wait: Duration,
@@ -595,6 +596,7 @@ where
             pipelines_out: Vec::with_capacity(1),
             pipelines_err: Vec::with_capacity(1),
             state: SourceState::Initialized,
+            connectivity: Connectivity::Disconnected, // we always start as disconnected until `.connect()` connects us
             pull_wait_start: None,
             pull_wait: DEFAULT_POLL_DURATION,
             is_transactional,
@@ -608,7 +610,7 @@ where
 
     /// we wait for control plane messages iff
     ///
-    /// - we are paused
+    /// - we are paused or initialized
     /// - we have some control plane messages (here we don't need to wait)
     /// - if we have no pipelines connected
     fn needs_control_plane_msg(&self) -> bool {
@@ -694,9 +696,13 @@ where
             SourceMsg::Connect(sender, attempt) => {
                 info!("{} Connecting...", &self.ctx);
                 let connect_result = self.source.connect(&self.ctx, &attempt).await;
-                if let Ok(true) = connect_result {
-                    info!("{} Source connected.", &self.ctx);
-                }
+                self.connectivity = match &connect_result {
+                    Ok(true) => {
+                        info!("{} Connected.", &self.ctx);
+                        Connectivity::Connected
+                    }
+                    Ok(false) | Err(_) => Connectivity::Disconnected
+                };
                 self.ctx.log_err(
                     sender.send(connect_result).await,
                     "Error sending source connect result",
@@ -711,14 +717,14 @@ where
             }
             SourceMsg::Resume => {
                 info!(
-                    "[Source::{}] Ignoring Resume msg in {:?} state",
-                    &self.ctx.alias, &self.state
+                    "{} Ignoring Resume msg in {:?} state",
+                    &self.ctx, &self.state
                 );
                 Ok(Control::Continue)
             }
             SourceMsg::Pause if self.state == Running => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
-                info!("[Source::{}] Paused.", self.ctx.alias);
+                info!("{} Paused.", &self.ctx);
                 self.state = Paused;
                 self.ctx
                     .log_err(self.source.on_pause(&self.ctx).await, "on_pause failed");
@@ -726,8 +732,8 @@ where
             }
             SourceMsg::Pause => {
                 info!(
-                    "[Source::{}] Ignoring Pause msg in {:?} state",
-                    &self.ctx.alias, &self.state
+                    "{} Ignoring Pause msg in {:?} state",
+                    &self.ctx, &self.state
                 );
                 Ok(Control::Continue)
             }
@@ -755,26 +761,32 @@ where
                 Ok(Control::Continue)
             }
             SourceMsg::Drain(drained_sender) => {
-                // At this point the connector has advised all reading from external connections to stop via the `QuiescenceBeacon`
-                // We change the source state to `Draining` and wait for `SourceReply::Empty` as we drain out everything that might be in flight
-                // when reached the `Empty` point, we emit the `Drain` signal and wait for the CB answer (one for each connected pipeline)
+                // if we are not connected to any pipeline, we cannot take part in the draining protocol like this
+                // we are drained
+                info!("{} Draining...", &self.ctx);
                 if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
                     self.ctx.log_err(
                         drained_sender.send(Msg::SourceDrained).await,
                         "sending SourceDrained message failed",
                     );
                     self.state = Drained;
-                } else if !self.is_asynchronous {
-                    // non-asynchronous sources are considered immediately drained
-                    self.on_fully_drained().await?;
                 } else {
-                    info!("{} Draining...", &self.ctx);
+
                     self.connector_channel = Some(drained_sender);
-                    self.state = Draining;
+                    if !self.is_asynchronous || self.connectivity == Connectivity::Disconnected {
+                        // non-asynchronous sources or disconnected sources are considered immediately drained
+                        self.on_fully_drained().await?;
+                    } else {
+                        // At this point the connector has advised all reading from external connections to stop via the `QuiescenceBeacon`
+                        // We change the source state to `Draining` and wait for `SourceReply::Empty` as we drain out everything that might be in flight
+                        // when reached the `Empty` point, we emit the `Drain` signal and wait for the CB answer (one for each connected pipeline)
+                        self.state = Draining;
+                    }
                 }
                 Ok(Control::Continue)
             }
             SourceMsg::ConnectionLost => {
+                self.connectivity = Connectivity::Disconnected;
                 self.ctx.log_err(
                     self.source.on_connection_lost(&self.ctx).await,
                     "on_connection_lost failed",
@@ -782,6 +794,7 @@ where
                 Ok(Control::Continue)
             }
             SourceMsg::ConnectionEstablished => {
+                self.connectivity = Connectivity::Connected;
                 self.ctx.log_err(
                     self.source.on_connection_established(&self.ctx).await,
                     "on_connection_established failed",
@@ -816,7 +829,7 @@ where
             }
             SourceMsg::Cb(CbAction::Open, _id) => {
                 // FIXME: only start polling for data if we received at least 1 CbAction::Open
-                info!("[Source::{}] Circuit Breaker: Open.", self.ctx.alias);
+                info!("{} Circuit Breaker: Open.", &self.ctx);
                 self.cb_open_received = true;
                 self.ctx
                     .log_err(self.source.on_cb_open(&self.ctx).await, "on_cb_open failed");
@@ -829,28 +842,28 @@ where
             }
             SourceMsg::Cb(CbAction::Drained(uid), _id) => {
                 debug!(
-                    "[Source::{}] Drained contraflow message for {}",
-                    self.ctx.alias, uid
+                    "{} Drained contraflow message for {}",
+                    &self.ctx, uid
                 );
                 // only account for Drained CF which we caused
                 // as CF is sent back the DAG to all destinations
                 if uid == self.ctx.uid {
                     self.expected_drained = self.expected_drained.saturating_sub(1);
                     debug!(
-                        "[Source::{}] Drained this is us! we still have {} drains to go",
-                        self.ctx.alias, self.expected_drained
+                        "{} Drained message is for us!",
+                        &self.ctx
                     );
                     if self.expected_drained == 0 {
                         // we received 1 drain CB event per connected pipeline (hopefully)
                         if let Some(connector_channel) = self.connector_channel.as_ref() {
                             debug!(
-                                "[Source::{}] Drain completed, sending data now!",
-                                self.ctx.alias
+                                "{} Drain completed, sending data now!",
+                                &self.ctx
                             );
                             if connector_channel.send(Msg::SourceDrained).await.is_err() {
                                 error!(
-                                    "[Source::{}] Error sending SourceDrained message to Connector",
-                                    &self.ctx.alias
+                                    "{} Error sending SourceDrained message to Connector",
+                                    &self.ctx
                                 );
                             }
                         }
@@ -941,6 +954,7 @@ where
 
     /// should this manager pull data from its source?
     fn should_pull_data(&mut self) -> bool {
+        // FIXME: simplify this overly complex condition
         // this check implements the waiting that is induced by a source returning `SourceReply::Empty(wait_ms)`.
         // We stop pulling data until the wait time has elapsed, but we don't sleep this entire time.
         let needs_to_wait = if let Some(pull_wait_start) = self.pull_wait_start {
@@ -965,6 +979,7 @@ where
         !needs_to_wait
             && state_should_pull
             && !self.pipelines_out.is_empty() // we have pipelines connected
+            && self.connectivity == Connectivity::Connected // we are connected to our thingy
             && self.cb_open_received // we did receive at least 1 `CbAction::Open` from 1 of those connected pipelines
                                      // so we know the downstream side is ready to receive something
     }

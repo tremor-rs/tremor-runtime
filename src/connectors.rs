@@ -652,14 +652,18 @@ async fn connector_task(
                         }
                     }
                     // ugly extra check
-                    if new == Connectivity::Disconnected && !will_retry && start_sender.is_some() {
-                        if let Some(start_sender) = start_sender.take() {
-                            ctx.log_err(
-                                start_sender
-                                    .send(ConnectorResult::err(&ctx, "Connect failed."))
-                                    .await,
-                                "Error sending start response",
-                            )
+                    if new == Connectivity::Disconnected && !will_retry {
+                        // if we weren't able to connect and gave up retrying, we are failed. That's life.
+                        connector_state = InstanceState::Failed;
+                        if start_sender.is_some() {
+                            if let Some(start_sender) = start_sender.take() {
+                                ctx.log_err(
+                                    start_sender
+                                        .send(ConnectorResult::err(&ctx, "Connect failed."))
+                                        .await,
+                                    "Error sending start response",
+                                )
+                            }
                         }
                     }
                     connectivity = new;
