@@ -39,7 +39,7 @@ static ERL_NIF_TERM ts_eval(ErlNifEnv *env, int argc,
     memcpy(ast_c_str, ast.data, ast.size);
     ast_c_str[ast.size] = 0;
 
-    char json_value[8192];
+    unsigned char json_value[8192];
     json_value[0] = 0;
     tremor_script_c_eval(ast_c_str, json_value, 8192);
     result.size = strnlen(json_value, 8192);
