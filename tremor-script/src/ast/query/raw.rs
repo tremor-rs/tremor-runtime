@@ -237,7 +237,6 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         helper.enter_scope();
 
-        let query = None;
         let dflt_in_ports = self.dflt_in_ports();
         let dflt_out_ports = self.dflt_out_ports();
         let from = self.from.up(helper)?.unwrap_or(dflt_in_ports);
@@ -258,18 +257,29 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
         }
 
         let mid = self.mid.box_with_name(&self.id);
-        helper.leave_scope()?;
+        let stmts = self
+            .pipeline
+            .up(helper)?
+            .into_iter()
+            .filter_map(std::convert::identity)
+            .collect();
+        let scope = helper.leave_scope()?;
         let params = self.params.up(helper)?;
+        let config = self
+            .config
+            .into_iter()
+            .map(|(k, v)| Ok((k.up(helper)?.to_string(), v.up(helper)?)))
+            .collect::<Result<_>>()?;
 
         let pipeline_decl = PipelineDefinition {
-            raw_config: self.config,
+            config,
             mid,
             node_id: NodeId::new(self.id, &[]),
             params,
-            raw_stmts: self.pipeline,
+            stmts,
             from,
             into,
-            query,
+            scope,
         };
 
         helper.add_query_decl_doc(&pipeline_decl.fqn(), self.doc);

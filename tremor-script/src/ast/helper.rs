@@ -149,16 +149,19 @@ where
     }
     /// Enters a new scope
     pub(crate) fn enter_scope(&mut self) {
-        let mut scope = Scope::default();
+        self.set_scope(Scope::default());
+    }
+    ///Prepends a given scope
+    pub(crate) fn set_scope(&mut self, mut scope: Scope<'script>) {
         std::mem::swap(&mut self.scope, &mut scope);
         self.scope.parent = Some(Box::new(scope));
     }
     /// leaves a scope
-    pub(crate) fn leave_scope(&mut self) -> Result<()> {
+    pub(crate) fn leave_scope(&mut self) -> Result<Scope<'script>> {
         // FIXME return left scope
-        if let Some(next) = self.scope.parent.take() {
-            self.scope = *next;
-            Ok(())
+        if let Some(mut next) = self.scope.parent.take() {
+            std::mem::swap(&mut self.scope, &mut next);
+            Ok(*next)
         } else {
             Err("No parent scope".into())
         }

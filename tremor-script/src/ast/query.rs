@@ -14,13 +14,10 @@
 
 pub(crate) mod raw;
 
-use self::raw::{ArgsExprsRaw, ConfigRaw, DefinitioalArgsRaw, QueryRaw};
-
 use super::{
     error_generic, error_no_locals,
     helper::Scope,
     node_id::NodeId,
-    raw::{IdentRaw, ImutExprRaw, LiteralRaw},
     visitors::{ArgsRewriter, ConstFolder},
     walkers::QueryWalker,
     EventPath, HashMap, Helper, Ident, ImutExpr, InvokeAggrFn, NodeMeta, Path, Result, Script,
@@ -221,6 +218,9 @@ pub struct ScriptCreate<'script> {
 }
 impl_expr!(ScriptCreate);
 
+/// A config
+pub type Config<'script> = Vec<(String, ImutExpr<'script>)>;
+
 /// A pipeline declaration
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PipelineDefinition<'script> {
@@ -235,72 +235,46 @@ pub struct PipelineDefinition<'script> {
     /// Output Ports
     pub into: Vec<Ident<'script>>,
     /// Raw config
-    pub raw_config: ConfigRaw<'script>,
+    pub config: Config<'script>,
     /// The raw pipeline statements
-    pub raw_stmts: raw::StmtsRaw<'script>,
-    /// The query in it's runnable form
-    pub query: Option<Query<'script>>,
+    pub stmts: Stmts<'script>,
+    /// The scope
+    pub scope: Scope<'script>,
 }
 
 impl<'script> PipelineDefinition<'script> {
-    /// FIXME: :sob:
-    pub fn apply_args<'registry>(
-        &mut self,
-        args_in: &Value<'script>,
+    /// Converts a pipeline defintion into a query
+    pub fn to_query<'registry>(
+        &self,
+        args: &Value<'script>,
         helper: &mut Helper<'script, 'registry>,
-    ) -> Result<()> {
+    ) -> Result<Query<'script>> {
+        let config = HashMap::new();
+        let scope = self.scope.clone();
+        helper.set_scope(scope);
+
         let mut params = self.params.clone();
-        params.substitute_args(args_in, helper)?;
-        let args = ArgsExprsRaw(
-            params
-                .args
-                .0
-                .into_iter()
-                .map(|(k, v)| {
-                    Ok((
-                        IdentRaw {
-                            mid: k.mid,
-                            id: k.id,
-                        },
-                        v.map(|v| -> Result<_> {
-                            let mid = Box::new(v.meta().clone());
-                            let value = v.try_into_lit()?;
-                            Ok(ImutExprRaw::Literal(LiteralRaw { mid, value }))
-                        })
-                        .transpose()?,
-                    ))
-                })
-                .collect::<Result<_>>()?,
-        );
-        let params = DefinitioalArgsRaw { args };
-        let mut query = QueryRaw {
-            config: self.raw_config.clone(),
-            stmts: self.raw_stmts.clone(),
-            params,
+
+        params.substitute_args(args, helper)?;
+        let inner_args = params.render()?;
+
+        let stmts = self
+            .stmts
+            .iter()
+            .cloned()
+            .map(|s| s.apply_args(&inner_args, helper))
+            .collect::<Result<_>>()?;
+
+        Ok(Query {
+            config,
+            stmts,
+            params: self.params.clone(),
+            scope: helper.leave_scope()?,
             mid: self.mid.clone(),
-        }
-        .up_script(helper)?;
-        for stmt in &mut query.stmts {
-            match stmt {
-                // definitions do not need to be updated
-                Stmt::WindowDefinition(_)
-                | Stmt::OperatorDefinition(_)
-                | Stmt::ScriptDefinition(_)
-                | Stmt::PipelineDefinition(_)
-                | Stmt::StreamStmt(_) => (),
-                Stmt::PipelineCreate(c) => c.params.substitute_args(&args_in, helper)?,
-                Stmt::OperatorCreate(op) => op.params.substitute_args(&args_in, helper)?,
-                Stmt::ScriptCreate(script) => script.params.substitute_args(&args_in, helper)?,
-                Stmt::SelectStmt(select) => {
-                    ArgsRewriter::new(args_in.clone(), helper).walk_select(select.stmt.as_mut())?;
-                }
-            }
-            ConstFolder::new(&helper).walk_stmt(stmt)?;
-        }
-        self.query = Some(query);
-        Ok(())
+        })
     }
 }
+
 impl_expr!(PipelineDefinition);
 impl_fqn!(PipelineDefinition);
 
@@ -640,5 +614,30 @@ impl<'script> ArgsExprs<'script> {
             })
             .collect::<Result<_>>()?;
         Ok(())
+    }
+}
+impl<'script> Stmt<'script> {
+    fn apply_args(
+        mut self,
+        args: &Value<'script>,
+        helper: &mut Helper<'script, '_>,
+    ) -> Result<Self> {
+        match &mut self {
+            // For definitions, select andstreams we do not substitute incomming args
+            // their args are handled via the create statements
+            Stmt::WindowDefinition(_)
+            | Stmt::OperatorDefinition(_)
+            | Stmt::ScriptDefinition(_)
+            | Stmt::PipelineDefinition(_)
+            | Stmt::StreamStmt(_) => (),
+            Stmt::SelectStmt(s) => {
+                ArgsRewriter::new(args.clone(), helper).walk_select_stmt(s)?;
+                ConstFolder::new(helper).walk_select_stmt(s)?;
+            }
+            Stmt::OperatorCreate(d) => d.params.substitute_args(args, helper)?,
+            Stmt::ScriptCreate(d) => d.params.substitute_args(args, helper)?,
+            Stmt::PipelineCreate(d) => d.params.substitute_args(args, helper)?,
+        };
+        Ok(self)
     }
 }

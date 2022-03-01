@@ -294,7 +294,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn visit_operator_stmt(&mut self, _stmt: &mut OperatorCreate<'script>) -> Result<VisitRes> {
+    fn visit_operator_create(&mut self, _stmt: &mut OperatorCreate<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
@@ -302,7 +302,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn leave_operator_stmt(&mut self, _stmt: &mut OperatorCreate<'script>) -> Result<()> {
+    fn leave_operator_create(&mut self, _stmt: &mut OperatorCreate<'script>) -> Result<()> {
         Ok(())
     }
 
