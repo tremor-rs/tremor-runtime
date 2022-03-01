@@ -35,7 +35,7 @@ endif
 CFLAGS += -fPIC -I $(ERTS_INCLUDE_DIR) -I $(ERL_INTERFACE_INCLUDE_DIR)
 CXXFLAGS += -fPIC -I $(ERTS_INCLUDE_DIR) -I $(ERL_INTERFACE_INCLUDE_DIR)
 
-LDLIBS += -L $(ERL_INTERFACE_LIB_DIR) -lerl_interface -lei -L $(TREMOR_SCRIPT_LIB_DIR) -ltremor_script
+LDLIBS += -L $(ERL_INTERFACE_LIB_DIR) -lei -L $(TREMOR_SCRIPT_LIB_DIR) -ltremor_script
 LDFLAGS += -shared
 
 # Verbosity.
