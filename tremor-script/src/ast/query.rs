@@ -24,16 +24,23 @@ use super::{
     Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
-use crate::{ast::walkers::ImutExprWalker, errors::Error};
+use crate::{
+    ast::{walkers::ImutExprWalker, Literal},
+    errors::Error,
+};
 use crate::{impl_expr, impl_fqn};
 use raw::WindowDefnRaw;
-use simd_json::{Builder, Mutable};
+use simd_json::{Builder, Mutable, ValueAccess};
 
 /// A Tremor query
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Query<'script> {
     /// Config for the query
     pub config: HashMap<String, Value<'script>>,
+    /// Input Ports
+    pub from: Vec<Ident<'script>>,
+    /// Output Ports
+    pub into: Vec<Ident<'script>>,
     /// Statements
     pub stmts: Stmts<'script>,
     /// Params if this is a modular query
@@ -241,23 +248,32 @@ pub struct PipelineDefinition<'script> {
     /// The scope
     pub scope: Scope<'script>,
 }
+impl_expr!(PipelineDefinition);
+impl_fqn!(PipelineDefinition);
 
 impl<'script> PipelineDefinition<'script> {
     /// Converts a pipeline defintion into a query
     pub fn to_query<'registry>(
         &self,
-        args: &Value<'script>,
+        create: &CreationalWith<'script>,
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<Query<'script>> {
+        let mut args = create.render()?;
         let config = HashMap::new();
         let scope = self.scope.clone();
         helper.set_scope(scope);
 
         let mut params = self.params.clone();
+        for (k, v) in &mut params.args.0 {
+            if let Some(new) = args.remove(k.as_str())? {
+                *v = Some(*Literal::boxed_expr(Box::new(k.meta().clone()), new))
+            }
+        }
+        if let Some(k) = args.as_object().and_then(|o| o.keys().next()) {
+            return error_generic(create, create, &format!("Unknown parameter {k}"));
+        }
 
-        params.substitute_args(args, helper)?;
         let inner_args = params.render()?;
-
         let stmts = self
             .stmts
             .iter()
@@ -268,15 +284,14 @@ impl<'script> PipelineDefinition<'script> {
         Ok(Query {
             config,
             stmts,
+            from: self.from.clone(),
+            into: self.into.clone(),
             params: self.params.clone(),
             scope: helper.leave_scope()?,
             mid: self.mid.clone(),
         })
     }
 }
-
-impl_expr!(PipelineDefinition);
-impl_fqn!(PipelineDefinition);
 
 /// A pipeline creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -401,7 +416,10 @@ impl BaseExpr for StreamStmt {
 pub struct CreationalWith<'script> {
     /// `with` seection
     pub with: WithExprs<'script>,
+    pub(crate) mid: Box<NodeMeta>,
 }
+impl_expr!(CreationalWith);
+
 impl<'script> CreationalWith<'script> {
     pub(crate) fn substitute_args<'registry>(
         &mut self,
@@ -533,14 +551,6 @@ impl<'script> DefinitioalArgs<'script> {
         }
     }
 
-    pub(crate) fn substitute_args<'registry>(
-        &mut self,
-        args: &Value<'script>,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<()> {
-        self.args.substitute_args(args, helper)
-    }
-
     /// Renders a with clause into a k/v pair
     pub fn render(&self) -> Result<Value<'script>> {
         let mut res = Value::object();
@@ -591,31 +601,6 @@ pub type ArgsExpr<'script> = (Ident<'script>, Option<ImutExpr<'script>>);
 #[derive(Clone, Debug, PartialEq, Serialize, Default)]
 pub struct ArgsExprs<'script>(pub Vec<ArgsExpr<'script>>);
 
-impl<'script> ArgsExprs<'script> {
-    pub(crate) fn substitute_args<'registry>(
-        &mut self,
-        args: &Value<'script>,
-        helper: &mut Helper<'script, 'registry>,
-    ) -> Result<()> {
-        let mut old = Vec::new();
-        std::mem::swap(&mut old, &mut self.0);
-        self.0 = old
-            .into_iter()
-            .map(|(name, value_expr)| {
-                let value_expr = value_expr
-                    .map(|mut value_expr| -> Result<_> {
-                        ArgsRewriter::new(args.clone(), helper).rewrite_expr(&mut value_expr)?;
-                        ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut value_expr)?;
-                        Ok(value_expr)
-                    })
-                    .transpose()?;
-
-                Ok((name, value_expr))
-            })
-            .collect::<Result<_>>()?;
-        Ok(())
-    }
-}
 impl<'script> Stmt<'script> {
     fn apply_args(
         mut self,

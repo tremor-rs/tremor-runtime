@@ -231,7 +231,7 @@ impl ErrorKind {
             | NotConstant(outer, inner)
             | PatchKeyExists(outer, inner, _)
             | PipelineUnknownPort(outer, inner, _, _)
-            | QueryStreamNotDefined(outer, inner, _)
+            | QueryStreamNotDefined(outer, inner, _, _)
             | RecursionLimit(outer, inner)
             | RuntimeError(outer, inner, _, _, _, _)
             | TailingHereDoc(outer, inner, _, _)
@@ -796,9 +796,9 @@ error_chain! {
         /*
          * Query stream declarations
          */
-        QueryStreamNotDefined(stmt: Span, inner: Span, name: String) {
-            description("Stream is not defined")
-                display("Stream used in `from` or `into` is not defined: {}", name)
+        QueryStreamNotDefined(stmt: Span, inner: Span, name: String, port: String) {
+            description("Stream / port is not defined")
+                display("Stream used in `from` or `into` is not defined: {}/{}", name, port)
         }
         NoLocalsAllowed(stmt: Span, inner: Span) {
             description("Local variables are not allowed here")
@@ -858,9 +858,23 @@ error_chain! {
     }
 }
 
+pub fn already_defined_err<S>(e: &S, what: &str) -> Error
+where
+    S: BaseExpr + Ranged,
+{
+    err_generic(
+        e,
+        e,
+        &format!(
+            "Can't define the {what} `{}` twice",
+            e.name().unwrap_or_default()
+        ),
+    )
+}
+
 /// Creates a stream not defined error
 #[allow(clippy::borrowed_box)]
-pub fn query_stream_not_defined_err<S, I>(stmt: &S, inner: &I, name: String) -> Error
+pub fn query_stream_not_defined_err<S, I>(stmt: &S, inner: &I, name: String, port: String) -> Error
 where
     S: Ranged,
     I: BaseExpr + Ranged,
@@ -868,7 +882,7 @@ where
     // Subqueries store unmangled `name` in `meta`
     // Use `name` from `meta` if it exists.
     let name = inner.meta().name().map_or(name, |s| s.into());
-    ErrorKind::QueryStreamNotDefined(stmt.extent(), inner.extent(), name).into()
+    ErrorKind::QueryStreamNotDefined(stmt.extent(), inner.extent(), name, port).into()
 }
 
 /// Creates a query stream duplicate name error

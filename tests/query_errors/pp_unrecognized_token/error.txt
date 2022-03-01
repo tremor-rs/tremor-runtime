@@ -1,5 +1,3 @@
 Error: 
     1 | use ;
       |     ^ Found the token `;` but expected `<ident>`
-    2 |
-
