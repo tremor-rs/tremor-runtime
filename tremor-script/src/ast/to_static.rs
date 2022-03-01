@@ -1026,6 +1026,7 @@ impl<'script> CreationalWith<'script> {
     pub fn into_static(self) -> CreationalWith<'static> {
         CreationalWith {
             with: self.with.into_static(),
+            mid: self.mid,
         }
     }
 }

@@ -4,12 +4,14 @@ args
 pipeline
   define pipeline inner
   args
-    add = args.add
+    add
   pipeline
     select args from in into out;
   end;
 
-  create pipeline inner;
+  create pipeline inner with
+    add = args.add
+  end;
 
   select event from in into inner;
   select event from inner into out;

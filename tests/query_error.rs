@@ -15,6 +15,7 @@ use pretty_assertions::assert_eq;
 use regex::Regex;
 use std::io::prelude::*;
 use std::path::Path;
+use std::sync::Mutex;
 use tremor_common::{file, ids::OperatorIdGen};
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
@@ -28,6 +29,9 @@ fn to_pipe(query: &str) -> Result<ExecutableGraph> {
     let mut idgen = OperatorIdGen::new();
     let q = Query::parse(query, &*FN_REGISTRY.read()?, &aggr_reg)?;
     Ok(q.to_pipe(&mut idgen)?)
+}
+lazy_static::lazy_static! {
+    static ref UNIQUE: Mutex<()> = Mutex::new(());
 }
 
 macro_rules! test_cases {
@@ -43,14 +47,18 @@ macro_rules! test_cases {
                 let err_file = concat!("tests/query_errors/", stringify!($file), "/error.txt");
                 let err_re_file = concat!("tests/query_errors/", stringify!($file), "/error.re");
 
-                ModuleManager::add_path(query_dir)?;
-                ModuleManager::add_path("tremor-script/lib")?;
 
                 println!("Loading query: {}", query_file);
                 let mut file = file::open(query_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
 
+                let l = UNIQUE.lock();
+                ModuleManager::clear_path()?;
+                ModuleManager::add_path(query_dir)?;
+                ModuleManager::add_path("tremor-script/lib")?;
+                let s = to_pipe( &contents);
+                drop (l);
                 if Path::new(err_re_file).exists() {
                     println!("Loading error: {}", err_re_file);
                     let mut file = file::open(err_re_file)?;
@@ -59,7 +67,6 @@ macro_rules! test_cases {
                     let err = err.trim();
                     let re = Regex::new(err)?;
 
-                    let s = to_pipe( &contents);
                     if let Err(e) = s {
                         println!("{} ~ {}", err, format!("{}", e));
                         assert!(re.is_match(&format!("{}", e)));
@@ -73,20 +80,20 @@ macro_rules! test_cases {
                     let mut err = String::new();
                     file.read_to_string(&mut err)?;
 
-                    match to_pipe(&contents) {
+                    match s {
                         Err(Error(ErrorKind::Pipeline(tremor_pipeline::errors::ErrorKind::Script(e)), o)) => {
                             let e = tremor_script::errors::Error(e, o);
                             let got = Dumb::error_to_string(&e)?;
-                            assert_eq!(err.trim(), got.trim(), "unexpected error message: {}", got);
+                            assert_eq!(err.trim(), got.trim(), "unexpected error message:\n{}", got);
                         }
                         Err(Error(ErrorKind::Script(e), o)) =>{
                             let e = tremor_script::errors::Error(e, o);
                             let got = Dumb::error_to_string(&e)?;
-                            assert_eq!(err.trim(), got.trim(), "unexpected error message: {}", got);
+                            assert_eq!(err.trim(), got.trim(), "unexpected error message:\n{}", got);
                         }
                         Err(Error(ErrorKind::Pipeline(e), _)) =>{
                             let got = format!("{}", e);
-                            assert_eq!(err.trim(), got.trim(), "unexpected error message: {}", got);
+                            assert_eq!(err.trim(), got.trim(), "unexpected error message:\n{}", got);
                         }
                         Err(e) => {
                             println!("got wrong error: {:?}", e);

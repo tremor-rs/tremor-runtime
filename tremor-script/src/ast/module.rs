@@ -25,7 +25,7 @@ use super::{
 };
 use crate::{
     arena::{self, Arena},
-    errors::Result,
+    errors::{already_defined_err, Result},
     impl_expr,
     lexer::{Span, Tokenizer},
     path::ModulePath,
@@ -135,9 +135,10 @@ impl<'script> Debug for ModuleContent<'script> {
 impl<'script> ModuleContent<'script> {
     pub(crate) fn insert_flow(&mut self, flow: FlowDefinition<'script>) -> Result<()> {
         let name = flow.node_id.id.clone();
-        if let Some(_old) = self.flows.insert(name.clone(), flow) {
-            Err("FIXME: already defined".into())
+        if self.flows.contains_key(&name) {
+            Err(already_defined_err(&flow, "flow"))
         } else {
+            self.flows.insert(name, flow);
             Ok(())
         }
     }
@@ -146,57 +147,63 @@ impl<'script> ModuleContent<'script> {
         connector: ConnectorDefinition<'script>,
     ) -> Result<()> {
         let name = connector.node_id.id.clone();
-        if let Some(_old) = self.connectors.insert(name.clone(), connector) {
-            Err("FIXME: already defined".into())
+        if self.connectors.contains_key(&name) {
+            Err(already_defined_err(&connector, "connector"))
         } else {
+            self.connectors.insert(name, connector);
             Ok(())
         }
     }
     pub(crate) fn insert_const(&mut self, c: Const<'script>) -> Result<()> {
         let name = c.name.clone();
-        if let Some(old) = self.consts.insert(name.clone(), c) {
-            Err(format!("FIXME: already defined: {}", old.name).into())
+        if self.consts.contains_key(&name) {
+            Err(already_defined_err(&c, "constant"))
         } else {
+            self.consts.insert(name, c);
             Ok(())
         }
     }
     pub(crate) fn insert_function(&mut self, f: FnDecl<'script>) -> Result<()> {
         let name = f.name.to_string();
-        if let Some(_old) = self.functions.insert(name, f) {
-            Err("FIXME: already defined".into())
+        if self.functions.contains_key(&name) {
+            Err(already_defined_err(&f, "function"))
         } else {
+            self.functions.insert(name, f);
             Ok(())
         }
     }
     pub(crate) fn insert_pipeline(&mut self, pipeline: PipelineDefinition<'script>) -> Result<()> {
         let name = pipeline.node_id.id.clone();
-        if let Some(_old) = self.pipelines.insert(name, pipeline) {
-            Err("FIXME: already defined".into())
+        if self.pipelines.contains_key(&name) {
+            Err(already_defined_err(&pipeline, "pipeline"))
         } else {
+            self.pipelines.insert(name, pipeline);
             Ok(())
         }
     }
 
     pub(crate) fn insert_window(&mut self, window: WindowDefinition<'script>) -> Result<()> {
         let name = window.node_id.id.clone();
-        if let Some(_old) = self.windows.insert(name, window) {
-            Err("FIXME: already defined".into())
+        if self.windows.contains_key(&name) {
+            Err(already_defined_err(&window, "window"))
         } else {
+            self.windows.insert(name, window);
             Ok(())
         }
     }
     pub(crate) fn insert_operator(&mut self, operator: OperatorDefinition<'script>) -> Result<()> {
         let name = operator.node_id.id.clone();
-        if let Some(_old) = self.operators.insert(name, operator) {
-            Err("FIXME: already defined".into())
+        if self.operators.contains_key(&name) {
+            Err(already_defined_err(&operator, "operator"))
         } else {
+            self.operators.insert(name, operator);
             Ok(())
         }
     }
     pub(crate) fn insert_script(&mut self, script: ScriptDefinition<'script>) -> Result<()> {
         let name = script.node_id.id.clone();
-        if let Some(_old) = self.scripts.insert(name, script) {
-            Err("FIXME: already defined".into())
+        if let Some(old) = self.scripts.insert(name, script) {
+            Err(already_defined_err(&old, "script"))
         } else {
             Ok(())
         }

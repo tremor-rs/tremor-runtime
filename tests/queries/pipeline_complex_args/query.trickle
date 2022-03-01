@@ -10,9 +10,9 @@ args
 pipeline
     define script foo
     args
-      p1 = -args.param1 + args.param2 + args.param3 - args.param4[5],
-      p2 = args.param4[0:4],
-      p3 = args.param6 + "badger"
+      p1,
+      p2,
+      p3,
     script
       {
       "p1": args.p1,
@@ -20,7 +20,11 @@ pipeline
       "p3": args.p3
       }
     end;
-    create script foo;
+    create script foo with
+      p1 = -args.param1 + args.param2 + args.param3 - args.param4[5],
+      p2 = args.param4[0:4],
+      p3 = args.param6 + "badger"
+    end;
 
     select event from in into foo;
     select event from foo into out;
