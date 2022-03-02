@@ -339,6 +339,7 @@ impl TremorUrl {
     }
 
     /// Sets the port on the given consumed instance and returns the updated instance
+    #[must_use]
     pub fn with_port<S>(mut self, i: &S) -> Self
     where
         S: ToString + ?Sized,
