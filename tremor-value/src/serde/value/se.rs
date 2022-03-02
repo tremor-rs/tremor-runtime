@@ -68,12 +68,8 @@ where
     value.serialize(Serializer::default())
 }
 
+#[derive(Default)]
 pub struct Serializer {}
-impl Default for Serializer {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 impl serde::Serializer for Serializer {
     type Ok = Value<'static>;
