@@ -73,7 +73,7 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
         }
     }
     #[inline(always)]
-    #[allow(clippy::unwrap_used)]
+    #[allow(clippy::unwrap_used, clippy::uninit_vec)]
     fn parse_array(&mut self, len: usize) -> Value<'input> {
         // Rust doesn't optimize the normal loop away here
         // so we write our own avoiding the length
