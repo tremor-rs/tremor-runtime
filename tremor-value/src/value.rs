@@ -599,6 +599,7 @@ impl<'de> ValueDeserializer<'de> {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline(always))]
+    #[allow(clippy::uninit_vec)]
     fn parse_array(&mut self, len: usize) -> Value<'de> {
         // Rust doesn't optimize the normal loop away here
         // so we write our own avoiding the length
