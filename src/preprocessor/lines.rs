@@ -230,7 +230,6 @@ impl Preprocessor for Lines {
         } else {
             Ok(vec![])
         }
-        
     }
 }
 

@@ -441,7 +441,6 @@ async fn spawn_task(
                         }
                         wait_for_start_responses += start_points.len();
                         debug!("[Flow::{alias}] Waiting for {wait_for_start_responses} connectors to start.");
-
                     }
                 }
                 MsgWrapper::Msg(Msg::Start) => {
@@ -465,9 +464,7 @@ async fn spawn_task(
                     info!("[Flow::{alias}] Paused.");
                 }
                 MsgWrapper::Msg(Msg::Pause) => {
-                    info!(
-                        "[Flow::{alias}] Ignoring Pause message. Current state: {state}",
-                    );
+                    info!("[Flow::{alias}] Ignoring Pause message. Current state: {state}",);
                 }
                 MsgWrapper::Msg(Msg::Resume) if state == InstanceState::Paused => {
                     info!("[Flow::{alias}] Resuming...");
@@ -488,14 +485,10 @@ async fn spawn_task(
                     info!("[Flow::{alias}] Resumed.");
                 }
                 MsgWrapper::Msg(Msg::Resume) => {
-                    info!(
-                        "[Flow::{alias}] Ignoring Resume message. Current state: {state}",
-                    );
+                    info!("[Flow::{alias}] Ignoring Resume message. Current state: {state}",);
                 }
                 MsgWrapper::Msg(Msg::Drain(_sender)) if state == InstanceState::Draining => {
-                    info!(
-                        "[Flow::{alias}] Ignoring Drain message. Current state: {state}",
-                    );
+                    info!("[Flow::{alias}] Ignoring Drain message. Current state: {state}",);
                 }
                 MsgWrapper::Msg(Msg::Drain(sender)) => {
                     info!("[Flow::{alias}] Draining...");
@@ -572,15 +565,12 @@ async fn spawn_task(
                         }
                     }
 
-                    
                     for pipeline in &pipelines {
                         if let Err(e) = pipeline.stop().await {
-                            error!(
-                                "[Flow::{alias}] Error stopping pipeline {pipeline:?}: {e}"
-                            );
+                            error!("[Flow::{alias}] Error stopping pipeline {pipeline:?}: {e}");
                         }
                     }
-                    
+
                     state = InstanceState::Stopped;
                 }
                 MsgWrapper::Msg(Msg::Report(sender)) => {
