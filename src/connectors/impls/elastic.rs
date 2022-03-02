@@ -487,6 +487,9 @@ impl Sink for ElasticSink {
                             .await;
                         }
                     }
+
+                    drop(guard);
+
                     Ok(())
                 })?;
             Ok(SinkReply::NONE)

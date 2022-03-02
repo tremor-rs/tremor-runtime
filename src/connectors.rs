@@ -382,9 +382,7 @@ async fn connector_task(
     );
 
     let default_codec = connector.codec_requirements();
-    if connector.codec_requirements() == CodecReq::Structured
-        && (config.codec.is_some() || config.codec_map.is_some())
-    {
+    if connector.codec_requirements() == CodecReq::Structured && (config.codec.is_some()) {
         return Err(format!(
             "[Connector::{}] is a structured connector and can't be configured with a codec",
             alias
@@ -1178,6 +1176,8 @@ pub fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
         Box::new(impls::unix_socket::client::Builder::default()),
         Box::new(impls::http::client::Builder::default()),
         Box::new(impls::http::server::Builder::default()),
+        Box::new(impls::otel::client::Builder::default()),
+        Box::new(impls::otel::server::Builder::default()),
     ]
 }
 
