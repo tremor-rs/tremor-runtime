@@ -39,6 +39,8 @@ pub(crate) mod kv;
 pub(crate) mod metrics;
 /// Metronome
 pub(crate) mod metronome;
+/// OpenTelemetry
+pub(crate) mod otel;
 /// AWS S3 connectors
 pub(crate) mod s3;
 /// std streams connector (stdout, stderr, stdin)

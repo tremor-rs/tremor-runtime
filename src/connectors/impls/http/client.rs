@@ -109,6 +109,9 @@ impl Connector for HttpClient {
     }
 }
 
+/// Time to await an answer before handing control back to the source manager
+const SOURCE_RECV_INTERVAL: u64 = 50;
+
 struct HttpRequestSource {
     #[allow(dead_code)]
     http_meta: HttpRequestMeta,
@@ -120,11 +123,10 @@ impl Source for HttpRequestSource {
     async fn pull_data(&mut self, _pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
         match self.rx.try_recv() {
             Ok(receiver) => Ok(receiver),
-            Err(TryRecvError::Empty) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
+            Err(TryRecvError::Empty) => Ok(SourceReply::Empty(SOURCE_RECV_INTERVAL)),
             Err(TryRecvError::Closed) => {
-                // shit is on fire, we gotta reconnect
                 ctx.notifier().notify().await?;
-                Err("HTTP Request Source channel is closed, we gotta reconnect.".into())
+                Err("HTTP Request Source channel is closed, we have to reconnect.".into())
             }
         }
     }

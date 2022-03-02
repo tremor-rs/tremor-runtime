@@ -14,7 +14,6 @@
 
 use crate::connectors::ConnectorType;
 use crate::Result;
-use halfbrown::HashMap;
 use simd_json::ValueType;
 use tremor_pipeline::FN_REGISTRY;
 use tremor_script::{
@@ -143,19 +142,6 @@ pub struct Connector {
     /// Configuration map
     pub config: tremor_pipeline::ConfigMap,
 
-    /// Mapping from mime-type to codec used to handle requests/responses
-    /// with this mime-type
-    ///
-    /// e.g.:
-    ///       codec_map:
-    ///         "application/json": "json"
-    ///         "text/plain": "string"
-    ///
-    /// A default builtin codec mapping is defined
-    /// for msgpack, json, yaml and plaintext codecs with the common mime-types
-    ///
-    pub codec_map: Option<HashMap<String, Codec>>,
-
     // TODO: interceptors or configurable processors
     /// Preprocessor chain configuration
     pub preprocessors: Option<Vec<Preprocessor>>,
@@ -204,7 +190,6 @@ impl Connector {
         }
 
         // TODO: can we get hygenic errors here?
-        validate_type(&defn, "codec_map", ValueType::Object)?;
         validate_type(&defn, "preprocessors", ValueType::Array)?;
         validate_type(&defn, "postprocessors", ValueType::Array)?;
         validate_type(&defn, "metrics_interval_s", ValueType::U64)
@@ -214,14 +199,6 @@ impl Connector {
             id,
             connector_type,
             config: config,
-            codec_map: defn
-                .get_object("codec_map")
-                .map(|o| {
-                    o.iter()
-                        .map(|(k, v)| Ok((k.to_string(), Codec::from_value(v)?)))
-                        .collect::<Result<HashMap<_, _>>>()
-                })
-                .transpose()?,
             preprocessors: defn
                 .get_array("preprocessors")
                 .map(|o| {
@@ -293,6 +270,28 @@ mod tests {
                 randomized: true
             }
         ));
+        Ok(())
+    }
+
+    #[test]
+    fn test_config_builtin_preproc_with_config() -> Result<()> {
+        let c = Connector::from_defn(
+            "snot".to_string(),
+            ConnectorType::from("otel_client".to_string()),
+            literal!({
+                "preprocessors": [ {"name": "snot", "config": { "separator": "\n" }}],
+            }),
+        )?;
+        let pp = c.preprocessors;
+        assert!(pp.is_some());
+
+        if let Some(pp) = pp {
+            assert_eq!("snot", pp[0].name);
+            assert!(pp[0].config.is_some());
+            if let Some(config) = &pp[0].config {
+                assert_eq!("\n", config.get("separator").unwrap().to_string());
+            }
+        }
         Ok(())
     }
 }
