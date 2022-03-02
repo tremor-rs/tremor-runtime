@@ -151,7 +151,10 @@ pub fn finish(
         let mut data = match head.finish(None) {
             Ok(d) => d,
             Err(e) => {
-                error!("[{instance_id}] Preprocessor '{}' finish error: {e}", head.name());
+                error!(
+                    "[{instance_id}] Preprocessor '{}' finish error: {e}",
+                    head.name()
+                );
                 return Err(e);
             }
         };
@@ -162,7 +165,10 @@ pub fn finish(
                 match pp.finish(Some(d)) {
                     Ok(mut r) => data1.append(&mut r),
                     Err(e) => {
-                        error!("[{instance_id}] Preprocessor '{}' finish error: {e}", pp.name());
+                        error!(
+                            "[{instance_id}] Preprocessor '{}' finish error: {e}",
+                            pp.name()
+                        );
                         return Err(e);
                     }
                 }
