@@ -48,7 +48,7 @@ pub trait Preprocessor: Sync + Send {
     /// # Errors
     ///
     /// * if finishing fails for some reason lol
-    fn finish(&mut self, _data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn finish(&mut self, _data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
         Ok(vec![])
     }
 }
@@ -147,23 +147,32 @@ pub fn finish(
     preprocessors: &mut [Box<dyn Preprocessor>],
     instance_id: &str,
 ) -> Result<Vec<Vec<u8>>> {
-    let mut data = vec![vec![]];
-    let mut data1 = Vec::new();
-    for pp in preprocessors {
-        data1.clear();
-        for d in data.iter() {
-            match pp.finish(d) {
-                Ok(mut r) => data1.append(&mut r),
-                Err(e) => {
-                    error!("[{}] Preprocessor finish error: {}", instance_id, e);
-                    return Err(e);
+    if let Some((head, tail)) = preprocessors.split_first_mut() {
+        let mut data = match head.finish(None) {
+            Ok(d) => d,
+            Err(e) => {
+                error!("[{instance_id}] Preprocessor '{}' finish error: {e}", head.name());
+                return Err(e);
+            }
+        };
+        let mut data1 = Vec::new();
+        for pp in tail {
+            data1.clear();
+            for d in data.iter() {
+                match pp.finish(Some(d)) {
+                    Ok(mut r) => data1.append(&mut r),
+                    Err(e) => {
+                        error!("[{instance_id}] Preprocessor '{}' finish error: {e}", pp.name());
+                        return Err(e);
+                    }
                 }
             }
+            std::mem::swap(&mut data, &mut data1);
         }
-        std::mem::swap(&mut data, &mut data1);
+        Ok(data)
+    } else {
+        Ok(vec![])
     }
-
-    Ok(data)
 }
 
 trait SliceTrim {
@@ -510,7 +519,7 @@ mod test {
         let mut in_ns = 0u64;
         let decoded = pre_p.process(&mut in_ns, &encoded)?.pop().unwrap();
 
-        assert!(pre_p.finish(&vec![])?.is_empty());
+        assert!(pre_p.finish(None)?.is_empty());
 
         assert_eq!(data, decoded);
         assert_eq!(in_ns, 42);
@@ -697,7 +706,7 @@ mod test {
     fn test_filter_empty() -> Result<()> {
         let mut pre = FilterEmpty::default();
         assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &vec![]));
-        assert_eq!(Ok(vec![]), pre.finish(&vec![]));
+        assert_eq!(Ok(vec![]), pre.finish(None));
         Ok(())
     }
 
@@ -705,7 +714,7 @@ mod test {
     fn test_filter_null() -> Result<()> {
         let mut pre = FilterEmpty::default();
         assert_eq!(Ok(vec![]), pre.process(&mut 0_u64, &vec![]));
-        assert_eq!(Ok(vec![]), pre.finish(&vec![]));
+        assert_eq!(Ok(vec![]), pre.finish(None));
         Ok(())
     }
 
@@ -732,7 +741,7 @@ mod test {
             assert_eq!(&$internal, &out);
 
             // empty finish, no leftovers
-            assert!(pre.finish(&vec![])?.is_empty());
+            assert!(pre.finish(None)?.is_empty());
         };
     }
     macro_rules! assert_simple_symmetric {
@@ -757,7 +766,7 @@ mod test {
             // Assert actual decoded form is as expected
             assert_eq!(&$internal, &out);
             // assert empty finish, no leftovers
-            assert!(pre.finish(&vec![])?.is_empty())
+            assert!(pre.finish(None)?.is_empty())
         };
     }
 
@@ -785,7 +794,7 @@ mod test {
             assert_eq!(&$inbound, &out);
 
             // assert empty finish, no leftovers
-            assert!(pre.finish(&vec![])?.is_empty())
+            assert!(pre.finish(None)?.is_empty())
         };
     }
 
@@ -813,7 +822,7 @@ mod test {
             assert_eq!(&$outbound, &out);
 
             // assert empty finish, no leftovers
-            assert!(pre.finish(&vec![])?.is_empty())
+            assert!(pre.finish(None)?.is_empty())
         };
     }
 
@@ -846,11 +855,11 @@ mod test {
         let mut ingest_ns = 0_u64;
         let mut res = pre.process(&mut ingest_ns, input)?;
         let splitted = input
-            .split(|c| *c == '\n' as u8)
+            .split(|c| *c == b'\n')
             .map(|line| line.to_vec())
             .collect::<Vec<_>>();
         assert_eq!(splitted[..splitted.len() - 1].to_vec(), res);
-        let mut finished = pre.finish(&vec![])?;
+        let mut finished = pre.finish(None)?;
         res.append(&mut finished);
         assert_eq!(splitted, res);
         Ok(())

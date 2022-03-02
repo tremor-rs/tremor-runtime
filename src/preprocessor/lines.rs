@@ -16,7 +16,7 @@ use std::num::NonZeroUsize;
 
 use super::Preprocessor;
 use crate::connectors::prelude::DEFAULT_BUF_SIZE;
-use crate::errors::{ErrorKind, Result};
+use crate::errors::{Kind as ErrorKind, Result};
 use memchr::memchr_iter;
 use tremor_pipeline::{ConfigImpl, ConfigMap};
 
@@ -206,7 +206,7 @@ impl Preprocessor for Lines {
                 last_idx = split_point + 1;
             }
             // push the rest out, if finished or not
-            if last_idx < data.len() {
+            if last_idx <= data.len() {
                 events.push(data[last_idx..].to_vec());
             }
         }
@@ -216,14 +216,21 @@ impl Preprocessor for Lines {
         Ok(events)
     }
 
-    fn finish(&mut self, data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn finish(&mut self, data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
         let mut tmp = 0_u64;
-        self.process(&mut tmp, data).map(|mut processed| {
-            if !self.buffer.is_empty() {
-                processed.push(self.buffer.split_off(0));
-            }
-            processed
-        })
+        if let Some(data) = data {
+            self.process(&mut tmp, data).map(|mut processed| {
+                if !self.buffer.is_empty() {
+                    processed.push(self.buffer.split_off(0));
+                }
+                processed
+            })
+        } else if !self.buffer.is_empty() {
+            Ok(vec![self.buffer.split_off(0)])
+        } else {
+            Ok(vec![])
+        }
+        
     }
 }
 
@@ -299,7 +306,7 @@ mod test {
         assert_eq!(r.pop().unwrap(), b"0123456789");
         assert_eq!(r.pop().unwrap(), b"012345");
         assert!(r.is_empty());
-        assert!(pp.finish(&[])?.is_empty());
+        assert!(pp.finish(None)?.is_empty());
 
         Ok(())
     }
@@ -369,7 +376,7 @@ mod test {
         assert_eq!(r.pop().unwrap(), b"0123456789");
         assert_eq!(r.pop().unwrap(), b"012345");
         assert!(r.is_empty());
-        assert!(pp.finish(&[])?.is_empty());
+        assert!(pp.finish(None)?.is_empty());
 
         Ok(())
     }
@@ -483,7 +490,7 @@ mod test {
         assert_eq!(r.pop().unwrap(), b"0123456789");
         assert_eq!(r.pop().unwrap(), b"012345");
         assert!(r.is_empty());
-        let r = pp.finish(&[])?;
+        let r = pp.finish(None)?;
         assert!(r.is_empty());
 
         Ok(())
@@ -503,7 +510,7 @@ mod test {
         let mut r = pp.process(&mut i, b"\n")?;
         assert_eq!(r.pop().unwrap(), b"012345");
         assert!(r.is_empty());
-        assert!(pp.finish(&[])?.is_empty());
+        assert!(pp.finish(None)?.is_empty());
 
         Ok(())
     }
@@ -523,7 +530,7 @@ mod test {
         assert_eq!(r.pop().unwrap(), b"012345");
         assert!(r.is_empty());
 
-        let mut r = pp.finish(&[])?;
+        let mut r = pp.finish(None)?;
         assert_eq!(r.pop().unwrap(), b"abc");
         assert!(r.is_empty());
 
@@ -562,7 +569,7 @@ mod test {
         let mut r = pp.process(&mut ingest_ns, data)?;
         assert_eq!(r.pop().unwrap(), b"4567890123");
         assert!(r.is_empty());
-        let mut r = pp.finish(&[])?;
+        let mut r = pp.finish(None)?;
         assert_eq!(r.pop().unwrap(), b"456");
         assert!(r.is_empty());
         assert!(pp.buffer.is_empty());
@@ -580,7 +587,7 @@ mod test {
         assert_eq!(2, r.len());
         assert_eq!(9998, r[0].len());
         assert_eq!(1, r[1].len());
-        let r = pp.finish(&[])?;
+        let r = pp.finish(None)?;
         assert_eq!(0, dbg!(r).len());
         Ok(())
     }
@@ -601,9 +608,54 @@ mod test {
         assert_eq!(1, r.len());
         assert_eq!(9998, r[0].len());
 
-        let r = pp.finish(&[])?;
+        let r = pp.finish(None)?;
         assert_eq!(1, r.len());
         assert_eq!(1, r[0].len());
+        Ok(())
+    }
+
+    #[test]
+    fn test_finish_chain_unbuffered() -> Result<()> {
+        let mut ingest_ns = 0;
+        let config = Some(literal!({
+            "separator": "|",
+            "max_length": 0,
+            "buffered": false
+        }));
+        let mut pp = Lines::from_config(&config)?;
+        let mut data = [b'A'; 100];
+        data[89] = b'|';
+        let r = pp.process(&mut ingest_ns, &data)?;
+        assert_eq!(2, r.len());
+        assert_eq!(89, r[0].len());
+        assert_eq!(10, r[1].len());
+
+        let r = pp.finish(Some(&[b'|']))?;
+        assert_eq!(2, r.len());
+        assert_eq!(0, r[0].len());
+        assert_eq!(0, r[1].len());
+        Ok(())
+    }
+
+    #[test]
+    fn test_finish_chain_buffered() -> Result<()> {
+        let mut ingest_ns = 0;
+        let config = Some(literal!({
+            "separator": "|",
+            "max_length": 0,
+            "buffered": true
+        }));
+        let mut pp = Lines::from_config(&config)?;
+        let mut data = [b'A'; 100];
+        data[89] = b'|';
+        let r = pp.process(&mut ingest_ns, &data)?;
+        assert_eq!(1, r.len());
+        assert_eq!(89, r[0].len());
+
+        let r = pp.finish(Some(&[b'|', b'A']))?;
+        assert_eq!(2, r.len());
+        assert_eq!(10, r[0].len());
+        assert_eq!(1, r[1].len());
         Ok(())
     }
 }

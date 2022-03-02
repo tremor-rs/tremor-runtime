@@ -141,7 +141,7 @@ pause_flow_connector_post(_, _, Res) ->
     io:format("Error: unexpected pause flow connector body response ~p~n", [Res]),
     false.
 
-pause_flow_connector_next(S = #state{}, _Res, [_C, {_Flow, Paused = #{<<"status">> := Status} }]) when (Status /= <<"paused">>) and (Status /= <<"running">>) ->
+pause_flow_connector_next(S = #state{}, _Res, [_C, {_Flow, _Paused = #{<<"status">> := Status} }]) when (Status /= <<"paused">>) and (Status /= <<"running">>) ->
     S;
 pause_flow_connector_next(S = #state{connectors = ConnectorsMap}, _Res, [_C, {Flow, Paused}]) ->
     FlowConnectors = maps:get(Flow, ConnectorsMap, []),
