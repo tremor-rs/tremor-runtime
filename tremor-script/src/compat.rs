@@ -51,7 +51,11 @@ fn eval(src: &str) -> Result<String> {
 
 #[no_mangle]
 
-pub extern "C" fn tremor_script_c_eval(script: *const c_char, dst: *mut c_char, len: usize) -> usize {
+pub extern "C" fn tremor_script_c_eval(
+    script: *const c_char,
+    dst: *mut c_char,
+    len: usize,
+) -> usize {
     let cstr = unsafe { CStr::from_ptr(script) };
     match cstr
         .to_str()

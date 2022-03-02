@@ -361,10 +361,8 @@ where
                     #[cfg(feature = "erlang-float-testing")]
                     Value::Static(value_trait::StaticNode::F64(_float)) => {
                         *string = StrLitElement::Lit("42".into())
-                    },
-                    other => {
-                        *string = StrLitElement::Lit(other.json_string()?.into())
                     }
+                    other => *string = StrLitElement::Lit(other.json_string()?.into()),
                 }
             }
             other @ StrLitElement::Expr(_) => *string = other,

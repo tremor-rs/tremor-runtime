@@ -701,7 +701,7 @@ where
                         info!("{} Connected.", &self.ctx);
                         Connectivity::Connected
                     }
-                    Ok(false) | Err(_) => Connectivity::Disconnected
+                    Ok(false) | Err(_) => Connectivity::Disconnected,
                 };
                 self.ctx.log_err(
                     sender.send(connect_result).await,
@@ -771,7 +771,6 @@ where
                     );
                     self.state = Drained;
                 } else {
-
                     self.connector_channel = Some(drained_sender);
                     if !self.is_asynchronous || self.connectivity == Connectivity::Disconnected {
                         // non-asynchronous sources or disconnected sources are considered immediately drained
@@ -841,25 +840,16 @@ where
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(CbAction::Drained(uid), _id) => {
-                debug!(
-                    "{} Drained contraflow message for {}",
-                    &self.ctx, uid
-                );
+                debug!("{} Drained contraflow message for {}", &self.ctx, uid);
                 // only account for Drained CF which we caused
                 // as CF is sent back the DAG to all destinations
                 if uid == self.ctx.uid {
                     self.expected_drained = self.expected_drained.saturating_sub(1);
-                    debug!(
-                        "{} Drained message is for us!",
-                        &self.ctx
-                    );
+                    debug!("{} Drained message is for us!", &self.ctx);
                     if self.expected_drained == 0 {
                         // we received 1 drain CB event per connected pipeline (hopefully)
                         if let Some(connector_channel) = self.connector_channel.as_ref() {
-                            debug!(
-                                "{} Drain completed, sending data now!",
-                                &self.ctx
-                            );
+                            debug!("{} Drain completed, sending data now!", &self.ctx);
                             if connector_channel.send(Msg::SourceDrained).await.is_err() {
                                 error!(
                                     "{} Error sending SourceDrained message to Connector",
