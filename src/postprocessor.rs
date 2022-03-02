@@ -45,7 +45,7 @@ pub trait Postprocessor: Send + Sync {
     ///
     /// # Errors
     ///   * if the postprocessor could not be finished correctly
-    fn finish(&mut self, _data: &[u8]) -> Result<Vec<Vec<u8>>> {
+    fn finish(&mut self, _data: Option<&[u8]>) -> Result<Vec<Vec<u8>>> {
         Ok(vec![])
     }
 }
