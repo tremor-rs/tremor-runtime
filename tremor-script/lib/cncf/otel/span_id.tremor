@@ -36,7 +36,7 @@ fn is_valid(span_id) of
       { "string": span_id != "0000000000000000" and string::bytes(span_id) == 16, "value": span_id }
     # Binary representation
     case(span_id) when type::is_binary(span_id) =>
-      let arr = binary::into_bytes(span_id),
+      let arr = binary::into_bytes(span_id);
       { "binary": array::len(arr) == 8 and span_id != << 0:64 >>, "value": span_id }
     # Array representation
     case(span_id) when type::is_array(span_id) =>
