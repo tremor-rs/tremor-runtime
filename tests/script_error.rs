@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use pretty_assertions::assert_eq;
-use std::io::prelude::*;
+use std::{io::prelude::*, sync::Mutex};
 use tremor_common::file;
-use tremor_script::FN_REGISTRY;
-
 use tremor_runtime::errors::*;
-use tremor_script::highlighter::{Dumb};
-use tremor_script::ModuleManager;
-use tremor_script::Script;
+use tremor_script::{highlighter::Dumb, ModuleManager, Script, FN_REGISTRY};
+
+lazy_static::lazy_static! {
+    static ref UNIQUE: Mutex<()> = Mutex::new(());
+}
 
 macro_rules! test_cases {
     ($($file:ident),* ,) => {
@@ -43,13 +43,16 @@ macro_rules! test_cases {
                 file.read_to_string(&mut err)?;
                 let err = err.trim();
 
+                let l = UNIQUE.lock();
+                ModuleManager::clear_path()?;
                 ModuleManager::add_path(script_dir)?;
                 ModuleManager::add_path("tremor-script/lib")?;
                 let s = Script::parse(&contents, &*FN_REGISTRY.read()?);
+                drop(l);
                 if let Err(e) = s {
                     let got = Dumb::error_to_string(&e)?;
-                    print!("{}", got);
-                    assert_eq!(err, got);
+                    println!("{}", got);
+                    assert_eq!(err.trim(), got.trim());
                 } else {
                     println!("Expected error, but got succeess :/");
                     assert!(false);
@@ -82,13 +85,16 @@ macro_rules! ignored_cases {
                 file.read_to_string(&mut err)?;
                 let _err = err.trim();
 
+                let l = UNIQUE.lock();
+                ModuleManager::clear_path()?;
                 ModuleManager::add_path(script_dir)?;
                 ModuleManager::add_path("tremor-script/lib")?;
                 let s = Script::parse(&contents, &*FN_REGISTRY.read()?);
+                drop(l);
                 if let Err(e) = s {
                     let got = Dumb::error_to_string(&e)?;
-                    print!("{}", got);
-                    assert_eq!(err, got);
+                    println!("{}", got);
+                    assert_eq!(err.trim(), got.trim());
                 } else {
                     println!("Expected error, but got succeess :(");
                     assert!(false);
@@ -127,7 +133,6 @@ test_cases!(
     pp_unrecognized_token5,
     pp_mod_not_found,
     unknown_function_in_function,
-    mod_bound_cross,
     pp_cyclic,
     pp_nest_cyclic,
     // INSERT
@@ -142,7 +147,6 @@ test_cases!(
     const_expr_reverse_range,
     const_expr_unknown_key,
     patch_non_str_key,
-    double_const_mod,
     bin_invalid_bits,
     bin_invalid_type,
     merge_ident,

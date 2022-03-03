@@ -1137,7 +1137,7 @@ Assignment: ExprRaw<'input> = {
 
 Patch: PatchRaw<'input> = {
   // NOTE: ASSUMPTION array and literal targets are banned
-    <start:@L> "patch" <target:ComplexExprImut> <end:@L> "of" <operations:PatchOperations> "end" => PatchRaw { target, operations, mid: NodeMeta::new_box(start, end) }
+    <start:@L> "patch" <target:ComplexExprImut> "of" <operations:PatchOperations> "end" <end:@L> => PatchRaw { target, operations, mid: NodeMeta::new_box(start, end) }
 }
 
 PatchOperations: PatchOperationsRaw<'input> = {
@@ -1154,16 +1154,16 @@ PatchField: StringLitRaw<'input> = {
 }
 
 PatchOperationClause: PatchOperationRaw<'input> = {
-    "insert" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperationRaw::Insert{ ident, expr },
-    "upsert" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperationRaw::Upsert{ ident, expr },
-    "update" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperationRaw::Update{ ident, expr },
-    "erase" <ident:PatchField> => PatchOperationRaw::Erase{ ident },
-    "move" <from:PatchField> "=>" <to:PatchField>  => PatchOperationRaw::Move{ from, to },
-    "copy" <from:PatchField> "=>" <to:PatchField>  => PatchOperationRaw::Copy{ from, to },
-    "merge" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperationRaw::Merge { ident, expr },
-    "merge" "=>" <expr:ComplexExprImut> => PatchOperationRaw::MergeRecord { expr },
-    "default" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperationRaw::Default { ident, expr },
-    "default" "=>" <expr:ComplexExprImut> => PatchOperationRaw::DefaultRecord { expr },
+    <start: @L> "insert" <ident:PatchField> "=>" <expr:ComplexExprImut> <end:@L>=> PatchOperationRaw::Insert{ ident, expr, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "upsert" <ident:PatchField> "=>" <expr:ComplexExprImut> <end:@L>=> PatchOperationRaw::Upsert{ ident, expr, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "update" <ident:PatchField> "=>" <expr:ComplexExprImut> <end:@L>=> PatchOperationRaw::Update{ ident, expr, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "erase" <ident:PatchField> <end:@L>=> PatchOperationRaw::Erase{ ident, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "move" <from:PatchField> "=>" <to:PatchField>  <end:@L>=> PatchOperationRaw::Move{ from, to, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "copy" <from:PatchField> "=>" <to:PatchField> <end:@L> => PatchOperationRaw::Copy{ from, to, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "merge" <ident:PatchField> "=>" <expr:ComplexExprImut> <end:@L>=> PatchOperationRaw::Merge { ident, expr, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "merge" "=>" <expr:ComplexExprImut> <end:@L>=> PatchOperationRaw::MergeRecord { expr, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "default" <ident:PatchField> "=>" <expr:ComplexExprImut> <end:@L>=> PatchOperationRaw::Default { ident, expr, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "default" "=>" <expr:ComplexExprImut> <end:@L>=> PatchOperationRaw::DefaultRecord { expr, mid: NodeMeta::new_box(start, end) },
 }
 
 ////////////////////////////// merge expression  //////////////////////////////

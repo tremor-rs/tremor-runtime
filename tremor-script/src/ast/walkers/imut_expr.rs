@@ -98,22 +98,23 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
             self.leave_patch_operation(op)
         );
         match op {
-            PatchOperation::Insert { ident, expr }
-            | PatchOperation::Default { ident, expr }
-            | PatchOperation::Merge { ident, expr }
-            | PatchOperation::Update { ident, expr }
-            | PatchOperation::Upsert { ident, expr } => {
+            PatchOperation::Insert { ident, expr, .. }
+            | PatchOperation::Default { ident, expr, .. }
+            | PatchOperation::Merge { ident, expr, .. }
+            | PatchOperation::Update { ident, expr, .. }
+            | PatchOperation::Upsert { ident, expr, .. } => {
                 self.walk_string(ident)?;
                 self.walk_expr(expr)?;
             }
-            PatchOperation::Copy { from, to } | PatchOperation::Move { from, to } => {
+            PatchOperation::Copy { from, to, .. } | PatchOperation::Move { from, to, .. } => {
                 self.walk_string(from)?;
                 self.walk_string(to)?;
             }
-            PatchOperation::Erase { ident } => {
+            PatchOperation::Erase { ident, .. } => {
                 self.walk_string(ident)?;
             }
-            PatchOperation::DefaultRecord { expr } | PatchOperation::MergeRecord { expr } => {
+            PatchOperation::DefaultRecord { expr, .. }
+            | PatchOperation::MergeRecord { expr, .. } => {
                 self.walk_expr(expr)?;
             }
         }

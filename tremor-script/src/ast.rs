@@ -1433,6 +1433,8 @@ pub enum PatchOperation<'script> {
         ident: StringLit<'script>,
         /// Value expression
         expr: ImutExpr<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Insert or update operation
     Upsert {
@@ -1440,6 +1442,8 @@ pub enum PatchOperation<'script> {
         ident: StringLit<'script>,
         /// Value expression
         expr: ImutExpr<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Update only operation
     Update {
@@ -1447,11 +1451,15 @@ pub enum PatchOperation<'script> {
         ident: StringLit<'script>,
         /// Value expression
         expr: ImutExpr<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Erase operation
     Erase {
         /// Field
         ident: StringLit<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Copy operation
     Copy {
@@ -1459,6 +1467,8 @@ pub enum PatchOperation<'script> {
         from: StringLit<'script>,
         /// To field
         to: StringLit<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Move operation
     Move {
@@ -1466,6 +1476,8 @@ pub enum PatchOperation<'script> {
         from: StringLit<'script>,
         /// Field to
         to: StringLit<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Merge convenience operation
     Merge {
@@ -1473,11 +1485,15 @@ pub enum PatchOperation<'script> {
         ident: StringLit<'script>,
         /// Value
         expr: ImutExpr<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Tuple based merge operation
     MergeRecord {
         /// Value
         expr: ImutExpr<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Merge convenience operation
     Default {
@@ -1485,11 +1501,15 @@ pub enum PatchOperation<'script> {
         ident: StringLit<'script>,
         /// Value
         expr: ImutExpr<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Tuple based merge operation
     DefaultRecord {
         /// Value
         expr: ImutExpr<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
 }
 

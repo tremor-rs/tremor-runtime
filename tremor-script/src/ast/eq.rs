@@ -314,47 +314,66 @@ impl<'script> AstEq for PatchOperation<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
             (
-                Self::Insert { ident, expr },
+                Self::Insert { ident, expr, .. },
                 Self::Insert {
                     ident: i2,
                     expr: e2,
+                    ..
                 },
             )
             | (
-                Self::Upsert { ident, expr },
+                Self::Upsert { ident, expr, .. },
                 Self::Upsert {
                     ident: i2,
                     expr: e2,
+                    ..
                 },
             )
             | (
-                Self::Update { ident, expr },
+                Self::Update { ident, expr, .. },
                 Self::Update {
                     ident: i2,
                     expr: e2,
+                    ..
                 },
             )
             | (
-                Self::Default { ident, expr },
+                Self::Default { ident, expr, .. },
                 Self::Default {
                     ident: i2,
                     expr: e2,
+                    ..
                 },
             )
             | (
-                Self::Merge { ident, expr },
+                Self::Merge { ident, expr, .. },
                 Self::Merge {
                     ident: i2,
                     expr: e2,
+                    ..
                 },
             ) => ident.ast_eq(i2) && expr.ast_eq(e2),
-            (Self::Erase { ident: i1 }, Self::Erase { ident: i2 }) => i1.ast_eq(i2),
-            (Self::Copy { from: f1, to: t1 }, Self::Copy { from: f2, to: t2 })
-            | (Self::Move { from: f1, to: t1 }, Self::Move { from: f2, to: t2 }) => {
-                f1.ast_eq(f2) && t1.ast_eq(t2)
+            (Self::Erase { ident: i1, .. }, Self::Erase { ident: i2, .. }) => i1.ast_eq(i2),
+            (
+                Self::Copy {
+                    from: f1, to: t1, ..
+                },
+                Self::Copy {
+                    from: f2, to: t2, ..
+                },
+            )
+            | (
+                Self::Move {
+                    from: f1, to: t1, ..
+                },
+                Self::Move {
+                    from: f2, to: t2, ..
+                },
+            ) => f1.ast_eq(f2) && t1.ast_eq(t2),
+            (Self::DefaultRecord { expr: e1, .. }, Self::DefaultRecord { expr: e2, .. })
+            | (Self::MergeRecord { expr: e1, .. }, Self::MergeRecord { expr: e2, .. }) => {
+                e1.ast_eq(e2)
             }
-            (Self::DefaultRecord { expr: e1 }, Self::DefaultRecord { expr: e2 })
-            | (Self::MergeRecord { expr: e1 }, Self::MergeRecord { expr: e2 }) => e1.ast_eq(e2),
             _ => false,
         }
     }
@@ -1194,13 +1213,6 @@ mod tests {
             segments: vec![]
         }))
         .ast_eq(&local));
-        // is_const different
-        assert!(!ImutExpr::Path(Path::Local(LocalPath {
-            idx: 1,
-            mid: NodeMeta::dummy(),
-            segments: vec![]
-        }))
-        .ast_eq(&local));
 
         assert!(Path::Local(LocalPath {
             idx: 1,
@@ -1216,84 +1228,104 @@ mod tests {
         assert!(PatchOperation::Insert {
             ident: "snot".into(),
             expr: ImutExpr::null_lit(),
+            mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::Insert {
             ident: "snot".into(),
             expr: ImutExpr::null_lit(),
+            mid: NodeMeta::dummy(),
         }));
 
         assert!(PatchOperation::Upsert {
             ident: "snot".into(),
             expr: ImutExpr::null_lit(),
+            mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::Upsert {
             ident: "snot".into(),
             expr: ImutExpr::null_lit(),
+            mid: NodeMeta::dummy(),
         }));
 
         assert!(PatchOperation::Update {
             ident: "snot".into(),
             expr: ImutExpr::null_lit(),
+            mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::Update {
             ident: "snot".into(),
             expr: ImutExpr::null_lit(),
+            mid: NodeMeta::dummy(),
         }));
 
         assert!(PatchOperation::Erase {
             ident: "snot".into(),
+            mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::Erase {
             ident: "snot".into(),
+            mid: NodeMeta::dummy(),
         }));
 
         assert!(PatchOperation::Copy {
             from: "snot".into(),
             to: "badger".into(),
+            mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::Copy {
             from: "snot".into(),
             to: "badger".into(),
+            mid: NodeMeta::dummy(),
         }));
         assert!(PatchOperation::Move {
             from: "snot".into(),
             to: "badger".into(),
+            mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::Move {
             from: "snot".into(),
             to: "badger".into(),
+            mid: NodeMeta::dummy(),
         }));
 
         assert!(PatchOperation::Merge {
             ident: "snot".into(),
             expr: ImutExpr::null_lit(),
+            mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::Merge {
             ident: "snot".into(),
             expr: ImutExpr::null_lit(),
+            mid: NodeMeta::dummy(),
         }));
 
         assert!(PatchOperation::MergeRecord {
             expr: ImutExpr::null_lit(),
+            mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::MergeRecord {
             expr: ImutExpr::null_lit(),
+            mid: NodeMeta::dummy(),
         }));
 
         assert!(PatchOperation::Default {
             ident: "snot".into(),
             expr: ImutExpr::null_lit(),
+            mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::Default {
             ident: "snot".into(),
             expr: ImutExpr::null_lit(),
+            mid: NodeMeta::dummy(),
         }));
 
         assert!(PatchOperation::DefaultRecord {
             expr: ImutExpr::null_lit(),
+            mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::DefaultRecord {
             expr: ImutExpr::null_lit(),
+            mid: NodeMeta::dummy(),
         }));
     }
 }

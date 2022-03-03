@@ -1,2 +1,5 @@
 Error: 
-      | ^ function a already defined.
+    5 | fn a () with
+    6 |   2
+    7 | end;
+      | ^^^ Can't define the function `a` twice
