@@ -2,11 +2,11 @@ define pipeline in
 pipeline
     define script process
     script
-    use std::json;
-    let $kv = event[0].kv;
-    let event = event[1];
-    let $correlation = json::encode(event);
-    event
+        use std::json;
+        let $kv = event[0].kv;
+        let event = event[1];
+        let $correlation = json::encode(event);
+        event
     end;
 
     create script process;
@@ -42,19 +42,7 @@ define pipeline out
 into out, exit
 pipeline
     use std::string;
-
-    mod helpers with
-        use std::string;
-        # checks if the event is the successful response of a put command for the key "exit" with the value "exit"
-        fn is_put_exit(payload, meta) with
-            let meta_ok = match meta of
-              case %{kv ~= %{op == "put", ok == string::into_binary("exit")}} => true
-              default => false
-            end;
-            meta_ok and payload == "exit"
-        end;
-    end;
-
+    use helpers;
     select {
         "event": event,
         "meta": match $ of
