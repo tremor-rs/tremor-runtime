@@ -530,6 +530,7 @@ fn test_transactional_multiple_windows() -> Result<()> {
     Ok(())
 }
 
+// FIXME: why is this floppy
 #[test]
 fn count_tilt() -> Result<()> {
     // Windows are 15s and 30s
@@ -557,7 +558,7 @@ fn count_tilt() -> Result<()> {
     assert_eq!("out", out);
     assert_eq!(*event.data.suffix().value(), 2);
     // Add another event prior to 30
-    assert!(try_enqueue(&mut op, test_event(17))?.is_none());
+    assert!(try_enqueue(&mut op, test_event(16))?.is_none());
     // This emits only the initial event since the rollup
     // will only be emitted once it gets the first event
     // of the next window

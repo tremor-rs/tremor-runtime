@@ -1,3 +1,3 @@
 Error: 
     1 | 12.0j5
-      |     ^ An unexpected character 'j' was found
+      | ^^^^ An unexpected character 'j' was found

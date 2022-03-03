@@ -135,6 +135,12 @@ pub trait BaseExpr: Clone {
     }
 }
 
+impl BaseExpr for NodeMeta {
+    fn meta(&self) -> &NodeMeta {
+        &self
+    }
+}
+
 impl Ranged for (Location, Location) {
     fn s(&self) -> Location {
         self.0

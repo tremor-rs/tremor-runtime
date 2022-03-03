@@ -1,6 +1,3 @@
 Error: 
-    3 |     42
-    4 |   end;
-    5 | end;
-    6 | snot::badger(event)
+    1 | snot::badger(event)
       | ^^^^^^^^^^^^^^^^^^^ Call to undefined function snot::badger

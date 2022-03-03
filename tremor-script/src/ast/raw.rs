@@ -1086,6 +1086,8 @@ pub enum PatchOperationRaw<'script> {
         ident: StringLitRaw<'script>,
         /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
+        mid: Box<NodeMeta>,
     },
     /// we're forced to make this pub because of lalrpop
     Upsert {
@@ -1093,6 +1095,8 @@ pub enum PatchOperationRaw<'script> {
         ident: StringLitRaw<'script>,
         /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
+        mid: Box<NodeMeta>,
     },
     /// we're forced to make this pub because of lalrpop
     Update {
@@ -1100,11 +1104,15 @@ pub enum PatchOperationRaw<'script> {
         ident: StringLitRaw<'script>,
         /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
+        mid: Box<NodeMeta>,
     },
     /// we're forced to make this pub because of lalrpop
     Erase {
         /// we're forced to make this pub because of lalrpop
         ident: StringLitRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
+        mid: Box<NodeMeta>,
     },
     /// we're forced to make this pub because of lalrpop
     Copy {
@@ -1112,6 +1120,8 @@ pub enum PatchOperationRaw<'script> {
         from: StringLitRaw<'script>,
         /// we're forced to make this pub because of lalrpop
         to: StringLitRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
+        mid: Box<NodeMeta>,
     },
     /// we're forced to make this pub because of lalrpop
     Move {
@@ -1119,6 +1129,8 @@ pub enum PatchOperationRaw<'script> {
         from: StringLitRaw<'script>,
         /// we're forced to make this pub because of lalrpop
         to: StringLitRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
+        mid: Box<NodeMeta>,
     },
     /// we're forced to make this pub because of lalrpop
     Merge {
@@ -1126,11 +1138,15 @@ pub enum PatchOperationRaw<'script> {
         ident: StringLitRaw<'script>,
         /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
+        mid: Box<NodeMeta>,
     },
     /// we're forced to make this pub because of lalrpop
     MergeRecord {
         /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
+        mid: Box<NodeMeta>,
     },
     /// we're forced to make this pub because of lalrpop
     Default {
@@ -1138,11 +1154,15 @@ pub enum PatchOperationRaw<'script> {
         ident: StringLitRaw<'script>,
         /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
+        mid: Box<NodeMeta>,
     },
     /// we're forced to make this pub because of lalrpop
     DefaultRecord {
         /// we're forced to make this pub because of lalrpop
         expr: ImutExprRaw<'script>,
+        /// we're forced to make this pub because of lalrpop
+        mid: Box<NodeMeta>,
     },
 }
 
@@ -1151,42 +1171,54 @@ impl<'script> Upable<'script> for PatchOperationRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         use PatchOperationRaw::{Copy, Erase, Insert, Merge, MergeRecord, Move, Update, Upsert};
         Ok(match self {
-            Insert { ident, expr } => PatchOperation::Insert {
+            Insert { mid, ident, expr } => PatchOperation::Insert {
+                mid,
                 ident: ident.up(helper)?,
                 expr: expr.up(helper)?,
             },
-            Upsert { ident, expr } => PatchOperation::Upsert {
+            Upsert { mid, ident, expr } => PatchOperation::Upsert {
+                mid,
                 ident: ident.up(helper)?,
                 expr: expr.up(helper)?,
             },
-            Update { ident, expr } => PatchOperation::Update {
+            Update { mid, ident, expr } => PatchOperation::Update {
+                mid,
                 ident: ident.up(helper)?,
                 expr: expr.up(helper)?,
             },
-            Erase { ident } => PatchOperation::Erase {
+            Erase { mid, ident } => PatchOperation::Erase {
+                mid,
                 ident: ident.up(helper)?,
             },
-            Copy { from, to } => PatchOperation::Copy {
+            Copy { mid, from, to } => PatchOperation::Copy {
+                mid,
                 from: from.up(helper)?,
                 to: to.up(helper)?,
             },
-            Move { from, to } => PatchOperation::Move {
+            Move { mid, from, to } => PatchOperation::Move {
+                mid,
                 from: from.up(helper)?,
                 to: to.up(helper)?,
             },
-            Merge { expr, ident, .. } => PatchOperation::Merge {
+            Merge {
+                mid, expr, ident, ..
+            } => PatchOperation::Merge {
+                mid,
                 ident: ident.up(helper)?,
                 expr: expr.up(helper)?,
             },
-            MergeRecord { expr } => PatchOperation::MergeRecord {
+            MergeRecord { mid, expr } => PatchOperation::MergeRecord {
+                mid,
                 expr: expr.up(helper)?,
             },
-            PatchOperationRaw::Default { ident, expr } => PatchOperation::Default {
+            PatchOperationRaw::Default { mid, ident, expr } => PatchOperation::Default {
                 ident: ident.up(helper)?,
+                mid,
                 expr: expr.up(helper)?,
             },
-            PatchOperationRaw::DefaultRecord { expr } => PatchOperation::DefaultRecord {
+            PatchOperationRaw::DefaultRecord { mid, expr } => PatchOperation::DefaultRecord {
                 expr: expr.up(helper)?,
+                mid,
             },
         })
     }
@@ -2207,7 +2239,6 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                     args,
                 })
             } else {
-                dbg!(&helper.scope);
                 Err(
                     ErrorKind::MissingFunction(outer, inner, node_id.module, node_id.id, None)
                         .into(),
