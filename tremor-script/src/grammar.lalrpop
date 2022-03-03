@@ -253,6 +253,7 @@ FlowStmtInner: FlowStmtRaw<'input> = {
     <Define> => <>,
     <Create> => FlowStmtRaw::Create(<>),
     <Connect> => FlowStmtRaw::Connect(<>),
+    <Use> => FlowStmtRaw::Use(<>)
 }
 
 Define: FlowStmtRaw<'input> =  {

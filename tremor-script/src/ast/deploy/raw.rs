@@ -282,8 +282,20 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
 
         let mut connections = Vec::new();
         let mut creates = Vec::new();
-        for link in self.stmts {
-            match link {
+        for stmt in self.stmts {
+            match stmt {
+                FlowStmtRaw::Use(UseRaw { alias, module, mid }) => {
+                    let range = mid.range;
+                    let module_id = ModuleManager::load(&module).map_err(|err| match err {
+                        Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
+                            ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
+                            state,
+                        ),
+                        _ => err,
+                    })?;
+                    let alias = alias.unwrap_or_else(|| module.id.clone());
+                    helper.scope().add_module_alias(alias, module_id);
+                }
                 FlowStmtRaw::ConnectorDefinition(stmt) => {
                     let stmt = stmt.up(helper)?;
                     helper.scope.insert_connector(stmt)?;
@@ -321,20 +333,15 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
     }
 }
 
-pub type FlowStmtsRaw<'script> = Vec<FlowStmtRaw<'script>>;
-
-/// we're forced to make this pub because of lalrpop
+pub(crate) type FlowStmtsRaw<'script> = Vec<FlowStmtRaw<'script>>;
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub enum FlowStmtRaw<'script> {
-    /// we're forced to make this pub because of lalrpop
+pub(crate) enum FlowStmtRaw<'script> {
     ConnectorDefinition(ConnectorDefinitionRaw<'script>),
-    /// we're forced to make this pub because of lalrpop
     PipelineDefinition(PipelineDefinitionRaw<'script>),
-    /// we're forced to make this pub because of lalrpop
     Connect(ConnectStmtRaw<'script>),
-    /// we're forced to make this pub because of lalrpop
     Create(CreateStmtRaw<'script>),
+    Use(UseRaw),
 }
 
 /// we're forced to make this pub because of lalrpop
