@@ -1,0 +1,8 @@
+[
+  "opentelemetry",
+  "otel",
+  "otlp",
+  "echo",
+  "connectors",
+  "connector"
+]
