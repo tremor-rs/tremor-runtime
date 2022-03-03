@@ -8,7 +8,7 @@ flow
   with
 #    preprocessors = ["lines"],
     postprocessors = ["lines"],
-    codec = "json",
+    codec = "json-sorted",
     config = {
       "url": "http://localhost:65535/",
       "method": "post",
@@ -26,7 +26,7 @@ flow
   with
     preprocessors = ["lines"],
     postprocessors = ["lines"],
-    codec = "json",
+    codec = "json-sorted",
     config = {
       "url": "http://localhost:65535/",
     }
