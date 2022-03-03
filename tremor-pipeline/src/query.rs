@@ -96,7 +96,7 @@ fn resolve_output_port(port: &(Ident, Ident)) -> OutputPort {
     }
 }
 
-pub(crate) fn window_decl_to_impl(d: &WindowDefinition) -> Result<window::Impl> {
+pub(crate) fn window_decl_to_impl(d: &WindowDefinition<'static>) -> Result<window::Impl> {
     use op::trickle::window::{TumblingOnNumber, TumblingOnTime};
     match &d.kind {
         WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
@@ -712,7 +712,7 @@ fn select(
     operator_uid: u64,
     config: &NodeConfig,
     node: &ast::SelectStmt<'static>,
-    helper: &Helper,
+    helper: &Helper<'static, '_>,
 ) -> Result<Box<dyn Operator>> {
     let select_type = node.complexity();
     match select_type {
@@ -762,7 +762,7 @@ pub(crate) fn supported_operators(
     config: &NodeConfig,
     uid: u64,
     node: Option<&ast::Stmt<'static>>,
-    helper: &mut Helper,
+    helper: &mut Helper<'static, '_>,
 ) -> Result<OperatorNode> {
     let op: Box<dyn op::Operator> = match node {
         Some(ast::Stmt::ScriptDefinition(script)) => Box::new(op::trickle::script::Script {

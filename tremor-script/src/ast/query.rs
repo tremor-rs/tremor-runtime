@@ -104,7 +104,7 @@ pub struct SelectStmt<'script> {
     /// The select statement
     pub stmt: Box<Select<'script>>,
     /// Aggregates
-    pub aggregates: Aggregates<'static>,
+    pub aggregates: Aggregates<'script>,
     /// Constants
     pub consts: Consts<'script>,
     /// Number of locals

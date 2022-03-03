@@ -79,7 +79,7 @@ pub type NodeLookupFn = fn(
     config: &NodeConfig,
     uid: u64,
     node: Option<&ast::Stmt<'static>>,
-    helper: &mut Helper,
+    helper: &mut Helper<'static, '_>,
 ) -> Result<OperatorNode>;
 
 /// A channel used to send metrics betwen different parts of the system
