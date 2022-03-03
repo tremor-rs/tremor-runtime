@@ -204,14 +204,6 @@ impl Connector {
             id: alias.to_string(),
             connector_type,
             config: config,
-            codec_map: connector_config
-                .get_object("codec_map")
-                .map(|o| {
-                    o.iter()
-                        .map(|(k, v)| Ok((k.to_string(), Codec::from_value(v)?)))
-                        .collect::<Result<HashMap<_, _>>>()
-                })
-                .transpose()?,
             preprocessors: connector_config
                 .get_array("preprocessors")
                 .map(|o| {
@@ -291,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_config_builtin_preproc_with_config() -> Result<()> {
-        let c = Connector::from_defn(
+        let c = Connector::from_config(
             "snot".to_string(),
             ConnectorType::from("otel_client".to_string()),
             literal!({
