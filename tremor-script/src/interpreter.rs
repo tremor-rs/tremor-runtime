@@ -726,43 +726,53 @@ where
 enum PreEvaluatedPatchOperation<'event, 'run> {
     Insert {
         cow: beef::Cow<'event, str>,
-        ident: &'run StringLit<'event>,
+        _ident: &'run StringLit<'event>,
         value: Value<'event>,
+        mid: &'run NodeMeta,
     },
     Update {
         cow: beef::Cow<'event, str>,
-        ident: &'run StringLit<'event>,
+        _ident: &'run StringLit<'event>,
         value: Value<'event>,
+        mid: &'run NodeMeta,
     },
     Upsert {
         cow: beef::Cow<'event, str>,
         value: Value<'event>,
+        _mid: &'run NodeMeta,
     },
     Erase {
         cow: beef::Cow<'event, str>,
+        _mid: &'run NodeMeta,
     },
     Copy {
         from: beef::Cow<'event, str>,
         to: beef::Cow<'event, str>,
+        mid: &'run NodeMeta,
     },
     Move {
         from: beef::Cow<'event, str>,
         to: beef::Cow<'event, str>,
+        mid: &'run NodeMeta,
     },
     Merge {
         cow: beef::Cow<'event, str>,
-        ident: &'run StringLit<'event>,
+        _ident: &'run StringLit<'event>,
         mvalue: Value<'event>,
+        mid: &'run NodeMeta,
     },
     MergeRecord {
         mvalue: Value<'event>,
+        _mid: &'run NodeMeta,
     },
     Default {
         cow: beef::Cow<'event, str>,
         expr: &'run ImutExpr<'event>,
+        _mid: &'run NodeMeta,
     },
     DefaultRecord {
         expr: &'run ImutExpr<'event>,
+        mid: &'run NodeMeta,
     },
 }
 
@@ -778,46 +788,55 @@ impl<'event, 'run> PreEvaluatedPatchOperation<'event, 'run> {
         local: &LocalStack<'event>,
     ) -> Result<Self> {
         Ok(match patch_op {
-            PatchOperation::Insert { ident, expr } => PreEvaluatedPatchOperation::Insert {
+            PatchOperation::Insert { ident, expr, mid } => PreEvaluatedPatchOperation::Insert {
                 cow: stry!(ident.run(opts, env, event, state, meta, local)),
-                ident,
+                _ident: ident,
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+                mid: &mid,
             },
-            PatchOperation::Update { ident, expr } => PreEvaluatedPatchOperation::Update {
+            PatchOperation::Update { ident, expr, mid } => PreEvaluatedPatchOperation::Update {
                 cow: stry!(ident.run(opts, env, event, state, meta, local)),
-                ident,
+                _ident: ident,
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+                mid: &mid,
             },
-            PatchOperation::Upsert { ident, expr } => PreEvaluatedPatchOperation::Upsert {
+            PatchOperation::Upsert { ident, expr, mid } => PreEvaluatedPatchOperation::Upsert {
                 cow: stry!(ident.run(opts, env, event, state, meta, local)),
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+                _mid: &mid,
             },
-            PatchOperation::Erase { ident } => PreEvaluatedPatchOperation::Erase {
+            PatchOperation::Erase { ident, mid } => PreEvaluatedPatchOperation::Erase {
                 cow: stry!(ident.run(opts, env, event, state, meta, local)),
+                _mid: &mid,
             },
-            PatchOperation::Copy { from, to } => PreEvaluatedPatchOperation::Copy {
+            PatchOperation::Copy { from, to, mid } => PreEvaluatedPatchOperation::Copy {
                 from: stry!(from.run(opts, env, event, state, meta, local)),
                 to: stry!(to.run(opts, env, event, state, meta, local)),
+                mid: &mid,
             },
-            PatchOperation::Move { from, to } => PreEvaluatedPatchOperation::Move {
+            PatchOperation::Move { from, to, mid } => PreEvaluatedPatchOperation::Move {
                 from: stry!(from.run(opts, env, event, state, meta, local)),
                 to: stry!(to.run(opts, env, event, state, meta, local)),
+                mid: &mid,
             },
-            PatchOperation::Merge { ident, expr } => PreEvaluatedPatchOperation::Merge {
+            PatchOperation::Merge { ident, expr, mid } => PreEvaluatedPatchOperation::Merge {
                 cow: stry!(ident.run(opts, env, event, state, meta, local)),
-                ident,
+                _ident: ident,
                 mvalue: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+                mid: &mid,
             },
-            PatchOperation::MergeRecord { expr } => PreEvaluatedPatchOperation::MergeRecord {
+            PatchOperation::MergeRecord { expr, mid } => PreEvaluatedPatchOperation::MergeRecord {
                 mvalue: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+                _mid: &mid,
             },
-            PatchOperation::Default { ident, expr } => PreEvaluatedPatchOperation::Default {
+            PatchOperation::Default { ident, expr, mid } => PreEvaluatedPatchOperation::Default {
                 cow: stry!(ident.run(opts, env, event, state, meta, local)),
                 // PERF: this is slow, we might not need to evaluate it
                 expr,
+                _mid: &mid,
             },
-            PatchOperation::DefaultRecord { expr } => {
-                PreEvaluatedPatchOperation::DefaultRecord { expr }
+            PatchOperation::DefaultRecord { expr, mid } => {
+                PreEvaluatedPatchOperation::DefaultRecord { expr, mid: &mid }
             }
         })
     }
@@ -857,51 +876,57 @@ fn patch_value<'run, 'event>(
             .as_object_mut()
             .ok_or_else(|| err_need_obj(patch_expr, &expr.target, t))?;
         match const_op {
-            Insert { cow, ident, value } => {
+            Insert {
+                cow, value, mid, ..
+            } => {
                 if obj.contains_key(&cow) {
                     let key = cow.to_string();
-                    return error_patch_key_exists(patch_expr, ident, key);
+                    return error_patch_key_exists(patch_expr, mid, key);
                 };
                 obj.insert(cow, value);
             }
-            Update { cow, ident, value } => {
+            Update {
+                cow, value, mid, ..
+            } => {
                 if obj.contains_key(&cow) {
                     obj.insert(cow, value);
                 } else {
                     let key = cow.to_string();
-                    return error_patch_update_key_missing(patch_expr, ident, key);
+                    return error_patch_update_key_missing(patch_expr, mid, key);
                 }
             }
-            Upsert { cow, value } => {
+            Upsert { cow, value, .. } => {
                 obj.insert(cow, value);
             }
-            Erase { cow } => {
+            Erase { cow, .. } => {
                 obj.remove(&cow);
             }
-            Copy { from, to } => {
+            Copy { from, to, mid } => {
                 if obj.contains_key(&to) {
-                    return error_patch_key_exists(patch_expr, expr, to.to_string());
+                    return error_patch_key_exists(patch_expr, mid, to.to_string());
                 }
                 if let Some(old) = obj.get(&from) {
                     let old = old.clone();
                     obj.insert(to, old);
                 }
             }
-            Move { from, to } => {
+            Move { from, to, mid } => {
                 if obj.contains_key(&to) {
-                    return error_patch_key_exists(patch_expr, expr, to.to_string());
+                    return error_patch_key_exists(patch_expr, mid, to.to_string());
                 }
                 if let Some(old) = obj.remove(&from) {
                     obj.insert(to, old);
                 }
             }
-            Merge { cow, ident, mvalue } => match obj.get_mut(&cow) {
+            Merge {
+                cow, mvalue, mid, ..
+            } => match obj.get_mut(&cow) {
                 Some(value @ Value::Object(_)) => {
                     stry!(merge_values(patch_expr, expr, value, &mvalue));
                 }
                 Some(other) => {
                     let key = cow.to_string();
-                    return error_patch_merge_type_conflict(patch_expr, ident, key, other);
+                    return error_patch_merge_type_conflict(patch_expr, mid, key, other);
                 }
                 None => {
                     let mut new_value = Value::object();
@@ -909,7 +934,7 @@ fn patch_value<'run, 'event>(
                     obj.insert(cow, new_value);
                 }
             },
-            MergeRecord { mvalue } => {
+            MergeRecord { mvalue, .. } => {
                 stry!(merge_values(patch_expr, expr, target, &mvalue));
             }
             Default { cow, expr, .. } => {
@@ -918,12 +943,12 @@ fn patch_value<'run, 'event>(
                     obj.insert(cow, default_value.into_owned());
                 };
             }
-            DefaultRecord { expr: inner } => {
+            DefaultRecord { expr: inner, mid } => {
                 let default_value = stry!(inner.run(opts, env, event, state, meta, local));
                 if let Some(dflt) = default_value.as_object() {
                     apply_default(obj, dflt);
                 } else {
-                    return error_need_obj(expr, inner, default_value.value_type());
+                    return error_need_obj(expr, mid, default_value.value_type());
                 }
             }
         }

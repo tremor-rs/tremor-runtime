@@ -25,7 +25,7 @@ use super::{
 };
 use crate::{
     arena::{self, Arena},
-    errors::{already_defined_err, Result},
+    errors::{already_defined_err, Error, Kind as ErrorKind, Result},
     impl_expr,
     lexer::{Span, Tokenizer},
     path::ModulePath,
@@ -242,6 +242,7 @@ impl Module {
 
     pub fn load(
         id: ModuleId,
+        ids: &mut Vec<(ModuleId, String)>,
         aid: arena::Index,
         src: &'static str,
         name: Vec<String>,
@@ -258,11 +259,27 @@ impl Module {
 
         for s in raw.stmts {
             match s {
-                ModuleStmtRaw::Use(UseRaw { alias, module, .. }) => {
-                    // FIXME: prevent self inclusion
-                    let mid = ModuleManager::load(&module)?;
-                    let alias = alias.unwrap_or_else(|| module.id.clone());
-                    helper.scope().add_module_alias(alias, mid);
+                ModuleStmtRaw::Use(UseRaw {
+                    alias,
+                    module,
+                    mid: meta,
+                }) => {
+                    let mid = ModuleManager::load_(&module, ids);
+                    match mid {
+                        Err(Error(ErrorKind::CyclicUse(_, _, uses), o)) => {
+                            return Err(Error(
+                                ErrorKind::CyclicUse(meta.range, meta.range, uses),
+                                o,
+                            ));
+                        }
+                        Err(e) => {
+                            return Err(e);
+                        }
+                        Ok(mid) => {
+                            let alias = alias.unwrap_or_else(|| module.id.clone());
+                            helper.scope().add_module_alias(alias, mid);
+                        }
+                    }
                 }
                 ModuleStmtRaw::Flow(e) => {
                     let e = e.up(&mut helper)?;
@@ -421,6 +438,11 @@ impl ModuleManager {
     }
 
     pub(crate) fn load(node_id: &NodeId) -> Result<Index> {
+        let mut ids = Vec::new();
+        ModuleManager::load_(node_id, &mut ids)
+    }
+
+    fn load_(node_id: &NodeId, ids: &mut Vec<(ModuleId, String)>) -> Result<Index> {
         let m = MODULES.read()?;
         let path = &m.path;
 
@@ -436,6 +458,15 @@ impl ModuleManager {
 
         let src = std::fs::read_to_string(&p)?;
         let id = ModuleId::from(src.as_bytes());
+        if ids.iter().any(|(other, _)| &id == other) {
+            return Err(ErrorKind::CyclicUse(
+                Span::default(),
+                Span::default(),
+                ids.iter().map(|v| &v.1).cloned().collect(),
+            )
+            .into());
+        }
+        ids.push((id.clone(), p.to_string_lossy().to_string()));
 
         let m = MODULES.read()?;
         let maybe_id = m
@@ -445,13 +476,13 @@ impl ModuleManager {
             .find(|(_, m)| m.id == id)
             .map(|(i, _)| i);
         drop(m);
-
+        dbg!(maybe_id);
         if let Some(id) = maybe_id {
             Ok(Index(id))
         } else {
             let mid = node_id.to_vec();
             let (aid, src) = Arena::insert(src)?;
-            let m = Module::load(id, aid, src, mid)?;
+            let m = Module::load(id, ids, aid, src, mid)?;
 
             let mut mm = MODULES.write()?;
 

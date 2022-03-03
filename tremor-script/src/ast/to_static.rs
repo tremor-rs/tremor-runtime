@@ -779,42 +779,52 @@ impl<'script> Field<'script> {
 impl<'script> PatchOperation<'script> {
     pub(crate) fn into_static(self) -> PatchOperation<'static> {
         match self {
-            PatchOperation::Insert { ident, expr } => PatchOperation::Insert {
+            PatchOperation::Insert { ident, expr, mid } => PatchOperation::Insert {
                 ident: ident.into_static(),
                 expr: expr.into_static(),
+                mid,
             },
-            PatchOperation::Upsert { ident, expr } => PatchOperation::Upsert {
+            PatchOperation::Upsert { ident, expr, mid } => PatchOperation::Upsert {
                 ident: ident.into_static(),
                 expr: expr.into_static(),
+                mid,
             },
-            PatchOperation::Update { ident, expr } => PatchOperation::Update {
+            PatchOperation::Update { ident, expr, mid } => PatchOperation::Update {
                 ident: ident.into_static(),
                 expr: expr.into_static(),
+                mid,
             },
-            PatchOperation::Erase { ident } => PatchOperation::Erase {
+            PatchOperation::Erase { ident, mid } => PatchOperation::Erase {
                 ident: ident.into_static(),
+                mid,
             },
-            PatchOperation::Copy { from, to } => PatchOperation::Copy {
+            PatchOperation::Copy { from, to, mid } => PatchOperation::Copy {
                 from: from.into_static(),
                 to: to.into_static(),
+                mid,
             },
-            PatchOperation::Move { from, to } => PatchOperation::Move {
+            PatchOperation::Move { from, to, mid } => PatchOperation::Move {
                 from: from.into_static(),
                 to: to.into_static(),
+                mid,
             },
-            PatchOperation::Merge { ident, expr } => PatchOperation::Merge {
+            PatchOperation::Merge { ident, expr, mid } => PatchOperation::Merge {
                 ident: ident.into_static(),
                 expr: expr.into_static(),
+                mid,
             },
-            PatchOperation::MergeRecord { expr } => PatchOperation::MergeRecord {
+            PatchOperation::MergeRecord { expr, mid } => PatchOperation::MergeRecord {
                 expr: expr.into_static(),
+                mid,
             },
-            PatchOperation::Default { ident, expr } => PatchOperation::Default {
+            PatchOperation::Default { ident, expr, mid } => PatchOperation::Default {
                 ident: ident.into_static(),
                 expr: expr.into_static(),
+                mid,
             },
-            PatchOperation::DefaultRecord { expr } => PatchOperation::DefaultRecord {
+            PatchOperation::DefaultRecord { expr, mid } => PatchOperation::DefaultRecord {
                 expr: expr.into_static(),
+                mid,
             },
         }
     }

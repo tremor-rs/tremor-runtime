@@ -18,7 +18,7 @@ use crate::{
     op::{
         self,
         identity::PassthroughFactory,
-        prelude::{ERR, IN, OUT},
+        prelude::{IN, OUT},
         trickle::{operator::TrickleOperator, select::Select, simple_select::SimpleSelect, window},
     },
     ConfigGraph, Connection, ExecPortIndexMap, ExecutableGraph, NodeConfig, NodeKind, NodeMetrics,
@@ -45,19 +45,13 @@ use tremor_script::{
         SelectType, Stmt, WindowDefinition, WindowKind,
     },
     errors::{
-        err_generic, query_node_duplicate_name_err, query_node_reserved_name_err,
-        query_stream_duplicate_name_err, query_stream_not_defined_err,
+        err_generic, query_node_duplicate_name_err, query_stream_duplicate_name_err,
+        query_stream_not_defined_err,
     },
     highlighter::{Dumb, Highlighter},
     prelude::*,
     AggrRegistry, NodeMeta, Registry, Value,
 };
-
-const BUILTIN_NODES: [(Cow<'static, str>, NodeKind); 3] = [
-    (IN, NodeKind::Input),
-    (OUT, NodeKind::Output(OUT)),
-    (ERR, NodeKind::Output(ERR)),
-];
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct InputPort {
@@ -183,19 +177,31 @@ impl Query {
             .and_then(Value::as_str)
             .unwrap_or("<generated>");
 
-        for (name, node_kind) in &BUILTIN_NODES {
+        for name in &self.0.query.from {
+            let name = name.id.clone();
+            let kind = NodeKind::Input;
             let id = pipe_graph.add_node(NodeConfig {
                 id: name.to_string(),
-                kind: node_kind.clone(),
+                kind,
                 op_type: "passthrough".to_string(),
                 ..NodeConfig::default()
             });
-            nodes_by_name.insert(name.clone(), id);
+            nodes_by_name.insert(name, id);
+        }
+
+        for name in &self.0.query.into {
+            let name = name.id.clone();
+            let kind = NodeKind::Output(name.clone());
+            let id = pipe_graph.add_node(NodeConfig {
+                id: name.to_string(),
+                kind,
+                op_type: "passthrough".to_string(),
+                ..NodeConfig::default()
+            });
+            nodes_by_name.insert(name, id);
         }
 
         let mut select_num = 0;
-
-        let has_builtin_node_name = make_builtin_node_name_checker();
 
         let mut included_graphs: HashMap<String, InlcudedGraph> = HashMap::new();
         for stmt in &self.0.query.stmts {
@@ -321,12 +327,7 @@ impl Query {
                 Stmt::PipelineCreate(s) => {
                     let name = s.alias.clone();
                     if nodes_by_name.contains_key(name.as_str()) {
-                        let error_func = if has_builtin_node_name(name.as_str()) {
-                            query_node_reserved_name_err
-                        } else {
-                            query_node_duplicate_name_err
-                        };
-                        return Err(error_func(s, name).into());
+                        return Err(query_node_duplicate_name_err(s, name).into());
                     }
                     // This is just a placeholder!
                     nodes_by_name.insert(name.clone().into(), NodeIndex::default());
@@ -399,12 +400,9 @@ impl Query {
                 }
                 Stmt::OperatorCreate(o) => {
                     if nodes_by_name.contains_key(&common_cow(o.node_id.id())) {
-                        let error_func = if has_builtin_node_name(&common_cow(o.node_id.id())) {
-                            query_node_reserved_name_err
-                        } else {
-                            query_node_duplicate_name_err
-                        };
-                        return Err(error_func(o, o.node_id.id().to_string()).into());
+                        return Err(
+                            query_node_duplicate_name_err(o, o.node_id.id().to_string()).into()
+                        );
                     }
 
                     let mut decl: OperatorDefinition =
@@ -426,12 +424,9 @@ impl Query {
                 }
                 Stmt::ScriptCreate(o) => {
                     if nodes_by_name.contains_key(&common_cow(o.node_id.id())) {
-                        let error_func = if has_builtin_node_name(&common_cow(o.node_id.id())) {
-                            query_node_reserved_name_err
-                        } else {
-                            query_node_duplicate_name_err
-                        };
-                        return Err(error_func(o, o.node_id.id().to_string()).into());
+                        return Err(
+                            query_node_duplicate_name_err(o, o.node_id.id().to_string()).into()
+                        );
                     }
 
                     // FIXME: Better error
@@ -793,12 +788,6 @@ pub(crate) fn supported_operators(
     })
 }
 
-pub(crate) fn make_builtin_node_name_checker() -> impl Fn(&str) -> bool {
-    // saving these names for reuse
-
-    move |name| BUILTIN_NODES.iter().any(|k| k.0 == name)
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -833,15 +822,5 @@ mod test {
         let out = g.graph.get(4).unwrap();
         assert_eq!(out.id, "out/test_out");
         assert_eq!(out.kind, NodeKind::Output("test_out".into()));
-    }
-
-    #[test]
-    fn builtin_nodes() {
-        let has_builtin_node_name = make_builtin_node_name_checker();
-        assert!(has_builtin_node_name(&"in".into()));
-        assert!(has_builtin_node_name(&"out".into()));
-        assert!(has_builtin_node_name(&"err".into()));
-        assert!(!has_builtin_node_name(&"snot".into()));
-        assert!(!has_builtin_node_name(&"badger".into()));
     }
 }

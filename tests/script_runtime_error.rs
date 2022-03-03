@@ -17,7 +17,7 @@ use tremor_common::file;
 use tremor_script::FN_REGISTRY;
 
 use tremor_runtime::errors::*;
-use tremor_script::highlighter::{Dumb};
+use tremor_script::highlighter::Dumb;
 use tremor_script::prelude::*;
 use tremor_script::utils::*;
 use tremor_script::ModuleManager;
@@ -62,7 +62,7 @@ macro_rules! test_cases {
                     if let Err(e) = s {
                         let got = Dumb::error_to_string(&e)?;
                         print!("{}", got);
-                        assert_eq!(err, got);
+                        assert_eq!(err.trim(), got.trim());
                     } else {
                         println!("Expected error, but got succeess");
                         assert!(false);
@@ -113,7 +113,7 @@ macro_rules! ignore_cases {
                     if let Err(e) = s {
                         let got = Dumb::error_to_string(&e)?;
                         print!("{}", got);
-                        assert_eq!(err, got);
+                        assert_eq!(err.trim(), got.trim());
                     } else {
                         println!("Expected error, but got succeess");
                         assert!(false);
