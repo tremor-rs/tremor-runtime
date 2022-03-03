@@ -243,8 +243,8 @@ mod tests {
                 "port": 4317,
             },
         });
-        let config: ConnectorConfig = crate::config::Connector::from_defn(
-            "snot".into(),
+        let config: ConnectorConfig = crate::config::Connector::from_config(
+            "snot",
             ConnectorType("otel_server".into()),
             with_processors,
         )?;

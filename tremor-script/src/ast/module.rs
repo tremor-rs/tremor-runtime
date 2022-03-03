@@ -476,7 +476,6 @@ impl ModuleManager {
             .find(|(_, m)| m.id == id)
             .map(|(i, _)| i);
         drop(m);
-        dbg!(maybe_id);
         if let Some(id) = maybe_id {
             Ok(Index(id))
         } else {
@@ -515,14 +514,14 @@ mod test {
 
     #[test]
     fn load_twice() -> Result<()> {
-        ModuleManager::add_path("./lib")?;
+        ModuleManager::add_path("./tests/modules")?;
         let id1 = ModuleManager::load(&NodeId {
-            id: "string".to_string(),
-            module: vec!["std".into()],
+            id: "twice".to_string(),
+            module: vec!["loading".into()],
         })?;
         let id2 = ModuleManager::load(&NodeId {
-            id: "string".to_string(),
-            module: vec!["std".into()],
+            id: "twice".to_string(),
+            module: vec!["loading".into()],
         })?;
         assert_eq!(id1, id2);
         Ok(())
