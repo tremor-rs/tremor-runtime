@@ -1,0 +1,3 @@
+{"event":1,"error":"Error: \n    3 | define script test\n    4 | script\n    5 |   let $ = \"snot\";\n      |       ^^^^^^^^^^ You are trying to assign to a value that isn't valid\n    6 |   $\n    7 | end;\n\n"}
+{"event":2,"error":"Error: \n    3 | define script test\n    4 | script\n    5 |   let $ = \"snot\";\n      |       ^^^^^^^^^^ You are trying to assign to a value that isn't valid\n    6 |   $\n    7 | end;\n\n"}
+{"event":3,"error":"Error: \n    3 | define script test\n    4 | script\n    5 |   let $ = \"snot\";\n      |       ^^^^^^^^^^ You are trying to assign to a value that isn't valid\n    6 |   $\n    7 | end;\n\n"}

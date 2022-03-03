@@ -2,6 +2,6 @@ Error:
     3 |   event
     4 | end;
     5 | create script out;
-      | ^^^^^^^^^^^^^^^^^ Name `out` is reserved for built-in nodes, please use another name.
+      | ^^^^^^^^^^^^^^^^^ Name `out` is already in use for another node, please use another name.
     6 | 
     7 | select event from in into out;

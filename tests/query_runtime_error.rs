@@ -23,7 +23,7 @@ use tremor_script::FN_REGISTRY;
 
 use tremor_pipeline::errors::{Error as PipelineError, ErrorKind as PipelineErrorKind};
 use tremor_runtime::errors::*;
-use tremor_script::highlighter::{Dumb};
+use tremor_script::highlighter::Dumb;
 use tremor_script::utils::*;
 
 fn to_pipe(query: &str) -> Result<ExecutableGraph> {
@@ -72,7 +72,6 @@ macro_rules! test_cases {
                 }
 
                 let mut results = Vec::new();
-                let mut had_error = false;
                 for (id, json) in in_json.into_iter().enumerate() {
                     let event = Event {
                         id: EventId::from_id(0, 0, (id as u64)),
@@ -88,8 +87,7 @@ macro_rules! test_cases {
                                 let e = tremor_script::errors::Error(e, o);
                                 let got = Dumb::error_to_string(&e)?;
                                 print!("{}", got);
-                                assert_eq!(err, &got);
-                                had_error = true;
+                                assert_eq!(err.trim(), got.trim());
                             } else {
                                 println!("Got unexpected error: {:?}", e);
                                 assert!(false);
@@ -103,7 +101,6 @@ macro_rules! test_cases {
                     }
                     results.append(&mut r);
                 }
-                dbg!(&results, &out_json);
                 assert_eq!(results.len(), out_json.len(), "Number of events differ error");
                 for (_, result) in results {
                     for value in result.value_iter() {
@@ -113,7 +110,6 @@ macro_rules! test_cases {
                         }
                     }
                 }
-                assert!(had_error, "we should have seen errors");
 
                 Ok(())
             }

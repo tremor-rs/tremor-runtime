@@ -158,7 +158,7 @@ impl ErrorKind {
             AccessError, AggrInAggr, ArrayOutOfRange, AssignIntoArray, AssignToConst,
             BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity,
             BadArrayIndex, BadType, BinaryDrop, BinaryEmit, CantSetArgsConst, CantSetGroupConst,
-            CantSetWindowConst, Common, DecreasingRange, DeployArgNotSpecified,
+            CantSetWindowConst, Common, CyclicUse, DecreasingRange, DeployArgNotSpecified,
             DeployArtefactNotDefined, DeployRequiredArgDoesNotResolve, DoubleConst,
             DoublePipelineCreate, DoubleStream, EmptyInterpolation, EmptyScript, ExtraToken,
             Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst,
@@ -244,6 +244,7 @@ impl ErrorKind {
             | UnterminatedIdentLiteral(outer, inner, _)
             | UnterminatedInterpolation(outer, inner, _)
             | UnterminatedStringLiteral(outer, inner, _)
+            | CyclicUse(outer, inner, _)
             | UpdateKeyMissing(outer, inner, _) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
@@ -491,6 +492,11 @@ error_chain! {
             description("Generic error")
                 display("{}", msg)
         }
+        CyclicUse(expr: Span, inner: Span, uses: Vec<String>) {
+            description(" Cyclic dependency detected!")
+                display(" Cyclic dependency detected: {}", uses.join(" -> "))
+        }
+
 
         EmptyScript {
             description("No expressions were found in the script")
