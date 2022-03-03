@@ -36,7 +36,7 @@ fn is_valid(trace_id) of
       { "kind": "string", "valid": trace_id != "00000000000000000000000000000000" and string::bytes(trace_id) == 32, "value": trace_id }
     # Binary representation
     case(trace_id) when type::is_binary(trace_id) =>
-      let arr = binary::into_bytes(trace_id),
+      let arr = binary::into_bytes(trace_id);
       { "kind": "binary", "valid": binary::len(arr) == 16 and trace_id != << 0:64, 0:64 >>, "value": trace_id }
     # Array representation
     case(trace_id) when type::is_array(trace_id) =>
