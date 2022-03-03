@@ -351,6 +351,7 @@ fn select_single_win_on_signal() -> Result<()> {
     Ok(())
 }
 
+// FIXME: why is this flappy
 #[test]
 fn select_multiple_wins_on_signal() -> Result<()> {
     let mut select = select_stmt_from_query(
