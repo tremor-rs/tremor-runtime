@@ -27,6 +27,7 @@ use super::{
     ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamStmt, Upable,
     WindowDefinition, WindowKind,
 };
+use crate::{ast::NodeMeta, impl_expr};
 use crate::{
     ast::{
         node_id::{BaseRef, NodeId},
@@ -37,10 +38,6 @@ use crate::{
     },
     errors::{Error, Kind as ErrorKind},
     impl_expr_no_lt, ModuleManager,
-};
-use crate::{
-    ast::{InvokeAggrFn, NodeMeta},
-    impl_expr,
 };
 use beef::Cow;
 use simd_json::ValueAccess;
@@ -150,10 +147,6 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                 helper.swap(&mut aggregates, &mut locals);
                 let stmt: Select<'script> = stmt.up(helper)?;
                 helper.swap(&mut aggregates, &mut locals);
-                let aggregates: Vec<_> = aggregates
-                    .into_iter()
-                    .map(InvokeAggrFn::into_static)
-                    .collect();
 
                 Ok(Some(Stmt::SelectStmt(SelectStmt {
                     stmt: Box::new(stmt),

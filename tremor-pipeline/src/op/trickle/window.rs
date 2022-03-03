@@ -488,8 +488,12 @@ impl TumblingOnTime {
         self.next_window = None;
     }
 
-    pub fn from_stmt(interval: u64, max_groups: usize, script: Option<&WindowDefinition>) -> Self {
-        let script = script.cloned().map(WindowDefinition::into_static);
+    pub fn from_stmt(
+        interval: u64,
+        max_groups: usize,
+        script: Option<&WindowDefinition<'static>>,
+    ) -> Self {
+        let script = script.cloned();
         Self {
             next_window: None,
             max_groups,
@@ -575,8 +579,12 @@ impl TumblingOnNumber {
         self.next_eviction = 0;
         self.count = 0;
     }
-    pub fn from_stmt(size: u64, max_groups: usize, script: Option<&WindowDefinition>) -> Self {
-        let script = script.cloned().map(WindowDefinition::into_static);
+    pub fn from_stmt(
+        size: u64,
+        max_groups: usize,
+        script: Option<&WindowDefinition<'static>>,
+    ) -> Self {
+        let script = script.cloned();
 
         Self {
             max_groups,

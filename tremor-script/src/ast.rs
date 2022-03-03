@@ -29,7 +29,6 @@ mod node_id;
 pub mod query;
 pub(crate) mod raw;
 mod support;
-mod to_static;
 mod upable;
 /// collection of AST visitors
 pub mod visitors;
