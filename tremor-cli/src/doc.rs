@@ -51,7 +51,7 @@ fn gen_doc(
         .ok_or_else(|| Error::from("Could not isolate relative path"))?
         .replace(".tremor", "");
 
-    let runnable = Script::parse(raw, &env.fun)?;
+    let runnable = Script::parse(&raw, &env.fun)?;
     let docs = runnable.docs();
     let consts = &docs.consts;
     let fns = &docs.fns;
@@ -99,7 +99,7 @@ fn gen_doc(
 impl Doc {
     pub(crate) fn run(&self) -> Result<()> {
         let mut env = env::setup()?;
-        env.module_path.add(self.dir.clone());
+        env.module_path.add(&self.dir);
         let is_interactive = self.interactive;
         let dest_path = self.outdir.clone();
         visit_path_str(&self.dir, &move |rel_path, src_path| {

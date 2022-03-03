@@ -48,7 +48,7 @@ use serde::Serialize;
 use super::{
     base_expr::Ranged,
     docs::{FnDoc, ModDoc},
-    module::ModuleManager,
+    module::Manager,
     Const, NodeId, NodeMeta,
 };
 
@@ -91,7 +91,7 @@ impl<'script> ScriptRaw<'script> {
             let range = e.meta().range;
             match e {
                 TopLevelExprRaw::Use(UseRaw { alias, module, .. }) => {
-                    let mid = ModuleManager::load(&module).map_err(|err| match err {
+                    let mid = Manager::load(&module).map_err(|err| match err {
                         Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
                             ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
                             state,
@@ -118,17 +118,17 @@ impl<'script> ScriptRaw<'script> {
                         value: value.clone(),
                     };
                     helper.scope.insert_const(c)?;
-                    exprs.push(Expr::Imut(ImutExpr::Literal(Literal { value, mid })));
+                    exprs.push(Expr::Imut(ImutExpr::Literal(Literal { mid, value })));
                     helper.add_const_doc(&name, comment, value_type);
                 }
                 TopLevelExprRaw::FnDecl(f) => {
                     helper.docs.fns.push(f.doc());
-                    let mut f = f.up(&mut helper)?;
+                    let mut f = f.up(helper)?;
                     ExprWalker::walk_fn_decl(&mut ConstFolder::new(helper), &mut f)?;
                     helper.scope.insert_function(f)?;
                 }
                 TopLevelExprRaw::Expr(expr) => {
-                    exprs.push(expr.up(&mut helper)?);
+                    exprs.push(expr.up(helper)?);
                 }
             }
         }
@@ -621,7 +621,7 @@ impl<'script> FnDeclRaw<'script> {
     pub(crate) fn doc(&self) -> FnDoc {
         FnDoc {
             name: self.name.to_string(),
-            args: self.args.iter().map(|a| a.to_string()).collect(),
+            args: self.args.iter().map(ToString::to_string).collect(),
             open: self.open,
             doc: self
                 .doc
@@ -710,7 +710,7 @@ impl<'script> MatchFnDeclRaw<'script> {
     pub(crate) fn doc(&self) -> FnDoc {
         FnDoc {
             name: self.name.to_string(),
-            args: self.args.iter().map(|a| a.to_string()).collect(),
+            args: self.args.iter().map(ToString::to_string).collect(),
             open: self.open,
             doc: self
                 .doc
@@ -1838,7 +1838,7 @@ impl<'script> Upable<'script> for ConstPathRaw<'script> {
 
         let mid = self.mid.box_with_name(&id);
         let node_id = NodeId {
-            module: self.module.iter().map(|m| m.to_string()).collect(),
+            module: self.module.iter().map(ToString::to_string).collect(),
             id: id.to_string(),
         };
 
@@ -2233,7 +2233,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
                 let invocable = Invocable::Tremor(f.into());
                 let args = self.args.up(helper)?.into_iter().collect();
                 Ok(Invoke {
-                    mid: self.mid.box_with_name(node_id.fqn()),
+                    mid: self.mid.box_with_name(&node_id.fqn()),
                     node_id,
                     invocable,
                     args,

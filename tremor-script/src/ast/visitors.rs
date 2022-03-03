@@ -15,14 +15,14 @@
 pub(crate) mod prelude;
 use prelude::*;
 
-/// Deploy
+/// deployments
 pub mod deploy;
-/// Expr
+/// expressions
 pub mod expr;
 mod impls;
-/// ImutExpr
+/// imutable expressions
 pub mod imut_expr;
-/// Query
+/// queries
 pub mod query;
 
 pub use impls::args_rewriter::ArgsRewriter;

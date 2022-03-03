@@ -17,7 +17,7 @@ use tremor_common::file;
 use tremor_script::deploy::Deploy;
 
 use tremor_script::errors::*;
-use tremor_script::ModuleManager;
+use tremor_script::Manager;
 
 fn parse<'script>(deploy: &str) -> tremor_script::Result<tremor_script::deploy::Deploy> {
     let aggr_reg = tremor_script::aggr_registry();

@@ -142,16 +142,16 @@ pub enum ConnectStmt {
 impl ConnectStmt {
     pub(crate) fn from_mut(&mut self) -> &mut DeployEndpoint {
         match self {
-            ConnectStmt::ConnectorToPipeline { from, .. } => from,
-            ConnectStmt::PipelineToConnector { from, .. } => from,
-            ConnectStmt::PipelineToPipeline { from, .. } => from,
+            ConnectStmt::ConnectorToPipeline { from, .. }
+            | ConnectStmt::PipelineToConnector { from, .. }
+            | ConnectStmt::PipelineToPipeline { from, .. } => from,
         }
     }
     pub(crate) fn to_mut(&mut self) -> &mut DeployEndpoint {
         match self {
-            ConnectStmt::ConnectorToPipeline { to, .. } => to,
-            ConnectStmt::PipelineToConnector { to, .. } => to,
-            ConnectStmt::PipelineToPipeline { to, .. } => to,
+            ConnectStmt::ConnectorToPipeline { to, .. }
+            | ConnectStmt::PipelineToConnector { to, .. }
+            | ConnectStmt::PipelineToPipeline { to, .. } => to,
         }
     }
 }
@@ -172,7 +172,7 @@ impl std::fmt::Display for DeployEndpoint {
 
 impl DeployEndpoint {
     /// Creates a new endpoint
-    pub fn new<A, P>(alias: A, port: P) -> Self
+    pub fn new<A, P>(alias: &A, port: &P) -> Self
     where
         A: ToString,
         P: ToString,
@@ -183,10 +183,12 @@ impl DeployEndpoint {
         }
     }
     /// The artefact
+    #[must_use]
     pub fn alias(&self) -> &str {
         &self.alias
     }
     /// The port
+    #[must_use]
     pub fn port(&self) -> &str {
         &self.port
     }
@@ -217,7 +219,7 @@ pub enum CreateTargetDefinition<'script> {
     /// A connector
     Connector(ConnectorDefinition<'script>),
     /// A Pipeline
-    Pipeline(PipelineDefinition<'script>),
+    Pipeline(Box<PipelineDefinition<'script>>),
 }
 /// A create statement
 #[derive(Clone, Debug, PartialEq, Serialize)]

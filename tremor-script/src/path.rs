@@ -38,11 +38,11 @@ impl Default for ModulePath {
 impl ModulePath {
     /// removes all module path
     pub fn clear(&mut self) {
-        self.mounts.clear()
+        self.mounts.clear();
     }
 
     /// Adds to the module path
-    pub fn add<S: ToString>(&mut self, path: S) {
+    pub fn add<S: ToString>(&mut self, path: &S) {
         let p = path.to_string();
         if !self.mounts.contains(&p) {
             self.mounts.push(p);
@@ -50,6 +50,7 @@ impl ModulePath {
     }
 
     /// Does a particular module exist relative to the module path in force
+    #[must_use]
     pub fn resolve_id(&self, id: &NodeId) -> Option<PathBuf> {
         let mut p = PathBuf::new();
         for e in &id.module {
@@ -79,7 +80,7 @@ impl ModulePath {
             target.push(&rel_file);
             if let Ok(meta) = std::fs::metadata(&target) {
                 if meta.is_file() {
-                    return Some(target.into()); // NOTE The first match on the path is returned so overriding is neither possible nor supported
+                    return Some(target); // NOTE The first match on the path is returned so overriding is neither possible nor supported
                 }
             }
         }

@@ -120,7 +120,7 @@ impl ToString for QueryDeclDoc {
 }
 
 /// Documentation from a module
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct Docs {
     /// Constants
     pub consts: Vec<ConstDoc>,
@@ -130,17 +130,6 @@ pub struct Docs {
     pub query_decls: Vec<QueryDeclDoc>,
     /// Module level documentation
     pub module: Option<ModDoc>,
-}
-
-impl Default for Docs {
-    fn default() -> Self {
-        Self {
-            consts: Vec::new(),
-            fns: Vec::new(),
-            query_decls: Vec::new(),
-            module: None,
-        }
-    }
 }
 
 #[cfg(test)]

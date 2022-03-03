@@ -127,6 +127,7 @@ impl NodeMeta {
         Box::new(Self::new_with_name(start, end, name))
     }
     /// Creates a new meta node
+    #[must_use]
     pub fn new(start: Location, end: Location) -> Self {
         NodeMeta {
             range: Span::new(start, end),
@@ -155,18 +156,18 @@ impl NodeMeta {
     where
         S: ToString + ?Sized,
     {
-        self.name = Some(name.to_string())
+        self.name = Some(name.to_string());
     }
-    pub(crate) fn with_name<S>(mut self, name: S) -> Self
+    pub(crate) fn with_name<S>(mut self, name: &S) -> Self
     where
-        S: ToString,
+        S: ToString + ?Sized,
     {
         self.name = Some(name.to_string());
         self
     }
-    pub(crate) fn box_with_name<S>(self, name: S) -> Box<Self>
+    pub(crate) fn box_with_name<S>(self, name: &S) -> Box<Self>
     where
-        S: ToString,
+        S: ToString + ?Sized,
     {
         Box::new(self.with_name(name))
     }
@@ -442,10 +443,12 @@ impl<'script> Ident<'script> {
         }
     }
     /// Creates a new ident
+    #[must_use]
     pub fn new(id: beef::Cow<'script, str>, mid: Box<NodeMeta>) -> Self {
-        Self { id, mid }
+        Self { mid, id }
     }
     /// As a string
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.id
     }
@@ -1224,7 +1227,8 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
     // allow this otherwise clippy complains after telling us to use matches
     #[allow(
         // we allow this because of the borrow checker
-        clippy::option_if_let_else
+        clippy::option_if_let_else,
+        clippy::too_many_lines
     )]
     fn optimize(&mut self, n: u64) {
         if let Self::Simple {

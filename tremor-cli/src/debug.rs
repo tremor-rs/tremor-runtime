@@ -199,26 +199,24 @@ impl DbgAst {
 
         let env = env::setup()?;
         match data.kind {
-            SourceKind::Tremor | SourceKind::Json => {
-                match Script::parse(data.raw.clone(), &env.fun) {
-                    Ok(runnable) => {
-                        let ast = if self.exprs_only {
-                            simd_json::to_string_pretty(&runnable.script.exprs)?
-                        } else {
-                            simd_json::to_string_pretty(&runnable.script)?
-                        };
-                        println!();
-                        h.highlight_str(&ast, "", !data.opts.raw)?;
-                    }
-                    Err(e) => {
-                        if let Err(e) = h.format_error(&e) {
-                            eprintln!("Error: {}", e);
-                        };
-                    }
+            SourceKind::Tremor | SourceKind::Json => match Script::parse(&data.raw, &env.fun) {
+                Ok(runnable) => {
+                    let ast = if self.exprs_only {
+                        simd_json::to_string_pretty(&runnable.script.exprs)?
+                    } else {
+                        simd_json::to_string_pretty(&runnable.script)?
+                    };
+                    println!();
+                    h.highlight_str(&ast, "", !data.opts.raw)?;
                 }
-            }
+                Err(e) => {
+                    if let Err(e) = h.format_error(&e) {
+                        eprintln!("Error: {}", e);
+                    };
+                }
+            },
             SourceKind::Trickle => {
-                match Query::parse(data.raw.clone(), &env.fun, &env.aggr) {
+                match Query::parse(&data.raw, &env.fun, &env.aggr) {
                     Ok(runnable) => {
                         let ast = simd_json::to_string_pretty(&runnable.query)?;
                         println!();
@@ -232,7 +230,7 @@ impl DbgAst {
                 };
             }
             SourceKind::Troy => {
-                match Deploy::parse(data.raw.clone(), &env.fun, &env.aggr) {
+                match Deploy::parse(&data.raw, &env.fun, &env.aggr) {
                     Ok(runnable) => {
                         let ast = simd_json::to_string_pretty(&runnable.deploy)?;
                         println!();
@@ -265,7 +263,7 @@ impl DbgDot {
 
         if data.kind == SourceKind::Trickle {
             let env = env::setup()?;
-            match Query::parse(data.raw.clone(), &env.fun, &env.aggr) {
+            match Query::parse(&data.raw, &env.fun, &env.aggr) {
                 Ok(runnable) => {
                     let mut idgen = OperatorIdGen::new();
                     let g = tremor_pipeline::query::Query(runnable).to_pipe(&mut idgen)?;
@@ -280,7 +278,7 @@ impl DbgDot {
             };
         } else if data.kind == SourceKind::Troy {
             let env = env::setup()?;
-            match Deploy::parse(data.raw.clone(), &env.fun, &env.aggr) {
+            match Deploy::parse(&data.raw, &env.fun, &env.aggr) {
                 Ok(runnable) => {
                     println!("{}", runnable.dot());
                 }

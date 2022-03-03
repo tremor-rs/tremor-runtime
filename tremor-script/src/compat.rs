@@ -28,7 +28,7 @@ use std::ptr;
 
 fn eval(src: &str) -> Result<String> {
     let reg: Registry = registry::registry();
-    let script = Script::parse(src.to_string(), &reg)?;
+    let script = Script::parse(src, &reg)?;
 
     let mut event = Value::object();
     let mut meta = Value::object();

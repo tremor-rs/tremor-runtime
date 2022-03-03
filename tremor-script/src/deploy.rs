@@ -16,7 +16,7 @@ use crate::{
     arena::{self, Arena},
     ast::{self, helper::Warning, DeployStmt},
     errors::{Error, Result},
-    highlighter::{Dumb as DumbHighlighter, Highlighter},
+    highlighter::Highlighter,
     lexer::{self, Tokenizer},
     prelude::*,
 };
@@ -64,7 +64,10 @@ where
     ///
     /// # Errors
     /// if the deployment can not be parsed
-    pub fn parse<S: ToString>(script: S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
+    pub fn parse<S>(script: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
+    where
+        S: ToString + ?Sized,
+    {
         let mut warnings = BTreeSet::new();
 
         let (aid, script) = Arena::insert(script)?;
@@ -119,17 +122,6 @@ where
             h.highlight_error(None, &tokens, "", true, Some(w.outer), Some(w.into()))?;
         }
         h.finalize()
-    }
-
-    /// Formats an error within this script
-    #[must_use]
-    pub fn format_error(&self, e: &Error) -> String {
-        let mut h = DumbHighlighter::default();
-        if Self::format_error_with(&mut h, e).is_ok() {
-            h.to_string()
-        } else {
-            format!("Failed to extract code for error: {}", e)
-        }
     }
 }
 

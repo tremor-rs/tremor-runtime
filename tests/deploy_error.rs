@@ -13,7 +13,7 @@
 // limitations under the License.
 use std::{io::prelude::*, sync::Mutex};
 use tremor_common::file;
-use tremor_script::{deploy::Deploy, errors::*, highlighter::Dumb, ModuleManager};
+use tremor_script::{deploy::Deploy, errors::*, highlighter::Dumb, Manager};
 
 fn parse<'script>(deploy: &str) -> tremor_script::Result<Deploy> {
     let aggr_reg = tremor_script::aggr_registry();
