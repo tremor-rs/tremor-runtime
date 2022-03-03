@@ -230,7 +230,7 @@ impl Run {
             std::process::exit(1);
         }
         let raw = raw?;
-        let (aid, raw) = Arena::insert(raw)?;
+        let (aid, raw) = Arena::insert(&raw)?;
 
         let env = env::setup()?;
 
@@ -314,7 +314,7 @@ impl Run {
         let env = env::setup()?;
         let mut h = TermHighlighter::stderr();
 
-        let runnable = match Query::parse(raw.clone(), &env.fun, &env.aggr) {
+        let runnable = match Query::parse(&raw, &env.fun, &env.aggr) {
             Ok(runnable) => runnable,
             Err(e) => {
                 if let Err(e) = h.format_error(&e) {

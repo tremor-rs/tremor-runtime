@@ -15,7 +15,7 @@
 pub use super::query::*;
 use super::{
     docs::{ConstDoc, Docs, QueryDeclDoc},
-    module::{self, GetModule, ModuleContent, ModuleManager},
+    module::{self, Content, GetMod, Manager},
     raw::LocalPathRaw,
     ConnectorDefinition, Const, DeployFlow, FlowDefinition, FnDecl, InvokeAggrFn, NodeId,
 };
@@ -62,7 +62,7 @@ pub struct Scope<'script> {
     /// Module of the scope
     pub(crate) modules: std::collections::HashMap<String, module::Index>,
     /// Content of the scope
-    pub content: ModuleContent<'script>,
+    pub content: Content<'script>,
     pub(crate) parent: Option<Box<Scope<'script>>>,
 }
 impl<'script> Scope<'script> {
@@ -77,7 +77,7 @@ impl<'script> Scope<'script> {
         } else {
             return Ok(None);
         };
-        ModuleManager::find_module(id, rest)
+        Manager::find_module(id, rest)
     }
     pub(crate) fn add_module_alias(&mut self, alias: String, module_id: module::Index) {
         self.modules.insert(alias, module_id);
@@ -167,18 +167,21 @@ where
         }
     }
     /// Finds something from the module script
+    /// # Errors
+    /// if we can't lock the module manager
     pub fn get<Target>(&self, id: &NodeId) -> Result<Option<Target>>
     where
         Target: 'script,
-        ModuleManager: module::Get<Target>,
-        ModuleContent<'script>: module::GetModule<Target>,
+        Manager: module::Get<Target>,
+        Content<'script>: module::GetMod<Target>,
     {
-        Ok(if id.module.is_empty() {
-            self.scope.content.get(&id.id)
+        if id.module.is_empty() {
+            Ok(self.scope.content.get(&id.id))
+        } else if let Some((m, n)) = self.resolve_module_alias(id)? {
+            Manager::get(m, n)
         } else {
-            self.resolve_module_alias(id)?
-                .and_then(ModuleManager::get_tpl)
-        })
+            Ok(None)
+        }
     }
 
     /// resolves the local aliases for modules

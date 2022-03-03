@@ -238,7 +238,7 @@ impl<'script> ImutExpr<'script> {
             ImutExpr::Patch(ref expr) => Self::patch(opts, env, event, state, meta, local, expr),
             ImutExpr::Merge(ref expr) => self.merge(opts, env, event, state, meta, local, expr),
             ImutExpr::Local { idx, mid, .. } => {
-                if let Some(l) = stry!(local.get(*idx, self, &mid)) {
+                if let Some(l) = stry!(local.get(*idx, self, mid)) {
                     Ok(Cow::Borrowed(l))
                 } else {
                     let path: Path = Path::Local(LocalPath {
@@ -549,7 +549,7 @@ impl<'script> ImutExpr<'script> {
                 // Next segment is an index: index into `current`, if it's an array
                 Segment::Idx { idx, .. } => {
                     if let Some(a) = current.as_array() {
-                        let range_to_consider = subrange.unwrap_or_else(|| a.as_slice());
+                        let range_to_consider = subrange.unwrap_or(a.as_slice());
                         let idx = *idx;
 
                         if let Some(c) = range_to_consider.get(idx) {
@@ -565,7 +565,7 @@ impl<'script> ImutExpr<'script> {
                 // Next segment is an index range: index into `current`, if it's an array
                 Segment::RangeExpr { start, end, .. } => {
                     if let Some(a) = current.as_array() {
-                        let array = subrange.unwrap_or_else(|| a.as_slice());
+                        let array = subrange.unwrap_or(a.as_slice());
                         let start_idx = stry!(start.eval_to_index(
                             self, opts, env, event, state, meta, local, path, array,
                         ));
@@ -587,7 +587,7 @@ impl<'script> ImutExpr<'script> {
                 // Next segment is an index range: index into `current`, if it's an array
                 Segment::Range { start, end, .. } => {
                     if let Some(a) = current.as_array() {
-                        let array = subrange.unwrap_or_else(|| a.as_slice());
+                        let array = subrange.unwrap_or(a.as_slice());
                         let start_idx = *start;
                         let end_idx = *end;
 
@@ -609,7 +609,7 @@ impl<'script> ImutExpr<'script> {
                         (Value::Object(o), Value::String(id)) => o.get(id),
                         // If `current` is an array, the segment has to be an index
                         (Value::Array(a), idx) => {
-                            let array = subrange.unwrap_or_else(|| a.as_slice());
+                            let array = subrange.unwrap_or(a.as_slice());
                             let idx = stry!(value_to_index(self, segment, idx, path, array));
                             array.get(idx)
                         }

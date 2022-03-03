@@ -39,7 +39,7 @@ use crate::{
     ast::{
         ArrayPattern, ArrayPredicatePattern, BaseExpr, BinOpKind, ExprPath, GroupBy, ImutExpr,
         InvokeAggrFn, NodeMeta, Patch, PatchOperation, Path, Pattern, PredicatePattern,
-        RecordPattern, ReservedPath, RunConsts, Segment, StringLit, TuplePattern, UnaryOpKind,
+        RecordPattern, ReservedPath, RunConsts, Segment, TuplePattern, UnaryOpKind,
     },
     errors::{
         err_need_obj, error_array_out_of_bound, error_bad_array_index, error_bad_key,
@@ -575,7 +575,7 @@ where
             // Next segment is an index: index into `current`, if it's an array
             Segment::Idx { idx, .. } => {
                 if let Some(a) = current.as_array() {
-                    let range_to_consider = subrange.unwrap_or_else(|| a.as_slice());
+                    let range_to_consider = subrange.unwrap_or(a.as_slice());
                     let idx = *idx;
 
                     if let Some(c) = range_to_consider.get(idx) {
@@ -592,7 +592,7 @@ where
             // Next segment is an index range: index into `current`, if it's an array
             Segment::RangeExpr { start, end, .. } => {
                 if let Some(a) = current.as_array() {
-                    let array = subrange.unwrap_or_else(|| a.as_slice());
+                    let array = subrange.unwrap_or(a.as_slice());
                     let start = stry!(start
                         .eval_to_index(outer, opts, env, event, state, meta, local, path, array));
                     let end = stry!(
@@ -614,7 +614,7 @@ where
             // Next segment is an index range: index into `current`, if it's an array
             Segment::Range { start, end, .. } => {
                 if let Some(a) = current.as_array() {
-                    let array = subrange.unwrap_or_else(|| a.as_slice());
+                    let array = subrange.unwrap_or(a.as_slice());
                     let start = *start;
                     let end = *end;
 
@@ -650,7 +650,7 @@ where
                     }
                     // If `current` is an array, the segment has to be an index
                     (Value::Array(a), idx) => {
-                        let array = subrange.unwrap_or_else(|| a.as_slice());
+                        let array = subrange.unwrap_or(a.as_slice());
                         let idx = stry!(value_to_index(outer, segment, idx, path, array));
 
                         if let Some(v) = array.get(idx) {
@@ -726,24 +726,20 @@ where
 enum PreEvaluatedPatchOperation<'event, 'run> {
     Insert {
         cow: beef::Cow<'event, str>,
-        _ident: &'run StringLit<'event>,
         value: Value<'event>,
         mid: &'run NodeMeta,
     },
     Update {
         cow: beef::Cow<'event, str>,
-        _ident: &'run StringLit<'event>,
         value: Value<'event>,
         mid: &'run NodeMeta,
     },
     Upsert {
         cow: beef::Cow<'event, str>,
         value: Value<'event>,
-        _mid: &'run NodeMeta,
     },
     Erase {
         cow: beef::Cow<'event, str>,
-        _mid: &'run NodeMeta,
     },
     Copy {
         from: beef::Cow<'event, str>,
@@ -757,18 +753,15 @@ enum PreEvaluatedPatchOperation<'event, 'run> {
     },
     Merge {
         cow: beef::Cow<'event, str>,
-        _ident: &'run StringLit<'event>,
         mvalue: Value<'event>,
         mid: &'run NodeMeta,
     },
     MergeRecord {
         mvalue: Value<'event>,
-        _mid: &'run NodeMeta,
     },
     Default {
         cow: beef::Cow<'event, str>,
         expr: &'run ImutExpr<'event>,
-        _mid: &'run NodeMeta,
     },
     DefaultRecord {
         expr: &'run ImutExpr<'event>,
@@ -790,53 +783,46 @@ impl<'event, 'run> PreEvaluatedPatchOperation<'event, 'run> {
         Ok(match patch_op {
             PatchOperation::Insert { ident, expr, mid } => PreEvaluatedPatchOperation::Insert {
                 cow: stry!(ident.run(opts, env, event, state, meta, local)),
-                _ident: ident,
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
-                mid: &mid,
+                mid,
             },
             PatchOperation::Update { ident, expr, mid } => PreEvaluatedPatchOperation::Update {
                 cow: stry!(ident.run(opts, env, event, state, meta, local)),
-                _ident: ident,
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
-                mid: &mid,
+                mid,
             },
-            PatchOperation::Upsert { ident, expr, mid } => PreEvaluatedPatchOperation::Upsert {
+            PatchOperation::Upsert { ident, expr, .. } => PreEvaluatedPatchOperation::Upsert {
                 cow: stry!(ident.run(opts, env, event, state, meta, local)),
                 value: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
-                _mid: &mid,
             },
-            PatchOperation::Erase { ident, mid } => PreEvaluatedPatchOperation::Erase {
+            PatchOperation::Erase { ident, .. } => PreEvaluatedPatchOperation::Erase {
                 cow: stry!(ident.run(opts, env, event, state, meta, local)),
-                _mid: &mid,
             },
             PatchOperation::Copy { from, to, mid } => PreEvaluatedPatchOperation::Copy {
                 from: stry!(from.run(opts, env, event, state, meta, local)),
                 to: stry!(to.run(opts, env, event, state, meta, local)),
-                mid: &mid,
+                mid,
             },
             PatchOperation::Move { from, to, mid } => PreEvaluatedPatchOperation::Move {
                 from: stry!(from.run(opts, env, event, state, meta, local)),
                 to: stry!(to.run(opts, env, event, state, meta, local)),
-                mid: &mid,
+                mid,
             },
             PatchOperation::Merge { ident, expr, mid } => PreEvaluatedPatchOperation::Merge {
                 cow: stry!(ident.run(opts, env, event, state, meta, local)),
-                _ident: ident,
                 mvalue: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
-                mid: &mid,
+                mid,
             },
-            PatchOperation::MergeRecord { expr, mid } => PreEvaluatedPatchOperation::MergeRecord {
+            PatchOperation::MergeRecord { expr, .. } => PreEvaluatedPatchOperation::MergeRecord {
                 mvalue: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
-                _mid: &mid,
             },
-            PatchOperation::Default { ident, expr, mid } => PreEvaluatedPatchOperation::Default {
+            PatchOperation::Default { ident, expr, .. } => PreEvaluatedPatchOperation::Default {
                 cow: stry!(ident.run(opts, env, event, state, meta, local)),
                 // PERF: this is slow, we might not need to evaluate it
                 expr,
-                _mid: &mid,
             },
             PatchOperation::DefaultRecord { expr, mid } => {
-                PreEvaluatedPatchOperation::DefaultRecord { expr, mid: &mid }
+                PreEvaluatedPatchOperation::DefaultRecord { expr, mid }
             }
         })
     }

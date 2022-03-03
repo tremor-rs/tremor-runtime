@@ -22,7 +22,7 @@ use tremor_script::FN_REGISTRY;
 
 use tremor_runtime::errors::*;
 use tremor_script::utils::*;
-use tremor_script::ModuleManager;
+use tremor_script::Manager;
 
 lazy_static::lazy_static! {
     static ref UNIQUE: Mutex<()> = Mutex::new(());

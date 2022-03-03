@@ -21,7 +21,7 @@ use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::Dumb;
-use tremor_script::ModuleManager;
+use tremor_script::Manager;
 use tremor_script::FN_REGISTRY;
 
 fn to_pipe(query: &str) -> Result<ExecutableGraph> {

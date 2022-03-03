@@ -213,7 +213,7 @@ impl Event {
     pub fn cb_ack_with_timing(ingest_ns: u64, id: EventId, op_meta: OpMeta, duration: u64) -> Self {
         Event {
             ingest_ns,
-            id: id,
+            id,
             cb: CbAction::Ack,
             op_meta,
             data: (Value::null(), literal!({ "time": duration })).into(),

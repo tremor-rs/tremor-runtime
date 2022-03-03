@@ -44,7 +44,7 @@ impl<'script> From<IdentRaw<'script>> for NodeId {
 }
 
 impl NodeId {
-    /// Creates a new NodeId with a given module prefix
+    /// Creates a new `NodeId` with a given module prefix
     #[must_use]
     pub fn with_prefix(mut self, prefix: &[String]) -> Self {
         let mut module = prefix.to_vec();
@@ -54,7 +54,7 @@ impl NodeId {
     }
     /// Create a new `NodeId` from an ID and Module list.
     #[must_use]
-    pub fn new<T: ToString>(id: T, module: &[String]) -> Self {
+    pub fn new<T: ToString>(id: &T, module: &[String]) -> Self {
         Self {
             id: id.to_string(),
             module: module.to_vec(),
@@ -95,12 +95,6 @@ impl NodeId {
         } else {
             format!("{}::{}", self.module.join("::"), target)
         }
-    }
-
-    pub(crate) fn to_vec(&self) -> Vec<String> {
-        let mut res = self.module.clone();
-        res.push(self.id.clone());
-        res
     }
 }
 

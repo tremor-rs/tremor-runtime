@@ -639,7 +639,7 @@ where
                 for (pipeline_url, p) in &pipelines {
                     self.ctx.log_err(
                         p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
-                            endpoint: DeployEndpoint::new(self.ctx.alias.clone(), port.to_string()),
+                            endpoint: DeployEndpoint::new(&self.ctx.alias, &port),
                             target: InputTarget::Source(self.addr.clone()),
                             is_transactional: self.is_transactional,
                         })

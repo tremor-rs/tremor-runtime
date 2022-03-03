@@ -253,6 +253,9 @@ impl_fqn!(PipelineDefinition);
 
 impl<'script> PipelineDefinition<'script> {
     /// Converts a pipeline defintion into a query
+    ///
+    /// # Errors
+    /// if translation to a query fails
     pub fn to_query<'registry>(
         &self,
         create: &CreationalWith<'script>,
@@ -266,7 +269,7 @@ impl<'script> PipelineDefinition<'script> {
         let mut params = self.params.clone();
         for (k, v) in &mut params.args.0 {
             if let Some(new) = args.remove(k.as_str())? {
-                *v = Some(*Literal::boxed_expr(Box::new(k.meta().clone()), new))
+                *v = Some(*Literal::boxed_expr(Box::new(k.meta().clone()), new));
             }
         }
         if let Some(k) = args.as_object().and_then(|o| o.keys().next()) {
@@ -430,10 +433,12 @@ impl<'script> CreationalWith<'script> {
     }
 
     /// Renders a with clause into a k/v pair
+    /// # Errors
+    /// when a value can't be evaluated intoa literal
     pub fn render(&self) -> Result<Value<'script>> {
         let mut res = Value::object();
-        for (k, v) in self.with.0.iter() {
-            res.insert(k.id.clone(), v.clone().try_into_lit()?.clone())?;
+        for (k, v) in &self.with.0 {
+            res.try_insert(k.id.clone(), v.clone().try_into_lit()?.clone());
         }
         Ok(res)
     }
@@ -455,6 +460,9 @@ impl<'script> DefinitioalArgsWith<'script> {
     /// 2) We check if all mandatory fiends defined in the creational-args are set
     /// 3) we incoperate the merged args into the creational with - this results in the final map
     /// in the with section
+    ///
+    /// # Errors
+    /// for unknown keys
     pub fn ingest_creational_with(&mut self, creational: &CreationalWith<'script>) -> Result<()> {
         // Ingest creational `with` into definitional `args` and error if `with` contains
         // a unknown key
@@ -527,6 +535,9 @@ impl<'script> DefinitioalArgs<'script> {
     /// 2) We check if all mandatory fiends defined in the creational-args are set
     /// 3) we incoperate the merged args into the creational with - this results in the final map
     /// in the with section
+    ///
+    /// # Errors
+    /// for unknown keys
     pub fn ingest_creational_with(&mut self, creational: &CreationalWith<'script>) -> Result<()> {
         // Ingest creational `with` into definitional `args` and error if `with` contains
         // a unknown key
@@ -552,9 +563,11 @@ impl<'script> DefinitioalArgs<'script> {
     }
 
     /// Renders a with clause into a k/v pair
+    /// # Errors
+    /// on missing keys
     pub fn render(&self) -> Result<Value<'script>> {
         let mut res = Value::object();
-        for (k, v) in self.args.0.iter() {
+        for (k, v) in &self.args.0 {
             // FIXME: hygenic error
             res.insert(
                 k.id.clone(),

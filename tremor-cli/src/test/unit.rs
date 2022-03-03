@@ -217,7 +217,7 @@ pub(crate) fn run_suite(
     let env = env::setup()?;
     let report_start = nanotime();
     let mut stats = stats::Stats::new();
-    match tremor_script::Script::parse(raw.clone(), &env.fun) {
+    match tremor_script::Script::parse(&raw, &env.fun) {
         Ok(runnable) => {
             let local = LocalStack::default();
 

@@ -20,7 +20,7 @@ use tremor_runtime::errors::*;
 use tremor_script::highlighter::Dumb;
 use tremor_script::prelude::*;
 use tremor_script::utils::*;
-use tremor_script::ModuleManager;
+use tremor_script::Manager;
 use tremor_script::{AggrType, EventContext, Script};
 use tremor_script::{Object, Value};
 

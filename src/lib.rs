@@ -112,7 +112,7 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
         .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
     let aggr_reg = tremor_script::registry::aggr();
 
-    let deployable = Deploy::parse(src.clone(), &*FN_REGISTRY.read()?, &aggr_reg);
+    let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg);
     let deployable = match deployable {
         Ok(deployable) => deployable,
         Err(e) => {

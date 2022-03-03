@@ -137,7 +137,7 @@ pub trait BaseExpr: Clone {
 
 impl BaseExpr for NodeMeta {
     fn meta(&self) -> &NodeMeta {
-        &self
+        self
     }
 }
 
@@ -172,7 +172,7 @@ impl<'script> BaseExpr for ImutExpr<'script> {
             ImutExpr::Patch(e) => e.meta(),
             ImutExpr::Path(e) => e.meta(),
             ImutExpr::Recur(e) => e.meta(),
-            ImutExpr::Local { mid, .. } | ImutExpr::Present { mid, .. } => &mid,
+            ImutExpr::Local { mid, .. } | ImutExpr::Present { mid, .. } => mid,
             ImutExpr::Record(e) => e.meta(),
             ImutExpr::Unary(e) => e.meta(),
             ImutExpr::Bytes(e) => e.meta(),
@@ -187,7 +187,7 @@ impl<'script> BaseExpr for Expr<'script> {
         match self {
             Expr::Assign { mid, .. }
             | Expr::AssignMoveLocal { mid, .. }
-            | Expr::Drop { mid, .. } => &mid,
+            | Expr::Drop { mid, .. } => mid,
             Expr::Comprehension(e) => e.meta(),
             Expr::Emit(e) => e.meta(),
             Expr::Imut(e) => e.meta(),
@@ -234,7 +234,7 @@ impl<'script> BaseExpr for Segment<'script> {
             | Self::Idx { mid, .. }
             | Self::Element { mid, .. }
             | Self::Range { mid, .. }
-            | Self::RangeExpr { mid, .. } => &mid,
+            | Self::RangeExpr { mid, .. } => mid,
         }
     }
 }
@@ -266,9 +266,7 @@ impl<'script> BaseExpr for ImutExprRaw<'script> {
 impl<'script> BaseExpr for GroupBy<'script> {
     fn meta(&self) -> &NodeMeta {
         match self {
-            GroupBy::Expr { mid, .. } | GroupBy::Set { mid, .. } | GroupBy::Each { mid, .. } => {
-                &mid
-            }
+            GroupBy::Expr { mid, .. } | GroupBy::Set { mid, .. } | GroupBy::Each { mid, .. } => mid,
         }
     }
 }
