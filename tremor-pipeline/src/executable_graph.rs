@@ -83,7 +83,7 @@ impl NodeConfig {
         &self,
         uid: u64,
         resolver: NodeLookupFn,
-        helper: &mut Helper,
+        helper: &mut Helper<'static, '_>,
     ) -> Result<OperatorNode> {
         resolver(self, uid, self.stmt.as_ref(), helper)
     }
