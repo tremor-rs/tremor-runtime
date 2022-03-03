@@ -129,7 +129,7 @@ pub(crate) fn highlight(is_pretty: bool, value: &Value) -> Result<()> {
             simd_json::to_string(&value)?
         }
     );
-    let (aid, result) = Arena::insert(result)?;
+    let (aid, result) = Arena::insert(&result)?;
     let lexed_tokens: Vec<_> = lexer::Tokenizer::new(result, aid)
         .tokenize_until_err()
         .collect();

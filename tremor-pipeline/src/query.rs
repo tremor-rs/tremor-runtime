@@ -142,7 +142,10 @@ impl Query {
     ///
     /// # Errors
     /// if the trickle script can not be parsed
-    pub fn parse<S: ToString>(script: S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
+    pub fn parse<S>(script: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
+    where
+        S: ToString + ?Sized,
+    {
         Ok(Self(tremor_script::query::Query::parse(
             script, reg, aggr_reg,
         )?))
@@ -333,7 +336,7 @@ impl Query {
                     nodes_by_name.insert(name.clone().into(), NodeIndex::default());
 
                     if let Some(pd) = helper.get::<PipelineDefinition>(&s.target)? {
-                        let prefix = prefix_for(&s);
+                        let prefix = prefix_for(s);
 
                         let query = Query(tremor_script::Query::from_query(
                             pd.to_query(&s.params, &mut helper)?,
@@ -436,7 +439,7 @@ impl Query {
                     decl.params.ingest_creational_with(&o.params)?;
                     let inner_args = decl.params.render()?;
                     ArgsRewriter::new(inner_args, &mut helper).walk_script_decl(&mut decl)?;
-                    ConstFolder::new(&mut helper).walk_script_decl(&mut decl)?;
+                    ConstFolder::new(&helper).walk_script_decl(&mut decl)?;
 
                     let e = decl.extent();
                     let mut h = Dumb::new();
@@ -494,7 +497,7 @@ impl Query {
 
             for (old_idx, mut node) in ig.graph.graph.into_iter().enumerate() {
                 let new_idx = if let NodeKind::Output(port) = &node.kind {
-                    let port: &str = &port;
+                    let port: &str = port;
                     node.config.kind = NodeKind::Operator;
                     let new_idx = pipe_graph.add_node(node.config);
                     let to_id = ig.into_map.get(port).ok_or(format!(
@@ -720,7 +723,7 @@ fn select(
             let op = PassthroughFactory::new_boxed();
             op.from_node(operator_uid, config)
         }
-        SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(config.id.clone(), node)?)),
+        SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(config.id.clone(), node))),
         SelectType::Normal => {
             let windows: Result<Vec<(String, window::Impl)>> = node
                 .stmt
@@ -741,7 +744,7 @@ fn select(
                 config.id.clone(),
                 windows?,
                 node,
-            )?))
+            )))
         }
     }
 }

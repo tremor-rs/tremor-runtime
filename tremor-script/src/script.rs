@@ -75,7 +75,10 @@ impl Script {
     ///
     /// # Errors
     /// if the script can not be parsed
-    pub fn parse<S: ToString>(script: S, reg: &Registry) -> Result<Self> {
+    pub fn parse<S>(script: &S, reg: &Registry) -> Result<Self>
+    where
+        S: ToString + ?Sized,
+    {
         let mut warnings = Warnings::new();
         let (aid, script) = Arena::insert(script)?;
 

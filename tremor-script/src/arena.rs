@@ -56,9 +56,9 @@ impl From<u32> for Index {
 }
 
 impl Arena {
-    fn insert_<S>(&mut self, src: S) -> Index
+    fn insert_<S>(&mut self, src: &S) -> Index
     where
-        S: ToString,
+        S: ToString + ?Sized,
     {
         let id = self.sources.len();
         self.sources.push(ArenaEntry {
@@ -79,6 +79,8 @@ impl Arena {
     }
 
     /// Fetches the source as a static string
+    /// # Errors
+    /// if the source can't be found
     pub fn get(id: Index) -> Result<Option<&'static str>> {
         // FIXME: explain why this is OK, in short, we simply never delete anything so
         // it stays for the lifetime of the system
@@ -86,14 +88,18 @@ impl Arena {
     }
 
     /// Same as get but returns an io error
+    /// # Errors
+    /// if the source can't be found
     pub fn io_get(aid: Index) -> io::Result<&'static str> {
-        Arena::get(aid)?.ok_or(io::Error::new(io::ErrorKind::NotFound, "source not found"))
+        Arena::get(aid)?.ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "source not found"))
     }
 
     /// Inserts source code
-    pub fn insert<S>(src: S) -> Result<(Index, &'static str)>
+    /// # Errors
+    /// really never
+    pub fn insert<S>(src: &S) -> Result<(Index, &'static str)>
     where
-        S: ToString,
+        S: ToString + ?Sized,
     {
         let mut a = ARENA.write()?;
         let id = a.insert_(src);

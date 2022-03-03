@@ -161,15 +161,6 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
                 Lit(Literal { mid, value })
             }
             // handled below
-            e @ ImutExpr::String(_) => e,
-
-            e @ ImutExpr::Patch(_) => e,         // TODO
-            e @ ImutExpr::Match(_) => e,         // TODO
-            e @ ImutExpr::Comprehension(_) => e, // TODO
-            e @ ImutExpr::Merge(_) => e,         // TODO
-            e @ ImutExpr::Local { .. } => e,     // TODO
-            e @ ImutExpr::Present { .. } => e,   // TODO
-
             ImutExpr::Path(Path::Expr(ExprPath {
                 expr,
                 segments,
@@ -178,7 +169,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
             })) if expr.is_lit() => {
                 let value = expr.try_into_lit()?;
                 let outer = e.extent();
-                let (value, segments) = self.reduce_path(outer, value, segments)?;
+                let (value, segments) = reduce_path(outer, value, segments)?;
                 let lit = ImutExpr::Literal(Literal {
                     mid: mid.clone(),
                     value,
@@ -194,7 +185,6 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
                     }))
                 }
             }
-            e @ ImutExpr::Path(_) => e,
 
             ImutExpr::Invoke(i)
             | ImutExpr::Invoke1(i)
@@ -223,8 +213,15 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
                     mid: i.mid,
                 })
             }
-
-            e @ (ImutExpr::Invoke(_)
+            e @ (ImutExpr::Path(_)
+            | ImutExpr::String(_)
+            | ImutExpr::Patch(_)
+            | ImutExpr::Match(_)
+            | ImutExpr::Comprehension(_)
+            | ImutExpr::Merge(_)
+            | ImutExpr::Local { .. }
+            | ImutExpr::Present { .. }
+            | ImutExpr::Invoke(_)
             | ImutExpr::Invoke1(_)
             | ImutExpr::Invoke2(_)
             | ImutExpr::Invoke3(_)
@@ -379,98 +376,86 @@ where
         expr.try_into_lit()
     }
     /// New folder
+    #[must_use]
     pub fn new(helper: &'run Helper<'script, '_>) -> Self {
         ConstFolder { reg: helper.reg }
     }
+}
 
-    pub(crate) fn reduce_path(
-        &self,
-        outer: Span,
-        mut value: Value<'script>,
-        segments: Vec<Segment<'script>>,
-    ) -> Result<(Value<'script>, Vec<Segment<'script>>)> {
-        let mut segments = segments.into_iter().peekable();
-        let mut subrange: Option<&[Value<'script>]> = None;
+fn reduce_path<'script>(
+    outer: Span,
+    mut value: Value<'script>,
+    segments: Vec<Segment<'script>>,
+) -> Result<(Value<'script>, Vec<Segment<'script>>)> {
+    let mut segments = segments.into_iter().peekable();
+    let mut subrange: Option<&[Value<'script>]> = None;
 
-        while let Some(segment) = segments.peek() {
-            match segment {
-                Segment::Id { key, mid } => {
-                    if !value.is_object() {
-                        return error_need_obj(&outer, segment, value.value_type());
-                    }
-                    if subrange.is_some() {
-                        return Err("We can't index a name into a subrange.".into());
-                        // FIXME better error
-                    }
-                    if let Some(v) = key.lookup(&value) {
-                        subrange = None;
-                        value = v.clone();
-                    } else {
-                        return error_bad_key(
-                            &outer,
-                            segment,
-                            &fake_path(mid),
-                            key.key().to_string(),
-                            value
-                                .as_object()
-                                .map(|o| o.keys().map(ToString::to_string).collect::<Vec<_>>())
-                                .unwrap_or_default(),
-                        );
-                    }
+    while let Some(segment) = segments.peek() {
+        match segment {
+            Segment::Id { key, mid } => {
+                if !value.is_object() {
+                    return error_need_obj(&outer, segment, value.value_type());
                 }
-                Segment::Idx { idx, mid } => {
-                    if let Some(a) = value.as_array() {
-                        let range_to_consider = subrange.unwrap_or_else(|| a.as_slice());
-                        if let Some(c) = range_to_consider.get(*idx) {
-                            value = c.clone();
-                            subrange = None;
-                        } else {
-                            let r = *idx..*idx;
-                            let l = range_to_consider.len();
-                            return error_array_out_of_bound(
-                                &outer,
-                                segment,
-                                &fake_path(mid),
-                                r,
-                                l,
-                            );
-                        }
-                    } else {
-                        return error_need_arr(&outer, segment, value.value_type());
-                    }
+                if subrange.is_some() {
+                    return Err("We can't index a name into a subrange.".into());
+                    // FIXME better error
                 }
-                Segment::Range { start, end, mid } => {
-                    if let Some(a) = value.as_array() {
-                        let array = subrange.unwrap_or_else(|| a.as_slice());
-                        let start = *start;
-                        let end = *end;
-                        if end > array.len() {
-                            let r = start..end;
-                            let l = array.len();
-                            return error_array_out_of_bound(
-                                &outer,
-                                segment,
-                                &fake_path(mid),
-                                r,
-                                l,
-                            );
-                        }
-                        subrange = array.get(start..end);
-                    } else {
-                        return error_need_arr(&outer, segment, value.value_type());
-                    }
-                }
-
-                Segment::RangeExpr { .. } | Segment::Element { .. } => {
-                    break;
+                if let Some(v) = key.lookup(&value) {
+                    subrange = None;
+                    value = v.clone();
+                } else {
+                    return error_bad_key(
+                        &outer,
+                        segment,
+                        &fake_path(mid),
+                        key.key().to_string(),
+                        value
+                            .as_object()
+                            .map(|o| o.keys().map(ToString::to_string).collect::<Vec<_>>())
+                            .unwrap_or_default(),
+                    );
                 }
             }
-            segments.next();
+            Segment::Idx { idx, mid } => {
+                if let Some(a) = value.as_array() {
+                    let range_to_consider = subrange.unwrap_or(a.as_slice());
+                    if let Some(c) = range_to_consider.get(*idx) {
+                        value = c.clone();
+                        subrange = None;
+                    } else {
+                        let r = *idx..*idx;
+                        let l = range_to_consider.len();
+                        return error_array_out_of_bound(&outer, segment, &fake_path(mid), r, l);
+                    }
+                } else {
+                    return error_need_arr(&outer, segment, value.value_type());
+                }
+            }
+            Segment::Range { start, end, mid } => {
+                if let Some(a) = value.as_array() {
+                    let array = subrange.unwrap_or(a.as_slice());
+                    let start = *start;
+                    let end = *end;
+                    if end > array.len() {
+                        let r = start..end;
+                        let l = array.len();
+                        return error_array_out_of_bound(&outer, segment, &fake_path(mid), r, l);
+                    }
+                    subrange = array.get(start..end);
+                } else {
+                    return error_need_arr(&outer, segment, value.value_type());
+                }
+            }
+
+            Segment::RangeExpr { .. } | Segment::Element { .. } => {
+                break;
+            }
         }
-        if let Some(arr) = subrange {
-            Ok((Value::from(arr.to_vec()), segments.collect()))
-        } else {
-            Ok((value, segments.collect()))
-        }
+        segments.next();
+    }
+    if let Some(arr) = subrange {
+        Ok((Value::from(arr.to_vec()), segments.collect()))
+    } else {
+        Ok((value, segments.collect()))
     }
 }

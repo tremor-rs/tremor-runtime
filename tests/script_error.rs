@@ -15,7 +15,7 @@ use pretty_assertions::assert_eq;
 use std::{io::prelude::*, sync::Mutex};
 use tremor_common::file;
 use tremor_runtime::errors::*;
-use tremor_script::{highlighter::Dumb, ModuleManager, Script, FN_REGISTRY};
+use tremor_script::{highlighter::Dumb, Manager, Script, FN_REGISTRY};
 
 lazy_static::lazy_static! {
     static ref UNIQUE: Mutex<()> = Mutex::new(());

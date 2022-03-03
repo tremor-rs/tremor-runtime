@@ -19,7 +19,7 @@ use tremor_pipeline::EventOriginUri;
 use tremor_runtime::errors::*;
 use tremor_script::prelude::*;
 use tremor_script::utils::*;
-use tremor_script::{AggrType, EventContext, ModuleManager, Return, Script, FN_REGISTRY};
+use tremor_script::{AggrType, EventContext, Manager, Return, Script, FN_REGISTRY};
 
 macro_rules! test_cases {
     ($($file:ident),* ,) => {
