@@ -90,6 +90,7 @@ impl std::fmt::Debug for Span {
 
 impl Span {
     /// New span
+    #[must_use]
     pub fn new(start: Location, end: Location) -> Self {
         Self { start, end }
     }
@@ -102,10 +103,12 @@ impl Span {
         self.start.aid
     }
     /// start of the span
+    #[must_use]
     pub fn start(self) -> Location {
         self.start
     }
     /// end of the span
+    #[must_use]
     pub fn end(self) -> Location {
         self.end
     }

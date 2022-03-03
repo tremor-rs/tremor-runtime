@@ -56,7 +56,7 @@ impl Select {
         id: String,
         windows: Vec<(String, window::Impl)>,
         select: &ast::SelectStmt<'static>,
-    ) -> Result<Self> {
+    ) -> Self {
         let windows: Vec<_> = windows
             .into_iter()
             .map(|(fqwn, window_impl)| Window {
@@ -76,7 +76,7 @@ impl Select {
             .map(|w| w.window_impl.max_groups())
             .min()
             .unwrap_or(0) as usize;
-        Ok(Self {
+        Self {
             id,
             windows,
             select: select.clone(),
@@ -85,7 +85,7 @@ impl Select {
             recursion_limit: tremor_script::recursion_limit(),
             dflt_group,
             max_groups,
-        })
+        }
     }
     const fn opts() -> ExecOpts {
         ExecOpts {

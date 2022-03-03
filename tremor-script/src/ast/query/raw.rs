@@ -37,7 +37,7 @@ use crate::{
         Consts, Ident,
     },
     errors::{Error, Kind as ErrorKind},
-    impl_expr_no_lt, ModuleManager,
+    impl_expr_no_lt, Manager,
 };
 use beef::Cow;
 use simd_json::ValueAccess;
@@ -78,7 +78,7 @@ impl<'script> QueryRaw<'script> {
                         from.push(Ident::new(
                             v.trim().to_string().into(),
                             Box::new(mid.clone()),
-                        ))
+                        ));
                     }
                 }
                 ("into", Some(v)) => {
@@ -86,7 +86,7 @@ impl<'script> QueryRaw<'script> {
                         into.push(Ident::new(
                             v.trim().to_string().into(),
                             Box::new(mid.clone()),
-                        ))
+                        ));
                     }
                 }
                 _ => {}
@@ -181,7 +181,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
             StmtRaw::PipelineCreate(stmt) => Ok(Some(Stmt::PipelineCreate(stmt.up(helper)?))),
             StmtRaw::Use(UseRaw { alias, module, mid }) => {
                 let range = mid.range;
-                let module_id = ModuleManager::load(&module).map_err(|err| match err {
+                let module_id = Manager::load(&module).map_err(|err| match err {
                     Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
                         ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
                         state,
@@ -212,7 +212,7 @@ impl<'script> Upable<'script> for OperatorDefinitionRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let operator_decl = OperatorDefinition {
             mid: self.mid.box_with_name(&self.id),
-            node_id: NodeId::new(self.id, &[]),
+            node_id: NodeId::new(&self.id, &[]),
             kind: self.kind.up(helper)?,
             params: self.params.up(helper)?,
         };
@@ -246,11 +246,11 @@ impl<'script> PipelineDefinitionRaw<'script> {
     fn dflt_out_ports<'ident>(&self) -> Vec<Ident<'ident>> {
         vec![
             Ident {
-                mid: self.mid.clone().box_with_name("out"),
+                mid: self.mid.clone().box_with_name(&"out"),
                 id: "out".into(),
             },
             Ident {
-                mid: self.mid.clone().box_with_name("err"),
+                mid: self.mid.clone().box_with_name(&"err"),
                 id: "err".into(),
             },
         ]
@@ -282,12 +282,7 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
         }
 
         let mid = self.mid.box_with_name(&self.id);
-        let stmts = self
-            .pipeline
-            .up(helper)?
-            .into_iter()
-            .filter_map(std::convert::identity)
-            .collect();
+        let stmts = self.pipeline.up(helper)?.into_iter().flatten().collect();
         let scope = helper.leave_scope()?;
         let params = self.params.up(helper)?;
         let config = self
@@ -299,7 +294,7 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
         let pipeline_decl = PipelineDefinition {
             config,
             mid,
-            node_id: NodeId::new(self.id, &[]),
+            node_id: NodeId::new(&self.id, &[]),
             params,
             stmts,
             from,
@@ -353,7 +348,7 @@ impl<'script> Upable<'script> for OperatorCreateRaw<'script> {
         let params = self.params.up(helper)?;
         Ok(OperatorCreate {
             mid: self.mid.box_with_name(&self.id),
-            node_id: NodeId::new(self.id, &[]),
+            node_id: NodeId::new(&self.id, &[]),
             target: self.target.with_prefix(&[]), // FIXME
             params,
         })
@@ -421,7 +416,7 @@ impl<'script> Upable<'script> for ScriptCreateRaw<'script> {
         let params = self.params.up(helper)?;
         Ok(ScriptCreate {
             mid: self.mid.box_with_name(&self.id),
-            node_id: NodeId::new(self.id, &[]),
+            node_id: NodeId::new(&self.id, &[]),
             params,
             target: self.target.with_prefix(&[]), // FIXME
         })
@@ -451,7 +446,7 @@ impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
 
         let window_decl = WindowDefinition {
             mid: self.mid.box_with_name(&self.id),
-            node_id: NodeId::new(self.id, &[]),
+            node_id: NodeId::new(&self.id, &[]),
             kind: self.kind,
             params: self.params.up(helper)?,
             script: maybe_script,
@@ -622,7 +617,7 @@ impl<'script> Upable<'script> for OperatorKindRaw {
         Ok(OperatorKind {
             mid: self
                 .mid
-                .box_with_name(format!("{}::{}", self.module, self.operation)),
+                .box_with_name(&format!("{}::{}", self.module, self.operation)),
             module: self.module,
             operation: self.operation,
         })
@@ -689,7 +684,7 @@ impl<'script> Upable<'script> for CreationalWithRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let mid = self.with.mid.clone();
         let with = self.with.up(helper)?;
-        Ok(CreationalWith { mid, with })
+        Ok(CreationalWith { with, mid })
     }
 }
 

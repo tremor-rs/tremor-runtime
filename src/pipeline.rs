@@ -498,7 +498,7 @@ pub(crate) async fn pipeline_task(
                     if alias == endpoint.alias() {
                         if let Err(e) = pipe
                             .send_mgmt(MgmtMsg::ConnectInput {
-                                endpoint: DeployEndpoint::new(alias.to_string(), port.to_string()),
+                                endpoint: DeployEndpoint::new(&alias, &port),
                                 target: InputTarget::Pipeline(Box::new(addr.clone())),
                                 is_transactional: true,
                             })
@@ -532,8 +532,7 @@ pub(crate) async fn pipeline_task(
                         {
                             if let Err(e) = pipe
                                 .send_mgmt(MgmtMsg::DisconnectInput(DeployEndpoint::new(
-                                    alias.to_string(),
-                                    port.to_string(),
+                                    &alias, &port,
                                 )))
                                 .await
                             {

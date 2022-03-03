@@ -301,7 +301,7 @@ impl ErrorKind {
         };
         match self {
             UnrecognizedToken(outer, inner, t, _) if t.is_empty() && inner.start().absolute() == outer.start().absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
-            UnrecognizedToken(_, _, t, _) if t == "##"  || t == "##"   => Some(format!("`{t}` is as doc comment, it needs to be followed by a statement, did you want to use `#` here?")),
+            UnrecognizedToken(_, _, t, _) if t == "##" => Some(format!("`{t}` is as doc comment, it needs to be followed by a statement, did you want to use `#` here?")),
             UnrecognizedToken(_, _, t, _) if t == "default" || t == "case" => Some("You might have a trailing `;` in the prior statement".into()),
             UnrecognizedToken(_, _, t, l) if !matches!(lexer::ident_to_token(t), lexer::Token::Ident(_, _)) && l.contains(&("`<ident>`".to_string())) => Some(format!("It looks like you tried to use the '{}' as a ident, consider quoting it as `{}` to make it an identifier.", t, t)),
             UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
@@ -444,7 +444,7 @@ where
             "one of {}",
             choices
                 .iter()
-                .map(|e| e.to_string())
+                .map(ToString::to_string)
                 .collect::<Vec<String>>()
                 .join(", ")
         )
@@ -887,7 +887,7 @@ where
 {
     // Subqueries store unmangled `name` in `meta`
     // Use `name` from `meta` if it exists.
-    let name = inner.meta().name().map_or(name, |s| s.into());
+    let name = inner.meta().name().map_or(name, std::convert::Into::into);
     ErrorKind::QueryStreamNotDefined(stmt.extent(), inner.extent(), name, port).into()
 }
 
@@ -897,7 +897,7 @@ pub fn query_stream_duplicate_name_err<S: Ranged, I: BaseExpr + Ranged>(
     inner: &I,
     name: String,
 ) -> Error {
-    let name = inner.meta().name().map_or(name, |s| s.into());
+    let name = inner.meta().name().map_or(name, std::convert::Into::into);
     ErrorKind::DoubleStream(stmt.extent(), inner.extent(), name).into()
 }
 
@@ -907,7 +907,7 @@ pub fn pipeline_stmt_duplicate_name_err<S: Ranged, I: BaseExpr + Ranged>(
     inner: &I,
     name: String,
 ) -> Error {
-    let name = inner.meta().name().map_or(name, |s| s.into());
+    let name = inner.meta().name().map_or(name, std::convert::Into::into);
     ErrorKind::DoublePipelineCreate(stmt.extent(), inner.extent(), name).into()
 }
 
@@ -918,19 +918,22 @@ pub fn pipeline_unknown_port_err<S: Ranged, I: BaseExpr + Ranged>(
     subq_name: String,
     port_name: String,
 ) -> Error {
-    let subq_name = inner.meta().name().map_or(subq_name, |s| s.into());
+    let subq_name = inner
+        .meta()
+        .name()
+        .map_or(subq_name, std::convert::Into::into);
     ErrorKind::PipelineUnknownPort(stmt.extent(), inner.extent(), subq_name, port_name).into()
 }
 
 /// Creates a query node reserved name error
 pub fn query_node_reserved_name_err<S: BaseExpr + Ranged>(stmt: &S, name: String) -> Error {
-    let name = stmt.meta().name().map_or(name, |s| s.into());
+    let name = stmt.meta().name().map_or(name, std::convert::Into::into);
     ErrorKind::QueryNodeReservedName(stmt.extent(), name).into()
 }
 
 /// Creates a query node duplicate name error
 pub fn query_node_duplicate_name_err<S: BaseExpr + Ranged>(stmt: &S, name: String) -> Error {
-    let name = stmt.meta().name().map_or(name, |s| s.into());
+    let name = stmt.meta().name().map_or(name, std::convert::Into::into);
     ErrorKind::QueryNodeDuplicateName(stmt.extent(), name).into()
 }
 

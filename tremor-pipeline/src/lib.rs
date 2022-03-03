@@ -100,10 +100,12 @@ impl MetricsChannel {
     }
 
     /// Get the sender
+    #[must_use]
     pub fn tx(&self) -> Sender<MetricsMsg> {
         self.tx.clone()
     }
     /// Get the receiver
+    #[must_use]
     pub fn rx(&self) -> Receiver<MetricsMsg> {
         self.rx.clone()
     }
@@ -119,6 +121,7 @@ pub struct MetricsMsg {
 
 impl MetricsMsg {
     /// creates a new message
+    #[must_use]
     pub fn new(payload: EventPayload, origin_uri: Option<EventOriginUri>) -> Self {
         Self {
             payload,

@@ -35,12 +35,12 @@ pub struct SimpleSelect {
 }
 
 impl SimpleSelect {
-    pub fn with_stmt(id: String, stmt: &ast::SelectStmt<'static>) -> Result<Self> {
-        Ok(Self {
+    pub fn with_stmt(id: String, stmt: &ast::SelectStmt<'static>) -> Self {
+        Self {
             id,
             select: stmt.clone(),
             recursion_limit: tremor_script::recursion_limit(),
-        })
+        }
     }
     fn opts() -> ExecOpts {
         ExecOpts {

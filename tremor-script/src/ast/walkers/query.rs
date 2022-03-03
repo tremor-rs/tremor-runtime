@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{module::ModuleContent, CreationalWith, DefinitioalArgs, WithExpr};
+use crate::ast::{module::Content, CreationalWith, DefinitioalArgs, WithExpr};
 
 use super::super::visitors::prelude::*;
 macro_rules! stop {
@@ -301,7 +301,7 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_module_content(&mut self, m: &mut ModuleContent<'script>) -> Result<()> {
+    fn walk_module_content(&mut self, m: &mut Content<'script>) -> Result<()> {
         stop!(self.visit_module_content(m), self.leave_module_content(m));
         for d in m.windows.values_mut() {
             self.walk_window_decl(d)?;

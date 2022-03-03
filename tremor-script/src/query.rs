@@ -41,6 +41,7 @@ where
     /// Converts a troy embedded pipeline with resolved arguments to a runnable query
     /// # Errors
     ///   If the query fails to parse and convert correctly
+    #[must_use]
     pub fn from_query(query: ast::Query<'static>) -> Self {
         let warnings = BTreeSet::new();
         let locals = 0;
@@ -55,7 +56,10 @@ where
     ///
     /// # Errors
     /// if the query can not be parsed
-    pub fn parse<S: ToString>(script: S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self> {
+    pub fn parse<S>(script: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
+    where
+        S: ToString + ?Sized,
+    {
         let mut warnings = BTreeSet::new();
 
         let (aid, script) = Arena::insert(script)?;

@@ -35,7 +35,7 @@ use crate::{
         Deploy, DeployStmt, Helper, NodeMeta, Script, Upable,
     },
     errors::{Error, Kind as ErrorKind, Result},
-    impl_expr, AggrType, EventContext, ModuleManager, Return,
+    impl_expr, AggrType, EventContext, Manager, Return,
 };
 use beef::Cow;
 use halfbrown::HashMap;
@@ -46,7 +46,7 @@ use tremor_value::literal;
 /// for use during compile time reduction
 /// # Errors
 /// If evaluation of the script fails, or a legal value cannot be evaluated by result
-pub fn run_script<'script, 'registry>(expr: &Script<'script>) -> Result<Value<'script>> {
+pub fn run_script<'script>(expr: &Script<'script>) -> Result<Value<'script>> {
     // We duplicate these here as it simplifies use of the macro externally
     let ctx = EventContext::new(nanotime(), None);
     let mut event = literal!({}).into_static();
@@ -76,7 +76,7 @@ impl<'script> DeployRaw<'script> {
     ) -> Result<Deploy<'script>> {
         let mut stmts: Vec<DeployStmt<'script>> = vec![];
         for (_i, stmt) in self.stmts.into_iter().enumerate() {
-            if let Some(stmt) = stmt.up(&mut helper)? {
+            if let Some(stmt) = stmt.up(helper)? {
                 stmts.push(stmt);
             }
         }
@@ -119,7 +119,7 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
         match self {
             DeployStmtRaw::Use(UseRaw { alias, module, mid }) => {
                 let range = mid.range;
-                let module_id = ModuleManager::load(&module).map_err(|err| match err {
+                let module_id = Manager::load(&module).map_err(|err| match err {
                     Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
                         ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
                         state,
@@ -128,7 +128,7 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
                 })?;
 
                 let alias = alias.unwrap_or_else(|| module.id.clone());
-                helper.scope().add_module_alias(dbg!(alias), module_id);
+                helper.scope().add_module_alias(alias, module_id);
                 Ok(None)
             }
             DeployStmtRaw::FlowDefinition(stmt) => {
@@ -170,7 +170,7 @@ impl<'script> Upable<'script> for ConnectorDefinitionRaw<'script> {
             mid: self.mid.box_with_name(&self.id),
             params: self.params.up(helper)?,
             builtin_kind: self.kind.to_string(),
-            node_id: NodeId::new(self.id, &[]),
+            node_id: NodeId::new(&self.id, &[]),
             docs: self
                 .docs
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
@@ -286,7 +286,7 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
             match stmt {
                 FlowStmtRaw::Use(UseRaw { alias, module, mid }) => {
                     let range = mid.range;
-                    let module_id = ModuleManager::load(&module).map_err(|err| match err {
+                    let module_id = Manager::load(&module).map_err(|err| match err {
                         Error(ErrorKind::ModuleNotFound(_, _, p, exp), state) => Error(
                             ErrorKind::ModuleNotFound(range.expand_lines(2), range, p, exp),
                             state,
@@ -392,7 +392,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             }
             CreateKind::Pipeline => {
                 if let Some(artefact) = helper.get(&target)? {
-                    CreateTargetDefinition::Pipeline(artefact)
+                    CreateTargetDefinition::Pipeline(Box::new(artefact))
                 } else {
                     return Err(ErrorKind::DeployArtefactNotDefined(
                         outer,
@@ -408,7 +408,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         let create_stmt = CreateStmt {
             mid: self.mid.box_with_name(&self.id.id),
             with: params,
-            instance_alias: node_id.clone(),
+            instance_alias: node_id,
             from_target: target,
             defn: decl,
         };

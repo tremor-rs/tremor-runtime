@@ -151,6 +151,8 @@ pub trait Highlighter {
     }
 
     /// Format an error given a script source.
+    /// # Errors
+    /// on io errors
     fn format_error(&mut self, error: &crate::errors::Error) -> io::Result<()> {
         if let (Some(r), _) = error.context() {
             let aid = r.aid();
@@ -572,7 +574,8 @@ pub struct Dumb {
 }
 impl Dumb {
     /// Takes a error and creates a highlighted version
-    #[must_use]
+    /// # Errors
+    /// on io errors
     pub fn error_to_string(e: &crate::errors::Error) -> io::Result<String> {
         let mut h = Dumb::default();
         h.format_error(e)?;

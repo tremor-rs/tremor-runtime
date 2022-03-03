@@ -18,7 +18,7 @@ use tremor_script::FN_REGISTRY;
 
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::{Dumb, Highlighter};
-use tremor_script::{ModuleManager, Script};
+use tremor_script::{Manager, Script};
 
 macro_rules! test_cases {
     ($($file:ident),* ,) => {

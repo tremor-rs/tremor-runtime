@@ -11,7 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#![allow(dead_code)]
+// We want to keep the names here
+#![allow(clippy::module_name_repetitions)]
 
 use super::{
     deploy::raw::{ConnectorDefinitionRaw, FlowDefinitionRaw},
@@ -33,12 +34,12 @@ use crate::{
 };
 use beef::Cow;
 use sha2::Digest;
-use std::mem::transmute;
+use std::{collections::hash_map::Entry, mem::transmute};
 use std::{collections::HashMap, fmt::Debug};
 
 use std::sync::RwLock;
 lazy_static::lazy_static! {
-    static ref MODULES: RwLock<ModuleManager> = RwLock::new(ModuleManager::default());
+    static ref MODULES: RwLock<Manager> = RwLock::new(Manager::default());
 }
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -92,13 +93,13 @@ impl_expr!(ModuleRaw);
 
 /// module id
 #[derive(Debug, Clone, PartialEq)]
-pub struct ModuleId(Vec<u8>);
+pub struct Id(Vec<u8>);
 
 type NamedEnteties<T> = HashMap<String, T>;
 
 /// Content of a module
 #[derive(Default, Clone, Serialize, PartialEq)]
-pub struct ModuleContent<'script> {
+pub struct Content<'script> {
     /// connectors in this module
     pub connectors: NamedEnteties<ConnectorDefinition<'script>>,
     /// pipelines in this module
@@ -117,7 +118,7 @@ pub struct ModuleContent<'script> {
     pub functions: NamedEnteties<FnDecl<'script>>,
 }
 
-impl<'script> Debug for ModuleContent<'script> {
+impl<'script> Debug for Content<'script> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ModuleContent")
             .field("connectors", &self.connectors.keys())
@@ -132,80 +133,78 @@ impl<'script> Debug for ModuleContent<'script> {
     }
 }
 
-impl<'script> ModuleContent<'script> {
-    pub(crate) fn insert_flow(&mut self, flow: FlowDefinition<'script>) -> Result<()> {
-        let name = flow.node_id.id.clone();
-        if self.flows.contains_key(&name) {
-            Err(already_defined_err(&flow, "flow"))
-        } else {
-            self.flows.insert(name, flow);
+impl<'script> Content<'script> {
+    pub(crate) fn insert_flow(&mut self, elem: FlowDefinition<'script>) -> Result<()> {
+        let name = elem.node_id.id.clone();
+        if let Entry::Vacant(e) = self.flows.entry(name) {
+            e.insert(elem);
             Ok(())
+        } else {
+            Err(already_defined_err(&elem, "flow"))
         }
     }
-    pub(crate) fn insert_connector(
-        &mut self,
-        connector: ConnectorDefinition<'script>,
-    ) -> Result<()> {
-        let name = connector.node_id.id.clone();
-        if self.connectors.contains_key(&name) {
-            Err(already_defined_err(&connector, "connector"))
-        } else {
-            self.connectors.insert(name, connector);
+    pub(crate) fn insert_connector(&mut self, elem: ConnectorDefinition<'script>) -> Result<()> {
+        let name = elem.node_id.id.clone();
+        if let Entry::Vacant(e) = self.connectors.entry(name) {
+            e.insert(elem);
             Ok(())
+        } else {
+            Err(already_defined_err(&elem, "connector"))
         }
     }
-    pub(crate) fn insert_const(&mut self, c: Const<'script>) -> Result<()> {
-        let name = c.name.clone();
-        if self.consts.contains_key(&name) {
-            Err(already_defined_err(&c, "constant"))
-        } else {
-            self.consts.insert(name, c);
+    pub(crate) fn insert_const(&mut self, elem: Const<'script>) -> Result<()> {
+        let name = elem.name.clone();
+        if let Entry::Vacant(e) = self.consts.entry(name) {
+            e.insert(elem);
             Ok(())
+        } else {
+            Err(already_defined_err(&elem, "const"))
         }
     }
-    pub(crate) fn insert_function(&mut self, f: FnDecl<'script>) -> Result<()> {
-        let name = f.name.to_string();
-        if self.functions.contains_key(&name) {
-            Err(already_defined_err(&f, "function"))
-        } else {
-            self.functions.insert(name, f);
+    pub(crate) fn insert_function(&mut self, elem: FnDecl<'script>) -> Result<()> {
+        let name = elem.name.to_string();
+        if let Entry::Vacant(e) = self.functions.entry(name) {
+            e.insert(elem);
             Ok(())
+        } else {
+            Err(already_defined_err(&elem, "function"))
         }
     }
-    pub(crate) fn insert_pipeline(&mut self, pipeline: PipelineDefinition<'script>) -> Result<()> {
-        let name = pipeline.node_id.id.clone();
-        if self.pipelines.contains_key(&name) {
-            Err(already_defined_err(&pipeline, "pipeline"))
-        } else {
-            self.pipelines.insert(name, pipeline);
+    pub(crate) fn insert_pipeline(&mut self, elem: PipelineDefinition<'script>) -> Result<()> {
+        let name = elem.node_id.id.clone();
+        if let Entry::Vacant(e) = self.pipelines.entry(name) {
+            e.insert(elem);
             Ok(())
+        } else {
+            Err(already_defined_err(&elem, "pipeline"))
         }
     }
 
-    pub(crate) fn insert_window(&mut self, window: WindowDefinition<'script>) -> Result<()> {
-        let name = window.node_id.id.clone();
-        if self.windows.contains_key(&name) {
-            Err(already_defined_err(&window, "window"))
-        } else {
-            self.windows.insert(name, window);
+    pub(crate) fn insert_window(&mut self, elem: WindowDefinition<'script>) -> Result<()> {
+        let name = elem.node_id.id.clone();
+        if let Entry::Vacant(e) = self.windows.entry(name) {
+            e.insert(elem);
             Ok(())
+        } else {
+            Err(already_defined_err(&elem, "window"))
         }
     }
-    pub(crate) fn insert_operator(&mut self, operator: OperatorDefinition<'script>) -> Result<()> {
-        let name = operator.node_id.id.clone();
-        if self.operators.contains_key(&name) {
-            Err(already_defined_err(&operator, "operator"))
-        } else {
-            self.operators.insert(name, operator);
+    pub(crate) fn insert_operator(&mut self, elem: OperatorDefinition<'script>) -> Result<()> {
+        let name = elem.node_id.id.clone();
+        if let Entry::Vacant(e) = self.operators.entry(name) {
+            e.insert(elem);
             Ok(())
+        } else {
+            Err(already_defined_err(&elem, "operator"))
         }
     }
-    pub(crate) fn insert_script(&mut self, script: ScriptDefinition<'script>) -> Result<()> {
-        let name = script.node_id.id.clone();
-        if let Some(old) = self.scripts.insert(name, script) {
-            Err(already_defined_err(&old, "script"))
-        } else {
+    pub(crate) fn insert_script(&mut self, elem: ScriptDefinition<'script>) -> Result<()> {
+        let name = elem.node_id.id.clone();
+        if let Entry::Vacant(e) = self.scripts.entry(name) {
+            e.insert(elem);
             Ok(())
+        } else {
+            Err(already_defined_err(&elem, "script"))
         }
     }
 }
@@ -213,15 +212,14 @@ impl<'script> ModuleContent<'script> {
 // This is a self referential struct, beware
 #[derive(Debug, Clone)]
 pub(crate) struct Module {
-    pub(crate) name: Vec<String>,
-    pub(crate) id: ModuleId,
-    pub(crate) content: ModuleContent<'static>,
+    pub(crate) id: Id,
+    pub(crate) content: Content<'static>,
     pub(crate) modules: HashMap<String, Index>,
 }
 
-impl From<&[u8]> for ModuleId {
+impl From<&[u8]> for Id {
     fn from(src: &[u8]) -> Self {
-        ModuleId(sha2::Sha512::digest(src).to_vec())
+        Id(sha2::Sha512::digest(src).to_vec())
     }
 }
 
@@ -230,28 +228,17 @@ impl From<&[u8]> for ModuleId {
 pub struct Index(usize);
 
 impl Module {
-    pub(crate) fn insert_flow(&mut self, flow: FlowDefinition<'static>) -> Result<()> {
-        self.content.insert_flow(flow)
-    }
-    pub(crate) fn insert_connector(
-        &mut self,
-        connector: ConnectorDefinition<'static>,
-    ) -> Result<()> {
-        self.content.insert_connector(connector)
-    }
-
     pub fn load(
-        id: ModuleId,
-        ids: &mut Vec<(ModuleId, String)>,
-        aid: arena::Index,
+        id: Id,
+        ids: &mut Vec<(Id, String)>,
+        arena_idx: arena::Index,
         src: &'static str,
-        name: Vec<String>,
     ) -> Result<Self> {
         let aggr_reg = crate::aggr_registry();
         let reg = &*FN_REGISTRY.read()?; // FIXME
-        let mut helper = Helper::new(&reg, &aggr_reg);
+        let mut helper = Helper::new(reg, &aggr_reg);
 
-        let lexemes = Tokenizer::new(&src, aid)
+        let lexemes = Tokenizer::new(src, arena_idx)
             .filter_map(std::result::Result::ok)
             .filter(|t| !t.value.is_ignorable());
         let raw: ModuleRaw = crate::parser::g::ModuleFileParser::new().parse(lexemes)?;
@@ -263,24 +250,18 @@ impl Module {
                     alias,
                     module,
                     mid: meta,
-                }) => {
-                    let mid = ModuleManager::load_(&module, ids);
-                    match mid {
-                        Err(Error(ErrorKind::CyclicUse(_, _, uses), o)) => {
-                            return Err(Error(
-                                ErrorKind::CyclicUse(meta.range, meta.range, uses),
-                                o,
-                            ));
-                        }
-                        Err(e) => {
-                            return Err(e);
-                        }
-                        Ok(mid) => {
-                            let alias = alias.unwrap_or_else(|| module.id.clone());
-                            helper.scope().add_module_alias(alias, mid);
-                        }
+                }) => match Manager::load_(&module, ids) {
+                    Err(Error(ErrorKind::CyclicUse(_, _, uses), o)) => {
+                        return Err(Error(ErrorKind::CyclicUse(meta.range, meta.range, uses), o));
                     }
-                }
+                    Err(e) => {
+                        return Err(e);
+                    }
+                    Ok(mod_idx) => {
+                        let alias = alias.unwrap_or_else(|| module.id.clone());
+                        helper.scope().add_module_alias(alias, mod_idx);
+                    }
+                },
                 ModuleStmtRaw::Flow(e) => {
                     let e = e.up(&mut helper)?;
                     helper.scope.insert_flow(e)?;
@@ -297,12 +278,10 @@ impl Module {
                     let e = e.up(&mut helper)?;
                     helper.scope.insert_function(e)?;
                 }
-
                 ModuleStmtRaw::Pipeline(e) => {
                     let e = e.up(&mut helper)?;
                     helper.scope.insert_pipeline(e)?;
                 }
-
                 ModuleStmtRaw::Window(e) => {
                     let e = e.up(&mut helper)?;
                     helper.scope.insert_window(e)?;
@@ -319,7 +298,6 @@ impl Module {
         }
         Ok(Module {
             id,
-            name,
             content: helper.scope.content,
             modules: helper.scope.modules,
         })
@@ -335,9 +313,9 @@ pub trait Get<Target> {
 }
 
 /// Get something from a module
-impl<'target, Target> Get<Target> for ModuleManager
+impl<'target, Target> Get<Target> for Manager
 where
-    ModuleContent<'target>: GetModule<Target>,
+    Content<'target>: GetMod<Target>,
     Target: Clone,
 {
     fn get(&self, module: Index, name: &str) -> Option<Target> {
@@ -345,51 +323,51 @@ where
     }
 }
 
-pub trait GetModule<Target> {
+pub trait GetMod<Target> {
     fn get(&self, id: &str) -> Option<Target>;
 }
 
-impl<'module> GetModule<WindowDefinition<'module>> for ModuleContent<'module> {
+impl<'module> GetMod<WindowDefinition<'module>> for Content<'module> {
     fn get(&self, name: &str) -> Option<WindowDefinition<'module>> {
         self.windows.get(name).cloned()
     }
 }
 
-impl<'module> GetModule<Const<'module>> for ModuleContent<'module> {
+impl<'module> GetMod<Const<'module>> for Content<'module> {
     fn get(&self, name: &str) -> Option<Const<'module>> {
         self.consts.get(name).cloned()
     }
 }
-impl<'module> GetModule<ConnectorDefinition<'module>> for ModuleContent<'module> {
+impl<'module> GetMod<ConnectorDefinition<'module>> for Content<'module> {
     fn get(&self, name: &str) -> Option<ConnectorDefinition<'module>> {
         self.connectors.get(name).cloned()
     }
 }
-impl<'module> GetModule<ScriptDefinition<'module>> for ModuleContent<'module> {
+impl<'module> GetMod<ScriptDefinition<'module>> for Content<'module> {
     fn get(&self, name: &str) -> Option<ScriptDefinition<'module>> {
         self.scripts.get(name).cloned()
     }
 }
 
-impl<'module> GetModule<OperatorDefinition<'module>> for ModuleContent<'module> {
+impl<'module> GetMod<OperatorDefinition<'module>> for Content<'module> {
     fn get(&self, name: &str) -> Option<OperatorDefinition<'module>> {
         self.operators.get(name).cloned()
     }
 }
 
-impl<'module> GetModule<FnDecl<'module>> for ModuleContent<'module> {
+impl<'module> GetMod<FnDecl<'module>> for Content<'module> {
     fn get(&self, name: &str) -> Option<FnDecl<'module>> {
         self.functions.get(name).cloned()
     }
 }
 
-impl<'module> GetModule<PipelineDefinition<'module>> for ModuleContent<'module> {
+impl<'module> GetMod<PipelineDefinition<'module>> for Content<'module> {
     fn get(&self, name: &str) -> Option<PipelineDefinition<'module>> {
         self.pipelines.get(name).cloned()
     }
 }
 
-impl<'module> GetModule<FlowDefinition<'module>> for ModuleContent<'module> {
+impl<'module> GetMod<FlowDefinition<'module>> for Content<'module> {
     fn get(&self, name: &str) -> Option<FlowDefinition<'module>> {
         self.flows.get(name).cloned()
     }
@@ -397,21 +375,25 @@ impl<'module> GetModule<FlowDefinition<'module>> for ModuleContent<'module> {
 
 /// Global Module Manager
 #[derive(Default, Debug)]
-pub struct ModuleManager {
+pub struct Manager {
     path: ModulePath,
     modules: Vec<Module>,
 }
 
 // FIXME: unwraps
-impl ModuleManager {
+impl Manager {
     /// removes all module load locations
+    /// # Errors
+    /// if the module global can't be aquired
     pub fn clear_path() -> Result<()> {
         MODULES.write()?.path.clear();
         Ok(())
     }
 
     /// Addas a module path
-    pub fn add_path<S: ToString>(path: S) -> Result<()> {
+    /// # Errors
+    /// if the module global can't be aquired
+    pub fn add_path<S: ToString>(path: &S) -> Result<()> {
         MODULES.write()?.path.add(path);
         Ok(())
     }
@@ -439,10 +421,10 @@ impl ModuleManager {
 
     pub(crate) fn load(node_id: &NodeId) -> Result<Index> {
         let mut ids = Vec::new();
-        ModuleManager::load_(node_id, &mut ids)
+        Manager::load_(node_id, &mut ids)
     }
 
-    fn load_(node_id: &NodeId, ids: &mut Vec<(ModuleId, String)>) -> Result<Index> {
+    fn load_(node_id: &NodeId, ids: &mut Vec<(Id, String)>) -> Result<Index> {
         let m = MODULES.read()?;
         let path = &m.path;
 
@@ -457,7 +439,7 @@ impl ModuleManager {
         drop(m);
 
         let src = std::fs::read_to_string(&p)?;
-        let id = ModuleId::from(src.as_bytes());
+        let id = Id::from(src.as_bytes());
         if ids.iter().any(|(other, _)| &id == other) {
             return Err(ErrorKind::CyclicUse(
                 Span::default(),
@@ -479,9 +461,8 @@ impl ModuleManager {
         if let Some(id) = maybe_id {
             Ok(Index(id))
         } else {
-            let mid = node_id.to_vec();
-            let (aid, src) = Arena::insert(src)?;
-            let m = Module::load(id, ids, aid, src, mid)?;
+            let (arena_idx, src) = Arena::insert(&src)?;
+            let m = Module::load(id, ids, arena_idx, src)?;
 
             let mut mm = MODULES.write()?;
 
@@ -492,19 +473,12 @@ impl ModuleManager {
         }
     }
 
-    pub(crate) fn get<Target>(module: Index, name: &str) -> Option<Target>
+    pub(crate) fn get<Target>(module: Index, name: &str) -> Result<Option<Target>>
     where
-        ModuleManager: Get<Target>,
+        Manager: Get<Target>,
     {
-        let ms = MODULES.read().unwrap();
-        ms.get(module, name)
-    }
-    pub(crate) fn get_tpl<Target>(tpl: (Index, &str)) -> Option<Target>
-    where
-        ModuleManager: Get<Target>,
-    {
-        let ms = MODULES.read().unwrap();
-        ms.get_tpl(tpl)
+        let ms = MODULES.read()?;
+        Ok(ms.get(module, name))
     }
 }
 
@@ -514,12 +488,12 @@ mod test {
 
     #[test]
     fn load_twice() -> Result<()> {
-        ModuleManager::add_path("./tests/modules")?;
-        let id1 = ModuleManager::load(&NodeId {
+        Manager::add_path("./tests/modules")?;
+        let id1 = Manager::load(&NodeId {
             id: "twice".to_string(),
             module: vec!["loading".into()],
         })?;
-        let id2 = ModuleManager::load(&NodeId {
+        let id2 = Manager::load(&NodeId {
             id: "twice".to_string(),
             module: vec!["loading".into()],
         })?;
@@ -528,8 +502,8 @@ mod test {
     }
     #[test]
     fn load_nested() -> Result<()> {
-        ModuleManager::add_path("./tests/modules")?;
-        ModuleManager::load(&NodeId {
+        Manager::add_path("./tests/modules")?;
+        Manager::load(&NodeId {
             id: "outside".to_string(),
             module: vec![],
         })?;
@@ -537,9 +511,9 @@ mod test {
     }
     #[test]
     fn load_from_id() -> Result<()> {
-        ModuleManager::add_path("./lib")?;
+        Manager::add_path("./lib")?;
 
-        ModuleManager::load(&NodeId {
+        Manager::load(&NodeId {
             id: "string".to_string(),
             module: vec!["std".to_string()],
         })?;
