@@ -35,7 +35,9 @@ use crate::{
         Deploy, DeployStmt, Helper, NodeMeta, Script, Upable,
     },
     errors::{Error, Kind as ErrorKind, Result},
-    impl_expr, AggrType, EventContext, Manager, Return,
+    impl_expr,
+    module::Manager,
+    AggrType, EventContext, Return,
 };
 use beef::Cow;
 use halfbrown::HashMap;

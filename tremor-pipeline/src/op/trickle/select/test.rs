@@ -95,7 +95,7 @@ fn test_event_tx(s: u64, transactional: bool, group: u64) -> Event {
     }
 }
 
-fn test_select(uid: u64, stmt: SelectStmt<'static>) -> Result<Select> {
+fn test_select(uid: u64, stmt: SelectStmt<'static>) -> Select {
     let windows = vec![
         (
             "w15s".into(),
@@ -162,7 +162,7 @@ fn parse_query(query: &str) -> Result<crate::op::trickle::select::Select> {
         })
         .next()
         .ok_or_else(|| Error::from("Invalid query"))?;
-    Ok(test_select(1, stmt)?)
+    Ok(test_select(1, stmt))
 }
 
 #[test]
@@ -231,7 +231,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
         .collect();
 
     let id = "select".to_string();
-    Ok(Select::with_stmt(42, id, windows, &stmt)?)
+    Ok(Select::with_stmt(42, id, windows, &stmt))
 }
 
 fn test_tick(ns: u64) -> Event {
@@ -593,7 +593,7 @@ fn select_nowin_nogrp_nowhr_nohav() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(1, stmt)?;
+    let mut op = test_select(1, stmt);
     assert!(try_enqueue(&mut op, test_event(0))?.is_none());
     assert!(try_enqueue(&mut op, test_event(1))?.is_none());
     let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
@@ -615,7 +615,7 @@ fn select_nowin_nogrp_whrt_nohav() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(2, stmt)?;
+    let mut op = test_select(2, stmt);
 
     assert!(try_enqueue(&mut op, test_event(0))?.is_none());
 
@@ -637,7 +637,7 @@ fn select_nowin_nogrp_whrf_nohav() -> Result<()> {
     }));
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(3, stmt)?;
+    let mut op = test_select(3, stmt);
     let next = try_enqueue(&mut op, test_event(0))?;
     assert_eq!(None, next);
     Ok(())
@@ -654,7 +654,7 @@ fn select_nowin_nogrp_whrbad_nohav() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(4, stmt)?;
+    let mut op = test_select(4, stmt);
 
     assert!(try_enqueue(&mut op, test_event(0)).is_err());
 
@@ -676,7 +676,7 @@ fn select_nowin_nogrp_whrt_havt() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(5, stmt)?;
+    let mut op = test_select(5, stmt);
 
     let event = test_event(0);
     assert!(try_enqueue(&mut op, event)?.is_none());
@@ -703,7 +703,7 @@ fn select_nowin_nogrp_whrt_havf() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(6, stmt)?;
+    let mut op = test_select(6, stmt);
     let event = test_event(0);
 
     let next = try_enqueue(&mut op, event)?;
@@ -730,7 +730,7 @@ fn select_nowin_nogrp_whrt_havbad() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(7, stmt)?;
+    let mut op = test_select(7, stmt);
     let event = test_event(0);
 
     let next = try_enqueue(&mut op, event)?;

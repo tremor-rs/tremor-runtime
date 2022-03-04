@@ -18,7 +18,7 @@ use tremor_script::FN_REGISTRY;
 
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::{Dumb, Highlighter};
-use tremor_script::{Manager, Script};
+use tremor_script::{module::Manager, Script};
 
 macro_rules! test_cases {
     ($($file:ident),* ,) => {
@@ -30,8 +30,8 @@ macro_rules! test_cases {
                 let script_dir = concat!("tests/script_warnings/", stringify!($file), "/").to_string();
                 let script_file = concat!("tests/script_warnings/", stringify!($file), "/script.tremor");
                 let err_file = concat!("tests/script_warnings/", stringify!($file), "/warning.txt");
-                ModuleManager::add_path("tremor-script/lib")?;
-                ModuleManager::add_path(script_dir)?;
+                Manager::add_path(&"tremor-script/lib")?;
+                Manager::add_path(&script_dir)?;
 
                 println!("Loading script: {}", script_file);
                 let mut file = file::open(script_file)?;

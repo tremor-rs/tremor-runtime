@@ -17,7 +17,7 @@ use tremor_common::file;
 use tremor_script::deploy::Deploy;
 
 use tremor_script::errors::*;
-use tremor_script::Manager;
+use tremor_script::module::Manager;
 
 fn parse<'script>(deploy: &str) -> tremor_script::Result<tremor_script::deploy::Deploy> {
     let aggr_reg = tremor_script::aggr_registry();
@@ -36,8 +36,8 @@ macro_rules! test_cases {
                 fn $file() -> Result<()> {
                     let deploy_dir = concat!("tests/deploys/", stringify!($file), "/").to_string();
                     let deploy_file = concat!("tests/deploys/", stringify!($file), "/deploy.troy");
-                    ModuleManager::add_path("tremor-script/lib")?;
-                    ModuleManager::add_path(deploy_dir)?;
+                    Manager::add_path(&"tremor-script/lib")?;
+                    Manager::add_path(&deploy_dir)?;
 
                     println!("Loading deployment file: {}", deploy_file);
                     let mut file = file::open(deploy_file)?;

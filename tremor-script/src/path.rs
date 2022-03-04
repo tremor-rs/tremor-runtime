@@ -159,8 +159,8 @@ mod tests {
     fn test_add() {
         let mounts = vec![];
         let mut paths = ModulePath { mounts };
-        paths.add("/foo/bar/baz");
-        paths.add("snot/badger");
+        paths.add(&"/foo/bar/baz");
+        paths.add(&"snot/badger");
         assert_eq!(
             vec![String::from("/foo/bar/baz"), String::from("snot/badger")],
             paths.mounts
