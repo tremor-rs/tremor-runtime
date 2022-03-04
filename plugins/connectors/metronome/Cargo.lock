@@ -5,7 +5,7 @@ version = 3
 [[package]]
 name = "abi_stable"
 version = "0.10.4"
-source = "git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=ok_or#a45b5537270dd192cbce760a4be6697a0feec6d4"
+source = "git+https://github.com/rodrimati1992/abi_stable_crates.git?branch=0_11#ae31031ad97fddd0cd15102641df4d48437a47cc"
 dependencies = [
  "abi_stable_derive",
  "abi_stable_shared",
@@ -24,7 +24,7 @@ dependencies = [
 [[package]]
 name = "abi_stable_derive"
 version = "0.10.3"
-source = "git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=ok_or#a45b5537270dd192cbce760a4be6697a0feec6d4"
+source = "git+https://github.com/rodrimati1992/abi_stable_crates.git?branch=0_11#ae31031ad97fddd0cd15102641df4d48437a47cc"
 dependencies = [
  "abi_stable_shared",
  "as_derive_utils",
@@ -39,7 +39,7 @@ dependencies = [
 [[package]]
 name = "abi_stable_shared"
 version = "0.10.3"
-source = "git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=ok_or#a45b5537270dd192cbce760a4be6697a0feec6d4"
+source = "git+https://github.com/rodrimati1992/abi_stable_crates.git?branch=0_11#ae31031ad97fddd0cd15102641df4d48437a47cc"
 dependencies = [
  "core_extensions",
 ]
@@ -217,7 +217,7 @@ checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
 [[package]]
 name = "as_derive_utils"
 version = "0.10.3"
-source = "git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=ok_or#a45b5537270dd192cbce760a4be6697a0feec6d4"
+source = "git+https://github.com/rodrimati1992/abi_stable_crates.git?branch=0_11#ae31031ad97fddd0cd15102641df4d48437a47cc"
 dependencies = [
  "core_extensions",
  "proc-macro2",

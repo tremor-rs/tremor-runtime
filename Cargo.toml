@@ -275,7 +275,7 @@ tarpaulin-exclude = []
 rust-bert = { git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989' }
 rust_tokenizers = { git = 'https://github.com/mfelsche/rust-tokenizers.git', rev = '5a7860d' }
 # FIXME: update to v0.11 when it's released
-abi_stable = { git = "https://github.com/marioortizmanero/abi_stable_crates.git", branch = "ok_or" }
+abi_stable = { git = "https://github.com/rodrimati1992/abi_stable_crates.git", branch = "0_11" }
 # FIXME: update to crates.io when this is added to a new version:
 # https://github.com/simd-lite/simd-json-derive/pull/9
 simd-json-derive = { git = "https://github.com/marioortizmanero/simd-json-derive.git", branch = "abi-stable" }
