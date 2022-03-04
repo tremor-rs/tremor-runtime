@@ -21,9 +21,10 @@ pub mod deploy;
 /// custom equality definition - checking for equivalence of different AST nodes
 /// e.g. two different event paths with different metadata
 pub mod eq;
-/// FIXME
+/// Helper code
 pub mod helper;
-pub(crate) mod module;
+/// Module related code
+pub mod module;
 mod node_id;
 /// Query AST
 pub mod query;

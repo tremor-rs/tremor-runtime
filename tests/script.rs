@@ -19,7 +19,7 @@ use tremor_pipeline::EventOriginUri;
 use tremor_runtime::errors::*;
 use tremor_script::prelude::*;
 use tremor_script::utils::*;
-use tremor_script::{AggrType, EventContext, Manager, Return, Script, FN_REGISTRY};
+use tremor_script::{module::Manager, AggrType, EventContext, Return, Script, FN_REGISTRY};
 
 macro_rules! test_cases {
     ($($file:ident),* ,) => {
@@ -38,9 +38,9 @@ macro_rules! test_cases {
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
 
-                ModuleManager::add_path("tremor-script/lib")?;
-                ModuleManager::add_path(script_dir)?;
-                let script = Script::parse(contents, &*FN_REGISTRY.read()?)?;
+                Manager::add_path(&"tremor-script/lib")?;
+                Manager::add_path(&script_dir)?;
+                let script = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
 
                 println!("Loading input: {}", in_file);
                 let in_json = load_event_file(in_file)?;

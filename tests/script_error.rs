@@ -15,7 +15,7 @@ use pretty_assertions::assert_eq;
 use std::{io::prelude::*, sync::Mutex};
 use tremor_common::file;
 use tremor_runtime::errors::*;
-use tremor_script::{highlighter::Dumb, Manager, Script, FN_REGISTRY};
+use tremor_script::{highlighter::Dumb, module::Manager, Script, FN_REGISTRY};
 
 lazy_static::lazy_static! {
     static ref UNIQUE: Mutex<()> = Mutex::new(());
@@ -44,9 +44,9 @@ macro_rules! test_cases {
                 let err = err.trim();
 
                 let l = UNIQUE.lock();
-                ModuleManager::clear_path()?;
-                ModuleManager::add_path(script_dir)?;
-                ModuleManager::add_path("tremor-script/lib")?;
+                Manager::clear_path()?;
+                Manager::add_path(&script_dir)?;
+                Manager::add_path(&"tremor-script/lib")?;
                 let s = Script::parse(&contents, &*FN_REGISTRY.read()?);
                 drop(l);
                 if let Err(e) = s {
@@ -86,9 +86,9 @@ macro_rules! ignored_cases {
                 let _err = err.trim();
 
                 let l = UNIQUE.lock();
-                ModuleManager::clear_path()?;
-                ModuleManager::add_path(script_dir)?;
-                ModuleManager::add_path("tremor-script/lib")?;
+                Manager::clear_path()?;
+                Manager::add_path(&script_dir)?;
+                Manager::add_path(&"tremor-script/lib")?;
                 let s = Script::parse(&contents, &*FN_REGISTRY.read()?);
                 drop(l);
                 if let Err(e) = s {

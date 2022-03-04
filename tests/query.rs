@@ -21,8 +21,8 @@ use tremor_pipeline::{Event, EventId};
 use tremor_script::FN_REGISTRY;
 
 use tremor_runtime::errors::*;
+use tremor_script::module::Manager;
 use tremor_script::utils::*;
-use tremor_script::Manager;
 
 lazy_static::lazy_static! {
     static ref UNIQUE: Mutex<()> = Mutex::new(());
@@ -31,7 +31,7 @@ lazy_static::lazy_static! {
 fn to_pipe(query: String) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let mut idgen = OperatorIdGen::new();
-    let q = Query::parse(query, &*FN_REGISTRY.read()?, &aggr_reg)?;
+    let q = Query::parse(&query, &*FN_REGISTRY.read()?, &aggr_reg)?;
     Ok(q.to_pipe(&mut idgen)?)
 }
 
@@ -48,9 +48,9 @@ macro_rules! test_cases {
                 let out_file = concat!("tests/queries/", stringify!($file), "/out");
                 let l = UNIQUE.lock().await;
                 let pipeline = (||{
-                    ModuleManager::clear_path()?;
-                    ModuleManager::add_path("tremor-script/lib")?;
-                    ModuleManager::add_path(query_dir)?;
+                    Manager::clear_path()?;
+                    Manager::add_path(&"tremor-script/lib")?;
+                    Manager::add_path(&query_dir)?;
                     println!("Loading query: {}", query_file);
                     let mut file = file::open(query_file)?;
                     let mut contents = String::new();
