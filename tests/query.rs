@@ -122,7 +122,6 @@ test_cases!(
     window_by_two_scripted,
     window_by_two,
     window_size_tilted,
-    // Preprocessor + modules
     pp_win,
     pp_script,
     pp_operator,
@@ -137,13 +136,10 @@ test_cases!(
     pipeline_nested_operator,
     args_nesting_no_leakage,
     args_nesting_redefine,
-    // module_module_containment, // FIXME we don't have mod right now
-    // module_in_pipeline,  // FIXME we don't have mod right now
     pipeline_nested_pipeline,
     pipeline_passthrough,
     alias_script_params_overwrite,
     cardinality,
-    // mod_def,  // FIXME we don't have mod right now
     window_mixed_2,
     window_mixed_1,
     pp_const,

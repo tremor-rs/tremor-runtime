@@ -21,7 +21,7 @@ use super::{
 };
 use super::{node_id::NodeId, PipelineDefinition};
 use super::{HashMap, Value};
-use crate::{impl_expr, impl_fqn};
+use crate::{impl_expr, impl_expr_no_lt, impl_fqn};
 pub(crate) mod raw;
 
 /// A Tremor deployment
@@ -162,7 +162,9 @@ pub struct DeployEndpoint {
     alias: String,
     /// Refers to a local artefact being deployed in a troy definition
     port: String,
+    mid: Box<NodeMeta>,
 }
+impl_expr_no_lt!(DeployEndpoint);
 
 impl std::fmt::Display for DeployEndpoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -172,7 +174,7 @@ impl std::fmt::Display for DeployEndpoint {
 
 impl DeployEndpoint {
     /// Creates a new endpoint
-    pub fn new<A, P>(alias: &A, port: &P) -> Self
+    pub fn new<A, P>(alias: &A, port: &P, mid: &NodeMeta) -> Self
     where
         A: ToString,
         P: ToString,
@@ -180,6 +182,7 @@ impl DeployEndpoint {
         Self {
             alias: alias.to_string(),
             port: port.to_string(),
+            mid: Box::new(mid.clone()),
         }
     }
     /// The artefact
