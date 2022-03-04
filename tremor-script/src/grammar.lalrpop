@@ -1587,7 +1587,7 @@ extern {
         "~=" => Token::TildeEq,
         "~" => Token::Tilde,
         "bool" => Token::BoolLiteral(<bool>),
-        "int" => Token::IntLiteral(<i64>),
+        "int" => Token::IntLiteral(<u64>),
         "float" => Token::FloatLiteral(<f64>, <String>),
         "string" => Token::StringLiteral(<Cow<'input, str>>),
         "heredoc_start" => Token::HereDocStart,
