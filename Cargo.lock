@@ -6347,6 +6347,7 @@ dependencies = [
  "log",
  "lru",
  "petgraph 0.6.0",
+ "rand 0.8.5",
  "regex",
  "rust-bert",
  "serde",

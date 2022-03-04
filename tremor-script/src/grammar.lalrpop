@@ -268,17 +268,22 @@ Create: CreateStmtRaw<'input> = {
 
 
 Connect: ConnectStmtRaw<'input> = {
-    <start:@L> "connect" "/" "connector" <from:ConnectFrom> "to" "/" "pipeline" <to:ConnectTo> <end:@L>  => ConnectStmtRaw::ConnectorToPipeline{mid: NodeMeta::new_box(start, end), from, to},
-    <start:@L> "connect" "/" "pipeline" <from:ConnectFrom> "to" "/" "connector" <to:ConnectTo> <end:@L>  => ConnectStmtRaw::PipelineToConnector{mid: NodeMeta::new_box(start, end), from, to},
-    <start:@L> "connect" "/" "pipeline" <from:ConnectFrom> "to" "/" "pipeline" <to:ConnectTo> <end:@L>  => ConnectStmtRaw::PipelineToPipeline{mid: NodeMeta::new_box(start, end), from, to}
+    <start:@L> "connect" "/"  <from:ConnectFromConnector> "to" "/" <to:ConnectToPipeline> <end:@L>  => ConnectStmtRaw::ConnectorToPipeline{mid: NodeMeta::new_box(start, end), from, to},
+    <start:@L> "connect" "/"  <from:ConnectFromPipeline> "to" "/" <to:ConnectToConnector> <end:@L>  => ConnectStmtRaw::PipelineToConnector{mid: NodeMeta::new_box(start, end), from, to},
+    <start:@L> "connect" "/"  <from:ConnectFromPipeline> "to" "/" <to:ConnectToPipeline> <end:@L>  => ConnectStmtRaw::PipelineToPipeline{mid: NodeMeta::new_box(start, end), from, to}
 }
 
-ConnectFrom: DeployEndpointRaw<'input> = {
-     "/" <alias:Ident> <port:MaybePort> => DeployEndpointRaw{alias, port: port.unwrap_or_else(|| "out".into())},
+ConnectFromConnector: DeployEndpointRaw<'input> = {
+    <start:@L> "connector" "/" <alias:Ident> <port:MaybePort> <end:@L> => DeployEndpointRaw{mid: NodeMeta::new_box(start, end),alias, port: port.unwrap_or_else(|| "out".into())},
 }
-
-ConnectTo: DeployEndpointRaw<'input> = {
-    "/" <alias:Ident> <port:MaybePort> => DeployEndpointRaw{alias, port: port.unwrap_or_else(|| "in".into())},
+ConnectFromPipeline: DeployEndpointRaw<'input> = {
+    <start:@L> "pipeline" "/" <alias:Ident> <port:MaybePort> <end:@L> => DeployEndpointRaw{mid: NodeMeta::new_box(start, end), alias, port: port.unwrap_or_else(|| "out".into())},
+}
+ConnectToPipeline: DeployEndpointRaw<'input> = {
+    <start:@L>  "pipeline" "/" <alias:Ident> <port:MaybePort> <end:@L>  => DeployEndpointRaw{mid: NodeMeta::new_box(start, end), alias, port: port.unwrap_or_else(|| "in".into())},
+}
+ConnectToConnector: DeployEndpointRaw<'input> = {
+    <start:@L> "connector" "/" <alias:Ident> <port:MaybePort> <end:@L>  => DeployEndpointRaw{mid: NodeMeta::new_box(start, end), alias, port: port.unwrap_or_else(|| "in".into())},
 }
 
 DefineConnector: ConnectorDefinitionRaw<'input> =  {
