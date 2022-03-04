@@ -24,11 +24,11 @@ use super::{
     Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
+use crate::impl_expr;
 use crate::{
     ast::{walkers::ImutExprWalker, Literal},
     errors::Error,
 };
-use crate::{impl_expr, impl_fqn};
 use raw::WindowDefnRaw;
 use simd_json::{Builder, Mutable, ValueAccess};
 
@@ -172,7 +172,7 @@ impl BaseExpr for OperatorKind {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorDefinition<'script> {
     /// The ID and Module of the Operator
-    pub node_id: NodeId,
+    pub id: String,
     /// metadata id
     pub(crate) mid: Box<NodeMeta>,
     /// Type of the operator
@@ -181,13 +181,12 @@ pub struct OperatorDefinition<'script> {
     pub params: DefinitioalArgsWith<'script>,
 }
 impl_expr!(OperatorDefinition);
-impl_fqn!(OperatorDefinition);
 
 /// An operator creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorCreate<'script> {
     /// The ID and Module of the Operator
-    pub node_id: NodeId,
+    pub id: String,
     /// metadata id
     pub(crate) mid: Box<NodeMeta>,
     /// Target of the operator
@@ -202,20 +201,19 @@ impl_expr!(OperatorCreate);
 pub struct ScriptDefinition<'script> {
     pub(crate) mid: Box<NodeMeta>,
     /// The ID and Module of the Script
-    pub node_id: NodeId,
+    pub id: String,
     /// Parameters of a script declaration
     pub params: DefinitioalArgs<'script>,
     /// The script itself
     pub script: Script<'script>,
 }
 impl_expr!(ScriptDefinition);
-impl_fqn!(ScriptDefinition);
 
 /// A script creation
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptCreate<'script> {
     /// The ID and Module of the Script
-    pub node_id: NodeId,
+    pub id: String,
     /// metadata id
     pub(crate) mid: Box<NodeMeta>,
     /// Target of the script
@@ -232,7 +230,7 @@ pub type Config<'script> = Vec<(String, ImutExpr<'script>)>;
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PipelineDefinition<'script> {
     /// The ID and Module of the SubqueryDecl
-    pub node_id: NodeId,
+    pub id: String,
     /// metadata id
     pub(crate) mid: Box<NodeMeta>,
     /// Parameters of a subquery declaration
@@ -249,7 +247,6 @@ pub struct PipelineDefinition<'script> {
     pub scope: Scope<'script>,
 }
 impl_expr!(PipelineDefinition);
-impl_fqn!(PipelineDefinition);
 
 impl<'script> PipelineDefinition<'script> {
     /// Converts a pipeline defintion into a query
@@ -328,7 +325,7 @@ pub enum WindowKind {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct WindowDefinition<'script> {
     /// ID and Module of the Window
-    pub node_id: NodeId,
+    pub id: String,
     /// metadata id
     pub(crate) mid: Box<NodeMeta>,
     /// The type of window
@@ -339,7 +336,6 @@ pub struct WindowDefinition<'script> {
     pub script: Option<Script<'script>>,
 }
 impl_expr!(WindowDefinition);
-impl_fqn!(WindowDefinition);
 
 impl<'script> WindowDefinition<'script> {
     /// `emit_empty_windows` setting

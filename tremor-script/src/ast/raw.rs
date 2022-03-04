@@ -114,7 +114,7 @@ impl<'script> ScriptRaw<'script> {
                     let mid = mid.box_with_name(&name);
                     let c = Const {
                         mid: mid.clone(),
-                        name: name.to_string(),
+                        id: name.to_string(),
                         value: value.clone(),
                     };
                     helper.scope.insert_const(c)?;
@@ -477,7 +477,7 @@ impl<'script> Upable<'script> for ConstRaw<'script> {
         let value = expr.try_into_lit()?;
         Ok(Const {
             mid: self.mid.box_with_name(&self.name),
-            name: self.name.to_string(),
+            id: self.name.to_string(),
             value,
         })
     }
@@ -653,10 +653,9 @@ impl<'script> Upable<'script> for FnDeclRaw<'script> {
         helper.possible_leaf = false;
         helper.swap(&mut aggrs, &mut locals);
         helper.can_emit = can_emit;
-        let name = self.name.up(helper)?;
         Ok(FnDecl {
-            mid: self.mid.box_with_name(&name.id),
-            name,
+            mid: self.mid.box_with_name(&self.name.id),
+            name: self.name.id.to_string(),
             args: self.args.up(helper)?,
             body,
             locals: locals.len(),
@@ -805,10 +804,9 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
 
         helper.swap(&mut aggrs, &mut locals);
         helper.can_emit = can_emit;
-        let name = self.name.up(helper)?;
         Ok(FnDecl {
-            mid: self.mid.box_with_name(&name),
-            name,
+            mid: self.mid.box_with_name(&self.name.id),
+            name: self.name.id.to_string(),
             args: self.args.up(helper)?,
             body,
             locals: locals.len(),
