@@ -401,10 +401,8 @@ impl Query {
                     }
                 }
                 Stmt::OperatorCreate(o) => {
-                    if nodes_by_name.contains_key(&common_cow(o.node_id.id())) {
-                        return Err(
-                            query_node_duplicate_name_err(o, o.node_id.id().to_string()).into()
-                        );
+                    if nodes_by_name.contains_key(&common_cow(&o.id)) {
+                        return Err(query_node_duplicate_name_err(o, o.id.clone()).into());
                     }
 
                     let mut decl: OperatorDefinition =
@@ -414,7 +412,7 @@ impl Query {
 
                     let that = Stmt::OperatorDefinition(decl);
                     let node = NodeConfig {
-                        id: o.node_id.id().to_string(),
+                        id: o.id.clone(),
                         kind: NodeKind::Operator,
                         op_type: "trickle::operator".to_string(),
                         stmt: Some(that),
@@ -422,13 +420,11 @@ impl Query {
                     };
                     let id = pipe_graph.add_node(node.clone());
 
-                    nodes_by_name.insert(common_cow(o.node_id.id()), id);
+                    nodes_by_name.insert(common_cow(&o.id), id);
                 }
                 Stmt::ScriptCreate(o) => {
-                    if nodes_by_name.contains_key(&common_cow(o.node_id.id())) {
-                        return Err(
-                            query_node_duplicate_name_err(o, o.node_id.id().to_string()).into()
-                        );
+                    if nodes_by_name.contains_key(&common_cow(&o.id)) {
+                        return Err(query_node_duplicate_name_err(o, o.id.clone()).into());
                     }
 
                     let mut decl: ScriptDefinition = helper
@@ -450,7 +446,7 @@ impl Query {
                     let that_defn = Stmt::ScriptDefinition(Box::new(decl));
 
                     let node = NodeConfig {
-                        id: o.node_id.id().to_string(),
+                        id: o.id.clone(),
                         kind: NodeKind::Script,
                         label,
                         op_type: "trickle::script".to_string(),
@@ -459,7 +455,7 @@ impl Query {
                     };
                     let id = pipe_graph.add_node(node.clone());
 
-                    nodes_by_name.insert(common_cow(o.node_id.id()), id);
+                    nodes_by_name.insert(common_cow(&o.id), id);
                 }
             };
         }

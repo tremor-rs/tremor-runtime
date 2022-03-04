@@ -172,7 +172,7 @@ impl<'script> Upable<'script> for ConnectorDefinitionRaw<'script> {
             mid: self.mid.box_with_name(&self.id),
             params: self.params.up(helper)?,
             builtin_kind: self.kind.to_string(),
-            node_id: NodeId::new(&self.id, &[]),
+            id: self.id,
             docs: self
                 .docs
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
@@ -320,11 +320,9 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
         let params = self.params.up(helper)?;
         helper.leave_scope()?;
 
-        let node_id = NodeId::new(&self.id, &[]); // FIXME
-
         let flow_decl = FlowDefinition {
             mid,
-            node_id,
+            id: self.id,
             params,
             connections,
             creates,
@@ -370,9 +368,6 @@ impl_expr!(CreateStmtRaw);
 impl<'script> Upable<'script> for CreateStmtRaw<'script> {
     type Target = CreateStmt<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        // TODO check that names across pipeline/flow/connector definitions are unique or else hygienic error
-
-        let node_id = NodeId::new(&self.id.id, &[]); // FIXME
         let target = self.target.clone(); // FIXME
         let outer = self.extent();
         let inner = self.id.extent();
@@ -409,7 +404,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         let create_stmt = CreateStmt {
             mid: self.mid.box_with_name(&self.id.id),
             with: params,
-            instance_alias: node_id,
+            instance_alias: self.id.id.to_string(),
             from_target: target,
             defn: decl,
         };
@@ -435,8 +430,7 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // TODO check that names across pipeline/flow/connector definitions are unique or else hygienic error
 
-        let node_id = NodeId::new(&self.id.id, &[]); // FIXME
-        let target = self.target.clone().with_prefix(&[]); // FIXME
+        let target = self.target.clone();
 
         let mut defn = if let Some(artefact) = helper.get::<FlowDefinition>(&target)? {
             artefact.clone()
@@ -455,7 +449,7 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
 
         let create_stmt = DeployFlow {
             mid: self.mid.box_with_name(&self.id.id),
-            instance_alias: node_id,
+            instance_alias: self.id.id.to_string(),
             from_target: self.target,
             defn,
             docs: self

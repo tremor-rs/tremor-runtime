@@ -39,7 +39,7 @@ pub struct FlowId(pub String);
 
 impl From<&DeployFlow<'_>> for FlowId {
     fn from(f: &DeployFlow) -> Self {
-        FlowId(f.instance_alias.id().to_string())
+        FlowId(f.instance_alias.to_string())
     }
 }
 
@@ -181,7 +181,7 @@ impl Flow {
         let mut connectors = HashMap::new();
 
         for create in &flow.defn.creates {
-            let alias = create.instance_alias.id();
+            let alias: &str = &create.instance_alias;
             match &create.defn {
                 ast::CreateTargetDefinition::Connector(defn) => {
                     let connector = crate::Connector::from_defn(alias, defn)?;
@@ -214,7 +214,7 @@ impl Flow {
         }
 
         let addr = spawn_task(
-            flow.instance_alias.id().to_string(),
+            flow.instance_alias.clone(),
             pipelines,
             connectors,
             &flow.defn.connections,
