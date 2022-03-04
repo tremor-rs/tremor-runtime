@@ -6,13 +6,3 @@ use std::integer::unsigned;
 ## Parses a string as an integer.
 ## Returns an `integer`.
 intrinsic fn parse(string) as integer::parse;
-
-## Minimum valid integer value.
-##
-## Same as `signed::min`
-const min = (-9223372036854775807);
-
-## Maximum valid integer value.
-##
-## Same as `signed::max`
-const max = 9223372036854775807;

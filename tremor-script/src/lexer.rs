@@ -179,7 +179,7 @@ pub enum Token<'input> {
     /// a boolean
     BoolLiteral(bool),
     /// an integer
-    IntLiteral(i64),
+    IntLiteral(u64),
     /// an float
     FloatLiteral(f64, String),
     /// a test literal
@@ -1982,7 +1982,7 @@ impl<'input> Lexer<'input> {
         let (end, hex) = self.extract_number(int_start, is_hex);
         // ALLOW: this takes the whole string and can not panic
         match int {
-            "0" | "-0" => match self.lookahead() {
+            "0" => match self.lookahead() {
                 Some((_, ch)) if is_ident_start(ch) => Err(ErrorKind::UnexpectedCharacter(
                     Span::new(start, end).expand_lines(2),
                     Span::new(start, end),
@@ -2007,9 +2007,8 @@ impl<'input> Lexer<'input> {
                         )
                         .into())
                     } else {
-                        let is_positive = int == "0";
                         // ALLOW: this takes the whole string and can not panic
-                        match i64_from_hex(&hex[..], is_positive) {
+                        match u64::from_str_radix(&hex[..], 16) {
                             Ok(val) => Ok(spanned(start, end, Token::IntLiteral(val))),
                             Err(_err) => Err(ErrorKind::InvalidHexLiteral(
                                 Span::new(start, end).expand_lines(2),
@@ -2038,7 +2037,7 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    /// handle numbers (with or without leading '-')
+    /// handle numbers
     #[allow(clippy::too_many_lines)]
     fn number(&mut self, start: Location) -> Result<TokenSpan<'input>> {
         let (end, int) = self.extract_number(start, is_dec_digit);
@@ -2080,15 +2079,6 @@ impl<'input> Lexer<'input> {
     }
 }
 
-/// Converts partial hex literal (i.e. part after `0x` or `-0x`) to 64 bit signed integer.
-///
-/// This is basically a copy and adaptation of `std::num::from_str_radix`.
-fn i64_from_hex(hex: &str, is_positive: bool) -> Result<i64> {
-    let r = i64::from_str_radix(hex, 16)?;
-
-    Ok(if is_positive { r } else { -r })
-}
-
 impl<'input> Iterator for Lexer<'input> {
     type Item = Result<TokenSpan<'input>>;
 
@@ -2121,10 +2111,7 @@ impl<'input> Iterator for Lexer<'input> {
             '^' => Some(Ok(spanned(start, start + ch, Token::BitXor))),
             '&' => Some(Ok(spanned(start, start + ch, Token::BitAnd))),
             ':' => Some(Ok(self.colon(start))),
-            '-' => match self.lookahead() {
-                Some((_loc, c)) if is_dec_digit(c) => Some(self.number(start)),
-                _ => Some(Ok(spanned(start, start + ch, Token::Sub))),
-            },
+            '-' => Some(Ok(spanned(start, start + ch, Token::Sub))),
             '#' => Some(Ok(self.comment(start))),
             '=' => Some(Ok(self.eq(start))),
             '<' => Some(Ok(self.lt(start))),
