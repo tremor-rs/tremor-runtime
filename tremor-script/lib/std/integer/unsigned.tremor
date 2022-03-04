@@ -1,0 +1,8 @@
+##! Unsigned integer constatns
+
+## Max signed value
+## FIXME: This is a lexer issue that we can't make this as a u64 not a lexer type
+const max = 9223372036854775807 * 2;
+ 
+## Minimal signed value
+const min = 0;
