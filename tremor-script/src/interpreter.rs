@@ -456,12 +456,17 @@ pub(crate) fn exec_unary<'run, 'event: 'run>(
         }
     } else if let Some(x) = val.as_u64() {
         match &op {
-            Minus => x
-                .try_into()
-                .ok()
-                .and_then(i64::checked_neg)
-                .map(Value::from)
-                .map(Cow::Owned),
+            Minus => {
+                if x == 9223372036854775808 {
+                    Some(Cow::Owned(Value::from(i64::MIN)))
+                } else {
+                    x.try_into()
+                        .ok()
+                        .and_then(i64::checked_neg)
+                        .map(Value::from)
+                        .map(Cow::Owned)
+                }
+            }
             Plus => Some(Cow::Owned(Value::from(x))),
             BitNot => Some(Cow::Owned(Value::from(!x))),
             Not => None,

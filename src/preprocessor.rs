@@ -673,10 +673,8 @@ mod test {
         Ok(())
     }
 
-    const LOOKUP_TABLE: [&str; 17] = [
+    const LOOKUP_TABLE: [&str; 15] = [
         "lines",
-        "lines-null",
-        "lines-pipe",
         "base64",
         "gzip",
         "zlib",
