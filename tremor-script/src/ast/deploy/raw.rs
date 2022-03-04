@@ -183,12 +183,10 @@ impl<'script> Upable<'script> for ConnectorDefinitionRaw<'script> {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-/// we're forced to make this pub because of lalrpop
-pub struct DeployEndpointRaw<'script> {
-    /// we're forced to make this pub because of lalrpop
-    pub alias: IdentRaw<'script>,
-    /// we're forced to make this pub because of lalrpop
-    pub port: IdentRaw<'script>,
+pub(crate) struct DeployEndpointRaw<'script> {
+    pub(crate) alias: IdentRaw<'script>,
+    pub(crate) port: IdentRaw<'script>,
+    pub(crate) mid: Box<NodeMeta>,
 }
 
 impl<'script> Upable<'script> for DeployEndpointRaw<'script> {
@@ -197,13 +195,14 @@ impl<'script> Upable<'script> for DeployEndpointRaw<'script> {
         Ok(DeployEndpoint {
             alias: self.alias.to_string(),
             port: self.port.to_string(),
+            mid: self.mid,
         })
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// we're forced to make this pub because of lalrpop
-pub enum ConnectStmtRaw<'script> {
+pub(crate) enum ConnectStmtRaw<'script> {
     ConnectorToPipeline {
         /// The instance we're connecting to
         from: DeployEndpointRaw<'script>,

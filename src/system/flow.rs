@@ -28,7 +28,10 @@ use hashbrown::HashMap;
 use std::{borrow::Borrow, collections::HashSet};
 use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
-use tremor_script::ast::{self, ConnectStmt, DeployEndpoint, DeployFlow, Helper};
+use tremor_script::{
+    ast::{self, ConnectStmt, DeployEndpoint, DeployFlow, Helper},
+    errors::not_defined_err,
+};
 
 /// unique identifier of a flow instance within a tremor instance
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize)]
@@ -238,7 +241,7 @@ async fn link(
         ConnectStmt::ConnectorToPipeline { from, to, .. } => {
             let connector = connectors
                 .get(from.alias())
-                .ok_or(format!("FIXME: connector {} not found", from.alias()))?;
+                .ok_or(not_defined_err(from, "connector"))?;
 
             let pipeline = pipelines
                 .get(to.alias())

@@ -878,6 +878,20 @@ where
     )
 }
 
+pub fn not_defined_err<S>(e: &S, what: &str) -> Error
+where
+    S: BaseExpr + Ranged,
+{
+    err_generic(
+        e,
+        e,
+        &format!(
+            "The {what} `{}` is not defined",
+            e.name().unwrap_or_default()
+        ),
+    )
+}
+
 /// Creates a stream not defined error
 #[allow(clippy::borrowed_box)]
 pub fn query_stream_not_defined_err<S, I>(stmt: &S, inner: &I, name: String, port: String) -> Error
