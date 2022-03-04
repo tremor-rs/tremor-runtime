@@ -1,19 +1,11 @@
 ### The `integer` module contains functions to work with integers.
 
+use std::integer::signed;
+use std::integer::unsigned;
+
 ## Parses a string as an integer.
 ## Returns an `integer`.
 intrinsic fn parse(string) as integer::parse;
-
-# mod unsigned with
-#  ##! Unsigned integer constatns
-#
-#  ## Max signed value
-#  const max = 18446744073709551615;
-#  
-#  ## Minimal signed value
-#  const min = 0;
-# end
-
 
 ## Minimum valid integer value.
 ##
