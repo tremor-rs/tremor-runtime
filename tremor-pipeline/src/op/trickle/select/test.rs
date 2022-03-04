@@ -24,7 +24,7 @@ use super::*;
 use tremor_script::ast::{self, Ident, Literal};
 use tremor_script::{ast::Consts, NodeMeta, Value};
 use tremor_script::{
-    ast::{visitors::ConstFolder, walkers::QueryWalker, Stmt, WindowDefinition},
+    ast::{visitors::ConstFolder, walkers::QueryWalker, Stmt},
     lexer::Location,
 };
 use tremor_value::literal;
@@ -127,7 +127,6 @@ fn try_enqueue(op: &mut Select, event: Event) -> Result<Option<(Cow<'static, str
     if action.events.is_empty() {
         Ok(first)
     } else {
-        dbg!(action);
         Ok(None)
     }
 }
@@ -202,14 +201,6 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
     let reg = tremor_script::registry();
     let aggr_reg = tremor_script::aggr_registry();
     let query = tremor_script::query::Query::parse(query_str, &reg, &aggr_reg)?;
-    let mut window_decls: Vec<WindowDefinition<'_>> = query
-        .query
-        .scope
-        .content
-        .windows
-        .values()
-        .cloned()
-        .collect();
     let stmt = query
         .query
         .stmts
@@ -218,15 +209,24 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
         .next()
         .cloned()
         .ok_or_else(|| Error::from("Invalid query, expected 1 select statement"))?;
-    let windows: Vec<(String, window::Impl)> = window_decls
-        .iter_mut()
-        .enumerate()
-        .map(|(i, window_decl)| {
+    let windows: Vec<(String, window::Impl)> = stmt
+        .stmt
+        .windows
+        .iter()
+        .map(|win_defn| {
+            let mut window_defn = query
+                .query
+                .scope
+                .content
+                .windows
+                .get(win_defn.id.id())
+                .unwrap()
+                .clone();
             let mut f = ConstFolder { reg: &reg };
-            f.walk_window_decl(window_decl).unwrap();
+            f.walk_window_decl(&mut window_defn).unwrap();
             (
-                i.to_string(),
-                window_decl_to_impl(window_decl).unwrap(), // yes, indeed!
+                window_defn.id.clone(),
+                window_decl_to_impl(&window_defn).unwrap(), // yes, indeed!
             )
         })
         .collect();
@@ -352,7 +352,6 @@ fn select_single_win_on_signal() -> Result<()> {
     Ok(())
 }
 
-// FIXME: why is this flappy
 #[test]
 fn select_multiple_wins_on_signal() -> Result<()> {
     let mut select = select_stmt_from_query(
@@ -532,7 +531,6 @@ fn test_transactional_multiple_windows() -> Result<()> {
     Ok(())
 }
 
-// FIXME: why is this floppy
 #[test]
 fn count_tilt() -> Result<()> {
     // Windows are 15s and 30s
