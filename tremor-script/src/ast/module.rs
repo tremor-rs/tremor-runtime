@@ -458,7 +458,7 @@ impl Manager {
             .find(|(_, m)| m.id == id)
             .map(|(i, _)| i);
         drop(m);
-        if let Some(id) = maybe_id {
+        let r = if let Some(id) = maybe_id {
             Ok(Index(id))
         } else {
             let (arena_idx, src) = Arena::insert(&src)?;
@@ -470,7 +470,9 @@ impl Manager {
             mm.modules.push(m);
 
             Ok(Index(n))
-        }
+        };
+        ids.pop();
+        r
     }
 
     pub(crate) fn get<Target>(module: Index, name: &str) -> Result<Option<Target>>
