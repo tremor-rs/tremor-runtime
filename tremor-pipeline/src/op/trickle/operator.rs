@@ -51,7 +51,7 @@ impl TrickleOperator {
 
         let op = decl.clone();
         let config = mk_node_config(
-            op.node_id.id().to_string(),
+            op.id.clone(),
             format!("{}::{}", op.kind.module, op.kind.operation),
             op.params.generate_config(helper)?,
         );

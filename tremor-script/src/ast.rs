@@ -551,7 +551,7 @@ impl_expr!(Literal);
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FnDecl<'script> {
     pub(crate) mid: Box<NodeMeta>,
-    pub(crate) name: Ident<'script>,
+    pub(crate) name: String,
     pub(crate) args: Vec<Ident<'script>>,
     pub(crate) body: Exprs<'script>,
     pub(crate) locals: usize,
@@ -565,7 +565,7 @@ impl_expr!(FnDecl);
 pub struct Const<'script> {
     pub(crate) mid: Box<NodeMeta>,
     pub(crate) value: Value<'script>,
-    pub(crate) name: String,
+    pub(crate) id: String,
 }
 impl_expr!(Const);
 

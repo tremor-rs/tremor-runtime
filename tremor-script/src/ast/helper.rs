@@ -123,7 +123,7 @@ where
     pub(crate) can_emit: bool,
     pub(crate) is_in_aggr: bool,
     // Troy
-    pub(crate) instances: HashMap<NodeId, DeployFlow<'script>>,
+    pub(crate) instances: HashMap<String, DeployFlow<'script>>,
     /// Aggregates
     pub aggregates: Vec<InvokeAggrFn<'script>>,
     /// Warnings

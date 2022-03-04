@@ -135,7 +135,7 @@ impl<'script> Debug for Content<'script> {
 
 impl<'script> Content<'script> {
     pub(crate) fn insert_flow(&mut self, elem: FlowDefinition<'script>) -> Result<()> {
-        let name = elem.node_id.id.clone();
+        let name = elem.id.clone();
         if let Entry::Vacant(e) = self.flows.entry(name) {
             e.insert(elem);
             Ok(())
@@ -144,7 +144,7 @@ impl<'script> Content<'script> {
         }
     }
     pub(crate) fn insert_connector(&mut self, elem: ConnectorDefinition<'script>) -> Result<()> {
-        let name = elem.node_id.id.clone();
+        let name = elem.id.clone();
         if let Entry::Vacant(e) = self.connectors.entry(name) {
             e.insert(elem);
             Ok(())
@@ -153,7 +153,7 @@ impl<'script> Content<'script> {
         }
     }
     pub(crate) fn insert_const(&mut self, elem: Const<'script>) -> Result<()> {
-        let name = elem.name.clone();
+        let name = elem.id.clone();
         if let Entry::Vacant(e) = self.consts.entry(name) {
             e.insert(elem);
             Ok(())
@@ -162,7 +162,7 @@ impl<'script> Content<'script> {
         }
     }
     pub(crate) fn insert_function(&mut self, elem: FnDecl<'script>) -> Result<()> {
-        let name = elem.name.to_string();
+        let name = elem.name.clone();
         if let Entry::Vacant(e) = self.functions.entry(name) {
             e.insert(elem);
             Ok(())
@@ -171,7 +171,7 @@ impl<'script> Content<'script> {
         }
     }
     pub(crate) fn insert_pipeline(&mut self, elem: PipelineDefinition<'script>) -> Result<()> {
-        let name = elem.node_id.id.clone();
+        let name = elem.id.clone();
         if let Entry::Vacant(e) = self.pipelines.entry(name) {
             e.insert(elem);
             Ok(())
@@ -181,7 +181,7 @@ impl<'script> Content<'script> {
     }
 
     pub(crate) fn insert_window(&mut self, elem: WindowDefinition<'script>) -> Result<()> {
-        let name = elem.node_id.id.clone();
+        let name = elem.id.clone();
         if let Entry::Vacant(e) = self.windows.entry(name) {
             e.insert(elem);
             Ok(())
@@ -190,7 +190,7 @@ impl<'script> Content<'script> {
         }
     }
     pub(crate) fn insert_operator(&mut self, elem: OperatorDefinition<'script>) -> Result<()> {
-        let name = elem.node_id.id.clone();
+        let name = elem.id.clone();
         if let Entry::Vacant(e) = self.operators.entry(name) {
             e.insert(elem);
             Ok(())
@@ -199,7 +199,7 @@ impl<'script> Content<'script> {
         }
     }
     pub(crate) fn insert_script(&mut self, elem: ScriptDefinition<'script>) -> Result<()> {
-        let name = elem.node_id.id.clone();
+        let name = elem.id.clone();
         if let Entry::Vacant(e) = self.scripts.entry(name) {
             e.insert(elem);
             Ok(())
