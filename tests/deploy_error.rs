@@ -13,7 +13,7 @@
 // limitations under the License.
 use std::{io::prelude::*, sync::Mutex};
 use tremor_common::file;
-use tremor_script::{deploy::Deploy, errors::*, highlighter::Dumb, Manager};
+use tremor_script::{deploy::Deploy, errors::*, highlighter::Dumb, module::Manager};
 
 fn parse<'script>(deploy: &str) -> tremor_script::Result<Deploy> {
     let aggr_reg = tremor_script::aggr_registry();
@@ -40,9 +40,9 @@ macro_rules! test_cases {
                 let deploy_file = concat!("tests/deploy_errors/", stringify!($file), "/deploy.troy");
                 let err_file = concat!("tests/deploy_errors/", stringify!($file), "/error.txt");
                 let l = UNIQUE.lock();
-                ModuleManager::clear_path()?;
-                ModuleManager::add_path(deploy_dir)?;
-                ModuleManager::add_path("tremor-script/lib")?;
+                Manager::clear_path()?;
+                Manager::add_path(&deploy_dir)?;
+                Manager::add_path(&"tremor-script/lib")?;
 
 
                 println!("Loading deployment: {}", deploy_file);

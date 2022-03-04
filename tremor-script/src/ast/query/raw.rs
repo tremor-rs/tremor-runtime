@@ -37,7 +37,8 @@ use crate::{
         Consts, Ident,
     },
     errors::{Error, Kind as ErrorKind},
-    impl_expr_no_lt, Manager,
+    impl_expr_no_lt,
+    module::Manager,
 };
 use beef::Cow;
 use simd_json::ValueAccess;

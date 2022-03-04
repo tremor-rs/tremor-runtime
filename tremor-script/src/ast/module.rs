@@ -79,15 +79,15 @@ impl<'script> BaseExpr for ModuleStmtRaw<'script> {
     }
 }
 
-pub type ModuleStmtsRaw<'script> = Vec<ModuleStmtRaw<'script>>;
+pub(crate) type ModuleStmtsRaw<'script> = Vec<ModuleStmtRaw<'script>>;
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct ModuleRaw<'script> {
-    pub name: IdentRaw<'script>,
-    pub stmts: ModuleStmtsRaw<'script>,
-    pub doc: Option<Vec<Cow<'script, str>>>,
-    pub mid: Box<NodeMeta>,
+    pub(crate) name: IdentRaw<'script>,
+    pub(crate) stmts: ModuleStmtsRaw<'script>,
+    pub(crate) doc: Option<Vec<Cow<'script, str>>>,
+    pub(crate) mid: Box<NodeMeta>,
 }
 impl_expr!(ModuleRaw);
 
@@ -306,10 +306,8 @@ impl Module {
 
 /// Get something from a module manager
 pub trait Get<Target> {
+    /// Gets an item from a module and scope
     fn get(&self, m: Index, id: &str) -> Option<Target>;
-    fn get_tpl(&self, (m, id): (Index, &str)) -> Option<Target> {
-        self.get(m, id)
-    }
 }
 
 /// Get something from a module
@@ -323,7 +321,9 @@ where
     }
 }
 
+/// Something that is gettable from a module
 pub trait GetMod<Target> {
+    /// Gets an item from a  scope
     fn get(&self, id: &str) -> Option<Target>;
 }
 
@@ -488,7 +488,7 @@ mod test {
 
     #[test]
     fn load_twice() -> Result<()> {
-        Manager::add_path("./tests/modules")?;
+        Manager::add_path(&"./tests/modules")?;
         let id1 = Manager::load(&NodeId {
             id: "twice".to_string(),
             module: vec!["loading".into()],
@@ -502,7 +502,7 @@ mod test {
     }
     #[test]
     fn load_nested() -> Result<()> {
-        Manager::add_path("./tests/modules")?;
+        Manager::add_path(&"./tests/modules")?;
         Manager::load(&NodeId {
             id: "outside".to_string(),
             module: vec![],
@@ -511,7 +511,7 @@ mod test {
     }
     #[test]
     fn load_from_id() -> Result<()> {
-        Manager::add_path("./lib")?;
+        Manager::add_path(&"./lib")?;
 
         Manager::load(&NodeId {
             id: "string".to_string(),

@@ -132,11 +132,11 @@ mod test {
 
     #[test]
     fn fqn() {
-        let no_module = NodeId::new("foo".to_string(), &[]);
+        let no_module = NodeId::new(&"foo", &[]);
         assert_eq!(no_module.fqn(), "foo");
         assert!(no_module.module().is_empty());
 
-        let with_module = NodeId::new("foo".to_string(), &["bar".to_string(), "baz".to_string()]);
+        let with_module = NodeId::new(&"foo", &["bar".to_string(), "baz".to_string()]);
         assert_eq!(with_module.fqn(), "bar::baz::foo");
         assert_eq!(with_module.module(), &["bar", "baz"]);
 

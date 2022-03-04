@@ -18,9 +18,9 @@ use tremor_script::FN_REGISTRY;
 
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::Dumb;
+use tremor_script::module::Manager;
 use tremor_script::prelude::*;
 use tremor_script::utils::*;
-use tremor_script::Manager;
 use tremor_script::{AggrType, EventContext, Script};
 use tremor_script::{Object, Value};
 
@@ -41,8 +41,8 @@ macro_rules! test_cases {
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
 
-                ModuleManager::add_path(script_dir)?;
-                ModuleManager::add_path("tremor-script/lib")?;
+                Manager::add_path(&script_dir)?;
+                Manager::add_path(&"tremor-script/lib")?;
                 let script = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
 
                 println!("Loading input: {}", in_file);
@@ -92,8 +92,8 @@ macro_rules! ignore_cases {
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
 
-                ModuleManager::add_path(script_dir)?;
-                ModuleManager::add_path("tremor-script/lib")?;
+                Manager::add_path(&script_dir)?;
+                Manager::add_path(&"tremor-script/lib")?;
                 let script = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
 
                 println!("Loading input: {}", in_file);
