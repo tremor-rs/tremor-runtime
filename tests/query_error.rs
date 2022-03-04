@@ -21,7 +21,7 @@ use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::Dumb;
-use tremor_script::Manager;
+use tremor_script::module::Manager;
 use tremor_script::FN_REGISTRY;
 
 fn to_pipe(query: &str) -> Result<ExecutableGraph> {
@@ -54,9 +54,9 @@ macro_rules! test_cases {
                 file.read_to_string(&mut contents)?;
 
                 let l = UNIQUE.lock();
-                ModuleManager::clear_path()?;
-                ModuleManager::add_path(query_dir)?;
-                ModuleManager::add_path("tremor-script/lib")?;
+                Manager::clear_path()?;
+                Manager::add_path(&query_dir)?;
+                Manager::add_path(&"tremor-script/lib")?;
                 let s = to_pipe( &contents);
                 drop (l);
                 if Path::new(err_re_file).exists() {
