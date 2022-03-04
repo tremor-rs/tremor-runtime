@@ -35,6 +35,13 @@ fn gen_doc(
         .as_ref()
         .ok_or_else(|| Error::from("Bad destination path"))?;
 
+    if let Some(ext) = path.extension() {
+        let ext = ext.to_str();
+       if Some("tremor") != ext {
+           return Ok(()) // Skip unless it is a .tremor file
+       }
+    }
+
     let mut raw = String::new();
     let mut input = crate::open_file(path, None)?;
     input.read_to_string(&mut raw)?;
