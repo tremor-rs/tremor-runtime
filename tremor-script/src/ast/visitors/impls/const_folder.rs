@@ -138,6 +138,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
                         .ok_or_else(|| {
                             let inner = b.extent();
                             let outer = b.extent();
+                            dbg!(value);
                             err_invalid_unary(&outer, &inner, *kind, value)
                         })?
                         .into_owned();

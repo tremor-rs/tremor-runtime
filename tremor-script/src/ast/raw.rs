@@ -204,7 +204,7 @@ impl Default for Endian {
 pub struct BytesPartRaw<'script> {
     pub data: ImutExprRaw<'script>,
     pub data_type: IdentRaw<'script>,
-    pub bits: Option<i64>,
+    pub bits: Option<u64>,
     pub(crate) mid: Box<NodeMeta>,
 }
 impl_expr!(BytesPartRaw);
