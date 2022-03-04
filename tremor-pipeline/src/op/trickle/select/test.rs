@@ -127,6 +127,7 @@ fn try_enqueue(op: &mut Select, event: Event) -> Result<Option<(Cow<'static, str
     if action.events.is_empty() {
         Ok(first)
     } else {
+        dbg!(action);
         Ok(None)
     }
 }

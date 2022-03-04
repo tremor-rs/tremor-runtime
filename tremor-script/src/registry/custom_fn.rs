@@ -31,7 +31,7 @@ pub(crate) const RECUR_REF: &Value<'static> = &RECUR;
 /// Encapsulates a user defined or standard library function
 pub struct CustomFn<'script> {
     /// Name
-    pub name: Cow<'script, str>,
+    pub name: String,
     /// Function body
     pub body: Exprs<'script>,
     /// Nominal arguments
@@ -50,7 +50,7 @@ impl<'script> From<FnDecl<'script>> for CustomFn<'script> {
     fn from(mut f: FnDecl<'script>) -> Self {
         let is_const = IsConstFn::is_const(&mut f.body).unwrap_or_default();
         CustomFn {
-            name: f.name.id,
+            name: f.name,
             args: f.args.iter().map(ToString::to_string).collect(),
             locals: f.locals,
             body: f.body,

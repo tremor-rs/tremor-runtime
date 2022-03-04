@@ -21,7 +21,7 @@ use super::{
 };
 use super::{node_id::NodeId, PipelineDefinition};
 use super::{HashMap, Value};
-use crate::{impl_expr, impl_expr_no_lt, impl_fqn};
+use crate::{impl_expr, impl_expr_no_lt};
 pub(crate) mod raw;
 
 /// A Tremor deployment
@@ -66,9 +66,9 @@ impl<'script> BaseRef for DeployStmt<'script> {
     #[must_use]
     fn fqn(&self) -> String {
         match self {
-            DeployStmt::FlowDefinition(stmt) => stmt.fqn(),
-            DeployStmt::PipelineDefinition(stmt) => stmt.fqn(),
-            DeployStmt::ConnectorDefinition(stmt) => stmt.fqn(),
+            DeployStmt::FlowDefinition(stmt) => stmt.id.clone(),
+            DeployStmt::PipelineDefinition(stmt) => stmt.id.clone(),
+            DeployStmt::ConnectorDefinition(stmt) => stmt.id.clone(),
             DeployStmt::DeployFlowStmt(stmt) => stmt.fqn(),
         }
     }
@@ -91,7 +91,7 @@ impl<'script> BaseExpr for DeployStmt<'script> {
 pub struct ConnectorDefinition<'script> {
     pub(crate) mid: Box<NodeMeta>,
     /// Identifer for the connector
-    pub node_id: NodeId,
+    pub id: String,
     /// Resolved argument defaults
     pub params: DefinitioalArgsWith<'script>,
     /// Internal / intrinsic builtin name
@@ -103,7 +103,6 @@ pub struct ConnectorDefinition<'script> {
     pub docs: Option<String>,
 }
 impl_expr!(ConnectorDefinition);
-impl_fqn!(ConnectorDefinition);
 
 type DeployStmts<'script> = Vec<DeployStmt<'script>>;
 
@@ -202,7 +201,7 @@ impl DeployEndpoint {
 pub struct FlowDefinition<'script> {
     pub(crate) mid: Box<NodeMeta>,
     /// Identifer for the flow
-    pub node_id: NodeId,
+    pub id: String,
     /// Resolved argument defaults
     pub params: DefinitioalArgs<'script>,
     /// Links between artefacts in the flow
@@ -214,7 +213,6 @@ pub struct FlowDefinition<'script> {
     pub docs: Option<String>,
 }
 impl_expr!(FlowDefinition);
-impl_fqn!(FlowDefinition);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// A connect target
@@ -231,7 +229,7 @@ pub struct CreateStmt<'script> {
     /// Target of the artefact definition being deployed
     pub from_target: NodeId,
     /// The name of the created entity (aka local alias)
-    pub instance_alias: NodeId,
+    pub instance_alias: String,
     /// creational args
     pub with: CreationalWith<'script>,
     /// Atomic unit of deployment
@@ -240,7 +238,7 @@ pub struct CreateStmt<'script> {
 impl_expr!(CreateStmt);
 impl crate::ast::node_id::BaseRef for CreateStmt<'_> {
     fn fqn(&self) -> String {
-        self.instance_alias.fqn()
+        self.instance_alias.clone()
     }
 }
 
@@ -251,7 +249,7 @@ pub struct DeployFlow<'script> {
     /// Target of the artefact definition being deployed
     pub from_target: NodeId,
     /// Target for creation
-    pub instance_alias: NodeId,
+    pub instance_alias: String,
     /// Atomic unit of deployment
     pub defn: FlowDefinition<'script>,
     /// Documentation comments
@@ -261,6 +259,6 @@ pub struct DeployFlow<'script> {
 impl_expr!(DeployFlow);
 impl crate::ast::node_id::BaseRef for DeployFlow<'_> {
     fn fqn(&self) -> String {
-        self.instance_alias.fqn()
+        self.instance_alias.clone()
     }
 }

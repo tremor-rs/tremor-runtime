@@ -44,14 +44,6 @@ impl<'script> From<IdentRaw<'script>> for NodeId {
 }
 
 impl NodeId {
-    /// Creates a new `NodeId` with a given module prefix
-    #[must_use]
-    pub fn with_prefix(mut self, prefix: &[String]) -> Self {
-        let mut module = prefix.to_vec();
-        module.append(&mut self.module);
-        self.module = module;
-        self
-    }
     /// Create a new `NodeId` from an ID and Module list.
     #[must_use]
     pub fn new<T: ToString>(id: &T, module: &[String]) -> Self {

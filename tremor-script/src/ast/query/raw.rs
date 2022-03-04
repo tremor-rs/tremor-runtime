@@ -30,7 +30,7 @@ use super::{
 use crate::{ast::NodeMeta, impl_expr};
 use crate::{
     ast::{
-        node_id::{BaseRef, NodeId},
+        node_id::NodeId,
         raw::UseRaw,
         visitors::{ConstFolder, GroupByExprExtractor, TargetEventRef},
         walkers::{ImutExprWalker, QueryWalker},
@@ -213,11 +213,11 @@ impl<'script> Upable<'script> for OperatorDefinitionRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let operator_decl = OperatorDefinition {
             mid: self.mid.box_with_name(&self.id),
-            node_id: NodeId::new(&self.id, &[]),
+            id: self.id.clone(),
             kind: self.kind.up(helper)?,
             params: self.params.up(helper)?,
         };
-        helper.add_query_decl_doc(&operator_decl.node_id.id(), self.doc);
+        helper.add_query_decl_doc(&operator_decl.id, self.doc);
         Ok(operator_decl)
     }
 }
@@ -295,7 +295,7 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
         let pipeline_decl = PipelineDefinition {
             config,
             mid,
-            node_id: NodeId::new(&self.id, &[]),
+            id: self.id,
             params,
             stmts,
             from,
@@ -303,7 +303,7 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
             scope,
         };
 
-        helper.add_query_decl_doc(&pipeline_decl.fqn(), self.doc);
+        helper.add_query_decl_doc(&pipeline_decl.id, self.doc);
         Ok(pipeline_decl)
     }
 }
@@ -349,8 +349,8 @@ impl<'script> Upable<'script> for OperatorCreateRaw<'script> {
         let params = self.params.up(helper)?;
         Ok(OperatorCreate {
             mid: self.mid.box_with_name(&self.id),
-            node_id: NodeId::new(&self.id, &[]),
-            target: self.target.with_prefix(&[]), // FIXME
+            id: self.id,
+            target: self.target,
             params,
         })
     }
@@ -387,16 +387,15 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         // Handle the params in the outside module
         let params = self.params;
         let params = params.up(helper)?;
-        let node_id = NodeId::new(&self.id, &[]); // FIXME
 
         let script_decl = ScriptDefinition {
             mid,
-            node_id,
+            id: self.id,
             params,
             script,
         };
 
-        helper.add_query_decl_doc(&script_decl.node_id.id(), self.doc);
+        helper.add_query_decl_doc(&script_decl.id, self.doc);
         Ok(script_decl)
     }
 }
@@ -417,9 +416,9 @@ impl<'script> Upable<'script> for ScriptCreateRaw<'script> {
         let params = self.params.up(helper)?;
         Ok(ScriptCreate {
             mid: self.mid.box_with_name(&self.id),
-            node_id: NodeId::new(&self.id, &[]),
+            id: self.id,
             params,
-            target: self.target.with_prefix(&[]), // FIXME
+            target: self.target,
         })
     }
 }
@@ -447,16 +446,13 @@ impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
 
         let window_decl = WindowDefinition {
             mid: self.mid.box_with_name(&self.id),
-            node_id: NodeId::new(&self.id, &[]),
+            id: self.id,
             kind: self.kind,
             params: self.params.up(helper)?,
             script: maybe_script,
         };
 
-        // FIXME: helper
-        // .windows
-        // .insert(window_decl.fqn(), window_decl.clone());
-        helper.add_query_decl_doc(&window_decl.node_id.id(), self.doc);
+        helper.add_query_decl_doc(&window_decl.id, self.doc);
         Ok(window_decl)
     }
 }

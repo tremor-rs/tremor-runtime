@@ -94,10 +94,9 @@ impl World {
             };
             error!(
                 "Error starting deployment of flow {}: {}",
-                flow.instance_alias.id(),
-                &err_str
+                flow.instance_alias, &err_str
             );
-            Err(ErrorKind::DeployFlowError(flow.instance_alias.id().to_string(), err_str).into())
+            Err(ErrorKind::DeployFlowError(flow.instance_alias.clone(), err_str).into())
         } else {
             Ok(())
         }
