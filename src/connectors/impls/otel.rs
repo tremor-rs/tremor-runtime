@@ -28,22 +28,22 @@ use tremor_script::Registry;
 /// Extend function registry with `CNCF OpenTelemetry` support
 pub fn load(registry: &mut Registry) {
     registry
-        .insert(tremor_fn! (cncf::otel|gen_span_id_string(ctx) {
+        .insert(tremor_fn! (cncf_otel|gen_span_id_string(ctx) {
             Ok(id::random_span_id_value(ctx.ingest_ns()).into_static())
         }))
-        .insert(tremor_fn! (cncf::otel|gen_span_id_array(ctx) {
+        .insert(tremor_fn! (cncf_otel|gen_span_id_array(ctx) {
             Ok(id::random_span_id_array(ctx.ingest_ns()).into_static())
         }))
-        .insert(tremor_fn! (cncf::otel|gen_span_id_bytes(ctx) {
+        .insert(tremor_fn! (cncf_otel|gen_span_id_bytes(ctx) {
             Ok(Value::Bytes(id::random_span_id_bytes(ctx.ingest_ns()).into()).into_static())
         }))
-        .insert(tremor_fn! (cncf::otel|gen_trace_id_string(ctx) {
+        .insert(tremor_fn! (cncf_otel|gen_trace_id_string(ctx) {
             Ok(id::random_trace_id_value(ctx.ingest_ns()).into_static())
         }))
-        .insert(tremor_fn! (cncf::otel|gen_trace_id_array(ctx) {
+        .insert(tremor_fn! (cncf_otel|gen_trace_id_array(ctx) {
             Ok(id::random_trace_id_array(ctx.ingest_ns()).into_static())
         }))
-        .insert(tremor_fn! (cncf::otel|gen_trace_id_bytes(ctx) {
+        .insert(tremor_fn! (cncf_otel|gen_trace_id_bytes(ctx) {
             Ok(Value::Bytes(id::random_trace_id_bytes(ctx.ingest_ns()).into()).into_static())
         }));
 }
@@ -54,24 +54,24 @@ mod tests {
     use test_case::test_case;
     use tremor_script::{registry, EventContext};
 
-    #[test_case("gen_span_id_string" ; "cncf::otel::gen_span_id_string")]
-    #[test_case("gen_span_id_array" ; "cncf::otel::gen_span_id_array")]
-    #[test_case("gen_span_id_bytes" ; "cncf::otel::gen_span_id_bytes")]
-    #[test_case("gen_trace_id_string" ; "cncf::otel::gen_trace_id_string")]
-    #[test_case("gen_trace_id_array" ; "cncf::otel::gen_trace_id_array")]
-    #[test_case("gen_trace_id_bytes" ; "cncf::otel::gen_trace_id_bytes")]
+    #[test_case("gen_span_id_string" ; "cncf_otel::gen_span_id_string")]
+    #[test_case("gen_span_id_array" ; "cncf_otel::gen_span_id_array")]
+    #[test_case("gen_span_id_bytes" ; "cncf_otel::gen_span_id_bytes")]
+    #[test_case("gen_trace_id_string" ; "cncf_otel::gen_trace_id_string")]
+    #[test_case("gen_trace_id_array" ; "cncf_otel::gen_trace_id_array")]
+    #[test_case("gen_trace_id_bytes" ; "cncf_otel::gen_trace_id_bytes")]
     fn test_tremor_fns(fun_name: &str) {
         let mut reg = registry::registry();
         load(&mut reg);
 
-        let f = reg.find("cncf::otel", fun_name);
+        let f = reg.find("cncf_otel", fun_name);
 
         if let Ok(f) = f {
             let context = EventContext::default();
             let r = f.invoke(&context, &[]);
             assert!(r.is_ok());
         } else {
-            assert!(false, "unknown function error for cncf::otel extension");
+            assert!(false, "unknown function error for cncf_otel extension");
         }
     }
 }
