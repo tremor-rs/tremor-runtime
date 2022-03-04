@@ -27,7 +27,7 @@ use std::collections::BTreeMap;
 use std::fmt::Display;
 use std::time::{Duration, Instant};
 use tremor_common::time::nanotime;
-use tremor_script::{ast::DeployEndpoint, EventPayload, ValueAndMeta};
+use tremor_script::{ast::DeployEndpoint, prelude::BaseExpr, EventPayload, ValueAndMeta};
 
 use crate::config::{
     self, Codec as CodecConfig, Connector as ConnectorConfig, Preprocessor as PreprocessorConfig,
@@ -639,7 +639,11 @@ where
                 for (pipeline_url, p) in &pipelines {
                     self.ctx.log_err(
                         p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
-                            endpoint: DeployEndpoint::new(&self.ctx.alias, &port),
+                            endpoint: DeployEndpoint::new(
+                                &self.ctx.alias,
+                                &port,
+                                pipeline_url.meta(),
+                            ),
                             target: InputTarget::Source(self.addr.clone()),
                             is_transactional: self.is_transactional,
                         })

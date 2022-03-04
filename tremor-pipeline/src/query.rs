@@ -33,6 +33,7 @@ use petgraph::{
     EdgeDirection::{Incoming, Outgoing},
     Graph,
 };
+use rand::Rng;
 use std::collections::BTreeSet;
 use std::iter;
 use tremor_common::ids::OperatorIdGen;
@@ -45,8 +46,8 @@ use tremor_script::{
         SelectType, Stmt, WindowDefinition, WindowKind,
     },
     errors::{
-        err_generic, query_node_duplicate_name_err, query_stream_duplicate_name_err,
-        query_stream_not_defined_err,
+        err_generic, not_defined_err, query_node_duplicate_name_err,
+        query_stream_duplicate_name_err, query_stream_not_defined_err,
     },
     highlighter::{Dumb, Highlighter},
     prelude::*,
@@ -225,13 +226,11 @@ impl Query {
                     if let Some(g) = included_graphs.get(node.as_str()) {
                         let name = into_name(&g.prefix, port.as_str());
                         node.id = name.into();
-                        // port.id = "out".into();
                     }
                     let (node, port) = &mut select.stmt.into;
                     if let Some(g) = included_graphs.get(node.as_str()) {
                         let name = from_name(&g.prefix, port.as_str());
                         node.id = name.into();
-                        // port.id = "in".into();
                     }
 
                     let s: &ast::Select<'_> = &select.stmt;
@@ -432,10 +431,9 @@ impl Query {
                         );
                     }
 
-                    // FIXME: Better error
                     let mut decl: ScriptDefinition = helper
                         .get(&o.target)?
-                        .ok_or_else(|| format!("script not found: {}", &o.target,))?;
+                        .ok_or_else(|| not_defined_err(o, "script"))?;
                     decl.params.ingest_creational_with(&o.params)?;
                     let inner_args = decl.params.render()?;
                     ArgsRewriter::new(inner_args, &mut helper).walk_script_decl(&mut decl)?;
@@ -501,7 +499,7 @@ impl Query {
                     node.config.kind = NodeKind::Operator;
                     let new_idx = pipe_graph.add_node(node.config);
                     let to_id = ig.into_map.get(port).ok_or(format!(
-                        "FIXME: invalid sub graph bad output port {}, availabile: {:?}",
+                        "invalid sub graph bad output port {}, availabile: {:?}",
                         port,
                         ig.into_map.keys().collect::<Vec<_>>()
                     ))?;
@@ -516,7 +514,7 @@ impl Query {
                     let port = node.id;
                     let new_idx = pipe_graph.add_node(node.config);
                     let from_id = ig.from_map.get(&port).ok_or(format!(
-                        "FIXME: invalid sub graph bad input port {}, availabile: {:?}",
+                        "invalid sub graph bad input port {}, availabile: {:?}",
                         port,
                         ig.from_map.keys().collect::<Vec<_>>()
                     ))?;
@@ -536,12 +534,12 @@ impl Query {
                 let from_id = old_index_to_new_index
                     .get(&from_id)
                     .copied()
-                    .ok_or("FIXME: invalid graph unknown from_id")?;
+                    .ok_or("invalid graph unknown from_id")?;
                 for (to_id, to_port) in tos {
                     let to_id = old_index_to_new_index
                         .get(&to_id)
                         .copied()
-                        .ok_or("FIXME: invalid graph unknown to_id")?;
+                        .ok_or("invalid graph unknown to_id")?;
                     let con = Connection {
                         from: from_port.clone(),
                         to: to_port,
@@ -702,7 +700,9 @@ fn node_to_dot(_g: &Graph<NodeConfig, Connection>, (_, c): (NodeIndex, &NodeConf
 }
 
 fn prefix_for(s: &PipelineCreate) -> String {
-    format!("FIXME: this should be random {}", s.alias)
+    let rand_id1: u64 = rand::thread_rng().gen();
+    let rand_id2: u64 = rand::thread_rng().gen();
+    format!("pipeline-{}-{rand_id1}-{rand_id2}", s.alias)
 }
 fn from_name(prefix: &str, port: &str) -> String {
     format!("{prefix}-from/{port}")
@@ -769,7 +769,7 @@ pub(crate) fn supported_operators(
 ) -> Result<OperatorNode> {
     let op: Box<dyn op::Operator> = match node {
         Some(ast::Stmt::ScriptDefinition(script)) => Box::new(op::trickle::script::Script {
-            id: format!("FIXME: {uid}"),
+            id: format!("script-{uid}"),
             script: tremor_script::Script {
                 script: script.script.clone(),
                 aid: script.aid(),

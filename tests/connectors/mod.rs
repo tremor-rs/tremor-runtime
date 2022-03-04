@@ -47,7 +47,7 @@ use tremor_runtime::{
     system::{ShutdownMode, World, WorldConfig},
     Event, QSIZE,
 };
-use tremor_script::{ast::DeployEndpoint, Value};
+use tremor_script::{ast::DeployEndpoint, NodeMeta, Value};
 
 pub(crate) struct ConnectorHarness {
     connector_id: String,
@@ -85,7 +85,11 @@ impl ConnectorHarness {
         let (link_tx, link_rx) = async_std::channel::unbounded();
         for port in ports {
             // try to connect a fake pipeline outbound
-            let pipeline_id = DeployEndpoint::new(&format!("TEST__{}_pipeline", port), &IN);
+            let pipeline_id = DeployEndpoint::new(
+                &format!("TEST__{}_pipeline", port),
+                &IN,
+                &NodeMeta::default(),
+            );
             let pipeline = TestPipeline::new(pipeline_id.alias().to_string());
             connector_addr
                 .send(connectors::Msg::Link {

@@ -26,7 +26,7 @@ use std::{fmt, sync::atomic::Ordering};
 use tremor_common::{ids::OperatorIdGen, time::nanotime};
 use tremor_pipeline::errors::ErrorKind as PipelineErrorKind;
 use tremor_pipeline::{CbAction, Event, ExecutableGraph, SignalKind};
-use tremor_script::{ast::DeployEndpoint, highlighter::Dumb};
+use tremor_script::{ast::DeployEndpoint, highlighter::Dumb, prelude::BaseExpr};
 
 const TICK_MS: u64 = 100;
 type Inputs = halfbrown::HashMap<DeployEndpoint, (bool, InputTarget)>;
@@ -498,7 +498,7 @@ pub(crate) async fn pipeline_task(
                     if alias == endpoint.alias() {
                         if let Err(e) = pipe
                             .send_mgmt(MgmtMsg::ConnectInput {
-                                endpoint: DeployEndpoint::new(&alias, &port),
+                                endpoint: DeployEndpoint::new(&alias, &port, endpoint.meta()),
                                 target: InputTarget::Pipeline(Box::new(addr.clone())),
                                 is_transactional: true,
                             })
@@ -532,7 +532,9 @@ pub(crate) async fn pipeline_task(
                         {
                             if let Err(e) = pipe
                                 .send_mgmt(MgmtMsg::DisconnectInput(DeployEndpoint::new(
-                                    &alias, &port,
+                                    &alias,
+                                    &port,
+                                    delete_url.meta(),
                                 )))
                                 .await
                             {
