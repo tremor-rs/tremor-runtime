@@ -21,7 +21,7 @@ use serde_ext::forward_to_deserialize_any;
 use simd_json::StaticNode;
 use std::fmt;
 
-use abi_stable::std_types::{map::Iter, RBox, RCowStr, RVec, Tuple2};
+use abi_stable::std_types::{map::Iter, RCowStr, RVec, Tuple2};
 
 impl<'de> de::Deserializer<'de> for Value<'de> {
     type Error = Error;
@@ -101,7 +101,7 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
     {
         let (variant, value) = match self {
             Value::Object(value) => {
-                let mut iter = RBox::into_inner(value).into_iter();
+                let mut iter = value.into_iter();
                 let Tuple2(variant, value) = match iter.next() {
                     Some(v) => v,
                     None => {

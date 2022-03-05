@@ -16,7 +16,7 @@ use super::{Object, Value};
 use simd_json::{BorrowedValue, OwnedValue, StaticNode};
 use std::iter::FromIterator;
 
-use abi_stable::std_types::{RBox, RCowStr, ROption, RStr, RString, RVec, Tuple2};
+use abi_stable::std_types::{RCowStr, ROption, RStr, RString, RVec, Tuple2};
 
 /// FIXME: this should be taken from `tremor_pdk` in the future
 /// FIXME: at some point do a search for all the occurrences of this function
@@ -286,11 +286,11 @@ impl<'value, K: Into<beef::Cow<'value, str>>, V: Into<Value<'value>>> FromIterat
     #[inline]
     #[must_use]
     fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
-        Value::Object(RBox::new(
+        Value::Object(
             iter.into_iter()
                 .map(|(k, v)| (cow_beef_to_sabi(Into::into(k)), Into::into(v)))
                 .collect(),
-        ))
+        )
     }
 }
 
@@ -300,11 +300,11 @@ impl<'value, K: Into<RCowStr<'value>>, V: Into<Value<'value>>> FromIterator<Tupl
     #[inline]
     #[must_use]
     fn from_iter<I: IntoIterator<Item = Tuple2<K, V>>>(iter: I) -> Self {
-        Value::Object(RBox::new(
+        Value::Object(
             iter.into_iter()
                 .map(|Tuple2(k, v)| (Into::into(k), Into::into(v)))
                 .collect(),
-        ))
+        )
     }
 }
 
@@ -312,7 +312,7 @@ impl<'value> From<Object<'value>> for Value<'value> {
     #[inline]
     #[must_use]
     fn from(v: Object<'value>) -> Self {
-        Self::Object(RBox::new(v))
+        Self::Object(v)
     }
 }
 impl<'value> From<halfbrown::HashMap<beef::Cow<'value, str>, Value<'value>>> for Value<'value> {

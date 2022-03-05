@@ -34,7 +34,7 @@ pub use crate::serde::to_value;
 pub use r#static::StaticValue;
 
 use abi_stable::{
-    std_types::{RBox, RCowSlice, RCowStr, RHashMap, RVec, Tuple2},
+    std_types::{RCowSlice, RCowStr, RHashMap, RVec, Tuple2},
     StableAbi,
 };
 
@@ -88,8 +88,9 @@ pub enum Value<'value> {
     String(RCowStr<'value>),
     /// array type
     Array(RVec<Value<'value>>),
-    /// object type
-    Object(RBox<Object<'value>>),
+    /// Object type. Note that since the PDK there is no need to `Box` the map,
+    /// because `RHashMap` is an opaque type and already boxed.
+    Object(Object<'value>),
     /// A binary type
     Bytes(Bytes<'value>),
 }
@@ -230,7 +231,7 @@ impl<'value> Ord for Value<'value> {
             (Value::Array(v1), Value::Array(v2)) => v1.cmp(v2),
             (Value::Array(_a), _) => Ordering::Greater,
             (_, Value::Array(_a)) => Ordering::Less,
-            (Value::Object(v1), Value::Object(v2)) => cmp_map(v1.as_ref(), v2.as_ref()),
+            (Value::Object(v1), Value::Object(v2)) => cmp_map(v1, v2),
         }
     }
 }
@@ -276,7 +277,7 @@ impl<'value> Value<'value> {
         match self {
             Self::String(s) => Value::String(RCowStr::Owned(s.to_string().into())),
             Self::Array(arr) => arr.into_iter().map(Value::into_static).collect(),
-            Self::Object(obj) => RBox::into_inner(obj)
+            Self::Object(obj) => obj
                 .into_iter()
                 .map(|Tuple2(k, v)| Tuple2(RCowStr::Owned(k.to_string().into()), v.into_static()))
                 .collect(),
@@ -370,7 +371,7 @@ impl<'value> Builder<'value> for Value<'value> {
     #[inline]
     #[must_use]
     fn object_with_capacity(capacity: usize) -> Self {
-        Self::Object(RBox::new(Object::with_capacity(capacity)))
+        Self::Object(Object::with_capacity(capacity))
     }
 }
 
