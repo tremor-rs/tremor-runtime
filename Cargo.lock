@@ -1022,9 +1022,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.1.5"
+version = "3.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ced1892c55c910c1219e98d6fc8d71f6bddba7905866ce740066d8bfea859312"
+checksum = "d8c93436c21e4698bacadf42917db28b23017027a4deccb35dbe47a7e7840123"
 dependencies = [
  "atty",
  "bitflags",
@@ -1043,7 +1043,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df6f3613c0a3cddfd78b41b10203eb322cb29b600cbdf808a7d3db95691b8e25"
 dependencies = [
- "clap 3.1.5",
+ "clap 3.1.6",
 ]
 
 [[package]]
@@ -6677,7 +6677,7 @@ version = "0.11.4"
 dependencies = [
  "anyhow",
  "async-std",
- "clap 3.1.5",
+ "clap 3.1.6",
  "clap_complete",
  "criterion",
  "difference",
