@@ -18,7 +18,7 @@ use crate::{
     common_cow,
     errors::Result,
     errors::{Error, ErrorKind},
-    metrics::metrics_value_count,
+    metrics::value_count,
     op::prelude::IN,
     ConfigMap, ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
 };
@@ -52,16 +52,16 @@ impl NodeConfig {
     }
 
     /// Creates a `curlNodeConfig` from a config struct
-    pub fn from_config<I>(id: &I, config: Option<tremor_value::Value<'static>>) -> Result<Self>
+    pub fn from_config<I>(id: &I, config: Option<tremor_value::Value<'static>>) -> Self
     where
         I: ToString,
     {
-        Ok(NodeConfig {
+        NodeConfig {
             id: id.to_string(),
             kind: NodeKind::Operator,
             config,
             ..NodeConfig::default()
-        })
+        }
     }
 }
 
@@ -216,7 +216,7 @@ impl NodeMetrics {
         tags.insert("direction".into(), "input".into());
         for (k, v) in &self.inputs {
             tags.insert("port".into(), Value::from(k.clone()));
-            res.push(metrics_value_count(
+            res.push(value_count(
                 metric_name.to_string().into(),
                 tags.clone(),
                 *v,
@@ -226,7 +226,7 @@ impl NodeMetrics {
         tags.insert("direction".into(), "output".into());
         for (k, v) in &self.outputs {
             tags.insert("port".into(), Value::from(k.clone()));
-            res.push(metrics_value_count(
+            res.push(value_count(
                 metric_name.to_string().into(),
                 tags.clone(),
                 *v,
@@ -284,7 +284,7 @@ impl ExecutableGraph {
                 !self
                     .graph
                     .get(**id)
-                    .map(|n| n.skippable())
+                    .map(Operator::skippable)
                     .unwrap_or_default()
             })
             .copied()
@@ -295,7 +295,7 @@ impl ExecutableGraph {
                 !self
                     .graph
                     .get(**id)
-                    .map(|n| n.skippable())
+                    .map(Operator::skippable)
                     .unwrap_or_default()
             })
             .copied()
@@ -511,7 +511,7 @@ impl ExecutableGraph {
                         })
                         .await
                     {
-                        error!("Failed to send metrics: {}", e)
+                        error!("Failed to send metrics: {}", e);
                     };
                 }
             }
@@ -525,7 +525,7 @@ impl ExecutableGraph {
                     })
                     .await
                 {
-                    error!("Failed to send metrics: {}", e)
+                    error!("Failed to send metrics: {}", e);
                 };
             }
         }

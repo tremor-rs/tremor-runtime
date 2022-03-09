@@ -379,7 +379,7 @@ where
     /// New folder
     #[must_use]
     pub fn new(helper: &'run Helper<'script, '_>) -> Self {
-        ConstFolder { helper: helper }
+        ConstFolder { helper }
     }
 }
 

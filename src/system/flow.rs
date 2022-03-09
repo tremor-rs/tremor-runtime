@@ -371,11 +371,6 @@ async fn spawn_task(
     connectors: HashMap<ConnectorId, connectors::Addr>,
     links: &[ConnectStmt],
 ) -> Result<Addr> {
-    let (msg_tx, msg_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-    let (drain_tx, drain_rx) = unbounded();
-    let (stop_tx, stop_rx) = unbounded();
-    let (start_tx, start_rx) = unbounded();
-
     #[derive(Debug)]
     /// wrapper for all possible messages handled by the flow task
     enum MsgWrapper {
@@ -384,6 +379,11 @@ async fn spawn_task(
         DrainResult(ConnectorResult<()>),
         StopResult(ConnectorResult<()>),
     }
+
+    let (msg_tx, msg_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+    let (drain_tx, drain_rx) = unbounded();
+    let (stop_tx, stop_rx) = unbounded();
+    let (start_tx, start_rx) = unbounded();
 
     let mut input_channel = PriorityMerge::new(
         msg_rx.map(MsgWrapper::Msg),
