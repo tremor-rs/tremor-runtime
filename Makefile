@@ -56,7 +56,7 @@ demo: image
 	-docker-compose -f demo/demo.yaml up
 	-docker-compose -f demo/demo.yaml rm -fsv
 
-it: clean
+it-clean:
 	-find tremor-cli/tests -name '*.log' | xargs rm
 it: it-clean
 	cargo run -p tremor-cli -- test integration tremor-cli/tests

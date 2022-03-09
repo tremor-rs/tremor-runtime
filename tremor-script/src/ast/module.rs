@@ -235,7 +235,7 @@ impl Module {
         src: &'static str,
     ) -> Result<Self> {
         let aggr_reg = crate::aggr_registry();
-        let reg = &*FN_REGISTRY.read()?; // FIXME
+        let reg = &*FN_REGISTRY.read()?;
         let mut helper = Helper::new(reg, &aggr_reg);
 
         let lexemes = Tokenizer::new(src, arena_idx)
@@ -380,7 +380,6 @@ pub struct Manager {
     modules: Vec<Module>,
 }
 
-// FIXME: unwraps
 impl Manager {
     /// removes all module load locations
     /// # Errors

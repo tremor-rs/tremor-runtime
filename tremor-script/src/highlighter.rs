@@ -197,7 +197,7 @@ pub trait Highlighter {
     /// # Errors
     /// on io errors
     fn highlight_str(&mut self, source: &str, ident: &str, emit_lines: bool) -> io::Result<()> {
-        // FIXME: we might not want this here
+        // TODO: do we really want to input this here?
         let (aid, source) = Arena::insert(source)?;
         let tokens: Vec<_> = crate::lexer::Tokenizer::new(source, aid)
             .filter_map(Result::ok)

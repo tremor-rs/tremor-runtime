@@ -146,7 +146,6 @@ impl NodeMeta {
         }
     }
     #[cfg(test)]
-    /// FIXMER
     pub fn dummy() -> Box<Self> {
         Box::default()
     }
@@ -1291,7 +1290,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
                                 key: key.clone(),
                             }],
                             idx: 0,
-                            mid: Box::default(), // FIXME
+                            mid: mid.clone(),
                         }),
                     });
 

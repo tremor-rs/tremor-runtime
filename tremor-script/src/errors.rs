@@ -168,12 +168,11 @@ impl ErrorKind {
             MissingEffectors, MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit,
             NoConstsAllowed, NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant,
             NotFound, Oops, ParseIntError, ParserError, PatchKeyExists, PipelineUnknownPort,
-            PreprocessorError, QueryNodeDuplicateName, QueryNodeReservedName,
-            QueryStreamNotDefined, RecursionLimit, RuntimeError, TailingHereDoc, TypeConflict,
-            UnexpectedCharacter, UnexpectedEndOfStream, UnexpectedEscapeCode, UnrecognizedToken,
-            UnterminatedExtractor, UnterminatedHereDoc, UnterminatedIdentLiteral,
-            UnterminatedInterpolation, UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error,
-            ValueError,
+            QueryNodeDuplicateName, QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit,
+            RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
+            UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
+            UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
+            UpdateKeyMissing, Utf8Error, ValueError,
         };
         match self {
             NoClauseHit(outer)
@@ -261,7 +260,6 @@ impl ErrorKind {
             | NotFound
             | ParseIntError(_)
             | ParserError(_)
-            | PreprocessorError(_)
             | Self::__Nonexhaustive { .. }
             | UnexpectedEndOfStream
             | Utf8Error(_)
@@ -631,11 +629,6 @@ error_chain! {
         /*
          * Preprocessor
          */
-         PreprocessorError(msg: String) {
-            description("Preprocessor due to user error")
-                display("Preprocessor due to user error: {}", msg)
-         }
-
         ModuleNotFound(range: Span, loc: Span, resolved_relative_file_path: String, expected: Vec<String>) {
             description("Module not found")
                 display("Module `{}` not found or not readable error in module path: {}",
