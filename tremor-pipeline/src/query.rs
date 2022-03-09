@@ -431,6 +431,8 @@ impl Query {
                         .get(&o.target)?
                         .ok_or_else(|| not_defined_err(o, "script"))?;
                     decl.params.ingest_creational_with(&o.params)?;
+                    // we const fold twice to ensure that we are able
+                    ConstFolder::new(&helper).walk_definitional_args(&mut decl.params)?;
                     let inner_args = decl.params.render()?;
                     ArgsRewriter::new(inner_args, &mut helper).walk_script_decl(&mut decl)?;
                     ConstFolder::new(&helper).walk_script_decl(&mut decl)?;
@@ -729,9 +731,15 @@ fn select(
                     Ok(helper
                         .get::<WindowDefinition>(&w.id)?
                         .ok_or_else(|| {
-                            ErrorKind::BadOpConfig(format!("Unknown window: {} available", &w.id,))
+                            Error::from(ErrorKind::BadOpConfig(format!(
+                                "Unknown window: {} available",
+                                &w.id,
+                            )))
                         })
-                        .and_then(|imp| Ok((w.id.id().to_string(), window_decl_to_impl(&imp)?)))?)
+                        .and_then(|mut imp| {
+                            ConstFolder::new(&helper).walk_window_decl(&mut imp)?;
+                            Ok((w.id.id().to_string(), window_decl_to_impl(&imp)?))
+                        })?)
                 })
                 .collect();
 

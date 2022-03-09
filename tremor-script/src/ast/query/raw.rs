@@ -57,7 +57,6 @@ impl<'script> QueryRaw<'script> {
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<Query<'script>> {
         let params = self.params.up(helper)?;
-        // let args = params.render()?; FIXME
         let mut stmts: Vec<_> = self
             .stmts
             .into_iter()
@@ -72,7 +71,7 @@ impl<'script> QueryRaw<'script> {
         for (k, mut v) in self.config.up(helper)? {
             ConstFolder::new(helper).walk_expr(&mut v)?;
             let mid = v.meta().clone();
-            let v = v.try_into_lit()?;
+            let v = v.try_into_value(helper)?;
             match (k.as_str(), v.as_str()) {
                 ("from", Some(v)) => {
                     for v in v.split(',') {

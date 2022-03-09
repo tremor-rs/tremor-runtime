@@ -18,17 +18,14 @@
 
 use crate::{
     ast::{
-        base_expr, query,
-        upable::Upable,
-        visitors::ConstFolder,
-        walkers::{ExprWalker, ImutExprWalker},
-        ArrayPattern, ArrayPredicatePattern, AssignPattern, BinExpr, BinOpKind, Bytes, BytesPart,
-        ClauseGroup, Comprehension, ComprehensionCase, Costly, DefaultCase, EmitExpr, EventPath,
-        Expr, ExprPath, Expression, Field, FnDecl, Helper, Ident, IfElse, ImutExpr, Invocable,
-        Invoke, InvokeAggr, InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath,
-        Patch, PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record,
-        RecordPattern, Recur, ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit,
-        TestExpr, TuplePattern, UnaryExpr, UnaryOpKind,
+        base_expr, query, upable::Upable, visitors::ConstFolder, walkers::ExprWalker, ArrayPattern,
+        ArrayPredicatePattern, AssignPattern, BinExpr, BinOpKind, Bytes, BytesPart, ClauseGroup,
+        Comprehension, ComprehensionCase, Costly, DefaultCase, EmitExpr, EventPath, Expr, ExprPath,
+        Expression, Field, FnDecl, Helper, Ident, IfElse, ImutExpr, Invocable, Invoke, InvokeAggr,
+        InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath, Patch, PatchOperation,
+        Path, Pattern, PredicateClause, PredicatePattern, Record, RecordPattern, Recur,
+        ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit, TestExpr, TuplePattern,
+        UnaryExpr, UnaryOpKind,
     },
     errors::{
         err_generic, error_generic, error_missing_effector, Error, Kind as ErrorKind, Result,
@@ -107,9 +104,8 @@ impl<'script> ScriptRaw<'script> {
                     mid,
                     comment,
                 }) => {
-                    let mut expr = expr.up(helper)?;
-                    ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut expr)?;
-                    let value = expr.try_into_lit()?;
+                    let expr = expr.up(helper)?;
+                    let value = expr.try_into_value(helper)?;
                     let value_type = value.value_type();
                     let mid = mid.box_with_name(&name);
                     let c = Const {
@@ -472,9 +468,8 @@ impl<'script> Upable<'script> for ConstRaw<'script> {
     type Target = Const<'script>;
 
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let mut expr = self.expr.up(helper)?;
-        ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut expr)?;
-        let value = expr.try_into_lit()?;
+        let expr = self.expr.up(helper)?;
+        let value = expr.try_into_value(helper)?;
         Ok(Const {
             mid: self.mid.box_with_name(&self.name),
             id: self.name.to_string(),
