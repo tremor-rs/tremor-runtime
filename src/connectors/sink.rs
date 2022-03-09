@@ -740,6 +740,7 @@ where
                             }
                         }
                         SinkMsg::ConnectionEstablished => {
+                            debug!("[Sink::{}] Connection established", &self.ctx.alias);
                             self.ctx.log_err(
                                 self.sink.on_connection_established(&self.ctx).await,
                                 "Error during on_connection_established",

@@ -178,9 +178,7 @@ impl TcpClientSink {
             source_runtime,
         }
     }
-}
 
-impl TcpClientSink {
     /// writing to the client socket
     async fn write(&mut self, data: Vec<Vec<u8>>) -> Result<()> {
         let stream = self

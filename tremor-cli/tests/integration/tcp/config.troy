@@ -1,4 +1,44 @@
-define flow main
+define flow server
+flow
+  use integration;
+  use troy::pipelines;
+  use troy::connectors;
+
+  define connector tcp_server from tcp_server
+  with
+    preprocessors = ["lines"],
+    postprocessors = ["lines"],
+    codec = "json",
+    config = {
+      "host": "0.0.0.0",
+      "port": 65535,
+      "buf_size": 1024,
+    }
+  end;
+  
+  create connector server_out from integration::write_file
+  with
+    file = "server_out.log"
+  end;
+  create connector stdio from connectors::console;
+  create connector tcp_server;
+
+  create pipeline server_side from pipelines::passthrough;
+  create pipeline debug from pipelines::passthrough;
+
+  # flow from tcp_server to file
+  connect /connector/tcp_server to /pipeline/server_side;
+  connect /connector/tcp_server/err to /pipeline/debug;
+  connect /pipeline/server_side to /connector/server_out;
+
+  # aaaand echo it back
+  connect /pipeline/server_side to /connector/tcp_server;
+
+  # debugging
+  connect /pipeline/debug to /connector/stdio;
+end;
+
+define flow client
 flow
   use integration;
   use troy::pipelines;
@@ -25,33 +65,15 @@ flow
     }
   end;
 
-  define connector tcp_server from tcp_server
-  with
-    preprocessors = ["lines"],
-    postprocessors = ["lines"],
-    codec = "json",
-    config = {
-      "host": "0.0.0.0",
-      "port": 65535,
-      "buf_size": 1024,
-    }
-  end;
-
   create connector in from integration::read_file;
   create connector client_out from integration::write_file
   with
     file = "client_out.log"
   end;
-  create connector server_out from integration::write_file
-  with
-    file = "server_out.log"
-  end;
   create connector exit from integration::exit;
   create connector stdio from connectors::console;
   create connector tcp_client;
-  create connector tcp_server;
 
-  create pipeline server_side from pipelines::passthrough;
   create pipeline to_client from pipelines::passthrough;
   create pipeline from_client from integration::out_or_exit;
   create pipeline debug from pipelines::passthrough;
@@ -66,17 +88,11 @@ flow
   connect /pipeline/from_client/out to /connector/client_out;
   connect /pipeline/from_client/exit to /connector/exit;
 
-  # flow from tcp_server to file
-  connect /connector/tcp_server to /pipeline/server_side;
-  connect /connector/tcp_server/err to /pipeline/debug;
-  connect /pipeline/server_side to /connector/server_out;
-  
-  # aaaand echo it back
-  connect /pipeline/server_side to /connector/tcp_server;
-
   # debugging
   connect /pipeline/debug to /connector/stdio;
 
 end;
 
-deploy flow main;
+deploy flow server;
+deploy flow client;
+
