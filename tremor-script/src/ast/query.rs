@@ -258,14 +258,15 @@ impl<'script> PipelineDefinition<'script> {
         create: &CreationalWith<'script>,
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<Query<'script>> {
+        let mut create = create.clone();
+        ConstFolder::new(helper).walk_creational_with(&mut create)?;
         let mut args = create.render()?;
 
         let mut config = HashMap::new();
 
         for (k, v) in &self.config {
-            let mut v = v.clone();
-            ConstFolder::new(helper).walk_expr(&mut v)?;
-            let v = v.try_into_lit()?;
+            let v = v.clone();
+            let v = v.try_into_value(helper)?;
             config.insert(k.to_string(), v);
         }
 
@@ -279,9 +280,9 @@ impl<'script> PipelineDefinition<'script> {
             }
         }
         if let Some(k) = args.as_object().and_then(|o| o.keys().next()) {
-            return error_generic(create, create, &format!("Unknown parameter {k}"));
+            return error_generic(&create, &create, &format!("Unknown parameter {k}"));
         }
-
+        ConstFolder::new(helper).walk_definitional_args(&mut params)?;
         let inner_args = params.render()?;
         let stmts = self
             .stmts
@@ -443,7 +444,7 @@ impl<'script> CreationalWith<'script> {
     pub fn render(&self) -> Result<Value<'script>> {
         let mut res = Value::object();
         for (k, v) in &self.with.0 {
-            res.try_insert(k.id.clone(), v.clone().try_into_lit()?.clone());
+            res.try_insert(k.id.clone(), v.try_as_lit()?.clone());
         }
         Ok(res)
     }
@@ -576,9 +577,9 @@ impl<'script> DefinitioalArgs<'script> {
             // FIXME: hygenic error
             res.insert(
                 k.id.clone(),
-                v.clone()
+                v.as_ref()
                     .ok_or_else(|| Error::from(format!("missing key: {}", k)))?
-                    .try_into_lit()?
+                    .try_as_lit()?
                     .clone(),
             )?;
         }
