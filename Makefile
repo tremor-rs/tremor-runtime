@@ -57,8 +57,7 @@ demo: image
 	-docker-compose -f demo/demo.yaml rm -fsv
 
 it:
-	cargo install --path tremor-cli
-	cd tremor-cli && TREMOR_PATH=../tremor-script/lib tremor test integration tests -i integration -e ws
+	cargo run -p tremor-cli -- test integration tremor-cli/tests -i integration -e ws
 
 bench: force
 	cargo build --release -p tremor
