@@ -114,11 +114,11 @@ test::suite({
   "tests": [
     test::test({
       "name": "integer min",
-      "test": test::assert("integer min", integer::min, -9223372036854775807)
+      "test": test::assert("integer min", integer::signed::min, -9223372036854775808)
     }),
     test::test({
       "name": "integer max",
-      "test": test::assert("integer max", integer::max, 9223372036854775807)
+      "test": test::assert("integer max", integer::signed::max, 9223372036854775807)
     }),
     test::test({
       "name": "integer parse",
