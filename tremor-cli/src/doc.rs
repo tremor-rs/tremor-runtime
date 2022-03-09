@@ -35,9 +35,9 @@ fn gen_doc(
 
     if let Some(ext) = path.extension() {
         let ext = ext.to_str();
-       if Some("tremor") != ext {
-           return Ok(()) // Skip unless it is a .tremor file
-       }
+        if Some("tremor") != ext {
+            return Ok(()); // Skip unless it is a .tremor file
+        }
     }
 
     let mut raw = String::new();
