@@ -47,6 +47,12 @@ pub enum ResourceType {
     Trickle,
     Troy,
 }
+
+impl std::fmt::Display for ResourceType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_str().fmt(f)
+    }
+}
 impl ResourceType {
     #[must_use]
     pub fn as_str(self) -> &'static str {
@@ -107,14 +113,9 @@ pub fn serialize<T: Serialize>(t: ResourceType, d: &T, code: StatusCode) -> Resu
             .header(headers::CONTENT_TYPE, t.as_str())
             .body(simd_json::to_string(d)?)
             .build()),
-        ResourceType::Trickle => Err(Error::new(
+        _ => Err(Error::new(
             StatusCode::InternalServerError,
-            "Unsuported formatting as trickle".into(),
-        )),
-        // FIXME: we should have troy serialization, maybe just use the file from the Arena?
-        ResourceType::Troy => Err(Error::new(
-            StatusCode::InternalServerError,
-            "Unsuported formatting as troy".into(),
+            format!("Unsuported formatting: {}", t).into(),
         )),
     }
 }

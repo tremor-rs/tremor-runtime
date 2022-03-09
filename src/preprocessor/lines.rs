@@ -172,7 +172,10 @@ impl Preprocessor for Lines {
         let mut split_points = memchr_iter(separator, data);
         if self.is_buffered {
             if let Some(first_line_idx) = split_points.next() {
-                let first_line = &data[last_idx..first_line_idx];
+                // ALLOW
+                let first_line = data
+                    .get(last_idx..first_line_idx)
+                    .ok_or(ErrorKind::InvalidLines)?;
                 if !self.buffer.is_empty() {
                     events.push(self.complete_fragment(first_line)?);
                 // invalid lines are ignored (and logged about here)
@@ -182,7 +185,9 @@ impl Preprocessor for Lines {
                 last_idx = first_line_idx + 1;
 
                 while let Some(line_idx) = split_points.next() {
-                    let line = &data[last_idx..line_idx];
+                    let line = data
+                        .get(last_idx..line_idx)
+                        .ok_or(ErrorKind::InvalidLines)?;
                     if self.is_valid_line(line) {
                         events.push(line.to_vec());
                     }
@@ -192,7 +197,7 @@ impl Preprocessor for Lines {
                     // this is the last line and since it did not end in a line boundary, it
                     // needs to be remembered for later (when more data arrives)
                     // invalid lines are ignored (and logged about here)
-                    self.save_fragment(&data[last_idx..])?;
+                    self.save_fragment(data.get(last_idx..).ok_or(ErrorKind::InvalidLines)?)?;
                 }
             } else {
                 // if there's no other lines, or if data did not end in a line boundary
@@ -201,13 +206,21 @@ impl Preprocessor for Lines {
         } else {
             for split_point in split_points {
                 if !self.exceeds_max_length(split_point - last_idx) {
-                    events.push(data[last_idx..split_point].to_vec());
+                    events.push(
+                        data.get(last_idx..split_point)
+                            .ok_or(ErrorKind::InvalidLines)?
+                            .to_vec(),
+                    );
                 }
                 last_idx = split_point + 1;
             }
             // push the rest out, if finished or not
             if last_idx <= data.len() {
-                events.push(data[last_idx..].to_vec());
+                events.push(
+                    data.get(last_idx..)
+                        .ok_or(ErrorKind::InvalidLines)?
+                        .to_vec(),
+                );
             }
         }
 

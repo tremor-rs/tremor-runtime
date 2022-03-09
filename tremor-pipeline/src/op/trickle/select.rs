@@ -50,8 +50,7 @@ pub struct Select {
 }
 
 impl Select {
-    //FIXME rename
-    pub fn with_stmt(
+    pub fn from_stmt(
         operator_uid: u64,
         id: String,
         windows: Vec<(String, window::Impl)>,

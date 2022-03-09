@@ -45,8 +45,8 @@ impl ChannelSource {
         Self { rx, tx }
     }
 
-    /// get the sender for the source
-    /// FIXME: change the name
+    /// get the runtime for the source
+
     pub fn runtime(&self) -> ChannelSourceRuntime {
         ChannelSourceRuntime {
             sender: self.tx.clone(),

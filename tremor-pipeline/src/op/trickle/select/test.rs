@@ -117,7 +117,7 @@ fn test_select(uid: u64, stmt: SelectStmt<'static>) -> Select {
         ),
     ];
     let id = "select".to_string();
-    Select::with_stmt(uid, id, windows, &stmt)
+    Select::from_stmt(uid, id, windows, &stmt)
 }
 
 fn try_enqueue(op: &mut Select, event: Event) -> Result<Option<(Cow<'static, str>, Event)>> {
@@ -233,7 +233,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
         .collect();
 
     let id = "select".to_string();
-    Ok(Select::with_stmt(42, id, windows, &stmt))
+    Ok(Select::from_stmt(42, id, windows, &stmt))
 }
 
 fn test_tick(ns: u64) -> Event {

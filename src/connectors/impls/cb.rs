@@ -279,6 +279,7 @@ impl Source for CbSource {
         } else {
             self.num_sent += 1;
             self.last_sent = self.last_sent.max(*pull_id);
+            // ALLOW: we know bytes_read is smaller than or equal buf_size
             let data = self.buf[0..bytes_read].to_vec();
             Ok(SourceReply::Data {
                 data,
