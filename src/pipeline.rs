@@ -167,7 +167,8 @@ pub(crate) async fn spawn(
     operator_id_gen: &mut OperatorIdGen,
 ) -> Result<Addr> {
     let qsize = crate::QSIZE.load(Ordering::Relaxed);
-    let pipeline = config.to_pipe(operator_id_gen)?;
+    let mut pipeline = config.to_pipe(operator_id_gen)?;
+    pipeline.optimize();
 
     let (tx, rx) = bounded::<Box<Msg>>(qsize);
     // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous

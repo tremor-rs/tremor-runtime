@@ -127,7 +127,7 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
 
     let mut count = 0;
     for flow in deployable.iter_flows() {
-        world.start_deploy(&src, flow).await?;
+        world.start_deploy(flow).await?;
         count += 1;
     }
     Ok(count)

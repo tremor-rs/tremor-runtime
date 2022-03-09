@@ -29,8 +29,6 @@ pub(crate) type Channel = Sender<Msg>;
 pub(crate) enum Msg {
     /// deploy a Flow
     StartDeploy {
-        /// deploy source
-        src: String,
         /// deploy flow
         flow: DeployFlow<'static>,
         /// result sender
@@ -91,7 +89,7 @@ impl Manager {
                             );
                         }
                     }
-                    Msg::StartDeploy { src, flow, sender } => {
+                    Msg::StartDeploy { flow, sender } => {
                         let id = FlowId::from(&flow);
                         let res = match self.flows.entry(id.clone()) {
                             Entry::Occupied(_occupied) => {
@@ -99,7 +97,6 @@ impl Manager {
                             }
                             Entry::Vacant(vacant) => {
                                 let res = Flow::start(
-                                    src.clone(),
                                     flow,
                                     &mut self.operator_id_gen,
                                     &mut self.connector_id_gen,
