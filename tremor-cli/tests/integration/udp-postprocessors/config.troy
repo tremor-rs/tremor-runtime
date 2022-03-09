@@ -29,11 +29,9 @@ flow
   create connector in;
   create connector `udp-out`;
   create connector exit from connectors::exit;
-  #create connector debug from connectors::stdio;
 
   connect /connector/in/out to /pipeline/main/in;
   connect /pipeline/main/out to /connector/`udp-out`/in;
-  #connect /pipeline/main/out to /connector/debug/in;
   connect /pipeline/main/exit to /connector/exit/in;
 end;
 
