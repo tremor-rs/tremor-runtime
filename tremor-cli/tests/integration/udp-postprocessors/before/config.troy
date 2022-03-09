@@ -1,7 +1,6 @@
 
 define flow main
 flow
-
   use troy::connectors;
   use integration;
   
@@ -28,7 +27,7 @@ flow
 
   create pipeline main from integration::out_or_exit;
   create connector `udp-in`;
-  create connector debug from connectors::stdio;
+  create connector debug from connectors::console;
   create connector exit from connectors::exit;
   create connector out;
 
