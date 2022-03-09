@@ -243,7 +243,7 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
             }
         };
         let bits = if let Some(bits) = self.bits {
-            if bits <= 0 || bits > 64 {
+            if bits == 0 || bits > 64 {
                 return Err(err_generic(
                     &self,
                     &self,

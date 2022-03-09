@@ -727,7 +727,7 @@ fn select(
                 .windows
                 .iter()
                 .map(|w| {
-                    Ok(helper
+                    helper
                         .get::<WindowDefinition>(&w.id)?
                         .ok_or_else(|| {
                             Error::from(ErrorKind::BadOpConfig(format!(
@@ -736,9 +736,9 @@ fn select(
                             )))
                         })
                         .and_then(|mut imp| {
-                            ConstFolder::new(&helper).walk_window_decl(&mut imp)?;
+                            ConstFolder::new(helper).walk_window_decl(&mut imp)?;
                             Ok((w.id.id().to_string(), window_decl_to_impl(&imp)?))
-                        })?)
+                        })
                 })
                 .collect();
 
