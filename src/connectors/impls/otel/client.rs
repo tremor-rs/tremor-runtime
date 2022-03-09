@@ -33,7 +33,7 @@ const CONNECTOR_TYPE: &str = "otel_client";
 
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct Config {
-    // TODO FIXME replace host/port pair with http(s) `endpoint`
+    // FIXME: replace host/port pair with http(s) `endpoint`
     /// The hostname or IP address for the remote OpenTelemetry collector endpoint
     #[serde(default = "default_localhost")]
     pub host: String,

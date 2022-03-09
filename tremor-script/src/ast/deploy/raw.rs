@@ -368,7 +368,7 @@ impl_expr!(CreateStmtRaw);
 impl<'script> Upable<'script> for CreateStmtRaw<'script> {
     type Target = CreateStmt<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let target = self.target.clone(); // FIXME
+        let target = self.target.clone();
         let outer = self.extent();
         let inner = self.id.extent();
         let params = self.params.up(helper)?;

@@ -55,6 +55,8 @@ impl From<u32> for Index {
     }
 }
 
+///
+/// Append only arena
 impl Arena {
     fn insert_<S>(&mut self, src: &S) -> Index
     where
@@ -75,6 +77,7 @@ impl Arena {
 
     unsafe fn get_static(&self, id: Index) -> Option<&'static str> {
         self.get_(id)
+            // ALLOW: The reason we can do that is because the Arena is additive only, we never remove from it
             .map(|s| unsafe { std::mem::transmute::<&str, &'static str>(s) })
     }
 
@@ -82,8 +85,6 @@ impl Arena {
     /// # Errors
     /// if the source can't be found
     pub fn get(id: Index) -> Result<Option<&'static str>> {
-        // FIXME: explain why this is OK, in short, we simply never delete anything so
-        // it stays for the lifetime of the system
         Ok(unsafe { ARENA.read()?.get_static(id) })
     }
 

@@ -481,13 +481,12 @@ impl<'script> DefinitioalArgsWith<'script> {
             {
                 *arg_v = Some(v.clone());
             } else {
-                // FIXME: better error
-                return Err(format!("unknown key: {}", k).into());
+                return error_generic(creational, k, &"Unknown key");
             }
         }
 
         if let Some((k, _)) = self.args.0.iter_mut().find(|(_, v)| v.is_none()) {
-            Err(format!("missing key: {}", k).into())
+            error_generic(creational, k, &"Missing key")
         } else {
             Ok(())
         }

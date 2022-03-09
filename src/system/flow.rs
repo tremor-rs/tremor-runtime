@@ -72,6 +72,12 @@ impl Borrow<str> for ConnectorId {
 }
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash)]
 pub(crate) struct PipelineId(pub String);
+
+impl std::fmt::Display for PipelineId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
 impl From<&DeployEndpoint> for PipelineId {
     fn from(e: &DeployEndpoint) -> Self {
         PipelineId(e.alias().to_string())
@@ -232,6 +238,13 @@ impl Flow {
     }
 }
 
+fn key_list<K: ToString, V>(h: &HashMap<K, V>) -> String {
+    h.keys()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 async fn link(
     connectors: &HashMap<ConnectorId, connectors::Addr>,
     pipelines: &HashMap<PipelineId, pipeline::Addr>,
@@ -245,7 +258,11 @@ async fn link(
 
             let pipeline = pipelines
                 .get(to.alias())
-                .ok_or(format!("FIXME: pipeline {} not found", to.alias()))?
+                .ok_or(format!(
+                    "Pipeline {} not found, in: {}",
+                    to.alias(),
+                    key_list(pipelines)
+                ))?
                 .clone();
 
             // this is some odd stuff to have here
@@ -266,13 +283,19 @@ async fn link(
             // FIXME: move the connecto message from connector to pipeline here
         }
         ConnectStmt::PipelineToConnector { from, to, .. } => {
-            let pipeline = pipelines
-                .get(from.alias())
-                .ok_or(format!("FIXME: pipeline {} not found", from.alias()))?;
+            let pipeline = pipelines.get(from.alias()).ok_or(format!(
+                "Pipeline {} not found in: {}",
+                from.alias(),
+                key_list(pipelines)
+            ))?;
 
             let connector = connectors
                 .get(to.alias())
-                .ok_or(format!("FIXME: connector {} not found", to.alias()))?
+                .ok_or(format!(
+                    "Connector {} not found: {}",
+                    to.alias(),
+                    key_list(pipelines)
+                ))?
                 .clone();
 
             // first link the pipeline to the connector
@@ -304,12 +327,16 @@ async fn link(
             rx.recv().timeout(timeout).await???;
         }
         ConnectStmt::PipelineToPipeline { from, to, .. } => {
-            let from_pipeline = pipelines
-                .get(from.alias())
-                .ok_or(format!("FIXME: pipeline {} not found", from.alias()))?;
-            let to_pipeline = pipelines
-                .get(to.alias())
-                .ok_or(format!("FIXME: pipeline {} not found", from.alias()))?;
+            let from_pipeline = pipelines.get(from.alias()).ok_or(format!(
+                "Pipeline {} not found in: {}",
+                from.alias(),
+                key_list(pipelines)
+            ))?;
+            let to_pipeline = pipelines.get(to.alias()).ok_or(format!(
+                "Pipeline {} not found in: {}",
+                from.alias(),
+                key_list(pipelines)
+            ))?;
             let msg_from = crate::pipeline::MgmtMsg::ConnectOutput {
                 port: from.port().to_string().into(),
                 endpoint: to.clone(),

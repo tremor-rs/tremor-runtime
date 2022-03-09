@@ -63,6 +63,7 @@ impl StreamReader for UnixSocketReader {
                 stream,
             });
         }
+        // ALLOW: we know bytes_read is smaller than or equal buf_size
         let data = self.buffer[0..bytes_read].to_vec();
         debug!("[Connector::{}] Read {bytes_read} bytes", &self.alias);
         debug!(
@@ -75,8 +76,7 @@ impl StreamReader for UnixSocketReader {
             origin_uri: self.origin_uri.clone(),
             stream,
             meta: Some(self.meta.clone()),
-            // ALLOW: we know bytes_read is smaller than or equal buf_size
-            data: self.buffer[0..bytes_read].to_vec(),
+            data,
             port: None,
         })
     }

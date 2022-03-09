@@ -221,7 +221,6 @@ impl Query {
                     let mut select = select.clone();
                     // Note we connecto from stmt.from to graph.into
                     // and stmt.into to graph.from
-                    // FIXME: error handling
                     let (node, port) = &mut select.stmt.from;
                     if let Some(g) = included_graphs.get(node.as_str()) {
                         let name = into_name(&g.prefix, port.as_str());
@@ -743,7 +742,7 @@ fn select(
                 })
                 .collect();
 
-            Ok(Box::new(Select::with_stmt(
+            Ok(Box::new(Select::from_stmt(
                 operator_uid,
                 config.id.clone(),
                 windows?,

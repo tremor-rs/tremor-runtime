@@ -320,6 +320,7 @@ impl Sink for ElasticSink {
                                         BulkOperation::delete(id)
                                     } else {
                                         let e = Error::from(format!(
+                                            // ALLOW: this is a string
                                             "Missing `$elastic[\"_id\"]` for `delete` action."
                                         ));
                                         return handle_error(
@@ -345,7 +346,8 @@ impl Sink for ElasticSink {
                                     // Actually `_id` should be completely optional here
                                     // See: https://github.com/elastic/elasticsearch-rs/issues/190
                                     let e = Error::from(format!(
-                                        "Missing `$elastic[\"_id\"]` for `create` action."
+                                        // ALLOW: this is a string
+                                        "Missing `$elastic.[\"_id\"]` for `create` action."
                                     ));
                                     return handle_error(
                                         e,
@@ -370,6 +372,7 @@ impl Sink for ElasticSink {
                                     )
                                 } else {
                                     let e = Error::from(format!(
+                                        // ALLOW: this is a string
                                         "Missing `$elastic[\"_id\"]` for `create` action."
                                     ));
                                     return handle_error(

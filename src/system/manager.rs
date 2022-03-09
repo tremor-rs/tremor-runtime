@@ -83,10 +83,7 @@ impl Manager {
                             .known_connectors
                             .insert(connector_type.clone(), builder)
                         {
-                            error!(
-                                "FIXME: error on duplicate connectors: {}",
-                                old.connector_type()
-                            );
+                            error!("Connector type {} already defined!", old.connector_type());
                         }
                     }
                     Msg::StartDeploy { flow, sender } => {

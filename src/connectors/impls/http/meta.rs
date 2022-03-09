@@ -308,9 +308,9 @@ impl HttpRequestMeta {
             if let Some(active_codec) = active_codec {
                 return Ok(Some(active_codec));
             } else {
-                if values.len() >= 1 {
+                if let Some(v) = values.first() {
                     // NOTE - we do not currently handle attributes like `charset=UTF-8` correctly
-                    if let Ok(as_mime) = Mime::from_str(&values[0].to_string()) {
+                    if let Ok(as_mime) = Mime::from_str(&v.to_string()) {
                         let essence = as_mime.essence();
                         return Ok(codec_map.map.get(essence));
                     }

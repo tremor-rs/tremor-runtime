@@ -252,7 +252,7 @@ async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Resul
         .collect::<Value>();
 
     let linking_uuid = Uuid::new_v4().to_urn();
-    // FIXME TODO remove if/when RV issues resolved - useful for debugging for now
+    // FIXME: remove if/when RV issues resolved - useful for debugging for now
     //  - specifically changes to SourceReply::BatchData ( punctuation + metadata ) and
     //  - and resolution of the http cli/srv in the same process ( future ) issue
     //
