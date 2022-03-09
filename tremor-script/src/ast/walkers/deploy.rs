@@ -35,7 +35,7 @@ pub trait Walker<'script>: QueryWalker<'script> + DeployVisitor<'script> {
             self.visit_flow_definition(defn),
             self.leave_flow_definition(defn)
         );
-        self.walk_definitinal_args(&mut defn.params)?;
+        self.walk_definitional_args(&mut defn.params)?;
         for create in &mut defn.creates {
             self.walk_create_stmt(create)?;
         }
@@ -44,6 +44,7 @@ pub trait Walker<'script>: QueryWalker<'script> + DeployVisitor<'script> {
         }
         self.leave_flow_definition(defn)
     }
+
     /// walks a `CreateStmt`
     ///
     /// # Errors
