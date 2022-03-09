@@ -60,7 +60,7 @@ flow
   end;
   create pipeline main;
   define pipeline metrics
-  into out, err, `pipeline`, source, sink
+  into out, err, `pipeline`, source, sink, done
   pipeline
     define script process
     script
@@ -73,7 +73,6 @@ flow
         case %{} => state
         # initialize state
         default => {
-          "out": 0,
           "source": 0,
           "pipeline": 0,
           "sink": 0
@@ -99,10 +98,10 @@ flow
     select event from in into process;
     select event from in into out;
 
-    select event from process/`pipeline` into out/`pipeline`;
-    select event from process/source into out/source;
-    select event from process/sink into out/sink;
-    select event from process/done into out/done;
+    select event from process/`pipeline` into `pipeline`;
+    select event from process/source into source;
+    select event from process/sink into sink;
+    select event from process/done into done;
 
     select event from process/err into err;
 

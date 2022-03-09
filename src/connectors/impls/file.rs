@@ -315,6 +315,11 @@ impl Sink for FileSink {
             // e.g. if a simple write failed temporarily
             &Mode::Append
         };
+        debug!(
+            "[Sink::file] opening file {} with options {:?}",
+            self.config.path.to_string_lossy(),
+            mode
+        );
         let file = file::open_with(&self.config.path, &mut mode.as_open_options()).await?;
         self.file = Some(file);
         Ok(true)
