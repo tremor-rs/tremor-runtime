@@ -259,7 +259,16 @@ impl<'script> PipelineDefinition<'script> {
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<Query<'script>> {
         let mut args = create.render()?;
-        let config = HashMap::new();
+
+        let mut config = HashMap::new();
+
+        for (k, v) in &self.config {
+            let mut v = v.clone();
+            ConstFolder::new(helper).walk_expr(&mut v)?;
+            let v = v.try_into_lit()?;
+            config.insert(k.to_string(), v);
+        }
+
         let scope = self.scope.clone();
         helper.set_scope(scope);
 

@@ -171,7 +171,6 @@ impl Flow {
     }
 
     pub(crate) async fn start(
-        _src: String,
         flow: ast::DeployFlow<'static>,
         oidgen: &mut OperatorIdGen,
         cidgen: &mut ConnectorIdGen,
@@ -184,8 +183,9 @@ impl Flow {
             let alias: &str = &create.instance_alias;
             match &create.defn {
                 ast::CreateTargetDefinition::Connector(defn) => {
-                    let connector = crate::Connector::from_defn(alias, defn)?;
-                    // FIXME
+                    let mut defn = defn.clone();
+                    defn.params.ingest_creational_with(&create.with)?;
+                    let connector = crate::Connector::from_defn(alias, &defn)?;
                     connectors.insert(
                         ConnectorId::from(alias),
                         connectors::spawn(alias, cidgen, known_connectors, connector).await?,
