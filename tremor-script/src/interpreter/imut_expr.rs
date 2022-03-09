@@ -67,20 +67,6 @@ impl<'script> ImutExpr<'script> {
     }
 
     /// Checks if the expression is a literal expression
-    ///
-    /// # Errors
-    ///   * If this is not a literal
-    #[inline]
-    pub fn try_into_lit(self) -> Result<Value<'script>> {
-        match self {
-            ImutExpr::Literal(Literal { value, .. }) => Ok(value),
-            other => {
-                Err(ErrorKind::NotConstant(other.extent(), other.extent().expand_lines(2)).into())
-            }
-        }
-    }
-
-    /// Checks if the expression is a literal expression
     #[inline]
     #[must_use]
     pub fn as_lit(&self) -> Option<&Value<'script>> {
@@ -96,9 +82,9 @@ impl<'script> ImutExpr<'script> {
     ///   * If this is not a literal
     #[inline]
     pub fn try_as_lit(&self) -> Result<&Value<'script>> {
-        self.as_lit().ok_or_else(|| {
+        dbg!(self.as_lit().ok_or_else(|| {
             ErrorKind::NotConstant(self.extent(), self.extent().expand_lines(2)).into()
-        })
+        }))
     }
 
     /// Evaluates the expression to a string.

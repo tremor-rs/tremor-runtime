@@ -21,16 +21,16 @@ use crate::{
     },
     interpreter::{exec_binary, exec_unary, Env},
     lexer::Span,
-    EventContext, Registry, Value, NO_AGGRS, NO_CONSTS,
+    EventContext, Value, NO_AGGRS, NO_CONSTS,
 };
 use simd_json::prelude::*;
 use simd_json_derive::Serialize;
 use tremor_value::KnownKey;
 
 /// Walks a AST and performs constant folding on arguments
-pub struct ConstFolder<'run> {
+pub struct ConstFolder<'run, 'script> {
     /// Function Registry
-    pub reg: &'run Registry,
+    pub helper: &'run Helper<'script, 'run>,
 }
 
 fn fake_path(mid: &NodeMeta) -> Path {
@@ -44,15 +44,15 @@ fn fake_path(mid: &NodeMeta) -> Path {
         mid: Box::new(mid.clone()),
     })
 }
-impl<'run, 'script: 'run> DeployWalker<'script> for ConstFolder<'run> {}
-impl<'run, 'script: 'run> QueryWalker<'script> for ConstFolder<'run> {}
-impl<'run, 'script: 'run> ExprWalker<'script> for ConstFolder<'run> {}
-impl<'run, 'script: 'run> ImutExprWalker<'script> for ConstFolder<'run> {}
-impl<'run, 'script: 'run> DeployVisitor<'script> for ConstFolder<'run> {}
-impl<'run, 'script: 'run> QueryVisitor<'script> for ConstFolder<'run> {}
-impl<'run, 'script: 'run> ExprVisitor<'script> for ConstFolder<'run> {}
+impl<'run, 'script: 'run> DeployWalker<'script> for ConstFolder<'run, 'script> {}
+impl<'run, 'script: 'run> QueryWalker<'script> for ConstFolder<'run, 'script> {}
+impl<'run, 'script: 'run> ExprWalker<'script> for ConstFolder<'run, 'script> {}
+impl<'run, 'script: 'run> ImutExprWalker<'script> for ConstFolder<'run, 'script> {}
+impl<'run, 'script: 'run> DeployVisitor<'script> for ConstFolder<'run, 'script> {}
+impl<'run, 'script: 'run> QueryVisitor<'script> for ConstFolder<'run, 'script> {}
+impl<'run, 'script: 'run> ExprVisitor<'script> for ConstFolder<'run, 'script> {}
 
-impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
+impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script> {
     #[allow(clippy::too_many_lines)]
     fn leave_expr(&mut self, e: &mut ImutExpr<'script>) -> Result<()> {
         use ImutExpr::Literal as Lit;
@@ -168,7 +168,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
                 mid,
                 var,
             })) if expr.is_lit() => {
-                let value = expr.try_into_lit()?;
+                let value = expr.try_into_value(self.helper)?;
                 let outer = e.extent();
                 let (value, segments) = reduce_path(outer, value, segments)?;
                 let lit = ImutExpr::Literal(Literal {
@@ -208,7 +208,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
                 let v = i
                     .invocable
                     .invoke(&env, &args2)
-                    .map_err(|e| e.into_err(&ex, &ex, Some(self.reg)))?;
+                    .map_err(|e| e.into_err(&ex, &ex, Some(self.helper.reg)))?;
                 ImutExpr::Literal(Literal {
                     value: v,
                     mid: i.mid,
@@ -249,14 +249,14 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
                 start, end, mid, ..
             } if start.is_lit() && end.is_lit() => {
                 let inner = start.extent();
-                let start = start.try_into_lit()?;
+                let start = start.try_into_value(self.helper)?;
                 let got = start.value_type();
                 let start = start
                     .as_usize()
                     .ok_or_else(|| err_need_int(segment, &inner, got))?;
 
                 let inner = end.extent();
-                let end = end.try_into_lit()?;
+                let end = end.try_into_value(self.helper)?;
                 let got = end.value_type();
                 let end = end
                     .as_usize()
@@ -299,7 +299,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
         match old {
             StrLitElement::Lit(l) => *string = StrLitElement::Lit(l),
             StrLitElement::Expr(e) if e.is_lit() => {
-                let value = e.try_into_lit()?;
+                let value = e.try_into_value(self.helper)?;
                 match value {
                     Value::String(s) => *string = StrLitElement::Lit(s),
                     // TODO: The float scenario is different in erlang and rust
@@ -355,7 +355,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
             match field {
                 Field { name, value, .. } if name.as_str().is_some() && value.is_lit() => {
                     let k = name.into_str().ok_or("unreachable error str and not str")?;
-                    let v = value.try_into_lit()?;
+                    let v = value.try_into_value(self.helper)?;
                     record.base.insert(k, v);
                 }
                 other => record.fields.push(other),
@@ -365,7 +365,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run> {
     }
 }
 
-impl<'run, 'script> ConstFolder<'run>
+impl<'run, 'script> ConstFolder<'run, 'script>
 where
     'script: 'run,
 {
@@ -374,12 +374,12 @@ where
         mut expr: ImutExpr<'script>,
     ) -> Result<Value<'script>> {
         ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut expr)?;
-        expr.try_into_lit()
+        expr.try_into_value(helper)
     }
     /// New folder
     #[must_use]
     pub fn new(helper: &'run Helper<'script, '_>) -> Self {
-        ConstFolder { reg: helper.reg }
+        ConstFolder { helper: helper }
     }
 }
 

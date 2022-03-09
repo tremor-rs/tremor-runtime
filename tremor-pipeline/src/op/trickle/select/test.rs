@@ -21,7 +21,7 @@ use crate::EventId;
 
 use super::*;
 
-use tremor_script::ast::{self, Ident, Literal};
+use tremor_script::ast::{self, Helper, Ident, Literal};
 use tremor_script::{ast::Consts, NodeMeta, Value};
 use tremor_script::{
     ast::{visitors::ConstFolder, walkers::QueryWalker, Stmt},
@@ -209,6 +209,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
         .next()
         .cloned()
         .ok_or_else(|| Error::from("Invalid query, expected 1 select statement"))?;
+    let h = Helper::new(&reg, &aggr_reg);
     let windows: Vec<(String, window::Impl)> = stmt
         .stmt
         .windows
@@ -222,7 +223,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
                 .get(win_defn.id.id())
                 .unwrap()
                 .clone();
-            let mut f = ConstFolder { reg: &reg };
+            let mut f = ConstFolder { helper: &h };
             f.walk_window_decl(&mut window_defn).unwrap();
             (
                 window_defn.id.clone(),
@@ -800,7 +801,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
     };
     let mut params = halfbrown::HashMap::with_capacity(1);
     params.insert("size".to_string(), Value::from(3));
-    let with = window_decl.params.render()?;
+    let with = dbg!(window_decl.params.render())?;
     let interval = with
         .get("interval")
         .and_then(Value::as_u64)

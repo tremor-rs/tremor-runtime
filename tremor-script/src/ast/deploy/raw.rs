@@ -93,7 +93,7 @@ impl<'script> DeployRaw<'script> {
         let mut config = HashMap::new();
         for (k, mut v) in self.config.up(helper)? {
             ConstFolder::new(helper).walk_expr(&mut v)?;
-            config.insert(k.to_string(), v.try_into_lit()?);
+            config.insert(k.to_string(), v.try_into_value(helper)?);
         }
         Ok(Deploy {
             config,

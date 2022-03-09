@@ -126,7 +126,7 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_definitinal_args(&mut self, args: &mut DefinitioalArgs<'script>) -> Result<()> {
+    fn walk_definitional_args(&mut self, args: &mut DefinitioalArgs<'script>) -> Result<()> {
         stop!(
             self.visit_definitional_args(args),
             self.leave_definitional_args(args)
@@ -190,7 +190,7 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     /// if the walker function fails
     fn walk_script_decl(&mut self, decl: &mut ScriptDefinition<'script>) -> Result<()> {
         stop!(self.visit_script_decl(decl), self.leave_script_decl(decl));
-        self.walk_definitinal_args(&mut decl.params)?;
+        self.walk_definitional_args(&mut decl.params)?;
         self.walk_script(&mut decl.script)?;
         self.leave_script_decl(decl)
     }
@@ -205,7 +205,7 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
             self.leave_pipeline_definition(defn)
         );
 
-        self.walk_definitinal_args(&mut defn.params)?;
+        self.walk_definitional_args(&mut defn.params)?;
         self.leave_pipeline_definition(defn)
     }
 
