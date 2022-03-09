@@ -62,7 +62,7 @@
 //! ```
 
 use crate::errors::{ErrorKind, Result};
-use crate::metrics::metrics_value_count;
+use crate::metrics::value_count;
 use crate::op::prelude::*;
 use crate::{Event, Operator};
 use beef::Cow;
@@ -208,20 +208,10 @@ impl Operator for Grouper {
                 tags.insert(CLASS, class.clone().into());
                 tags.insert(ACTION, PASS.into());
                 // Count good cases
-                res.push(metrics_value_count(
-                    BUCKETING,
-                    tags.clone(),
-                    b.pass,
-                    timestamp,
-                ));
+                res.push(value_count(BUCKETING, tags.clone(), b.pass, timestamp));
                 // Count bad cases
                 tags.insert(ACTION, OVERFLOW.into());
-                res.push(metrics_value_count(
-                    BUCKETING,
-                    tags.clone(),
-                    b.overflow,
-                    timestamp,
-                ));
+                res.push(value_count(BUCKETING, tags.clone(), b.overflow, timestamp));
             }
         }
         Ok(res)

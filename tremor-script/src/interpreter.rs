@@ -457,7 +457,7 @@ pub(crate) fn exec_unary<'run, 'event: 'run>(
     } else if let Some(x) = val.as_u64() {
         match &op {
             Minus => {
-                if x == 9223372036854775808 {
+                if x == 9_223_372_036_854_775_808 {
                     Some(Cow::Owned(Value::from(i64::MIN)))
                 } else {
                     x.try_into()

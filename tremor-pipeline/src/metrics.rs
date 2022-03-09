@@ -24,7 +24,7 @@ const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
 
 /// Generate an influx-compatible metrics value based on a count
 #[must_use]
-pub fn metrics_value_count(
+pub fn value_count(
     metric_name: Cow<'static, str>,
     tags: HashMap<Cow<'static, str>, Value<'static>>,
     count: u64,
@@ -42,7 +42,7 @@ pub fn metrics_value_count(
 
 /// Generate an influx-compatible metrics value based on a named value, which will be encoded into a field
 #[must_use]
-pub fn metrics_value_named(
+pub fn value_named(
     metric_name: Cow<'static, str>,
     tags: HashMap<Cow<'static, str>, Value<'static>>,
     name: &'static str,
@@ -61,7 +61,7 @@ pub fn metrics_value_named(
 
 /// Generate an influx-compatible metrics value based on a given set of fields
 #[must_use]
-pub fn metrics_value(
+pub fn value(
     metric_name: Cow<'static, str>,
     tags: HashMap<Cow<'static, str>, Value<'static>>,
     fields: HashMap<Cow<'static, str>, Value<'static>>,
