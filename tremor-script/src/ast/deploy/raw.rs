@@ -372,7 +372,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         let outer = self.extent();
         let inner = self.id.extent();
         let params = self.params.up(helper)?;
-        let decl = match self.kind {
+        let defn = match self.kind {
             CreateKind::Connector => {
                 if let Some(artefact) = helper.get(&target)? {
                     CreateTargetDefinition::Connector(artefact)
@@ -406,7 +406,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             with: params,
             instance_alias: self.id.id.to_string(),
             from_target: target,
-            defn: decl,
+            defn,
         };
 
         Ok(create_stmt)
