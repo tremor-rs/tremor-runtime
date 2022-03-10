@@ -24,14 +24,14 @@ use s3::Endpoint;
 /// Get an S3 client for the given region and the optionally provided endpoint URL.
 ///
 /// This client will use the default auth provider chain defined here:
-/// https://docs.rs/aws-config/latest/aws_config/default_provider/credentials/struct.DefaultCredentialsChain.html
+/// <https://docs.rs/aws-config/latest/aws_config/default_provider/credentials/struct.DefaultCredentialsChain.html>
 ///
 /// It will try the following providers in order: (Based on aws-config 0.6.0)
 /// 1. Environment variables
 /// 2. Shared config (~/.aws/config, ~/.aws/credentials)
 /// 3. Web Identity Tokens
 /// 4. ECS (IAM Roles for Tasks) & General HTTP credentials
-/// 5. EC2 IMDSv2
+/// 5. EC2 `IMDSv2`
 pub async fn get_client(region: Option<String>, endpoint: Option<&String>) -> Result<S3Client> {
     let region_provider =
         RegionProviderChain::first_try(region.map(Region::new)).or_default_provider();

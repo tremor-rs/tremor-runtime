@@ -20,12 +20,12 @@ use surf::middleware::{Middleware, Next};
 use surf::{Client, Request, Response};
 
 #[derive(Debug, Clone, Deserialize, Default)]
-pub struct Config {
+pub(crate) struct Config {
     /// URL for the sse endpoint
-    pub url: String,
+    pub(crate) url: String,
     /// Header modifications to the request.
     #[serde(default)]
-    pub headers: HashMap<String, String>,
+    pub(crate) headers: HashMap<String, String>,
 }
 impl ConfigImpl for Config {}
 
@@ -51,8 +51,8 @@ impl Middleware for MiddlewareHeader {
     }
 }
 
-pub struct Sse {
-    pub config: Config,
+pub(crate) struct Sse {
+    pub(crate) config: Config,
     onramp_id: TremorUrl,
 }
 
@@ -84,7 +84,7 @@ impl Onramp for Sse {
     }
 }
 
-pub struct Int {
+pub(crate) struct Int {
     config: Config,
     onramp_id: TremorUrl,
     event_source: Option<Receiver<surf_sse::Event>>,

@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod connectors;
-
+use super::ConnectorHarness;
+use crate::errors::Result;
 use async_std::path::Path;
-use connectors::ConnectorHarness;
 use std::time::Duration;
-use tremor_runtime::errors::Result;
 use tremor_value::literal;
 use value_trait::ValueAccess;
 
@@ -28,6 +26,8 @@ async fn file_connector_xz() -> Result<()> {
     let input_path = Path::new(file!())
         .parent()
         .unwrap()
+        .join("../../..")
+        .join("tests")
         .join("data")
         .join("input.xz");
     let defn = literal!({
@@ -55,7 +55,7 @@ async fn file_connector_xz() -> Result<()> {
     assert_eq!(
         literal!({
             "file": {
-                "path": "tests/data/input.xz"
+                "path": "src/connectors/tests/../../../tests/data/input.xz"
             }
         }),
         meta

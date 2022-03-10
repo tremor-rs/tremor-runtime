@@ -18,17 +18,17 @@ use crate::source::prelude::*;
 use async_nats::{Connection as NatsConnection, Subscription};
 
 #[derive(Debug, Clone, Deserialize, Default)]
-pub struct Config {
+pub(crate) struct Config {
     // list of hosts
-    pub hosts: Vec<String>,
+    pub(crate) hosts: Vec<String>,
     // subject to send messages to
-    pub subject: String,
+    pub(crate) subject: String,
     // optional queue to subscribe to
     #[serde(default = "Default::default")]
-    pub queue: Option<String>,
+    pub(crate) queue: Option<String>,
     // options to use when opening a new connection
     #[serde(default = "Default::default")]
-    pub options: ConnectOptions,
+    pub(crate) options: ConnectOptions,
 }
 
 impl ConfigImpl for Config {}
@@ -41,8 +41,8 @@ impl Config {
     }
 }
 
-pub struct Nats {
-    pub config: Config,
+pub(crate) struct Nats {
+    pub(crate) config: Config,
     onramp_id: TremorUrl,
 }
 
@@ -73,7 +73,7 @@ impl Onramp for Nats {
     }
 }
 
-pub struct Int {
+pub(crate) struct Int {
     onramp_id: TremorUrl,
     config: Config,
     subscription: Option<Subscription>,

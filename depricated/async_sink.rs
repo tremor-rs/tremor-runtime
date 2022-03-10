@@ -22,13 +22,13 @@ use std::result;
 /// Adding support for sinks that handle events asynchronously with a
 /// given `capacity` of events handles concurrently
 #[derive(Debug)]
-pub struct AsyncSink<T> {
+pub(crate) struct AsyncSink<T> {
     queue: VecDeque<Receiver<Result<T>>>,
     capacity: usize,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum SinkEnqueueError {
+pub(crate) enum SinkEnqueueError {
     AtCapacity,
 }
 impl error::Error for SinkEnqueueError {}
@@ -42,7 +42,7 @@ impl fmt::Display for SinkEnqueueError {
 
 /// Error result of the attempt to dequeue a slot for a new event ot handle
 #[derive(Debug, PartialEq)]
-pub enum SinkDequeueError {
+pub(crate) enum SinkDequeueError {
     /// the queue is empty
     Empty,
     /// the dequeued slot is filled and the result is not yet there
@@ -61,14 +61,14 @@ impl fmt::Display for SinkDequeueError {
 /// completes.
 impl<T> AsyncSink<T> {
     /// constructor
-    pub fn new(capacity: usize) -> Self {
+    pub(crate) fn new(capacity: usize) -> Self {
         Self {
             queue: VecDeque::with_capacity(capacity),
             capacity,
         }
     }
     /// enqueue a receiver for a result of an async event handling
-    pub fn enqueue(&mut self, value: Receiver<Result<T>>) -> result::Result<(), SinkEnqueueError> {
+    pub(crate) fn enqueue(&mut self, value: Receiver<Result<T>>) -> result::Result<(), SinkEnqueueError> {
         if self.queue.len() >= self.capacity {
             Err(SinkEnqueueError::AtCapacity)
         } else {
@@ -77,7 +77,7 @@ impl<T> AsyncSink<T> {
         }
     }
     /// attempt to dequeue the result of an async event handling
-    pub fn dequeue(&mut self) -> result::Result<Result<T>, SinkDequeueError> {
+    pub(crate) fn dequeue(&mut self) -> result::Result<Result<T>, SinkDequeueError> {
         match self.queue.pop_front() {
             None => Err(SinkDequeueError::Empty),
             Some(rx) => {
@@ -92,7 +92,7 @@ impl<T> AsyncSink<T> {
     }
 
     /// returns true if the `AsyncSink` has capacity for at least one addition event handling job
-    pub fn has_capacity(&self) -> bool {
+    pub(crate) fn has_capacity(&self) -> bool {
         self.queue.len() < self.capacity
     }
 }

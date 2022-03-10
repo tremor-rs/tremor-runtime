@@ -15,7 +15,7 @@
 use super::prelude::*;
 
 #[derive(Clone)]
-pub struct Cbor {}
+pub(crate) struct Cbor {}
 
 impl Codec for Cbor {
     #[cfg(not(tarpaulin_include))]

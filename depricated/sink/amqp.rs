@@ -30,8 +30,8 @@ use serde::Deserialize;
 use std::{fmt, time::Instant};
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct Config {
-    pub amqp_addr: String,
+pub(crate) struct Config {
+    pub(crate) amqp_addr: String,
     #[serde(default = "Default::default")]
     routing_key: String,
     #[serde(default = "Default::default")]
@@ -39,7 +39,7 @@ pub struct Config {
     publish_options: BasicPublishOptions,
     // headers to use for the messages
     #[serde(default = "Default::default")]
-    pub headers: HashMap<String, Vec<String>>,
+    pub(crate) headers: HashMap<String, Vec<String>>,
 }
 
 impl Config {
@@ -54,7 +54,7 @@ impl Config {
 impl ConfigImpl for Config {}
 
 /// Amqp offramp connector
-pub struct Amqp {
+pub(crate) struct Amqp {
     sink_url: TremorUrl,
     config: Config,
     postprocessors: Postprocessors,

@@ -25,7 +25,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_script::{ast, highlighter::Highlighter};
 
-use self::flow::{Flow, FlowId};
+use self::flow::Flow;
 
 /// Configuration for the runtime
 pub struct WorldConfig {
@@ -122,7 +122,7 @@ impl World {
     ///  * if we fail to send the request or fail to receive it
     pub async fn get_flow(&self, flow_id: String) -> Result<Flow> {
         let (flow_tx, flow_rx) = bounded(1);
-        let flow_id = FlowId(flow_id);
+        let flow_id = flow::Id(flow_id);
         self.system
             .send(manager::Msg::GetFlow(flow_id.clone(), flow_tx))
             .await?;

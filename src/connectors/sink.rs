@@ -15,12 +15,12 @@
 #![allow(clippy::module_name_repetitions)]
 
 /// Providing a `Sink` implementation for connectors handling multiple Streams
-pub mod channel_sink;
+pub(crate) mod channel_sink;
 
 /// Providing a `Sink` implementation for connectors handling only a single Stream
-pub mod single_stream_sink;
+pub(crate) mod single_stream_sink;
 
-/// Utility for limiting concurrency (by sending CB::Close messages when a maximum concurrency value is reached)
+/// Utility for limiting concurrency (by sending `CB::Close` messages when a maximum concurrency value is reached)
 pub(crate) mod concurrency_cap;
 
 use crate::codec::{self, Codec};
@@ -37,8 +37,8 @@ use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task;
 use beef::Cow;
-pub use channel_sink::{ChannelSink, ChannelSinkRuntime};
-pub use single_stream_sink::{SingleStreamSink, SingleStreamSinkRuntime};
+pub(crate) use channel_sink::{ChannelSink, ChannelSinkRuntime};
+pub(crate) use single_stream_sink::{SingleStreamSink, SingleStreamSinkRuntime};
 use std::borrow::Borrow;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, HashSet};
@@ -49,7 +49,7 @@ use tremor_script::{ast::DeployEndpoint, EventPayload};
 
 use tremor_value::Value;
 
-pub use self::channel_sink::SinkMeta;
+pub(crate) use self::channel_sink::SinkMeta;
 
 use super::{utils::metrics::SinkReporter, CodecReq};
 
@@ -61,41 +61,33 @@ use super::{utils::metrics::SinkReporter, CodecReq};
 ///
 /// A response is an event generated from the sink delivery.
 #[derive(Clone, Debug, Default, Copy)]
-pub struct SinkReply {
+pub(crate) struct SinkReply {
     /// guaranteed delivery response - did we sent the event successfully `SinkAck::Ack` or did it fail `SinkAck::Fail`
-    pub ack: SinkAck,
+    pub(crate) ack: SinkAck,
     /// circuit breaker action
-    pub cb: CbAction,
+    pub(crate) cb: CbAction,
 }
 
 impl SinkReply {
     /// Acknowledges
-    pub const ACK: SinkReply = SinkReply {
+    pub(crate) const ACK: SinkReply = SinkReply {
         ack: SinkAck::Ack,
         cb: CbAction::None,
     };
     /// Fails
-    pub const FAIL: SinkReply = SinkReply {
+    pub(crate) const FAIL: SinkReply = SinkReply {
         ack: SinkAck::Fail,
         cb: CbAction::None,
     };
     /// None
-    pub const NONE: SinkReply = SinkReply {
+    pub(crate) const NONE: SinkReply = SinkReply {
         ack: SinkAck::None,
         cb: CbAction::None,
     };
 
-    /// Decide according to the given flag if we return an ack or a none
-    pub fn ack_or_none(needs_ack: bool) -> Self {
-        if needs_ack {
-            Self::ACK
-        } else {
-            Self::NONE
-        }
-    }
-
     /// Decide according to the given flag if we return a fail or a none
-    pub fn fail_or_none(needs_fail: bool) -> Self {
+    #[must_use]
+    pub(crate) fn fail_or_none(needs_fail: bool) -> Self {
         if needs_fail {
             Self::FAIL
         } else {
@@ -104,11 +96,13 @@ impl SinkReply {
     }
 
     /// Acknowledges
-    pub fn ack() -> Self {
+    #[must_use]
+    pub(crate) fn ack() -> Self {
         Self::ACK
     }
     /// Fails
-    pub fn fail() -> Self {
+    #[must_use]
+    pub(crate) fn fail() -> Self {
         Self::FAIL
     }
 }
@@ -124,7 +118,7 @@ impl From<bool> for SinkReply {
 /// stuff a sink replies back upon an event or a signal
 /// to the calling sink/connector manager
 #[derive(Clone, Debug, Copy)]
-pub enum SinkAck {
+pub(crate) enum SinkAck {
     /// no reply - maybe no reply yet, maybe replies come asynchronously...
     None,
     /// everything went smoothly, chill
@@ -150,7 +144,7 @@ impl From<bool> for SinkAck {
 }
 
 /// Possible replies from asynchronous sinks via `reply_channel` from event or signal handling
-pub enum AsyncSinkReply {
+pub(crate) enum AsyncSinkReply {
     /// success
     Ack(ContraflowData, u64),
     /// failure
@@ -161,7 +155,7 @@ pub enum AsyncSinkReply {
 
 /// connector sink - receiving events
 #[async_trait::async_trait]
-pub trait Sink: Send {
+pub(crate) trait Sink: Send {
     /// called when receiving an event
     async fn on_event(
         &mut self,
@@ -259,7 +253,7 @@ pub trait Sink: Send {
 
 /// handles writing to 1 stream (e.g. file or TCP connection)
 #[async_trait::async_trait]
-pub trait StreamWriter: Send + Sync {
+pub(crate) trait StreamWriter: Send + Sync {
     /// write the given data out to the stream
     async fn write(&mut self, data: Vec<Vec<u8>>, meta: Option<SinkMeta>) -> Result<()>;
     /// handle the stream being done, by error or regular end of stream
@@ -271,9 +265,9 @@ pub trait StreamWriter: Send + Sync {
 }
 /// context for the connector sink
 #[derive(Clone)]
-pub struct SinkContext {
+pub(crate) struct SinkContext {
     /// the connector unique identifier
-    pub uid: u64,
+    pub(crate) uid: u64,
     /// the connector url
     pub(crate) alias: String,
     /// the connector type
@@ -311,7 +305,7 @@ impl Context for SinkContext {
 }
 
 /// messages a sink can receive
-pub enum SinkMsg {
+pub(crate) enum SinkMsg {
     /// receive an event to handle
     Event {
         /// the event
@@ -330,13 +324,6 @@ pub enum SinkMsg {
         port: Cow<'static, str>,
         /// the pipelines
         pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
-    },
-    /// unlink a pipeline
-    Unlink {
-        /// url of the pipeline
-        id: DeployEndpoint,
-        /// the port
-        port: Cow<'static, str>,
     },
     /// Connect to the outside world and send the result back
     Connect(Sender<Result<bool>>, Attempt),
@@ -367,22 +354,13 @@ enum SinkMsgWrapper {
 
 /// address of a connector sink
 #[derive(Clone, Debug)]
-pub struct SinkAddr {
+pub(crate) struct SinkAddr {
     /// the actual sender
-    pub addr: Sender<SinkMsg>,
-}
-impl SinkAddr {
-    /// send a message
-    ///
-    /// # Errors
-    ///  * If sending failed
-    pub async fn send(&self, msg: SinkMsg) -> Result<()> {
-        Ok(self.addr.send(msg).await?)
-    }
+    pub(crate) addr: Sender<SinkMsg>,
 }
 
 /// Builder for the sink manager
-pub struct SinkManagerBuilder {
+pub(crate) struct SinkManagerBuilder {
     qsize: usize,
     serializer: EventSerializer,
     reply_channel: (Sender<AsyncSinkReply>, Receiver<AsyncSinkReply>),
@@ -391,7 +369,8 @@ pub struct SinkManagerBuilder {
 
 impl SinkManagerBuilder {
     /// globally configured queue size
-    pub fn qsize(&self) -> usize {
+    #[must_use]
+    pub(crate) fn qsize(&self) -> usize {
         self.qsize
     }
 
@@ -399,12 +378,13 @@ impl SinkManagerBuilder {
     ///
     /// This is especially useful if your sink handles events asynchronously
     /// and you can't reply immediately.
-    pub fn reply_tx(&self) -> Sender<AsyncSinkReply> {
+    #[must_use]
+    pub(crate) fn reply_tx(&self) -> Sender<AsyncSinkReply> {
         self.reply_channel.0.clone()
     }
 
     /// spawn your specific sink
-    pub fn spawn<S>(self, sink: S, ctx: SinkContext) -> Result<SinkAddr>
+    pub(crate) fn spawn<S>(self, sink: S, ctx: SinkContext) -> Result<SinkAddr>
     where
         S: Sink + Send + 'static,
     {
@@ -450,7 +430,7 @@ pub(crate) fn builder(
 ///
 /// Keeps track of codec/postprocessors for seach stream
 /// Attention: Take care to clear out data for streams that are not used
-pub struct EventSerializer {
+pub(crate) struct EventSerializer {
     // default stream handling
     pub(crate) codec: Box<dyn Codec>,
     postprocessors: Postprocessors,
@@ -476,9 +456,8 @@ impl EventSerializer {
                         "FIXME: identify sink"
                     )
                     .into());
-                } else {
-                    CodecConfig::from("null")
                 }
+                CodecConfig::from("null")
             }
             CodecReq::Required => codec_config
                 .ok_or_else(|| format!("Missing codec for connector {}", "FIXME: identify sink"))?,
@@ -497,13 +476,13 @@ impl EventSerializer {
     }
 
     /// drop a stream
-    pub fn drop_stream(&mut self, stream_id: u64) {
+    pub(crate) fn drop_stream(&mut self, stream_id: u64) {
         self.streams.remove(&stream_id);
     }
 
     /// clear out all streams - this can lead to data loss
     /// only use when you are sure, all the streams are gone
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.streams.clear();
     }
 
@@ -511,7 +490,7 @@ impl EventSerializer {
     ///
     /// # Errors
     ///   * if serialization failed (codec or postprocessors)
-    pub fn serialize(&mut self, value: &Value, ingest_ns: u64) -> Result<Vec<Vec<u8>>> {
+    pub(crate) fn serialize(&mut self, value: &Value, ingest_ns: u64) -> Result<Vec<Vec<u8>>> {
         self.serialize_for_stream(value, ingest_ns, DEFAULT_STREAM_ID)
     }
 
@@ -519,7 +498,7 @@ impl EventSerializer {
     ///
     /// # Errors
     ///   * if serialization failed (codec or postprocessors)
-    pub fn serialize_for_stream(
+    pub(crate) fn serialize_for_stream(
         &mut self,
         value: &Value,
         ingest_ns: u64,
@@ -629,15 +608,6 @@ where
                             //     &self.ctx.alias
                             // );
                             self.pipelines.append(&mut pipelines);
-                        }
-                        SinkMsg::Unlink { id, port: _port } => {
-                            // FIXME: the connector can define valid ports so we can't assum IN is the only valid one
-                            // debug_assert!(
-                            //     port == IN,
-                            //     "[Sink::{}] disconnected from invalid connector sink port",
-                            //     &self.ctx.alias
-                            // );
-                            self.pipelines.retain(|(url, _)| url != &id);
                         }
                         // FIXME: only handle those if in the right state (see source part)
                         SinkMsg::Start if self.state == Initialized => {
@@ -904,7 +874,7 @@ where
 
 #[derive(Clone, Debug)]
 /// basic data to build contraflow messages
-pub struct ContraflowData {
+pub(crate) struct ContraflowData {
     event_id: EventId,
     ingest_ns: u64,
     op_meta: OpMeta,

@@ -212,8 +212,8 @@ impl Source for Blaster {
             // TODO better sleep perhaps
             if let Some(interval) = self.interval_ns {
                 let interval = interval.as_nanos();
-                let ns = (interval % 1000000) as u64;
-                let ms = (interval / 1000000) as u64;
+                let ns = (interval % 1_000_000) as u64;
+                let ms = (interval / 1_000_000) as u64;
                 async_std::task::sleep(Duration::from_nanos(ns)).await;
                 if ms > 0 {
                     self.did_sleep = true;

@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use tremor_pipeline::{CbAction, Event};
 
 /// Utility for limiting concurrency in a sink to a certain `cap` value
-/// Issueing CB::Close message when the `cap` value is reached and CB::Open message when we fall back below it
+/// Issueing `CB::Close` message when the `cap` value is reached and `CB::Open` message when we fall back below it
 #[derive(Debug, Clone)]
 pub(crate) struct ConcurrencyCap {
     cap: usize,
@@ -64,7 +64,7 @@ impl ConcurrencyCap {
             // we crossed max - send an open
             self.reply_tx
                 .send(AsyncSinkReply::CB(cf_data.clone(), CbAction::Open))
-                .await?
+                .await?;
         }
         Ok(())
     }

@@ -45,7 +45,7 @@ impl ConnectorBuilder for Builder {
         if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
             let (source_tx, source_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-            Ok(Box::new(UnixSocketClient {
+            Ok(Box::new(Client {
                 config,
                 source_tx,
                 source_rx,
@@ -56,14 +56,14 @@ impl ConnectorBuilder for Builder {
     }
 }
 
-pub struct UnixSocketClient {
+pub struct Client {
     config: Config,
     source_tx: Sender<SourceReply>,
     source_rx: Receiver<SourceReply>,
 }
 
 #[async_trait::async_trait()]
-impl Connector for UnixSocketClient {
+impl Connector for Client {
     async fn create_sink(
         &mut self,
         sink_context: SinkContext,
@@ -181,9 +181,11 @@ impl Sink for UnixSocketClientSink {
     }
 
     /// when writing is done
-    async fn on_stop(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
         // ignore error here
-        let _ = self.close().await;
+        if let Err(e) = self.close().await {
+            error!("{ctx} Failed stopping: {e}..");
+        }
         Ok(())
     }
 

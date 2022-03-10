@@ -14,7 +14,7 @@
 
 use crate::codec::{self, binary, json, msgpack, string, yaml, Codec};
 use crate::config::NameWithConfig;
-use crate::errors::*;
+use crate::errors::Result;
 use halfbrown::HashMap;
 use serde::{
     de::{MapAccess, Visitor},
@@ -79,7 +79,7 @@ impl Clone for MimeCodecMap {
                     "Unespected duplicate mime type codec mapping {} / {}",
                     k,
                     v.name()
-                )
+                );
             }
         }
         Self { map: h }
@@ -117,7 +117,7 @@ impl Serialize for MimeCodecMap {
     {
         let mut map = serializer.serialize_map(Some(self.map.len()))?;
         for (k, v) in &self.map {
-            map.serialize_entry(&k.to_string(), &v.name())?;
+            map.serialize_entry(k, &v.name())?;
         }
         map.end()
     }

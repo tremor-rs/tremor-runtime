@@ -75,9 +75,9 @@ struct HttpServerState {
 impl Clone for HttpServerState {
     fn clone(&self) -> Self {
         Self {
-            idgen: self.idgen.clone(),
+            idgen: self.idgen,
             tx: self.tx.clone(),
-            uid: self.uid.clone(),
+            uid: self.uid,
             codec: self.codec.boxed_clone(),
             codec_map: self.codec_map.clone(),
         }
@@ -123,7 +123,7 @@ impl ConnectorBuilder for Builder {
             };
 
             let codec = if let Some(codec) = &raw_config.codec {
-                codec::resolve(&codec)?
+                codec::resolve(codec)?
             } else {
                 codec::resolve(&"json".into())?
             };
@@ -302,7 +302,7 @@ async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Resul
     let event = call_response.recv().await?;
 
     if let Rendezvous::Response(_) = event {
-        let codec = &req.state().codec;
+        let codec: &(dyn Codec + 'static) = req.state().codec.as_ref();
         let codec_map = &req.state().codec_map;
         let mut processors = Vec::new();
         if let Ok(response) = make_response(ingest_ns, codec, codec_map, &mut processors, &event) {
@@ -321,7 +321,7 @@ async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Resul
 
 fn make_response(
     ingest_ns: u64,
-    default_codec: &Box<dyn Codec>,
+    default_codec: &dyn Codec,
     codec_map: &MimeCodecMap,
     postprocessors: &mut Postprocessors,
     event: &Rendezvous,
@@ -337,7 +337,7 @@ fn make_response(
 
 fn _make_response(
     ingest_ns: u64,
-    default_codec: &Box<dyn Codec>,
+    default_codec: &dyn Codec,
     codec_map: &MimeCodecMap,
     post_processors: &mut Postprocessors,
     event: &ValueAndMeta,
@@ -526,10 +526,10 @@ impl Source for HttpServerSource {
                 // rpc context. The sink will in fact receive the response ( pipeline originated ) so we need
                 // to rendezvous the response somehow - and we use the urn for this
 
-                let reply = if data.len() == 0 {
+                let reply = if data.is_empty() {
                     // NOTE GET, HEAD ...
                     let value = Value::Static(StaticNode::Null);
-                    if let Some(_) = self.inflight.insert(urn, response_channel.clone()) {
+                    if self.inflight.insert(urn, response_channel).is_some() {
                         error!("Request tracking urn collision: {}", urn);
                     };
                     SourceReply::Structured {
@@ -539,7 +539,7 @@ impl Source for HttpServerSource {
                         port: None,
                     }
                 } else {
-                    //
+                    // FIXME
                     // Sketch of alternate to using BatchData vi structured
                     //  - benefit of using batch data is proc+codec is for free
                     //  - but it lacks punctuation so makes batch response handling harder
@@ -567,7 +567,7 @@ impl Source for HttpServerSource {
                     //         }
                     //     };
                     // }
-                    if let Some(_) = self.inflight.insert(urn, response_channel.clone()) {
+                    if self.inflight.insert(urn, response_channel).is_some() {
                         error!("Request tracking urn collision: {}", urn);
                     };
                     meta.insert("batch-urn", urn.to_string())?;
@@ -585,22 +585,22 @@ impl Source for HttpServerSource {
                 if let Some(request) = vm.meta().get("request") {
                     if let Some(headers) = request.get("headers") {
                         if let Some(urn) = headers.get("x-tremor-http-urn") {
-                            let urn = Urn::from_uuid(Uuid::from_str(&urn.to_string()).unwrap());
+                            let urn = Urn::from_uuid(Uuid::from_str(&urn.to_string())?);
                             if let Some(callresponse) = self.inflight.remove(&urn) {
-                                callresponse.send(Rendezvous::Response(vm.clone())).await?
+                                callresponse.send(Rendezvous::Response(vm.clone())).await?;
                             }
                         }
                     }
                 } else if let Some(urn) = vm.meta().get("batch-urn") {
                     // NOTE Batch - this is limping along *but* technically not correct as tremor does not punctuate BatchData batches so we have no start/end demarcation hints to work with
-                    let urn = Urn::from_uuid(Uuid::from_str(&urn.to_string()).unwrap());
+                    let urn = Urn::from_uuid(Uuid::from_str(&urn.to_string())?);
                     if let Some(callresponse) = self.inflight.remove(&urn) {
                         callresponse
                             .send(Rendezvous::Response(ValueAndMeta::from_parts(
                                 Value::Static(StaticNode::Null),
                                 literal!({ "response": { "status": 201 }}),
                             )))
-                            .await?
+                            .await?;
                     }
                 }
                 Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))

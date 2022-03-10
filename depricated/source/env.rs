@@ -16,7 +16,7 @@
 use crate::source::prelude::*;
 
 #[derive(Clone)]
-pub struct Env {
+pub(crate) struct Env {
     onramp_id: TremorUrl,
     origin_uri: EventOriginUri,
     sent: bool,

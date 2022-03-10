@@ -34,7 +34,7 @@ use rdkafka::message::{BorrowedMessage, Headers, Message};
 use rdkafka::{ClientContext, Offset, TopicPartitionList};
 use rdkafka_sys::RDKafkaErrorCode;
 
-const KAFKA_CONSUMER_META_KEY: &'static str = "kafka_consumer";
+const KAFKA_CONSUMER_META_KEY: &str = "kafka_consumer";
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -146,6 +146,7 @@ struct TremorConsumerContext {
 }
 
 impl ClientContext for TremorConsumerContext {
+    #[allow(clippy::cast_sign_loss)] // thanks librdkafka
     fn stats(&self, stats: rdkafka::Statistics) {
         // expose as metrics to the source
         if stats.client_type.eq("consumer") {
@@ -165,8 +166,8 @@ impl ClientContext for TremorConsumerContext {
                 );
             }
             let mut consumer_lag = 0_i64;
-            for (_name, topic) in &stats.topics {
-                for (_index, partition) in &topic.partitions {
+            for topic in stats.topics.values() {
+                for partition in topic.partitions.values() {
                     if partition.desired && !partition.unknown && partition.consumer_lag >= 0 {
                         consumer_lag += partition.consumer_lag;
                     }
@@ -191,7 +192,14 @@ impl ClientContext for TremorConsumerContext {
         error!("{} Kafka Error {}: {}", &self.ctx, error, reason);
         // check for errors that manifest a non-working consumer, so we bail out
         if matches!(&error, KafkaError::Subscription(_)) || is_failed_connect_error(&error) {
-            if !self.connect_tx.is_closed() {
+            if self.connect_tx.is_closed() {
+                // issue a reconnect upon fatal errors
+                let notifier = self.ctx.notifier().clone();
+                task::spawn(async move {
+                    notifier.notify().await?;
+                    Ok::<(), Error>(())
+                });
+            } else {
                 // we are in the connect phase - channel is still open, so notify the connect method of an error
                 if let Err(e) = self.connect_tx.try_send(Err(error.into())) {
                     error!(
@@ -201,13 +209,6 @@ impl ClientContext for TremorConsumerContext {
                 } else {
                     self.connect_tx.close();
                 }
-            } else {
-                // issue a reconnect upon fatal errors
-                let notifier = self.ctx.notifier().clone();
-                task::spawn(async move {
-                    notifier.notify().await?;
-                    Ok::<(), Error>(())
-                });
             }
         }
     }
@@ -231,7 +232,9 @@ impl ConsumerContext for TremorConsumerContext {
                     .collect();
                 // if we got something assigned, this is a good indicator that we are connected
                 if !offset_strings.is_empty() {
-                    let _ = self.connect_tx.try_send(Ok(true));
+                    if let Err(e) = self.connect_tx.try_send(Ok(true)) {
+                        info!("{} Send Error: {e}", &self.ctx);
+                    };
                 }
                 info!(
                     "{} Rebalance Assigned: {}",
@@ -475,7 +478,7 @@ impl Source for KafkaConsumerSource {
                     Some(Ok(kafka_msg)) => {
                         //debug!("{source_ctx} Received kafka msg: {kafka_msg:?}");
                         if let Some(tx) = connect_result_channel.take() {
-                            let _ = tx.try_send(Ok(true));
+                            tx.try_send(Ok(true))?;
                         }
                         // handle kafka msg
                         let (stream_id, pull_id) =
@@ -486,10 +489,8 @@ impl Source for KafkaConsumerSource {
                             kafka_msg.partition().to_string(),
                             kafka_msg.offset().to_string(),
                         ];
-                        let data: Vec<u8> = kafka_msg
-                            .payload()
-                            .map(|slice| slice.to_vec())
-                            .unwrap_or_default();
+                        let data: Vec<u8> =
+                            kafka_msg.payload().map(<[u8]>::to_vec).unwrap_or_default();
 
                         let meta = kafka_meta(&kafka_msg);
                         let reply = SourceReply::Data {
@@ -510,7 +511,7 @@ impl Source for KafkaConsumerSource {
                                 | RDKafkaErrorCode::TopicAuthorizationFailed
                                 | RDKafkaErrorCode::UnknownTopic),
                             ) => {
-                                error!("{} Subscription failed: {}.", &source_ctx, e);
+                                error!("{source_ctx} Subscription failed: {e}.");
 
                                 if let Some(tx) = connect_result_channel.take() {
                                     if tx.try_send(Err("Subscription failed".into())).is_err() {
@@ -539,7 +540,9 @@ impl Source for KafkaConsumerSource {
                             &source_ctx
                         );
                         if let Some(tx) = connect_result_channel.take() {
-                            let _ = tx.try_send(Err("Consumer done".into()));
+                            if let Err(e) = tx.try_send(Err("Consumer done".into())) {
+                                error!("{source_ctx} Send failed: {e}.");
+                            }
                         } else {
                             source_ctx.notifier().notify().await?;
                         }
@@ -708,9 +711,10 @@ impl TopicResolver {
     }
 
     /// Resolve topic, partition and message offset for the given `stream_id` and `pull_id`
+    #[allow(clippy::cast_possible_wrap)] // we are limited by rdkafka types
     fn resolve_topic(&self, stream_id: u64, pull_id: u64) -> Option<(&str, i32, Offset)> {
         let partition = (stream_id >> 32) as i32;
-        let topic_id = stream_id & 0xffffffff;
+        let topic_id = stream_id & 0xffff_ffff;
 
         // insertion order should be the same as the actual indices,
         // so the index lookup can be misused as a reverse lookup
@@ -724,7 +728,7 @@ impl TopicResolver {
         })
     }
 
-    /// Resolve stream_id and pull_id for the given kafka_msg
+    /// Resolve `stream_id` and `pull_id` for the given `kafka_msg`
     ///
     /// With the help of the topic index we use the 32 bit partition id
     /// and the topic index to form a stream id to identify the partition of a topic.
@@ -738,6 +742,8 @@ impl TopicResolver {
         self.resolve_stream_and_pull_ids_inner(topic, partition, offset)
     }
 
+    // We allow this since we're limited to the return value from kafka but partitions are never negative
+    #[allow(clippy::cast_sign_loss)]
     fn resolve_stream_and_pull_ids_inner(
         &self,
         topic: &str,

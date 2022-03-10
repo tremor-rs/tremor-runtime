@@ -21,7 +21,7 @@ use aws_sdk_s3 as s3;
 use s3::model::{CompletedMultipartUpload, CompletedPart};
 use s3::Client as S3Client;
 
-const CONNECTOR_TYPE: &'static str = "s3-writer";
+const CONNECTOR_TYPE: &str = "s3-writer";
 
 const FIVEMBS: usize = 5 * 1024 * 1024 + 100; // Some extra bytes to keep aws happy.
 
@@ -175,13 +175,12 @@ impl Sink for S3Sink {
 
             let s3_meta = S3Meta::new(meta);
 
-            let object_key = match s3_meta.get_object_key().map(ToString::to_string) {
-                Some(key) => key,
-                None => {
-                    self.current_key.clear();
-                    error!("{ctx}: missing '$s3.key' meta data in event");
-                    return Ok(SinkReply::FAIL);
-                }
+            let object_key = if let Some(key) = s3_meta.get_object_key().map(ToString::to_string) {
+                key
+            } else {
+                self.current_key.clear();
+                error!("{ctx}: missing '$s3.key' meta data in event");
+                return Ok(SinkReply::FAIL);
             };
 
             if object_key != self.current_key {
@@ -192,7 +191,7 @@ impl Sink for S3Sink {
             }
 
             // Handle the aggregation.
-            for data in serializer.serialize(event, ingest_id)?.into_iter() {
+            for data in serializer.serialize(event, ingest_id)? {
                 self.buffer.extend(data);
                 if self.buffer.len() >= self.min_part_size {
                     self.upload_part(ctx).await?;
@@ -238,11 +237,11 @@ impl S3Sink {
 
     async fn prepare_new_multipart(&mut self, key: String, ctx: &SinkContext) -> Result<()> {
         // Finish the previous multipart upload if any.
-        if self.current_key != "" {
+        if !self.current_key.is_empty() {
             self.complete_multipart(ctx).await?;
         }
 
-        if key != "" {
+        if !key.is_empty() {
             self.initiate_multipart(key).await?;
         }
         // NOTE: The buffers are cleared when the stuff is committed.
@@ -261,10 +260,12 @@ impl S3Sink {
             .send()
             .await?;
 
-        self.upload_id = resp.upload_id.ok_or(ErrorKind::S3Error(format!(
+        self.upload_id = resp.upload_id.ok_or_else(|| {
+            ErrorKind::S3Error(format!(
             "Failed to initiate multipart upload for key \"{}\": upload id not found in response.",
             &self.current_key
-        )))?;
+        ))
+        })?;
 
         Ok(())
     }
@@ -306,7 +307,7 @@ impl S3Sink {
 
     async fn complete_multipart(&mut self, ctx: &SinkContext) -> Result<()> {
         // Upload the last part if any.
-        if self.buffer.len() > 0 {
+        if !self.buffer.is_empty() {
             self.upload_part(ctx).await?;
         }
 

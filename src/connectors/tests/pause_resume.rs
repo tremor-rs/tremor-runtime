@@ -12,19 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod connectors;
-
-#[macro_use]
-extern crate log;
-
+use super::ConnectorHarness;
+use crate::{errors::Result, instance::State};
 use async_std::{
     io::WriteExt,
     net::{TcpListener, TcpStream, UdpSocket},
     prelude::FutureExt,
 };
-use connectors::ConnectorHarness;
 use std::time::Duration;
-use tremor_runtime::{errors::Result, instance::State};
 use tremor_value::prelude::*;
 
 #[async_std::test]
