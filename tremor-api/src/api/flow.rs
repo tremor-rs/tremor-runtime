@@ -15,7 +15,7 @@
 //! Flow API
 
 use crate::api::prelude::*;
-use tremor_runtime::instance::InstanceState;
+use tremor_runtime::instance::State;
 
 // FIXME: apply default API timeout for each endpoint here
 
@@ -40,7 +40,7 @@ pub(crate) async fn get_flow(req: Request) -> Result<Response> {
 
 #[derive(Deserialize, Debug)]
 struct PatchStatus {
-    status: InstanceState,
+    status: State,
 }
 
 pub(crate) async fn patch_flow_status(mut req: Request) -> Result<Response> {
@@ -54,12 +54,12 @@ pub(crate) async fn patch_flow_status(mut req: Request) -> Result<Response> {
             // desired status == current status
             current_status
         }
-        (InstanceState::Running, InstanceState::Paused) => {
+        (State::Running, State::Paused) => {
             flow.pause().await?;
             flow.report_status().await?
         }
 
-        (InstanceState::Paused, InstanceState::Running) => {
+        (State::Paused, State::Running) => {
             flow.resume().await?;
             flow.report_status().await?
         }
@@ -112,12 +112,12 @@ pub(crate) async fn patch_flow_connector_status(mut req: Request) -> Result<Resp
             // desired status == current status
             current_status
         }
-        (InstanceState::Running, InstanceState::Paused) => {
+        (State::Running, State::Paused) => {
             connector.pause().await?;
             connector.report_status().await?
         }
 
-        (InstanceState::Paused, InstanceState::Running) => {
+        (State::Paused, State::Running) => {
             connector.resume().await?;
             connector.report_status().await?
         }

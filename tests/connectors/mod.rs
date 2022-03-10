@@ -42,7 +42,7 @@ use tremor_runtime::{
         self, builtin_connector_types, sink::SinkMsg, source::SourceMsg, Connectivity, StatusReport,
     },
     errors::Result,
-    instance::InstanceState,
+    instance::State,
     pipeline::{self, CfMsg},
     system::{ShutdownMode, World, WorldConfig},
     Event, QSIZE,
@@ -199,11 +199,7 @@ impl ConnectorHarness {
     /// # Errors
     ///
     /// If communication with the connector fails or we time out without reaching the desired state
-    pub(crate) async fn wait_for_state(
-        &self,
-        state: InstanceState,
-        timeout: Duration,
-    ) -> Result<()> {
+    pub(crate) async fn wait_for_state(&self, state: State, timeout: Duration) -> Result<()> {
         let start = std::time::Instant::now();
         while self.status().await?.status != state {
             async_std::task::sleep(Duration::from_millis(100)).await;

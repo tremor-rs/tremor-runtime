@@ -24,7 +24,7 @@ use async_std::{
 };
 use connectors::ConnectorHarness;
 use std::time::Duration;
-use tremor_runtime::{errors::Result, instance::InstanceState};
+use tremor_runtime::{errors::Result, instance::State};
 use tremor_value::prelude::*;
 
 #[async_std::test]
@@ -73,7 +73,7 @@ async fn connector_udp_pause_resume() -> Result<()> {
     // pause connector
     harness.pause().await?;
     harness
-        .wait_for_state(InstanceState::Paused, Duration::from_secs(5))
+        .wait_for_state(State::Paused, Duration::from_secs(5))
         .await?;
     // make sure the udp_server source got out of its last pull_data call and now knows it should pause
     async_std::task::sleep(Duration::from_millis(200)).await;
@@ -89,7 +89,7 @@ async fn connector_udp_pause_resume() -> Result<()> {
     // resume connector
     harness.resume().await?;
     harness
-        .wait_for_state(InstanceState::Running, Duration::from_secs(5))
+        .wait_for_state(State::Running, Duration::from_secs(5))
         .await?;
     // receive the data sent during pause
     // first line, continueing the stuff from last send
@@ -170,7 +170,7 @@ async fn connector_tcp_server_pause_resume() -> Result<()> {
     // pause connector
     harness.pause().await?;
     harness
-        .wait_for_state(InstanceState::Paused, Duration::from_secs(5))
+        .wait_for_state(State::Paused, Duration::from_secs(5))
         .await?;
     // send some more data
     let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
@@ -185,7 +185,7 @@ async fn connector_tcp_server_pause_resume() -> Result<()> {
     // resume connector
     harness.resume().await?;
     harness
-        .wait_for_state(InstanceState::Running, Duration::from_secs(5))
+        .wait_for_state(State::Running, Duration::from_secs(5))
         .await?;
     // receive the data sent during pause
     assert_eq!(
