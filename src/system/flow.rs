@@ -15,7 +15,7 @@
 use crate::{
     connectors::{self, ConnectorResult, KnownConnectors},
     errors::{Error, Kind as ErrorKind, Result},
-    instance::InstanceState,
+    instance::State,
     permge::PriorityMerge,
     pipeline::{self, InputTarget},
 };
@@ -134,7 +134,7 @@ pub struct StatusReport {
     /// the url of the instance this report describes
     pub alias: String,
     /// the current state
-    pub status: InstanceState,
+    pub status: State,
     /// the crated connectors
     pub connectors: Vec<ConnectorId>,
 }
@@ -396,7 +396,7 @@ async fn spawn_task(
         ),
     );
     let addr = msg_tx;
-    let mut state = InstanceState::Initializing;
+    let mut state = State::Initializing;
     // let registries = self.reg.clone();
 
     // extracting connectors and pipes from the links
@@ -451,7 +451,7 @@ async fn spawn_task(
         let mut wait_for_start_responses: usize = 0;
         while let Some(wrapped) = input_channel.next().await {
             match wrapped {
-                MsgWrapper::Msg(Msg::Start) if state == InstanceState::Initializing => {
+                MsgWrapper::Msg(Msg::Start) if state == State::Initializing => {
                     info!("[Flow::{alias}] Starting...");
                     // start all pipelines first - order doesnt matter as connectors aren't started yet
                     for pipe in &pipelines {
@@ -459,7 +459,7 @@ async fn spawn_task(
                     }
 
                     if connectors.is_empty() {
-                        state = InstanceState::Running;
+                        state = State::Running;
                         info!("[Flow::{alias}] Started.");
                     } else {
                         // start sink connectors first
@@ -486,7 +486,7 @@ async fn spawn_task(
                 MsgWrapper::Msg(Msg::Start) => {
                     info!("[Flow::{alias}] Ignoring Start message. Current state: {state}");
                 }
-                MsgWrapper::Msg(Msg::Pause) if state == InstanceState::Running => {
+                MsgWrapper::Msg(Msg::Pause) if state == State::Running => {
                     info!("[Flow::{alias}] Pausing...");
                     for source in &start_points {
                         source.pause().await?;
@@ -500,13 +500,13 @@ async fn spawn_task(
                     for pipeline in &pipelines {
                         pipeline.pause().await?;
                     }
-                    state = InstanceState::Paused;
+                    state = State::Paused;
                     info!("[Flow::{alias}] Paused.");
                 }
                 MsgWrapper::Msg(Msg::Pause) => {
                     info!("[Flow::{alias}] Ignoring Pause message. Current state: {state}",);
                 }
-                MsgWrapper::Msg(Msg::Resume) if state == InstanceState::Paused => {
+                MsgWrapper::Msg(Msg::Resume) if state == State::Paused => {
                     info!("[Flow::{alias}] Resuming...");
 
                     for pipeline in &pipelines {
@@ -521,19 +521,19 @@ async fn spawn_task(
                     for source in &start_points {
                         source.resume().await?;
                     }
-                    state = InstanceState::Running;
+                    state = State::Running;
                     info!("[Flow::{alias}] Resumed.");
                 }
                 MsgWrapper::Msg(Msg::Resume) => {
                     info!("[Flow::{alias}] Ignoring Resume message. Current state: {state}",);
                 }
-                MsgWrapper::Msg(Msg::Drain(_sender)) if state == InstanceState::Draining => {
+                MsgWrapper::Msg(Msg::Drain(_sender)) if state == State::Draining => {
                     info!("[Flow::{alias}] Ignoring Drain message. Current state: {state}",);
                 }
                 MsgWrapper::Msg(Msg::Drain(sender)) => {
                     info!("[Flow::{alias}] Draining...");
 
-                    state = InstanceState::Draining;
+                    state = State::Draining;
 
                     // handling the weird case of no connectors
                     if connectors.is_empty() {
@@ -611,7 +611,7 @@ async fn spawn_task(
                         }
                     }
 
-                    state = InstanceState::Stopped;
+                    state = State::Stopped;
                 }
                 MsgWrapper::Msg(Msg::Report(sender)) => {
                     // TODO: aggregate states of all containing instances
@@ -690,16 +690,16 @@ async fn spawn_task(
                             "[Flow::{alias}] Error starting Connector {conn}: {e}",
                             conn = conn_res.alias
                         );
-                        if state != InstanceState::Failed {
+                        if state != State::Failed {
                             // only report failed upon the first connector failure
-                            state = InstanceState::Failed;
+                            state = State::Failed;
                             info!("[Flow::{alias}] Failed.")
                         }
-                    } else if state == InstanceState::Initializing {
+                    } else if state == State::Initializing {
                         // report started flow if all connectors started
                         wait_for_start_responses = wait_for_start_responses.saturating_sub(1);
                         if wait_for_start_responses == 0 {
-                            state = InstanceState::Running;
+                            state = State::Running;
                             info!("[Flow::{alias}] Started.");
                         }
                     }

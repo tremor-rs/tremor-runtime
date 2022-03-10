@@ -31,7 +31,7 @@ use self::source::{SourceAddr, SourceContext, SourceMsg};
 use self::utils::quiescence::QuiescenceBeacon;
 pub use crate::config::Connector as ConnectorConfig;
 use crate::errors::{Error, Kind as ErrorKind, Result};
-use crate::instance::InstanceState;
+use crate::instance::State;
 use crate::pipeline;
 use crate::system::World;
 use async_std::channel::{bounded, Sender};
@@ -291,7 +291,7 @@ pub struct StatusReport {
     /// connector instance url
     pub alias: String,
     /// state of the connector
-    pub status: InstanceState,
+    pub status: State,
     /// current connectivity
     pub connectivity: Connectivity,
     /// connected pipelines
@@ -444,7 +444,7 @@ async fn connector_task(
     };
 
     let send_addr = connector_addr.clone();
-    let mut connector_state = InstanceState::Initializing;
+    let mut connector_state = State::Initializing;
     let mut drainage = None;
     let mut start_sender: Option<Sender<ConnectorResult<()>>> = None;
 
@@ -617,7 +617,7 @@ async fn connector_task(
                         .await?;
 
                     // reconnect if running - wait with reconnect if paused (until resume)
-                    if connector_state == InstanceState::Running {
+                    if connector_state == State::Running {
                         // ensure we don't reconnect in a hot loop
                         // ensure we adhere to the reconnect strategy, waiting and possibly not reconnecting at all
                         reconnect.enqueue_retry(&ctx).await;
@@ -658,7 +658,7 @@ async fn connector_task(
                     // ugly extra check
                     if new == Connectivity::Disconnected && !will_retry {
                         // if we weren't able to connect and gave up retrying, we are failed. That's life.
-                        connector_state = InstanceState::Failed;
+                        connector_state = State::Failed;
                         if start_sender.is_some() {
                             if let Some(start_sender) = start_sender.take() {
                                 ctx.log_err(
@@ -672,19 +672,19 @@ async fn connector_task(
                     }
                     connectivity = new;
                 }
-                Msg::Start(sender) if connector_state == InstanceState::Initializing => {
+                Msg::Start(sender) if connector_state == State::Initializing => {
                     info!("[Connector::{}] Starting...", &connector_addr.alias);
                     start_sender = Some(sender);
 
                     // start connector
                     connector_state = match connector.on_start(&ctx).await {
-                        Ok(()) => InstanceState::Running,
+                        Ok(()) => State::Running,
                         Err(e) => {
                             error!(
                                 "[Connector::{}] on_start Error: {}",
                                 &connector_addr.alias, e
                             );
-                            InstanceState::Failed
+                            State::Failed
                         }
                     };
                     info!(
@@ -703,8 +703,7 @@ async fn connector_task(
                         "[Connector::{}] Ignoring Start Msg. Current state: {:?}",
                         &connector_addr.alias, &connector_state
                     );
-                    if connector_state == InstanceState::Running
-                        && connectivity == Connectivity::Connected
+                    if connector_state == State::Running && connectivity == Connectivity::Connected
                     {
                         // sending an answer if we are connected
                         ctx.log_err(
@@ -714,7 +713,7 @@ async fn connector_task(
                     }
                 }
 
-                Msg::Pause if connector_state == InstanceState::Running => {
+                Msg::Pause if connector_state == State::Running => {
                     info!("[Connector::{}] Pausing...", &connector_addr.alias);
 
                     // TODO: in implementations that don't really support pausing
@@ -722,7 +721,7 @@ async fn connector_task(
                     //       e.g. UDP, TCP, Rest
                     //
                     ctx.log_err(connector.on_pause(&ctx).await, "Error during on_pause");
-                    connector_state = InstanceState::Paused;
+                    connector_state = State::Paused;
                     quiescence_beacon.pause();
 
                     connector_addr.send_source(SourceMsg::Pause).await?;
@@ -736,10 +735,10 @@ async fn connector_task(
                         &connector_addr.alias, &connector_state
                     );
                 }
-                Msg::Resume if connector_state == InstanceState::Paused => {
+                Msg::Resume if connector_state == State::Paused => {
                     info!("[Connector::{}] Resuming...", &connector_addr.alias);
                     ctx.log_err(connector.on_resume(&ctx).await, "Error during on_resume");
-                    connector_state = InstanceState::Running;
+                    connector_state = State::Running;
                     quiescence_beacon.resume();
 
                     connector_addr.send_source(SourceMsg::Resume).await?;
@@ -761,7 +760,7 @@ async fn connector_task(
                         &connector_addr.alias, &connector_state
                     );
                 }
-                Msg::Drain(_) if connector_state == InstanceState::Draining => {
+                Msg::Drain(_) if connector_state == State::Draining => {
                     info!(
                         "[Connector::{}] Ignoring Drain Msg. Current state: {:?}",
                         &connector_addr.alias, &connector_state
@@ -774,7 +773,7 @@ async fn connector_task(
                     quiescence_beacon.stop_reading();
                     // let connector stop emitting anything to its source part - if possible here
                     ctx.log_err(connector.on_drain(&ctx).await, "Error during on_drain");
-                    connector_state = InstanceState::Draining;
+                    connector_state = State::Draining;
 
                     // notify source to drain the source channel and then send the drain signal
                     if let Some(source) = connector_addr.source.as_ref() {
@@ -799,7 +798,7 @@ async fn connector_task(
                     }
                     drainage = Some(d);
                 }
-                Msg::SourceDrained if connector_state == InstanceState::Draining => {
+                Msg::SourceDrained if connector_state == State::Draining => {
                     info!(
                         "[Connector::{}] Source-part is drained.",
                         &connector_addr.alias
@@ -828,7 +827,7 @@ async fn connector_task(
                         }
                     }
                 }
-                Msg::SinkDrained if connector_state == InstanceState::Draining => {
+                Msg::SinkDrained if connector_state == State::Draining => {
                     info!(
                         "[Connector::{}] Sink-part is drained.",
                         &connector_addr.alias
@@ -862,7 +861,7 @@ async fn connector_task(
                 Msg::Stop(sender) => {
                     info!("{} Stopping...", &ctx);
                     ctx.log_err(connector.on_stop(&ctx).await, "Error during on_stop");
-                    connector_state = InstanceState::Stopped;
+                    connector_state = State::Stopped;
                     quiescence_beacon.full_stop();
                     let (stop_tx, stop_rx) = bounded(2);
                     let mut expect = 0_usize
