@@ -176,7 +176,7 @@ impl Manager {
                                     error!(
                                         "Failed to drain Deployment \"{alias}\": {e}",
                                         alias = flow.alias()
-                                    )
+                                    );
                                 } else {
                                     alive_flows += 1;
                                 }
