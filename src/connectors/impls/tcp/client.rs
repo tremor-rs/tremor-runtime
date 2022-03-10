@@ -296,10 +296,11 @@ impl Sink for TcpClientSink {
     }
 
     /// when writing is done
-    async fn on_stop(&mut self, _ctx: &SinkContext) -> Result<()> {
+    async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
         if let Some(stream) = self.tcp_stream.as_ref() {
-            // ignore error here
-            let _ = stream.shutdown(std::net::Shutdown::Write);
+            if let Err(e) = stream.shutdown(std::net::Shutdown::Write) {
+                error!("{ctx} stopping: {e}...",);
+            }
         }
         Ok(())
     }

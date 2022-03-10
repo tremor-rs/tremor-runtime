@@ -26,7 +26,7 @@ use s3::Client as S3Client;
 
 const MINCHUNKSIZE: i64 = 8 * 1024 * 1024; // 8 MBs
 
-const CONNECTOR_TYPE: &'static str = "s3-reader";
+const CONNECTOR_TYPE: &str = "s3-reader";
 const URL_SCHEME: &str = "tremor-s3";
 
 #[derive(Deserialize, Debug, Default)]
@@ -65,7 +65,7 @@ impl S3SourceConfig {
         MINCHUNKSIZE
     }
 
-    /// https://docs.aws.amazon.com/cli/latest/topic/s3-config.html#max-concurrent-requests
+    /// See <https://docs.aws.amazon.com/cli/latest/topic/s3-config.html#max-concurrent-requests>
     fn default_max_connections() -> usize {
         10
     }
@@ -260,7 +260,7 @@ async fn fetch_keys_task(
 /// Fetches the object from s3
 /// depending on `multipart_threshold` it downloads the object as one or in ranges.
 ///
-/// The received data is sent to the ChannelSource channel.
+/// The received data is sent to the `ChannelSource` channel.
 async fn fetch_object_task(
     ctx: ConnectorContext,
     client: S3Client,

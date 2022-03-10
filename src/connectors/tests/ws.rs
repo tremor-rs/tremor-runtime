@@ -12,11 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod connectors;
-
-#[macro_use]
-extern crate log;
-
+use super::{find_free_tcp_port, setup_for_tls, ConnectorHarness};
+use crate::errors::Result;
 use async_std::{
     channel::{bounded, Receiver, Sender, TryRecvError},
     net::{TcpListener, TcpStream},
@@ -45,11 +42,6 @@ use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, Value};
 use tungstenite::protocol::{frame::coding::CloseCode, CloseFrame};
 use value_trait::ValueAccess;
-
-use crate::connectors::find_free_tcp_port;
-use crate::connectors::setup_for_tls;
-use connectors::ConnectorHarness;
-use tremor_runtime::errors::Result;
 
 /// A minimal websocket test client harness
 struct TestClient<S> {
@@ -345,7 +337,7 @@ async fn connector_ws_server_text_routing() -> Result<()> {
 }
 
 // FIXME: this test is extremely flaky and needs to be fixed
-// #[async_std::test]
+#[async_std::test]
 async fn connector_ws_client_binary_routing() -> Result<()> {
     let _ = env_logger::try_init();
 

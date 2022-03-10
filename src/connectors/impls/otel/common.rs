@@ -79,7 +79,7 @@ pub(crate) fn any_value_to_pb(data: &Value<'_>) -> AnyValue {
             value: Some(Inner::StringValue(v.to_string())),
         },
         Value::Array(va) => {
-            let a: Vec<AnyValue> = va.iter().map(|v| any_value_to_pb(v)).collect();
+            let a: Vec<AnyValue> = va.iter().map(any_value_to_pb).collect();
             let x = Inner::ArrayValue(ArrayValue { values: a });
             AnyValue { value: Some(x) }
         }

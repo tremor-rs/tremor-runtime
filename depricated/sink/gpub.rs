@@ -32,7 +32,7 @@ use halfbrown::HashMap;
 use tremor_pipeline::{EventIdGenerator, OpMeta};
 use tremor_value::Value;
 
-pub struct GoogleCloudPubSub {
+pub(crate) struct GoogleCloudPubSub {
     remote_publisher: Option<PublisherClient<AuthedService>>,
     remote_subscriber: Option<SubscriberClient<AuthedService>>,
     is_down: bool,

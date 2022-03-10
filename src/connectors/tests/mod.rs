@@ -11,49 +11,58 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+mod crononome;
+#[cfg(feature = "es-integration")]
+mod elastic;
+mod file;
+mod file_non_existent;
+mod file_xz;
+mod http_client;
+#[cfg(feature = "kafka-integration")]
+mod kafka;
+mod metronome;
+mod pause_resume;
+#[cfg(feature = "s3-integration")]
+mod s3;
+mod tcp_event_routing;
+mod unix_socket;
+mod ws;
 
 // some tests don't use everything and this would generate warnings for those
 // which it shouldn't
-#![allow(dead_code)]
 
-use async_std::{
-    channel::{bounded, Receiver},
-    net::TcpListener,
-    prelude::{FutureExt, StreamExt},
-    task::JoinHandle,
-};
-use beef::Cow;
-use halfbrown::HashMap;
-use log::{debug, info};
-use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
-use signal_hook_async_std::{Handle, Signals};
-use std::process::Stdio;
-use std::sync::Once;
-use std::{sync::atomic::Ordering, time::Duration};
-use testcontainers::{clients, Docker};
-use tremor_common::{
-    ids::ConnectorIdGen,
-    url::ports::{ERR, IN, OUT},
-};
-use tremor_pipeline::{CbAction, EventId};
-use tremor_runtime::{
+use crate::{
     config,
     connectors::{
         self, builtin_connector_types, sink::SinkMsg, source::SourceMsg, Connectivity, StatusReport,
     },
     errors::Result,
     instance::State,
-    pipeline::{self, CfMsg},
+    pipeline,
     system::{ShutdownMode, World, WorldConfig},
     Event, QSIZE,
 };
+use async_std::{
+    channel::{bounded, Receiver},
+    net::TcpListener,
+    prelude::FutureExt,
+};
+use beef::Cow;
+use log::{debug, info};
+use std::collections::HashMap;
+use std::process::Stdio;
+use std::sync::Once;
+use std::{sync::atomic::Ordering, time::Duration};
+use tremor_common::{
+    ids::ConnectorIdGen,
+    url::ports::{ERR, IN, OUT},
+};
+use tremor_pipeline::{CbAction, EventId};
 use tremor_script::{ast::DeployEndpoint, NodeMeta, Value};
 
 pub(crate) struct ConnectorHarness {
     connector_id: String,
     world: World,
-    handle: JoinHandle<Result<()>>,
-    //config: config::Connector,
     addr: connectors::Addr,
     pipes: HashMap<Cow<'static, str>, TestPipeline>,
 }
@@ -73,9 +82,8 @@ impl ConnectorHarness {
 
         let connector_type = connector_type.to_string();
 
-        let (world, handle) = World::start(WorldConfig::default()).await?;
-        let raw_config =
-            config::Connector::from_config(connector_type.clone(), connector_type.into(), defn)?;
+        let (world, _) = World::start(WorldConfig::default()).await?;
+        let raw_config = config::Connector::from_config(connector_type.into(), defn)?;
         let id = String::from("test");
         // FIXME: woohp whoop
         let connector_addr =
@@ -112,8 +120,6 @@ impl ConnectorHarness {
         Ok(Self {
             connector_id: id,
             world,
-            handle,
-            //config: connector_config,
             addr: connector_addr,
             pipes,
         })
@@ -231,6 +237,8 @@ impl ConnectorHarness {
         self.get_pipe(OUT)
     }
 
+    #[cfg(any(feature = "kafka-integration", feature = "es-integration",))]
+
     /// get the err pipeline - if any
     pub(crate) fn err(&self) -> Option<&TestPipeline> {
         self.get_pipe(ERR)
@@ -240,101 +248,16 @@ impl ConnectorHarness {
         self.addr.send_sink(SinkMsg::Event { event, port }).await
     }
 
+    #[cfg(feature = "kafka-integration")]
     pub(crate) async fn send_contraflow(&self, cb: CbAction, id: EventId) -> Result<()> {
         self.addr.send_source(SourceMsg::Cb(cb, id)).await
-    }
-
-    pub(crate) async fn find_free_tcp_port() -> u16 {
-        let listener = TcpListener::bind("127.0.0.1:0").await;
-        let listener = match listener {
-            Err(_) => return 65535, // TODO error handling
-            Ok(listener) => listener,
-        };
-        let port = match listener.local_addr().ok() {
-            Some(addr) => addr.port(),
-            None => return 65535,
-        };
-        info!("free port: {}", port);
-        port
-    }
-
-    pub(crate) fn handle_signals(container_id: String) -> Result<SignalHandler> {
-        SignalHandler::new(container_id)
-    }
-}
-
-pub(crate) struct SignalHandler {
-    signal_handle: Handle,
-    handle_task: Option<JoinHandle<()>>,
-}
-
-impl SignalHandler {
-    pub(crate) fn new(container_id: String) -> Result<Self> {
-        let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
-        let signal_handle = signals.handle();
-        let handle_task = async_std::task::spawn(async move {
-            let signal_docker = clients::Cli::default();
-            while let Some(signal) = signals.next().await {
-                signal_docker.stop(container_id.as_str());
-                signal_docker.rm(container_id.as_str());
-                let _ = signal_hook::low_level::emulate_default_handler(signal);
-            }
-        });
-        Ok(Self {
-            signal_handle,
-            handle_task: Some(handle_task),
-        })
-    }
-}
-
-impl Drop for SignalHandler {
-    fn drop(&mut self) {
-        self.signal_handle.close();
-        if let Some(s) = self.handle_task.take() {
-            async_std::task::block_on(s.cancel());
-        }
-    }
-}
-
-/// Keeps track of process env manipulations and restores previous values upon drop
-pub(crate) struct EnvHelper {
-    restore: HashMap<String, String>,
-}
-
-impl EnvHelper {
-    pub(crate) fn new() -> Self {
-        Self {
-            restore: HashMap::new(),
-        }
-    }
-
-    pub(crate) fn set_var(&mut self, key: &str, value: &str) {
-        if let Ok(old_value) = std::env::var(key) {
-            self.restore.insert(key.to_string(), old_value);
-        }
-        std::env::set_var(key, value);
-    }
-
-    pub(crate) fn remove_var(&mut self, key: &str) {
-        if let Ok(old_value) = std::env::var(key) {
-            self.restore.insert(key.to_string(), old_value);
-        }
-        std::env::remove_var(key);
-    }
-}
-
-impl Drop for EnvHelper {
-    fn drop(&mut self) {
-        for (k, v) in &self.restore {
-            std::env::set_var(k, v);
-        }
     }
 }
 
 pub(crate) struct TestPipeline {
     rx: Receiver<Box<pipeline::Msg>>,
+    #[allow(dead_code)]
     rx_cf: Receiver<pipeline::CfMsg>,
-    rx_mgmt: Receiver<pipeline::MgmtMsg>,
     addr: pipeline::Addr,
 }
 
@@ -343,33 +266,30 @@ impl TestPipeline {
         let qsize = QSIZE.load(Ordering::Relaxed);
         let (tx, rx) = bounded(qsize);
         let (tx_cf, rx_cf) = bounded(qsize);
-        let (tx_mgmt, rx_mgmt) = bounded(qsize);
+        let (tx_mgmt, _) = bounded(qsize);
         let addr = pipeline::Addr::new(tx, tx_cf, tx_mgmt, alias);
-        Self {
-            rx,
-            rx_cf,
-            rx_mgmt,
-            addr,
-        }
-    }
-
-    pub(crate) async fn send_contraflow(&self, event: Event) -> Result<()> {
-        self.addr.send_insight(event).await
+        Self { rx, rx_cf, addr }
     }
 
     // get all available contraflow events
+    #[cfg(feature = "kafka-integration")]
     pub(crate) fn get_contraflow_events(&self) -> Result<Vec<Event>> {
         let mut events = Vec::with_capacity(self.rx.len());
-        while let Ok(CfMsg::Insight(event)) = self.rx_cf.try_recv() {
+        while let Ok(pipeline::CfMsg::Insight(event)) = self.rx_cf.try_recv() {
             events.push(event);
         }
         Ok(events)
     }
 
-    // wait for a contraflow event
+    // wait for a contraflow
+    #[cfg(any(
+        feature = "kafka-integration",
+        feature = "es-integration",
+        feature = "s3-integration"
+    ))]
     pub(crate) async fn get_contraflow(&self) -> Result<Event> {
         match self.rx_cf.recv().await? {
-            CfMsg::Insight(event) => Ok(event),
+            pipeline::CfMsg::Insight(event) => Ok(event),
         }
     }
 
@@ -427,12 +347,6 @@ pub(crate) async fn find_free_tcp_port() -> u16 {
     };
     info!("free port: {}", port);
     port
-}
-
-/// Find free TCP host:port for use in test server endpoints
-pub(crate) async fn find_free_tcp_endpoint_str() -> String {
-    let port = find_free_tcp_port().await.to_string();
-    format!("{}:{}", "localhost", port) // NOTE we use localhost rather than an IP for cmopat with TLS
 }
 
 static TLS_SETUP: Once = Once::new();

@@ -128,10 +128,7 @@ pub(crate) type Postprocessor = NameWithConfig;
 /// Connector configuration - only the parts applicable to all connectors
 /// Specific parts are catched in the `config` map.
 #[derive(Clone, Debug, Default)]
-pub struct Connector {
-    /// Connector identifier
-    pub id: Id,
-
+pub(crate) struct Connector {
     /// Connector type
     pub connector_type: ConnectorType,
 
@@ -157,10 +154,7 @@ pub struct Connector {
 
 impl Connector {
     /// Spawns a connector from a declaration
-    pub fn from_defn(
-        alias: &str,
-        defn: &ast::ConnectorDefinition<'static>,
-    ) -> crate::Result<Connector> {
+    pub(crate) fn from_defn(defn: &ast::ConnectorDefinition<'static>) -> crate::Result<Connector> {
         let aggr_reg = tremor_script::registry::aggr();
         let reg = &*FN_REGISTRY.read()?;
 
@@ -169,16 +163,13 @@ impl Connector {
 
         let conf = params.generate_config(&mut helper)?;
 
-        Connector::from_config(alias, defn.builtin_kind.clone().into(), conf)
+        Connector::from_config(defn.builtin_kind.clone().into(), conf)
     }
     /// Creates a connector from it's definition (aka config + settings)
-    pub fn from_config<A: ToString>(
-        alias: A,
+    pub(crate) fn from_config(
         connector_type: ConnectorType,
         connector_config: Value<'static>,
     ) -> crate::Result<Connector> {
-        let config = connector_config.get("config").cloned();
-
         fn validate_type(v: &Value, k: &str, t: ValueType) -> Result<()> {
             if v.get(k).is_some() && v.get(k).map(Value::value_type) != Some(t) {
                 return Err(format!(
@@ -191,6 +182,7 @@ impl Connector {
             }
             Ok(())
         }
+        let config = connector_config.get("config").cloned();
 
         // TODO: can we get hygenic errors here?
 
@@ -201,9 +193,8 @@ impl Connector {
             .or_else(|_| validate_type(&connector_config, "metrics_interval_s", ValueType::I64))?;
 
         Ok(Connector {
-            id: alias.to_string(),
             connector_type,
-            config: config,
+            config,
             preprocessors: connector_config
                 .get_array("preprocessors")
                 .map(|o| {
@@ -284,7 +275,6 @@ mod tests {
     #[test]
     fn test_config_builtin_preproc_with_config() -> Result<()> {
         let c = Connector::from_config(
-            "snot".to_string(),
             ConnectorType::from("otel_client".to_string()),
             literal!({
                 "preprocessors": [ {"name": "snot", "config": { "separator": "\n" }}],

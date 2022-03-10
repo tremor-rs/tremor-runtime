@@ -27,7 +27,7 @@ use tremor_pipeline::OpMeta;
 
 // struct containing connection options
 #[derive(Clone, Debug, Deserialize, Default, PartialEq)]
-pub struct ConnectOptions {
+pub(crate) struct ConnectOptions {
     token: Option<String>,
     username: Option<String>,
     password: Option<String>,
@@ -45,7 +45,7 @@ pub struct ConnectOptions {
 }
 
 impl ConnectOptions {
-    pub fn generate(&self) -> NatsOptions {
+    pub(crate) fn generate(&self) -> NatsOptions {
         let mut options = None;
         if let Some(token) = &self.token {
             options = Some(NatsOptions::with_token(token.as_str()));
@@ -84,20 +84,20 @@ impl ConnectOptions {
 }
 
 #[derive(Deserialize)]
-pub struct Config {
+pub(crate) struct Config {
     // list of hosts
-    pub hosts: Vec<String>,
+    pub(crate) hosts: Vec<String>,
     // subject to send messages to
-    pub subject: String,
+    pub(crate) subject: String,
     // options to use when opening a new connection
     #[serde(default = "Default::default")]
-    pub options: ConnectOptions,
+    pub(crate) options: ConnectOptions,
     // reply to use for the messages
     #[serde(default = "Default::default")]
-    pub reply: Option<String>,
+    pub(crate) reply: Option<String>,
     // headers to use for the messages
     #[serde(default = "Default::default")]
-    pub headers: HashMap<String, Vec<String>>,
+    pub(crate) headers: HashMap<String, Vec<String>>,
 }
 
 impl Config {
@@ -112,7 +112,7 @@ impl Config {
 
 impl ConfigImpl for Config {}
 
-pub struct Nats {
+pub(crate) struct Nats {
     sink_url: TremorUrl,
     config: Config,
     postprocessors: Postprocessors,

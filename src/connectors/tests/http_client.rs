@@ -12,14 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod connectors;
-
-extern crate log;
-
+use super::{find_free_tcp_port, setup_for_tls, ConnectorHarness};
+use crate::errors::Result;
 use async_std::task::{spawn, JoinHandle};
-use connectors::find_free_tcp_endpoint_str;
-use connectors::setup_for_tls;
-use connectors::ConnectorHarness;
 use http_types::Method;
 use http_types::Url;
 use log::error;
@@ -30,9 +25,15 @@ use tide_rustls::TlsListener;
 use tremor_common::url::ports::IN;
 use tremor_pipeline::Event;
 use tremor_pipeline::EventId;
-use tremor_runtime::errors::Result;
 use tremor_script::{literal, Value, ValueAndMeta};
 use value_trait::ValueAccess;
+
+/// Find free TCP host:port for use in test server endpoints
+pub(crate) async fn find_free_tcp_endpoint_str() -> String {
+    let port = find_free_tcp_port().await.to_string();
+    format!("{}:{}", "localhost", port) // NOTE we use localhost rather than an IP for cmopat with TLS
+}
+
 
 struct TestHttpServer {
     acceptor: Option<JoinHandle<Result<()>>>,

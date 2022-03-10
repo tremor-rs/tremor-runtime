@@ -32,7 +32,7 @@ impl GcsClient {
     // Create a wrapper around reqwest::client
     // which keeps the token with itself and inserts on each request.
 
-    pub fn get(&self, url: String) -> Result<reqwest::RequestBuilder> {
+    pub(crate) fn get(&self, url: String) -> Result<reqwest::RequestBuilder> {
         let token: String = self.token.header_value()?.to_string();
 
         Ok(self.client.get(url).header(
@@ -41,7 +41,7 @@ impl GcsClient {
         ))
     }
 
-    pub fn post(&self, url: String) -> Result<reqwest::RequestBuilder> {
+    pub(crate) fn post(&self, url: String) -> Result<reqwest::RequestBuilder> {
         let token: String = self.token.header_value()?.to_string();
 
         Ok(self.client.post(url).header(
@@ -50,7 +50,7 @@ impl GcsClient {
         ))
     }
 
-    pub fn delete(&self, url: String) -> Result<reqwest::RequestBuilder> {
+    pub(crate) fn delete(&self, url: String) -> Result<reqwest::RequestBuilder> {
         let token: String = self.token.header_value()?.to_string();
 
         Ok(self.client.delete(url).header(

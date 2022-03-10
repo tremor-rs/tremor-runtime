@@ -155,7 +155,9 @@ cron = "0.10.0"
 grok = "1"
 
 # rest onramp
-tide = { version = "0.16", default-features = false, features = ["h1-server"]} # no logger, no session, no cookies
+tide = { version = "0.16", default-features = false, features = [
+  "h1-server",
+] } # no logger, no session, no cookies
 tide-rustls = "0.3"
 
 # sse-onramp
@@ -228,8 +230,10 @@ default = []
 128bit = ["tremor-value/128bit"]
 bert = ["tremor-pipeline/bert"]
 
-integration = ["es-integration"]
+integration = ["es-integration", "s3-integration", "kafka-integration"]
 es-integration = []
+s3-integration = []
+kafka-integration = []
 
 [patch.crates-io]
 rust-bert = { git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989' }

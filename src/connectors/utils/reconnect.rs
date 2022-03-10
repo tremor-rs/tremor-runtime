@@ -134,7 +134,7 @@ impl ReconnectStrategy for RetryWithBackoff {
 
 /// describing the number of previous connection attempts
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
-pub struct Attempt {
+pub(crate) struct Attempt {
     overall: u64,
     success: u64,
     since_last_success: u64,
@@ -154,23 +154,18 @@ impl Attempt {
     }
 
     /// Returns true if this is the very first attempt
-    pub fn is_first(&self) -> bool {
+    pub(crate) fn is_first(&self) -> bool {
         self.overall == 0
     }
 
     /// returns the number of previous successful connection attempts
-    pub fn success(&self) -> u64 {
+    pub(crate) fn success(&self) -> u64 {
         self.success
     }
 
     /// returns the number of connection attempts since the last success
-    pub fn since_last_success(&self) -> u64 {
+    pub(crate) fn since_last_success(&self) -> u64 {
         self.since_last_success
-    }
-
-    /// returns the overall connection attempts
-    pub fn overall(&self) -> u64 {
-        self.overall
     }
 }
 
@@ -201,15 +196,15 @@ pub(crate) struct ReconnectRuntime {
 ///
 /// This will change the connector state properly and trigger a new reconnect attempt (according to the configured logic)
 #[derive(Clone)]
-pub struct ConnectionLostNotifier(Sender<Msg>);
+pub(crate) struct ConnectionLostNotifier(Sender<Msg>);
 
 impl ConnectionLostNotifier {
     /// constructor
-    pub fn new(tx: Sender<Msg>) -> Self {
+    pub(crate) fn new(tx: Sender<Msg>) -> Self {
         Self(tx)
     }
     /// notify the runtime that this connector lost its connection
-    pub async fn notify(&self) -> Result<()> {
+    pub(crate) async fn notify(&self) -> Result<()> {
         self.0.send(Msg::ConnectionLost).await?;
         Ok(())
     }
@@ -377,9 +372,7 @@ impl ReconnectRuntime {
 
 #[cfg(test)]
 mod tests {
-    // use crate::connectors::quiescence::QuiescenceBeacon;
-
-    use crate::connectors::{quiescence::QuiescenceBeacon, CodecReq};
+    use crate::connectors::{utils::quiescence::QuiescenceBeacon, CodecReq};
 
     use super::*;
 
@@ -402,17 +395,14 @@ mod tests {
     fn attempt() -> Result<()> {
         let mut attempt = Attempt::default();
         assert_eq!(0, attempt.since_last_success());
-        assert_eq!(0, attempt.overall());
         assert_eq!(0, attempt.success());
 
         attempt.on_success();
         assert_eq!(0, attempt.since_last_success());
-        assert_eq!(1, attempt.overall());
         assert_eq!(1, attempt.success());
 
         attempt.on_failure();
         assert_eq!(1, attempt.since_last_success());
-        assert_eq!(2, attempt.overall());
         assert_eq!(1, attempt.success());
 
         Ok(())
@@ -460,7 +450,6 @@ mod tests {
         };
         let qb = QuiescenceBeacon::default();
         let ctx = ConnectorContext {
-            uid: 1,
             alias,
             connector_type: "fake".into(),
             quiescence_beacon: qb,
@@ -499,7 +488,6 @@ mod tests {
         };
         let qb = QuiescenceBeacon::default();
         let ctx = ConnectorContext {
-            uid: 1,
             alias,
             connector_type: "fake".into(),
             quiescence_beacon: qb,

@@ -35,18 +35,21 @@ pub struct ChannelSource {
 
 impl ChannelSource {
     /// constructor
+    #[must_use]
     pub fn new(qsize: usize) -> Self {
         let (tx, rx) = bounded(qsize);
         Self::from_channel(tx, rx)
     }
 
     /// construct a channel source from a given channel
+    #[must_use]
     pub fn from_channel(tx: Sender<SourceReply>, rx: Receiver<SourceReply>) -> Self {
         Self { rx, tx }
     }
 
     /// get the runtime for the source
 
+    #[must_use]
     pub fn runtime(&self) -> ChannelSourceRuntime {
         ChannelSourceRuntime {
             sender: self.tx.clone(),
@@ -54,7 +57,7 @@ impl ChannelSource {
     }
 }
 
-/// The runtime driving the ChannelSource
+/// The runtime driving the `ChannelSource`
 #[derive(Clone)]
 pub struct ChannelSourceRuntime {
     sender: Sender<SourceReply>,

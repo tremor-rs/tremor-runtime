@@ -23,21 +23,21 @@ use std::path::Path;
 use tremor_pipeline::ConfigImpl;
 use tremor_script::prelude::*;
 
-pub trait Kv {
+pub(crate) trait Kv {
     fn get(&mut self) -> Result<simd_json::OwnedValue>;
     fn set(&mut self, obj: simd_json::OwnedValue) -> Result<()>;
 }
 
-pub struct File {
-    pub config: Config,
-    pub store: mapr::MmapMut,
-    pub len: usize,
-    pub end: usize,
+pub(crate) struct File {
+    pub(crate) config: Config,
+    pub(crate) store: mapr::MmapMut,
+    pub(crate) len: usize,
+    pub(crate) end: usize,
 }
-pub struct Anon {
-    pub store: mapr::MmapMut,
-    pub end: usize,
-    pub len: usize,
+pub(crate) struct Anon {
+    pub(crate) store: mapr::MmapMut,
+    pub(crate) end: usize,
+    pub(crate) len: usize,
 }
 
 impl File {
@@ -118,9 +118,9 @@ impl Kv for Anon {
 impl ConfigImpl for Config {}
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct Config {
-    pub path: String,
-    pub size: usize,
+pub(crate) struct Config {
+    pub(crate) path: String,
+    pub(crate) size: usize,
 }
 
 impl Anon {
@@ -180,7 +180,7 @@ impl File {
     }
 }
 
-pub fn lookup(
+pub(crate) fn lookup(
     name: &str,
     config: Option<Config>,
     obj: &simd_json::OwnedValue,

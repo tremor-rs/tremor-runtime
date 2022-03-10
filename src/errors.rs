@@ -181,6 +181,7 @@ error_chain! {
         EnvVarError(std::env::VarError);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
         Wal(qwal::Error);
+        Uuid(uuid::Error);
     }
 
     errors {

@@ -92,23 +92,23 @@ impl<'v> TryFrom<&'v Value<'v>> for Command<'v> {
 
     fn try_from(v: &'v Value<'v>) -> Result<Self> {
         let v = v.get("kv").ok_or("Missing `$kv` field for commands")?;
-        if let Some(key) = v.get_bytes("get").map(|v| v.to_vec()) {
+        if let Some(key) = v.get_bytes("get").map(<[u8]>::to_vec) {
             Ok(Command::Get { key })
-        } else if let Some(key) = v.get_bytes("put").map(|v| v.to_vec()) {
+        } else if let Some(key) = v.get_bytes("put").map(<[u8]>::to_vec) {
             Ok(Command::Put { key })
-        } else if let Some(key) = v.get_bytes("swap").map(|v| v.to_vec()) {
+        } else if let Some(key) = v.get_bytes("swap").map(<[u8]>::to_vec) {
             Ok(Command::Swap { key })
-        } else if let Some(key) = v.get_bytes("cas").map(|v| v.to_vec()) {
+        } else if let Some(key) = v.get_bytes("cas").map(<[u8]>::to_vec) {
             Ok(Command::Cas {
                 key,
                 old: v.get("old"),
             })
-        } else if let Some(key) = v.get_bytes("delete").map(|v| v.to_vec()) {
+        } else if let Some(key) = v.get_bytes("delete").map(<[u8]>::to_vec) {
             Ok(Command::Delete { key })
-        } else if let Some(start) = v.get_bytes("scan").map(|v| v.to_vec()) {
+        } else if let Some(start) = v.get_bytes("scan").map(<[u8]>::to_vec) {
             Ok(Command::Scan {
                 start,
-                end: v.get_bytes("end").map(|v| v.to_vec()),
+                end: v.get_bytes("end").map(<[u8]>::to_vec),
             })
         } else {
             Err(format!("Invalid KV command: {}", v).into())
@@ -187,7 +187,7 @@ impl ConnectorBuilder for Builder {
             }
 
             let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-            Ok(Box::new(Kv { config, tx, rx }))
+            Ok(Box::new(Kv { config, rx, tx }))
         } else {
             Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }

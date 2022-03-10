@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::{
-    connectors::{self, ConnectorResult, KnownConnectors},
+    connectors::{self, ConnectorResult, Known},
     errors::{Error, Kind as ErrorKind, Result},
     instance::State,
     permge::PriorityMerge,
@@ -35,23 +35,23 @@ use tremor_script::{
 
 /// unique identifier of a flow instance within a tremor instance
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize)]
-pub struct FlowId(pub String);
+pub(crate) struct Id(pub(crate) String);
 
-impl From<&DeployFlow<'_>> for FlowId {
+impl From<&DeployFlow<'_>> for Id {
     fn from(f: &DeployFlow) -> Self {
-        FlowId(f.instance_alias.to_string())
+        Id(f.instance_alias.to_string())
     }
 }
 
-impl From<&str> for FlowId {
+impl From<&str> for Id {
     fn from(e: &str) -> Self {
-        FlowId(e.to_string())
+        Id(e.to_string())
     }
 }
 
 /// unique identifier of a connector within a deployment
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize)]
-pub struct ConnectorId(String);
+pub(crate) struct ConnectorId(String);
 
 impl From<&DeployEndpoint> for ConnectorId {
     fn from(e: &DeployEndpoint) -> Self {
@@ -71,7 +71,7 @@ impl Borrow<str> for ConnectorId {
     }
 }
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash)]
-pub(crate) struct PipelineId(pub String);
+pub(crate) struct PipelineId(pub(crate) String);
 
 impl std::fmt::Display for PipelineId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -99,7 +99,7 @@ impl Borrow<str> for PipelineId {
 #[allow(dead_code)] // FIXME
 #[derive(Debug)]
 /// Control Plane message accepted by each binding control plane handler
-pub enum Msg {
+pub(crate) enum Msg {
     /// start all contained instances
     Start,
     /// pause all contained instances
@@ -132,14 +132,15 @@ pub struct Flow {
 #[derive(Serialize, Debug)]
 pub struct StatusReport {
     /// the url of the instance this report describes
-    pub alias: String,
+    pub(crate) alias: String,
     /// the current state
     pub status: State,
     /// the crated connectors
-    pub connectors: Vec<ConnectorId>,
+    pub(crate) connectors: Vec<ConnectorId>,
 }
+
 impl Flow {
-    pub fn alias(&self) -> &str {
+    pub(crate) fn alias(&self) -> &str {
         self.alias.as_str()
     }
     pub(crate) async fn stop(&self, tx: Sender<Result<()>>) -> Result<()> {
@@ -180,7 +181,7 @@ impl Flow {
         flow: ast::DeployFlow<'static>,
         operator_id_gen: &mut OperatorIdGen,
         connector_id_gen: &mut ConnectorIdGen,
-        known_connectors: &KnownConnectors,
+        known_connectors: &Known,
     ) -> Result<Self> {
         let mut pipelines = HashMap::new();
         let mut connectors = HashMap::new();
@@ -191,7 +192,7 @@ impl Flow {
                 ast::CreateTargetDefinition::Connector(defn) => {
                     let mut defn = defn.clone();
                     defn.params.ingest_creational_with(&create.with)?;
-                    let connector = crate::Connector::from_defn(alias, &defn)?;
+                    let connector = crate::Connector::from_defn(&defn)?;
                     connectors.insert(
                         ConnectorId::from(alias),
                         connectors::spawn(alias, connector_id_gen, known_connectors, connector)
@@ -255,7 +256,7 @@ async fn link(
         ConnectStmt::ConnectorToPipeline { from, to, .. } => {
             let connector = connectors
                 .get(from.alias())
-                .ok_or(not_defined_err(from, "connector"))?;
+                .ok_or_else(|| not_defined_err(from, "connector"))?;
 
             let pipeline = pipelines
                 .get(to.alias())

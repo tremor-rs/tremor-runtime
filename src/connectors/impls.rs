@@ -39,7 +39,7 @@ pub(crate) mod kv;
 pub(crate) mod metrics;
 /// Metronome
 pub(crate) mod metronome;
-/// OpenTelemetry
+/// `OpenTelemetry`
 pub(crate) mod otel;
 /// AWS S3 connectors
 pub(crate) mod s3;
@@ -55,5 +55,5 @@ pub(crate) mod udp;
 pub(crate) mod unix_socket;
 /// Write Ahead Log
 pub(crate) mod wal;
-/// WebSockets
+/// `WebSockets`
 pub(crate) mod ws;

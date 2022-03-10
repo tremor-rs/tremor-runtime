@@ -17,7 +17,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use crate::errors::{Error, ErrorKind, Result};
+use crate::errors::{Error, Kind as ErrorKind, Result};
 use async_tls::TlsConnector;
 use rustls::internal::pemfile::{certs, pkcs8_private_keys, rsa_private_keys};
 use rustls::{Certificate, ClientConfig, NoClientAuth, PrivateKey, RootCertStore, ServerConfig};
@@ -30,7 +30,7 @@ lazy_static! {
         for cert in load_native_certs().expect("Unable to load system TLS certificates.") {
             roots
                 .add(&Certificate(cert.0))
-                .expect("Unable to add root TLS certificate to RootCertStore")
+                .expect("Unable to add root TLS certificate to RootCertStore");
         }
         roots
     };

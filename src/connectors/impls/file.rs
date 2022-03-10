@@ -28,7 +28,7 @@ const URL_SCHEME: &str = "tremor-file";
 /// how to open the given file for writing
 #[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "lowercase")]
-pub enum Mode {
+pub(crate) enum Mode {
     /// read from file
     Read,
     /// equivalent to `truncate` only here because it has such a nice name
@@ -65,26 +65,26 @@ impl Mode {
 /// File connector config
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     /// path to the file
-    pub path: PathBuf,
+    pub(crate) path: PathBuf,
     /// how to interface with the file
-    pub mode: Mode, // whether we read or write (in various forms)
+    pub(crate) mode: Mode, // whether we read or write (in various forms)
     /// chunk_size to read from the file
     #[serde(default = "default_buf_size")]
-    pub chunk_size: usize,
+    pub(crate) chunk_size: usize,
 }
 
 impl ConfigImpl for Config {}
 
 /// file connector
-pub struct File {
+pub(crate) struct File {
     config: Config,
 }
 
 /// builder for file connector
 #[derive(Default, Debug)]
-pub struct Builder {}
+pub(crate) struct Builder {}
 
 impl Builder {}
 

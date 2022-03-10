@@ -62,20 +62,13 @@ pub const DEFAULT_POLL_DURATION: Duration = Duration::from_millis(10);
 
 #[derive(Debug)]
 /// Messages a Source can receive
-pub enum SourceMsg {
+pub(crate) enum SourceMsg {
     /// connect a pipeline
     Link {
         /// port
         port: Cow<'static, str>,
         /// pipelines to connect
         pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
-    },
-    /// disconnect a pipeline from a port
-    Unlink {
-        /// port
-        port: Cow<'static, str>,
-        /// url of the pipeline
-        id: DeployEndpoint,
     },
     /// Connect to the outside world and send the result back
     Connect(Sender<Result<bool>>, Attempt),
@@ -160,7 +153,7 @@ pub type SourceReplySender = Sender<SourceReply>;
 
 /// source part of a connector
 #[async_trait::async_trait]
-pub trait Source: Send {
+pub(crate) trait Source: Send {
     /// Pulls an event from the source if one exists
     /// the `pull_id` identifies the number of the call to `pull_data` and is passed in so
     /// sources can keep track of which event stems from which call of `pull_data` and so can
@@ -272,7 +265,7 @@ pub trait Source: Send {
 
 ///
 #[async_trait::async_trait]
-pub trait StreamReader: Send {
+pub(crate) trait StreamReader: Send {
     /// reads from the source reader
     async fn read(&mut self, stream: u64) -> Result<SourceReply>;
 
@@ -285,7 +278,7 @@ pub trait StreamReader: Send {
 // TODO make fields private and add some nice methods
 /// context for a source
 #[derive(Clone)]
-pub struct SourceContext {
+pub(crate) struct SourceContext {
     /// connector uid
     pub uid: u64,
     /// connector alias
@@ -326,7 +319,7 @@ impl Context for SourceContext {
 
 /// address of a source
 #[derive(Clone, Debug)]
-pub struct SourceAddr {
+pub(crate) struct SourceAddr {
     /// the actual address
     pub addr: Sender<SourceMsg>,
 }
@@ -336,12 +329,12 @@ impl SourceAddr {
     ///
     /// # Errors
     ///  * If sending failed
-    pub async fn send(&self, msg: SourceMsg) -> Result<()> {
+    pub(crate) async fn send(&self, msg: SourceMsg) -> Result<()> {
         Ok(self.addr.send(msg).await?)
     }
 }
 
-/// Builder for the SourceManager
+/// Builder for the `SourceManager`
 #[allow(clippy::module_name_repetitions)]
 pub struct SourceManagerBuilder {
     qsize: usize,
@@ -351,12 +344,15 @@ pub struct SourceManagerBuilder {
 
 impl SourceManagerBuilder {
     /// queue size configured by the tremor runtime
+    #[must_use]
     pub fn qsize(&self) -> usize {
         self.qsize
     }
 
     /// spawn a Manager with the given source implementation
-    pub fn spawn<S>(self, source: S, ctx: SourceContext) -> Result<SourceAddr>
+    /// # Errors
+    /// if the source can not be spawned into a own process
+    pub(crate) fn spawn<S>(self, source: S, ctx: SourceContext) -> Result<SourceAddr>
     where
         S: Source + Send + 'static,
     {
@@ -395,7 +391,10 @@ impl SourceManagerBuilder {
 /// create a builder for a `SourceManager`.
 /// with the generic information available in the connector
 /// the builder then in a second step takes the source specific information to assemble and spawn the actual `SourceManager`.
-pub fn builder(
+///
+/// # Errors
+/// - on invalid connector configuration
+pub(crate) fn builder(
     connector_uid: u64,
     config: &ConnectorConfig,
     connector_default_codec: CodecReq,
@@ -411,9 +410,8 @@ pub fn builder(
                     config.connector_type
                 )
                 .into());
-            } else {
-                CodecConfig::from("null")
             }
+            CodecConfig::from("null")
         }
         CodecReq::Required => config
             .codec
@@ -652,28 +650,6 @@ where
                     );
                 }
                 pipes.append(&mut pipelines);
-                Ok(Control::Continue)
-            }
-            SourceMsg::Unlink { id, port } => {
-                let pipelines = if port.eq_ignore_ascii_case(OUT.as_ref()) {
-                    &mut self.pipelines_out
-                } else if port.eq_ignore_ascii_case(ERR.as_ref()) {
-                    &mut self.pipelines_err
-                } else {
-                    error!(
-                        "[Source::{}] Tried to disconnect from an invalid port: {}",
-                        &self.ctx.alias, &port
-                    );
-                    return Ok(Control::Continue);
-                };
-                pipelines.retain(|(url, _)| url == &id);
-                if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
-                    self.ctx.log_err(
-                        self.source.on_stop(&self.ctx).await,
-                        "on_stop after unlinking failed",
-                    );
-                    return Ok(Control::Terminate);
-                }
                 Ok(Control::Continue)
             }
             SourceMsg::Start if self.state == Initialized => {

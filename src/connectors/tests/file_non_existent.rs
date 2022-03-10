@@ -12,14 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod connectors;
-
+use super::ConnectorHarness;
+use crate::errors::Result;
 use async_std::path::Path;
-use connectors::ConnectorHarness;
-use std::time::Duration;
-use tremor_runtime::errors::Result;
-use tremor_value::literal;
-use value_trait::ValueAccess;
+use tremor_value::prelude::*;
 
 #[async_std::test]
 async fn file_connector() -> Result<()> {
@@ -29,7 +25,7 @@ async fn file_connector() -> Result<()> {
         .parent()
         .unwrap()
         .join("data")
-        .join("input.txt");
+        .join("non_existent.txt");
     let defn = literal!({
         "codec": "string",
         "preprocessors": ["lines"],
@@ -40,45 +36,10 @@ async fn file_connector() -> Result<()> {
     });
 
     let harness = ConnectorHarness::new("file", defn).await?;
-    let out = harness.out().expect("No out pipeline");
-    harness.start().await?;
-
-    harness.wait_for_connected(Duration::from_secs(5)).await?;
-
-    let event = out.get_event().await?;
-    assert_eq!(1, event.len());
-    let value = event.data.suffix().value();
-    let meta = event.data.suffix().meta();
-
-    // value
-    assert_eq!("snot", value.as_str().unwrap());
-    // meta
-    assert_eq!(
-        literal!({
-            "file": {
-                "path": "tests/data/input.txt"
-            }
-        }),
-        meta
-    );
-
-    let event2 = out.get_event().await?;
-    assert_eq!(1, event2.len());
-    let data = event2.data.suffix().value();
-    assert_eq!("badger", data.as_str().unwrap());
+    assert!(harness.start().await.is_err());
 
     let (out_events, err_events) = harness.stop().await?;
-    assert!(
-        out_events.is_empty(),
-        "got some events on OUT port: {:?}",
-        err_events
-    );
-
-    assert!(
-        err_events.is_empty(),
-        "got some events on ERR port: {:?}",
-        err_events
-    );
-
+    assert!(out_events.is_empty());
+    assert!(err_events.is_empty());
     Ok(())
 }

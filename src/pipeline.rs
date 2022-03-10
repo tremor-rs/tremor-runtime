@@ -46,7 +46,7 @@ pub struct Addr {
 impl Addr {
     /// creates a new address
     #[must_use]
-    pub fn new(
+    pub(crate) fn new(
         addr: Sender<Box<Msg>>,
         cf_addr: Sender<CfMsg>,
         mgmt_addr: Sender<MgmtMsg>,
@@ -125,7 +125,7 @@ pub enum CfMsg {
 
 /// Input targets
 #[derive(Debug)]
-pub enum InputTarget {
+pub(crate) enum InputTarget {
     /// another pipeline
     Pipeline(Box<Addr>),
     /// a connector
@@ -143,7 +143,7 @@ impl InputTarget {
 
 /// Output targets
 #[derive(Debug)]
-pub enum OutputTarget {
+pub(crate) enum OutputTarget {
     /// another pipeline
     Pipeline(Box<Addr>),
     /// a connector
@@ -210,7 +210,7 @@ pub(crate) async fn spawn(
 
 /// control plane message
 #[derive(Debug)]
-pub enum MgmtMsg {
+pub(crate) enum MgmtMsg {
     /// input can only ever be connected to the `in` port, so no need to include it here
     ConnectInput {
         /// url of the input to connect
@@ -229,11 +229,6 @@ pub enum MgmtMsg {
         /// the actual target addr
         target: OutputTarget,
     },
-    /// disconnect an output
-    DisconnectOutput(Cow<'static, str>, DeployEndpoint),
-    /// disconnect an input
-    DisconnectInput(DeployEndpoint),
-
     /// FIXME: messages for transitioning from one state to the other
     /// start the pipeline
     Start,
@@ -243,10 +238,6 @@ pub enum MgmtMsg {
     Resume,
     /// stop the pipeline
     Stop,
-
-    /// for testing - ensures we drain the channel up to this message
-    #[cfg(test)]
-    Echo(Sender<()>),
 }
 
 /// an input dataplane message for this pipeline
@@ -521,46 +512,6 @@ pub(crate) async fn pipeline_task(
                     dests.insert(port, vec![(endpoint, target.into())]);
                 }
             }
-            M::M(MgmtMsg::DisconnectOutput(port, to_delete)) => {
-                info!(
-                    "[Pipeline::{}] Disconnecting {} from '{}'",
-                    alias, &to_delete, &port
-                );
-
-                let mut remove = false;
-                if let Some(output_vec) = dests.get_mut(&port) {
-                    while let Some(index) = output_vec.iter().position(|(k, _)| k == &to_delete) {
-                        if let (delete_url, OutputTarget::Pipeline(pipe)) =
-                            output_vec.swap_remove(index)
-                        {
-                            if let Err(e) = pipe
-                                .send_mgmt(MgmtMsg::DisconnectInput(DeployEndpoint::new(
-                                    &alias,
-                                    &port,
-                                    delete_url.meta(),
-                                )))
-                                .await
-                            {
-                                error!(
-                                    "[Pipeline::{}] Error disconnecting input pipeline {}: {}",
-                                    alias, &delete_url, e
-                                );
-                            }
-                        }
-                    }
-                    remove = output_vec.is_empty();
-                }
-                if remove {
-                    dests.remove(&port);
-                }
-            }
-            M::M(MgmtMsg::DisconnectInput(input_url)) => {
-                info!(
-                    "[Pipeline::{}] Disconnecting {} from 'in'",
-                    alias, &input_url
-                );
-                inputs.remove(&input_url);
-            }
             M::M(MgmtMsg::Start) if state == State::Initializing => {
                 // No-op
                 state = State::Running;
@@ -594,15 +545,6 @@ pub(crate) async fn pipeline_task(
             M::M(MgmtMsg::Stop) => {
                 info!("[Pipeline::{}] Stopping...", alias);
                 break;
-            }
-            #[cfg(test)]
-            M::M(MgmtMsg::Echo(sender)) => {
-                if let Err(e) = sender.send(()).await {
-                    error!(
-                        "[Pipeline::{}] Error responding to echo message: {}",
-                        alias, e
-                    );
-                }
             }
         }
     }

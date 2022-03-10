@@ -20,19 +20,19 @@ use crate::source::prelude::*;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use std::env;
 use std::{fs::File, io::Read};
-pub struct GoogleCloudPubSub {
+pub(crate) struct GoogleCloudPubSub {
     config: Config,
     onramp_id: TremorUrl,
 }
 
 #[derive(Clone, Deserialize)]
-pub struct Config {
-    pub subscription: String,
+pub(crate) struct Config {
+    pub(crate) subscription: String,
 }
 
 impl ConfigImpl for Config {}
 
-pub struct Int {
+pub(crate) struct Int {
     config: Config,
     onramp_id: TremorUrl,
     remote: Option<SubscriberClient<pubsub_auth::AuthedService>>,
