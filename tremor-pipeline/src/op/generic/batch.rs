@@ -259,7 +259,7 @@ mod test {
                 "count": 100,
                 "timeout": 1,
             })),
-        )?;
+        );
         let mut op = BatchFactory::new().from_node(42, &node_config)?;
 
         let event1 = Event {
