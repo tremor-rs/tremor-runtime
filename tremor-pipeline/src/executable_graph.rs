@@ -51,8 +51,9 @@ impl NodeConfig {
         self.label.as_deref().unwrap_or(dflt)
     }
 
+    #[cfg(test)]
     /// Creates a `curlNodeConfig` from a config struct
-    pub fn from_config<I>(id: &I, config: Option<tremor_value::Value<'static>>) -> Self
+    pub(crate) fn from_config<I>(id: &I, config: Option<tremor_value::Value<'static>>) -> Self
     where
         I: ToString,
     {
@@ -601,7 +602,7 @@ mod test {
     };
     use tremor_script::prelude::*;
     fn pass(uid: u64, id: &'static str) -> OperatorNode {
-        let config = NodeConfig::from_config(&"passthrough", None).unwrap();
+        let config = NodeConfig::from_config(&"passthrough", None);
         OperatorNode {
             id: id.into(),
             kind: NodeKind::Operator,
