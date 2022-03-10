@@ -178,8 +178,8 @@ impl Flow {
 
     pub(crate) async fn start(
         flow: ast::DeployFlow<'static>,
-        oidgen: &mut OperatorIdGen,
-        cidgen: &mut ConnectorIdGen,
+        operator_id_gen: &mut OperatorIdGen,
+        connector_id_gen: &mut ConnectorIdGen,
         known_connectors: &KnownConnectors,
     ) -> Result<Self> {
         let mut pipelines = HashMap::new();
@@ -194,7 +194,8 @@ impl Flow {
                     let connector = crate::Connector::from_defn(alias, &defn)?;
                     connectors.insert(
                         ConnectorId::from(alias),
-                        connectors::spawn(alias, cidgen, known_connectors, connector).await?,
+                        connectors::spawn(alias, connector_id_gen, known_connectors, connector)
+                            .await?,
                     );
                 }
                 ast::CreateTargetDefinition::Pipeline(defn) => {
@@ -208,7 +209,7 @@ impl Flow {
                     let pipeline = tremor_pipeline::query::Query(
                         tremor_script::query::Query::from_query(query),
                     );
-                    let addr = pipeline::spawn(alias, pipeline, oidgen).await?;
+                    let addr = pipeline::spawn(alias, pipeline, operator_id_gen).await?;
                     pipelines.insert(PipelineId::from(alias), addr);
                 }
             }
@@ -639,7 +640,7 @@ async fn spawn_task(
                 MsgWrapper::Msg(Msg::GetConnectors(reply_tx)) => {
                     let res = connectors.values().cloned().collect::<Vec<_>>();
                     if reply_tx.send(Ok(res)).await.is_err() {
-                        error!("[Flow::{alias}] Error sending GetConnectors response")
+                        error!("[Flow::{alias}] Error sending GetConnectors response");
                     }
                 }
 
@@ -657,7 +658,7 @@ async fn spawn_task(
                         info!("[Flow::{alias}] All connectors are drained.");
                         // upon last drain
                         for drain_sender in drain_senders.drain(..) {
-                            if let Err(_) = drain_sender.send(Ok(())).await {
+                            if drain_sender.send(Ok(())).await.is_err() {
                                 error!("[Flow::{alias}] Error sending successful Drain result");
                             }
                         }
@@ -677,7 +678,7 @@ async fn spawn_task(
                         info!("[Flow::{alias}] All connectors are stopped.");
                         // upon last stop
                         for stop_sender in stop_senders.drain(..) {
-                            if let Err(_) = stop_sender.send(Ok(())).await {
+                            if stop_sender.send(Ok(())).await.is_err() {
                                 error!("[Flow::{alias}] Error sending successful Stop result");
                             }
                         }
@@ -693,7 +694,7 @@ async fn spawn_task(
                         if state != State::Failed {
                             // only report failed upon the first connector failure
                             state = State::Failed;
-                            info!("[Flow::{alias}] Failed.")
+                            info!("[Flow::{alias}] Failed.");
                         }
                     } else if state == State::Initializing {
                         // report started flow if all connectors started
