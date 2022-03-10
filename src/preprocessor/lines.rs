@@ -68,9 +68,8 @@ impl Lines {
                         ),
                     )
                     .into());
-                } else {
-                    config.separator.as_bytes()[0]
                 }
+                config.separator.as_bytes()[0]
             };
             Ok(Self::new(
                 separator,

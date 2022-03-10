@@ -31,27 +31,27 @@ use tokio_postgres::{Client, NoTls, Row, Statement};
 const TIME_FMT: &str = "%Y-%m-%d %H:%M:%S%.6f %:z";
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct Config {
-    pub host: String,
-    pub port: u32,
-    pub user: String,
-    pub password: String,
-    pub dbname: String,
-    pub query: String,
-    pub interval_ms: u32,
-    pub consume_from: String,
-    pub cache: CacheConfig,
+pub(crate) struct Config {
+    pub(crate) host: String,
+    pub(crate) port: u32,
+    pub(crate) user: String,
+    pub(crate) password: String,
+    pub(crate) dbname: String,
+    pub(crate) query: String,
+    pub(crate) interval_ms: u32,
+    pub(crate) consume_from: String,
+    pub(crate) cache: CacheConfig,
 }
 
 impl ConfigImpl for Config {}
 
-pub struct Postgres {
+pub(crate) struct Postgres {
     onramp_id: TremorUrl,
-    pub config: Config,
+    pub(crate) config: Config,
 }
 
-pub struct Int {
-    pub config: Config,
+pub(crate) struct Int {
+    pub(crate) config: Config,
     // onramp_uid: u64,
     onramp_id: TremorUrl,
     origin_uri: EventOriginUri,

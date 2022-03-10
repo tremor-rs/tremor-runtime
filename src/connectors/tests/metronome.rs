@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod connectors;
-
-use connectors::ConnectorHarness;
+use super::ConnectorHarness;
+use crate::errors::Result;
 use std::{thread::sleep, time::Duration};
-use tremor_runtime::errors::Result;
 use tremor_value::prelude::*;
 
 #[async_std::test]

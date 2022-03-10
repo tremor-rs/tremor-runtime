@@ -12,18 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod connectors;
-
-#[macro_use]
-extern crate log;
-use std::time::Duration;
-
+use super::ConnectorHarness;
+use crate::errors::Result;
 use async_std::os::unix::net::UnixStream;
 use async_std::prelude::*;
-use connectors::ConnectorHarness;
+use std::time::Duration;
 use tremor_common::url::ports::IN;
 use tremor_pipeline::{Event, EventId};
-use tremor_runtime::errors::Result;
 use tremor_value::{literal, Value};
 use value_trait::{Builder, ValueAccess};
 

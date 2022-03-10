@@ -25,11 +25,11 @@ use async_std::{
 use std::marker::PhantomData;
 use tremor_common::time::nanotime;
 
-use super::channel_sink::{NoMeta, SinkMeta, SinkMetaBehaviour, WithMeta};
+use super::channel_sink::{SinkMeta, SinkMetaBehaviour, WithMeta};
 use super::{AsyncSinkReply, ContraflowData, EventSerializer, Sink, SinkContext, StreamWriter};
 
 /// simple Sink implementation that is handling only a single stream
-pub struct SingleStreamSink<B>
+pub(crate) struct SingleStreamSink<B>
 where
     B: SinkMetaBehaviour + Send + Sync,
 {
@@ -39,16 +39,9 @@ where
     reply_tx: Sender<AsyncSinkReply>,
 }
 
-impl SingleStreamSink<NoMeta> {
-    /// Constructs a new single stream sink with metadata support redacted
-    pub fn new_no_meta(qsize: usize, reply_tx: Sender<AsyncSinkReply>) -> Self {
-        SingleStreamSink::new(qsize, reply_tx)
-    }
-}
-
 impl SingleStreamSink<WithMeta> {
     /// Constructs a new single stream sink with metadata support enabled
-    pub fn new_with_meta(qsize: usize, reply_tx: Sender<AsyncSinkReply>) -> Self {
+    pub(crate) fn new_with_meta(qsize: usize, reply_tx: Sender<AsyncSinkReply>) -> Self {
         SingleStreamSink::new(qsize, reply_tx)
     }
 }
@@ -58,7 +51,7 @@ where
     B: SinkMetaBehaviour + Send + Sync,
 {
     /// constructs a sink that requires metadata
-    pub fn new(qsize: usize, reply_tx: Sender<AsyncSinkReply>) -> Self {
+    pub(crate) fn new(qsize: usize, reply_tx: Sender<AsyncSinkReply>) -> Self {
         let (tx, rx) = bounded(qsize);
         Self {
             tx,
@@ -68,7 +61,8 @@ where
         }
     }
     /// hand out a `ChannelSinkRuntime` instance in order to register stream writers
-    pub fn runtime(&self) -> SingleStreamSinkRuntime {
+    #[must_use]
+    pub(crate) fn runtime(&self) -> SingleStreamSinkRuntime {
         SingleStreamSinkRuntime {
             rx: self.rx.clone(),
             reply_tx: self.reply_tx.clone(),

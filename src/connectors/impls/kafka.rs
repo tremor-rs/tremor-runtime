@@ -43,7 +43,7 @@ impl AsyncRuntime for SmolRuntime {
 }
 
 /// verify broker host:port pairs in kafka connector configs
-fn verify_brokers(id: &str, brokers: &Vec<String>) -> Result<(String, Option<u16>)> {
+fn verify_brokers(id: &str, brokers: &[String]) -> Result<(String, Option<u16>)> {
     let mut first_broker: Option<(String, Option<u16>)> = None;
     for broker in brokers {
         match broker.split(':').collect::<Vec<_>>().as_slice() {

@@ -67,7 +67,7 @@ where
                     Message::Text(text) => text.into_bytes(),
                     Message::Binary(binary) => {
                         is_binary = true;
-                        binary.clone()
+                        binary
                     }
                     Message::Close(_) => {
                         return Ok(SourceReply::EndStream {

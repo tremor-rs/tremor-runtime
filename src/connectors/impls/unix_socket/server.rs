@@ -19,13 +19,15 @@
 //!
 //! When we have metadata like on an event we receive via the sink part of this connector:
 //!
+//! ```json
 //! {
 //!     "unix_socket_server": {
 //!         "peer": 123
 //!     }
 //! }
+//! ```
 //!
-//! We try to route the event to the connection with stream_id `123`.
+//! We try to route the event to the connection with `stream_id` `123`.
 use crate::connectors::prelude::*;
 use crate::connectors::sink::channel_sink::ChannelSinkMsg;
 use crate::errors::{Kind as ErrorKind, Result};
@@ -79,7 +81,7 @@ impl ConnectorBuilder for Builder {
     }
 }
 
-/// just a stream_id
+/// just a `stream_id`
 #[derive(PartialEq, Eq, Hash, Debug, Clone, Copy)]
 struct ConnectionMeta(u64);
 

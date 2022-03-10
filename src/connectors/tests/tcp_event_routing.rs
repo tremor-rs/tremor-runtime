@@ -12,25 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod connectors;
-
-#[macro_use]
-extern crate log;
-
-use async_std::prelude::*;
+use super::ConnectorHarness;
+use crate::errors::Result;
+use async_std::{
+    io::WriteExt,
+    net::{TcpListener, TcpStream},
+    prelude::*,
+};
 use std::time::Duration;
 use tremor_common::url::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, Value};
 use value_trait::{Builder, ValueAccess};
-
-use async_std::{
-    io::WriteExt,
-    net::{TcpListener, TcpStream},
-    prelude::FutureExt,
-};
-use connectors::ConnectorHarness;
-use tremor_runtime::errors::Result;
 
 #[async_std::test]
 async fn connector_tcp_event_routing() -> Result<()> {

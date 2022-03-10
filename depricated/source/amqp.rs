@@ -31,8 +31,8 @@ use url::Url;
     NoWait 8
 }*/
 #[derive(Deserialize, Debug, Clone)]
-pub struct Config {
-    pub amqp_addr: String,
+pub(crate) struct Config {
+    pub(crate) amqp_addr: String,
     queue_name: String,
     queue_options: QueueDeclareOptions,
     #[serde(default = "Default::default")]
@@ -43,12 +43,12 @@ pub struct Config {
 
 impl ConfigImpl for Config {}
 
-pub struct Amqp {
-    pub config: Config,
+pub(crate) struct Amqp {
+    pub(crate) config: Config,
     onramp_id: TremorUrl,
 }
 
-pub struct Int {
+pub(crate) struct Int {
     config: Config,
     amqp_url: Url,
     onramp_id: TremorUrl,

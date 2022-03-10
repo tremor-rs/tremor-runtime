@@ -18,7 +18,7 @@ use tremor_value::{literal, structurize};
 use super::meta::*;
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
-use crate::connectors::utils::mime::*;
+use crate::connectors::utils::mime::MimeCodecMap;
 use crate::postprocessor::{self, Postprocessors};
 use crate::preprocessor::{self, Preprocessors};
 
@@ -55,7 +55,7 @@ impl ConnectorBuilder for Builder {
         let _preprocessor_configs = connector_config.preprocessors.clone().unwrap_or_default();
         let _postprocessor_configs = connector_config.postprocessors.clone().unwrap_or_default();
         if let Some(config) = &connector_config.config {
-            let config = Config::new(&config)?;
+            let config = Config::new(config)?;
             let _codec_map: MimeCodecMap =
                 if let Some(codec_map) = &connector_config.config.get("codec_map") {
                     let value: Value = (*codec_map).clone();
@@ -299,7 +299,7 @@ impl Sink for HttpRequestSink {
                         Err(_e) => {
                             error!(
                                 "Unhandled / unexpected condition responding to http_server event"
-                            )
+                            );
                         }
                     };
                     drop(guard);
@@ -340,7 +340,6 @@ mod tests {
             "postprocessors": [ "lines" ],
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
-            "snot",
             ConnectorType("rest_client".into()),
             with_processors,
         )?;
@@ -362,7 +361,6 @@ mod tests {
             "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
-            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
@@ -383,7 +381,6 @@ mod tests {
             "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
-            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
@@ -404,7 +401,6 @@ mod tests {
             "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
-            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
@@ -420,7 +416,6 @@ mod tests {
             "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
-            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
@@ -440,7 +435,6 @@ mod tests {
             "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
-            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
@@ -459,7 +453,6 @@ mod tests {
             "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
-            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
@@ -482,7 +475,6 @@ mod tests {
                     "preprocessors": [ "lines" ]
                 });
         let config: ConnectorConfig = crate::config::Connector::from_config(
-            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;
@@ -505,7 +497,6 @@ mod tests {
             "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
-            "snot",
             ConnectorType("rest_client".into()),
             connector_config,
         )?;

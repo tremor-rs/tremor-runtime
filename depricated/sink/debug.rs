@@ -33,7 +33,7 @@ struct DebugBucket {
     cnt: u64,
 }
 
-pub struct Debug {
+pub(crate) struct Debug {
     last: Instant,
     update_time: Duration,
     buckets: HashMap<String, DebugBucket>,

@@ -33,7 +33,7 @@ use http::HeaderMap;
 use tremor_pipeline::{EventIdGenerator, OpMeta};
 use tremor_value::Value;
 
-pub struct GoogleCloudStorage {
+pub(crate) struct GoogleCloudStorage {
     remote: Option<GcsClient>,
     is_down: bool,
     qos_facility: Box<dyn SinkQoS>,

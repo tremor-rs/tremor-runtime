@@ -16,7 +16,6 @@ use beef::Cow;
 use halfbrown::HashMap;
 use http_types::headers::HeaderValue;
 use http_types::{Method, Mime, Url};
-use simd_json::StaticNode;
 use std::str::FromStr;
 use tremor_common::time::nanotime;
 use tremor_pipeline::{CbAction, Event, EventOriginUri, DEFAULT_STREAM_ID};
@@ -30,7 +29,7 @@ use crate::codec::{self, Codec};
 use crate::connectors::impls::http::utils::{SurfRequest, SurfRequestBuilder, SurfResponse};
 use crate::connectors::prelude::ConfigImpl;
 use crate::connectors::source::SourceReply;
-use crate::connectors::utils::mime::*;
+use crate::connectors::utils::mime::MimeCodecMap;
 use crate::connectors::ConnectorConfig;
 use crate::connectors::ConnectorType;
 use crate::errors::{Error, Result};
@@ -104,8 +103,8 @@ pub(crate) enum ResponseEventCont {
 
 impl HttpResponseMeta {
     #[allow(dead_code)]
-    pub(crate) fn from_config(_config: &ConnectorConfig, _default_codec: &str) -> Result<Self> {
-        Ok(HttpResponseMeta {})
+    pub(crate) fn from_config(_config: &ConnectorConfig, _default_codec: &str) -> Self {
+        HttpResponseMeta {}
     }
 
     /// Conditionally Converts a HTTP response to a tremor event
@@ -188,9 +187,9 @@ impl HttpResponseMeta {
                     error!(
                         "[Rest::{}] HTTP request failed: {} => {}",
                         &origin_uri, status, body
-                    )
+                    );
                 } else {
-                    error!("[Rest:{}] HTTP request failed: {}", &origin_uri, status)
+                    error!("[Rest:{}] HTTP request failed: {}", &origin_uri, status);
                 }
             }
             CbAction::Fail
@@ -262,7 +261,7 @@ impl BatchItemMeta {
         for (k, v) in &self.headers {
             let mut values = Vec::new();
             for hv in v {
-                values.push(hv.to_string())
+                values.push(hv.to_string());
             }
             let k = k.as_str();
             headers.insert(Cow::from(k), Value::from(values));
@@ -273,64 +272,48 @@ impl BatchItemMeta {
             "method": self.method.to_string(),
             "headers": headers,
             "codec": self.codec.name(),
-            "correlation": if let Some(correlation) = &self.correlation {
-                    correlation.clone_static()
-                } else {
-                    Value::Static(StaticNode::Null)
-                },
+            "correlation":  self.correlation.as_ref().map_or(Value::const_null(), Value::clone_static)
+                    ,
         })
         .into_static()
     }
 }
 
 impl HttpRequestMeta {
-    fn _choose<X, Y, T>(value: &Value, field_name: &str, transform: X, alternate: Y) -> T
-    where
-        X: FnOnce(Value<'static>) -> T,
-        Y: FnOnce() -> T,
-        T: Sized,
-    {
-        if let Some(target) = value.get(field_name) {
-            return transform(target.clone_static());
-        }
-
-        // Fallthrough - use alternate
-        alternate()
-    }
-
     fn refresh_active_codec<'event>(
         codec_map: &'event MimeCodecMap,
         name: &str,
-        values: &Vec<HeaderValue>,
-        active_codec: Option<&'event Box<dyn Codec>>,
-    ) -> Result<Option<&'event Box<dyn Codec>>> {
+        values: &[HeaderValue],
+        active_codec: Option<&'event (dyn Codec + 'static)>,
+    ) -> Option<&'event (dyn Codec + 'static)> {
         if "content-type".eq_ignore_ascii_case(name) {
             if let Some(active_codec) = active_codec {
-                return Ok(Some(active_codec));
-            } else {
-                if let Some(v) = values.first() {
-                    // NOTE - we do not currently handle attributes like `charset=UTF-8` correctly
-                    if let Ok(as_mime) = Mime::from_str(&v.to_string()) {
-                        let essence = as_mime.essence();
-                        return Ok(codec_map.map.get(essence));
-                    }
+                return Some(active_codec);
+            } else if let Some(v) = values.first() {
+                // NOTE - we do not currently handle attributes like `charset=UTF-8` correctly
+                if let Ok(as_mime) = Mime::from_str(&v.to_string()) {
+                    let essence = as_mime.essence();
+                    return codec_map.map.get(essence).map(Box::as_ref);
                 }
             }
         };
 
         // Fallthrough - use prior active
-        Ok(active_codec)
+        active_codec
     }
 
     fn meta_to_header_map<'outer, 'event>(
-        from_meta: Value<'static>,
+        from_meta: &Value,
         codec_map: &'outer MimeCodecMap,
-        default_codec: &'outer Box<dyn Codec>,
-    ) -> Result<(HashMap<String, Vec<HeaderValue>>, &'outer Box<dyn Codec>)>
+        default_codec: &'outer (dyn Codec + 'static),
+    ) -> Result<(
+        HashMap<String, Vec<HeaderValue>>,
+        &'outer (dyn Codec + 'static),
+    )>
     where
         'outer: 'event,
     {
-        if let Value::Object(from_meta) = from_meta {
+        if let Some(from_meta) = from_meta.as_object() {
             Self::to_header_map(from_meta, codec_map, default_codec)
         } else {
             Err(Error::from(
@@ -340,10 +323,13 @@ impl HttpRequestMeta {
     }
 
     fn to_header_map<'outer, 'event, T>(
-        from_config: Box<HashMap<T, Value<'static>>>,
+        from_config: &HashMap<T, Value>,
         codec_map: &'outer MimeCodecMap,
-        default_codec: &'outer Box<dyn Codec>,
-    ) -> Result<(HashMap<String, Vec<HeaderValue>>, &'outer Box<dyn Codec>)>
+        default_codec: &'outer (dyn Codec + 'static),
+    ) -> Result<(
+        HashMap<String, Vec<HeaderValue>>,
+        &'outer (dyn Codec + 'static),
+    )>
     where
         'outer: 'event,
         T: ToString,
@@ -368,9 +354,9 @@ impl HttpRequestMeta {
                     name,
                     &active_values,
                     Some(default_codec),
-                )?;
+                );
             } else if let Value::String(flat) = values {
-                active_values.push(HeaderValue::from_str(&flat.to_string())?);
+                active_values.push(HeaderValue::from_str(flat)?);
             } else {
                 // NOTE - assumes headers set in metadata are of the form:
                 // * { "string": "string" } -> its a flat string value
@@ -396,12 +382,12 @@ impl HttpRequestMeta {
     pub(crate) fn from_config(config: &ConnectorConfig, default_codec: &str) -> Result<Self> {
         let _connector_type = ConnectorType("http_client".to_string());
         let preprocessors = if let Some(preprocessors) = &config.preprocessors {
-            crate::preprocessor::make_preprocessors(&preprocessors)?
+            crate::preprocessor::make_preprocessors(preprocessors)?
         } else {
             vec![]
         };
         let postprocessors = if let Some(postprocessors) = &config.postprocessors {
-            crate::postprocessor::make_postprocessors(&postprocessors)?
+            crate::postprocessor::make_postprocessors(postprocessors)?
         } else {
             vec![]
         };
@@ -414,7 +400,7 @@ impl HttpRequestMeta {
         };
 
         let codec = if let Some(codec) = &config.codec {
-            codec::resolve(&codec)?
+            codec::resolve(codec)?
         } else {
             codec::resolve(&default_codec.into())?
         };
@@ -427,9 +413,9 @@ impl HttpRequestMeta {
         for (k, v) in user_specified.headers {
             // NOTE Not ideal as it doesn't capture conversion errors to HeaderValue
             // at the earliest opportunity
-            let hv = v.into_iter().map(|x| Value::from(x)).collect();
+            let hv = v.into_iter().map(Value::from).collect();
             if let Some(_duplicate) = active_headers.insert(k, hv) {
-                warn!("duplicate headers not allowed in config error")
+                warn!("duplicate headers not allowed in config error");
             }
         }
 
@@ -440,16 +426,15 @@ impl HttpRequestMeta {
         // Resolve user provided default HTTP headers
         let (active_headers, _active_codec) = Self::to_header_map(
             // TODO wire in
-            Box::new(active_headers), // NOTE We box the config variant, as metadata overrides will always be boxed, whereas config occurs once
+            &active_headers, // NOTE We box the config variant, as metadata overrides will always be boxed, whereas config occurs once
             &user_specified.codec_map,
-            &codec,
+            codec.as_ref(),
         )?;
 
         Ok(Self::new(
             user_specified.codec_map,
             user_specified.url,
             active_method,
-            active_auth,
             active_headers,
             codec,
             preprocessors,
@@ -461,7 +446,6 @@ impl HttpRequestMeta {
         codec_map: MimeCodecMap,
         default_endpoint: String,
         default_method: Method,
-        _default_auth: HttpAuth,
         default_headers: HashMap<String, Vec<HeaderValue>>,
         codec: Box<dyn Codec>,
         preprocessors: Vec<Box<dyn Preprocessor>>,
@@ -481,25 +465,16 @@ impl HttpRequestMeta {
 
     fn per_batch_item_overrides(&mut self, meta: &Value) -> Result<BatchItemMeta> {
         if let Some(overrides) = meta.get("request") {
-            let active_endpoint = Self::_choose(
-                overrides,
-                "url",
-                |x| x.to_string(),
-                || self.endpoint.clone(),
-            );
-            let active_method = Self::_choose(
-                overrides,
-                "method",
-                |x| Method::from_str(&x.to_string()),
-                || Ok(self.method),
-            )?;
-            let active_correlation: Option<Value<'static>> =
-                Self::_choose(overrides, "correlation", |x| Some(x), || None);
-            let (mut active_headers, active_codec) = Self::_choose(
-                overrides,
-                "headers",
-                |x| Self::meta_to_header_map(x, &self.codec_map, &self.codec),
-                || Ok((self.headers.clone(), &self.codec)),
+            let active_endpoint = overrides
+                .get_str("url")
+                .map_or_else(|| self.endpoint.clone(), ToString::to_string);
+            let active_method = overrides
+                .get_str("method")
+                .map_or_else(|| Ok(self.method), Method::from_str)?;
+            let active_correlation = overrides.get("correlation").map(Value::clone_static);
+            let (mut active_headers, active_codec) = overrides.get("headers").map_or_else(
+                || Ok((self.headers.clone(), self.codec.as_ref())),
+                |x| Self::meta_to_header_map(x, &self.codec_map, self.codec.as_ref()),
             )?;
 
             let active_auth = HttpAuth::from(overrides.get("auth"));
@@ -535,7 +510,7 @@ impl HttpRequestMeta {
         let mut body: Vec<u8> = vec![];
         let mut active_meta = BatchItemMeta {
             endpoint: self.endpoint.clone(),
-            method: self.method.clone(),
+            method: self.method,
             //            auth: self.auth.clone(),
             headers: self.headers.clone(),
             codec: self.codec.boxed_clone(),
@@ -556,12 +531,12 @@ impl HttpRequestMeta {
         }
 
         Ok((
-            self.into_request(&active_meta, body)?,
+            Self::into_request(&active_meta, &body)?,
             active_meta.to_value(),
         ))
     }
 
-    fn into_request(&self, meta: &BatchItemMeta, body: Vec<u8>) -> Result<SurfRequest> {
+    fn into_request(meta: &BatchItemMeta, body: &[u8]) -> Result<SurfRequest> {
         debug!("Rest endpoint [{}] chosen", &meta.endpoint);
         let endpoint_url = Url::parse(&meta.endpoint)?;
         let host = match (endpoint_url.host(), endpoint_url.port()) {
@@ -574,7 +549,7 @@ impl HttpRequestMeta {
 
         // Build headers from meta - effectively overwrite config headers in case of conflict
         for (k, v) in &meta.headers {
-            if "content-type".eq_ignore_ascii_case(&k) {
+            if "content-type".eq_ignore_ascii_case(k) {
                 'inner: for hv in v {
                     if let Ok(mime) = Mime::from_str(hv.as_str()) {
                         request_builder = request_builder.content_type(mime);
@@ -591,7 +566,7 @@ impl HttpRequestMeta {
         if let Some(host) = host {
             request_builder = request_builder.header("Host", host);
         }
-        request_builder = request_builder.body_bytes(&body);
+        request_builder = request_builder.body_bytes(body);
         Ok(request_builder.build())
     }
 }

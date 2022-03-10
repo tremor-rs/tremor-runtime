@@ -85,8 +85,8 @@ fn json_otel_metrics_to_pb(json: &Value<'_>) -> Result<ExportMetricsServiceReque
     Ok(pb)
 }
 
-/// The OpenTelemetry client connector
-pub struct OtelClient {
+/// The `OpenTelemetry` client connector
+pub struct Client {
     config: Config,
     #[allow(dead_code)]
     id: String,
@@ -96,7 +96,7 @@ pub struct OtelClient {
     remote: Option<RemoteOpenTelemetryEndpoint>,
 }
 
-impl std::fmt::Debug for OtelClient {
+impl std::fmt::Debug for Client {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "OtelClient")
     }
@@ -124,8 +124,8 @@ impl ConnectorBuilder for Builder {
         };
         let (tx, rx) = bounded(128);
         if let Some(config) = &connector_config.config {
-            Ok(Box::new(OtelClient {
-                config: Config::new(&config)?,
+            Ok(Box::new(Client {
+                config: Config::new(config)?,
                 id: id.to_string(),
                 origin_uri,
                 tx,
@@ -146,7 +146,7 @@ pub struct RemoteOpenTelemetryEndpoint {
 }
 
 #[async_trait::async_trait]
-impl Connector for OtelClient {
+impl Connector for Client {
     fn codec_requirements(&self) -> CodecReq {
         CodecReq::Structured
     }
@@ -388,7 +388,6 @@ mod tests {
             },
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
-            "snot",
             ConnectorType("otel_client".into()),
             with_processors,
         )?;

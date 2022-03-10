@@ -27,19 +27,19 @@ use crate::sink::prelude::*;
 use halfbrown::HashMap;
 use postgres::{Client, NoTls};
 
-pub struct Postgres {
-    pub config: Config,
+pub(crate) struct Postgres {
+    pub(crate) config: Config,
     client: Option<postgres::Client>,
 }
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct Config {
-    pub host: String,
-    pub port: u32,
-    pub user: String,
-    pub password: String,
-    pub dbname: String,
-    pub table: String,
+pub(crate) struct Config {
+    pub(crate) host: String,
+    pub(crate) port: u32,
+    pub(crate) user: String,
+    pub(crate) password: String,
+    pub(crate) dbname: String,
+    pub(crate) table: String,
 }
 
 impl ConfigImpl for Config {}

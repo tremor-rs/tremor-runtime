@@ -31,10 +31,10 @@ use std::time::SystemTime;
 use tremor_script::prelude::*;
 
 #[derive(Debug)]
-pub struct Record<'a> {
-    pub t: postgres::types::Type,
-    pub value: &'a Value<'a>,
-    pub name: &'a str,
+pub(crate) struct Record<'a> {
+    pub(crate) t: postgres::types::Type,
+    pub(crate) value: &'a Value<'a>,
+    pub(crate) name: &'a str,
 }
 
 impl postgres::types::ToSql for Record<'_> {
@@ -183,7 +183,7 @@ impl postgres::types::ToSql for Record<'_> {
     to_sql_checked!();
 }
 
-pub fn json_to_record<'a>(json: &'a Value<'a>) -> Result<Record> {
+pub(crate) fn json_to_record<'a>(json: &'a Value<'a>) -> Result<Record> {
     let field_type = match json.get_str("fieldType") {
         Some(v) => v,
         None => return Err("error getting fieldType".into()),
@@ -218,7 +218,7 @@ pub fn json_to_record<'a>(json: &'a Value<'a>) -> Result<Record> {
 
     Ok(Record { t, value, name })
 }
-pub fn row_to_json(
+pub(crate) fn row_to_json(
     row: &postgres::row::Row,
 ) -> std::result::Result<Value<'static>, Box<dyn std::error::Error + Sync + Send>> {
     let mut json: Value<'static> = Value::object();

@@ -32,23 +32,23 @@ use log::debug;
 use crate::sink::prelude::*;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Config {
+pub(crate) struct Config {
     /// NewRelic license/insert_key key
     #[serde(flatten)]
-    pub key: Key,
+    pub(crate) key: Key,
     /// Choose if logs should be compressed before sending to newrelic
     /// This avoids extra egress costs but increases CPU usage on tremor server
     #[serde(default)]
-    pub compress_logs: bool,
+    pub(crate) compress_logs: bool,
     /// Region to use to send logs
     /// use Europe in case you need to be GDPR compliant
     #[serde(default)]
-    pub region: Region,
+    pub(crate) region: Region,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Key {
+pub(crate) enum Key {
     /// NewRelic license key
     LicenseKey(String),
     /// NewRelic insert only key
@@ -59,7 +59,7 @@ impl ConfigImpl for Config {}
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Region {
+pub(crate) enum Region {
     Usa,
     Europe,
     #[cfg(test)]
@@ -73,7 +73,7 @@ impl Default for Region {
 }
 
 impl Region {
-    pub fn logs_url(&self) -> &str {
+    pub(crate) fn logs_url(&self) -> &str {
         match self {
             Self::Usa => "https://log-api.newrelic.com/log/v1",
             Self::Europe => "https://log-api.eu.newrelic.com/log/v1",
@@ -83,7 +83,7 @@ impl Region {
     }
 }
 
-pub struct NewRelic {
+pub(crate) struct NewRelic {
     config: Config,
 }
 

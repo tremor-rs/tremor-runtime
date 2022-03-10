@@ -32,25 +32,25 @@ use tremor_value::Value;
 use value_trait::ValueAccess;
 
 /// Behavioral trait for defining if a Channel Sink needs metadata or not
-pub trait SinkMetaBehaviour: Send + Sync {
+pub(crate) trait SinkMetaBehaviour: Send + Sync {
     /// Does this channel sink need metadata
     const NEEDS_META: bool;
 }
 
 /// Marker that this sink doesn't need any metadata
-pub struct NoMeta {}
+pub(crate) struct NoMeta {}
 impl SinkMetaBehaviour for NoMeta {
     const NEEDS_META: bool = false;
 }
 
 /// Marker that this sink needs metadata - and thus requires a clone
-pub struct WithMeta {}
+pub(crate) struct WithMeta {}
 impl SinkMetaBehaviour for WithMeta {
     const NEEDS_META: bool = true;
 }
 
 /// messages a channel sink can receive
-pub enum ChannelSinkMsg<M>
+pub(crate) enum ChannelSinkMsg<M>
 where
     M: Hash + Eq + Send + 'static,
 {
@@ -68,23 +68,23 @@ where
 }
 
 /// Metadata for a sink message
-pub type SinkMeta = Value<'static>;
+pub(crate) type SinkMeta = Value<'static>;
 
 /// some data for a `ChannelSink` stream
 #[derive(Clone, Debug)]
-pub struct SinkData {
+pub(crate) struct SinkData {
     /// data to send
-    pub data: Vec<Vec<u8>>,
+    pub(crate) data: Vec<Vec<u8>>,
     /// async reply utils (if required)
-    pub contraflow: Option<(ContraflowData, Sender<AsyncSinkReply>)>,
+    pub(crate) contraflow: Option<(ContraflowData, Sender<AsyncSinkReply>)>,
     /// Metadata for this request
-    pub meta: Option<SinkMeta>,
+    pub(crate) meta: Option<SinkMeta>,
     /// timestamp of processing start
-    pub start: u64,
+    pub(crate) start: u64,
 }
 
 /// tracking 1 channel per stream
-pub struct ChannelSink<M, F, B>
+pub(crate) struct ChannelSink<M, F, B>
 where
     M: Hash + Eq + Send + 'static,
     F: Fn(&Value<'_>) -> Option<M>,
@@ -104,15 +104,8 @@ where
     T: Hash + Eq + Send + 'static,
     F: Fn(&Value<'_>) -> Option<T>,
 {
-    /// constructor of a ChannelSink that is not sending the event metadata to the StreamWriter
-    /// and by that saves an expensive clone()
-    pub fn new_no_meta(qsize: usize, resolver: F, reply_tx: Sender<AsyncSinkReply>) -> Self {
-        let (tx, rx) = bounded(qsize);
-        ChannelSink::new(resolver, reply_tx, tx, rx)
-    }
-
     /// Construct a new instance that redacts metadata with prepared `rx` and `tx`
-    pub fn from_channel_no_meta(
+    pub(crate) fn from_channel_no_meta(
         resolver: F,
         reply_tx: Sender<AsyncSinkReply>,
         tx: Sender<ChannelSinkMsg<T>>,
@@ -128,18 +121,12 @@ where
     F: Fn(&Value<'_>) -> Option<T>,
 {
     /// Construct a new instance of a channel sink with metadata support
-    pub fn new_with_meta(qsize: usize, resolver: F, reply_tx: Sender<AsyncSinkReply>) -> Self {
-        let (tx, rx) = bounded(qsize);
-        ChannelSink::new(resolver, reply_tx, tx, rx)
-    }
-
-    /// Construct a new instance with metadata support with prepared `rx` and `tx`
-    pub fn from_channel_with_meta(
+    pub(crate) fn new_with_meta(
+        qsize: usize,
         resolver: F,
         reply_tx: Sender<AsyncSinkReply>,
-        tx: Sender<ChannelSinkMsg<T>>,
-        rx: Receiver<ChannelSinkMsg<T>>,
     ) -> Self {
+        let (tx, rx) = bounded(qsize);
         ChannelSink::new(resolver, reply_tx, tx, rx)
     }
 }
@@ -151,10 +138,10 @@ where
     F: Fn(&Value<'_>) -> Option<T>,
     B: SinkMetaBehaviour,
 {
-    /// constructor of a ChannelSink that is sending the event metadata to the StreamWriter
+    /// constructor of a `ChannelSink` that is sending the event metadata to the `StreamWriter`
     /// in case it needs it in the write.
     /// This costs a clone.
-    pub fn new(
+    pub(crate) fn new(
         resolver: F,
         reply_tx: Sender<AsyncSinkReply>,
         tx: Sender<ChannelSinkMsg<T>>,
@@ -174,7 +161,7 @@ where
     }
 
     /// hand out a `ChannelSinkRuntime` instance in order to register stream writers
-    pub fn runtime(&self) -> ChannelSinkRuntime<T> {
+    pub(crate) fn runtime(&self) -> ChannelSinkRuntime<T> {
         ChannelSinkRuntime {
             tx: self.tx.clone(),
         }
@@ -242,7 +229,7 @@ where
 
 /// The runtime driving the part of the sink that is receiving data and writing it out
 #[derive(Clone)]
-pub struct ChannelSinkRuntime<T>
+pub(crate) struct ChannelSinkRuntime<T>
 where
     T: Hash + Eq + Send + 'static,
 {

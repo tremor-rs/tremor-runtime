@@ -38,7 +38,7 @@ use rdkafka::{ClientContext, Statistics};
 use rdkafka_sys::RDKafkaErrorCode;
 use tremor_common::time::nanotime;
 
-const KAFKA_PRODUCER_META_KEY: &'static str = "kafka_producer";
+const KAFKA_PRODUCER_META_KEY: &str = "kafka_producer";
 
 #[derive(Deserialize, Clone)]
 pub struct Config {
@@ -82,17 +82,14 @@ impl ConnectorBuilder for Builder {
         if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
 
-            let _ = super::verify_brokers(alias, &config.brokers)?;
+            super::verify_brokers(alias, &config.brokers)?;
             let mut producer_config = ClientConfig::new();
 
             // ENABLE LIBRDKAFKA DEBUGGING:
             // - set librdkafka logger to debug in logger.yaml
             // - configure: debug: "all" for this onramp
             producer_config
-                .set(
-                    "client.id",
-                    &format!("tremor-{}-{}", hostname(), alias.to_string()),
-                )
+                .set("client.id", &format!("tremor-{}-{}", hostname(), alias))
                 .set("bootstrap.servers", config.brokers.join(","))
                 .set("message.timeout.ms", "5000")
                 .set("queue.buffering.max.ms", "0"); // set to 0 for sending each message out immediately without kafka client internal batching --> low latency, busy network
@@ -132,6 +129,7 @@ struct TremorProducerContext {
 }
 
 impl ClientContext for TremorProducerContext {
+    #[allow(clippy::cast_sign_loss)] // Sadly we need to use the kafka types
     fn stats(&self, stats: Statistics) {
         if stats.client_type.eq("producer") {
             let timestamp = stats.time as u64 * 1_000_000_000;
@@ -166,7 +164,9 @@ impl ClientContext for TremorProducerContext {
         if !self.connect_tx.is_closed() {
             if is_fatal(&error) || is_failed_connect_error(&error) {
                 // ignore any errors here, if the queue is full, we are probably not in the connect phase anymore
-                let _ = self.connect_tx.try_send(error.clone());
+                if let Err(e) = self.connect_tx.try_send(error) {
+                    warn!("{} Erro sending connect message: {e}", self.ctx);
+                }
                 self.connect_tx.close();
             }
         } else if is_fatal(&error) {
@@ -257,7 +257,7 @@ impl Sink for KafkaProducerSink {
             let kafka_key = kafka_meta
                 .get("key")
                 .and_then(Value::as_bytes)
-                .or_else(|| self.config.key.as_ref().map(|s| s.as_bytes()));
+                .or_else(|| self.config.key.as_ref().map(String::as_bytes));
             for payload in serializer.serialize(value, ingest_ns)? {
                 let mut record = FutureRecord::to(self.config.topic.as_str());
                 if let Some(key) = kafka_key {
@@ -396,10 +396,8 @@ async fn wait_for_delivery(
         Ok(results) => {
             if let Some((kafka_error, _)) = results.into_iter().find_map(std::result::Result::err) {
                 error!("{ctx} Error delivering kafka record: {kafka_error}");
-                if is_fatal(&kafka_error) {
-                    if ctx.notifier().notify().await.is_err() {
-                        error!("{ctx} Error notifying runtime of fatal Kafka error");
-                    }
+                if is_fatal(&kafka_error) && ctx.notifier().notify().await.is_err() {
+                    error!("{ctx} Error notifying runtime of fatal Kafka error");
                 }
                 cf_data.map(AsyncSinkReply::Fail)
             } else {
@@ -433,23 +431,8 @@ fn is_fatal(e: &KafkaError) -> bool {
         | KafkaError::OffsetFetch(code)
         | KafkaError::SetPartitionOffset(code)
         | KafkaError::StoreOffset(code) => matches!(code, RDKafkaErrorCode::Fatal),
-        // FFI error this is very bad
-        KafkaError::Nul(_) => true,
         // Check if it is a fatal transaction error
         KafkaError::Transaction(e) => e.is_fatal(),
-        // Creational errors, this should never apear during send
-        KafkaError::AdminOpCreation(_) => false,
-        KafkaError::ClientCreation(_) => false,
-        KafkaError::ClientConfig(_, _, _, _) => false,
-        KafkaError::Subscription(_) => false,
-        // Consumer error - we never seek on a producer
-        KafkaError::PartitionEOF(_) => false,
-        KafkaError::Seek(_) => false,
-        // Not sure what this exactly does - verify
-        KafkaError::Canceled => false,
-        KafkaError::NoMessageReceived => false,
-        // is not fatal might want to look into this for an enhancement later
-        KafkaError::PauseResume(_) => false,
         // This is required due to `KafkaError` being mared as `#[non_exhaustive]`
         _ => false,
     }

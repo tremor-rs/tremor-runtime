@@ -58,8 +58,8 @@ fn d_true() -> bool {
 
 impl ConfigImpl for Config {}
 
-/// The OpenTelemetry client connector
-pub struct OtelServer {
+/// The `OpenTelemetry` client connector
+pub struct Server {
     config: Config,
     #[allow(dead_code)]
     id: String,
@@ -69,7 +69,7 @@ pub struct OtelServer {
     rx: Receiver<OpenTelemetryEvents>,
 }
 
-impl std::fmt::Debug for OtelServer {
+impl std::fmt::Debug for Server {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "OtelServer")
     }
@@ -97,8 +97,8 @@ impl ConnectorBuilder for Builder {
         };
         let (tx, rx) = bounded(128);
         if let Some(config) = &connector_config.config {
-            Ok(Box::new(OtelServer {
-                config: Config::new(&config)?,
+            Ok(Box::new(Server {
+                config: Config::new(config)?,
                 id: id.to_string(),
                 origin_uri,
                 accept_task: None,
@@ -112,7 +112,7 @@ impl ConnectorBuilder for Builder {
 }
 
 #[async_trait::async_trait]
-impl Connector for OtelServer {
+impl Connector for Server {
     fn codec_requirements(&self) -> CodecReq {
         CodecReq::Structured
     }
@@ -244,7 +244,6 @@ mod tests {
             },
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
-            "snot",
             ConnectorType("otel_server".into()),
             with_processors,
         )?;

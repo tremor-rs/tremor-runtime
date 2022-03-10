@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::flow::{Flow, FlowId};
-use crate::connectors::{ConnectorBuilder, ConnectorType, KnownConnectors};
+use super::flow::{Flow, Id};
+use crate::connectors::{self, ConnectorBuilder, ConnectorType};
 use crate::errors::{Kind as ErrorKind, Result};
 use crate::system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
 use async_std::channel::{bounded, Sender};
@@ -41,7 +41,7 @@ pub(crate) enum Msg {
         builder: Box<dyn ConnectorBuilder>,
     },
     GetFlows(Sender<Result<Vec<Flow>>>),
-    GetFlow(FlowId, Sender<Result<Flow>>),
+    GetFlow(Id, Sender<Result<Flow>>),
     /// Initiate the Quiescence process
     Drain(Sender<Result<()>>),
     /// stop this manager
@@ -51,10 +51,10 @@ pub(crate) enum Msg {
 // FIXME: better name, Manager sounds stupid
 #[derive(Debug)]
 pub(crate) struct Manager {
-    flows: HashMap<FlowId, Flow>,
+    flows: HashMap<Id, Flow>,
     operator_id_gen: OperatorIdGen,
     connector_id_gen: ConnectorIdGen,
-    known_connectors: KnownConnectors,
+    known_connectors: connectors::Known,
     qsize: usize,
 }
 
@@ -62,7 +62,7 @@ impl Manager {
     pub fn new(qsize: usize) -> Self {
         Self {
             flows: HashMap::new(),
-            known_connectors: KnownConnectors::new(),
+            known_connectors: connectors::Known::new(),
             operator_id_gen: OperatorIdGen::new(),
             connector_id_gen: ConnectorIdGen::new(),
             qsize,
@@ -87,7 +87,7 @@ impl Manager {
                         }
                     }
                     Msg::StartDeploy { flow, sender } => {
-                        let id = FlowId::from(&flow);
+                        let id = Id::from(&flow);
                         let res = match self.flows.entry(id.clone()) {
                             Entry::Occupied(_occupied) => {
                                 Err(ErrorKind::DuplicateFlow(id.0.clone()).into())
