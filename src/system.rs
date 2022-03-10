@@ -96,6 +96,7 @@ impl World {
             Ok(())
         }
     }
+
     /// Registers the given connector type with `type_name` and the corresponding `builder`
     ///
     /// # Errors
@@ -116,6 +117,9 @@ impl World {
     // METHODS EXPOSED BECAUSE API
 
     /// Get a flow instance address identified by `flow_id`
+    ///
+    /// # Errors
+    ///  * if we fail to send the request or fail to receive it
     pub async fn get_flow(&self, flow_id: String) -> Result<Flow> {
         let (flow_tx, flow_rx) = bounded(1);
         let flow_id = FlowId(flow_id);
@@ -126,6 +130,9 @@ impl World {
     }
 
     /// list the currently deployed flows
+    ///
+    /// # Errors
+    ///  * if we fail to send the request or fail to receive it
     pub async fn get_flows(&self) -> Result<Vec<Flow>> {
         let (reply_tx, reply_rx) = bounded(1);
         self.system.send(manager::Msg::GetFlows(reply_tx)).await?;
