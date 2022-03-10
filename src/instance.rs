@@ -22,7 +22,7 @@ use std::fmt::Display;
 /// Possible lifecycle states of an instance
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub enum InstanceState {
+pub enum State {
     /// initializing - first state after coming to life
     Initializing,
     /// Running and consuming/producing/handling events
@@ -37,15 +37,15 @@ pub enum InstanceState {
     Failed,
 }
 
-impl InstanceState {
+impl State {
     /// checks if the state is stopped
     #[must_use]
     pub fn is_stopped(&self) -> bool {
-        *self == InstanceState::Stopped
+        *self == State::Stopped
     }
 }
 
-impl Display for InstanceState {
+impl Display for State {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Self::Initializing => "initialized",

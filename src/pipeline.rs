@@ -11,21 +11,23 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::errors::Result;
-use crate::permge::PriorityMerge;
 use crate::{
     connectors::{self, sink::SinkMsg, source::SourceMsg},
-    instance::InstanceState,
+    errors::Result,
+    instance::State,
+    permge::PriorityMerge,
 };
-use async_std::channel::{bounded, unbounded, Receiver, Sender};
-use async_std::stream::StreamExt;
-use async_std::task;
+use async_std::{
+    channel::{bounded, unbounded, Receiver, Sender},
+    stream::StreamExt,
+    task,
+};
 use beef::Cow;
-use std::time::Duration;
-use std::{fmt, sync::atomic::Ordering};
+use std::{fmt, sync::atomic::Ordering, time::Duration};
 use tremor_common::{ids::OperatorIdGen, time::nanotime};
-use tremor_pipeline::errors::ErrorKind as PipelineErrorKind;
-use tremor_pipeline::{CbAction, Event, ExecutableGraph, SignalKind};
+use tremor_pipeline::{
+    errors::ErrorKind as PipelineErrorKind, CbAction, Event, ExecutableGraph, SignalKind,
+};
 use tremor_script::{ast::DeployEndpoint, highlighter::Dumb, prelude::BaseExpr};
 
 const TICK_MS: u64 = 100;
@@ -426,7 +428,7 @@ pub(crate) async fn pipeline_task(
     let mut inputs: Inputs = halfbrown::HashMap::new();
     let mut eventset: Eventset = Vec::new();
 
-    let mut state: InstanceState = InstanceState::Initializing;
+    let mut state: State = State::Initializing;
 
     info!("[Pipeline::{}] Starting Pipeline.", alias);
 
@@ -559,9 +561,9 @@ pub(crate) async fn pipeline_task(
                 );
                 inputs.remove(&input_url);
             }
-            M::M(MgmtMsg::Start) if state == InstanceState::Initializing => {
+            M::M(MgmtMsg::Start) if state == State::Initializing => {
                 // No-op
-                state = InstanceState::Running;
+                state = State::Running;
             }
             M::M(MgmtMsg::Start) => {
                 info!(
@@ -569,9 +571,9 @@ pub(crate) async fn pipeline_task(
                     alias, &state
                 );
             }
-            M::M(MgmtMsg::Pause) if state == InstanceState::Running => {
+            M::M(MgmtMsg::Pause) if state == State::Running => {
                 // No-op
-                state = InstanceState::Paused;
+                state = State::Paused;
             }
             M::M(MgmtMsg::Pause) => {
                 info!(
@@ -579,9 +581,9 @@ pub(crate) async fn pipeline_task(
                     alias, &state
                 );
             }
-            M::M(MgmtMsg::Resume) if state == InstanceState::Paused => {
+            M::M(MgmtMsg::Resume) if state == State::Paused => {
                 // No-op
-                state = InstanceState::Running;
+                state = State::Running;
             }
             M::M(MgmtMsg::Resume) => {
                 info!(

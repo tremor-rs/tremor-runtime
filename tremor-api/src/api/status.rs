@@ -15,7 +15,7 @@
 //! Runtime status API
 
 use halfbrown::HashMap;
-use tremor_runtime::instance::InstanceState;
+use tremor_runtime::instance::State;
 
 use crate::api::prelude::*;
 
@@ -23,7 +23,7 @@ use crate::api::prelude::*;
 struct RuntimeStatus {
     all_running: bool,
     num_flows: usize,
-    flows: HashMap<InstanceState, usize>,
+    flows: HashMap<State, usize>,
 }
 
 impl Default for RuntimeStatus {
@@ -49,12 +49,11 @@ pub(crate) async fn get_runtime_status(req: Request) -> Result<Response> {
         *runtime_status.flows.entry(status.status).or_insert(0) += 1;
 
         // report OK if all flows are in a good/intended state (Running)
-        runtime_status.all_running =
-            runtime_status.all_running && status.status == InstanceState::Running;
+        runtime_status.all_running = runtime_status.all_running && status.status == State::Running;
         all_in_good_state = all_in_good_state
             && matches!(
                 status.status,
-                InstanceState::Running | InstanceState::Paused | InstanceState::Initializing
+                State::Running | State::Paused | State::Initializing
             );
     }
     let code = if all_in_good_state {
