@@ -210,7 +210,7 @@ impl Flow {
                     let pipeline = tremor_pipeline::query::Query(
                         tremor_script::query::Query::from_query(query),
                     );
-                    let addr = pipeline::spawn(alias, pipeline, operator_id_gen).await?;
+                    let addr = pipeline::spawn(alias, &pipeline, operator_id_gen)?;
                     pipelines.insert(PipelineId::from(alias), addr);
                 }
             }

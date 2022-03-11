@@ -83,9 +83,7 @@ impl Lines {
 
     pub fn new(separator: u8, max_length: usize, is_buffered: bool) -> Self {
         let max_length = NonZeroUsize::new(max_length);
-        let bufsize = max_length
-            .map(NonZeroUsize::get)
-            .unwrap_or(DEFAULT_BUF_SIZE);
+        let bufsize = max_length.map_or(DEFAULT_BUF_SIZE, NonZeroUsize::get);
         Self {
             separator,
             max_length,
@@ -183,7 +181,7 @@ impl Preprocessor for Lines {
                 }
                 last_idx = first_line_idx + 1;
 
-                while let Some(line_idx) = split_points.next() {
+                for line_idx in split_points.by_ref() {
                     let line = data
                         .get(last_idx..line_idx)
                         .ok_or(ErrorKind::InvalidLines)?;

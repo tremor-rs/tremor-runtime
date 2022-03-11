@@ -15,7 +15,7 @@
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use tremor_value::{literal, structurize};
 
-use super::meta::*;
+use super::meta::{Config, HttpRequestMeta, HttpResponseMeta, ResponseEventCont};
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
 use crate::connectors::utils::mime::MimeCodecMap;
@@ -25,14 +25,14 @@ use crate::preprocessor::{self, Preprocessors};
 const CONNECTOR_TYPE: &str = "http_client";
 
 /// The HTTP client connector - for HTTP-based API interactions
-pub struct HttpClient {
+pub struct Client {
     max_concurrency: usize,
     response_tx: Sender<SourceReply>,
     response_rx: Receiver<SourceReply>,
     connector_config: ConnectorConfig,
 }
 
-impl std::fmt::Debug for HttpClient {
+impl std::fmt::Debug for Client {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "HttpClient")
     }
@@ -64,7 +64,7 @@ impl ConnectorBuilder for Builder {
                     MimeCodecMap::with_builtin()
                 };
             let (response_tx, response_rx) = bounded(128);
-            Ok(Box::new(HttpClient {
+            Ok(Box::new(Client {
                 max_concurrency: config.concurrency,
                 response_tx,
                 response_rx,
@@ -77,7 +77,7 @@ impl ConnectorBuilder for Builder {
 }
 
 #[async_trait::async_trait]
-impl Connector for HttpClient {
+impl Connector for Client {
     fn codec_requirements(&self) -> CodecReq {
         CodecReq::Optional("json")
     }
@@ -341,7 +341,7 @@ mod tests {
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
-            with_processors,
+            &with_processors,
         )?;
 
         let builder = super::Builder::default();
@@ -362,7 +362,7 @@ mod tests {
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
-            connector_config,
+            &connector_config,
         )?;
         let http_meta = HttpRequestMeta::from_config(&config, "json")?;
         assert_eq!("json", http_meta.codec.name());
@@ -382,7 +382,7 @@ mod tests {
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
-            connector_config,
+            &connector_config,
         )?;
         let http_meta = HttpRequestMeta::from_config(&config, "snot")?;
         assert_eq!("msgpack", http_meta.codec.name());
@@ -402,7 +402,7 @@ mod tests {
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
-            connector_config,
+            &connector_config,
         )?;
         let http_meta = HttpRequestMeta::from_config(&config, "json")?;
         assert_eq!("https://localhost:443/", http_meta.endpoint);
@@ -417,7 +417,7 @@ mod tests {
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
-            connector_config,
+            &connector_config,
         )?;
         let http_meta = HttpRequestMeta::from_config(&config, "json")?;
         assert_eq!("https://tremor.rs/", http_meta.endpoint);
@@ -436,7 +436,7 @@ mod tests {
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
-            connector_config,
+            &connector_config,
         )?;
         let http_meta = HttpRequestMeta::from_config(&config, "json")?;
         assert_eq!("json", http_meta.codec.name());
@@ -454,7 +454,7 @@ mod tests {
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
-            connector_config,
+            &connector_config,
         )?;
         let http_meta = HttpRequestMeta::from_config(&config, "json")?;
         assert_eq!("json", http_meta.codec.name());
@@ -466,17 +466,16 @@ mod tests {
     #[test]
     fn default_http_meta_headers_handling() -> Result<()> {
         let connector_config = literal!({
-                    "id": "my_rest_client",
-                    "type": "rest_client",
-                    "config": {
-        //                "url": "https://tremor.rs/",
-                        "method": "pUt",
-                    },
-                    "preprocessors": [ "lines" ]
-                });
+            "id": "my_rest_client",
+            "type": "rest_client",
+            "config": {
+                "method": "pUt",
+            },
+            "preprocessors": [ "lines" ]
+        });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
-            connector_config,
+            &connector_config,
         )?;
         let http_meta = HttpRequestMeta::from_config(&config, "json")?;
         assert_eq!("json", http_meta.codec.name());
@@ -498,7 +497,7 @@ mod tests {
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
-            connector_config,
+            &connector_config,
         )?;
         let http_meta = HttpRequestMeta::from_config(&config, "json")?;
         assert_eq!("json", http_meta.codec.name());

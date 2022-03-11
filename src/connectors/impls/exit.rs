@@ -70,33 +70,31 @@ impl Sink for Exit {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        if !self.done {
-            if let Some((value, _meta)) = event.value_meta_iter().next() {
-                if let Some(delay) = value.get_u64(Self::DELAY) {
-                    info!(
-                        "{} Sleeping for {}ns before triggering shutdown.",
-                        ctx, delay
-                    );
-                    task::sleep(Duration::from_nanos(delay)).await;
-                }
-                let mode = if value.get_bool(Self::GRACEFUL).unwrap_or(true) {
-                    ShutdownMode::Graceful
-                } else {
-                    ShutdownMode::Forceful
-                };
-                // this should stop the whole server process
-                let world = self.world.clone();
-                let alias = ctx.alias().to_string();
-                // we spawn this out into another task, so we don't block the sink loop handling control plane messages
-                task::spawn(async move {
-                    if let Err(e) = world.stop(mode).await {
-                        error!("[Sink::{}] Error stopping Tremor: {}", &alias, e);
-                    }
-                });
-                self.done = true;
-            }
-        } else {
+        if self.done {
             debug!("{} Already exited.", ctx);
+        } else if let Some((value, _meta)) = event.value_meta_iter().next() {
+            if let Some(delay) = value.get_u64(Self::DELAY) {
+                info!(
+                    "{} Sleeping for {}ns before triggering shutdown.",
+                    ctx, delay
+                );
+                task::sleep(Duration::from_nanos(delay)).await;
+            }
+            let mode = if value.get_bool(Self::GRACEFUL).unwrap_or(true) {
+                ShutdownMode::Graceful
+            } else {
+                ShutdownMode::Forceful
+            };
+            // this should stop the whole server process
+            let world = self.world.clone();
+            let alias = ctx.alias().to_string();
+            // we spawn this out into another task, so we don't block the sink loop handling control plane messages
+            task::spawn(async move {
+                if let Err(e) = world.stop(mode).await {
+                    error!("[Sink::{}] Error stopping Tremor: {}", &alias, e);
+                }
+            });
+            self.done = true;
         }
 
         Ok(SinkReply::default())

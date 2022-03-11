@@ -95,10 +95,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Preprocessor>> {
 ///
 ///   * If the preprocessor is not known.
 pub fn make_preprocessors(preprocessors: &[PreprocessorConfig]) -> Result<Preprocessors> {
-    preprocessors
-        .iter()
-        .map(|n| lookup_with_config(n))
-        .collect()
+    preprocessors.iter().map(lookup_with_config).collect()
 }
 
 /// Canonical way to preprocess data before it is fed to a codec for decoding.
@@ -156,7 +153,7 @@ pub fn finish(
         let mut data1 = Vec::new();
         for pp in tail {
             data1.clear();
-            for d in data.iter() {
+            for d in &data {
                 match pp.finish(Some(d)) {
                     Ok(mut r) => data1.append(&mut r),
                     Err(e) => {

@@ -90,7 +90,7 @@ impl<S: Sorting> Codec for Json<S> {
             &mut self.string_buffer,
         )
         .map(Some)
-        .map_err(|e| e.into())
+        .map_err(Error::from)
     }
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {
         if S::SORTED {
