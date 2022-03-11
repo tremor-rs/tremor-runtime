@@ -23,6 +23,17 @@ use hashbrown::{hash_map::Entry, HashMap};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
 use tremor_script::ast::DeployFlow;
 
+macro_rules! log_error {
+    ($maybe_error:expr,  $($args:tt)+) => (
+        if let Err(e) = $maybe_error {
+            error!($($args)+, e = e);
+            true
+        } else {
+            false
+        }
+    )
+}
+
 pub(crate) type Channel = Sender<Msg>;
 
 /// This is control plane
@@ -69,6 +80,116 @@ impl Manager {
         }
     }
 
+    fn handle_register_connecor_type(
+        &mut self,
+        connector_type: ConnectorType,
+        builder: Box<dyn ConnectorBuilder>,
+    ) {
+        if let Some(old) = self.known_connectors.insert(connector_type, builder) {
+            error!("Connector type {} already defined!", old.connector_type());
+        }
+    }
+
+    async fn handle_start_deploy(&mut self, flow: DeployFlow<'static>, sender: Sender<Result<()>>) {
+        let id = Id::from(&flow);
+        let res = match self.flows.entry(id.clone()) {
+            Entry::Occupied(_occupied) => Err(ErrorKind::DuplicateFlow(id.0.clone()).into()),
+            Entry::Vacant(vacant) => Flow::start(
+                flow,
+                &mut self.operator_id_gen,
+                &mut self.connector_id_gen,
+                &self.known_connectors,
+            )
+            .await
+            .map(|deploy| {
+                vacant.insert(deploy);
+            }),
+        };
+        log_error!(
+            sender.send(res).await,
+            "Error sending StartDeploy Err Result: {e}"
+        );
+    }
+    async fn handle_get_flows(&self, reply_tx: Sender<Result<Vec<Flow>>>) {
+        let flows = self.flows.values().cloned().collect();
+        log_error!(
+            reply_tx.send(Ok(flows)).await,
+            "Error sending ListFlows response: {e}"
+        );
+    }
+    async fn handle_get_flow(&self, id: Id, reply_tx: Sender<Result<Flow>>) {
+        log_error!(
+            reply_tx
+                .send(
+                    self.flows
+                        .get(&id)
+                        .cloned()
+                        .ok_or_else(|| ErrorKind::FlowNotFound(id.0).into()),
+                )
+                .await,
+            "Error sending GetFlow response {e}"
+        );
+    }
+
+    async fn handle_stop(&self) -> Result<()> {
+        info!("Stopping Manager ...");
+        if !self.flows.is_empty() {
+            // send stop to each deployment
+            let (tx, rx) = bounded(self.flows.len());
+            let mut expected_stops: usize = 0;
+            for flow in self.flows.values() {
+                log_error!(
+                    flow.stop(tx.clone()).await,
+                    "Failed to stop Deployment \"{alias}\": {e}",
+                    alias = flow.alias()
+                );
+                expected_stops += 1;
+            }
+
+            task::spawn::<_, Result<()>>(async move {
+                while expected_stops > 0 {
+                    log_error!(rx.recv().await?, "Error during Stopping: {e}");
+                    expected_stops = expected_stops.saturating_sub(1);
+                }
+                Ok(())
+            })
+            .timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT)
+            .await??;
+        }
+        Ok(())
+    }
+    async fn handle_drain(&self, sender: Sender<Result<()>>) {
+        let num_flows = self.flows.len();
+        info!("Draining all {num_flows} Flows ...");
+        let mut alive_flows = 0_usize;
+        let (tx, rx) = bounded(num_flows);
+        for (_, flow) in &self.flows {
+            if !log_error!(
+                flow.drain(tx.clone()).await,
+                "Failed to drain Deployment \"{alias}\": {e}",
+                alias = flow.alias()
+            ) {
+                alive_flows += 1;
+            }
+        }
+        task::spawn::<_, Result<()>>(async move {
+            let rx_futures = std::iter::repeat_with(|| rx.recv()).take(alive_flows);
+            for result in futures::future::join_all(rx_futures).await {
+                match result {
+                    Err(_) => {
+                        error!("Error receiving from Draining process.");
+                    }
+                    Ok(Err(e)) => {
+                        error!("Error during Draining: {}", e);
+                    }
+                    Ok(Ok(())) => {}
+                }
+            }
+            info!("Flows drained.");
+            sender.send(Ok(())).await?;
+            Ok(())
+        });
+    }
     pub fn start(mut self) -> (JoinHandle<Result<()>>, Channel) {
         let (tx, rx) = bounded(self.qsize);
         let system_h = task::spawn(async move {
@@ -78,130 +199,17 @@ impl Manager {
                         connector_type,
                         builder,
                         ..
-                    } => {
-                        if let Some(old) = self
-                            .known_connectors
-                            .insert(connector_type.clone(), builder)
-                        {
-                            error!("Connector type {} already defined!", old.connector_type());
-                        }
-                    }
+                    } => self.handle_register_connecor_type(connector_type, builder),
                     Msg::StartDeploy { flow, sender } => {
-                        let id = Id::from(&flow);
-                        let res = match self.flows.entry(id.clone()) {
-                            Entry::Occupied(_occupied) => {
-                                Err(ErrorKind::DuplicateFlow(id.0.clone()).into())
-                            }
-                            Entry::Vacant(vacant) => {
-                                let res = Flow::start(
-                                    flow,
-                                    &mut self.operator_id_gen,
-                                    &mut self.connector_id_gen,
-                                    &self.known_connectors,
-                                )
-                                .await;
-                                match res {
-                                    Ok(deploy) => {
-                                        vacant.insert(deploy);
-                                        Ok(())
-                                    }
-                                    Err(e) => Err(e),
-                                }
-                            }
-                        };
-                        if sender.send(res).await.is_err() {
-                            error!("Error sending StartDeploy Err Result");
-                        }
+                        self.handle_start_deploy(flow, sender).await;
                     }
-                    Msg::GetFlows(reply_tx) => {
-                        let flows = self.flows.values().cloned().collect();
-                        if reply_tx.send(Ok(flows)).await.is_err() {
-                            error!("Error sending ListFlows response");
-                        }
-                    }
-                    Msg::GetFlow(id, reply_tx) => {
-                        if reply_tx
-                            .send(
-                                self.flows
-                                    .get(&id)
-                                    .cloned()
-                                    .ok_or_else(|| ErrorKind::FlowNotFound(id.0).into()),
-                            )
-                            .await
-                            .is_err()
-                        {
-                            error!("Error sending GetFlow response");
-                        }
-                    }
+                    Msg::GetFlows(reply_tx) => self.handle_get_flows(reply_tx).await,
+                    Msg::GetFlow(id, reply_tx) => self.handle_get_flow(id, reply_tx).await,
                     Msg::Stop => {
-                        info!("Stopping Manager ...");
-                        let num_flows = self.flows.len();
-                        if num_flows > 0 {
-                            // send stop to each deployment
-                            let (tx, rx) = bounded(self.flows.len());
-                            let mut expected_stops = self.flows.len();
-                            for (_, flow) in self.flows {
-                                if let Err(e) = flow.stop(tx.clone()).await {
-                                    error!(
-                                        "Failed to stop Deployment \"{alias}\": {e}",
-                                        alias = flow.alias()
-                                    );
-                                    expected_stops = expected_stops.saturating_sub(1);
-                                }
-                            }
-                            let h = task::spawn::<_, Result<()>>(async move {
-                                while expected_stops > 0 {
-                                    let res = rx.recv().await?;
-                                    if let Err(e) = res {
-                                        error!("Error during Stopping: {}", e);
-                                    }
-                                    expected_stops = expected_stops.saturating_sub(1);
-                                }
-                                Ok(())
-                            });
-                            h.timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT).await??;
-                        }
+                        self.handle_stop().await?;
                         break;
                     }
-                    Msg::Drain(sender) => {
-                        let num_flows = self.flows.len();
-                        if num_flows == 0 {
-                            sender.send(Ok(())).await?;
-                        } else {
-                            info!("Draining all {num_flows} Flows ...");
-                            let mut alive_flows = 0_usize;
-                            let (tx, rx) = bounded(num_flows);
-                            for (_, flow) in &self.flows {
-                                if let Err(e) = flow.drain(tx.clone()).await {
-                                    error!(
-                                        "Failed to drain Deployment \"{alias}\": {e}",
-                                        alias = flow.alias()
-                                    );
-                                } else {
-                                    alive_flows += 1;
-                                }
-                            }
-
-                            task::spawn::<_, Result<()>>(async move {
-                                let rx_futures =
-                                    std::iter::repeat_with(|| rx.recv()).take(alive_flows);
-                                for result in futures::future::join_all(rx_futures).await {
-                                    match result {
-                                        Err(_) => {
-                                            error!("Error receiving from Draining process.");
-                                        }
-                                        Ok(Err(e)) => {
-                                            error!("Error during Draining: {}", e);
-                                        }
-                                        Ok(Ok(())) => {}
-                                    }
-                                }
-                                info!("Flows drained.");
-                                sender.send(Ok(())).await?;
-                                Ok(())
-                            });
-                        }
-                    }
+                    Msg::Drain(sender) => self.handle_drain(sender).await,
                 }
             }
             info!("Manager stopped.");
