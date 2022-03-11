@@ -61,7 +61,7 @@ where
         let mut elem = String::with_capacity(16);
         for (id, params) in sd.iter() {
             elem.push('[');
-            elem.push_str(&id.to_string());
+            elem.push_str(id);
             let params = params.as_array().ok_or_else(|| {
                 Error::from(ErrorKind::InvalidSyslogData(
                     "Invalid structured data: params not an array of objects",
@@ -80,7 +80,7 @@ where
                         ))
                     })?;
                     elem.push(' ');
-                    elem.push_str(&k.to_string());
+                    elem.push_str(k);
                     elem.push('=');
                     elem.push('"');
                     elem.push_str(value);

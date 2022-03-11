@@ -15,6 +15,7 @@
 use crate::connectors::prelude::*;
 use hdrhistogram::Histogram;
 use std::{
+    cmp::min,
     fmt::Display,
     io::{BufRead as StdBufRead, BufReader, Read},
     time::Duration,
@@ -53,14 +54,14 @@ pub struct Config {
     pub stop_after_secs: u64,
     /// Significant figures for the histogram
     #[serde(default = "default_significant_figures")]
-    pub significant_figures: u64,
+    pub significant_figures: u8,
     /// Number of seconds to warmup, events during this time are not
     /// accounted for in the latency measurements
     #[serde(default = "Default::default")]
     pub warmup_secs: u64,
 }
 
-fn default_significant_figures() -> u64 {
+fn default_significant_figures() -> u8 {
     2
 }
 
@@ -204,6 +205,7 @@ struct Blaster {
 
 #[async_trait::async_trait]
 impl Source for Blaster {
+    #[allow(clippy::cast_possible_truncation)]
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         if self.finished {
             return Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL));
@@ -264,22 +266,20 @@ struct Blackhole {
 }
 
 impl Blackhole {
-    fn from_config(config: &Config) -> Self {
+    #[allow(clippy::cast_precision_loss, clippy::unwrap_used)]
+    fn from_config(c: &Config) -> Self {
         let now_ns = nanotime();
-
+        let sigfig = min(c.significant_figures, 5);
+        // ALLOW: this is a debug connector and the values are validated ahead of time
+        let delivered = Histogram::new_with_bounds(1, 100_000_000_000, sigfig).unwrap();
         Blackhole {
             // config: config.clone(),
-            run_secs: config.stop_after_secs as f64,
-            stop_after: now_ns + ((config.stop_after_secs + config.warmup_secs) * 1_000_000_000),
-            warmup: now_ns + (config.warmup_secs * 1_000_000_000),
-            has_stop_limit: config.stop_after_secs != 0,
-            structured: config.structured,
-            delivered: Histogram::new_with_bounds(
-                1,
-                100_000_000_000,
-                config.significant_figures as u8,
-            )
-            .unwrap(),
+            run_secs: c.stop_after_secs as f64,
+            stop_after: now_ns + ((c.stop_after_secs + c.warmup_secs) * 1_000_000_000),
+            warmup: now_ns + (c.warmup_secs * 1_000_000_000),
+            has_stop_limit: c.stop_after_secs != 0,
+            structured: c.structured,
+            delivered,
             bytes: 0,
             count: 0,
             buf: Vec::with_capacity(1024),
@@ -303,7 +303,7 @@ impl Sink for Blackhole {
         let now_ns = nanotime();
         if self.has_stop_limit && now_ns > self.stop_after {
             if self.structured {
-                let v = self.to_value(2)?;
+                let v = self.to_value(2);
                 v.write(&mut stdout())?;
             } else {
                 self.write_text(stdout(), 5, 2)?;
@@ -330,6 +330,7 @@ impl Sink for Blackhole {
 }
 
 impl Blackhole {
+    #[allow(clippy::cast_precision_loss)] // This is for reporting only we're fine with some precision loss
     fn write_text<W: Write>(
         &self,
         mut writer: W,
@@ -425,7 +426,8 @@ impl Blackhole {
         Ok(())
     }
 
-    fn to_value(&self, ticks_per_half: u32) -> Result<Value<'static>> {
+    #[allow(clippy::cast_precision_loss)] // This is for reporting only we're fine with some precision loss
+    fn to_value(&self, ticks_per_half: u32) -> Value<'static> {
         let quantiles: Value = self
             .delivered
             .iter_quantiles(ticks_per_half)
@@ -438,7 +440,7 @@ impl Blackhole {
                 })
             })
             .collect();
-        Ok(literal!({
+        literal!({
             "mean": self.delivered.mean(),
             "stdev": self.delivered.stdev(),
             "max": self.delivered.max(),
@@ -451,7 +453,6 @@ impl Blackhole {
                 "bytes_per_second": (self.bytes as f64 / self.run_secs)
             },
             "quantiles": quantiles
-
-        }))
+        })
     }
 }

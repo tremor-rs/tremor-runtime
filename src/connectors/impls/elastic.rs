@@ -198,6 +198,8 @@ struct ElasticSink {
 }
 
 impl ElasticSink {
+    // ALLOW: this is a string
+    const MISSING_ID: &'static str = "Missing field `$elastic[\"_id\"]`";
     fn new(
         node_urls: Vec<Url>,
         response_tx: Sender<SourceReply>,
@@ -291,9 +293,7 @@ impl Sink for ElasticSink {
                     let mut ops = BulkOperations::new();
                     // per request options - extract from event metadata (ignoring batched)
                     let event_es_meta = ESMeta::new(event.data.suffix().meta());
-                    let index = event_es_meta
-                        .get_index()
-                        .or_else(|| default_index.as_ref().map(|s| s.as_str()));
+                    let index = event_es_meta.get_index().or(default_index.as_deref());
                     let doc_type = event_es_meta.get_type();
                     let routing = event_es_meta.get_routing();
                     let refresh = event_es_meta.get_refresh();
@@ -319,10 +319,7 @@ impl Sink for ElasticSink {
                                     if let Some(id) = es_meta.get_id() {
                                         BulkOperation::delete(id)
                                     } else {
-                                        let e = Error::from(format!(
-                                            // ALLOW: this is a string
-                                            "Missing `$elastic[\"_id\"]` for `delete` action."
-                                        ));
+                                        let e = Error::from(Self::MISSING_ID);
                                         return handle_error(
                                             e,
                                             event,
@@ -345,10 +342,8 @@ impl Sink for ElasticSink {
                                 } else {
                                     // Actually `_id` should be completely optional here
                                     // See: https://github.com/elastic/elasticsearch-rs/issues/190
-                                    let e = Error::from(format!(
-                                        // ALLOW: this is a string
-                                        "Missing `$elastic.[\"_id\"]` for `create` action."
-                                    ));
+                                    // ALLOW: this is a string
+                                    let e = Error::from(Self::MISSING_ID);
                                     return handle_error(
                                         e,
                                         event,
@@ -371,10 +366,7 @@ impl Sink for ElasticSink {
                                         literal!({ "doc": data.clone_static() }), // TODO: find a way to not .clone_static()
                                     )
                                 } else {
-                                    let e = Error::from(format!(
-                                        // ALLOW: this is a string
-                                        "Missing `$elastic[\"_id\"]` for `create` action."
-                                    ));
+                                    let e = Error::from(Self::MISSING_ID);
                                     return handle_error(
                                         e,
                                         event,
@@ -551,7 +543,7 @@ async fn handle_response(
                         "_id": action_item.get("_id").map(Value::clone_static),
                         "_index": action_item.get("_index").map(Value::clone_static),
                         "_type": action_item.get("_type").map(Value::clone_static),
-                        "action": action.to_owned(),
+                        "action": action.clone(),
                         "success": false
                     }
                 });
@@ -571,7 +563,7 @@ async fn handle_response(
                         "_index": action_item.get("_index").map(Value::clone_static),
                         "_type": action_item.get("_type").map(Value::clone_static),
                         "version": action_item.get("_version").map(Value::clone_static),
-                        "action": action.to_owned(),
+                        "action": action.clone(),
                         "success": true
                     }
                 });
@@ -691,7 +683,8 @@ impl<'a, 'value> ESMeta<'a, 'value> {
         self.meta.get_str("action")
     }
 
-    /// supported values: true, false, "true", "false", "wait_for"
+    /// supported values: `true`, `false`, `"true"`, `"false"`, `"wait_for"`
+    /// FIXME: Should we return a type here?
     fn get_refresh(&self) -> Option<String> {
         self.meta
             .get_bool("refresh")

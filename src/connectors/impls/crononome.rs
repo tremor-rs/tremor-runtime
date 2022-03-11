@@ -11,13 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::connectors::prelude::*;
-use serde_yaml::Value as YamlValue;
-use tremor_common::time::nanotime;
-
 mod handler;
 
-use handler::*;
+use crate::connectors::prelude::*;
+use handler::{ChronomicQueue, CronEntryInt};
+use serde_yaml::Value as YamlValue;
+use tremor_common::time::nanotime;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]

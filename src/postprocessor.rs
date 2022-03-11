@@ -89,10 +89,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Postprocessor>> {
 ///
 ///   * If any postprocessor is not known.
 pub fn make_postprocessors(postprocessors: &[PostprocessorConfig]) -> Result<Postprocessors> {
-    postprocessors
-        .iter()
-        .map(|n| lookup_with_config(n))
-        .collect()
+    postprocessors.iter().map(lookup_with_config).collect()
 }
 
 /// canonical way to process encoded data passed from a `Codec`

@@ -60,33 +60,13 @@ impl Addr {
         }
     }
 
-    /// number of events in the pipelines channel
-    #[cfg(not(tarpaulin_include))]
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.addr.len()
-    }
-
-    /// true, if there are no events to be received at the moment
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.addr.is_empty()
-    }
-
-    /// pipeline instance id
-    #[cfg(not(tarpaulin_include))]
-    #[must_use]
-    pub fn id(&self) -> &str {
-        &self.alias
-    }
-
     /// send a contraflow insight message back down the pipeline
-    pub async fn send_insight(&self, event: Event) -> Result<()> {
+    pub(crate) async fn send_insight(&self, event: Event) -> Result<()> {
         Ok(self.cf_addr.send(CfMsg::Insight(event)).await?)
     }
 
     /// send a data-plane message to the pipeline
-    pub async fn send(&self, msg: Box<Msg>) -> Result<()> {
+    pub(crate) async fn send(&self, msg: Box<Msg>) -> Result<()> {
         Ok(self.addr.send(msg).await?)
     }
 
@@ -163,9 +143,9 @@ impl TryFrom<connectors::Addr> for OutputTarget {
     }
 }
 
-pub(crate) async fn spawn(
+pub(crate) fn spawn(
     alias: &str,
-    config: tremor_pipeline::query::Query,
+    config: &tremor_pipeline::query::Query,
     operator_id_gen: &mut OperatorIdGen,
 ) -> Result<Addr> {
     let qsize = crate::QSIZE.load(Ordering::Relaxed);
@@ -256,10 +236,10 @@ pub enum Msg {
 
 /// wrapper for all possible messages handled by the pipeline task
 #[derive(Debug)]
-pub(crate) enum M {
-    F(Msg),
-    C(CfMsg),
-    M(MgmtMsg),
+pub(crate) enum AnyMsg {
+    Flow(Msg),
+    Cfg(CfMsg),
+    Mgmt(MgmtMsg),
 }
 
 impl OutputTarget {
@@ -423,18 +403,18 @@ pub(crate) async fn pipeline_task(
 
     info!("[Pipeline::{}] Starting Pipeline.", alias);
 
-    let ff = rx.map(|e| M::F(*e));
-    let cf = cf_rx.map(M::C);
-    let mf = mgmt_rx.map(M::M);
+    let ff = rx.map(|e| AnyMsg::Flow(*e));
+    let cf = cf_rx.map(AnyMsg::Cfg);
+    let mf = mgmt_rx.map(AnyMsg::Mgmt);
 
     // prioritize management flow over contra flow over forward event flow
     let mut s = PriorityMerge::new(mf, PriorityMerge::new(cf, ff));
     while let Some(msg) = s.next().await {
         match msg {
-            M::C(msg) => {
+            AnyMsg::Cfg(msg) => {
                 handle_cf_msg(msg, &mut pipeline, &inputs).await?;
             }
-            M::F(Msg::Event { input, event }) => {
+            AnyMsg::Flow(Msg::Event { input, event }) => {
                 match pipeline.enqueue(&input, event, &mut eventset).await {
                     Ok(()) => {
                         handle_insights(&mut pipeline, &inputs).await;
@@ -451,7 +431,7 @@ pub(crate) async fn pipeline_task(
                     }
                 }
             }
-            M::F(Msg::Signal(signal)) => {
+            AnyMsg::Flow(Msg::Signal(signal)) => {
                 if let Err(e) = pipeline.enqueue_signal(signal.clone(), &mut eventset) {
                     let err_str = if let PipelineErrorKind::Script(script_kind) = e.0 {
                         let script_error = tremor_script::errors::Error(script_kind, e.1);
@@ -466,15 +446,15 @@ pub(crate) async fn pipeline_task(
                     maybe_send(send_events(&mut eventset, &mut dests).await);
                 }
             }
-            M::M(MgmtMsg::ConnectInput {
+            AnyMsg::Mgmt(MgmtMsg::ConnectInput {
                 endpoint,
                 target,
                 is_transactional,
             }) => {
                 info!("[Pipeline::{}] Connecting {} to port 'in'", alias, endpoint);
-                inputs.insert(endpoint, (is_transactional, target.into()));
+                inputs.insert(endpoint, (is_transactional, target));
             }
-            M::M(MgmtMsg::ConnectOutput {
+            AnyMsg::Mgmt(MgmtMsg::ConnectOutput {
                 port,
                 endpoint,
                 target,
@@ -507,42 +487,42 @@ pub(crate) async fn pipeline_task(
                 }
 
                 if let Some(output_dests) = dests.get_mut(&port) {
-                    output_dests.push((endpoint, target.into()));
+                    output_dests.push((endpoint, target));
                 } else {
-                    dests.insert(port, vec![(endpoint, target.into())]);
+                    dests.insert(port, vec![(endpoint, target)]);
                 }
             }
-            M::M(MgmtMsg::Start) if state == State::Initializing => {
+            AnyMsg::Mgmt(MgmtMsg::Start) if state == State::Initializing => {
                 // No-op
                 state = State::Running;
             }
-            M::M(MgmtMsg::Start) => {
+            AnyMsg::Mgmt(MgmtMsg::Start) => {
                 info!(
                     "[Pipeline::{}] Ignoring Start Msg. Current state: {}",
                     alias, &state
                 );
             }
-            M::M(MgmtMsg::Pause) if state == State::Running => {
+            AnyMsg::Mgmt(MgmtMsg::Pause) if state == State::Running => {
                 // No-op
                 state = State::Paused;
             }
-            M::M(MgmtMsg::Pause) => {
+            AnyMsg::Mgmt(MgmtMsg::Pause) => {
                 info!(
                     "[Pipeline::{}] Ignoring Pause Msg. Current state: {}",
                     alias, &state
                 );
             }
-            M::M(MgmtMsg::Resume) if state == State::Paused => {
+            AnyMsg::Mgmt(MgmtMsg::Resume) if state == State::Paused => {
                 // No-op
                 state = State::Running;
             }
-            M::M(MgmtMsg::Resume) => {
+            AnyMsg::Mgmt(MgmtMsg::Resume) => {
                 info!(
                     "[Pipeline::{}] Ignoring Resume Msg. Current state: {}",
                     alias, &state
                 );
             }
-            M::M(MgmtMsg::Stop) => {
+            AnyMsg::Mgmt(MgmtMsg::Stop) => {
                 info!("[Pipeline::{}] Stopping...", alias);
                 break;
             }

@@ -23,9 +23,9 @@ use async_std::{
     channel::{bounded, Receiver, Sender, TryRecvError},
     task::{self, JoinHandle},
 };
-use handler::*;
+use handler::Handler;
 use serenity::{client::bridge::gateway::GatewayIntents, Client, Error as SerenityError};
-use utils::*;
+use utils::Intents;
 
 #[derive(Deserialize, Clone)]
 pub struct Config {
