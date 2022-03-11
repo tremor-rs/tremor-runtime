@@ -57,7 +57,8 @@ fn affirm_severity_text_valid<T>(severity_text: &T) -> String
 where
     T: ToString,
 {
-    // TODO find a nice way to do this without RT regex comp
+    // FIXME find a nice way to do this without RT regex comp
+    // hg - match over all valid texts?
     //
     // if SEVERITY_TEXT_RE.is_match(&text) {
     //     return Ok(text);

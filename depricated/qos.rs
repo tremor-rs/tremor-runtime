@@ -51,18 +51,6 @@ impl CanaryProbe for HostPortScanCanaryProbe {
     }
 }
 
-// struct BadCanary {}
-
-// impl CanaryProbe for BadCanary {
-//     fn chirp(&self) -> bool {
-//         false
-//     }
-
-//     fn about(&self) -> String {
-//         "<unknown> [bad canary]".into()
-//     }
-// }
-
 /// Failure detector
 pub(crate) trait FailureDetector: Send + Sync {
     /// check if the remote endpoint is healthy or exhibits a failure
@@ -91,30 +79,6 @@ impl dyn FailureDetector {
         }
     }
 }
-
-// struct BadSupervisor {}
-
-// impl FailureDetector for BadSupervisor {
-//     fn chirp(&self) -> bool {
-//         false
-//     }
-
-//     fn trigger(&mut self) {
-//         // Do nothing - we're bad
-//     }
-
-//     fn probe(&mut self) {
-//         // Do nothing - we're lazy
-//     }
-
-//     fn restore(&mut self) {
-//         // Do nothing - supervisor says no!
-//     }
-
-//     fn is_down(&self) -> bool {
-//         false // We are always open for business
-//     }
-// }
 
 /// Supervisor for a GRPC endpoint
 pub(crate) struct GrpcEndpointSupervisor {

@@ -25,11 +25,6 @@ use tremor_influx as influx;
 
 pub type Kind = ErrorKind;
 
-// impl Clone for Error {
-//     fn clone(&self) -> Self {
-//         ErrorKind::ClonedError(format!("{}", self)).into()
-//     }
-// }
 
 impl From<sled::transaction::TransactionError<()>> for Error {
     fn from(e: sled::transaction::TransactionError<()>) -> Self {
