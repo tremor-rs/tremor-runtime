@@ -548,25 +548,6 @@ impl Source for HttpServerSource {
                     //     preprocess(&mut self.preprocessors, &mut ingest_ns, data, "chunked")?;
                     // let mut batch_data = Vec::with_capacity(chunks.len());
 
-                    // let end = chunks.len() - 1;
-                    // for at in 0..chunks.len() {
-                    //     if let Some(chunk) = chunks.get_mut(at) {
-                    //         let mut meta = meta.clone();
-                    //         meta.insert("content_length", chunk.len())?; // Compute content length for each chunk
-                    //         dbg!(at, end);
-                    //         if at == end {
-                    //             meta.insert("batch-urn", urn.to_string())?;
-                    //             dbg!(&meta);
-                    //             if let Some(_) = self.inflight.insert(urn, response_channel.clone())
-                    //             {
-                    //                 error!("Request tracking urn collision: {}", urn);
-                    //             };
-                    //             batch_data.push((chunk.clone(), Some(meta)));
-                    //         } else {
-                    //             batch_data.push((chunk.clone(), None));
-                    //         }
-                    //     };
-                    // }
                     if self.inflight.insert(urn, response_channel).is_some() {
                         error!("Request tracking urn collision: {}", urn);
                     };

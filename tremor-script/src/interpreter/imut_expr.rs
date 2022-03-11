@@ -293,8 +293,6 @@ impl<'script> ImutExpr<'script> {
             value_vec.reserve(l);
         }
 
-        // } else if let Some(target_array) = target_value.as_array() {
-
         let cases = &expr.cases;
 
         'outer: for (k, v) in items {

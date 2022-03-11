@@ -100,7 +100,7 @@ where
     }
 
     async fn on_done(&mut self, _stream: u64) -> StreamDone {
-        // THIS IS SHUTDOWN!
+        // FIXME THIS IS SHUTDOWN! (enable or delete)
         // if let Err(e) = self.wrapped_stream.close() { // TODO error code
         //     warn!(
         //         "[Connector::{}] Error shutting down reading half of stream {}: {}",

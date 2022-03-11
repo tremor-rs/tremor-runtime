@@ -119,12 +119,5 @@ async fn run(cli: Cli) -> Result<()> {
         Command::Run(r) => r.run(),
         Command::Doc(d) => d.run(),
         Command::Api(_) => todo!(),
-        // Some(("api", Some(matches))) => task::block_on(api::run_cmd(
-        //     TremorApp {
-        //         format,
-        //         config: load_config()?,
-        //     },
-        //     matches,
-        // )),
     }
 }

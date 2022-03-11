@@ -1119,15 +1119,6 @@ pub enum ClauseGroup<'script, Ex: Expression + 'script> {
     },
 }
 
-// impl<'script, Ex: Expression + 'script> Default for ClauseGroup<'script, Ex> {
-//     fn default() -> Self {
-//         Self::Simple {
-//             precondition: None,
-//             patterns: Vec::new(),
-//         }
-//     }
-// }
-
 impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
     const MAX_OPT_RUNS: u64 = 128;
     const MIN_BTREE_SIZE: usize = 16;

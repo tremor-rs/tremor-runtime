@@ -507,11 +507,6 @@ impl serde_ext::Serializer for MapKeySerializer {
 
     #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_char(self, _value: char) -> Result<Self::Ok> {
-        // Ok({
-        //     let mut s = String::new();
-        //     s.push(value);
-        //     s
-        // })
         Err(key_must_be_a_string())
     }
 
