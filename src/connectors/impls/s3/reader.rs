@@ -157,26 +157,33 @@ impl Connector for S3SourceConnector {
 
         // spawn object fetcher tasks
         for i in 0..self.config.max_connections {
-            let task_client = client.clone();
-            let task_rx = rx_key.clone();
-            let task_bucket = self.config.bucket.clone();
+            let client = client.clone();
+            let rx = rx_key.clone();
+            let bucket = self.config.bucket.clone();
 
-            let task_sender = self
+            let tx = self
                 .tx
                 .clone()
                 .ok_or_else(|| ErrorKind::S3Error("source sender not initialized".to_string()))?;
-
+            let origin_uri = EventOriginUri {
+                scheme: URL_SCHEME.to_string(),
+                host: hostname(),
+                port: None,
+                path: vec![bucket.clone()],
+            };
+            let instance = S3Instance {
+                ctx: ctx.clone(),
+                client,
+                rx,
+                tx,
+                bucket,
+                multipart_threshold: self.config.multipart_threshold,
+                part_size: self.config.multipart_chunksize,
+                origin_uri,
+            };
             let handle = task::Builder::new()
                 .name(format!("fetch_obj_task{}", i))
-                .spawn(fetch_object_task(
-                    ctx.clone(),
-                    task_client,
-                    task_bucket,
-                    task_rx,
-                    task_sender,
-                    self.config.multipart_threshold,
-                    self.config.multipart_chunksize,
-                ))?;
+                .spawn(async move { instance.start().await })?;
             self.handles.push(handle);
         }
 
@@ -255,165 +262,181 @@ async fn fetch_keys_task(
     Ok(())
 }
 
-///
-/// Receives object keys and the corresponsing stream id from the `recvr`
-/// Fetches the object from s3
-/// depending on `multipart_threshold` it downloads the object as one or in ranges.
-///
-/// The received data is sent to the `ChannelSource` channel.
-async fn fetch_object_task(
+struct S3Instance {
     ctx: ConnectorContext,
     client: S3Client,
+    rx: Receiver<KeyPayload>,
+    tx: Sender<SourceReply>,
     bucket: String,
-    recvr: Receiver<KeyPayload>,
-    sender: Sender<SourceReply>,
     multipart_threshold: i64,
     part_size: i64,
-) -> Result<()> {
-    let origin_uri = EventOriginUri {
-        scheme: URL_SCHEME.to_string(),
-        host: hostname(),
-        port: None,
-        path: vec![bucket.clone()],
-    };
-    // Construct the event struct
-    let event_from = |data, stream| SourceReply::Data {
-        origin_uri: origin_uri.clone(),
-        data,
-        meta: None,
-        stream,
-        port: None,
-    };
-    // Set the key and range (if present)
-    let fetch_object_stream = |key, range| async {
-        Result::<ByteStream>::Ok(
-            client
-                .get_object()
-                .bucket(bucket.clone())
-                .set_key(key)
-                .set_range(range)
-                .send()
-                .await?
-                .body,
-        )
-    };
+    origin_uri: EventOriginUri,
+}
+impl S3Instance {
+    fn event_from(&self, data: Vec<u8>, stream: u64) -> SourceReply {
+        SourceReply::Data {
+            origin_uri: self.origin_uri.clone(),
+            data,
+            meta: None,
+            stream,
+            port: None,
+        }
+    }
+    async fn fetch_object_stream(
+        &self,
+        key: Option<String>,
+        range: Option<String>,
+    ) -> Result<ByteStream> {
+        Ok(self
+            .client
+            .get_object()
+            .bucket(&self.bucket)
+            .set_key(key)
+            .set_range(range)
+            .send()
+            .await?
+            .body)
+    }
+    ///
+    /// Receives object keys and the corresponsing stream id from the `recvr`
+    /// Fetches the object from s3
+    /// depending on `multipart_threshold` it downloads the object as one or in ranges.
+    ///
+    /// The received data is sent to the `ChannelSource` channel.
+    async fn start(self) -> Result<()> {
+        while let Ok(KeyPayload {
+            object_data: Object { key, size, .. },
+            stream,
+        }) = self.rx.recv().await
+        {
+            let mut err = false; // marks an error
+            debug!("{} Fetching key {key:?}...", self.ctx);
+            // FIXME: usize -> i64, should be alright.
+            if size <= self.multipart_threshold {
+                // Perform a single fetch.
+                err = err || self.fetch_no_multipart(stream, key).await;
+            } else {
+                err = err || self.fetch_multipart(stream, key, size).await;
+            }
 
-    while let Ok(KeyPayload {
-        object_data,
-        stream,
-    }) = recvr.recv().await
-    {
-        let Object { key, size, .. } = object_data;
-        let mut err = false; // marks an error
-        debug!("{ctx} Fetching key {key:?}...");
-        // FIXME: usize -> i64, should be alright.
-        if size <= multipart_threshold {
-            // Perform a single fetch.
-            match fetch_object_stream(key.clone(), None).await {
+            // Close the stream
+            let stream_finish_reply = if err {
+                SourceReply::StreamFail(stream)
+            } else {
+                SourceReply::EndStream {
+                    origin_uri: self.origin_uri.clone(),
+                    stream,
+                    meta: None,
+                }
+            };
+            self.tx.send(stream_finish_reply).await?;
+        }
+        Ok(())
+    }
+
+    async fn fetch_no_multipart(&self, stream: u64, key: Option<String>) -> bool {
+        match self.fetch_object_stream(key.clone(), None).await {
+            Ok(mut obj_stream) => {
+                loop {
+                    // we iterate over the chunks the response provides
+                    match obj_stream.try_next().await {
+                        Ok(Some(chunk)) => {
+                            debug!(
+                                "{} Received chunk with {} bytes for key {key:?}.",
+                                self.ctx,
+                                chunk.len()
+                            );
+                            // meh, we need to clone the chunk :(
+                            if self
+                                .tx
+                                .send(self.event_from(chunk.as_ref().to_vec(), stream))
+                                .await
+                                .is_err()
+                            {
+                                error!(
+                                    "{} Error sending data for key {key:?} to source.",
+                                    self.ctx
+                                );
+                                return true;
+                            }
+                        }
+                        Ok(None) => {
+                            // stream finished
+                            return false;
+                        }
+                        Err(e) => {
+                            error!("{} Error fetching data for key {key:?}: {e}", self.ctx);
+                            // TODO: emit event to `err` port?
+                            return true;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                error!("{} Error fetching key {key:?}: {e}", self.ctx);
+                true
+            }
+        }
+    }
+    async fn fetch_multipart(&self, stream: u64, key: Option<String>, size: i64) -> bool {
+        let mut err = false;
+        // Fetch multipart.
+        let mut fetched_bytes = 0; // represent the next byte to fetch.
+
+        while fetched_bytes < size {
+            let fetch_till = fetched_bytes + self.part_size;
+            let range = Some(format!("bytes={}-{}", fetched_bytes, fetch_till - 1)); // -1 is reqd here as range is inclusive.
+
+            debug!(
+                "{} Fetching byte range: bytes={}-{} for key {key:?}",
+                self.ctx,
+                fetched_bytes,
+                fetch_till - 1
+            );
+            // fetch the range.
+            match self.fetch_object_stream(key.clone(), range.clone()).await {
                 Ok(mut obj_stream) => {
-                    'inner: loop {
-                        // we iterate over the chunks the response provides
+                    'inner_range: loop {
+                        // stream over the response chunks
                         match obj_stream.try_next().await {
                             Ok(Some(chunk)) => {
-                                debug!(
-                                    "{ctx} Received chunk with {} bytes for key {key:?}.",
-                                    chunk.len()
-                                );
+                                debug!("{} Received chunk with {} bytes for range {range:?} for key {key:?}.", self.ctx, chunk.len());
                                 // meh, we need to clone the chunk :(
-                                if sender
-                                    .send(event_from(chunk.as_ref().to_vec(), stream))
+                                if self
+                                    .tx
+                                    .send(self.event_from(chunk.as_ref().to_vec(), stream))
                                     .await
                                     .is_err()
                                 {
-                                    error!("{ctx} Error sending data for key {key:?} to source.");
+                                    error!("{} Error sending data for range {range:?} for key {key:?} to source.", self.ctx);
                                     err = true;
-                                    break 'inner;
+                                    break 'inner_range;
                                 }
                             }
                             Ok(None) => {
-                                // stream finished
-                                break 'inner;
+                                // object range stream finished
+                                break 'inner_range;
                             }
                             Err(e) => {
-                                error!("{ctx} Error fetching data for key {key:?}: {e}");
+                                error!("{} Error fetching data for range {range:?} for key {key:?}: {e}", self.ctx);
                                 // TODO: emit event to `err` port?
                                 err = true;
-                                break 'inner; // wait for next key
+                                break 'inner_range; // wait for next key
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    error!("{ctx} Error fetching key {key:?}: {e}");
+                    error!(
+                        "{} Error fetching range {range:?} for key {key:?}: {e}",
+                        self.ctx
+                    );
                     err = true;
                 }
-            };
-        } else {
-            // Fetch multipart.
-            let mut fetched_bytes = 0; // represent the next byte to fetch.
-
-            while fetched_bytes < size {
-                let fetch_till = fetched_bytes + part_size;
-                let range = Some(format!("bytes={}-{}", fetched_bytes, fetch_till - 1)); // -1 is reqd here as range is inclusive.
-
-                debug!(
-                    "{ctx} Fetching byte range: bytes={}-{} for key {key:?}",
-                    fetched_bytes,
-                    fetch_till - 1
-                );
-                // fetch the range.
-                match fetch_object_stream(key.clone(), range.clone()).await {
-                    Ok(mut obj_stream) => {
-                        'inner_range: loop {
-                            // stream over the response chunks
-                            match obj_stream.try_next().await {
-                                Ok(Some(chunk)) => {
-                                    debug!("{ctx} Received chunk with {} bytes for range {range:?} for key {key:?}.", chunk.len());
-                                    // meh, we need to clone the chunk :(
-                                    if sender
-                                        .send(event_from(chunk.as_ref().to_vec(), stream))
-                                        .await
-                                        .is_err()
-                                    {
-                                        error!("{ctx} Error sending data for range {range:?} for key {key:?} to source.");
-                                        err = true;
-                                        break 'inner_range;
-                                    }
-                                }
-                                Ok(None) => {
-                                    // object range stream finished
-                                    break 'inner_range;
-                                }
-                                Err(e) => {
-                                    error!("{ctx} Error fetching data for range {range:?} for key {key:?}: {e}");
-                                    // TODO: emit event to `err` port?
-                                    err = true;
-                                    break 'inner_range; // wait for next key
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        error!("{ctx} Error fetching range {range:?} for key {key:?}: {e}");
-                        err = true;
-                    }
-                }
-                // update for next iteration.
-                fetched_bytes = fetch_till;
             }
+            // update for next iteration.
+            fetched_bytes = fetch_till;
         }
-
-        // Close the stream
-        let stream_finish_reply = if err {
-            SourceReply::StreamFail(stream)
-        } else {
-            SourceReply::EndStream {
-                origin_uri: origin_uri.clone(),
-                stream,
-                meta: None,
-            }
-        };
-        sender.send(stream_finish_reply).await?;
+        err
     }
-    Ok(())
 }
