@@ -18,12 +18,12 @@ use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
 use crate::errors::{Error, Kind as ErrorKind, Result};
 use async_std::channel::{bounded, Receiver, Sender};
-use elasticsearch::cluster::ClusterHealthParts;
-use elasticsearch::http::response::Response;
 use elasticsearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
 use elasticsearch::http::Url;
 use elasticsearch::params::Refresh;
-use elasticsearch::{BulkDeleteOperation, BulkOperation, BulkOperations, BulkParts, Elasticsearch};
+use elasticsearch::{cluster::ClusterHealthParts, BulkDeleteOperation};
+use elasticsearch::{http::response::Response, Bulk};
+use elasticsearch::{BulkOperation, BulkOperations, BulkParts, Elasticsearch};
 use tremor_common::time::nanotime;
 use tremor_script::utils::sorted_serialize;
 use tremor_value::value::StaticValue;
@@ -198,8 +198,6 @@ struct ElasticSink {
 }
 
 impl ElasticSink {
-    // ALLOW: this is a string
-    const MISSING_ID: &'static str = "Missing field `$elastic[\"_id\"]`";
     fn new(
         node_urls: Vec<Url>,
         response_tx: Sender<SourceReply>,
@@ -289,189 +287,32 @@ impl Sink for ElasticSink {
                     guard.num()
                 ))
                 .spawn::<_, Result<()>>(async move {
-                    // build bulk request (we can't do that in a separate function)
-                    let mut ops = BulkOperations::new();
-                    // per request options - extract from event metadata (ignoring batched)
-                    let event_es_meta = ESMeta::new(event.data.suffix().meta());
-                    let index = event_es_meta.get_index().or(default_index.as_deref());
-                    let doc_type = event_es_meta.get_type();
-                    let routing = event_es_meta.get_routing();
-                    let refresh = event_es_meta.get_refresh();
-                    let timeout = event_es_meta.get_timeout();
-                    let pipeline = event_es_meta.get_pipeline();
-                    for (data, meta) in event.value_meta_iter() {
-                        // item metadata
-                        let es_meta = ESMeta::new(meta);
-                        match es_meta.get_action() {
-                            Some("index") | None => {
-                                // index is the default action
-                                let mut op = BulkOperation::index(data);
-                                if let Some(index) = es_meta.get_index() {
-                                    op = op.index(index);
-                                }
-                                if let Some(id) = es_meta.get_id() {
-                                    op = op.id(id);
-                                }
-                                ops.push(op)?;
-                            }
-                            Some("delete") => {
-                                let mut op: BulkDeleteOperation<()> =
-                                    if let Some(id) = es_meta.get_id() {
-                                        BulkOperation::delete(id)
-                                    } else {
-                                        let e = Error::from(Self::MISSING_ID);
-                                        return handle_error(
-                                            e,
-                                            event,
-                                            &origin_uri,
-                                            &response_tx,
-                                            &reply_tx,
-                                            include_payload,
-                                        )
-                                        .await;
-                                    };
-                                if let Some(index) = es_meta.get_index() {
-                                    op = op.index(index);
-                                }
-                                ops.push(op)?;
-                            }
-                            Some("create") => {
-                                // create requires an `_id` here, which is not according to spec
-                                let mut op = if let Some(id) = es_meta.get_id() {
-                                    BulkOperation::create(id, data)
-                                } else {
-                                    // Actually `_id` should be completely optional here
-                                    // See: https://github.com/elastic/elasticsearch-rs/issues/190
-                                    // ALLOW: this is a string
-                                    let e = Error::from(Self::MISSING_ID);
-                                    return handle_error(
-                                        e,
-                                        event,
-                                        &origin_uri,
-                                        &response_tx,
-                                        &reply_tx,
-                                        include_payload,
-                                    )
-                                    .await;
-                                };
-                                if let Some(index) = es_meta.get_index() {
-                                    op = op.index(index);
-                                }
-                                ops.push(op)?;
-                            }
-                            Some("update") => {
-                                let mut op = if let Some(id) = es_meta.get_id() {
-                                    BulkOperation::update(
-                                        id,
-                                        literal!({ "doc": data.clone_static() }), // TODO: find a way to not .clone_static()
-                                    )
-                                } else {
-                                    let e = Error::from(Self::MISSING_ID);
-                                    return handle_error(
-                                        e,
-                                        event,
-                                        &origin_uri,
-                                        &response_tx,
-                                        &reply_tx,
-                                        include_payload,
-                                    )
-                                    .await;
-                                };
-                                if let Some(index) = es_meta.get_index() {
-                                    op = op.index(index);
-                                }
-                                ops.push(op)?;
-                            }
-                            Some(other) => {
-                                // FIXME: send error response
-                                let e = Error::from(format!("Invalid `$elastic.action` {}", other));
-                                return handle_error(
-                                    e,
-                                    event,
-                                    &origin_uri,
-                                    &response_tx,
-                                    &reply_tx,
-                                    include_payload,
-                                )
-                                .await;
-                            }
-                        }
-                    }
+                    let r: Result<Value> = (|| async {
+                        // build bulk request (we can't do that in a separate function)
+                        let mut ops = BulkOperations::new();
+                        // per request options - extract from event metadata (ignoring batched)
+                        let event_es_meta = ESMeta::new(event.data.suffix().meta());
 
-                    let parts = match (index, doc_type) {
-                        (Some(index), Some(doc_type)) => BulkParts::IndexType(index, doc_type),
-                        (Some(index), None) => BulkParts::Index(index),
-                        _ => BulkParts::None,
-                    };
-                    let mut bulk = client.client.bulk(parts).body(vec![ops]);
-                    // apply request scoped options
-                    if let Some(routing) = routing {
-                        bulk = bulk.routing(routing);
-                    }
-                    if let Some(refresh) = refresh {
-                        let refresh = match refresh.as_str() {
-                            "wait_for" => Refresh::WaitFor,
-                            "false" => Refresh::False,
-                            "true" => Refresh::True,
-                            other => {
-                                return handle_error(
-                                    Error::from(format!(
-                                        "Invalid value for `$elastic.refresh`: {}",
-                                        other
-                                    )),
-                                    event,
-                                    &origin_uri,
-                                    &response_tx,
-                                    &reply_tx,
-                                    include_payload,
-                                )
-                                .await;
-                            }
-                        };
-                        bulk = bulk.refresh(refresh);
-                    }
-                    if let Some(timeout) = timeout {
-                        bulk = bulk.timeout(timeout);
-                    }
-                    if let Some(doc_type) = doc_type {
-                        bulk = bulk.ty(doc_type);
-                    }
-                    if let Some(pipeline) = pipeline {
-                        bulk = bulk.pipeline(pipeline);
-                    }
-                    match bulk.send().await.and_then(Response::error_for_status_code) {
-                        Ok(response) => {
-                            match response.json::<StaticValue>().await {
-                                Ok(value) => {
-                                    let v = value.into_value();
-                                    // build responses - one for every item
-                                    handle_response(
-                                        v,
-                                        event,
-                                        &origin_uri,
-                                        response_tx,
-                                        reply_tx,
-                                        include_payload,
-                                        start,
-                                    )
-                                    .await?;
-                                }
-                                Err(e) => {
-                                    // handle response deserialization error
-                                    return handle_error(
-                                        e,
-                                        event,
-                                        &origin_uri,
-                                        &response_tx,
-                                        &reply_tx,
-                                        include_payload,
-                                    )
-                                    .await;
-                                }
-                            }
+                        for (data, meta) in event.value_meta_iter() {
+                            ESMeta::new(meta).insert_op(data, &mut ops)?;
                         }
+
+                        let parts = event_es_meta.parts(default_index.as_deref());
+                        let bulk =
+                            event_es_meta.apply_to(client.client.bulk(parts).body(vec![ops]))?;
+                        // apply request scoped options
+
+                        let response = bulk
+                            .send()
+                            .await
+                            .and_then(Response::error_for_status_code)?;
+                        let value = response.json::<StaticValue>().await?;
+                        Ok(value.into_value())
+                    })()
+                    .await;
+                    match r {
                         Err(e) => {
-                            return handle_error(
+                            handle_error(
                                 e,
                                 event,
                                 &origin_uri,
@@ -479,15 +320,25 @@ impl Sink for ElasticSink {
                                 &reply_tx,
                                 include_payload,
                             )
-                            .await;
+                            .await
                         }
-                    }
-
+                        Ok(v) => {
+                            handle_response(
+                                v,
+                                event,
+                                &origin_uri,
+                                response_tx,
+                                reply_tx,
+                                include_payload,
+                                start,
+                            )
+                            .await
+                        }
+                    }?;
                     drop(guard);
 
                     Ok(())
                 })?;
-            Ok(SinkReply::NONE)
         } else {
             error!("{} No elasticsearch client available.", &ctx);
             handle_error(
@@ -499,8 +350,8 @@ impl Sink for ElasticSink {
                 self.include_payload,
             )
             .await?;
-            Ok(SinkReply::NONE)
         }
+        Ok(SinkReply::NONE)
     }
 
     fn auto_ack(&self) -> bool {
@@ -649,6 +500,9 @@ struct ESMeta<'a, 'value> {
 }
 
 impl<'a, 'value> ESMeta<'a, 'value> {
+    // ALLOW: this is a string
+    const MISSING_ID: &'static str = "Missing field `$elastic[\"_id\"]`";
+
     fn new(meta: &'a Value<'value>) -> Self {
         Self {
             meta: if let Some(elastic_meta) = meta.get("elastic") {
@@ -657,6 +511,98 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                 None
             },
         }
+    }
+
+    fn insert_op(&self, data: &Value, ops: &mut BulkOperations) -> Result<()> {
+        // index is the default action
+        match self.get_action().unwrap_or("index") {
+            "index" => {
+                let mut op = BulkOperation::index(data);
+                if let Some(id) = self.get_id() {
+                    op = op.id(id);
+                }
+                if let Some(index) = self.get_index() {
+                    op = op.index(index);
+                }
+                ops.push(op).map_err(Into::into)
+            }
+            "delete" => {
+                let mut op: BulkDeleteOperation<()> = self
+                    .get_id()
+                    .map(BulkOperation::delete)
+                    .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+                if let Some(index) = self.get_index() {
+                    op = op.index(index);
+                }
+                ops.push(op).map_err(Into::into)
+            }
+
+            "create" => {
+                // create requires an `_id` here, which is not according to spec
+                // Actually `_id` should be completely optional here
+                // See: https://github.com/elastic/elasticsearch-rs/issues/190
+                let mut op = self
+                    .get_id()
+                    .map(|id| BulkOperation::create(id, data))
+                    .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+                if let Some(index) = self.get_index() {
+                    op = op.index(index);
+                }
+                ops.push(op).map_err(Into::into)
+            }
+            "update" => {
+                let mut op = self
+                    .get_id()
+                    .map(|id| {
+                        BulkOperation::update(
+                            id,
+                            literal!({ "doc": data.clone_static() }), // TODO: find a way to not .clone_static()
+                        )
+                    })
+                    .ok_or_else(|| Error::from(Self::MISSING_ID))?;
+                if let Some(index) = self.get_index() {
+                    op = op.index(index);
+                }
+                ops.push(op).map_err(Into::into)
+            }
+            other => {
+                // FIXME: send error response
+                Err(Error::from(format!("Invalid `$elastic.action` {}", other)))
+            }
+        }
+    }
+
+    fn parts<'blk>(&'blk self, default_index: Option<&'blk str>) -> BulkParts<'blk> {
+        match (self.get_index().or(default_index), self.get_type()) {
+            (Some(index), Some(doc_type)) => BulkParts::IndexType(index, doc_type),
+            (Some(index), None) => BulkParts::Index(index),
+            _ => BulkParts::None,
+        }
+    }
+
+    fn apply_to<'bulk, 'meta, T>(
+        &'meta self,
+        mut bulk: Bulk<'bulk, 'meta, T>,
+    ) -> Result<Bulk<'bulk, 'meta, T>>
+    where
+        T: elasticsearch::http::request::Body,
+    {
+        if let Some(routing) = self.get_routing() {
+            bulk = bulk.routing(routing);
+        }
+        if let Some(refresh) = self.get_refresh()? {
+            bulk = bulk.refresh(refresh);
+        }
+        if let Some(timeout) = self.get_timeout() {
+            bulk = bulk.timeout(timeout);
+        }
+        if let Some(doc_type) = self.get_type() {
+            bulk = bulk.ty(doc_type);
+        }
+        if let Some(pipeline) = self.get_pipeline() {
+            bulk = bulk.pipeline(pipeline);
+        }
+        Ok(bulk)
     }
 
     fn get_id(&self) -> Option<&str> {
@@ -683,13 +629,18 @@ impl<'a, 'value> ESMeta<'a, 'value> {
         self.meta.get_str("action")
     }
 
-    /// supported values: `true`, `false`, `"true"`, `"false"`, `"wait_for"`
+    /// supported values: `true`, `false`, `"wait_for"`
     /// FIXME: Should we return a type here?
-    fn get_refresh(&self) -> Option<String> {
-        self.meta
-            .get_bool("refresh")
-            .as_ref()
-            .map(ToString::to_string)
-            .or_else(|| self.meta.get_str("refresh").map(ToString::to_string))
+    fn get_refresh(&self) -> Result<Option<Refresh>> {
+        if let Some(b) = self.meta.get_bool("refresh") {
+            Ok(Some(if b { Refresh::True } else { Refresh::False }))
+        } else if self.meta.get_str("refresh") == Some("wait_for") {
+            Ok(Some(Refresh::WaitFor))
+        } else {
+            Err(Error::from(format!(
+                "Invalid value for `$elastic.refresh`: {}",
+                self.meta.get("refresh").unwrap_or(&Value::const_null())
+            )))
+        }
     }
 }
