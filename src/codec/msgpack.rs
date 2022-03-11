@@ -40,7 +40,7 @@ impl Codec for MsgPack {
     ) -> Result<Option<Value<'input>>> {
         rmps::from_slice::<Value>(data)
             .map(Some)
-            .map_err(|e| e.into())
+            .map_err(Error::from)
     }
 
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {

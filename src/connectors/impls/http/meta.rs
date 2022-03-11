@@ -23,7 +23,7 @@ use tremor_script::{EventPayload, ValueAndMeta};
 use tremor_value::{literal, structurize, Value};
 use value_trait::{Builder, Mutable, ValueAccess};
 
-use super::auth::HttpAuth;
+use super::auth::Auth;
 
 use crate::codec::{self, Codec};
 use crate::connectors::impls::http::utils::{SurfRequest, SurfRequestBuilder, SurfResponse};
@@ -51,7 +51,7 @@ pub struct Config {
     pub(crate) url: String,
     /// Authorization method
     #[serde(default = "default_auth")]
-    pub(crate) auth: HttpAuth,
+    pub(crate) auth: Auth,
     /// Concurrency capacity limits ( in flight requests )
     #[serde(default = "default_concurrency")]
     pub(crate) concurrency: usize,
@@ -84,8 +84,8 @@ fn default_method() -> String {
     "post".to_string()
 }
 
-fn default_auth() -> HttpAuth {
-    HttpAuth::None
+fn default_auth() -> Auth {
+    Auth::None
 }
 
 fn default_mime_codec_map() -> MimeCodecMap {
@@ -279,6 +279,11 @@ impl BatchItemMeta {
     }
 }
 
+type HeaderAndCodec<'outer> = (
+    HashMap<String, Vec<HeaderValue>>,
+    &'outer (dyn Codec + 'static),
+);
+
 impl HttpRequestMeta {
     fn refresh_active_codec<'event>(
         codec_map: &'event MimeCodecMap,
@@ -306,10 +311,7 @@ impl HttpRequestMeta {
         from_meta: &Value,
         codec_map: &'outer MimeCodecMap,
         default_codec: &'outer (dyn Codec + 'static),
-    ) -> Result<(
-        HashMap<String, Vec<HeaderValue>>,
-        &'outer (dyn Codec + 'static),
-    )>
+    ) -> Result<HeaderAndCodec<'outer>>
     where
         'outer: 'event,
     {
@@ -326,10 +328,7 @@ impl HttpRequestMeta {
         from_config: &HashMap<T, Value>,
         codec_map: &'outer MimeCodecMap,
         default_codec: &'outer (dyn Codec + 'static),
-    ) -> Result<(
-        HashMap<String, Vec<HeaderValue>>,
-        &'outer (dyn Codec + 'static),
-    )>
+    ) -> Result<HeaderAndCodec<'outer>>
     where
         'outer: 'event,
         T: ToString,
@@ -477,7 +476,7 @@ impl HttpRequestMeta {
                 |x| Self::meta_to_header_map(x, &self.codec_map, self.codec.as_ref()),
             )?;
 
-            let active_auth = HttpAuth::from(overrides.get("auth"));
+            let active_auth = Auth::from(overrides.get("auth"));
 
             if let Ok(Some(header_value)) = active_auth.header_value() {
                 active_headers.insert(

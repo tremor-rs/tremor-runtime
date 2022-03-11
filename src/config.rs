@@ -81,6 +81,7 @@ impl Default for PauseBehaviour {
 
 /// Codec name and configuration
 #[derive(Clone, Debug, Default)]
+#[allow(clippy::module_name_repetitions)]
 pub struct NameWithConfig {
     pub(crate) name: String,
     pub(crate) config: Option<Value<'static>>,
@@ -163,12 +164,12 @@ impl Connector {
 
         let conf = params.generate_config(&mut helper)?;
 
-        Connector::from_config(defn.builtin_kind.clone().into(), conf)
+        Connector::from_config(defn.builtin_kind.clone().into(), &conf)
     }
     /// Creates a connector from it's definition (aka config + settings)
     pub(crate) fn from_config(
         connector_type: ConnectorType,
-        connector_config: Value<'static>,
+        connector_config: &Value<'static>,
     ) -> crate::Result<Connector> {
         fn validate_type(v: &Value, k: &str, t: ValueType) -> Result<()> {
             if v.get(k).is_some() && v.get(k).map(Value::value_type) != Some(t) {
@@ -176,7 +177,7 @@ impl Connector {
                     "Expect type {:?} for key {} but got {:?}",
                     t,
                     k,
-                    v.get(k).map(Value::value_type).unwrap_or(ValueType::Null)
+                    v.get(k).map_or(ValueType::Null, Value::value_type)
                 )
                 .into());
             }
@@ -186,11 +187,11 @@ impl Connector {
 
         // TODO: can we get hygenic errors here?
 
-        validate_type(&connector_config, "codec_map", ValueType::Object)?;
-        validate_type(&connector_config, "preprocessors", ValueType::Array)?;
-        validate_type(&connector_config, "postprocessors", ValueType::Array)?;
-        validate_type(&connector_config, "metrics_interval_s", ValueType::U64)
-            .or_else(|_| validate_type(&connector_config, "metrics_interval_s", ValueType::I64))?;
+        validate_type(connector_config, "codec_map", ValueType::Object)?;
+        validate_type(connector_config, "preprocessors", ValueType::Array)?;
+        validate_type(connector_config, "postprocessors", ValueType::Array)?;
+        validate_type(connector_config, "metrics_interval_s", ValueType::U64)
+            .or_else(|_| validate_type(connector_config, "metrics_interval_s", ValueType::I64))?;
 
         Ok(Connector {
             connector_type,
@@ -276,7 +277,7 @@ mod tests {
     fn test_config_builtin_preproc_with_config() -> Result<()> {
         let c = Connector::from_config(
             ConnectorType::from("otel_client".to_string()),
-            literal!({
+            &literal!({
                 "preprocessors": [ {"name": "snot", "config": { "separator": "\n" }}],
             }),
         )?;

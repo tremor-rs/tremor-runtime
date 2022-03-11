@@ -39,17 +39,17 @@ impl ConnectorBuilder for Builder {
         _raw_config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
         let (tx, rx) = bounded(128);
-        Ok(Box::new(DnsClient { tx, rx }))
+        Ok(Box::new(Client { tx, rx }))
     }
 }
 
-pub struct DnsClient {
+pub struct Client {
     tx: Sender<SourceReply>,
     rx: Receiver<SourceReply>,
 }
 
 #[async_trait::async_trait()]
-impl Connector for DnsClient {
+impl Connector for Client {
     fn codec_requirements(&self) -> CodecReq {
         CodecReq::Structured
     }
@@ -119,9 +119,10 @@ impl DnsSink {
             // generic lookup
             lookup_to_value(resolver.lookup_ip(name).await?.as_lookup())
         };
-        let meta = correlation
-            .map(|c| literal!({ "correlation": c.clone_static() }))
-            .unwrap_or_else(|| Value::object());
+        let meta = correlation.map_or_else(
+            Value::object,
+            |c| literal!({ "correlation": c.clone_static() }),
+        );
         let e = (data, meta).into();
 
         Ok(e)
@@ -160,10 +161,10 @@ impl Sink for DnsSink {
                         "request": m.get("dns").map(Value::clone_static).unwrap_or_default(),
                         "error": format!("{}", err),
                     });
-                    let meta = m
-                        .get("correlation")
-                        .map(|c| literal!({ "correlation": c.clone_static() }))
-                        .unwrap_or_else(|| Value::object());
+                    let meta = m.get("correlation").map_or_else(
+                        Value::object,
+                        |c| literal!({ "correlation": c.clone_static()}),
+                    );
 
                     let error_e = (data, meta).into();
                     (ERR, error_e)
@@ -175,7 +176,7 @@ impl Sink for DnsSink {
                 stream: DEFAULT_STREAM_ID,
                 port: Some(port),
             };
-            self.tx.send(source_reply).await?
+            self.tx.send(source_reply).await?;
         }
         Ok(SinkReply::NONE)
     }

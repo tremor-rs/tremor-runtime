@@ -36,7 +36,7 @@ impl Codec for String {
         std::str::from_utf8(data)
             .map(Value::from)
             .map(Some)
-            .map_err(|e| e.into())
+            .map_err(Error::from)
     }
 
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {
