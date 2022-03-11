@@ -74,13 +74,14 @@ struct Payload(Event);
 
 impl qwal::Entry for Payload {
     type Output = Event;
+    type Error = simd_json::Error;
 
-    fn serialize(self) -> Vec<u8> {
-        self.0.json_vec().unwrap()
+    fn serialize(self) -> std::result::Result<Vec<u8>, Self::Error> {
+        Ok(self.0.json_vec()?)
     }
 
-    fn deserialize(mut data: Vec<u8>) -> Self::Output {
-        Event::from_slice(&mut data).unwrap()
+    fn deserialize(mut data: Vec<u8>) -> std::result::Result<Self::Output, Self::Error> {
+        Event::from_slice(&mut data)
     }
 }
 
