@@ -25,7 +25,6 @@ use tremor_influx as influx;
 
 pub type Kind = ErrorKind;
 
-
 impl From<sled::transaction::TransactionError<()>> for Error {
     fn from(e: sled::transaction::TransactionError<()>) -> Self {
         Self::from(format!("Sled Transaction Error: {:?}", e))
@@ -175,7 +174,8 @@ error_chain! {
         WsError(async_tungstenite::tungstenite::Error);
         EnvVarError(std::env::VarError);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
-        Wal(qwal::Error);
+        WalJson(qwal::Error<simd_json::Error>);
+        WalInfailable(qwal::Error<std::convert::Infallible>);
         Uuid(uuid::Error);
     }
 
