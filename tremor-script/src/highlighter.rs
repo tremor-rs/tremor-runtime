@@ -452,24 +452,10 @@ pub trait Highlighter {
             self.set_color(&mut c)?;
             match &x.value {
                 Token::HereDocStart => {
-                    // (indent, lines) => {
                     writeln!(self.get_writer(), r#"""""#)?;
                     // TODO indentation sensing in heredoc's
-                    // for l in lines {
-                    //     line += 1;
-                    //     self.reset()?;
-                    //     self.set_color(ColorSpec::new().set_bold(true))?;
-                    //     write!(self.get_writer(), "{:5} | ", line)?;
-                    //     self.reset()?;
-                    //     c.set_intense(true).set_fg(Some(Color::Magenta));
-                    //     writeln!(self.get_writer(), "{}{}", " ".repeat(*indent), l)?
-                    // }
                     line += 1;
                     self.reset()?;
-                    // self.set_color(ColorSpec::new().set_bold(true))?;
-                    // write!(self.get_writer(), "{:5} | ", line)?;
-                    // self.reset()?;
-                    // write!(self.get_writer(), r#"""""#)?;
                 }
                 Token::HereDocEnd => {
                     write!(self.get_writer(), r#"""""#)?;
@@ -499,7 +485,6 @@ pub trait Highlighter {
             }
 
             self.reset()?;
-            //};
         }
         if let Some(Error {
             start,

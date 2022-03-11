@@ -187,17 +187,6 @@ macro_rules! assert_with_request_meta {
     };
 }
 
-// macro_rules! assert_with_response_meta {
-//     ($res: expr, $meta: ident, $ctx: block) => {
-//         let rqm = $res.meta().get("response");
-//         if let Some($meta) = rqm {
-//             $ctx
-//         } else {
-//             assert!(false, "Expected response metadata to be set by connector",);
-//         }
-//     };
-// }
-
 macro_rules! assert_with_response_headers {
     ($res: expr, $meta: ident, $ctx: block) => {
         let rqm = $res.meta().get("response");
@@ -244,14 +233,6 @@ async fn http_client_request_with_defaults() -> Result<()> {
     Ok(())
 }
 
-// #[async_std::test]
-// async fn https_client_request_with_defaults() -> Result<()> {
-//     let target = find_free_tcp_endpoint_str().await;
-//     let res = rtt("https", &target, "string", literal!({})).await?;
-//     assert_eq!("get", res.value().to_string());
-//     Ok(())
-// }
-
 #[async_std::test]
 async fn http_client_request_override_method() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
@@ -259,14 +240,6 @@ async fn http_client_request_override_method() -> Result<()> {
     assert_eq!("post", res.value().to_string());
     Ok(())
 }
-
-// #[async_std::test]
-// async fn https_client_request_override_method() -> Result<()> {
-//     let target = find_free_tcp_endpoint_str().await;
-//     let res = rtt("https", &target, "string", literal!({ "method": "post" })).await?;
-//     assert_eq!("post", res.value().to_string());
-//     Ok(())
-// }
 
 #[async_std::test]
 async fn http_client_request_override_endpoint() -> Result<()> {

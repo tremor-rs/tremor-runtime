@@ -137,35 +137,6 @@ pub fn reply<T: Serialize + Send + Sync + 'static>(
     serialize(accept(req), &result_in, ok_code)
 }
 
-// async fn decode<T>(mut req: Request) -> Result<(Request, T)>
-// where
-//     for<'de> T: Deserialize<'de>,
-// {
-//     let mut body = req.body_bytes().await?;
-//     match content_type(&req) {
-//         Some(ResourceType::Yaml) => serde_yaml::from_slice(body.as_slice())
-//             .map_err(|e| {
-//                 Error::new(
-//                     StatusCode::BadRequest,
-//                     format!("Could not decode YAML: {}", e),
-//                 )
-//             })
-//             .map(|data| (req, data)),
-//         Some(ResourceType::Json) => simd_json::from_slice(body.as_mut_slice())
-//             .map_err(|e| {
-//                 Error::new(
-//                     StatusCode::BadRequest,
-//                     format!("Could not decode JSON: {}", e),
-//                 )
-//             })
-//             .map(|data| (req, data)),
-//         Some(ResourceType::Trickle) | None => Err(Error::new(
-//             StatusCode::UnsupportedMediaType,
-//             "No content type provided".into(),
-//         )),
-//     }
-// }
-
 async fn handle_api_request<
     G: std::future::Future<Output = Result<tide::Response>>,
     F: Fn(Request) -> G,

@@ -262,14 +262,6 @@ fn cmp_map(left: &Object, right: &Object) -> Ordering {
     Ordering::Equal
 }
 
-// impl<'value> Ord for Value<'value> {
-//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-//         match (self, other) {
-//             (Value::Static(n1), Value::Static(n2)) => n1.cmp(n2),
-//             (Value::Static(_), _) => Ordering::Less,
-//         }
-//     }
-// }
 
 impl<'value> Value<'value> {
     /// Enforces static lifetime on a borrowed value, this will

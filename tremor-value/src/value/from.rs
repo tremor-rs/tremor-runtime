@@ -143,16 +143,6 @@ impl<'value> From<i64> for Value<'value> {
     }
 }
 
-// We do not use 128 bit yet
-// #[cfg(feature = "128bit")]
-// impl<'value> From<i128> for Value<'value> {
-//     #[inline]
-//     #[must_use]
-//     fn from(i: i128) -> Self {
-//         Value::Static(StaticNode::I128(i))
-//     }
-// }
-
 /********* u_ **********/
 impl<'value> From<u8> for Value<'value> {
     #[inline]
@@ -185,15 +175,6 @@ impl<'value> From<u64> for Value<'value> {
         Value::Static(StaticNode::U64(i))
     }
 }
-// We do not use 128 bit yet
-// #[cfg(feature = "128bit")]
-// impl<'value> From<u128> for Value<'value> {
-//     #[inline]
-//     #[must_use]
-//     fn from(i: u128) -> Self {
-//         Value::Static(StaticNode::U128(i))
-//     }
-// }
 
 impl<'value> From<usize> for Value<'value> {
     #[inline]
