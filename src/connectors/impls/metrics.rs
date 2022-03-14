@@ -124,7 +124,7 @@ impl Source for MetricsSource {
                 port: None,
             }),
             Err(TryRecvError::Closed) => Err(TryRecvError::Closed.into()),
-            Err(TryRecvError::Empty) => Ok(SourceReply::Empty(10)),
+            Err(TryRecvError::Empty | TryRecvError::Overflowed(_)) => Ok(SourceReply::Empty(10)),
         }
     }
 
