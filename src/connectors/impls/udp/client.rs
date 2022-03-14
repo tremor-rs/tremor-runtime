@@ -141,7 +141,7 @@ impl Sink for UdpClientSink {
                 error!("{} UDP Error: {}. Initiating Reconnect...", &ctx, &e);
                 // TODO: upon which errors to actually trigger a reconnect?
                 self.socket = None;
-                ctx.notifier().notify().await?;
+                ctx.notifier().connection_lost().await?;
                 return Err(e);
             }
         }

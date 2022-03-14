@@ -117,9 +117,7 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
         Ok(deployable) => deployable,
         Err(e) => {
             let mut h = TermHighlighter::stderr();
-            if let Err(e) = h.format_error(&e) {
-                eprintln!("Error: {}", e);
-            };
+            log_error!(h.format_error(&e), "Error: {e}");
 
             return Err(format!("failed to load troy file: {}", file_name).into());
         }
@@ -131,4 +129,18 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
         count += 1;
     }
     Ok(count)
+}
+
+/// Logs but ignores an error
+#[macro_export(log_error)]
+#[doc(hidden)]
+macro_rules! log_error {
+    ($maybe_error:expr,  $($args:tt)+) => (
+        if let Err(e) = $maybe_error {
+            error!($($args)+, e = e);
+            true
+        } else {
+            false
+        }
+    )
 }

@@ -288,7 +288,7 @@ impl Sink for TcpClientSink {
                 // TODO: figure upon which errors to actually reconnect
                 self.tcp_stream = None;
                 self.wrapped_stream = None;
-                ctx.notifier().notify().await?;
+                ctx.notifier().connection_lost().await?;
                 return Err(e);
             }
         }

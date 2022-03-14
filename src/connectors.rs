@@ -33,13 +33,20 @@ use self::sink::{SinkAddr, SinkContext, SinkMsg};
 use self::source::{SourceAddr, SourceContext, SourceMsg};
 use self::utils::quiescence::QuiescenceBeacon;
 pub(crate) use crate::config::Connector as ConnectorConfig;
-use crate::errors::{Error, Kind as ErrorKind, Result};
 use crate::instance::State;
 use crate::pipeline;
 use crate::system::World;
-use async_std::channel::{bounded, Sender};
+use crate::{
+    errors::{Error, Kind as ErrorKind, Result},
+    log_error,
+};
 use async_std::task::{self};
+use async_std::{
+    channel::{bounded, Sender},
+    task::JoinHandle,
+};
 use beef::Cow;
+use futures::Future;
 use halfbrown::HashMap;
 use std::{fmt::Display, sync::atomic::Ordering};
 use tremor_common::ids::ConnectorIdGen;
@@ -234,6 +241,7 @@ pub(crate) trait Context: Display + Clone {
     fn connector_type(&self) -> &ConnectorType;
 
     /// only log an error and swallow the result
+    #[inline]
     fn log_err<T, E, M>(&self, expr: std::result::Result<T, E>, msg: &M)
     where
         E: std::error::Error,
@@ -412,7 +420,7 @@ async fn connector_task(
     let sink_builder = sink::builder(
         &config,
         codec_requirement,
-        alias,
+        &alias,
         qsize,
         sink_metrics_reporter,
     )?;
@@ -1173,4 +1181,24 @@ pub(crate) async fn register_builtin_connector_types(world: &World, debug: bool)
         .await?;
 
     Ok(())
+}
+
+/// Function to spawn an acceptor task in the runtime, this forbids returning Result so
+/// that `?` can't be used in those tasks and silent errors with acceptor tasks dying
+/// are eliminated.
+pub(crate) fn spawn_task<F, C>(ctx: C, t: F) -> JoinHandle<()>
+where
+    F: Future<Output = Result<()>> + Send + 'static,
+    C: Context + Send + 'static,
+{
+    task::spawn(async move {
+        log_error!(t.await, "{ctx} Connector loop error: {e}");
+        // notify connector task about disconnect
+        // of the listening socket
+        let n = ctx.notifier();
+        log_error!(
+            n.connection_lost().await,
+            "{ctx} Failed to notify on connection lost: {e}"
+        );
+    })
 }

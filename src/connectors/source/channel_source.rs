@@ -100,7 +100,10 @@ impl ChannelSourceRuntime {
                 };
             }
             if reader.on_done(stream).await == StreamDone::ConnectorClosed {
-                ctx.log_err(ctx.notifier().notify().await, "Failed to notify connector");
+                ctx.log_err(
+                    ctx.notifier().connection_lost().await,
+                    "Failed to notify connector",
+                );
             }
         });
     }

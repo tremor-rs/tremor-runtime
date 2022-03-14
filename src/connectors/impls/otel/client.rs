@@ -298,7 +298,7 @@ impl Sink for OtelSink {
                         let request = json_otel_metrics_to_pb(value)?;
                         if let Err(e) = remote.metrics_client.export(request).await {
                             error!("Failed to dispatch otel/gRPC metrics message: {}", e);
-                            ctx.notifier().notify().await?;
+                            ctx.notifier().connection_lost().await?;
                             return if event.transactional {
                                 // Ok(vec![qos::fail(&mut event.clone()), qos::close(&mut event)])
                                 Ok(SinkReply::fail())
@@ -315,7 +315,7 @@ impl Sink for OtelSink {
                         let request = json_otel_logs_to_pb(value)?;
                         if let Err(e) = remote.logs_client.export(request).await {
                             error!("Failed to dispatch otel/gRPC logs message: {}", e);
-                            ctx.notifier().notify().await?;
+                            ctx.notifier().connection_lost().await?;
                             return if event.transactional {
                                 // Ok(vec![qos::fail(&mut event.clone()), qos::close(&mut event)])
                                 Ok(SinkReply::fail())
@@ -334,7 +334,7 @@ impl Sink for OtelSink {
                         let request = json_otel_trace_to_pb(value)?;
                         if let Err(e) = remote.trace_client.export(request).await {
                             error!("Failed to dispatch otel/gRPC logs message: {}", e);
-                            ctx.notifier().notify().await?;
+                            ctx.notifier().connection_lost().await?;
                             return if event.transactional {
                                 // Ok(vec![qos::fail(&mut event.clone()), qos::close(&mut event)])
                                 Ok(SinkReply::fail())

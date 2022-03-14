@@ -125,7 +125,7 @@ impl Source for HttpRequestSource {
             Ok(receiver) => Ok(receiver),
             Err(TryRecvError::Empty) => Ok(SourceReply::Empty(SOURCE_RECV_INTERVAL)),
             Err(TryRecvError::Closed) => {
-                ctx.notifier().notify().await?;
+                ctx.notifier().connection_lost().await?;
                 Err("HTTP Request Source channel is closed, we have to reconnect.".into())
             }
         }

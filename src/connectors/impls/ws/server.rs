@@ -269,7 +269,7 @@ impl Connector for WsServer {
 
             // notify connector task about disconnect
             // of the listening socket
-            ctx.notifier.notify().await?;
+            ctx.notifier.connection_lost().await?;
             Ok(())
         }));
 

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
-use async_std::task::{self, JoinHandle};
+use async_std::task::JoinHandle;
 use halfbrown::HashMap;
 use http_types::headers::HeaderValue;
 use http_types::{Mime, Url};
@@ -24,13 +24,13 @@ use tremor_common::time::nanotime;
 use uuid::adapter::Urn;
 use uuid::Uuid;
 
-use crate::codec;
 use crate::codec::Codec;
 use crate::connectors::prelude::*;
 use crate::connectors::utils::mime::MimeCodecMap;
 use crate::connectors::utils::tls::TLSServerConfig;
 use crate::postprocessor::postprocess;
 use crate::postprocessor::Postprocessors;
+use crate::{codec, connectors::spawn_task};
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -157,7 +157,7 @@ struct HttpServerSource {
     inflight: HashMap<Urn, Sender<Rendezvous>>,
     inflighttracker_rx: Receiver<Rendezvous>,
     inflighttracker_tx: Sender<Rendezvous>,
-    accept_task: Option<JoinHandle<Result<()>>>,
+    accept_task: Option<JoinHandle<()>>,
     tls_server_config: Option<TLSServerConfig>,
     codec: Box<dyn Codec>,
     codec_map: MimeCodecMap,
@@ -471,20 +471,20 @@ impl Source for HttpServerSource {
         let codec_map = self.codec_map.clone();
 
         // Accept task - this is the main receive loop for http server instances
-        //
-        self.accept_task = Some(task::spawn(async move {
+        self.accept_task = Some(spawn_task(ctx.clone(), async move {
             let idgen = EventIdGenerator::new(ctx.uid);
             // NOTE FIXME validate shcme = https for tls server config
             if let Some(tls_server_config) = tls_server_config {
                 let mut endpoint = tide::Server::with_state(HttpServerState {
                     idgen,
                     tx,
-                    uid: 0, // FIXME
+                    uid: ctx.uid,
                     codec,
                     codec_map,
                 });
                 endpoint.at("/").all(handle_request);
                 endpoint.at("/*").all(handle_request);
+
                 endpoint
                     .listen(
                         TlsListener::build()
@@ -497,7 +497,7 @@ impl Source for HttpServerSource {
                 let mut endpoint = tide::Server::with_state(HttpServerState {
                     idgen,
                     tx,
-                    uid: 0, // FIXME
+                    uid: ctx.uid,
                     codec,
                     codec_map,
                 });
@@ -505,10 +505,6 @@ impl Source for HttpServerSource {
                 endpoint.at("/*").all(handle_request);
                 endpoint.listen(&hostport).await?;
             };
-
-            // notify connector task about disconnect
-            // of the listening socket
-            ctx.notifier.notify().await?;
             Ok(())
         }));
 
@@ -617,7 +613,7 @@ impl Sink for HttpServerSink {
                 let vm = ValueAndMeta::from_parts(v.clone_static(), m.clone_static());
                 if let Err(_e) = self.inflighttracker_tx.send(Rendezvous::Response(vm)).await {
                     error!("{} Internal server error", &ctx);
-                    ctx.notifier().notify().await?;
+                    ctx.notifier().connection_lost().await?;
                 }
             }
             // send the event back to
@@ -638,7 +634,7 @@ impl Sink for HttpServerSink {
                 let vm = ValueAndMeta::from_parts(v.clone_static(), m.clone_static());
                 if let Err(_e) = self.inflighttracker_tx.send(Rendezvous::Response(vm)).await {
                     error!("{} Internal server error", &ctx);
-                    ctx.notifier().notify().await?;
+                    ctx.notifier().connection_lost().await?;
                 }
             }
         } else {
@@ -646,7 +642,7 @@ impl Sink for HttpServerSink {
                 let vm = ValueAndMeta::from_parts(v.clone_static(), m.clone_static());
                 if let Err(_e) = self.inflighttracker_tx.send(Rendezvous::Response(vm)).await {
                     error!("{} Internal server error", &ctx);
-                    ctx.notifier().notify().await?;
+                    ctx.notifier().connection_lost().await?;
                 }
             }
         }

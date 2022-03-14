@@ -143,7 +143,7 @@ impl Source for UdpServerSource {
                     ctx, &e
                 );
                 self.listener = None;
-                ctx.notifier().notify().await?;
+                ctx.notifier().connection_lost().await?;
                 return Err(e.into());
             }
             Err(_) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),

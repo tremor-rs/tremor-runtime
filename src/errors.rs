@@ -177,6 +177,7 @@ error_chain! {
         WalJson(qwal::Error<simd_json::Error>);
         WalInfailable(qwal::Error<std::convert::Infallible>);
         Uuid(uuid::Error);
+        Serenity(serenity::Error);
     }
 
     errors {

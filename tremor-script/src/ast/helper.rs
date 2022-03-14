@@ -158,7 +158,6 @@ where
     }
     /// leaves a scope
     pub(crate) fn leave_scope(&mut self) -> Result<Scope<'script>> {
-        // FIXME return left scope
         if let Some(mut next) = self.scope.parent.take() {
             std::mem::swap(&mut self.scope, &mut next);
             Ok(*next)
