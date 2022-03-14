@@ -94,7 +94,7 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
     #[cfg_attr(not(feature = "no-inline"), inline)]
     fn deserialize_enum<V>(
         self,
-        _name: &str,
+        name: &str,
         _variants: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value, Error>
@@ -107,14 +107,16 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
                 let (variant, value) = match iter.next() {
                     Some(v) => v,
                     None => {
-                        // FIXME: better error
-                        return Err(Error::Serde("missing enum type".to_string()));
+                        return Err(Error::Serde(format!(
+                            "Missing enum type for variant in enum `{name}`"
+                        )));
                     }
                 };
                 // enums are encoded in json as maps with a single key:value pair
-                if iter.next().is_some() {
-                    // FIXME: better error
-                    return Err(Error::Serde("extra values in enum".to_string()));
+                if let Some((extra, _)) = iter.next() {
+                    return Err(Error::Serde(format!(
+                        "extra values in enum `{name}`: `{variant}` .. `{extra}`"
+                    )));
                 }
                 (variant, Some(value))
             }
@@ -201,16 +203,7 @@ impl<'de> VariantAccess<'de> for VariantDeserializer<'de> {
                     visitor.visit_seq(Array(v.iter()))
                 }
             }
-            // FIXME
-            Some(_) | None => Err(Error::Serde("expected tuple variant".to_string()))
-            // Some(other) => Err(serde::de::Error::invalid_type(
-            //     other.unexpected(),
-            //     &"tuple variant",
-            // )),
-            // None => Err(serde::de::Error::invalid_type(
-            //     Unexpected::UnitVariant,
-            //     &"tuple variant",
-            // )),
+            Some(_) | None => Err(Error::Serde("expected tuple variant".to_string())),
         }
     }
 
@@ -227,17 +220,7 @@ impl<'de> VariantAccess<'de> for VariantDeserializer<'de> {
                 i: v.iter(),
                 v: &Value::Static(StaticNode::Null),
             }),
-            // FIXME
-            Some(_) | None => Err(Error::Serde("expected struct variant".to_string()))
-
-            // Some(other) => Err(serde::de::Error::invalid_type(
-            //     other.unexpected(),
-            //     &"struct variant",
-            // )),
-            // None => Err(serde::de::Error::invalid_type(
-            //     Unexpected::UnitVariant,
-            //     &"struct variant",
-            // )),
+            Some(_) | None => Err(Error::Serde("expected struct variant".to_string())),
         }
     }
 }

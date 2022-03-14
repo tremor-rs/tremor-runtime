@@ -19,7 +19,7 @@ pub(crate) use crate::ast::{
     ArgsExpr, ArrayPattern, ArrayPredicatePattern, BinExpr, Bytes, BytesPart, ClauseGroup,
     ClausePreCondition, Comprehension, ConnectStmt, ConnectorDefinition, CreateStmt,
     CreateTargetDefinition, CreationalWith, DefaultCase, DefinitioalArgs, DefinitioalArgsWith,
-    DeployEndpoint, EmitExpr, EventPath, Expr, ExprPath, Exprs, Field, FlowDefinition, FnDecl,
+    DeployEndpoint, EmitExpr, EventPath, Expr, ExprPath, Exprs, Field, FlowDefinition, FnDefn,
     GroupBy, Helper, Ident, IfElse, ImutExpr, Invoke, InvokeAggr, List, Literal, LocalPath, Match,
     Merge, MetadataPath, OperatorCreate, OperatorDefinition, Patch, PatchOperation, Path, Pattern,
     PipelineCreate, PipelineDefinition, PredicateClause, PredicatePattern, Query, Record,

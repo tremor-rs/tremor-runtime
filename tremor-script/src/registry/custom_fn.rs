@@ -17,7 +17,7 @@ use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
 use crate::prelude::*;
 use crate::Value;
 use crate::{
-    ast::{visitors::IsConstFn, Expr, Exprs, FnDecl, ImutExpr, ImutExprs, NodeMeta},
+    ast::{visitors::IsConstFn, Expr, Exprs, FnDefn, ImutExpr, ImutExprs, NodeMeta},
     NO_AGGRS,
 };
 use beef::Cow;
@@ -46,8 +46,8 @@ pub struct CustomFn<'script> {
     pub inline: bool,
 }
 
-impl<'script> From<FnDecl<'script>> for CustomFn<'script> {
-    fn from(mut f: FnDecl<'script>) -> Self {
+impl<'script> From<FnDefn<'script>> for CustomFn<'script> {
+    fn from(mut f: FnDefn<'script>) -> Self {
         let is_const = IsConstFn::is_const(&mut f.body).unwrap_or_default();
         CustomFn {
             name: f.name,

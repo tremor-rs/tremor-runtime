@@ -41,7 +41,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn visit_fn_decl(&mut self, _e: &mut FnDecl<'script>) -> Result<VisitRes> {
+    fn visit_fn_defn(&mut self, _e: &mut FnDefn<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
@@ -49,7 +49,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn leave_fn_decl(&mut self, _e: &mut FnDecl<'script>) -> Result<()> {
+    fn leave_fn_defn(&mut self, _e: &mut FnDefn<'script>) -> Result<()> {
         Ok(())
     }
     /// visit a comprehension

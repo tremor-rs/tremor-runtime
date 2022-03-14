@@ -154,7 +154,7 @@ pub(crate) struct Connector {
 }
 
 impl Connector {
-    /// Spawns a connector from a declaration
+    /// Spawns a connector from a definition
     pub(crate) fn from_defn(defn: &ast::ConnectorDefinition<'static>) -> crate::Result<Connector> {
         let aggr_reg = tremor_script::registry::aggr();
         let reg = &*FN_REGISTRY.read()?;

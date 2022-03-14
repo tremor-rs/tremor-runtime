@@ -150,8 +150,8 @@ ModuleStmt: ModuleStmtRaw<'input> = {
     
     // Script
     Const => ModuleStmtRaw::Const(<>),
-    FnDecl => ModuleStmtRaw::FnDecl(<>),
-    Intrinsic => ModuleStmtRaw::FnDecl(<>),
+    FnDefn => ModuleStmtRaw::FnDefn(<>),
+    Intrinsic => ModuleStmtRaw::FnDefn(<>),
 
     // Trickle
     DefineWindow => ModuleStmtRaw::Window(<>),
@@ -317,10 +317,6 @@ Stmts: StmtsRaw<'input> = {
 Stmt: StmtRaw<'input> = {
     // Generic
     Use => StmtRaw::Use(<>),
-    
-    // Script
-    // Const => StmtRaw::Const(<>),
-    // FnDecl => StmtRaw::FnDecl(<>),
 
     // Query
     DefineWindow => StmtRaw::WindowDefinition(<>),
@@ -530,8 +526,8 @@ InnerExprs: ExprsRaw<'input> = {
 
 TopLevelExpr: TopLevelExprRaw<'input> = {
      Const => TopLevelExprRaw::Const(<>),
-     FnDecl => TopLevelExprRaw::FnDecl(<>),
-     Intrinsic => TopLevelExprRaw::FnDecl(<>),
+     FnDefn => TopLevelExprRaw::FnDefn(<>),
+     Intrinsic => TopLevelExprRaw::FnDefn(<>),
      Expr => TopLevelExprRaw::Expr(<>),
      Use => TopLevelExprRaw::Use(<>),
 }
@@ -703,7 +699,7 @@ Intrinsic: AnyFnRaw<'input> = {
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
-        AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: true})
+        AnyFnRaw::Normal(FnDefnRaw{name, args: vec![], body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: true})
     },
     <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> ")" "as" <imod:ModularTarget><end:@L> => {
         let invoce_args = args.iter().map(|root|
@@ -722,7 +718,7 @@ Intrinsic: AnyFnRaw<'input> = {
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
-        AnyFnRaw::Normal(FnDeclRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: true})
+        AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: true})
     },
     <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> "," "." "." "." ")" "as" <imod:ModularTarget> <end:@L> => {
         let invoce_args = args.iter().map(|root|
@@ -740,7 +736,7 @@ Intrinsic: AnyFnRaw<'input> = {
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
-        AnyFnRaw::Normal(FnDeclRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: true})
+        AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: true})
     },
     <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" "." "." "." ")" "as" <imod:ModularTarget> <end:@L> => {
         let args = vec![];
@@ -755,19 +751,19 @@ Intrinsic: AnyFnRaw<'input> = {
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
-        AnyFnRaw::Normal(FnDeclRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: true})
+        AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: true})
     },
 }
 
-FnDecl: AnyFnRaw<'input> = {
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" "." "." "." ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: false}),
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs>  "," "." "." "." ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: false}),
+FnDefn: AnyFnRaw<'input> = {
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" "." "." "." ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args: vec![], body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: false}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs>  "," "." "." "." ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: false}),
 
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "("  ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: false}),
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: false}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "("  ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args: vec![], body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: false}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: false}),
 
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "("  ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDeclRaw{name, args: vec![], mid: NodeMeta::new_box(start, end), cases, doc, open: false, inline: false}),
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDeclRaw{name, args, mid: NodeMeta::new_box(start, end), cases, doc, open: false, inline: false}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "("  ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDefnRaw{name, args: vec![], mid: NodeMeta::new_box(start, end), cases, doc, open: false, inline: false}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDefnRaw{name, args, mid: NodeMeta::new_box(start, end), cases, doc, open: false, inline: false}),
 }
 
 FnCases: Vec<PredicateClauseRaw<'input, ExprRaw<'input>>> = {
