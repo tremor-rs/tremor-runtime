@@ -955,7 +955,7 @@ where
     }
 
     /// handle data from the source
-    async fn handle_data(&mut self, data: Result<SourceReply>, pull_id: u64) -> Result<()> {
+    async fn handle_source_reply(&mut self, data: Result<SourceReply>, pull_id: u64) -> Result<()> {
         let data = match data {
             Ok(d) => d,
             Err(e) => {
@@ -973,35 +973,8 @@ where
                 stream,
                 port,
             } => {
-                let mut ingest_ns = nanotime();
-                let stream_state = self.streams.get_or_create_stream(stream, &self.ctx)?; // we fail if we cannot create a stream (due to misconfigured codec, preprocessors, ...) (should not happen)
-                let results = build_events(
-                    &self.ctx.alias,
-                    stream_state,
-                    &mut ingest_ns,
-                    pull_id,
-                    origin_uri,
-                    port.as_ref(),
-                    data,
-                    &meta.unwrap_or_else(Value::object),
-                    self.is_transactional,
-                );
-                if results.is_empty() {
-                    if let Err(e) = self.source.on_no_events(pull_id, stream, &self.ctx).await {
-                        error!(
-                            "[Source::{}] Error on no events callback: {}",
-                            &self.ctx.alias, e
-                        );
-                    }
-                } else {
-                    let error = self.route_events(results).await;
-                    if error {
-                        self.ctx.log_err(
-                            self.source.fail(stream, pull_id, &self.ctx).await,
-                            "fail upon error sending events from data source reply failed",
-                        );
-                    }
-                }
+                self.handle_data(stream, pull_id, origin_uri, port, data, meta)
+                    .await?;
             }
             SourceReply::BatchData {
                 origin_uri,
@@ -1009,41 +982,8 @@ where
                 stream,
                 port,
             } => {
-                let mut ingest_ns = nanotime();
-                let stream_state = self.streams.get_or_create_stream(stream, &self.ctx)?; // we only error here due to misconfigured codec etc
-                let connector_url = &self.ctx.alias;
-
-                let mut results = Vec::with_capacity(batch_data.len()); // assuming 1:1 mapping
-                for (data, meta) in batch_data {
-                    let mut events = build_events(
-                        connector_url,
-                        stream_state,
-                        &mut ingest_ns,
-                        pull_id,
-                        origin_uri.clone(), // TODO: use split_last on batch_data to avoid last clone
-                        port.as_ref(),
-                        data,
-                        &meta.unwrap_or_else(Value::object),
-                        self.is_transactional,
-                    );
-                    results.append(&mut events);
-                }
-                if results.is_empty() {
-                    if let Err(e) = self.source.on_no_events(pull_id, stream, &self.ctx).await {
-                        error!(
-                            "[Source::{}] Error on no events callback: {}",
-                            &self.ctx.alias, e
-                        );
-                    }
-                } else {
-                    let error = self.route_events(results).await;
-                    if error {
-                        self.ctx.log_err(
-                            self.source.fail(stream, pull_id, &self.ctx).await,
-                            "fail upon error sending events from batched data source reply failed",
-                        );
-                    }
-                }
+                self.handle_batch_data(stream, batch_data, pull_id, origin_uri, port)
+                    .await?;
             }
             SourceReply::Structured {
                 origin_uri,
@@ -1051,63 +991,16 @@ where
                 stream,
                 port,
             } => {
-                let ingest_ns = nanotime();
-                let stream_state = self.streams.get_or_create_stream(stream, &self.ctx)?;
-                let event = build_event(
-                    stream_state,
-                    pull_id,
-                    ingest_ns,
-                    payload,
-                    origin_uri,
-                    self.is_transactional,
-                );
-                let error = self.route_events(vec![(port.unwrap_or(OUT), event)]).await;
-                if error {
-                    self.ctx.log_err(
-                        self.source.fail(stream, pull_id, &self.ctx).await,
-                        "fail upon error sending events from structured data source reply failed",
-                    );
-                }
+                self.handle_structured(stream, pull_id, payload, port, origin_uri)
+                    .await?;
             }
             SourceReply::EndStream {
                 origin_uri,
                 meta,
                 stream: stream_id,
             } => {
-                debug!("[Source::{}] Ending stream {}", &self.ctx.alias, stream_id);
-                let mut ingest_ns = nanotime();
-                if let Some(mut stream_state) = self.streams.end_stream(stream_id) {
-                    let results = build_last_events(
-                        &self.ctx.alias,
-                        &mut stream_state,
-                        &mut ingest_ns,
-                        pull_id,
-                        origin_uri,
-                        None,
-                        &meta.unwrap_or_else(Value::object),
-                        self.is_transactional,
-                    );
-                    if results.is_empty() {
-                        if let Err(e) = self
-                            .source
-                            .on_no_events(pull_id, stream_id, &self.ctx)
-                            .await
-                        {
-                            error!(
-                                "[Source::{}] Error on no events callback: {}",
-                                &self.ctx.alias, e
-                            );
-                        }
-                    } else {
-                        let error = self.route_events(results).await;
-                        if error {
-                            self.ctx.log_err(
-                                self.source.fail(stream_id, pull_id, &self.ctx).await,
-                                "fail upon error sending events from endstream source reply failed",
-                            );
-                        }
-                    }
-                }
+                self.handle_end_stream(stream_id, pull_id, origin_uri, meta)
+                    .await;
             }
             SourceReply::StreamFail(stream_id) => {
                 // clean out stream state
@@ -1121,6 +1014,163 @@ where
                     self.pull_wait_start = Some(Instant::now());
                     self.pull_wait = Duration::from_millis(wait_ms);
                 }
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_end_stream(
+        &mut self,
+        stream_id: u64,
+        pull_id: u64,
+        origin_uri: EventOriginUri,
+        meta: Option<Value<'static>>,
+    ) {
+        debug!("[Source::{}] Ending stream {}", &self.ctx.alias, stream_id);
+        let mut ingest_ns = nanotime();
+        if let Some(mut stream_state) = self.streams.end_stream(stream_id) {
+            let results = build_last_events(
+                &self.ctx.alias,
+                &mut stream_state,
+                &mut ingest_ns,
+                pull_id,
+                origin_uri,
+                None,
+                &meta.unwrap_or_else(Value::object),
+                self.is_transactional,
+            );
+            if results.is_empty() {
+                if let Err(e) = self
+                    .source
+                    .on_no_events(pull_id, stream_id, &self.ctx)
+                    .await
+                {
+                    error!(
+                        "[Source::{}] Error on no events callback: {}",
+                        &self.ctx.alias, e
+                    );
+                }
+            } else {
+                let error = self.route_events(results).await;
+                if error {
+                    self.ctx.log_err(
+                        self.source.fail(stream_id, pull_id, &self.ctx).await,
+                        "fail upon error sending events from endstream source reply failed",
+                    );
+                }
+            }
+        }
+    }
+
+    async fn handle_structured(
+        &mut self,
+        stream: u64,
+        pull_id: u64,
+        payload: EventPayload,
+        port: Option<Cow<'static, str>>,
+        origin_uri: EventOriginUri,
+    ) -> Result<()> {
+        let ingest_ns = nanotime();
+        let stream_state = self.streams.get_or_create_stream(stream, &self.ctx)?;
+        let event = build_event(
+            stream_state,
+            pull_id,
+            ingest_ns,
+            payload,
+            origin_uri,
+            self.is_transactional,
+        );
+        let error = self.route_events(vec![(port.unwrap_or(OUT), event)]).await;
+        if error {
+            self.ctx.log_err(
+                self.source.fail(stream, pull_id, &self.ctx).await,
+                "fail upon error sending events from structured data source reply failed",
+            );
+        }
+        Ok(())
+    }
+
+    async fn handle_batch_data(
+        &mut self,
+        stream: u64,
+        batch_data: Vec<(Vec<u8>, Option<Value<'static>>)>,
+        pull_id: u64,
+        origin_uri: EventOriginUri,
+        port: Option<Cow<'static, str>>,
+    ) -> Result<()> {
+        let mut ingest_ns = nanotime();
+        let stream_state = self.streams.get_or_create_stream(stream, &self.ctx)?;
+        let connector_url = &self.ctx.alias;
+        let mut results = Vec::with_capacity(batch_data.len());
+        for (data, meta) in batch_data {
+            let mut events = build_events(
+                connector_url,
+                stream_state,
+                &mut ingest_ns,
+                pull_id,
+                origin_uri.clone(), // TODO: use split_last on batch_data to avoid last clone
+                port.as_ref(),
+                data,
+                &meta.unwrap_or_else(Value::object),
+                self.is_transactional,
+            );
+            results.append(&mut events);
+        }
+        if results.is_empty() {
+            if let Err(e) = self.source.on_no_events(pull_id, stream, &self.ctx).await {
+                error!(
+                    "[Source::{}] Error on no events callback: {}",
+                    &self.ctx.alias, e
+                );
+            }
+        } else {
+            let error = self.route_events(results).await;
+            if error {
+                self.ctx.log_err(
+                    self.source.fail(stream, pull_id, &self.ctx).await,
+                    "fail upon error sending events from batched data source reply failed",
+                );
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_data(
+        &mut self,
+        stream: u64,
+        pull_id: u64,
+        origin_uri: EventOriginUri,
+        port: Option<Cow<'static, str>>,
+        data: Vec<u8>,
+        meta: Option<Value<'static>>,
+    ) -> Result<()> {
+        let mut ingest_ns = nanotime();
+        let stream_state = self.streams.get_or_create_stream(stream, &self.ctx)?;
+        let results = build_events(
+            &self.ctx.alias,
+            stream_state,
+            &mut ingest_ns,
+            pull_id,
+            origin_uri,
+            port.as_ref(),
+            data,
+            &meta.unwrap_or_else(Value::object),
+            self.is_transactional,
+        );
+        if results.is_empty() {
+            if let Err(e) = self.source.on_no_events(pull_id, stream, &self.ctx).await {
+                error!(
+                    "[Source::{}] Error on no events callback: {}",
+                    &self.ctx.alias, e
+                );
+            }
+        } else {
+            let error = self.route_events(results).await;
+            if error {
+                self.ctx.log_err(
+                    self.source.fail(stream, pull_id, &self.ctx).await,
+                    "fail upon error sending events from data source reply failed",
+                );
             }
         }
         Ok(())
@@ -1186,7 +1236,7 @@ where
             if self.should_pull_data() {
                 let mut pull_id = self.pull_counter;
                 let data = self.source.pull_data(&mut pull_id, &self.ctx).await;
-                self.handle_data(data, pull_id).await?;
+                self.handle_source_reply(data, pull_id).await?;
                 self.pull_counter += 1;
             };
             if self.pull_wait_start.is_some() {
