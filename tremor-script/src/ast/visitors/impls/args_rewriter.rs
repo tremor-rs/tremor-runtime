@@ -53,7 +53,6 @@ impl<'script, 'registry, 'meta> ImutExprVisitor<'script>
 {
     fn visit_path(&mut self, path: &mut Path<'script>) -> Result<VisitRes> {
         if let Path::Reserved(ReservedPath::Args { segments, mid }) = path {
-            // FIXME: add mid to args here
             let new = ExprPath {
                 expr: Box::new(self.args.clone()),
                 segments: segments.clone(),

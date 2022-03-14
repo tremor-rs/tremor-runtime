@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::module::Content;
+use crate::ast::{helper::raw::WindowName, module::Content};
 
 use super::super::visitors::prelude::*;
 use VisitRes::Walk;
@@ -207,19 +207,35 @@ pub trait Visitor<'script> {
         Ok(())
     }
 
-    /// visit a `WindowDecl`
+    /// visit a `WindowDefinition`
     ///
     /// # Errors
     /// if the walker function fails
-    fn visit_window_decl(&mut self, _decl: &mut WindowDefinition<'script>) -> Result<VisitRes> {
+    fn visit_window_defn(&mut self, _defn: &mut WindowDefinition<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
-    /// leave a `WindowDecl`
+    /// leave a `WindowDefinition`
     ///
     /// # Errors
     /// if the walker function fails
-    fn leave_window_decl(&mut self, _decl: &mut WindowDefinition<'script>) -> Result<()> {
+    fn leave_window_defn(&mut self, _defn: &mut WindowDefinition<'script>) -> Result<()> {
+        Ok(())
+    }
+
+    /// visit a `WindowName`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn visit_window_name(&mut self, _defn: &mut WindowName) -> Result<VisitRes> {
+        Ok(Walk)
+    }
+
+    /// leave a `WindowName`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn leave_window_name(&mut self, _defn: &mut WindowName) -> Result<()> {
         Ok(())
     }
 
@@ -227,7 +243,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn visit_operator_decl(&mut self, _decl: &mut OperatorDefinition<'script>) -> Result<VisitRes> {
+    fn visit_operator_defn(&mut self, _defn: &mut OperatorDefinition<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
@@ -235,7 +251,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn leave_operator_decl(&mut self, _decl: &mut OperatorDefinition<'script>) -> Result<()> {
+    fn leave_operator_defn(&mut self, _defn: &mut OperatorDefinition<'script>) -> Result<()> {
         Ok(())
     }
 
@@ -243,7 +259,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn visit_script_decl(&mut self, _decl: &mut ScriptDefinition<'script>) -> Result<VisitRes> {
+    fn visit_script_defn(&mut self, _defn: &mut ScriptDefinition<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
@@ -251,7 +267,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn leave_script_decl(&mut self, _decl: &mut ScriptDefinition<'script>) -> Result<()> {
+    fn leave_script_defn(&mut self, _defn: &mut ScriptDefinition<'script>) -> Result<()> {
         Ok(())
     }
 
@@ -259,10 +275,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn visit_pipeline_definition(
-        &mut self,
-        _decl: &mut PipelineDefinition<'script>,
-    ) -> Result<VisitRes> {
+    fn visit_pipeline_defn(&mut self, _defn: &mut PipelineDefinition<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
@@ -270,7 +283,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn leave_pipeline_definition(&mut self, _decl: &mut PipelineDefinition<'script>) -> Result<()> {
+    fn leave_pipeline_defn(&mut self, _defn: &mut PipelineDefinition<'script>) -> Result<()> {
         Ok(())
     }
 
@@ -310,7 +323,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn visit_script_stmt(&mut self, _stmt: &mut ScriptCreate<'script>) -> Result<VisitRes> {
+    fn visit_script_create(&mut self, _stmt: &mut ScriptCreate<'script>) -> Result<VisitRes> {
         Ok(Walk)
     }
 
@@ -318,7 +331,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn leave_script_stmt(&mut self, _stmt: &mut ScriptCreate<'script>) -> Result<()> {
+    fn leave_script_create(&mut self, _stmt: &mut ScriptCreate<'script>) -> Result<()> {
         Ok(())
     }
 
@@ -326,7 +339,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn visit_pipeline_stmt(&mut self, _stmt: &mut PipelineCreate) -> Result<VisitRes> {
+    fn visit_pipeline_create(&mut self, _stmt: &mut PipelineCreate) -> Result<VisitRes> {
         Ok(Walk)
     }
 
@@ -334,7 +347,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn leave_pipeline_stmt(&mut self, _stmt: &mut PipelineCreate) -> Result<()> {
+    fn leave_pipeline_create(&mut self, _stmt: &mut PipelineCreate) -> Result<()> {
         Ok(())
     }
 

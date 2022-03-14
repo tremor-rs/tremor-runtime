@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{module::Content, CreationalWith, DefinitioalArgs, WithExpr};
+use crate::ast::{
+    helper::raw::WindowName, module::Content, CreationalWith, DefinitioalArgs, WithExpr,
+};
 
 use super::super::visitors::prelude::*;
 macro_rules! stop {
@@ -56,8 +58,6 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
         for e in &mut script.exprs {
             ExprWalker::walk_expr(self, e)?;
         }
-        // FIXME: walk windows and functions?
-        // FIXME: walk consts / args
         self.leave_script(script)
     }
 
@@ -78,9 +78,23 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
             self.walk_group_by(g)?;
         };
 
-        // FIXME: do we want to walk window definitions
+        for w in &mut select.windows {
+            self.walk_window_name(w)?;
+        }
 
         self.leave_select(select)
+    }
+
+    /// walks a `WindowName`
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn walk_window_name(&mut self, window: &mut WindowName) -> Result<()> {
+        stop!(
+            self.visit_window_name(window),
+            self.leave_window_name(window)
+        );
+        self.leave_window_name(window)
     }
 
     /// walks a `WindowDecl`
@@ -88,12 +102,12 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_window_decl(&mut self, decl: &mut WindowDefinition<'script>) -> Result<()> {
-        stop!(self.visit_window_decl(decl), self.leave_window_decl(decl));
+        stop!(self.visit_window_defn(decl), self.leave_window_defn(decl));
         self.walk_creational_with(&mut decl.params)?;
         if let Some(script) = decl.script.as_mut() {
             self.walk_script(script)?;
         }
-        self.leave_window_decl(decl)
+        self.leave_window_defn(decl)
     }
 
     /// walks a `CreationalWith`
@@ -177,11 +191,11 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     /// if the walker function fails
     fn walk_operator_decl(&mut self, decl: &mut OperatorDefinition<'script>) -> Result<()> {
         stop!(
-            self.visit_operator_decl(decl),
-            self.leave_operator_decl(decl)
+            self.visit_operator_defn(decl),
+            self.leave_operator_defn(decl)
         );
         self.walk_definitinal_args_with(&mut decl.params)?;
-        self.leave_operator_decl(decl)
+        self.leave_operator_defn(decl)
     }
 
     /// walks a `ScriptDecl`
@@ -189,10 +203,10 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_script_decl(&mut self, decl: &mut ScriptDefinition<'script>) -> Result<()> {
-        stop!(self.visit_script_decl(decl), self.leave_script_decl(decl));
+        stop!(self.visit_script_defn(decl), self.leave_script_defn(decl));
         self.walk_definitional_args(&mut decl.params)?;
         self.walk_script(&mut decl.script)?;
-        self.leave_script_decl(decl)
+        self.leave_script_defn(decl)
     }
 
     /// walks a `PipelineDecl`
@@ -201,12 +215,12 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     /// if the walker function fails
     fn walk_pipeline_definition(&mut self, defn: &mut PipelineDefinition<'script>) -> Result<()> {
         stop!(
-            self.visit_pipeline_definition(defn),
-            self.leave_pipeline_definition(defn)
+            self.visit_pipeline_defn(defn),
+            self.leave_pipeline_defn(defn)
         );
 
         self.walk_definitional_args(&mut defn.params)?;
-        self.leave_pipeline_definition(defn)
+        self.leave_pipeline_defn(defn)
     }
 
     /// walks a `StreamStmt`
@@ -236,9 +250,12 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     /// # Errors
     /// if the walker function fails
     fn walk_script_stmt(&mut self, stmt: &mut ScriptCreate<'script>) -> Result<()> {
-        stop!(self.visit_script_stmt(stmt), self.leave_script_stmt(stmt));
+        stop!(
+            self.visit_script_create(stmt),
+            self.leave_script_create(stmt)
+        );
         self.walk_creational_with(&mut stmt.params)?;
-        self.leave_script_stmt(stmt)
+        self.leave_script_create(stmt)
     }
 
     /// walks a `PipelineCreate`
@@ -247,10 +264,10 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     /// if the walker function fails
     fn walk_pipeline_stmt(&mut self, stmt: &mut PipelineCreate) -> Result<()> {
         stop!(
-            self.visit_pipeline_stmt(stmt),
-            self.leave_pipeline_stmt(stmt)
+            self.visit_pipeline_create(stmt),
+            self.leave_pipeline_create(stmt)
         );
-        self.leave_pipeline_stmt(stmt)
+        self.leave_pipeline_create(stmt)
     }
 
     /// walks a `SelectStmt`

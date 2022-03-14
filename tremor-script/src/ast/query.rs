@@ -24,12 +24,9 @@ use super::{
     Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
-use crate::impl_expr;
-use crate::{
-    ast::{walkers::ImutExprWalker, Literal},
-    errors::Error,
-};
-use raw::WindowDefnRaw;
+use crate::ast::{walkers::ImutExprWalker, Literal};
+use crate::{errors::err_generic, impl_expr};
+use raw::WindowName;
 use simd_json::{Builder, Mutable, ValueAccess};
 
 /// A Tremor query
@@ -376,7 +373,7 @@ pub struct Select<'script> {
     /// Group-By clause
     pub maybe_group_by: Option<GroupBy<'script>>,
     /// Window
-    pub windows: Vec<WindowDefnRaw>,
+    pub windows: Vec<WindowName>,
 }
 impl_expr!(Select);
 
@@ -530,8 +527,10 @@ impl<'script> DefinitioalArgsWith<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize, Default)]
 pub struct DefinitioalArgs<'script> {
     /// `args` seection
-    pub args: ArgsExprs<'script>,
+    pub(crate) args: ArgsExprs<'script>,
+    pub(crate) mid: Box<NodeMeta>,
 }
+impl_expr!(DefinitioalArgs);
 
 impl<'script> DefinitioalArgs<'script> {
     /// Combines the definitional args and with block along with the creational with block
@@ -555,8 +554,7 @@ impl<'script> DefinitioalArgs<'script> {
             {
                 *arg_v = Some(v.clone());
             } else {
-                // FIXME: better error
-                return Err(format!("unknown key: {}", k).into());
+                return error_generic(self, k, &"Unknown key");
             }
         }
 
@@ -573,14 +571,12 @@ impl<'script> DefinitioalArgs<'script> {
     pub fn render(&self) -> Result<Value<'script>> {
         let mut res = Value::object();
         for (k, v) in &self.args.0 {
-            // FIXME: hygenic error
-            res.insert(
-                k.id.clone(),
-                v.as_ref()
-                    .ok_or_else(|| Error::from(format!("missing key: {}", k)))?
-                    .try_as_lit()?
-                    .clone(),
-            )?;
+            let v = v
+                .as_ref()
+                .ok_or_else(|| err_generic(k, k, &"Required key not provided"))?
+                .try_as_lit()?
+                .clone();
+            res.try_insert(k.id.clone(), v);
         }
         Ok(res)
     }
