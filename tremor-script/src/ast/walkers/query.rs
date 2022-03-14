@@ -97,17 +97,17 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
         self.leave_window_name(window)
     }
 
-    /// walks a `WindowDecl`
+    /// walks a `WindowDefinition`
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_window_decl(&mut self, decl: &mut WindowDefinition<'script>) -> Result<()> {
-        stop!(self.visit_window_defn(decl), self.leave_window_defn(decl));
-        self.walk_creational_with(&mut decl.params)?;
-        if let Some(script) = decl.script.as_mut() {
+    fn walk_window_defn(&mut self, defn: &mut WindowDefinition<'script>) -> Result<()> {
+        stop!(self.visit_window_defn(defn), self.leave_window_defn(defn));
+        self.walk_creational_with(&mut defn.params)?;
+        if let Some(script) = defn.script.as_mut() {
             self.walk_script(script)?;
         }
-        self.leave_window_defn(decl)
+        self.leave_window_defn(defn)
     }
 
     /// walks a `CreationalWith`
@@ -185,31 +185,31 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
         self.leave_args_expr(args)
     }
 
-    /// walks a `OperatorDecl`
+    /// walks a `OperatorDefinition`
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_operator_decl(&mut self, decl: &mut OperatorDefinition<'script>) -> Result<()> {
+    fn walk_operator_defn(&mut self, defn: &mut OperatorDefinition<'script>) -> Result<()> {
         stop!(
-            self.visit_operator_defn(decl),
-            self.leave_operator_defn(decl)
+            self.visit_operator_defn(defn),
+            self.leave_operator_defn(defn)
         );
-        self.walk_definitinal_args_with(&mut decl.params)?;
-        self.leave_operator_defn(decl)
+        self.walk_definitinal_args_with(&mut defn.params)?;
+        self.leave_operator_defn(defn)
     }
 
-    /// walks a `ScriptDecl`
+    /// walks a `ScriptDefinition`
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_script_decl(&mut self, decl: &mut ScriptDefinition<'script>) -> Result<()> {
-        stop!(self.visit_script_defn(decl), self.leave_script_defn(decl));
-        self.walk_definitional_args(&mut decl.params)?;
-        self.walk_script(&mut decl.script)?;
-        self.leave_script_defn(decl)
+    fn walk_script_defn(&mut self, defn: &mut ScriptDefinition<'script>) -> Result<()> {
+        stop!(self.visit_script_defn(defn), self.leave_script_defn(defn));
+        self.walk_definitional_args(&mut defn.params)?;
+        self.walk_script(&mut defn.script)?;
+        self.leave_script_defn(defn)
     }
 
-    /// walks a `PipelineDecl`
+    /// walks a `PipelineDefinition`
     ///
     /// # Errors
     /// if the walker function fails
@@ -287,9 +287,9 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     fn walk_stmt(&mut self, stmt: &mut Stmt<'script>) -> Result<()> {
         stop!(self.visit_stmt(stmt), self.leave_stmt(stmt));
         match stmt {
-            Stmt::WindowDefinition(d) => self.walk_window_decl(d.as_mut())?,
-            Stmt::OperatorDefinition(d) => self.walk_operator_decl(d)?,
-            Stmt::ScriptDefinition(d) => self.walk_script_decl(d.as_mut())?,
+            Stmt::WindowDefinition(d) => self.walk_window_defn(d.as_mut())?,
+            Stmt::OperatorDefinition(d) => self.walk_operator_defn(d)?,
+            Stmt::ScriptDefinition(d) => self.walk_script_defn(d.as_mut())?,
             Stmt::PipelineDefinition(d) => self.walk_pipeline_definition(d.as_mut())?,
             Stmt::StreamStmt(s) => self.walk_stream_stmt(s)?,
             Stmt::OperatorCreate(s) => self.walk_operator_create(s)?,
@@ -321,19 +321,19 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     fn walk_module_content(&mut self, m: &mut Content<'script>) -> Result<()> {
         stop!(self.visit_module_content(m), self.leave_module_content(m));
         for d in m.windows.values_mut() {
-            self.walk_window_decl(d)?;
+            self.walk_window_defn(d)?;
         }
         for d in m.pipelines.values_mut() {
             self.walk_pipeline_definition(d)?;
         }
         for d in m.scripts.values_mut() {
-            self.walk_script_decl(d)?;
+            self.walk_script_defn(d)?;
         }
         for d in m.operators.values_mut() {
-            self.walk_operator_decl(d)?;
+            self.walk_operator_defn(d)?;
         }
         for d in m.functions.values_mut() {
-            self.walk_fn_decl(d)?;
+            self.walk_fn_defn(d)?;
         }
         for d in m.consts.values_mut() {
             self.walk_const(d)?;

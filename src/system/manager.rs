@@ -33,7 +33,7 @@ pub(crate) enum Msg {
     /// deploy a Flow
     StartDeploy {
         /// deploy flow
-        flow: DeployFlow<'static>,
+        flow: Box<DeployFlow<'static>>,
         /// result sender
         sender: Sender<Result<()>>,
     },
@@ -201,7 +201,7 @@ impl Manager {
                         ..
                     } => self.handle_register_connecor_type(connector_type, builder),
                     Msg::StartDeploy { flow, sender } => {
-                        self.handle_start_deploy(flow, sender).await;
+                        self.handle_start_deploy(*flow, sender).await;
                     }
                     Msg::GetFlows(reply_tx) => self.handle_get_flows(reply_tx).await,
                     Msg::GetFlow(id, reply_tx) => self.handle_get_flow(id, reply_tx).await,

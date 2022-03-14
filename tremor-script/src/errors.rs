@@ -163,11 +163,11 @@ impl ErrorKind {
             DoublePipelineCreate, DoubleStream, EmptyInterpolation, EmptyScript, ExtraToken,
             Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst,
             InvalidDrop, InvalidEmit, InvalidExtractor, InvalidFloatLiteral, InvalidFn,
-            InvalidHexLiteral, InvalidIntLiteral, InvalidMod, InvalidPP, InvalidRecur,
-            InvalidToken, InvalidUnary, InvalidUtf8Sequence, Io, JsonError, MergeTypeConflict,
-            MissingEffectors, MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit,
-            NoConstsAllowed, NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant,
-            NotFound, Oops, ParseIntError, ParserError, PatchKeyExists, PipelineUnknownPort,
+            InvalidHexLiteral, InvalidIntLiteral, InvalidPP, InvalidRecur, InvalidToken,
+            InvalidUnary, InvalidUtf8Sequence, Io, JsonError, MergeTypeConflict, MissingEffectors,
+            MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed,
+            NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
+            ParseIntError, ParserError, PatchKeyExists, PipelineUnknownPort,
             QueryNodeDuplicateName, QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit,
             RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
             UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
@@ -213,7 +213,6 @@ impl ErrorKind {
             | InvalidFn(outer, inner)
             | InvalidHexLiteral(outer, inner, _)
             | InvalidIntLiteral(outer, inner, _)
-            | InvalidMod(outer, inner)
             | InvalidPP(outer, inner, _)
             | InvalidRecur(outer, inner)
             | InvalidToken(outer, inner)
@@ -697,24 +696,20 @@ error_chain! {
                 display("You are trying to assign to a value that isn't valid")
         }
         InvalidConst(expr: Span, inner: Span) {
-            description("Can't declare a const here")
-                display("Can't declare a const here")
-        }
-        InvalidMod(expr: Span, inner: Span) {
-            description("Can't declare a module here")
-                display("Can't declare a module here")
+            description("Can't define a const here")
+                display("Can't define a const here")
         }
         InvalidFn(expr: Span, inner: Span) {
-            description("Can't declare a function here")
-                display("Can't declare a function here")
+            description("Can't define a function here")
+                display("Can't define a function here")
         }
         DoubleConst(expr: Span, inner: Span, name: String) {
-            description("Can't declare a constant twice")
-                display("Can't declare the constant `{}` twice", name)
+            description("Can't define a constant twice")
+                display("Can't define the constant `{}` twice", name)
         }
         DoubleStream(expr: Span, inner: Span, name: String) {
-            description("Can't declare a stream twice")
-                display("Can't declare the stream `{}` twice", name)
+            description("Can't define a stream twice")
+                display("Can't define the stream `{}` twice", name)
         }
         DoublePipelineCreate(expr: Span, inner: Span, name: String) {
             description("Can't create a query twice")
@@ -793,7 +788,7 @@ error_chain! {
         }
 
         /*
-         * Query stream declarations
+         * Query stream definitions
          */
         QueryStreamNotDefined(stmt: Span, inner: Span, name: String, port: String) {
             description("Stream / port is not defined")

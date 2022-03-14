@@ -67,7 +67,7 @@ impl World {
         let (tx, rx) = bounded(1);
         self.system
             .send(manager::Msg::StartDeploy {
-                flow: flow.clone(),
+                flow: Box::new(flow.clone()),
                 sender: tx,
             })
             .await?;

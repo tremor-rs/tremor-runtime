@@ -16,7 +16,7 @@
 
 #![allow(clippy::float_cmp)]
 use crate::op::prelude::trickle::window::{Actions, Trait};
-use crate::query::window_decl_to_impl;
+use crate::query::window_defn_to_impl;
 use crate::EventId;
 
 use super::*;
@@ -224,10 +224,10 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
                 .unwrap()
                 .clone();
             let mut f = ConstFolder { helper: &h };
-            f.walk_window_decl(&mut window_defn).unwrap();
+            f.walk_window_defn(&mut window_defn).unwrap();
             (
                 window_defn.id.clone(),
-                window_decl_to_impl(&window_defn).unwrap(), // yes, indeed!
+                window_defn_to_impl(&window_defn).unwrap(), // yes, indeed!
             )
         })
         .collect();
@@ -795,13 +795,13 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
         &reg,
         &aggr_reg,
     )?;
-    let window_decl = match q.query.scope.content.windows.values().next() {
-        Some(decl) => decl,
-        other => return Err(format!("Didnt get a window decl, got: {:?}", other).into()),
+    let window_defn = match q.query.scope.content.windows.values().next() {
+        Some(defn) => defn,
+        other => return Err(format!("Didnt get a window defn, got: {:?}", other).into()),
     };
     let mut params = halfbrown::HashMap::with_capacity(1);
     params.insert("size".to_string(), Value::from(3));
-    let with = dbg!(window_decl.params.render())?;
+    let with = dbg!(window_defn.params.render())?;
     let interval = with
         .get("interval")
         .and_then(Value::as_u64)
@@ -809,7 +809,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
     let mut window = window::TumblingOnTime::from_stmt(
         interval,
         window::Impl::DEFAULT_MAX_GROUPS,
-        Some(&window_decl),
+        Some(&window_defn),
     );
     let json1 = literal!({
         "timestamp": 1_000_000_000

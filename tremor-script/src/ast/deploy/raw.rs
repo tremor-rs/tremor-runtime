@@ -166,7 +166,7 @@ impl_expr!(ConnectorDefinitionRaw);
 impl<'script> Upable<'script> for ConnectorDefinitionRaw<'script> {
     type Target = ConnectorDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let query_decl = ConnectorDefinition {
+        let query_defn = ConnectorDefinition {
             config: Value::const_null(),
             mid: self.mid.box_with_name(&self.id),
             params: self.params.up(helper)?,
@@ -177,7 +177,7 @@ impl<'script> Upable<'script> for ConnectorDefinitionRaw<'script> {
                 .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
         };
 
-        Ok(query_decl)
+        Ok(query_defn)
     }
 }
 
@@ -331,7 +331,7 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
         let params = self.params.up(helper)?;
         helper.leave_scope()?;
 
-        let flow_decl = FlowDefinition {
+        let flow_defn = FlowDefinition {
             mid,
             id: self.id,
             params,
@@ -339,7 +339,7 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
             creates,
             docs,
         };
-        Ok(flow_decl)
+        Ok(flow_defn)
     }
 }
 

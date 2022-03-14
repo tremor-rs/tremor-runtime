@@ -44,12 +44,12 @@ fn mk_node_config(id: String, op_type: String, config: Value) -> NodeConfig {
 impl TrickleOperator {
     pub fn with_stmt(
         operator_uid: u64,
-        decl: &ast::OperatorDefinition<'static>,
+        defn: &ast::OperatorDefinition<'static>,
         helper: &mut Helper,
     ) -> Result<Self> {
         use crate::operator;
 
-        let op = decl.clone();
+        let op = defn.clone();
         let config = mk_node_config(
             op.id.clone(),
             format!("{}::{}", op.kind.module, op.kind.operation),

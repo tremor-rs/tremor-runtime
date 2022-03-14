@@ -21,7 +21,7 @@ use crate::{
         base_expr, query, upable::Upable, visitors::ConstFolder, walkers::ExprWalker, ArrayPattern,
         ArrayPredicatePattern, AssignPattern, BinExpr, BinOpKind, Bytes, BytesPart, ClauseGroup,
         Comprehension, ComprehensionCase, Costly, DefaultCase, EmitExpr, EventPath, Expr, ExprPath,
-        Expression, Field, FnDecl, Helper, Ident, IfElse, ImutExpr, Invocable, Invoke, InvokeAggr,
+        Expression, Field, FnDefn, Helper, Ident, IfElse, ImutExpr, Invocable, Invoke, InvokeAggr,
         InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath, Patch, PatchOperation,
         Path, Pattern, PredicateClause, PredicatePattern, Record, RecordPattern, Recur,
         ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit, TestExpr, TuplePattern,
@@ -117,10 +117,10 @@ impl<'script> ScriptRaw<'script> {
                     exprs.push(Expr::Imut(ImutExpr::Literal(Literal { mid, value })));
                     helper.add_const_doc(&name, comment, value_type);
                 }
-                TopLevelExprRaw::FnDecl(f) => {
+                TopLevelExprRaw::FnDefn(f) => {
                     helper.docs.fns.push(f.doc());
                     let mut f = f.up(helper)?;
-                    ExprWalker::walk_fn_decl(&mut ConstFolder::new(helper), &mut f)?;
+                    ExprWalker::walk_fn_defn(&mut ConstFolder::new(helper), &mut f)?;
                     helper.scope.insert_function(f)?;
                 }
                 TopLevelExprRaw::Expr(expr) => {
@@ -486,7 +486,7 @@ pub enum TopLevelExprRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Const(ConstRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    FnDecl(AnyFnRaw<'script>),
+    FnDefn(AnyFnRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Use(UseRaw),
     /// we're forced to make this pub because of lalrpop
@@ -601,7 +601,7 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct FnDeclRaw<'script> {
+pub struct FnDefnRaw<'script> {
     pub(crate) name: IdentRaw<'script>,
     pub(crate) args: Vec<IdentRaw<'script>>,
     pub(crate) body: ExprsRaw<'script>,
@@ -610,9 +610,9 @@ pub struct FnDeclRaw<'script> {
     pub(crate) inline: bool,
     pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr!(FnDeclRaw);
+impl_expr!(FnDefnRaw);
 
-impl<'script> FnDeclRaw<'script> {
+impl<'script> FnDefnRaw<'script> {
     pub(crate) fn doc(&self) -> FnDoc {
         FnDoc {
             name: self.name.to_string(),
@@ -626,8 +626,8 @@ impl<'script> FnDeclRaw<'script> {
     }
 }
 
-impl<'script> Upable<'script> for FnDeclRaw<'script> {
-    type Target = FnDecl<'script>;
+impl<'script> Upable<'script> for FnDefnRaw<'script> {
+    type Target = FnDefn<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let can_emit = helper.can_emit;
         let mut aggrs = Vec::new();
@@ -648,7 +648,7 @@ impl<'script> Upable<'script> for FnDeclRaw<'script> {
         helper.possible_leaf = false;
         helper.swap(&mut aggrs, &mut locals);
         helper.can_emit = can_emit;
-        Ok(FnDecl {
+        Ok(FnDefn {
             mid: self.mid.box_with_name(&self.name.id),
             name: self.name.id.to_string(),
             args: self.args.up(helper)?,
@@ -664,9 +664,9 @@ impl<'script> Upable<'script> for FnDeclRaw<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum AnyFnRaw<'script> {
     /// we're forced to make this pub because of lalrpop
-    Match(MatchFnDeclRaw<'script>),
+    Match(MatchFnDefnRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    Normal(FnDeclRaw<'script>),
+    Normal(FnDefnRaw<'script>),
 }
 impl<'script> AnyFnRaw<'script> {
     pub(crate) fn doc(&self) -> FnDoc {
@@ -678,7 +678,7 @@ impl<'script> AnyFnRaw<'script> {
 }
 
 impl<'script> Upable<'script> for AnyFnRaw<'script> {
-    type Target = FnDecl<'script>;
+    type Target = FnDefn<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
             AnyFnRaw::Normal(f) => f.up(helper),
@@ -689,7 +689,7 @@ impl<'script> Upable<'script> for AnyFnRaw<'script> {
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct MatchFnDeclRaw<'script> {
+pub struct MatchFnDefnRaw<'script> {
     pub(crate) name: IdentRaw<'script>,
     pub(crate) args: Vec<IdentRaw<'script>>,
     pub(crate) cases: Vec<PredicateClauseRaw<'script, ExprRaw<'script>>>,
@@ -698,9 +698,9 @@ pub struct MatchFnDeclRaw<'script> {
     pub(crate) inline: bool,
     pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr!(MatchFnDeclRaw);
+impl_expr!(MatchFnDefnRaw);
 
-impl<'script> MatchFnDeclRaw<'script> {
+impl<'script> MatchFnDefnRaw<'script> {
     pub(crate) fn doc(&self) -> FnDoc {
         FnDoc {
             name: self.name.to_string(),
@@ -714,8 +714,8 @@ impl<'script> MatchFnDeclRaw<'script> {
     }
 }
 
-impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
-    type Target = FnDecl<'script>;
+impl<'script> Upable<'script> for MatchFnDefnRaw<'script> {
+    type Target = FnDefn<'script>;
     fn up<'registry>(mut self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let can_emit = helper.can_emit;
         let mut aggrs = Vec::new();
@@ -799,7 +799,7 @@ impl<'script> Upable<'script> for MatchFnDeclRaw<'script> {
 
         helper.swap(&mut aggrs, &mut locals);
         helper.can_emit = can_emit;
-        Ok(FnDecl {
+        Ok(FnDefn {
             mid: self.mid.box_with_name(&self.name.id),
             name: self.name.id.to_string(),
             args: self.args.up(helper)?,
@@ -2222,7 +2222,7 @@ impl<'script> Upable<'script> for InvokeRaw<'script> {
             // Absolute locability from without a set of nested modules
 
             // of the form: [mod, mod1, name] - where the list of idents is effectively a fully qualified resource name
-            if let Some(f) = helper.get::<FnDecl>(&node_id)? {
+            if let Some(f) = helper.get::<FnDefn>(&node_id)? {
                 let invocable = Invocable::Tremor(f.into());
                 let args = self.args.up(helper)?.into_iter().collect();
                 Ok(Invoke {

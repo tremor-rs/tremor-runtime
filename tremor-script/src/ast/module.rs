@@ -21,7 +21,7 @@ use super::{
     },
     raw::{AnyFnRaw, ConstRaw, IdentRaw, UseRaw},
     upable::Upable,
-    BaseExpr, ConnectorDefinition, Const, FlowDefinition, FnDecl, Helper, NodeId, NodeMeta,
+    BaseExpr, ConnectorDefinition, Const, FlowDefinition, FnDefn, Helper, NodeId, NodeMeta,
     OperatorDefinition, PipelineDefinition, ScriptDefinition, WindowDefinition,
 };
 use crate::{
@@ -51,7 +51,7 @@ pub enum ModuleStmtRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Const(ConstRaw<'script>),
     /// we're forced to make this pub because of lalrpop
-    FnDecl(AnyFnRaw<'script>),
+    FnDefn(AnyFnRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Pipeline(PipelineDefinitionRaw<'script>),
     /// we're forced to make this pub because of lalrpop
@@ -69,7 +69,7 @@ impl<'script> BaseExpr for ModuleStmtRaw<'script> {
             ModuleStmtRaw::Flow(e) => e.meta(),
             ModuleStmtRaw::Connector(e) => e.meta(),
             ModuleStmtRaw::Const(e) => e.meta(),
-            ModuleStmtRaw::FnDecl(e) => e.meta(),
+            ModuleStmtRaw::FnDefn(e) => e.meta(),
             ModuleStmtRaw::Pipeline(e) => e.meta(),
             ModuleStmtRaw::Use(e) => e.meta(),
             ModuleStmtRaw::Window(e) => e.meta(),
@@ -115,7 +115,7 @@ pub struct Content<'script> {
     /// consts in this module
     pub consts: NamedEnteties<Const<'script>>,
     /// functions in this module
-    pub functions: NamedEnteties<FnDecl<'script>>,
+    pub functions: NamedEnteties<FnDefn<'script>>,
 }
 
 impl<'script> Debug for Content<'script> {
@@ -161,7 +161,7 @@ impl<'script> Content<'script> {
             Err(already_defined_err(&elem, "const"))
         }
     }
-    pub(crate) fn insert_function(&mut self, elem: FnDecl<'script>) -> Result<()> {
+    pub(crate) fn insert_function(&mut self, elem: FnDefn<'script>) -> Result<()> {
         let name = elem.name.clone();
         if let Entry::Vacant(e) = self.functions.entry(name) {
             e.insert(elem);
@@ -274,7 +274,7 @@ impl Module {
                     let e = e.up(&mut helper)?;
                     helper.scope.insert_const(e)?;
                 }
-                ModuleStmtRaw::FnDecl(e) => {
+                ModuleStmtRaw::FnDefn(e) => {
                     let e = e.up(&mut helper)?;
                     helper.scope.insert_function(e)?;
                 }
@@ -355,8 +355,8 @@ impl<'module> GetMod<OperatorDefinition<'module>> for Content<'module> {
     }
 }
 
-impl<'module> GetMod<FnDecl<'module>> for Content<'module> {
-    fn get(&self, name: &str) -> Option<FnDecl<'module>> {
+impl<'module> GetMod<FnDefn<'module>> for Content<'module> {
+    fn get(&self, name: &str) -> Option<FnDefn<'module>> {
         self.functions.get(name).cloned()
     }
 }

@@ -14,10 +14,10 @@
 
 pub use super::query::*;
 use super::{
-    docs::{ConstDoc, Docs, QueryDeclDoc},
+    docs::{ConstDoc, Docs, QueryDoc},
     module::{self, Content, GetMod, Manager},
     raw::LocalPathRaw,
-    ConnectorDefinition, Const, DeployFlow, FlowDefinition, FnDecl, InvokeAggrFn, NodeId,
+    ConnectorDefinition, Const, DeployFlow, FlowDefinition, FnDefn, InvokeAggrFn, NodeId,
 };
 use crate::{
     errors::Result,
@@ -95,7 +95,7 @@ impl<'script> Scope<'script> {
     pub(crate) fn insert_const(&mut self, c: Const<'script>) -> Result<()> {
         self.content.insert_const(c)
     }
-    pub(crate) fn insert_function(&mut self, f: FnDecl<'script>) -> Result<()> {
+    pub(crate) fn insert_function(&mut self, f: FnDefn<'script>) -> Result<()> {
         self.content.insert_function(f)
     }
     pub(crate) fn insert_pipeline(&mut self, pipeline: PipelineDefinition<'script>) -> Result<()> {
@@ -216,13 +216,13 @@ where
             value_type,
         });
     }
-    pub(crate) fn add_query_decl_doc<N: ToString>(
+    pub(crate) fn add_query_doc<N: ToString>(
         &mut self,
         name: &N,
         doc: Option<Vec<Cow<'script, str>>>,
     ) {
         let doc = doc.map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
-        self.docs.query_decls.push(QueryDeclDoc {
+        self.docs.queries.push(QueryDoc {
             name: name.to_string(),
             doc,
         });
