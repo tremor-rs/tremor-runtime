@@ -196,7 +196,7 @@ impl ClientContext for TremorConsumerContext {
                 // issue a reconnect upon fatal errors
                 let notifier = self.ctx.notifier().clone();
                 task::spawn(async move {
-                    notifier.notify().await?;
+                    notifier.connection_lost().await?;
                     Ok::<(), Error>(())
                 });
             } else {
@@ -503,7 +503,7 @@ impl Source for KafkaConsumerSource {
             Err(TryRecvError::Empty) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
             Err(TryRecvError::Closed) => {
                 error!("{} Consumer unavailable. Initiating Reconnect...", &ctx);
-                ctx.notifier().notify().await?;
+                ctx.notifier().connection_lost().await?;
                 return Err("Consumer unavailable.".into());
             }
         }
@@ -659,7 +659,7 @@ async fn consumer_task(
                 if let Err(e) = source_tx.send((reply, Some(pull_id))).await {
                     error!("{source_ctx} Error sending kafka message to source: {e}");
                     source_ctx.log_err(
-                        source_ctx.notifier().notify().await,
+                        source_ctx.notifier().connection_lost().await,
                         "Error notifying the runtime of a disfunctional source channel.",
                     );
                     break;
@@ -682,14 +682,14 @@ async fn consumer_task(
                                 // lets initiate a reconnect via the notifier
                                 // this might happen when we subscribe to multiple topics
                                 source_ctx.log_err(
-                                    source_ctx.notifier().notify().await,
+                                    source_ctx.notifier().connection_lost().await,
                                     "Error notifying the runtime about a failing consumer.",
                                 );
                             }
                         } else {
                             // Initiate reconnect (if configured)
                             source_ctx.log_err(
-                                source_ctx.notifier().notify().await,
+                                source_ctx.notifier().connection_lost().await,
                                 "Error notifying the runtime about a failing consumer.",
                             );
                         }
@@ -714,7 +714,7 @@ async fn consumer_task(
                     }
                 } else {
                     source_ctx.log_err(
-                        source_ctx.notifier().notify().await,
+                        source_ctx.notifier().connection_lost().await,
                         "Error notifying the runtime of finished consumer.",
                     );
                 }

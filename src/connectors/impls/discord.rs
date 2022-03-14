@@ -14,17 +14,17 @@
 
 use std::sync::atomic::AtomicBool;
 
-use crate::connectors::prelude::*;
+use crate::connectors::{prelude::*, spawn_task};
 
 mod handler;
 mod utils;
 
 use async_std::{
     channel::{bounded, Receiver, Sender, TryRecvError},
-    task::{self, JoinHandle},
+    task::JoinHandle,
 };
 use handler::Handler;
-use serenity::{client::bridge::gateway::GatewayIntents, Client, Error as SerenityError};
+use serenity::{client::bridge::gateway::GatewayIntents, Client};
 use utils::Intents;
 
 #[derive(Deserialize, Clone)]
@@ -72,7 +72,7 @@ impl ConnectorBuilder for Builder {
 pub struct Discord {
     config: Config,
     origin_uri: EventOriginUri,
-    client_task: Option<JoinHandle<std::result::Result<(), SerenityError>>>,
+    client_task: Option<JoinHandle<()>>,
     message_channel: (Sender<Value<'static>>, Receiver<Value<'static>>),
     reply_channel: (Sender<Value<'static>>, Receiver<Value<'static>>),
 }
@@ -115,7 +115,7 @@ impl Connector for Discord {
         builder.spawn(sink, sink_context).map(Some)
     }
 
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         // cancel and quit client task
         if let Some(client_task) = self.client_task.take() {
             client_task.cancel().await;
@@ -143,7 +143,10 @@ impl Connector for Discord {
             .await
             .map_err(|e| Error::from(format!("Err discord creating client: {}", e)))?;
         // set up new client task
-        self.client_task = Some(task::spawn(async move { client.start().await }));
+        self.client_task = Some(spawn_task(
+            ctx.clone(),
+            async move { Ok(client.start().await?) },
+        ));
         Ok(true)
     }
 }
@@ -168,7 +171,7 @@ impl Sink for DiscordSink {
                     "{} Discord Client unreachable. Initiating Reconnect...",
                     &ctx
                 );
-                ctx.notifier().notify().await?;
+                ctx.notifier().connection_lost().await?;
             }
         }
         Ok(SinkReply::NONE)

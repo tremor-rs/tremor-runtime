@@ -12,13 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use async_std::{
-    channel::{bounded, Receiver, Sender, TryRecvError},
-    task,
-};
+use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 
 use super::{logs, metrics, trace};
-use crate::connectors::prelude::*;
+use crate::connectors::{prelude::*, spawn_task};
 use async_std::task::JoinHandle;
 use tremor_otelapis::all::{self, OpenTelemetryEvents};
 const CONNECTOR_TYPE: &str = "otel_server";
@@ -138,7 +135,7 @@ impl Connector for Server {
         Ok(None)
     }
 
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         let endpoint = format!("{}:{}", self.config.host, self.config.port).parse()?;
 
         if let Some(previous_handle) = self.accept_task.take() {
@@ -146,15 +143,11 @@ impl Connector for Server {
         }
 
         let tx = self.tx.clone();
-        task::spawn(async move {
-            match all::make(endpoint, tx).await {
-                Ok(()) => (),
-                Err(e) => {
-                    dbg!(&e);
-                    error!("Could not start Otel gRPC server: {}", e);
-                }
-            };
-        });
+
+        spawn_task(
+            ctx.clone(),
+            async move { Ok(all::make(endpoint, tx).await?) },
+        );
         Ok(true)
     }
 }
@@ -211,7 +204,7 @@ impl Source for OtelSource {
                 warn!("Otel Source received trace event when trace support is disabled. Dropping trace");
             }
             Err(TryRecvError::Closed) => {
-                ctx.notifier().notify().await?;
+                ctx.notifier().connection_lost().await?;
             }
             _ => (),
         };

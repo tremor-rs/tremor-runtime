@@ -173,7 +173,7 @@ impl ClientContext for TremorProducerContext {
             // issue a reconnect upon fatal errors
             let notifier = self.ctx.notifier().clone();
             task::spawn(async move {
-                notifier.notify().await?;
+                notifier.connection_lost().await?;
                 Ok::<(), Error>(())
             });
         }
@@ -289,7 +289,7 @@ impl Sink for KafkaProducerSink {
                         error!("{ctx} Failed to enqueue message: {e}");
                         if is_fatal(&e) {
                             error!("{ctx} Fatal Kafka Error: {e}. Attempting a reconnect.");
-                            ctx.notifier.notify().await?;
+                            ctx.notifier.connection_lost().await?;
                         }
                         return Err(e.into());
                     }
@@ -396,7 +396,7 @@ async fn wait_for_delivery(
         Ok(results) => {
             if let Some((kafka_error, _)) = results.into_iter().find_map(std::result::Result::err) {
                 error!("{ctx} Error delivering kafka record: {kafka_error}");
-                if is_fatal(&kafka_error) && ctx.notifier().notify().await.is_err() {
+                if is_fatal(&kafka_error) && ctx.notifier().connection_lost().await.is_err() {
                     error!("{ctx} Error notifying runtime of fatal Kafka error");
                 }
                 cf_data.map(AsyncSinkReply::Fail)

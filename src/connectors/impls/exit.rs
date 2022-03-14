@@ -22,7 +22,7 @@
 //! But options can be provided within a record with the following fields:
 //!
 //! * delay: milliseconds to wait before stopping the process
-use crate::connectors::prelude::*;
+use crate::connectors::{prelude::*, spawn_task};
 use crate::system::{ShutdownMode, World};
 use async_std::task;
 use std::time::Duration;
@@ -87,13 +87,8 @@ impl Sink for Exit {
             };
             // this should stop the whole server process
             let world = self.world.clone();
-            let alias = ctx.alias().to_string();
             // we spawn this out into another task, so we don't block the sink loop handling control plane messages
-            task::spawn(async move {
-                if let Err(e) = world.stop(mode).await {
-                    error!("[Sink::{}] Error stopping Tremor: {}", &alias, e);
-                }
-            });
+            spawn_task(ctx.clone(), async move { world.stop(mode).await });
             self.done = true;
         }
 
