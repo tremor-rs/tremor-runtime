@@ -41,7 +41,7 @@ async fn connector_unix_socket_event_routing() -> Result<()> {
       }
     });
 
-    let harness = ConnectorHarness::new("unix_socket_server", defn).await?;
+    let harness = ConnectorHarness::new("unix_socket_server", &defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of unix_socket_server connector");

@@ -28,7 +28,7 @@ async fn connector_metronome_routing() -> Result<()> {
     });
     let epoch = tremor_common::time::nanotime();
 
-    let harness = ConnectorHarness::new("metronome", defn).await?;
+    let harness = ConnectorHarness::new("metronome", &defn).await?;
     let out_pipeline = harness
         .out()
         // FIXME: what should be here

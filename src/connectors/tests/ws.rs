@@ -266,7 +266,7 @@ async fn connector_ws_client_bad_config() -> Result<()> {
       }
     });
 
-    let harness = ConnectorHarness::new("ws_client", defn).await;
+    let harness = ConnectorHarness::new("ws_client", &defn).await;
     assert!(harness.is_err());
     Ok(())
 }
@@ -286,7 +286,7 @@ async fn connector_ws_server_text_routing() -> Result<()> {
       }
     });
 
-    let harness = ConnectorHarness::new("ws_server", defn).await?;
+    let harness = ConnectorHarness::new("ws_server", &defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of ws_server connector");
@@ -352,7 +352,7 @@ async fn connector_ws_client_binary_routing() -> Result<()> {
       }
     });
 
-    let harness = ConnectorHarness::new("ws_client", defn).await?;
+    let harness = ConnectorHarness::new("ws_client", &defn).await?;
     harness.start().await?;
     harness.wait_for_connected(Duration::from_secs(5)).await?;
 
@@ -407,7 +407,7 @@ async fn connector_ws_client_text_routing() -> Result<()> {
       }
     });
 
-    let harness = ConnectorHarness::new("ws_client", defn).await?;
+    let harness = ConnectorHarness::new("ws_client", &defn).await?;
 
     harness.start().await?;
     harness.wait_for_connected(Duration::from_secs(5)).await?;
@@ -471,7 +471,7 @@ async fn connector_wss_server_text_routing() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new("ws_server", defn).await?;
+    let harness = ConnectorHarness::new("ws_server", &defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of ws_server connector");
@@ -547,7 +547,7 @@ async fn connector_wss_server_binary_routing() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new("ws_server", defn).await?;
+    let harness = ConnectorHarness::new("ws_server", &defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of ws_server connector");
