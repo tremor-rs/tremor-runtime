@@ -209,7 +209,6 @@ pub(crate) enum MgmtMsg {
         /// the actual target addr
         target: OutputTarget,
     },
-    /// FIXME: messages for transitioning from one state to the other
     /// start the pipeline
     Start,
     /// pause the pipeline - currently a no-op
