@@ -404,7 +404,8 @@ impl SinkManagerBuilder {
 /// the builder then in a second step takes the source specific information to assemble and spawn the actual `SinkManager`.
 pub(crate) fn builder(
     config: &ConnectorConfig,
-    connector_default_codec: CodecReq,
+    connector_codec_requirement: CodecReq,
+    alias: &str,
     qsize: usize,
     metrics_reporter: SinkReporter,
 ) -> Result<SinkManagerBuilder> {
@@ -412,8 +413,10 @@ pub(crate) fn builder(
     let postprocessor_configs = config.postprocessors.clone().unwrap_or_default();
     let serializer = EventSerializer::build(
         config.codec.clone(),
-        connector_default_codec,
+        connector_codec_requirement,
         postprocessor_configs,
+        config.connector_type,
+        alias,
     )?;
     // the incoming channels for events are all bounded, so we can safely be unbounded here
     // TODO: actually we could have lots of CB events not bound to events here
@@ -447,20 +450,21 @@ impl EventSerializer {
         codec_config: Option<CodecConfig>,
         default_codec: CodecReq,
         postprocessor_configs: Vec<PostprocessorConfig>,
+        connector_type: ConnectorType,
+        alias: &str,
     ) -> Result<Self> {
         let codec_config = match default_codec {
             CodecReq::Structured => {
                 if codec_config.is_some() {
                     return Err(format!(
-                        "The connector {} can not be configured with a codec.",
-                        "FIXME: identify sink"
+                        "The {connector_type} connector {alias} can not be configured with a codec.",
                     )
                     .into());
                 }
                 CodecConfig::from("null")
             }
             CodecReq::Required => codec_config
-                .ok_or_else(|| format!("Missing codec for connector {}", "FIXME: identify sink"))?,
+                .ok_or_else(|| format!("Missing codec for {connector_type} connector {alias}"))?,
             CodecReq::Optional(opt) => codec_config.unwrap_or_else(|| CodecConfig::from(opt)),
         };
 
@@ -601,15 +605,8 @@ where
                             port: _port,
                             mut pipelines,
                         } => {
-                            // FIXME: the connector can define valid ports so we can't assum IN is the only valid one
-                            // debug_assert!(
-                            //     port == IN,
-                            //     "[Sink::{}] connected to invalid connector sink port",
-                            //     &self.ctx.alias
-                            // );
                             self.pipelines.append(&mut pipelines);
                         }
-                        // FIXME: only handle those if in the right state (see source part)
                         SinkMsg::Start if self.state == Initialized => {
                             self.state = Running;
                             self.ctx.log_err(
