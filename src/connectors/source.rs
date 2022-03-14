@@ -619,39 +619,10 @@ where
 
     /// Handle a control plane message
     async fn handle_control_plane_msg(&mut self, msg: SourceMsg) -> Result<Control> {
-        use SourceState::{Drained, Draining, Initialized, Paused, Running, Stopped};
+        use SourceState::{Initialized, Paused, Running, Stopped};
 
         match msg {
-            SourceMsg::Link {
-                port,
-                mut pipelines,
-            } => {
-                let pipes = if port.eq_ignore_ascii_case(OUT.as_ref()) {
-                    &mut self.pipelines_out
-                } else if port.eq_ignore_ascii_case(ERR.as_ref()) {
-                    &mut self.pipelines_err
-                } else {
-                    error!("{} Tried to connect to invalid port: {}", &self.ctx, &port);
-                    return Ok(Control::Continue);
-                };
-                for (pipeline_url, p) in &pipelines {
-                    self.ctx.log_err(
-                        p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
-                            endpoint: DeployEndpoint::new(
-                                &self.ctx.alias,
-                                &port,
-                                pipeline_url.meta(),
-                            ),
-                            target: InputTarget::Source(self.addr.clone()),
-                            is_transactional: self.is_transactional,
-                        })
-                        .await,
-                        &format!("Failed sending ConnectInput to pipeline {}", pipeline_url),
-                    );
-                }
-                pipes.append(&mut pipelines);
-                Ok(Control::Continue)
-            }
+            SourceMsg::Link { port, pipelines } => self.handle_link(port, pipelines).await,
             SourceMsg::Start if self.state == Initialized => {
                 info!("{} Starting...", &self.ctx);
                 self.state = Running;
@@ -659,10 +630,7 @@ where
                     .log_err(self.source.on_start(&self.ctx).await, "on_start failed");
 
                 if let Err(e) = self.send_signal(Event::signal_start(self.ctx.uid)).await {
-                    error!(
-                        "[Source::{}] Error sending start signal: {}",
-                        &self.ctx.alias, e
-                    );
+                    error!("{} Error sending start signal: {}", &self.ctx, e);
                 }
                 Ok(Control::Continue)
             }
@@ -726,44 +694,7 @@ where
                 );
                 Ok(Control::Terminate)
             }
-            SourceMsg::Drain(_sender) if self.state == Draining => {
-                info!(
-                    "[Source::{}] Ignoring incoming Drain message in {:?} state",
-                    &self.ctx.alias, &self.state
-                );
-                Ok(Control::Continue)
-            }
-            SourceMsg::Drain(sender) if self.state == Drained => {
-                self.ctx.log_err(
-                    sender.send(Msg::SourceDrained).await,
-                    "Error sending SourceDrained message",
-                );
-                Ok(Control::Continue)
-            }
-            SourceMsg::Drain(drained_sender) => {
-                // if we are not connected to any pipeline, we cannot take part in the draining protocol like this
-                // we are drained
-                info!("{} Draining...", &self.ctx);
-                if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
-                    self.ctx.log_err(
-                        drained_sender.send(Msg::SourceDrained).await,
-                        "sending SourceDrained message failed",
-                    );
-                    self.state = Drained;
-                } else {
-                    self.connector_channel = Some(drained_sender);
-                    if !self.is_asynchronous || self.connectivity == Connectivity::Disconnected {
-                        // non-asynchronous sources or disconnected sources are considered immediately drained
-                        self.on_fully_drained().await?;
-                    } else {
-                        // At this point the connector has advised all reading from external connections to stop via the `QuiescenceBeacon`
-                        // We change the source state to `Draining` and wait for `SourceReply::Empty` as we drain out everything that might be in flight
-                        // when reached the `Empty` point, we emit the `Drain` signal and wait for the CB answer (one for each connected pipeline)
-                        self.state = Draining;
-                    }
-                }
-                Ok(Control::Continue)
-            }
+            SourceMsg::Drain(drained_sender) => self.handle_drain(drained_sender).await,
             SourceMsg::ConnectionLost => {
                 self.connectivity = Connectivity::Disconnected;
                 self.ctx.log_err(
@@ -780,7 +711,52 @@ where
                 );
                 Ok(Control::Continue)
             }
-            SourceMsg::Cb(CbAction::Fail, id) => {
+            SourceMsg::Cb(cb, id) => self.handle_cb(cb, id).await,
+        }
+    }
+
+    async fn handle_drain(&mut self, drained_sender: Sender<Msg>) -> Result<Control> {
+        match self.state {
+            SourceState::Drained => self.ctx.log_err(
+                drained_sender.send(Msg::SourceDrained).await,
+                "Error sending SourceDrained message",
+            ),
+            SourceState::Draining => {
+                info!(
+                    "{} Ignoring incoming Drain message in {:?} state",
+                    &self.ctx, &self.state
+                );
+            }
+            _ => {
+                // if we are not connected to any pipeline, we cannot take part in the draining protocol like this
+                // we are drained
+                info!("{} Draining...", &self.ctx);
+                if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
+                    self.ctx.log_err(
+                        drained_sender.send(Msg::SourceDrained).await,
+                        "sending SourceDrained message failed",
+                    );
+                    self.state = SourceState::Drained;
+                } else {
+                    self.connector_channel = Some(drained_sender);
+                    if !self.is_asynchronous || self.connectivity == Connectivity::Disconnected {
+                        // non-asynchronous sources or disconnected sources are considered immediately drained
+                        self.on_fully_drained().await?;
+                    } else {
+                        // At this point the connector has advised all reading from external connections to stop via the `QuiescenceBeacon`
+                        // We change the source state to `Draining` and wait for `SourceReply::Empty` as we drain out everything that might be in flight
+                        // when reached the `Empty` point, we emit the `Drain` signal and wait for the CB answer (one for each connected pipeline)
+                        self.state = SourceState::Draining;
+                    }
+                }
+            }
+        };
+        Ok(Control::Continue)
+    }
+
+    async fn handle_cb(&mut self, cb: CbAction, id: EventId) -> Result<Control> {
+        match cb {
+            CbAction::Fail => {
                 if let Some((stream_id, id)) = id.get_min_by_source(self.ctx.uid) {
                     self.ctx.log_err(
                         self.source.fail(stream_id, id, &self.ctx).await,
@@ -789,7 +765,7 @@ where
                 }
                 Ok(Control::Continue)
             }
-            SourceMsg::Cb(CbAction::Ack, id) => {
+            CbAction::Ack => {
                 if let Some((stream_id, id)) = id.get_max_by_source(self.ctx.uid) {
                     self.ctx.log_err(
                         self.source.ack(stream_id, id, &self.ctx).await,
@@ -798,15 +774,15 @@ where
                 }
                 Ok(Control::Continue)
             }
-            SourceMsg::Cb(CbAction::Close, _id) => {
+            CbAction::Close => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
-                info!("[Source::{}] Circuit Breaker: Close.", self.ctx.alias);
+                info!("{} Circuit Breaker: Close.", self.ctx);
                 let res = self.source.on_cb_close(&self.ctx).await;
                 self.ctx.log_err(res, "on_cb_close failed");
-                self.state = Paused;
+                self.state = SourceState::Paused;
                 Ok(Control::Continue)
             }
-            SourceMsg::Cb(CbAction::Open, _id) => {
+            CbAction::Open => {
                 // FIXME: only start polling for data if we received at least 1 CbAction::Open
                 info!("{} Circuit Breaker: Open.", &self.ctx);
                 self.cb_open_received = true;
@@ -814,12 +790,12 @@ where
                     .log_err(self.source.on_cb_open(&self.ctx).await, "on_cb_open failed");
                 // avoid a race condition where the necessary start routine wasnt executed
                 // because a `CbAction::Open` was there first, and thus the `Start` msg was ignored
-                if self.state != Initialized {
-                    self.state = Running;
+                if self.state != SourceState::Initialized {
+                    self.state = SourceState::Running;
                 }
                 Ok(Control::Continue)
             }
-            SourceMsg::Cb(CbAction::Drained(uid), _id) => {
+            CbAction::Drained(uid) => {
                 debug!("{} Drained contraflow message for {}", &self.ctx, uid);
                 // only account for Drained CF which we caused
                 // as CF is sent back the DAG to all destinations
@@ -841,8 +817,36 @@ where
                 }
                 Ok(Control::Continue)
             }
-            SourceMsg::Cb(CbAction::None, _id) => Ok(Control::Continue),
+            CbAction::None => Ok(Control::Continue),
         }
+    }
+
+    async fn handle_link(
+        &mut self,
+        port: Cow<'static, str>,
+        mut pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
+    ) -> Result<Control> {
+        let pipes = if port.eq_ignore_ascii_case(OUT.as_ref()) {
+            &mut self.pipelines_out
+        } else if port.eq_ignore_ascii_case(ERR.as_ref()) {
+            &mut self.pipelines_err
+        } else {
+            error!("{} Tried to connect to invalid port: {}", &self.ctx, &port);
+            return Ok(Control::Continue);
+        };
+        for (pipeline_url, p) in &pipelines {
+            self.ctx.log_err(
+                p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
+                    endpoint: DeployEndpoint::new(&self.ctx.alias, &port, pipeline_url.meta()),
+                    target: InputTarget::Source(self.addr.clone()),
+                    is_transactional: self.is_transactional,
+                })
+                .await,
+                &format!("Failed sending ConnectInput to pipeline {}", pipeline_url),
+            );
+        }
+        pipes.append(&mut pipelines);
+        Ok(Control::Continue)
     }
 
     /// send a signal to all connected pipelines
@@ -905,8 +909,8 @@ where
                     .await
                 {
                     error!(
-                        "[Source::{}] Failed to send event to pipeline {}: {}",
-                        &self.ctx.alias, &last.0, e
+                        "{} Failed to send event to pipeline {}: {}",
+                        self.ctx, &last.0, e
                     );
                     send_error = true;
                 }
@@ -1026,7 +1030,7 @@ where
         origin_uri: EventOriginUri,
         meta: Option<Value<'static>>,
     ) {
-        debug!("[Source::{}] Ending stream {}", &self.ctx.alias, stream_id);
+        debug!("{} Ending stream {stream_id}", self.ctx);
         let mut ingest_ns = nanotime();
         if let Some(mut stream_state) = self.streams.end_stream(stream_id) {
             let results = build_last_events(
@@ -1045,10 +1049,7 @@ where
                     .on_no_events(pull_id, stream_id, &self.ctx)
                     .await
                 {
-                    error!(
-                        "[Source::{}] Error on no events callback: {}",
-                        &self.ctx.alias, e
-                    );
+                    error!("{} Error on no events callback: {e}", self.ctx);
                 }
             } else {
                 let error = self.route_events(results).await;
@@ -1118,10 +1119,7 @@ where
         }
         if results.is_empty() {
             if let Err(e) = self.source.on_no_events(pull_id, stream, &self.ctx).await {
-                error!(
-                    "[Source::{}] Error on no events callback: {}",
-                    &self.ctx.alias, e
-                );
+                error!("{} Error on no events callback: {e}", self.ctx);
             }
         } else {
             let error = self.route_events(results).await;
@@ -1159,10 +1157,7 @@ where
         );
         if results.is_empty() {
             if let Err(e) = self.source.on_no_events(pull_id, stream, &self.ctx).await {
-                error!(
-                    "[Source::{}] Error on no events callback: {}",
-                    &self.ctx.alias, e
-                );
+                error!("{} Error on no events callback: {e}", self.ctx);
             }
         } else {
             let error = self.route_events(results).await;
@@ -1229,7 +1224,7 @@ where
             // FIXME: change reply from true/false to something descriptive like enum {Stop Continue} or the rust controlflow thingy
             if self.control_plane().await? == Control::Terminate {
                 // source has been stopped, lets stop running here
-                debug!("[Source::{}] Terminating source task...", self.ctx.alias);
+                debug!("{} Terminating source task...", self.ctx);
                 return Ok(());
             }
 
