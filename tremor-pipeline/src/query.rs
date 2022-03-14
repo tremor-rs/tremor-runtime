@@ -97,7 +97,7 @@ fn resolve_output_port(port: &(Ident, Ident)) -> OutputPort {
     }
 }
 
-pub(crate) fn window_decl_to_impl(d: &WindowDefinition<'static>) -> Result<window::Impl> {
+pub(crate) fn window_defn_to_impl(d: &WindowDefinition<'static>) -> Result<window::Impl> {
     use op::trickle::window::{TumblingOnNumber, TumblingOnTime};
     match &d.kind {
         WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
@@ -404,12 +404,12 @@ impl Query {
                         return Err(query_node_duplicate_name_err(o, o.id.clone()).into());
                     }
 
-                    let mut decl: OperatorDefinition =
+                    let mut defn: OperatorDefinition =
                         helper.get(&o.target)?.ok_or("operator not found")?;
 
-                    decl.params.ingest_creational_with(&o.params)?;
+                    defn.params.ingest_creational_with(&o.params)?;
 
-                    let that = Stmt::OperatorDefinition(decl);
+                    let that = Stmt::OperatorDefinition(defn);
                     let node = NodeConfig {
                         id: o.id.clone(),
                         kind: NodeKind::Operator,
@@ -426,17 +426,17 @@ impl Query {
                         return Err(query_node_duplicate_name_err(o, o.id.clone()).into());
                     }
 
-                    let mut decl: ScriptDefinition = helper
+                    let mut defn: ScriptDefinition = helper
                         .get(&o.target)?
                         .ok_or_else(|| not_defined_err(o, "script"))?;
-                    decl.params.ingest_creational_with(&o.params)?;
+                    defn.params.ingest_creational_with(&o.params)?;
                     // we const fold twice to ensure that we are able
-                    ConstFolder::new(&helper).walk_definitional_args(&mut decl.params)?;
-                    let inner_args = decl.params.render()?;
-                    ArgsRewriter::new(inner_args, &mut helper).walk_script_decl(&mut decl)?;
-                    ConstFolder::new(&helper).walk_script_decl(&mut decl)?;
+                    ConstFolder::new(&helper).walk_definitional_args(&mut defn.params)?;
+                    let inner_args = defn.params.render()?;
+                    ArgsRewriter::new(inner_args, &mut helper).walk_script_defn(&mut defn)?;
+                    ConstFolder::new(&helper).walk_script_defn(&mut defn)?;
 
-                    let e = decl.extent();
+                    let e = defn.extent();
                     let mut h = Dumb::new();
                     // We're trimming the code so no spaces are at the end then adding a newline
                     // to ensure we're left justified (this is a dot thing, don't question it)
@@ -444,7 +444,7 @@ impl Query {
                         .highlight_range(e)
                         .ok()
                         .map(|_| format!("{}\n", h.to_string().trim_end()));
-                    let that_defn = Stmt::ScriptDefinition(Box::new(decl));
+                    let that_defn = Stmt::ScriptDefinition(Box::new(defn));
 
                     let node = NodeConfig {
                         id: o.id.clone(),
@@ -736,8 +736,8 @@ fn select(
                             )))
                         })
                         .and_then(|mut imp| {
-                            ConstFolder::new(helper).walk_window_decl(&mut imp)?;
-                            Ok((w.id.id().to_string(), window_decl_to_impl(&imp)?))
+                            ConstFolder::new(helper).walk_window_defn(&mut imp)?;
+                            Ok((w.id.id().to_string(), window_defn_to_impl(&imp)?))
                         })
                 })
                 .collect();

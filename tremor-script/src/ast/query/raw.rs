@@ -210,14 +210,14 @@ impl_expr!(OperatorDefinitionRaw);
 impl<'script> Upable<'script> for OperatorDefinitionRaw<'script> {
     type Target = OperatorDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let operator_decl = OperatorDefinition {
+        let operator_defn = OperatorDefinition {
             mid: self.mid.box_with_name(&self.id),
             id: self.id.clone(),
             kind: self.kind.up(helper)?,
             params: self.params.up(helper)?,
         };
-        helper.add_query_decl_doc(&operator_decl.id, self.doc);
-        Ok(operator_decl)
+        helper.add_query_doc(&operator_defn.id, self.doc);
+        Ok(operator_defn)
     }
 }
 
@@ -291,7 +291,7 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
             .map(|(k, v)| Ok((k.up(helper)?.to_string(), v.up(helper)?)))
             .collect::<Result<_>>()?;
 
-        let pipeline_decl = PipelineDefinition {
+        let pipeline_defn = PipelineDefinition {
             config,
             mid,
             id: self.id,
@@ -302,8 +302,8 @@ impl<'script> Upable<'script> for PipelineDefinitionRaw<'script> {
             scope,
         };
 
-        helper.add_query_decl_doc(&pipeline_decl.id, self.doc);
-        Ok(pipeline_decl)
+        helper.add_query_doc(&pipeline_defn.id, self.doc);
+        Ok(pipeline_defn)
     }
 }
 
@@ -386,15 +386,15 @@ impl<'script> Upable<'script> for ScriptDefinitionRaw<'script> {
         let params = self.params;
         let params = params.up(helper)?;
 
-        let script_decl = ScriptDefinition {
+        let script_defn = ScriptDefinition {
             mid,
             id: self.id,
             params,
             script,
         };
 
-        helper.add_query_decl_doc(&script_decl.id, self.doc);
-        Ok(script_decl)
+        helper.add_query_doc(&script_defn.id, self.doc);
+        Ok(script_defn)
     }
 }
 
@@ -442,7 +442,7 @@ impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
 
         // warn params if `emit_empty_windows` is defined, but neither `max_groups` nor `evicition_period` is defined
 
-        let window_decl = WindowDefinition {
+        let window_defn = WindowDefinition {
             mid: self.mid.box_with_name(&self.id),
             id: self.id,
             kind: self.kind,
@@ -450,8 +450,8 @@ impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
             script: maybe_script,
         };
 
-        helper.add_query_decl_doc(&window_decl.id, self.doc);
-        Ok(window_decl)
+        helper.add_query_doc(&window_defn.id, self.doc);
+        Ok(window_defn)
     }
 }
 

@@ -73,8 +73,6 @@ use std::{collections::BTreeMap, mem};
 use upable::Upable;
 
 pub(crate) type Exprs<'script> = Vec<Expr<'script>>;
-/// A list of lexical compilation units
-pub type Imports = Vec<LexicalUnit>;
 /// A list of immutable expressions
 pub(crate) type ImutExprs<'script> = Vec<ImutExpr<'script>>;
 pub(crate) type Fields<'script> = Vec<Field<'script>>;
@@ -415,18 +413,6 @@ impl<'script> Script<'script> {
     }
 }
 
-/// A lexical compilation unit
-#[derive(Debug, PartialEq, Serialize, Clone)]
-pub enum LexicalUnit {
-    /// Import declaration with no alias
-    NakedImportDecl(Vec<raw::IdentRaw<'static>>),
-    /// Import declaration with an alias
-    AliasedImportDecl(Vec<raw::IdentRaw<'static>>, raw::IdentRaw<'static>),
-    /// Line directive with embedded "<string> <num> ;"
-    LineDirective(String),
-}
-// impl_expr_mid!(Ident);
-
 /// An ident
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct Ident<'script> {
@@ -548,7 +534,7 @@ impl_expr!(Literal);
 
 /// Damn you public interfaces
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct FnDecl<'script> {
+pub struct FnDefn<'script> {
     pub(crate) mid: Box<NodeMeta>,
     pub(crate) name: String,
     pub(crate) args: Vec<Ident<'script>>,
@@ -557,7 +543,7 @@ pub struct FnDecl<'script> {
     pub(crate) open: bool,
     pub(crate) inline: bool,
 }
-impl_expr!(FnDecl);
+impl_expr!(FnDefn);
 
 /// A Constant
 #[derive(Clone, Debug, PartialEq, Serialize)]

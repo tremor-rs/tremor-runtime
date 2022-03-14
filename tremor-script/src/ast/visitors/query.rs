@@ -239,7 +239,7 @@ pub trait Visitor<'script> {
         Ok(())
     }
 
-    /// visit a `OperatorDecl`
+    /// visit a `OperatorDefinition`
     ///
     /// # Errors
     /// if the walker function fails
@@ -247,7 +247,7 @@ pub trait Visitor<'script> {
         Ok(Walk)
     }
 
-    /// leave a `OperatorDecl`
+    /// leave a `OperatorDefinition`
     ///
     /// # Errors
     /// if the walker function fails
@@ -255,7 +255,7 @@ pub trait Visitor<'script> {
         Ok(())
     }
 
-    /// visit a `ScriptDecl`
+    /// visit a `ScriptDefinition`
     ///
     /// # Errors
     /// if the walker function fails
@@ -263,7 +263,7 @@ pub trait Visitor<'script> {
         Ok(Walk)
     }
 
-    /// leave a `ScriptDecl`
+    /// leave a `ScriptDefinition`
     ///
     /// # Errors
     /// if the walker function fails
@@ -271,7 +271,7 @@ pub trait Visitor<'script> {
         Ok(())
     }
 
-    /// visit a `PipelineDecl`
+    /// visit a `PipelineDefinition`
     ///
     /// # Errors
     /// if the walker function fails
@@ -279,7 +279,7 @@ pub trait Visitor<'script> {
         Ok(Walk)
     }
 
-    /// leave a `PipelineDecl`
+    /// leave a `PipelineDefinition`
     ///
     /// # Errors
     /// if the walker function fails

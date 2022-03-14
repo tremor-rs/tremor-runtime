@@ -98,14 +98,14 @@ impl ModDoc {
 
 /// Documentation from a query statement
 #[derive(Debug, Clone, PartialEq)]
-pub struct QueryDeclDoc {
+pub struct QueryDoc {
     /// Statment name
     pub name: String,
     /// Statment documentation
     pub doc: Option<String>,
 }
 
-impl ToString for QueryDeclDoc {
+impl ToString for QueryDoc {
     fn to_string(&self) -> String {
         format!(
             r#"
@@ -150,7 +150,7 @@ pub struct Docs {
     /// Functions
     pub fns: Vec<FnDoc>,
     /// Querys
-    pub query_decls: Vec<QueryDeclDoc>,
+    pub queries: Vec<QueryDoc>,
     /// Flows
     pub flows: Vec<FlowDoc>,
     /// Module level documentation
@@ -216,7 +216,7 @@ hello
 
     #[test]
     fn query_doc() {
-        let q = QueryDeclDoc {
+        let q = QueryDoc {
             name: "test query".into(),
             doc: Some("hello".into()),
         };

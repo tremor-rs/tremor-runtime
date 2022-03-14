@@ -51,11 +51,11 @@ impl<'script> Deploy<'script> {
 /// A tremor deployment language ( troy ) statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum DeployStmt<'script> {
-    /// A flow declaration
+    /// A flow definition
     FlowDefinition(Box<FlowDefinition<'script>>),
-    /// A pipeline declaration
+    /// A pipeline definition
     PipelineDefinition(Box<PipelineDefinition<'script>>),
-    /// A connector declaration
+    /// A connector definition
     ConnectorDefinition(Box<ConnectorDefinition<'script>>),
     /// The create instance constructor
     DeployFlowStmt(Box<DeployFlow<'script>>),
@@ -86,7 +86,7 @@ impl<'script> BaseExpr for DeployStmt<'script> {
     }
 }
 
-/// A connector declaration
+/// A connector definition
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ConnectorDefinition<'script> {
     pub(crate) mid: Box<NodeMeta>,
@@ -196,7 +196,7 @@ impl DeployEndpoint {
     }
 }
 
-/// A flow declaration
+/// A flow definition
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FlowDefinition<'script> {
     pub(crate) mid: Box<NodeMeta>,

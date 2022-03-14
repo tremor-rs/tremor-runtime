@@ -52,13 +52,13 @@ impl_expr!(Query);
 /// Query statement
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum Stmt<'script> {
-    /// A window declaration
+    /// A window definition
     WindowDefinition(Box<WindowDefinition<'script>>),
-    /// An operator declaration
+    /// An operator definition
     OperatorDefinition(OperatorDefinition<'script>),
-    /// A script declaration
+    /// A script definition
     ScriptDefinition(Box<ScriptDefinition<'script>>),
-    /// An pipeline declaration
+    /// An pipeline definition
     PipelineDefinition(Box<PipelineDefinition<'script>>),
     /// A stream
     StreamStmt(StreamStmt),
@@ -165,7 +165,7 @@ impl BaseExpr for OperatorKind {
     }
 }
 
-/// An operator declaration
+/// An operator definition
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct OperatorDefinition<'script> {
     /// The ID and Module of the Operator
@@ -193,13 +193,13 @@ pub struct OperatorCreate<'script> {
 }
 impl_expr!(OperatorCreate);
 
-/// A script declaration
+/// A script definition
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptDefinition<'script> {
     pub(crate) mid: Box<NodeMeta>,
     /// The ID and Module of the Script
     pub id: String,
-    /// Parameters of a script declaration
+    /// Parameters of a script definition
     pub params: DefinitioalArgs<'script>,
     /// The script itself
     pub script: Script<'script>,
@@ -223,14 +223,14 @@ impl_expr!(ScriptCreate);
 /// A config
 pub type Config<'script> = Vec<(String, ImutExpr<'script>)>;
 
-/// A pipeline declaration
+/// A pipeline definition
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct PipelineDefinition<'script> {
-    /// The ID and Module of the SubqueryDecl
+    /// The ID and Module of the PipelineDefinition
     pub id: String,
     /// metadata id
     pub(crate) mid: Box<NodeMeta>,
-    /// Parameters of a subquery declaration
+    /// Parameters of a subquery definition
     pub params: DefinitioalArgs<'script>,
     /// Input Ports
     pub from: Vec<Ident<'script>>,
@@ -328,7 +328,7 @@ pub enum WindowKind {
     Tumbling,
 }
 
-/// A window declaration
+/// A window definition
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct WindowDefinition<'script> {
     /// ID and Module of the Window

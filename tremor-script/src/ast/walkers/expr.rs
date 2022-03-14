@@ -68,15 +68,15 @@ pub trait Walker<'script>: ExprVisitor<'script> + ImutExprWalker<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_fn_decl(&mut self, decl: &mut FnDecl<'script>) -> Result<()> {
+    fn walk_fn_defn(&mut self, defn: &mut FnDefn<'script>) -> Result<()> {
         stop!(
-            ExprVisitor::visit_fn_decl(self, decl),
-            ExprVisitor::leave_fn_decl(self, decl)
+            ExprVisitor::visit_fn_defn(self, defn),
+            ExprVisitor::leave_fn_defn(self, defn)
         );
-        for e in &mut decl.body {
+        for e in &mut defn.body {
             Walker::walk_expr(self, e)?;
         }
-        ExprVisitor::leave_fn_decl(self, decl)
+        ExprVisitor::leave_fn_defn(self, defn)
     }
 
     /// walk a comprehension

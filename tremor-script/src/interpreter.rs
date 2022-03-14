@@ -1129,7 +1129,7 @@ where
 }
 
 /// A record pattern matches a target if the target is a record that contains **at least all
-/// declared keys** and the tests for **each of the declared key** match.
+/// keys** and the tests for **each of the key** match.
 #[inline]
 #[allow(clippy::too_many_lines)]
 fn match_rp_expr<'event, Expr>(

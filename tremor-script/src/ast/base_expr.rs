@@ -285,7 +285,7 @@ impl<'script> BaseExpr for TopLevelExprRaw<'script> {
     fn meta(&self) -> &NodeMeta {
         match self {
             TopLevelExprRaw::Const(c) => c.meta(),
-            TopLevelExprRaw::FnDecl(e) => e.meta(),
+            TopLevelExprRaw::FnDefn(e) => e.meta(),
             TopLevelExprRaw::Use(e) => e.meta(),
             TopLevelExprRaw::Expr(e) => e.meta(),
         }
