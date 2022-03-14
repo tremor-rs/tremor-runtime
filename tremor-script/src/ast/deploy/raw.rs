@@ -22,7 +22,7 @@ use super::{
 use crate::{
     ast::{
         base_expr::Ranged,
-        docs::ModDoc,
+        docs::{FlowDoc, ModDoc},
         error_generic,
         node_id::NodeId,
         query::raw::{
@@ -134,8 +134,7 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
                 Ok(None)
             }
             DeployStmtRaw::FlowDefinition(stmt) => {
-                // FIXME we don't have flow docs!
-                // helper.docs.flows.push(stmt.doc());
+                helper.docs.flows.push(stmt.doc());
                 let stmt: FlowDefinition<'script> = stmt.up(helper)?;
                 helper.scope.insert_flow(stmt)?;
                 Ok(None)
@@ -262,9 +261,21 @@ impl<'script> Upable<'script> for ConnectStmtRaw<'script> {
 pub struct FlowDefinitionRaw<'script> {
     pub(crate) id: String,
     pub(crate) params: DefinitioalArgsRaw<'script>,
-    pub(crate) docs: Option<Vec<Cow<'script, str>>>,
+    pub(crate) doc: Option<Vec<Cow<'script, str>>>,
     pub(crate) stmts: Vec<FlowStmtRaw<'script>>,
     pub(crate) mid: Box<NodeMeta>,
+}
+
+impl<'script> FlowDefinitionRaw<'script> {
+    fn doc(&self) -> FlowDoc {
+        FlowDoc {
+            name: self.id.clone(),
+            doc: self
+                .doc
+                .clone()
+                .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n")),
+        }
+    }
 }
 impl_expr!(FlowDefinitionRaw);
 
@@ -315,7 +326,7 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
         }
         let mid = self.mid.box_with_name(&self.id);
         let docs = self
-            .docs
+            .doc
             .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
         let params = self.params.up(helper)?;
         helper.leave_scope()?;
@@ -435,11 +446,19 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
         let mut defn = if let Some(artefact) = helper.get::<FlowDefinition>(&target)? {
             artefact.clone()
         } else {
+            // TODO: smarter error when using a module target
+            let defined_flows = helper
+                .scope
+                .content
+                .flows
+                .keys()
+                .map(ToString::to_string)
+                .collect();
             return Err(ErrorKind::DeployArtefactNotDefined(
                 self.extent(),
                 self.id.extent(),
                 target.to_string(),
-                Vec::new(), //FIXME; helper.flow_decls.keys().map(ToString::to_string).collect(),
+                defined_flows,
             )
             .into());
         };

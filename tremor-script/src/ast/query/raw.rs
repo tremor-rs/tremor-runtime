@@ -321,7 +321,6 @@ impl<'script> Upable<'script> for PipelineCreateRaw<'script> {
     type Target = PipelineCreate<'script>;
 
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        // FIXME are those correct?!?
         Ok(PipelineCreate {
             mid: self.mid.box_with_name(&self.alias),
             target: self.target,
@@ -458,7 +457,7 @@ impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct WindowDefnRaw {
+pub struct WindowName {
     /// Identity of the window definition
     pub id: NodeId,
     pub(crate) mid: Box<NodeMeta>,
@@ -473,7 +472,7 @@ pub struct SelectRaw<'script> {
     pub(crate) maybe_where: Option<ImutExprRaw<'script>>,
     pub(crate) maybe_having: Option<ImutExprRaw<'script>>,
     pub(crate) maybe_group_by: Option<GroupByRaw<'script>>,
-    pub(crate) windows: Option<Vec<WindowDefnRaw>>,
+    pub(crate) windows: Option<Vec<WindowName>>,
     pub(crate) mid: Box<NodeMeta>,
 }
 impl_expr!(SelectRaw);
@@ -643,6 +642,7 @@ pub type StmtsRaw<'script> = Vec<StmtRaw<'script>>;
 #[derive(Clone, Debug, PartialEq, Serialize, Default)]
 pub struct DefinitioalArgsRaw<'script> {
     pub args: ArgsExprsRaw<'script>,
+    pub(crate) mid: Box<NodeMeta>,
 }
 
 impl<'script> Upable<'script> for DefinitioalArgsRaw<'script> {
@@ -650,6 +650,7 @@ impl<'script> Upable<'script> for DefinitioalArgsRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(DefinitioalArgs {
             args: self.args.up(helper)?,
+            mid: self.mid,
         })
     }
 }

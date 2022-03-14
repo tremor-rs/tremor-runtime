@@ -119,6 +119,29 @@ impl ToString for QueryDeclDoc {
     }
 }
 
+/// Documentation from a flow statement
+#[derive(Debug, Clone, PartialEq)]
+pub struct FlowDoc {
+    /// Statment name
+    pub name: String,
+    /// Statment documentation
+    pub doc: Option<String>,
+}
+
+impl ToString for FlowDoc {
+    fn to_string(&self) -> String {
+        format!(
+            r#"
+### {}
+
+{}
+"#,
+            self.name,
+            &self.doc.clone().unwrap_or_default()
+        )
+    }
+}
+
 /// Documentation from a module
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Docs {
@@ -126,8 +149,10 @@ pub struct Docs {
     pub consts: Vec<ConstDoc>,
     /// Functions
     pub fns: Vec<FnDoc>,
-    /// Query Stament documentation
+    /// Querys
     pub query_decls: Vec<QueryDeclDoc>,
+    /// Flows
+    pub flows: Vec<FlowDoc>,
     /// Module level documentation
     pub module: Option<ModDoc>,
 }
