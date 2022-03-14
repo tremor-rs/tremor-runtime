@@ -258,6 +258,9 @@ pub(crate) struct TestPipeline {
     rx: Receiver<Box<pipeline::Msg>>,
     #[allow(dead_code)]
     rx_cf: Receiver<pipeline::CfMsg>,
+    #[allow(dead_code)]
+    // we need to keep a reference around here, otherwise the channel will be closed
+    rx_mgmt: Receiver<pipeline::MgmtMsg>,
     addr: pipeline::Addr,
 }
 
@@ -266,9 +269,14 @@ impl TestPipeline {
         let qsize = QSIZE.load(Ordering::Relaxed);
         let (tx, rx) = bounded(qsize);
         let (tx_cf, rx_cf) = bounded(qsize);
-        let (tx_mgmt, _) = bounded(qsize);
+        let (tx_mgmt, rx_mgmt) = bounded(qsize);
         let addr = pipeline::Addr::new(tx, tx_cf, tx_mgmt, alias);
-        Self { rx, rx_cf, addr }
+        Self {
+            rx,
+            rx_cf,
+            rx_mgmt,
+            addr,
+        }
     }
 
     // get all available contraflow events

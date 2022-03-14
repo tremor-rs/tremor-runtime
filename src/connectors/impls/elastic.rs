@@ -271,7 +271,7 @@ impl Sink for ElasticSink {
         let guard = self.concurrency_cap.inc_for(&event).await?;
 
         if let Some(client) = self.clients.next() {
-            trace!("{} sending event [{}] to {}", ctx, event.id, client.url);
+            trace!("{ctx} sending event [{}] to {}", event.id, client.url);
 
             // create task for awaiting the sending and handling the response
             let response_tx = self.response_tx.clone();
@@ -280,6 +280,7 @@ impl Sink for ElasticSink {
             let mut origin_uri = self.origin_uri.clone();
             origin_uri.host = client.cluster_name;
             let default_index = self.default_index.clone();
+            let task_ctx = ctx.clone();
             async_std::task::Builder::new()
                 .name(format!(
                     "Elasticsearch Connector {}#{}",
@@ -312,29 +313,36 @@ impl Sink for ElasticSink {
                     .await;
                     match r {
                         Err(e) => {
-                            handle_error(
-                                e,
-                                event,
-                                &origin_uri,
-                                &response_tx,
-                                &reply_tx,
-                                include_payload,
-                            )
-                            .await
+                            debug!("{task_ctx} Error sending Elasticsearch Bulk Request: {e}");
+                            task_ctx.log_err(
+                                handle_error(
+                                    e,
+                                    event,
+                                    &origin_uri,
+                                    &response_tx,
+                                    &reply_tx,
+                                    include_payload,
+                                )
+                                .await,
+                                "Error handling ES error",
+                            );
                         }
                         Ok(v) => {
-                            handle_response(
-                                v,
-                                event,
-                                &origin_uri,
-                                response_tx,
-                                reply_tx,
-                                include_payload,
-                                start,
-                            )
-                            .await
+                            task_ctx.log_err(
+                                handle_response(
+                                    v,
+                                    event,
+                                    &origin_uri,
+                                    response_tx,
+                                    reply_tx,
+                                    include_payload,
+                                    start,
+                                )
+                                .await,
+                                "Error handling ES response",
+                            );
                         }
-                    }?;
+                    }
                     drop(guard);
 
                     Ok(())
@@ -630,17 +638,19 @@ impl<'a, 'value> ESMeta<'a, 'value> {
     }
 
     /// supported values: `true`, `false`, `"wait_for"`
-    /// FIXME: Should we return a type here?
     fn get_refresh(&self) -> Result<Option<Refresh>> {
-        if let Some(b) = self.meta.get_bool("refresh") {
+        let refresh = self.meta.get("refresh");
+        if let Some(b) = refresh.as_bool() {
             Ok(Some(if b { Refresh::True } else { Refresh::False }))
-        } else if self.meta.get_str("refresh") == Some("wait_for") {
+        } else if refresh.as_str() == Some("wait_for") {
             Ok(Some(Refresh::WaitFor))
-        } else {
+        } else if let Some(other) = refresh {
             Err(Error::from(format!(
                 "Invalid value for `$elastic.refresh`: {}",
-                self.meta.get("refresh").unwrap_or(&Value::const_null())
+                other
             )))
+        } else {
+            Ok(None)
         }
     }
 }
