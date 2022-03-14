@@ -30,7 +30,7 @@ opt-level = 3
 
 [dependencies]
 anyhow = "1"
-async-broadcast = "0.3"
+async-broadcast = "0.4"
 async-compat = "0.2"
 async-compression = { version = "0.3", features = [
   "xz",
@@ -120,11 +120,11 @@ elasticsearch = { version = "=7.14.0-alpha.1", default-features = false, feature
 ] }
 
 # ws
-async-tungstenite = { version = "0.16.1", features = [
+async-tungstenite = { version = "0.17.1", features = [
   "async-std-runtime",
   "async-tls",
 ] }
-tungstenite = { version = "0.16.0", features = ["rustls"] }
+tungstenite = { version = "0.17.2", features = ["rustls"] }
 
 # for tcp & ws
 async-tls = "0.11"
@@ -132,7 +132,7 @@ rustls = "0.19"
 rustls-native-certs = "0.6"
 
 # dns
-async-std-resolver = "0.20"
+async-std-resolver = "0.21"
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
 # we stick with git until we have a release with https://github.com/fede1024/rust-rdkafka/pull/417
@@ -215,7 +215,7 @@ matches = "0.1"
 pretty_assertions = "1.2.0"
 proptest = "1.0"
 regex = "1"
-serial_test = "0.5"
+serial_test = "0.6"
 signal-hook = "0.3"
 signal-hook-async-std = "0.2"
 tempfile = { version = "3.2" }

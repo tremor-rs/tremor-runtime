@@ -237,16 +237,17 @@ fn rdata_to_value(r: &RData) -> Option<Value<'static>> {
         RData::SSHFP(v) => literal!({ "SSHFP": v.to_string() }),
         RData::SVCB(v) => literal!({ "SVCB": v.to_string() }),
         RData::TLSA(v) => literal!({ "TLSA": v.to_string() }),
-        RData::OPT(_) | RData::Unknown { .. } | RData::ZERO => return None,
+        RData::CSYNC(v) => literal!({"CSYNC": v.to_string() }),
+        // RData marked as non-exhaustive
+        _ => return None
     })
 }
 
 fn lookup_to_value(l: &Lookup) -> Value<'static> {
     l.record_iter()
         .filter_map(|r| {
-            let mut v = rdata_to_value(r.rdata())?;
-            v.try_insert("ttl", r.ttl());
-            Some(v)
+            let ttl = r.ttl();
+            r.data().and_then(rdata_to_value).and_then(|mut v|v.try_insert("ttl", ttl))
         })
         .collect()
 }
