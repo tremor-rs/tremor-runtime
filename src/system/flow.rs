@@ -96,7 +96,6 @@ impl Borrow<str> for PipelineId {
     }
 }
 
-#[allow(dead_code)] // FIXME
 #[derive(Debug)]
 /// Control Plane message accepted by each binding control plane handler
 pub(crate) enum Msg {

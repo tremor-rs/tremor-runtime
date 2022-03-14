@@ -336,7 +336,6 @@ async fn connector_ws_server_text_routing() -> Result<()> {
     Ok(())
 }
 
-// FIXME: this test is extremely flaky and needs to be fixed
 #[async_std::test]
 async fn connector_ws_client_binary_routing() -> Result<()> {
     let _ = env_logger::try_init();
