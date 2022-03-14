@@ -381,7 +381,7 @@ async fn connector_task(
         config.metrics_interval_s,
     );
 
-    let default_codec = connector.codec_requirements();
+    let codec_requirement = connector.codec_requirements();
     if connector.codec_requirements() == CodecReq::Structured && (config.codec.is_some()) {
         return Err(format!(
             "[Connector::{}] is a structured connector and can't be configured with a codec",
@@ -389,8 +389,13 @@ async fn connector_task(
         )
         .into());
     }
-    let source_builder =
-        source::builder(uid, &config, default_codec, qsize, source_metrics_reporter)?;
+    let source_builder = source::builder(
+        uid,
+        &config,
+        codec_requirement,
+        qsize,
+        source_metrics_reporter,
+    )?;
     let source_ctx = SourceContext {
         alias: alias.clone(),
         uid,
@@ -404,7 +409,13 @@ async fn connector_task(
         METRICS_CHANNEL.tx(),
         config.metrics_interval_s,
     );
-    let sink_builder = sink::builder(&config, default_codec, qsize, sink_metrics_reporter)?;
+    let sink_builder = sink::builder(
+        &config,
+        codec_requirement,
+        alias,
+        qsize,
+        sink_metrics_reporter,
+    )?;
     let sink_ctx = SinkContext {
         uid,
         alias: alias.clone(),
@@ -551,7 +562,6 @@ async fn connector_task(
                     }
                 }
                 Msg::ConnectionLost => {
-                    // FIXME: we don't always want to reconnect - add a flag that determines if a reconnect is appropriate
                     // react on the connection being lost
                     // immediately try to reconnect if we are not in draining state.
                     //
