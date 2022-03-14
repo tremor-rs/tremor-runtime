@@ -45,15 +45,15 @@ impl After {
         let mut process = job::TargetProcess::new_in_dir(&cmd, &self.args, &env, &current_dir)?;
         let out_file = base.join("after.out.log");
         let err_file = base.join("after.err.log");
-        let _ = process.stdio_tailer(&out_file, &err_file).await?;
+        process.stdio_tailer(&out_file, &err_file).await?;
 
         Ok(Some(process))
     }
 }
 
 pub(crate) fn load_after(path: &Path) -> Result<After> {
-    let mut tags_data = slurp_string(path)?;
-    match serde_yaml::from_str(&mut tags_data) {
+    let tags_data = slurp_string(path)?;
+    match serde_yaml::from_str(&tags_data) {
         Ok(s) => Ok(s),
         Err(_not_well_formed) => Err(Error::from(format!(
             "Unable to load `after.yaml` from path: {}",
@@ -91,7 +91,7 @@ impl AfterController {
                     }
                 });
 
-                after_process.await
+                after_process.await;
             }
         }
         Ok(())

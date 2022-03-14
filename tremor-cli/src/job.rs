@@ -228,8 +228,8 @@ impl TargetProcess {
 
         let exit_status = self.join().await?;
 
-        let _ = stdout_handle.await;
-        let _ = stderr_handle.await;
+        stdout_handle.await?;
+        stderr_handle.await?;
         Ok(exit_status)
     }
 }

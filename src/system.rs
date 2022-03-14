@@ -15,17 +15,15 @@
 mod flow;
 mod manager;
 
-use crate::connectors;
+use self::flow::Flow;
 use crate::errors::{Error, Kind as ErrorKind, Result};
-use crate::QSIZE;
+use crate::{connectors, QSIZE};
 use async_std::channel::bounded;
 use async_std::prelude::*;
 use async_std::task::JoinHandle;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_script::{ast, highlighter::Highlighter};
-
-use self::flow::Flow;
 
 /// Configuration for the runtime
 pub struct WorldConfig {

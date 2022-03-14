@@ -630,7 +630,7 @@ where
                     .log_err(self.source.on_start(&self.ctx).await, "on_start failed");
 
                 if let Err(e) = self.send_signal(Event::signal_start(self.ctx.uid)).await {
-                    error!("{} Error sending start signal: {}", &self.ctx, e);
+                    error!("{} Error sending start signal: {e}", &self.ctx);
                 }
                 Ok(Control::Continue)
             }
@@ -1183,7 +1183,7 @@ where
         debug!("{} Sending DRAIN Signal.", &self.ctx);
         let signal = Event::signal_drain(self.ctx.uid);
         if let Err(e) = self.send_signal(signal).await {
-            error!("{} Error sending DRAIN signal: {}", &self.ctx, e);
+            error!("{} Error sending DRAIN signal: {e}", &self.ctx);
         }
         // if we get a disconnect in between we might never receive every drain CB
         // but we will stop everything forcefully after a certain timeout at some point anyways

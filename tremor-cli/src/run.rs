@@ -87,7 +87,7 @@ impl Ingress {
         &mut self,
         runnable: &mut T,
         mut id: u64,
-        mut egress: &mut Egress,
+        egress: &mut Egress,
         handler: &IngressHandler<T>,
     ) -> Result<()> {
         let mut state: Value<'static> = Value::null();
@@ -118,7 +118,7 @@ impl Ingress {
                             );
                             highlight(self.is_pretty, &event)?;
                         }
-                        handler(runnable, &mut id, &mut egress, &mut state, at, event)?;
+                        handler(runnable, &mut id, egress, &mut state, at, event)?;
                     }
                 }
                 Err(e) => {
@@ -262,7 +262,7 @@ impl Run {
                                 if let (Some(r), _) = e.context() {
                                     let mut inner = TermHighlighter::stderr();
                                     let tokens: Vec<_> =
-                                        Tokenizer::new(&raw, aid).tokenize_until_err().collect();
+                                        Tokenizer::new(raw, aid).tokenize_until_err().collect();
 
                                     if let Err(highlight_error) = inner.highlight_error(
                                         Some(&src),
@@ -371,7 +371,7 @@ impl Run {
                                 let input = Arena::io_get(aid)?;
 
                                 let tokens: Vec<_> =
-                                    Tokenizer::new(&input, aid).tokenize_until_err().collect();
+                                    Tokenizer::new(input, aid).tokenize_until_err().collect();
 
                                 if let Err(highlight_error) = inner.highlight_error(
                                     Some(&file),
@@ -426,15 +426,11 @@ impl Run {
                 debug_connectors: true,
                 ..WorldConfig::default()
             };
-            let (world, _handle) = World::start(config).await.unwrap();
-            if let Err(e) = tremor_runtime::load_troy_file(&world, &self.script).await {
-                error!("Troy error: {}", e);
-                std::process::exit(1);
-            };
-
+            let (world, _handle) = World::start(config).await?;
+            tremor_runtime::load_troy_file(&world, &self.script).await?;
             async_std::task::sleep(std::time::Duration::from_millis(150_000)).await;
-            world.stop(ShutdownMode::Graceful).await.unwrap();
-        });
+            world.stop(ShutdownMode::Graceful).await
+        })?;
 
         Ok(())
     }

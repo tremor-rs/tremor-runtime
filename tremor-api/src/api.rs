@@ -115,7 +115,7 @@ pub fn serialize<T: Serialize>(t: ResourceType, d: &T, code: StatusCode) -> Resu
             .build()),
         _ => Err(Error::new(
             StatusCode::InternalServerError,
-            format!("Unsuported formatting: {}", t).into(),
+            format!("Unsuported formatting: {}", t),
         )),
     }
 }
@@ -168,7 +168,8 @@ async fn handle_api_request<
 }
 
 /// server the tremor API in a separately spawned task
-pub fn serve_api(host: String, world: &World) -> JoinHandle<Result<()>> {
+#[must_use]
+pub fn serve(host: String, world: &World) -> JoinHandle<Result<()>> {
     let mut v1_app = tide::Server::with_state(State {
         world: world.clone(),
     });
