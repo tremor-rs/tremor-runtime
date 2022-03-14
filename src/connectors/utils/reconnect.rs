@@ -204,7 +204,7 @@ impl ConnectionLostNotifier {
         Self(tx)
     }
     /// notify the runtime that this connector lost its connection
-    pub(crate) async fn notify(&self) -> Result<()> {
+    pub(crate) async fn connection_lost(&self) -> Result<()> {
         self.0.send(Msg::ConnectionLost).await?;
         Ok(())
     }

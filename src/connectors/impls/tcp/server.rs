@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use super::{TcpReader, TcpWriter};
-use crate::connectors::prelude::*;
 use crate::connectors::sink::channel_sink::ChannelSinkMsg;
 use crate::connectors::utils::tls::{load_server_config, TLSServerConfig};
+use crate::connectors::{prelude::*, spawn_task};
 use crate::errors::Kind as ErrorKind;
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use async_std::net::TcpListener;
-use async_std::task::{self, JoinHandle};
+use async_std::task::JoinHandle;
 use async_tls::TlsAcceptor;
 use futures::io::AsyncReadExt;
 use rustls::ServerConfig;
@@ -150,7 +150,7 @@ impl Connector for TcpServer {
 struct TcpServerSource {
     config: Config,
     tls_server_config: Option<ServerConfig>,
-    accept_task: Option<JoinHandle<Result<()>>>,
+    accept_task: Option<JoinHandle<()>>,
     connection_rx: Receiver<SourceReply>,
     runtime: ChannelSourceRuntime,
     sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
@@ -195,14 +195,12 @@ impl Source for TcpServerSource {
         let runtime = self.runtime.clone();
         let sink_runtime = self.sink_runtime.clone();
         // accept task
-        // FIXME: using `?` in the acceptor tasks causes the server quietly failing
-        //        when the acceptor task errors
-        self.accept_task = Some(task::spawn(async move {
+        self.accept_task = Some(spawn_task(ctx.clone(), async move {
             let mut stream_id_gen = StreamIdGen::default();
             // FIXME: handle quiesence when no new accepts happen
-            while let (true, Ok((stream, peer_addr))) = (
+            while let (true, (stream, peer_addr)) = (
                 ctx.quiescence_beacon().continue_reading().await,
-                listener.accept().await,
+                listener.accept().await?,
             ) {
                 debug!("{} new connection from {}", &accept_ctx, peer_addr);
                 let stream_id: u64 = stream_id_gen.next_stream_id();
@@ -220,7 +218,7 @@ impl Source for TcpServerSource {
                     .clone()
                     .map(|sc| TlsAcceptor::from(Arc::new(sc)));
                 if let Some(acceptor) = tls_acceptor {
-                    let tls_stream = acceptor.accept(stream.clone()).await?; // TODO: this should live in its own task, as it requires rome roundtrips :()
+                    let tls_stream = acceptor.accept(stream.clone()).await?;
                     let (tls_read_stream, tls_write_sink) = tls_stream.split();
                     let meta = ctx.meta(literal!({
                         "tls": true,
@@ -270,10 +268,6 @@ impl Source for TcpServerSource {
                     );
                 }
             }
-
-            // notify connector task about disconnect
-            // of the listening socket
-            ctx.notifier().notify().await?;
             Ok(())
         }));
 

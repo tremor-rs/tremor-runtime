@@ -311,7 +311,6 @@ impl S3Instance {
         {
             let mut err = false; // marks an error
             debug!("{} Fetching key {key:?}...", self.ctx);
-            // FIXME: usize -> i64, should be alright.
             if size <= self.multipart_threshold {
                 // Perform a single fetch.
                 err = err || self.fetch_no_multipart(stream, key).await;

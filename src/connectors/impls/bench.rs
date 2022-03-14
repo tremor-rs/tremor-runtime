@@ -314,7 +314,6 @@ impl Sink for Blackhole {
         for value in event.value_iter() {
             if now_ns > self.warmup {
                 let delta_ns = now_ns - event.ingest_ns;
-                // FIXME: use the buffer
                 if let Ok(bufs) = event_serializer.serialize(value, event.ingest_ns) {
                     self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
                 } else {

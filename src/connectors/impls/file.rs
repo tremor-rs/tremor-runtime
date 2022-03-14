@@ -344,14 +344,14 @@ impl Sink for FileSink {
                 if let Err(e) = file.write_all(&chunk).await {
                     error!("{} Error writing to file: {}", &ctx, &e);
                     self.file = None;
-                    ctx.notifier().notify().await?;
+                    ctx.notifier().connection_lost().await?;
                     return Err(e.into());
                 }
             }
             if let Err(e) = file.flush().await {
                 error!("{} Error flushing file: {}", &ctx, &e);
                 self.file = None;
-                ctx.notifier().notify().await?;
+                ctx.notifier().connection_lost().await?;
                 return Err(e.into());
             }
         }

@@ -931,15 +931,14 @@ where
         // FIXME: simplify this overly complex condition
         // this check implements the waiting that is induced by a source returning `SourceReply::Empty(wait_ms)`.
         // We stop pulling data until the wait time has elapsed, but we don't sleep this entire time.
-        let needs_to_wait = if let Some(pull_wait_start) = self.pull_wait_start {
-            if pull_wait_start.elapsed() > self.pull_wait {
+        let needs_to_wait = match self.pull_wait_start {
+            Some(pull_wait_start) if pull_wait_start.elapsed() > self.pull_wait => {
                 self.pull_wait_start = None;
                 false
-            } else {
-                true
             }
-        } else {
-            false
+            Some(_) => true,
+
+            None => false,
         };
 
         // asynchronous sources need to be drained from their asynchronous task which consumes from

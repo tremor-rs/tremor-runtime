@@ -415,7 +415,7 @@ pub(crate) fn builder(
         config.codec.clone(),
         connector_codec_requirement,
         postprocessor_configs,
-        config.connector_type,
+        &config.connector_type,
         alias,
     )?;
     // the incoming channels for events are all bounded, so we can safely be unbounded here
@@ -450,7 +450,7 @@ impl EventSerializer {
         codec_config: Option<CodecConfig>,
         default_codec: CodecReq,
         postprocessor_configs: Vec<PostprocessorConfig>,
-        connector_type: ConnectorType,
+        connector_type: &ConnectorType,
         alias: &str,
     ) -> Result<Self> {
         let codec_config = match default_codec {
@@ -736,7 +736,9 @@ where
                                     .send_sink_metrics(self.sink.metrics(t, &self.ctx).await);
                             }
 
-                            // FIXME: fix additional clones here for merge
+                            // TODO: fix additional clones here for merge
+                            //       (hg) - I don't think we can do this w/o a clone since we need
+                            //              them here and in the on_event
                             self.merged_operator_meta.merge(event.op_meta.clone());
                             let transactional = event.transactional;
                             let start = nanotime();

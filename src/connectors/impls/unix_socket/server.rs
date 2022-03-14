@@ -28,8 +28,8 @@
 //! ```
 //!
 //! We try to route the event to the connection with `stream_id` `123`.
-use crate::connectors::prelude::*;
 use crate::connectors::sink::channel_sink::ChannelSinkMsg;
+use crate::connectors::{prelude::*, spawn_task};
 use crate::errors::{Kind as ErrorKind, Result};
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use async_std::os::unix::net::UnixListener;
@@ -137,7 +137,7 @@ impl Connector for UnixSocketServer {
 
 struct UnixSocketSource {
     config: Config,
-    listener_task: Option<JoinHandle<Result<()>>>,
+    listener_task: Option<JoinHandle<()>>,
     connection_rx: Receiver<SourceReply>,
     runtime: ChannelSourceRuntime,
     sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
@@ -177,7 +177,7 @@ impl Source for UnixSocketSource {
         let ctx = ctx.clone();
         let runtime = self.runtime.clone();
         let sink_runtime = self.sink_runtime.clone();
-        self.listener_task = Some(async_std::task::spawn(async move {
+        self.listener_task = Some(spawn_task(ctx.clone(), async move {
             let mut stream_id_gen = StreamIdGen::default();
             let origin_uri = EventOriginUri {
                 scheme: URL_SCHEME.to_string(),
@@ -185,9 +185,9 @@ impl Source for UnixSocketSource {
                 port: None,
                 path: vec![path.display().to_string()],
             };
-            while let (true, Ok((stream, _peer))) = (
+            while let (true, (stream, _peer)) = (
                 ctx.quiescence_beacon().continue_reading().await,
-                listener.accept().await,
+                listener.accept().await?,
             ) {
                 let stream_id: u64 = stream_id_gen.next_stream_id();
                 let connection_meta = ConnectionMeta(stream_id);
@@ -208,9 +208,6 @@ impl Source for UnixSocketSource {
                     UnixSocketWriter::new(stream),
                 );
             }
-            // notify the connector task about disconnect
-            // of the listening socket
-            ctx.notifier().notify().await?;
             Ok(())
         }));
         Ok(true)

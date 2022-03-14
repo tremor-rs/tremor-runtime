@@ -13,26 +13,18 @@
 // limitations under the License.
 
 use super::flow::{Flow, Id};
-use crate::connectors::{self, ConnectorBuilder, ConnectorType};
 use crate::errors::{Kind as ErrorKind, Result};
 use crate::system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
+use crate::{
+    connectors::{self, ConnectorBuilder, ConnectorType},
+    log_error,
+};
 use async_std::channel::{bounded, Sender};
 use async_std::prelude::*;
 use async_std::task::{self, JoinHandle};
 use hashbrown::{hash_map::Entry, HashMap};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
 use tremor_script::ast::DeployFlow;
-
-macro_rules! log_error {
-    ($maybe_error:expr,  $($args:tt)+) => (
-        if let Err(e) = $maybe_error {
-            error!($($args)+, e = e);
-            true
-        } else {
-            false
-        }
-    )
-}
 
 pub(crate) type Channel = Sender<Msg>;
 
