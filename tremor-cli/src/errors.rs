@@ -34,7 +34,7 @@ impl<P> From<std::sync::PoisonError<P>> for Error {
 
 impl<T> From<async_std::channel::SendError<T>> for Error {
     fn from(_: async_std::channel::SendError<T>) -> Self {
-        Self::from(format!("Send Error"))
+        Self::from("Send Error")
     }
 }
 

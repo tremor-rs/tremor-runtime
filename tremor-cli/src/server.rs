@@ -72,9 +72,9 @@ impl ServerRun {
     #[cfg(not(tarpaulin_include))]
     #[allow(clippy::too_many_lines)]
     async fn run_dun(&self) -> Result<i32> {
-        let mut result = 0;
-
         use tremor_runtime::system::WorldConfig;
+
+        let mut result = 0;
 
         // Logging
         if let Some(logger_config) = &self.logger_config {
@@ -132,7 +132,7 @@ impl ServerRun {
         for config_file in &self.artefacts {
             let kind = get_source_kind(config_file);
             if kind == SourceKind::Troy {
-                troy_files.push(config_file)
+                troy_files.push(config_file);
             } else {
                 return Err(
                     ErrorKind::UnsupportedFileType(config_file.to_string(), kind, "troy").into(),
@@ -156,7 +156,7 @@ impl ServerRun {
         } else {
             eprintln!("Listening at: http://{}", &self.api_host);
             info!("Listening at: http://{}", &self.api_host);
-            api::serve_api(self.api_host.clone(), &world)
+            api::serve(self.api_host.clone(), &world)
         };
         // waiting for either
         match future::select(handle, api_handle).await {

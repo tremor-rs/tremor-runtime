@@ -41,7 +41,7 @@ fn test_env(tests_root_dir: &Path, test_dir: &Path) -> HashMap<String, String> {
     let mut env = HashMap::with_capacity(1);
     env.insert(
         String::from("RUST_LOG"),
-        std::env::var("RUST_LOG").unwrap_or(String::from("info")),
+        std::env::var("RUST_LOG").unwrap_or_else(|_| String::from("info")),
     );
     let tremor_path = std::env::var("TREMOR_PATH").unwrap_or_default();
     let test_lib = format!(
@@ -49,7 +49,7 @@ fn test_env(tests_root_dir: &Path, test_dir: &Path) -> HashMap<String, String> {
         tests_root_dir.to_string_lossy(),
         test_dir.to_string_lossy()
     );
-    let tremor_path = if tremor_path == "" {
+    let tremor_path = if tremor_path.is_empty() {
         test_lib
     } else {
         format!("{}:{}", tremor_path, test_lib)
@@ -57,6 +57,25 @@ fn test_env(tests_root_dir: &Path, test_dir: &Path) -> HashMap<String, String> {
     env.insert(String::from("TREMOR_PATH"), tremor_path);
     env
 }
+
+async fn handle_signals(
+    signals: Signals,
+    test_dir: PathBuf,
+    env: HashMap<String, String>,
+    run_after: Arc<AtomicBool>,
+) -> Result<()> {
+    let mut signals = signals.fuse();
+
+    while let Some(signal) = signals.next().await {
+        if run_after.load(Ordering::Acquire) {
+            let mut after = after::AfterController::new(&test_dir, &env);
+            after.spawn().await?;
+        }
+        signal_hook::low_level::emulate_default_handler(signal)?;
+    }
+    Ok(())
+}
+
 /// run the process
 ///
 /// `tests_root_dir`: the base path in which we discovered this test.
@@ -106,23 +125,7 @@ pub(crate) async fn run_process(
 
     // register signal handler - to ensure we run `after` even if we do a Ctrl-C
     let run_after = Arc::new(AtomicBool::new(true));
-    async fn handle_signals(
-        signals: Signals,
-        test_dir: PathBuf,
-        env: HashMap<String, String>,
-        run_after: Arc<AtomicBool>,
-    ) -> Result<()> {
-        let mut signals = signals.fuse();
 
-        while let Some(signal) = signals.next().await {
-            if run_after.load(Ordering::Acquire) {
-                let mut after = after::AfterController::new(&test_dir, &env);
-                after.spawn().await?;
-            }
-            signal_hook::low_level::emulate_default_handler(signal)?;
-        }
-        Ok(())
-    }
     let signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
     let _signal_handle = signals.handle();
     let _signal_handler_task = async_std::task::spawn(handle_signals(

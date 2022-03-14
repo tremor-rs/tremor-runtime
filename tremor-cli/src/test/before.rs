@@ -68,7 +68,7 @@ impl Before {
 
         let fg_out_file = base.join(format!("before.out.{num}.log"));
         let fg_err_file = base.join(format!("before.err.{num}.log"));
-        let _ = process.stdio_tailer(&fg_out_file, &fg_err_file).await?;
+        process.stdio_tailer(&fg_out_file, &fg_err_file).await?;
 
         debug!(
             "Spawning before: {} in {}",
@@ -183,8 +183,8 @@ fn default_min_await_secs() -> u64 {
 
 // load all the before definitions from before.yaml files
 pub(crate) fn load_before_defs(path: &Path) -> Result<Vec<Before>> {
-    let mut tags_data = slurp_string(path)?;
-    match serde_yaml::from_str(&mut tags_data) {
+    let tags_data = slurp_string(path)?;
+    match serde_yaml::from_str(&tags_data) {
         Ok(s) => Ok(s),
         Err(e) => Err(Error::from(format!(
             "Invalid `before.yaml` in path `{}`: {}",
