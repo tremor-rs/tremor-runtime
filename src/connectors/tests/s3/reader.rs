@@ -39,7 +39,7 @@ async fn connector_s3_no_connection() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new("s3-reader", connector_yaml).await?;
+    let harness = ConnectorHarness::new("s3-reader", &connector_yaml).await?;
     assert!(harness.start().await.is_err());
     Ok(())
 }
@@ -72,7 +72,7 @@ async fn connector_s3_no_credentials() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new("s3-reader", connector_yaml).await?;
+    let harness = ConnectorHarness::new("s3-reader", &connector_yaml).await?;
     assert!(harness.start().await.is_err());
 
     Ok(())
@@ -108,7 +108,7 @@ async fn connector_s3_no_region() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new("s3-reader", connector_yaml).await?;
+    let harness = ConnectorHarness::new("s3-reader", &connector_yaml).await?;
     assert!(harness.start().await.is_err());
 
     Ok(())
@@ -141,7 +141,7 @@ async fn connector_s3_no_bucket() -> Result<()> {
             "endpoint": endpoint
         }
     });
-    let harness = ConnectorHarness::new("s3-reader", connector_yaml).await?;
+    let harness = ConnectorHarness::new("s3-reader", &connector_yaml).await?;
     assert!(harness.start().await.is_err());
 
     Ok(())
@@ -181,7 +181,7 @@ async fn connector_s3_reader() -> Result<()> {
     let _client = get_client(http_port);
     // FIXME: populate the bucket, what is the client for?
 
-    let harness = ConnectorHarness::new("s3-reader", connector_yaml).await?;
+    let harness = ConnectorHarness::new("s3-reader", &connector_yaml).await?;
     let _out_pipe = harness
         .out()
         .expect("No pipelines connected to out port of s3-reader");

@@ -98,11 +98,12 @@ async fn connector_elastic() -> Result<()> {
             ]
         }
     });
-    let harness = ConnectorHarness::new("elastic", connector_config).await?;
+    let harness = ConnectorHarness::new("elastic", &connector_config).await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
     harness.start().await?;
+    harness.wait_for_connected(Duration::from_secs(10)).await?;
 
     // CB Open is sent upon being connected
     let cf_event = in_pipe.get_contraflow().await?;

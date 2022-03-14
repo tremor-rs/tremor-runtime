@@ -142,7 +142,7 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new("kafka_consumer", connector_config).await?;
+    let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
@@ -415,7 +415,7 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new("kafka_consumer", connector_config).await?;
+    let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
@@ -673,7 +673,7 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new("kafka_consumer", connector_config).await?;
+    let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
@@ -865,7 +865,7 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new("kafka_consumer", connector_config).await?;
+    let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
     assert!(harness.start().await.is_err());
 
     let (out_events, err_events) = harness.stop().await?;
@@ -896,7 +896,7 @@ async fn connector_kafka_consumer_unresolvable() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new("kafka_consumer", connector_config).await?;
+    let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
     assert!(harness.start().await.is_err());
 
     let (out_events, err_events) = harness.stop().await?;
@@ -998,7 +998,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new("kafka_consumer", connector_config).await?;
+    let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     harness.start().await?;
     harness.wait_for_connected(Duration::from_secs(10)).await?;
@@ -1014,6 +1014,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
         return Err("Unable to send record to Kafka".into());
     }
     producer.flush(Duration::from_secs(1));
+    debug!("BEFORE GET EVENT 1");
     let e1 = out.get_event().await?;
     assert_eq!(
         literal!({
@@ -1021,6 +1022,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
         }),
         e1.data.suffix().value()
     );
+    debug!("AFTER GET EVENT 1");
 
     harness.pause().await?;
 
@@ -1037,7 +1039,9 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     assert!(out.get_event().await.is_err());
 
     harness.resume().await?;
+    debug!("BEFORE GET EVENT 2");
     let e2 = out.get_event().await?;
+    debug!("AFTER GET EVENT 2");
     assert_eq!(Value::from("R.I.P."), e2.data.suffix().value());
 
     let (out_events, err_events) = harness.stop().await?;
