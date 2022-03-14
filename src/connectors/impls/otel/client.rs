@@ -389,7 +389,7 @@ mod tests {
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("otel_client".into()),
-            with_processors,
+            &with_processors,
         )?;
 
         let builder = super::Builder::default();

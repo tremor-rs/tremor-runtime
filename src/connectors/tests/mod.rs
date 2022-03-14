@@ -70,7 +70,7 @@ pub(crate) struct ConnectorHarness {
 impl ConnectorHarness {
     pub(crate) async fn new_with_ports<T: ToString>(
         connector_type: T,
-        defn: Value<'static>,
+        defn: &Value<'static>,
         ports: Vec<Cow<'static, str>>,
     ) -> Result<Self> {
         let mut connector_id_gen = ConnectorIdGen::new();
@@ -124,7 +124,7 @@ impl ConnectorHarness {
             pipes,
         })
     }
-    pub(crate) async fn new<T: ToString>(connector_type: T, defn: Value<'static>) -> Result<Self> {
+    pub(crate) async fn new<T: ToString>(connector_type: T, defn: &Value<'static>) -> Result<Self> {
         Self::new_with_ports(connector_type, defn, vec![IN, OUT, ERR]).await
     }
 

@@ -33,7 +33,7 @@ async fn connector_crononome_routing() -> Result<()> {
       },
     });
 
-    let harness = ConnectorHarness::new("crononome", defn).await?;
+    let harness = ConnectorHarness::new("crononome", &defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'in' port of ws_server connector");

@@ -48,7 +48,7 @@ async fn connector_tcp_event_routing() -> Result<()> {
       }
     });
 
-    let harness = ConnectorHarness::new("tcp_server", defn).await?;
+    let harness = ConnectorHarness::new("tcp_server", &defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of tcp_server connector");
