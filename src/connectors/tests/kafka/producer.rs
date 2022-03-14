@@ -37,7 +37,7 @@ use tremor_pipeline::{CbAction, EventId};
 use tremor_value::literal;
 
 const IMAGE: &str = "docker.vectorized.io/vectorized/redpanda";
-const VERSION: &str = "latest"; //FIXME: pin version
+const VERSION: &str = "v21.11.10";
 
 #[async_std::test]
 #[serial(kafka)]
