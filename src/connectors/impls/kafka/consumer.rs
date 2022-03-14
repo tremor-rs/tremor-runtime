@@ -463,95 +463,14 @@ impl Source for KafkaConsumerSource {
         let task_consumer = arc_consumer.clone();
         self.consumer = Some(arc_consumer);
 
-        let source_tx = self.source_tx.clone();
-        let source_ctx = ctx.clone();
-
-        let consumer_origin_uri = self.origin_uri.clone();
-        let topic_resolver = self.topic_resolver.clone();
-        let handle = task::spawn(async move {
-            info!("{} Consumer started.", &source_ctx);
-            let mut stream = task_consumer.stream();
-            let mut connect_result_channel = Some(connect_result_tx);
-
-            loop {
-                match stream.next().await {
-                    Some(Ok(kafka_msg)) => {
-                        //debug!("{source_ctx} Received kafka msg: {kafka_msg:?}");
-                        if let Some(tx) = connect_result_channel.take() {
-                            tx.try_send(Ok(true))?;
-                        }
-                        // handle kafka msg
-                        let (stream_id, pull_id) =
-                            topic_resolver.resolve_stream_and_pull_ids(&kafka_msg);
-                        let mut origin_uri = consumer_origin_uri.clone();
-                        origin_uri.path = vec![
-                            kafka_msg.topic().to_string(),
-                            kafka_msg.partition().to_string(),
-                            kafka_msg.offset().to_string(),
-                        ];
-                        let data: Vec<u8> =
-                            kafka_msg.payload().map(<[u8]>::to_vec).unwrap_or_default();
-
-                        let meta = kafka_meta(&kafka_msg);
-                        let reply = SourceReply::Data {
-                            origin_uri,
-                            data,
-                            meta: Some(meta),
-                            stream: stream_id,
-                            port: Some(OUT),
-                        };
-                        source_tx.send((reply, Some(pull_id))).await?;
-                    }
-                    Some(Err(e)) => {
-                        // handle kafka error
-                        match e {
-                            // Those we consider fatal
-                            KafkaError::MessageConsumption(
-                                e @ (RDKafkaErrorCode::UnknownTopicOrPartition
-                                | RDKafkaErrorCode::TopicAuthorizationFailed
-                                | RDKafkaErrorCode::UnknownTopic),
-                            ) => {
-                                error!("{source_ctx} Subscription failed: {e}.");
-
-                                if let Some(tx) = connect_result_channel.take() {
-                                    if tx.try_send(Err("Subscription failed".into())).is_err() {
-                                        // in case the connect_result_channel has already been closed,
-                                        // lets initiate a reconnect via the notifier
-                                        // this might happen when we subscribe to multiple topics
-                                        source_ctx.notifier().notify().await?;
-                                    }
-                                } else {
-                                    // Initiate reconnect (if configured)
-                                    source_ctx.notifier().notify().await?;
-                                }
-                                break;
-                            }
-                            err => {
-                                // TODO: gather some more fatal errors that require a reconnect
-                                debug!("{} Error consuming from kafka: {}", &source_ctx, err);
-                            }
-                        }
-                    }
-                    None => {
-                        // handle kafka being done
-                        // this shouldn't happen
-                        warn!(
-                            "{} Consumer is done consuming. Initiating reconnect...",
-                            &source_ctx
-                        );
-                        if let Some(tx) = connect_result_channel.take() {
-                            if let Err(e) = tx.try_send(Err("Consumer done".into())) {
-                                error!("{source_ctx} Send failed: {e}.");
-                            }
-                        } else {
-                            source_ctx.notifier().notify().await?;
-                        }
-                        break;
-                    }
-                }
-            }
-            Ok(())
-        });
+        let handle = task::spawn(consumer_task(
+            task_consumer,
+            self.topic_resolver.clone(),
+            self.origin_uri.clone(),
+            connect_result_tx,
+            self.source_tx.clone(),
+            ctx.clone(),
+        ));
         self.consumer_task = Some(handle);
 
         let res = connect_result_rx
@@ -692,6 +611,97 @@ impl Source for KafkaConsumerSource {
             vec![]
         }
     }
+}
+
+/// Kafka consumer main loop - consuming from a kafka stream
+async fn consumer_task(
+    task_consumer: Arc<StreamConsumer<TremorConsumerContext, SmolRuntime>>,
+    topic_resolver: TopicResolver,
+    consumer_origin_uri: EventOriginUri,
+    connect_result_tx: Sender<Result<bool>>,
+    source_tx: Sender<(SourceReply, Option<u64>)>,
+    source_ctx: SourceContext,
+) -> Result<()> {
+    info!("{} Consumer started.", &source_ctx);
+    let mut stream = task_consumer.stream();
+    let mut connect_result_channel = Some(connect_result_tx);
+
+    loop {
+        match stream.next().await {
+            Some(Ok(kafka_msg)) => {
+                //debug!("{source_ctx} Received kafka msg: {kafka_msg:?}");
+                if let Some(tx) = connect_result_channel.take() {
+                    tx.try_send(Ok(true))?;
+                }
+                // handle kafka msg
+                let (stream_id, pull_id) = topic_resolver.resolve_stream_and_pull_ids(&kafka_msg);
+                let mut origin_uri = consumer_origin_uri.clone();
+                origin_uri.path = vec![
+                    kafka_msg.topic().to_string(),
+                    kafka_msg.partition().to_string(),
+                    kafka_msg.offset().to_string(),
+                ];
+                let data: Vec<u8> = kafka_msg.payload().map(<[u8]>::to_vec).unwrap_or_default();
+
+                let meta = kafka_meta(&kafka_msg);
+                let reply = SourceReply::Data {
+                    origin_uri,
+                    data,
+                    meta: Some(meta),
+                    stream: stream_id,
+                    port: Some(OUT),
+                };
+                source_tx.send((reply, Some(pull_id))).await?;
+            }
+            Some(Err(e)) => {
+                // handle kafka error
+                match e {
+                    // Those we consider fatal
+                    KafkaError::MessageConsumption(
+                        e @ (RDKafkaErrorCode::UnknownTopicOrPartition
+                        | RDKafkaErrorCode::TopicAuthorizationFailed
+                        | RDKafkaErrorCode::UnknownTopic),
+                    ) => {
+                        error!("{source_ctx} Subscription failed: {e}.");
+
+                        if let Some(tx) = connect_result_channel.take() {
+                            if tx.try_send(Err("Subscription failed".into())).is_err() {
+                                // in case the connect_result_channel has already been closed,
+                                // lets initiate a reconnect via the notifier
+                                // this might happen when we subscribe to multiple topics
+                                source_ctx.notifier().notify().await?;
+                            }
+                        } else {
+                            // Initiate reconnect (if configured)
+                            source_ctx.notifier().notify().await?;
+                        }
+                        break;
+                    }
+                    err => {
+                        // TODO: gather some more fatal errors that require a reconnect
+                        debug!("{} Error consuming from kafka: {}", &source_ctx, err);
+                    }
+                }
+            }
+            None => {
+                // handle kafka being done
+                // this shouldn't happen
+                warn!(
+                    "{} Consumer is done consuming. Initiating reconnect...",
+                    source_ctx
+                );
+                if let Some(tx) = connect_result_channel.take() {
+                    if let Err(e) = tx.try_send(Err("Consumer done".into())) {
+                        error!("{source_ctx} Send failed: {e}.");
+                    }
+                } else {
+                    source_ctx.notifier().notify().await?;
+                }
+                break;
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Clone)]
