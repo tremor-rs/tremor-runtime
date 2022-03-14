@@ -22,12 +22,12 @@ use tremor_runtime::instance::State;
 pub(crate) async fn list_flows(req: Request) -> Result<Response> {
     let world = &req.state().world;
     let flows = world.get_flows().await?;
-    let mut res = Vec::with_capacity(flows.len());
+    let mut result = Vec::with_capacity(flows.len());
     for flow in flows {
         let status = flow.report_status().await?;
-        res.push(status);
+        result.push(status);
     }
-    reply(&req, res, StatusCode::Ok)
+    reply(&req, result, StatusCode::Ok)
 }
 
 pub(crate) async fn get_flow(req: Request) -> Result<Response> {
@@ -79,12 +79,12 @@ pub(crate) async fn get_flow_connectors(req: Request) -> Result<Response> {
     let flow_id = req.param("id")?.to_string();
     let flow = world.get_flow(flow_id).await?;
     let connectors = flow.get_connectors().await?;
-    let mut res = Vec::with_capacity(connectors.len());
+    let mut result = Vec::with_capacity(connectors.len());
     for connector in connectors {
         let status = connector.report_status().await?;
-        res.push(status);
+        result.push(status);
     }
-    reply(&req, res, StatusCode::Ok)
+    reply(&req, result, StatusCode::Ok)
 }
 
 pub(crate) async fn get_flow_connector_status(req: Request) -> Result<Response> {

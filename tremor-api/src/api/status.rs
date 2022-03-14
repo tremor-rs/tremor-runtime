@@ -26,6 +26,19 @@ struct RuntimeStatus {
     flows: HashMap<State, usize>,
 }
 
+impl RuntimeStatus {
+    fn new(num_flows: usize) -> Self {
+        Self {
+            num_flows,
+            ..Self::default()
+        }
+    }
+    fn add_flow(&mut self, status: State) {
+        *self.flows.entry(status).or_insert(0) += 1;
+        self.all_running = self.all_running && status == State::Running;
+    }
+}
+
 impl Default for RuntimeStatus {
     fn default() -> Self {
         Self {
@@ -40,16 +53,14 @@ pub(crate) async fn get_runtime_status(req: Request) -> Result<Response> {
     let world = &req.state().world;
 
     let flows = world.get_flows().await?;
-    let mut runtime_status = RuntimeStatus::default();
-    runtime_status.num_flows = flows.len();
+    let mut runtime_status = RuntimeStatus::new(flows.len());
     let mut all_in_good_state: bool = true;
 
     for flow in &flows {
         let status = flow.report_status().await?;
-        *runtime_status.flows.entry(status.status).or_insert(0) += 1;
+        runtime_status.add_flow(status.status);
 
         // report OK if all flows are in a good/intended state (Running)
-        runtime_status.all_running = runtime_status.all_running && status.status == State::Running;
         all_in_good_state = all_in_good_state
             && matches!(
                 status.status,

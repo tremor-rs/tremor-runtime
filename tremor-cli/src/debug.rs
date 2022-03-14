@@ -78,9 +78,9 @@ where
 {
     if !opts.no_banner {
         let mut banner = ColorSpec::new();
-        let mut banner = banner.set_fg(Some(Color::Green));
+        let banner = banner.set_fg(Some(Color::Green));
 
-        h.set_color(&mut banner)?;
+        h.set_color(banner)?;
         let spec = format!(
             "\n\n****************\n* {} - {}\n****************\n\n",
             section, detail
@@ -135,9 +135,9 @@ where
 {
     let mut default = ColorSpec::new();
     let mut line = ColorSpec::new();
-    let mut line = line.set_fg(Some(Color::Blue));
+    let line = line.set_fg(Some(Color::Blue));
     let mut directive = ColorSpec::new();
-    let mut directive = directive.set_fg(Some(Color::White));
+    let directive = directive.set_fg(Some(Color::White));
 
     for l in lexemes {
         let Spanned { span, value } = l;
@@ -151,17 +151,17 @@ where
                 | Token::DocComment(_)
                 | Token::ModComment(_) => (),
                 Token::ConfigDirective => {
-                    h.set_color(&mut line)?;
+                    h.set_color( line)?;
                     let line_spec = format!(
                         "{}:{} - {}:{}",
                         start.line(), start.column(), end.line(), end.column()
                     );
                     write!(h.get_writer(), "{:^16} \u{2219}    ", line_spec,)?;
-                    h.set_color(&mut directive)?;
+                    h.set_color( directive)?;
                     writeln!(h.get_writer(), " #!config ")?;
                 }
                 _other_token => {
-                    h.set_color(&mut line)?;
+                    h.set_color( line)?;
                     let line_spec = format!(
                         "{}:{} - {}:{}",
                         start.line(), start.column(), end.line(), end.column()
