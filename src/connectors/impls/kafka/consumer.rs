@@ -233,7 +233,9 @@ impl ConsumerContext for TremorConsumerContext {
                 // if we got something assigned, this is a good indicator that we are connected
                 if !offset_strings.is_empty() {
                     if let Err(e) = self.connect_tx.try_send(Ok(true)) {
-                        info!("{} Send Error: {e}", &self.ctx);
+                        // we can safely ignore errors here as they will happen after the first connector
+                        // as we only have &self here, we cannot switch out the connector
+                        trace!("{} Error sending to connect channel: {e}", &self.ctx);
                     };
                 }
                 info!(
@@ -377,7 +379,7 @@ struct KafkaConsumerSource {
     source_tx: Sender<(SourceReply, Option<u64>)>,
     source_rx: Receiver<(SourceReply, Option<u64>)>,
     consumer: Option<Arc<TremorConsumer>>,
-    consumer_task: Option<JoinHandle<Result<()>>>,
+    consumer_task: Option<JoinHandle<()>>,
     metrics_rx: Option<BroadcastReceiver<EventPayload>>,
 }
 
@@ -621,7 +623,7 @@ async fn consumer_task(
     connect_result_tx: Sender<Result<bool>>,
     source_tx: Sender<(SourceReply, Option<u64>)>,
     source_ctx: SourceContext,
-) -> Result<()> {
+) {
     info!("{} Consumer started.", &source_ctx);
     let mut stream = task_consumer.stream();
     let mut connect_result_channel = Some(connect_result_tx);
@@ -631,7 +633,10 @@ async fn consumer_task(
             Some(Ok(kafka_msg)) => {
                 //debug!("{source_ctx} Received kafka msg: {kafka_msg:?}");
                 if let Some(tx) = connect_result_channel.take() {
-                    tx.try_send(Ok(true))?;
+                    if !tx.is_closed() {
+                        source_ctx
+                            .log_err(tx.try_send(Ok(true)), "Error sending to connect channel");
+                    }
                 }
                 // handle kafka msg
                 let (stream_id, pull_id) = topic_resolver.resolve_stream_and_pull_ids(&kafka_msg);
@@ -651,7 +656,14 @@ async fn consumer_task(
                     stream: stream_id,
                     port: Some(OUT),
                 };
-                source_tx.send((reply, Some(pull_id))).await?;
+                if let Err(e) = source_tx.send((reply, Some(pull_id))).await {
+                    error!("{source_ctx} Error sending kafka message to source: {e}");
+                    source_ctx.log_err(
+                        source_ctx.notifier().notify().await,
+                        "Error notifying the runtime of a disfunctional source channel.",
+                    );
+                    break;
+                };
             }
             Some(Err(e)) => {
                 // handle kafka error
@@ -669,17 +681,23 @@ async fn consumer_task(
                                 // in case the connect_result_channel has already been closed,
                                 // lets initiate a reconnect via the notifier
                                 // this might happen when we subscribe to multiple topics
-                                source_ctx.notifier().notify().await?;
+                                source_ctx.log_err(
+                                    source_ctx.notifier().notify().await,
+                                    "Error notifying the runtime about a failing consumer.",
+                                );
                             }
                         } else {
                             // Initiate reconnect (if configured)
-                            source_ctx.notifier().notify().await?;
+                            source_ctx.log_err(
+                                source_ctx.notifier().notify().await,
+                                "Error notifying the runtime about a failing consumer.",
+                            );
                         }
                         break;
                     }
                     err => {
                         // TODO: gather some more fatal errors that require a reconnect
-                        debug!("{} Error consuming from kafka: {}", &source_ctx, err);
+                        error!("{} Error consuming from kafka: {}", &source_ctx, err);
                     }
                 }
             }
@@ -691,17 +709,19 @@ async fn consumer_task(
                     source_ctx
                 );
                 if let Some(tx) = connect_result_channel.take() {
-                    if let Err(e) = tx.try_send(Err("Consumer done".into())) {
-                        error!("{source_ctx} Send failed: {e}.");
+                    if !tx.is_closed() {
+                        source_ctx.log_err(tx.try_send(Err("Consumer done".into())), "Send failed");
                     }
                 } else {
-                    source_ctx.notifier().notify().await?;
+                    source_ctx.log_err(
+                        source_ctx.notifier().notify().await,
+                        "Error notifying the runtime of finished consumer.",
+                    );
                 }
                 break;
             }
         }
     }
-    Ok(())
 }
 
 #[derive(Clone)]

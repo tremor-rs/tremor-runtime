@@ -159,37 +159,45 @@ impl Manager {
         Ok(())
     }
     async fn handle_drain(&self, sender: Sender<Result<()>>) {
-        let num_flows = self.flows.len();
-        info!("Draining all {num_flows} Flows ...");
-        let mut alive_flows = 0_usize;
-        let (tx, rx) = bounded(num_flows);
-        for (_, flow) in &self.flows {
-            if !log_error!(
-                flow.drain(tx.clone()).await,
-                "Failed to drain Deployment \"{alias}\": {e}",
-                alias = flow.alias()
-            ) {
-                alive_flows += 1;
-            }
-        }
-        task::spawn::<_, Result<()>>(async move {
-            let rx_futures = std::iter::repeat_with(|| rx.recv()).take(alive_flows);
-            for result in futures::future::join_all(rx_futures).await {
-                match result {
-                    Err(_) => {
-                        error!("Error receiving from Draining process.");
-                    }
-                    Ok(Err(e)) => {
-                        error!("Error during Draining: {}", e);
-                    }
-                    Ok(Ok(())) => {}
+        if self.flows.is_empty() {
+            log_error!(
+                sender.send(Ok(())).await,
+                "Failed to send drain result: {e}"
+            );
+        } else {
+            let num_flows = self.flows.len();
+            info!("Draining all {num_flows} Flows ...");
+            let mut alive_flows = 0_usize;
+            let (tx, rx) = bounded(num_flows);
+            for (_, flow) in &self.flows {
+                if !log_error!(
+                    flow.drain(tx.clone()).await,
+                    "Failed to drain Deployment \"{alias}\": {e}",
+                    alias = flow.alias()
+                ) {
+                    alive_flows += 1;
                 }
             }
-            info!("Flows drained.");
-            sender.send(Ok(())).await?;
-            Ok(())
-        });
+            task::spawn::<_, Result<()>>(async move {
+                let rx_futures = std::iter::repeat_with(|| rx.recv()).take(alive_flows);
+                for result in futures::future::join_all(rx_futures).await {
+                    match result {
+                        Err(_) => {
+                            error!("Error receiving from Draining process.");
+                        }
+                        Ok(Err(e)) => {
+                            error!("Error during Draining: {}", e);
+                        }
+                        Ok(Ok(())) => {}
+                    }
+                }
+                info!("Flows drained.");
+                sender.send(Ok(())).await?;
+                Ok(())
+            });
+        }
     }
+
     pub fn start(mut self) -> (JoinHandle<Result<()>>, Channel) {
         let (tx, rx) = bounded(self.qsize);
         let system_h = task::spawn(async move {
