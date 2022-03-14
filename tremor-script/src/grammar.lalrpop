@@ -71,8 +71,9 @@ ArgsWithEnd: DefinitioalArgsWithRaw<'input> = {
 ///   arg2 = 5
 /// # something else
 DefinitionArgs: DefinitioalArgsRaw<'input> = {
-    <args:ArgsClause?> => DefinitioalArgsRaw {
+    <start:@L> <args:ArgsClause?> <end:@L> => DefinitioalArgsRaw {
         args: args.unwrap_or_default(),
+        mid: NodeMeta::new_box(start, end)
     }
 }
 
@@ -221,7 +222,6 @@ DeployStmt: DeployStmtRaw<'input> = {
 }
 
 DeployFlowStmt: DeployFlowRaw<'input> = {
-    // FIXME: we don't need a deploy kind here once troy is merged
     <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployFlowRaw { mid: NodeMeta::new_box(start, end), id, target, params, docs },
     <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> <params:CreationWithEnd> <end:@L> => DeployFlowRaw { mid: NodeMeta::new_box(start, end), id: id.clone(), target: id.into(), params, docs },
 }
@@ -293,7 +293,7 @@ DefineConnector: ConnectorDefinitionRaw<'input> =  {
 
 DefineFlow: FlowDefinitionRaw<'input> = {
     // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
-    <start:@L> <docs:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> "flow" <stmts:FlowStmts> "end" <end:@L> => FlowDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), params, stmts, docs },
+    <start:@L> <doc:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> "flow" <stmts:FlowStmts> "end" <end:@L> => FlowDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), params, stmts, doc },
 }
 
 ////////////////////////////// Trickle statements //////////////////////////////
@@ -409,11 +409,11 @@ WindowKind: WindowKind = {
     "tumbling" => WindowKind::Tumbling,
 }
     
-WindowClause: Option<Vec<WindowDefnRaw>> = {
+WindowClause: Option<Vec<WindowName>> = {
     (<WindowDefn>)? => <>,
 }
 
-Windows: Vec<WindowDefnRaw> = {
+Windows: Vec<WindowName> = {
     <fields:Windows_> => {
         let mut fields = fields;
         fields.reverse();
@@ -421,15 +421,15 @@ Windows: Vec<WindowDefnRaw> = {
     },
 }
 
-Windows_: Vec<WindowDefnRaw> = {
+Windows_: Vec<WindowName> = {
     <Sep<Windows_, Window, ",">> => <>
 }
 
-Window: WindowDefnRaw = {
-    <start:@L> <id:ModularTarget> <end:@L> => WindowDefnRaw { mid: NodeMeta::new_box(start, end), id},
+Window: WindowName = {
+    <start:@L> <id:ModularTarget> <end:@L> => WindowName { mid: NodeMeta::new_box(start, end), id},
 }
 
-WindowDefn: Vec<WindowDefnRaw>  = {
+WindowDefn: Vec<WindowName>  = {
     "[" <windows:Windows> "]" => windows
 }
 
