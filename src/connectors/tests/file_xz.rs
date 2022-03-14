@@ -39,7 +39,7 @@ async fn file_connector_xz() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new("file", defn).await?;
+    let harness = ConnectorHarness::new("file", &defn).await?;
     let out = harness.out().expect("No out pipeline");
     harness.start().await?;
     harness.wait_for_connected(Duration::from_secs(5)).await?;
