@@ -27,6 +27,7 @@ use std::io::{BufReader, Cursor};
 lazy_static! {
     static ref SYSTEM_ROOT_CERTS: RootCertStore = {
         let mut roots = RootCertStore::empty();
+        // ALLOW: this is expected to panic if we cannot load system certificates
         for cert in load_native_certs().expect("Unable to load system TLS certificates.") {
             roots
                 .add(&Certificate(cert.0))
