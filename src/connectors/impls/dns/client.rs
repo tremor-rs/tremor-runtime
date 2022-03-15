@@ -239,7 +239,7 @@ fn rdata_to_value(r: &RData) -> Option<Value<'static>> {
         RData::TLSA(v) => literal!({ "TLSA": v.to_string() }),
         RData::CSYNC(v) => literal!({"CSYNC": v.to_string() }),
         // RData marked as non-exhaustive
-        _ => return None
+        _ => return None,
     })
 }
 
@@ -247,7 +247,9 @@ fn lookup_to_value(l: &Lookup) -> Value<'static> {
     l.record_iter()
         .filter_map(|r| {
             let ttl = r.ttl();
-            r.data().and_then(rdata_to_value).and_then(|mut v|v.try_insert("ttl", ttl))
+            r.data()
+                .and_then(rdata_to_value)
+                .and_then(|mut v| v.try_insert("ttl", ttl))
         })
         .collect()
 }
