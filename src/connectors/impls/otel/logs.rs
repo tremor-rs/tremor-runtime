@@ -108,9 +108,8 @@ pub(crate) fn maybe_instrumentation_library_logs_to_pb(
                         severity_number: affirm_severity_number_valid(pb::maybe_int_to_pbi32(
                             log.get("severity_number"),
                         )?)?,
-                        severity_text: affirm_severity_text_valid(&pb::maybe_string_to_pb(
-                            log.get("severity_text"),
-                        )?),
+                        // the spec doesn't make any claims about the severity_text contents
+                        severity_text: pb::maybe_string_to_pb(log.get("severity_text"))?,
                         flags: affirm_traceflags_valid(pb::maybe_int_to_pbu32(log.get("flags"))?)?,
                         span_id: id::hex_span_id_to_pb(log.get("span_id"))?,
                         trace_id: id::hex_trace_id_to_pb(log.get("trace_id"))?,

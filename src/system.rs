@@ -13,7 +13,7 @@
 // limitations under the License.
 
 mod flow;
-mod manager;
+mod flow_supervisor;
 
 use self::flow::Flow;
 use crate::errors::{Error, Kind as ErrorKind, Result};
@@ -58,7 +58,7 @@ pub enum ShutdownMode {
 /// Tremor runtime
 #[derive(Clone, Debug)]
 pub struct World {
-    pub(crate) system: manager::Channel,
+    pub(crate) system: flow_supervisor::Channel,
 }
 
 impl World {
@@ -66,7 +66,7 @@ impl World {
     pub(crate) async fn start_deploy(&self, flow: &ast::DeployFlow<'static>) -> Result<()> {
         let (tx, rx) = bounded(1);
         self.system
-            .send(manager::Msg::StartDeploy {
+            .send(flow_supervisor::Msg::StartDeploy {
                 flow: Box::new(flow.clone()),
                 sender: tx,
             })
@@ -104,7 +104,7 @@ impl World {
         builder: Box<dyn connectors::ConnectorBuilder>,
     ) -> Result<()> {
         self.system
-            .send(manager::Msg::RegisterConnectorType {
+            .send(flow_supervisor::Msg::RegisterConnectorType {
                 connector_type: builder.connector_type(),
                 builder,
             })
@@ -122,7 +122,7 @@ impl World {
         let (flow_tx, flow_rx) = bounded(1);
         let flow_id = flow::Id(flow_id);
         self.system
-            .send(manager::Msg::GetFlow(flow_id.clone(), flow_tx))
+            .send(flow_supervisor::Msg::GetFlow(flow_id.clone(), flow_tx))
             .await?;
         flow_rx.recv().await?
     }
@@ -133,7 +133,9 @@ impl World {
     ///  * if we fail to send the request or fail to receive it
     pub async fn get_flows(&self) -> Result<Vec<Flow>> {
         let (reply_tx, reply_rx) = bounded(1);
-        self.system.send(manager::Msg::GetFlows(reply_tx)).await?;
+        self.system
+            .send(flow_supervisor::Msg::GetFlows(reply_tx))
+            .await?;
         reply_rx.recv().await?
     }
 
@@ -142,7 +144,7 @@ impl World {
     /// # Errors
     ///  * if the world manager can't be started
     pub async fn start(config: WorldConfig) -> Result<(Self, JoinHandle<Result<()>>)> {
-        let (system_h, system) = manager::Manager::new(config.qsize).start();
+        let (system_h, system) = flow_supervisor::FlowSupervisor::new(config.qsize).start();
 
         let world = Self { system };
 
@@ -156,7 +158,7 @@ impl World {
     ///  * if the system failed to drain
     pub async fn drain(&self, timeout: Duration) -> Result<()> {
         let (tx, rx) = bounded(1);
-        self.system.send(manager::Msg::Drain(tx)).await?;
+        self.system.send(flow_supervisor::Msg::Drain(tx)).await?;
         match rx.recv().timeout(timeout).await {
             Err(_) => {
                 warn!("Timeout draining all Flows after {}s", timeout.as_secs());
@@ -179,9 +181,9 @@ impl World {
             }
             ShutdownMode::Forceful => {}
         }
-        if let Err(e) = self.system.send(manager::Msg::Stop).await {
+        if let Err(e) = self.system.send(flow_supervisor::Msg::Stop).await {
             error!("Error stopping all Flows: {}", e);
         }
-        Ok(self.system.send(manager::Msg::Stop).await?)
+        Ok(self.system.send(flow_supervisor::Msg::Stop).await?)
     }
 }
