@@ -17,7 +17,7 @@ use std::io::prelude::*;
 use tremor_common::{file, ids::OperatorIdGen};
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
-use tremor_pipeline::{Event, EventId};
+use tremor_pipeline::{Event, EventId, GraphReturns};
 use tremor_script::FN_REGISTRY;
 
 use tremor_runtime::errors::*;
@@ -75,9 +75,9 @@ macro_rules! test_cases {
                         ingest_ns: id as u64,
                         ..Event::default()
                     };
-                    let mut r = Vec::new();
+                    let mut r = GraphReturns::default();
                     pipeline.enqueue("in", event, &mut r).await?;
-                    results.append(&mut r);
+                    results.append(&mut r.output);
                 }
                 assert_eq!(results.len(), out_json.len(), "Number of events differ error");
                 for (_, result) in results {

@@ -51,9 +51,8 @@ pub(crate) enum Msg {
     Stop,
 }
 
-// FIXME: (MW) better name, Manager sounds stupid
 #[derive(Debug)]
-pub(crate) struct Manager {
+pub(crate) struct FlowSupervisor {
     flows: HashMap<Id, Flow>,
     operator_id_gen: OperatorIdGen,
     connector_id_gen: ConnectorIdGen,
@@ -61,7 +60,7 @@ pub(crate) struct Manager {
     qsize: usize,
 }
 
-impl Manager {
+impl FlowSupervisor {
     pub fn new(qsize: usize) -> Self {
         Self {
             flows: HashMap::new(),

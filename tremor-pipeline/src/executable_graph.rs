@@ -615,7 +615,7 @@ mod test {
     use super::*;
     use crate::{
         op::{identity::PassthroughFactory, prelude::OUT},
-        METRICS_CHANNEL,
+        GraphReturns, METRICS_CHANNEL,
     };
     use tremor_script::prelude::*;
     fn pass(uid: u64, id: &'static str) -> OperatorNode {
@@ -835,10 +835,11 @@ mod test {
 
         // Test with one event
         let e = Event::default();
-        let mut returns = Vec::new();
+        let mut returns = GraphReturns::default();
         g.enqueue("in", e, &mut returns).await.unwrap();
-        assert_eq!(returns.len(), 1);
-        returns.clear();
+        assert_eq!(returns.output.len(), 1);
+        assert_eq!(returns.dead_ends.len(), 0);
+        returns.output.clear();
 
         g.send_metrics("test-metric", HashMap::new(), 123).await;
         let mut metrics = Vec::new();
@@ -849,16 +850,18 @@ mod test {
 
         // Test with two events
         let e = Event::default();
-        let mut returns = Vec::new();
+        let mut returns = GraphReturns::default();
         g.enqueue("in", e, &mut returns).await.unwrap();
-        assert_eq!(returns.len(), 1);
-        returns.clear();
+        assert_eq!(returns.output.len(), 1);
+        assert_eq!(returns.dead_ends.len(), 0);
+        returns.output.clear();
 
         let e = Event::default();
-        let mut returns = Vec::new();
+        let mut returns = GraphReturns::default();
         g.enqueue("in", e, &mut returns).await.unwrap();
-        assert_eq!(returns.len(), 1);
-        returns.clear();
+        assert_eq!(returns.output.len(), 1);
+        assert_eq!(returns.dead_ends.len(), 0);
+        returns.output.clear();
 
         g.send_metrics("test-metric", HashMap::new(), 123).await;
         let mut metrics = Vec::new();
@@ -932,10 +935,11 @@ mod test {
         assert!(g.optimize().is_some());
         // Test with one event
         let e = Event::default();
-        let mut returns = Vec::new();
+        let mut returns = GraphReturns::default();
         g.enqueue("in", e, &mut returns).await.unwrap();
-        assert_eq!(returns.len(), 1);
-        returns.clear();
+        assert_eq!(returns.output.len(), 1);
+        assert_eq!(returns.dead_ends.len(), 0);
+        returns.output.clear();
 
         // check that the Input was moved from 0 to 1, skipping the input
         assert_eq!(g.inputs.len(), 1);

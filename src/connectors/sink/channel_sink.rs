@@ -277,7 +277,7 @@ where
             ) {
                 let failed = writer.write(data, meta).await.is_err();
 
-                // send asyn contraflow insights if requested (only if event.transactional)
+                // send async contraflow insights if requested (only if event.transactional)
                 if let Some((cf_data, sender)) = contraflow {
                     let reply = if failed {
                         AsyncSinkReply::Fail(cf_data)
