@@ -48,7 +48,7 @@ use async_std::{
 use beef::Cow;
 use futures::Future;
 use halfbrown::HashMap;
-use std::{fmt::Display, sync::atomic::Ordering};
+use std::{fmt::Display, sync::atomic::Ordering, time::Duration};
 use tremor_common::ids::ConnectorIdGen;
 use tremor_common::url::ports::{ERR, IN, OUT};
 use tremor_pipeline::METRICS_CHANNEL;
@@ -59,6 +59,9 @@ use value_trait::{Builder, Mutable};
 
 /// quiescence stuff
 pub(crate) use utils::{metrics, reconnect};
+
+/// Accept timeout
+const ACCEPT_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// connector address
 #[derive(Clone, Debug)]
