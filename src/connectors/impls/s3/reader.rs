@@ -90,7 +90,7 @@ impl ConnectorBuilder for Builder {
         if let Some(config) = &raw_config.config {
             let config = S3SourceConfig::new(config)?;
 
-            // FIXME: display a warning if chunksize lesser than some quantity
+            // TODO: display a warning if chunksize lesser than some quantity
             Ok(Box::new(S3SourceConnector {
                 handles: Vec::with_capacity(config.max_connections),
                 config,

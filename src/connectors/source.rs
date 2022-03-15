@@ -1220,7 +1220,6 @@ where
         // we expect 1 source transport unit (stu) per pull, so this counter is equivalent to a stu counter
         // it is not unique per stream only, but per source
         loop {
-            // FIXME: change reply from true/false to something descriptive like enum {Stop Continue} or the rust controlflow thingy
             if self.control_plane().await? == Control::Terminate {
                 // source has been stopped, lets stop running here
                 debug!("{} Terminating source task...", self.ctx);
