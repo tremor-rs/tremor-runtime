@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use rand::{distributions::Alphanumeric, Rng};
-use std::io::Read;
-use std::time::{Duration, Instant};
-use super::super::{ConnectorHarness, TestPipeline, find_free_tcp_port};
+use super::super::{find_free_tcp_port, ConnectorHarness, TestPipeline};
 use super::{EnvHelper, SignalHandler};
 use crate::errors::{Error, Result};
 use aws_sdk_s3::{self as s3, client::Client as S3Client, Credentials, Endpoint, Region};
 use bytes::Buf;
+use rand::{distributions::Alphanumeric, Rng};
 use serial_test::serial;
+use std::io::Read;
+use std::time::{Duration, Instant};
 use testcontainers::{clients, images::generic::GenericImage, Container, Docker, RunArgs};
 use tremor_common::url::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};

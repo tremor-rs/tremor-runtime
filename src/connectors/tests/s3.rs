@@ -14,14 +14,14 @@
 mod reader;
 mod writer;
 
+use crate::errors::Result;
+use async_std::stream::StreamExt;
+use async_std::task::JoinHandle;
 use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook_async_std::{Handle, Signals};
-use testcontainers::clients;
-use crate::errors::Result;
-use async_std::task::JoinHandle;
 use std::collections::HashMap;
+use testcontainers::clients;
 use testcontainers::Docker;
-use async_std::stream::StreamExt;
 /// Keeps track of process env manipulations and restores previous values upon drop
 pub(crate) struct EnvHelper {
     restore: HashMap<String, String>,

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::{ConnectorHarness,find_free_tcp_port};
+use super::super::{find_free_tcp_port, ConnectorHarness};
 use super::{EnvHelper, SignalHandler};
 use crate::errors::{Error, Result};
 use aws_sdk_s3::{self as s3, client::Client as S3Client, Credentials, Endpoint, Region};

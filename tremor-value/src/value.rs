@@ -262,7 +262,6 @@ fn cmp_map(left: &Object, right: &Object) -> Ordering {
     Ordering::Equal
 }
 
-
 impl<'value> Value<'value> {
     /// Enforces static lifetime on a borrowed value, this will
     /// force all strings to become owned COW's, the same applies for
