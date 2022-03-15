@@ -936,7 +936,6 @@ where
 
     /// should this manager pull data from its source?
     fn should_pull_data(&mut self) -> bool {
-        // FIXME: simplify this overly complex condition
         // this check implements the waiting that is induced by a source returning `SourceReply::Empty(wait_ms)`.
         // We stop pulling data until the wait time has elapsed, but we don't sleep this entire time.
         let needs_to_wait = match self.pull_wait_start {
@@ -970,9 +969,8 @@ where
         let data = match data {
             Ok(d) => d,
             Err(e) => {
-                warn!("{} Error pulling data: {}", &self.ctx, e);
+                error!("{} Error pulling data: {}", &self.ctx, e);
                 // TODO: increment error metric
-                // FIXME: emit event to err port
                 return Ok(());
             }
         };

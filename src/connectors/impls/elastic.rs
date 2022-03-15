@@ -573,10 +573,7 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                 }
                 ops.push(op).map_err(Into::into)
             }
-            other => {
-                // FIXME: send error response
-                Err(Error::from(format!("Invalid `$elastic.action` {}", other)))
-            }
+            other => Err(Error::from(format!("Invalid `$elastic.action` {}", other))),
         }
     }
 

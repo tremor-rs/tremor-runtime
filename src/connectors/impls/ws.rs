@@ -74,7 +74,7 @@ where
                             origin_uri: self.origin_uri.clone(),
                             stream,
                             meta: Some(self.meta.clone()),
-                        })
+                        });
                     }
                     _ => todo!(),
                 };
@@ -86,7 +86,6 @@ where
                     origin_uri: self.origin_uri.clone(),
                     stream,
                     meta: Some(meta),
-                    // ALLOW: we know bytes_read is smaller than or equal buf_size
                     data,
                     port: None,
                 })
@@ -100,13 +99,6 @@ where
     }
 
     async fn on_done(&mut self, _stream: u64) -> StreamDone {
-        // FIXME THIS IS SHUTDOWN! (enable or delete)
-        // if let Err(e) = self.wrapped_stream.close() { // TODO error code
-        //     warn!(
-        //         "[Connector::{}] Error shutting down reading half of stream {}: {}",
-        //         &self.url, stream, e
-        //     );
-        // }
         // NOTE We depend on the StreamWriter to cascade an actual close
         StreamDone::StreamClosed
     }
