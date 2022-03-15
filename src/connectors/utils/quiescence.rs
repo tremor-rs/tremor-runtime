@@ -89,24 +89,34 @@ impl QuiescenceBeacon {
 
     /// pause both reading and writing
     pub fn pause(&mut self) {
-        let _ = self.0.state.compare_exchange(
-            Inner::RUNNING,
-            Inner::PAUSED,
-            Ordering::AcqRel,
-            Ordering::Relaxed,
-        );
+        if self
+            .0
+            .state
+            .compare_exchange(
+                Inner::RUNNING,
+                Inner::PAUSED,
+                Ordering::AcqRel,
+                Ordering::Relaxed,
+            )
+            .is_err()
+        {}
     }
 
     /// Resume both reading and writing.
     ///
     /// Has no effect if not currently paused.
     pub fn resume(&mut self) {
-        let _ = self.0.state.compare_exchange(
-            Inner::PAUSED,
-            Inner::RUNNING,
-            Ordering::AcqRel,
-            Ordering::Relaxed,
-        );
+        if self
+            .0
+            .state
+            .compare_exchange(
+                Inner::PAUSED,
+                Inner::RUNNING,
+                Ordering::AcqRel,
+                Ordering::Relaxed,
+            )
+            .is_err()
+        {}
         self.0.resume_event.notify(Self::MAX_LISTENERS); // we might have been paused, so notify here
     }
 

@@ -82,9 +82,9 @@ impl<'script> ImutExpr<'script> {
     ///   * If this is not a literal
     #[inline]
     pub fn try_as_lit(&self) -> Result<&Value<'script>> {
-        dbg!(self.as_lit().ok_or_else(|| {
+        self.as_lit().ok_or_else(|| {
             ErrorKind::NotConstant(self.extent(), self.extent().expand_lines(2)).into()
-        }))
+        })
     }
 
     /// Evaluates the expression to a string.
