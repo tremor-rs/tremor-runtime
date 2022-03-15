@@ -252,7 +252,7 @@ async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Resul
         .collect::<Value>();
 
     let linking_uuid = Uuid::new_v4().to_urn();
-    // FIXME: remove if/when RV issues resolved - useful for debugging for now
+    // FIXME: (MW) remove if/when RV issues resolved - useful for debugging for now
     //  - specifically changes to SourceReply::BatchData ( punctuation + metadata ) and
     //  - and resolution of the http cli/srv in the same process ( future ) issue
     //
@@ -473,7 +473,7 @@ impl Source for HttpServerSource {
         // Accept task - this is the main receive loop for http server instances
         self.accept_task = Some(spawn_task(ctx.clone(), async move {
             let idgen = EventIdGenerator::new(ctx.uid);
-            // NOTE FIXME validate shcme = https for tls server config
+            // NOTE FIXME: (MW) validate shcme = https for tls server config
             if let Some(tls_server_config) = tls_server_config {
                 let mut endpoint = tide::Server::with_state(HttpServerState {
                     idgen,
@@ -535,7 +535,7 @@ impl Source for HttpServerSource {
                         port: None,
                     }
                 } else {
-                    // FIXME
+                    // FIXME:  (MW)
                     // Sketch of alternate to using BatchData vi structured
                     //  - benefit of using batch data is proc+codec is for free
                     //  - but it lacks punctuation so makes batch response handling harder

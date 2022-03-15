@@ -131,7 +131,6 @@ where
     }
 }
 
-// FIXME: implement PauseBehaviour correctly
 impl<T, F, B> ChannelSink<T, F, B>
 where
     T: Hash + Eq + Send + 'static,

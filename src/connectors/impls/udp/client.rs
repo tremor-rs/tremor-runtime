@@ -71,7 +71,7 @@ impl ConnectorBuilder for Builder {
     }
 }
 
-// FIXME: We do not handle destination changes via metadata
+// TODO: We do not handle destination changes via metadata
 // there is a reason for this, and that is where it gets complicated,
 // metadata is assigned to a single event, but with postprocessors
 // so if event A includes metadata to set a host / port to send to, then which
