@@ -13,10 +13,10 @@
 // limitations under the License.
 
 use super::{WsReader, WsWriter};
-use crate::connectors::prelude::*;
 use crate::connectors::utils::tls::{load_server_config, TLSServerConfig};
+use crate::connectors::{prelude::*, spawn_task};
 use async_std::net::TcpListener;
-use async_std::task::{self, JoinHandle};
+use async_std::task::JoinHandle;
 use async_tls::TlsAcceptor;
 use async_tungstenite::accept_async;
 use futures::StreamExt;
@@ -59,7 +59,7 @@ impl From<SocketAddr> for ConnectionMeta {
 pub struct WsServer {
     alias: String,
     config: Config,
-    accept_task: Option<JoinHandle<Result<()>>>,
+    accept_task: Option<JoinHandle<()>>,
     sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
     source_runtime: Option<ChannelSourceRuntime>,
     tls_server_config: Option<ServerConfig>,
@@ -192,13 +192,11 @@ impl Connector for WsServer {
         let tls_server_config = self.tls_server_config.clone();
 
         // accept task
-        // FIXME: using `?` in the acceptor tasks causes the server quietly failing
-        //        when the acceptor task errors
-        self.accept_task = Some(task::spawn(async move {
+        self.accept_task = Some(spawn_task(ctx.clone(), async move {
             let mut stream_id_gen = StreamIdGen::default();
-            while let (true, Ok((tcp_stream, peer_addr))) = (
+            while let (true, (tcp_stream, peer_addr)) = (
                 ctx.quiescence_beacon.continue_reading().await,
-                listener.accept().await,
+                listener.accept().await?,
             ) {
                 let stream_id: u64 = stream_id_gen.next_stream_id();
                 let connection_meta: ConnectionMeta = peer_addr.into();
@@ -217,8 +215,8 @@ impl Connector for WsServer {
                     .map(|sc| TlsAcceptor::from(Arc::new(sc)));
                 if let Some(acceptor) = tls_acceptor {
                     let meta = ctx.meta(WsServer::meta(peer_addr, true));
-                    let tls_stream = acceptor.accept(tcp_stream.clone()).await?; // TODO: this should live in its own task, as it requires rome roundtrips :()
-
+                    // TODO: this should live in its own task, as it requires rome roundtrips :()
+                    let tls_stream = acceptor.accept(tcp_stream.clone()).await?;
                     let ws_stream = accept_async(tls_stream).await?;
                     debug!(
                         "[Connector::{}] new connection from {}",
@@ -266,10 +264,6 @@ impl Connector for WsServer {
                     );
                 }
             }
-
-            // notify connector task about disconnect
-            // of the listening socket
-            ctx.notifier.connection_lost().await?;
             Ok(())
         }));
 

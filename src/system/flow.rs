@@ -281,7 +281,7 @@ async fn link(
                 .await
                 .map_err(|e| -> Error { format!("Could not send to connector: {}", e).into() })?;
             rx.recv().timeout(timeout).await???;
-            // FIXME: move the connecto message from connector to pipeline here
+            // FIXME: move the connector message from connector to pipeline here
         }
         ConnectStmt::PipelineToConnector { from, to, .. } => {
             let pipeline = pipelines.get(from.alias()).ok_or(format!(

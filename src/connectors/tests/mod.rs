@@ -85,7 +85,6 @@ impl ConnectorHarness {
         let (world, _) = World::start(WorldConfig::default()).await?;
         let raw_config = config::Connector::from_config(connector_type.into(), defn)?;
         let id = String::from("test");
-        // FIXME: woohp whoop
         let connector_addr =
             connectors::spawn(&id, &mut connector_id_gen, &known_connectors, raw_config).await?;
         let mut pipes = HashMap::new();
