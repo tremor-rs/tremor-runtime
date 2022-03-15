@@ -13,10 +13,13 @@
 // limitations under the License.
 
 use super::{WsReader, WsWriter};
-use crate::connectors::utils::tls::{load_server_config, TLSServerConfig};
 use crate::connectors::{prelude::*, spawn_task};
-use async_std::net::TcpListener;
+use crate::connectors::{
+    utils::tls::{load_server_config, TLSServerConfig},
+    ACCEPT_TIMEOUT,
+};
 use async_std::task::JoinHandle;
+use async_std::{net::TcpListener, prelude::FutureExt};
 use async_tls::TlsAcceptor;
 use async_tungstenite::accept_async;
 use futures::StreamExt;
@@ -194,75 +197,78 @@ impl Connector for WsServer {
         // accept task
         self.accept_task = Some(spawn_task(ctx.clone(), async move {
             let mut stream_id_gen = StreamIdGen::default();
-            while let (true, (tcp_stream, peer_addr)) = (
-                ctx.quiescence_beacon.continue_reading().await,
-                listener.accept().await?,
-            ) {
-                let stream_id: u64 = stream_id_gen.next_stream_id();
-                let connection_meta: ConnectionMeta = peer_addr.into();
+            while ctx.quiescence_beacon.continue_reading().await {
+                match listener.accept().timeout(ACCEPT_TIMEOUT).await {
+                    Ok(Ok((tcp_stream, peer_addr))) => {
+                        let stream_id: u64 = stream_id_gen.next_stream_id();
+                        let connection_meta: ConnectionMeta = peer_addr.into();
 
-                // Async<T> allows us to read in one thread and write in another concurrently - see its documentation
-                // So we don't need no BiLock like we would when using `.split()`
-                let origin_uri = EventOriginUri {
-                    scheme: URL_SCHEME.to_string(),
-                    host: peer_addr.ip().to_string(),
-                    port: Some(peer_addr.port()),
-                    path: path.clone(), // captures server port
-                };
+                        // Async<T> allows us to read in one thread and write in another concurrently - see its documentation
+                        // So we don't need no BiLock like we would when using `.split()`
+                        let origin_uri = EventOriginUri {
+                            scheme: URL_SCHEME.to_string(),
+                            host: peer_addr.ip().to_string(),
+                            port: Some(peer_addr.port()),
+                            path: path.clone(), // captures server port
+                        };
 
-                let tls_acceptor: Option<TlsAcceptor> = tls_server_config
-                    .clone()
-                    .map(|sc| TlsAcceptor::from(Arc::new(sc)));
-                if let Some(acceptor) = tls_acceptor {
-                    let meta = ctx.meta(WsServer::meta(peer_addr, true));
-                    // TODO: this should live in its own task, as it requires rome roundtrips :()
-                    let tls_stream = acceptor.accept(tcp_stream.clone()).await?;
-                    let ws_stream = accept_async(tls_stream).await?;
-                    debug!(
-                        "[Connector::{}] new connection from {}",
-                        &accept_url, peer_addr
-                    );
+                        let tls_acceptor: Option<TlsAcceptor> = tls_server_config
+                            .clone()
+                            .map(|sc| TlsAcceptor::from(Arc::new(sc)));
+                        if let Some(acceptor) = tls_acceptor {
+                            let meta = ctx.meta(WsServer::meta(peer_addr, true));
+                            // TODO: this should live in its own task, as it requires rome roundtrips :()
+                            let tls_stream = acceptor.accept(tcp_stream.clone()).await?;
+                            let ws_stream = accept_async(tls_stream).await?;
+                            debug!(
+                                "[Connector::{}] new connection from {}",
+                                &accept_url, peer_addr
+                            );
 
-                    let (ws_write, ws_read) = ws_stream.split();
+                            let (ws_write, ws_read) = ws_stream.split();
 
-                    let ws_writer = WsWriter::new_tls_server(ws_write);
-                    sink_runtime.register_stream_writer(
-                        stream_id,
-                        Some(connection_meta.clone()),
-                        &ctx,
-                        ws_writer,
-                    );
+                            let ws_writer = WsWriter::new_tls_server(ws_write);
+                            sink_runtime.register_stream_writer(
+                                stream_id,
+                                Some(connection_meta.clone()),
+                                &ctx,
+                                ws_writer,
+                            );
 
-                    let ws_reader = WsReader::new(ws_read, origin_uri.clone(), meta);
-                    source_runtime.register_stream_reader(stream_id, &ctx, ws_reader);
-                } else {
-                    let ws_stream = match accept_async(tcp_stream).await {
-                        Ok(s) => s,
-                        Err(e) => {
-                            error!("Websaocket connection error: {}", e);
-                            continue;
+                            let ws_reader = WsReader::new(ws_read, origin_uri.clone(), meta);
+                            source_runtime.register_stream_reader(stream_id, &ctx, ws_reader);
+                        } else {
+                            let ws_stream = match accept_async(tcp_stream).await {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    error!("Websaocket connection error: {}", e);
+                                    continue;
+                                }
+                            };
+                            debug!(
+                                "[Connector::{}] new connection from {}",
+                                &accept_url, peer_addr
+                            );
+
+                            let (ws_write, ws_read) = ws_stream.split();
+
+                            let meta = ctx.meta(WsServer::meta(peer_addr, false));
+                            let ws_reader = WsReader::new(ws_read, origin_uri.clone(), meta);
+
+                            let ws_writer = WsWriter::new(ws_write);
+                            source_runtime.register_stream_reader(stream_id, &ctx, ws_reader);
+
+                            sink_runtime.register_stream_writer(
+                                stream_id,
+                                Some(connection_meta.clone()),
+                                &ctx,
+                                ws_writer,
+                            );
                         }
-                    };
-                    debug!(
-                        "[Connector::{}] new connection from {}",
-                        &accept_url, peer_addr
-                    );
-
-                    let (ws_write, ws_read) = ws_stream.split();
-
-                    let meta = ctx.meta(WsServer::meta(peer_addr, false));
-                    let ws_reader = WsReader::new(ws_read, origin_uri.clone(), meta);
-
-                    let ws_writer = WsWriter::new(ws_write);
-                    source_runtime.register_stream_reader(stream_id, &ctx, ws_reader);
-
-                    sink_runtime.register_stream_writer(
-                        stream_id,
-                        Some(connection_meta.clone()),
-                        &ctx,
-                        ws_writer,
-                    );
-                }
+                    }
+                    Ok(Err(e)) => return Err(e.into()),
+                    Err(_) => continue,
+                };
             }
             Ok(())
         }));

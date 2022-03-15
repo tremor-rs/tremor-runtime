@@ -12,13 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use super::{TcpReader, TcpWriter};
-use crate::connectors::sink::channel_sink::ChannelSinkMsg;
-use crate::connectors::utils::tls::{load_server_config, TLSServerConfig};
-use crate::connectors::{prelude::*, spawn_task};
-use crate::errors::Kind as ErrorKind;
-use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
-use async_std::net::TcpListener;
-use async_std::task::JoinHandle;
+use crate::{
+    connectors::{
+        prelude::*,
+        sink::channel_sink::ChannelSinkMsg,
+        spawn_task,
+        utils::tls::{load_server_config, TLSServerConfig},
+        ACCEPT_TIMEOUT,
+    },
+    errors::Kind as ErrorKind,
+};
+use async_std::{
+    channel::{bounded, Receiver, Sender, TryRecvError},
+    net::TcpListener,
+    prelude::*,
+    task::JoinHandle,
+};
 use async_tls::TlsAcceptor;
 use futures::io::AsyncReadExt;
 use rustls::ServerConfig;
@@ -197,76 +206,79 @@ impl Source for TcpServerSource {
         // accept task
         self.accept_task = Some(spawn_task(ctx.clone(), async move {
             let mut stream_id_gen = StreamIdGen::default();
-            // FIXME: handle quiesence when no new accepts happen
-            while let (true, (stream, peer_addr)) = (
-                ctx.quiescence_beacon().continue_reading().await,
-                listener.accept().await?,
-            ) {
-                debug!("{} new connection from {}", &accept_ctx, peer_addr);
-                let stream_id: u64 = stream_id_gen.next_stream_id();
-                let connection_meta: ConnectionMeta = peer_addr.into();
-                // Async<T> allows us to read in one thread and write in another concurrently - see its documentation
-                // So we don't need no BiLock like we would when using `.split()`
-                let origin_uri = EventOriginUri {
-                    scheme: URL_SCHEME.to_string(),
-                    host: peer_addr.ip().to_string(),
-                    port: Some(peer_addr.port()),
-                    path: path.clone(), // captures server port
+
+            while ctx.quiescence_beacon().continue_reading().await {
+                match listener.accept().timeout(ACCEPT_TIMEOUT).await {
+                    Ok(Ok((stream, peer_addr))) => {
+                        debug!("{} new connection from {}", &accept_ctx, peer_addr);
+                        let stream_id: u64 = stream_id_gen.next_stream_id();
+                        let connection_meta: ConnectionMeta = peer_addr.into();
+                        // Async<T> allows us to read in one thread and write in another concurrently - see its documentation
+                        // So we don't need no BiLock like we would when using `.split()`
+                        let origin_uri = EventOriginUri {
+                            scheme: URL_SCHEME.to_string(),
+                            host: peer_addr.ip().to_string(),
+                            port: Some(peer_addr.port()),
+                            path: path.clone(), // captures server port
+                        };
+
+                        let tls_acceptor: Option<TlsAcceptor> = tls_server_config
+                            .clone()
+                            .map(|sc| TlsAcceptor::from(Arc::new(sc)));
+                        if let Some(acceptor) = tls_acceptor {
+                            let tls_stream = acceptor.accept(stream.clone()).await?;
+                            let (tls_read_stream, tls_write_sink) = tls_stream.split();
+                            let meta = ctx.meta(literal!({
+                                "tls": true,
+                                "peer": {
+                                    "host": peer_addr.ip().to_string(),
+                                    "port": peer_addr.port()
+                                }
+                            }));
+                            let tls_reader = TcpReader::tls_server(
+                                tls_read_stream,
+                                stream.clone(),
+                                vec![0; buf_size],
+                                ctx.alias.clone(),
+                                origin_uri.clone(),
+                                meta,
+                            );
+                            runtime.register_stream_reader(stream_id, &ctx, tls_reader);
+
+                            sink_runtime.register_stream_writer(
+                                stream_id,
+                                Some(connection_meta.clone()),
+                                &ctx,
+                                TcpWriter::tls_server(tls_write_sink, stream),
+                            );
+                        } else {
+                            let meta = ctx.meta(literal!({
+                                "tls": false,
+                                "peer": {
+                                    "host": peer_addr.ip().to_string(),
+                                    "port": peer_addr.port()
+                                }
+                            }));
+                            let tcp_reader = TcpReader::new(
+                                stream.clone(),
+                                vec![0; buf_size],
+                                ctx.alias.clone(),
+                                origin_uri.clone(),
+                                meta,
+                            );
+                            runtime.register_stream_reader(stream_id, &ctx, tcp_reader);
+
+                            sink_runtime.register_stream_writer(
+                                stream_id,
+                                Some(connection_meta.clone()),
+                                &ctx,
+                                TcpWriter::new(stream),
+                            );
+                        }
+                    }
+                    Ok(Err(e)) => return Err(e.into()),
+                    Err(_) => continue,
                 };
-
-                let tls_acceptor: Option<TlsAcceptor> = tls_server_config
-                    .clone()
-                    .map(|sc| TlsAcceptor::from(Arc::new(sc)));
-                if let Some(acceptor) = tls_acceptor {
-                    let tls_stream = acceptor.accept(stream.clone()).await?;
-                    let (tls_read_stream, tls_write_sink) = tls_stream.split();
-                    let meta = ctx.meta(literal!({
-                        "tls": true,
-                        "peer": {
-                            "host": peer_addr.ip().to_string(),
-                            "port": peer_addr.port()
-                        }
-                    }));
-                    let tls_reader = TcpReader::tls_server(
-                        tls_read_stream,
-                        stream.clone(),
-                        vec![0; buf_size],
-                        ctx.alias.clone(),
-                        origin_uri.clone(),
-                        meta,
-                    );
-                    runtime.register_stream_reader(stream_id, &ctx, tls_reader);
-
-                    sink_runtime.register_stream_writer(
-                        stream_id,
-                        Some(connection_meta.clone()),
-                        &ctx,
-                        TcpWriter::tls_server(tls_write_sink, stream),
-                    );
-                } else {
-                    let meta = ctx.meta(literal!({
-                        "tls": false,
-                        "peer": {
-                            "host": peer_addr.ip().to_string(),
-                            "port": peer_addr.port()
-                        }
-                    }));
-                    let tcp_reader = TcpReader::new(
-                        stream.clone(),
-                        vec![0; buf_size],
-                        ctx.alias.clone(),
-                        origin_uri.clone(),
-                        meta,
-                    );
-                    runtime.register_stream_reader(stream_id, &ctx, tcp_reader);
-
-                    sink_runtime.register_stream_writer(
-                        stream_id,
-                        Some(connection_meta.clone()),
-                        &ctx,
-                        TcpWriter::new(stream),
-                    );
-                }
             }
             Ok(())
         }));

@@ -167,12 +167,10 @@ where
         }
     }
 
-    fn handle_channels_quickly(&mut self, serializer: &mut EventSerializer) -> bool {
-        self.handle_channels(serializer, false)
-    }
     /// returns true, if there are no more channels to send stuff to
     fn handle_channels(
         &mut self,
+        ctx: &SinkContext,
         serializer: &mut EventSerializer,
         clean_closed_streams: bool,
     ) -> bool {
@@ -183,7 +181,7 @@ where
                     meta,
                     sender,
                 } => {
-                    trace!("[Sink::XXX] started new stream {}", stream_id);
+                    trace!("{ctx} started new stream {stream_id}");
                     self.streams.insert(stream_id, sender);
                     if let Some(meta) = meta {
                         self.streams_meta.insert(meta, stream_id);
@@ -288,7 +286,7 @@ where
                         AsyncSinkReply::Ack(cf_data, nanotime() - start)
                     };
                     if let Err(e) = sender.send(reply).await {
-                        error!("{} Error sending async sink reply: {}", &ctx, e);
+                        error!("{ctx} Error sending async sink reply: {e}");
                     }
                 }
                 if failed {
@@ -301,10 +299,7 @@ where
                 Ok(_) => None,
             };
             if let Some(e) = error {
-                error!(
-                    "{} Error shutting down write half of stream {}: {}",
-                    &ctx, stream, e
-                );
+                error!("{ctx} Error shutting down write half of stream {stream}: {e}");
             }
             stream_sink_tx
                 .send(ChannelSinkMsg::RemoveStream(stream))
@@ -344,7 +339,7 @@ where
         // clean up
         // make sure channels for the given event are added to avoid stupid errors
         // due to channels not yet handled
-        let empty = self.handle_channels_quickly(serializer);
+        let empty = self.handle_channels(ctx, serializer, false);
         if empty {
             // no streams available :sob:
             return Ok(SinkReply {
@@ -355,11 +350,7 @@ where
 
         let ingest_ns = event.ingest_ns;
         let stream_ids = event.id.get_streams(ctx.uid);
-        trace!(
-            "[Sink::{}] on_event stream_ids: {:?}",
-            &ctx.alias,
-            stream_ids
-        );
+        trace!("{ctx} on_event stream_ids: {stream_ids:?}");
 
         let contraflow_utils = if event.transactional {
             Some((ContraflowData::from(&event), self.reply_tx.clone()))
@@ -387,7 +378,7 @@ where
             );
 
             for (stream_id, sender) in streams {
-                trace!("[Sink::{}] Send to stream {}.", &ctx.alias, stream_id);
+                trace!("{ctx} Send to stream {stream_id}.");
                 let data = serializer.serialize_for_stream(value, ingest_ns, *stream_id)?;
                 let meta = if B::NEEDS_META {
                     Some(meta.clone_static())
@@ -402,21 +393,18 @@ where
                 };
                 found = true;
                 if sender.send(sink_data).await.is_err() {
-                    error!(
-                        "[Sink::{}] Error sending to closed stream {}.",
-                        &ctx.alias, stream_id
-                    );
+                    error!("{ctx} Error sending to closed stream {stream_id}.",);
                     remove_streams.push(*stream_id);
                     errored = true;
                 }
             }
             if errored || !found {
-                debug!("{} No stream found for event: {}", &ctx, &event.id);
+                debug!("{ctx} No stream found for event: {}", &event.id);
                 reply = SinkReply::FAIL;
             }
         }
         for stream_id in remove_streams {
-            trace!("[Sink::{}] Removing stream {}", &ctx.alias, stream_id);
+            trace!("{ctx} Removing stream {stream_id}");
             self.remove_stream(stream_id);
             serializer.drop_stream(stream_id);
             // TODO: stream based CB
@@ -427,11 +415,11 @@ where
     async fn on_signal(
         &mut self,
         signal: Event,
-        _ctx: &SinkContext,
+        ctx: &SinkContext,
         serializer: &mut EventSerializer,
     ) -> Result<SinkReply> {
         if let Some(SignalKind::Tick) = signal.kind {
-            self.handle_channels(serializer, true);
+            self.handle_channels(ctx, serializer, true);
         }
         Ok(SinkReply::default())
     }

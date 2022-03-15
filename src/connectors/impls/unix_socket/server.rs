@@ -28,13 +28,16 @@
 //! ```
 //!
 //! We try to route the event to the connection with `stream_id` `123`.
-use crate::connectors::sink::channel_sink::ChannelSinkMsg;
 use crate::connectors::{prelude::*, spawn_task};
+use crate::connectors::{sink::channel_sink::ChannelSinkMsg, ACCEPT_TIMEOUT};
 use crate::errors::{Kind as ErrorKind, Result};
-use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use async_std::os::unix::net::UnixListener;
 use async_std::path::PathBuf;
 use async_std::task::JoinHandle;
+use async_std::{
+    channel::{bounded, Receiver, Sender, TryRecvError},
+    prelude::FutureExt,
+};
 
 use super::{UnixSocketReader, UnixSocketWriter};
 
@@ -185,28 +188,31 @@ impl Source for UnixSocketSource {
                 port: None,
                 path: vec![path.display().to_string()],
             };
-            while let (true, (stream, _peer)) = (
-                ctx.quiescence_beacon().continue_reading().await,
-                listener.accept().await?,
-            ) {
-                let stream_id: u64 = stream_id_gen.next_stream_id();
-                let connection_meta = ConnectionMeta(stream_id);
+            while ctx.quiescence_beacon().continue_reading().await {
+                match listener.accept().timeout(ACCEPT_TIMEOUT).await {
+                    Ok(Ok((stream, _peer_addr))) => {
+                        let stream_id: u64 = stream_id_gen.next_stream_id();
+                        let connection_meta = ConnectionMeta(stream_id);
 
-                let meta = ctx.meta(literal!({ "peer": stream_id }));
-                let reader = UnixSocketReader::new(
-                    stream.clone(),
-                    vec![0; buf_size],
-                    ctx.alias().to_string(),
-                    origin_uri.clone(),
-                    meta,
-                );
-                runtime.register_stream_reader(stream_id, &ctx, reader);
-                sink_runtime.register_stream_writer(
-                    stream_id,
-                    Some(connection_meta),
-                    &ctx,
-                    UnixSocketWriter::new(stream),
-                );
+                        let meta = ctx.meta(literal!({ "peer": stream_id }));
+                        let reader = UnixSocketReader::new(
+                            stream.clone(),
+                            vec![0; buf_size],
+                            ctx.alias().to_string(),
+                            origin_uri.clone(),
+                            meta,
+                        );
+                        runtime.register_stream_reader(stream_id, &ctx, reader);
+                        sink_runtime.register_stream_writer(
+                            stream_id,
+                            Some(connection_meta),
+                            &ctx,
+                            UnixSocketWriter::new(stream),
+                        );
+                    }
+                    Ok(Err(e)) => return Err(e.into()),
+                    Err(_) => continue,
+                };
             }
             Ok(())
         }));
