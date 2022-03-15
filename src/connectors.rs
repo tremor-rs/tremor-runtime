@@ -70,6 +70,12 @@ pub struct Addr {
     pub(crate) sink: Option<SinkAddr>,
 }
 
+impl Display for Addr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.alias.fmt(f)
+    }
+}
+
 impl Addr {
     /// send a message
     ///
@@ -161,7 +167,7 @@ impl Addr {
 /// Messages a Connector instance receives and acts upon
 pub(crate) enum Msg {
     /// connect 1 or more pipelines to a port
-    Link {
+    LinkInput {
         /// port to which to connect
         port: Cow<'static, str>,
         /// pipelines to connect
@@ -169,6 +175,16 @@ pub(crate) enum Msg {
         /// result receiver
         result_tx: Sender<Result<()>>,
     },
+    /// connect 1 or more pipelines to a port
+    LinkOutput {
+        /// port to which to connect
+        port: Cow<'static, str>,
+        /// pipelines to connect
+        pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
+        /// result receiver
+        result_tx: Sender<Result<()>>,
+    },
+
     /// notification from the connector implementation that connectivity is lost and should be reestablished
     ConnectionLost,
     /// initiate a reconnect attempt
@@ -495,19 +511,16 @@ async fn connector_task(
                         })
                         .await
                     {
-                        error!("[Connector::{}] Error sending status report {}.", &alias, e);
+                        error!("{ctx} Error sending status report {e}.");
                     }
                 }
-                Msg::Link {
+                Msg::LinkInput {
                     port,
                     pipelines: pipelines_to_link,
                     result_tx,
                 } => {
                     for (url, _) in &pipelines_to_link {
-                        info!(
-                            "[Connector::{}] Connecting {} via port {}",
-                            &connector_addr.alias, &url, port
-                        );
+                        info!("{ctx} Connecting {url} via port {port}",);
                     }
 
                     if let Some(port_pipes) = connected_pipelines.get_mut(&port) {
@@ -532,7 +545,34 @@ async fn connector_task(
                             )
                             .into())
                         }
-                    } else if connector.is_valid_output_port(&port) {
+                    } else {
+                        error!("{ctx} Tried to connect to unsupported port: \"{port}\"");
+                        Err(ErrorKind::InvalidConnect(
+                            connector_addr.alias.to_string(),
+                            port.clone(),
+                        )
+                        .into())
+                    };
+                    // send back the connect result
+                    if let Err(e) = result_tx.send(res).await {
+                        error!("{ctx} Error sending connect result: {e}");
+                    }
+                }
+                Msg::LinkOutput {
+                    port,
+                    pipelines: pipelines_to_link,
+                    result_tx,
+                } => {
+                    for (url, _) in &pipelines_to_link {
+                        info!("{ctx} Connecting {url} via port {port}");
+                    }
+
+                    if let Some(port_pipes) = connected_pipelines.get_mut(&port) {
+                        port_pipes.extend(pipelines_to_link.iter().cloned());
+                    } else {
+                        connected_pipelines.insert(port.clone(), pipelines_to_link.clone());
+                    }
+                    let res = if connector.is_valid_output_port(&port) {
                         // connect to source part
                         if let Some(source) = connector_addr.source.as_ref() {
                             source
@@ -551,10 +591,7 @@ async fn connector_task(
                             .into())
                         }
                     } else {
-                        error!(
-                            "[Connector::{}] Tried to connect to unsupported port: \"{}\"",
-                            &connector_addr.alias, &port
-                        );
+                        error!("{ctx} Tried to connect to unsupported port: \"{port}\"");
                         Err(ErrorKind::InvalidConnect(
                             connector_addr.alias.to_string(),
                             port.clone(),
@@ -562,12 +599,10 @@ async fn connector_task(
                         .into())
                     };
                     // send back the connect result
-                    if let Err(e) = result_tx.send(res).await {
-                        error!(
-                            "[Connector::{}] Error sending connect result: {}",
-                            &connector_addr.alias, e
-                        );
-                    }
+                    log_error!(
+                        result_tx.send(res).await,
+                        "{ctx} Error sending connect result: {e}"
+                    );
                 }
                 Msg::ConnectionLost => {
                     // react on the connection being lost
@@ -639,24 +674,18 @@ async fn connector_task(
                     connectivity = new;
                 }
                 Msg::Start(sender) if connector_state == State::Initializing => {
-                    info!("[Connector::{}] Starting...", &connector_addr.alias);
+                    info!("{ctx} Starting...");
                     start_sender = Some(sender);
 
                     // start connector
                     connector_state = match connector.on_start(&ctx).await {
                         Ok(()) => State::Running,
                         Err(e) => {
-                            error!(
-                                "[Connector::{}] on_start Error: {}",
-                                &connector_addr.alias, e
-                            );
+                            error!("{ctx} on_start Error: {e}");
                             State::Failed
                         }
                     };
-                    info!(
-                        "[Connector::{}] Started. New state: {:?}",
-                        &connector_addr.alias, &connector_state
-                    );
+                    info!("{ctx} Started. New state: {connector_state}",);
                     // forward to source/sink if available
                     connector_addr.send_source(SourceMsg::Start).await?;
                     connector_addr.send_sink(SinkMsg::Start).await?;
@@ -665,10 +694,7 @@ async fn connector_task(
                     connector_addr.sender.send(Msg::Reconnect).await?;
                 }
                 Msg::Start(sender) => {
-                    info!(
-                        "[Connector::{}] Ignoring Start Msg. Current state: {:?}",
-                        &connector_addr.alias, &connector_state
-                    );
+                    info!("{ctx} Ignoring Start Msg. Current state: {connector_state}",);
                     if connector_state == State::Running && connectivity == Connectivity::Connected
                     {
                         // sending an answer if we are connected
@@ -680,7 +706,7 @@ async fn connector_task(
                 }
 
                 Msg::Pause if connector_state == State::Running => {
-                    info!("[Connector::{}] Pausing...", &connector_addr.alias);
+                    info!("{ctx} Pausing...");
 
                     // TODO: in implementations that don't really support pausing
                     //       issue a warning/error message
@@ -693,16 +719,13 @@ async fn connector_task(
                     connector_addr.send_source(SourceMsg::Pause).await?;
                     connector_addr.send_sink(SinkMsg::Pause).await?;
 
-                    info!("[Connector::{}] Paused.", &connector_addr.alias);
+                    info!("{ctx} Paused.");
                 }
                 Msg::Pause => {
-                    info!(
-                        "[Connector::{}] Ignoring Pause Msg. Current state: {:?}",
-                        &connector_addr.alias, &connector_state
-                    );
+                    info!("{ctx} Ignoring Pause Msg. Current state: {connector_state}",);
                 }
                 Msg::Resume if connector_state == State::Paused => {
-                    info!("[Connector::{}] Resuming...", &connector_addr.alias);
+                    info!("{ctx} Resuming...");
                     ctx.log_err(connector.on_resume(&ctx).await, "Error during on_resume");
                     connector_state = State::Running;
                     quiescence_beacon.resume();
@@ -711,29 +734,20 @@ async fn connector_task(
                     connector_addr.send_sink(SinkMsg::Resume).await?;
 
                     if connectivity == Connectivity::Disconnected {
-                        info!(
-                            "[Connector::{}] Triggering reconnect as part of resume.",
-                            &connector_addr.alias
-                        );
+                        info!("{ctx} Triggering reconnect as part of resume.",);
                         connector_addr.send(Msg::Reconnect).await?;
                     }
 
-                    info!("[Connector::{}] Resumed.", &connector_addr.alias);
+                    info!("{ctx} Resumed.");
                 }
                 Msg::Resume => {
-                    info!(
-                        "[Connector::{}] Ignoring Resume Msg. Current state: {:?}",
-                        &connector_addr.alias, &connector_state
-                    );
+                    info!("{ctx} Ignoring Resume Msg. Current state: {connector_state}",);
                 }
                 Msg::Drain(_) if connector_state == State::Draining => {
-                    info!(
-                        "[Connector::{}] Ignoring Drain Msg. Current state: {:?}",
-                        &connector_addr.alias, &connector_state
-                    );
+                    info!("{ctx} Ignoring Drain Msg. Current state: {connector_state}",);
                 }
                 Msg::Drain(tx) => {
-                    info!("[Connector::{}] Draining...", &connector_addr.alias);
+                    info!("{ctx} Draining...");
 
                     // notify connector that it should stop reading - so no more new events arrive at its source part
                     quiescence_beacon.stop_reading();
@@ -754,31 +768,24 @@ async fn connector_task(
 
                     let d = Drainage::new(&connector_addr, tx);
                     if d.all_drained() {
-                        info!("[Connector::{}] Drained.", &connector_addr.alias);
-                        if let Err(e) = d.send_all_drained().await {
-                            error!(
-                                "[Connector::{}] error signalling being fully drained: {}",
-                                &connector_addr.alias, e
-                            );
-                        }
+                        info!("{ctx} Drained.");
+                        log_error!(
+                            d.send_all_drained().await,
+                            "{ctx} error signalling being fully drained: {e}"
+                        );
                     }
                     drainage = Some(d);
                 }
                 Msg::SourceDrained if connector_state == State::Draining => {
-                    info!(
-                        "[Connector::{}] Source-part is drained.",
-                        &connector_addr.alias
-                    );
+                    info!("{ctx} Source-part is drained.",);
                     if let Some(drainage) = drainage.as_mut() {
                         drainage.set_source_drained();
                         if drainage.all_drained() {
-                            info!("[Connector::{}] Drained.", &connector_addr.alias);
-                            if let Err(e) = drainage.send_all_drained().await {
-                                error!(
-                                    "[Connector::{}] Error signalling being fully drained: {}",
-                                    &connector_addr.alias, e
-                                );
-                            }
+                            info!("{ctx} Drained.");
+                            log_error!(
+                                drainage.send_all_drained().await,
+                                "{ctx} Error signalling being fully drained: {e}"
+                            );
                         } else {
                             // notify sink to go into DRAIN state
                             // flush all events until we received a drain signal from all inputs
@@ -794,38 +801,27 @@ async fn connector_task(
                     }
                 }
                 Msg::SinkDrained if connector_state == State::Draining => {
-                    info!(
-                        "[Connector::{}] Sink-part is drained.",
-                        &connector_addr.alias
-                    );
+                    info!("{ctx} Sink-part is drained.",);
                     if let Some(drainage) = drainage.as_mut() {
                         drainage.set_sink_drained();
                         quiescence_beacon.full_stop(); // TODO: maybe this should be done in the SinkManager?
                         if drainage.all_drained() {
-                            info!("[Connector::{}] Drained.", &connector_addr.alias);
-                            if let Err(e) = drainage.send_all_drained().await {
-                                error!(
-                                    "[Connector::{}] Error signalling being fully drained: {}",
-                                    &connector_addr.alias, e
-                                );
-                            }
+                            info!("{ctx} Drained.");
+                            log_error!(
+                                drainage.send_all_drained().await,
+                                "{ctx} Error signalling being fully drained: {e}"
+                            );
                         }
                     }
                 }
                 Msg::SourceDrained => {
-                    info!(
-                        "[Connector::{}] Ignoring SourceDrained Msg. Current state: {}",
-                        &connector_addr.alias, &connector_state
-                    );
+                    info!("{ctx} Ignoring SourceDrained Msg. Current state: {connector_state}",);
                 }
                 Msg::SinkDrained => {
-                    info!(
-                        "[Connector::{}] Ignoring SourceDrained Msg. Current state: {}",
-                        &connector_addr.alias, &connector_state
-                    );
+                    info!("{ctx} Ignoring SourceDrained Msg. Current state: {connector_state}",);
                 }
                 Msg::Stop(sender) => {
-                    info!("{} Stopping...", &ctx);
+                    info!("{ctx} Stopping...");
                     ctx.log_err(connector.on_stop(&ctx).await, "Error during on_stop");
                     connector_state = State::Stopped;
                     quiescence_beacon.full_stop();
@@ -843,23 +839,24 @@ async fn connector_task(
                         "Error sending Stop msg to Sink",
                     );
                     while expect > 0 {
-                        if let Err(e) = stop_rx.recv().await {
-                            error!("{} Error in stopping sink and source part: {}", &ctx, e);
-                        }
+                        log_error!(
+                            stop_rx.recv().await,
+                            "{ctx} Error in stopping sink and source part: {e}"
+                        );
+
                         expect -= 1;
                     }
-                    if sender.send(ConnectorResult::ok(&ctx)).await.is_err() {
-                        error!("{} Error sending Stop result.", &ctx);
-                    }
-                    info!("[Connector::{}] Stopped.", &connector_addr.alias);
+                    log_error!(
+                        sender.send(ConnectorResult::ok(&ctx)).await,
+                        "{ctx} Error sending Stop result: {e}"
+                    );
+
+                    info!("{ctx} Stopped.");
                     break;
                 }
             } // match
         } // while
-        info!(
-            "[Connector::{}] Connector Stopped. Reason: {:?}",
-            &connector_addr.alias, &connector_state
-        );
+        info!("{ctx} Connector Stopped. Reason: {connector_state}");
         // TODO: inform registry that this instance is gone now
         Ok(())
     });
