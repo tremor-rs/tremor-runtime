@@ -62,7 +62,6 @@ async fn connector_elastic() -> Result<()> {
     )?);
     let wait_for = Duration::from_secs(30); // that shit takes a while
     let start = Instant::now();
-    // FIXME
     while let Err(e) = elastic
         .cluster()
         .health(elasticsearch::cluster::ClusterHealthParts::None)

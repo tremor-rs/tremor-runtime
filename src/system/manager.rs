@@ -51,7 +51,7 @@ pub(crate) enum Msg {
     Stop,
 }
 
-// FIXME: better name, Manager sounds stupid
+// FIXME: (MW) better name, Manager sounds stupid
 #[derive(Debug)]
 pub(crate) struct Manager {
     flows: HashMap<Id, Flow>,

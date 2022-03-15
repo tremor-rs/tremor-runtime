@@ -53,27 +53,12 @@ fn affirm_severity_number_valid(severity_number: i32) -> Result<i32> {
     }
 }
 
-fn affirm_severity_text_valid<T>(severity_text: &T) -> String
-where
-    T: ToString,
-{
-    // FIXME find a nice way to do this without RT regex comp
-    // hg - match over all valid texts?
-    //
-    // if SEVERITY_TEXT_RE.is_match(&text) {
-    //     return Ok(text);
-    // } else {
-    //     Err(format!("The `severity_text` is invalid {}", text).into())
-    // }
-    severity_text.to_string()
-}
-
 fn log_record_to_json(log: LogRecord) -> Result<Value<'static>> {
     Ok(literal!({
         "name": log.name,
         "time_unix_nano": log.time_unix_nano,
         "severity_number": affirm_severity_number_valid(log.severity_number)?,
-        "severity_text": affirm_severity_text_valid(&log.severity_text),
+        "severity_text": log.severity_text.to_string(),
         "flags": affirm_traceflags_valid(log.flags)?,
         "span_id": id::hex_span_id_to_json(&log.span_id),
         "trace_id": id::hex_trace_id_to_json(&log.trace_id),
