@@ -19,7 +19,7 @@ use async_std::task::block_on;
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use tremor_common::{file, ids::OperatorIdGen, time::nanotime};
-use tremor_pipeline::{Event, EventId};
+use tremor_pipeline::{Event, EventId, GraphReturns};
 use tremor_runtime::{
     codec::Codec,
     config,
@@ -350,7 +350,7 @@ impl Run {
             &move |runnable, id, egress, _state, at, event| {
                 let value = EventPayload::new(vec![], |_| ValueAndMeta::from(event.clone_static()));
 
-                let mut continuation = vec![];
+                let mut continuation = GraphReturns::default();
 
                 if let Err(e) = async_std::task::block_on(runnable.enqueue(
                     "in",
@@ -398,7 +398,7 @@ impl Run {
                 }
                 *id += 1;
 
-                for (port, rvalue) in continuation.drain(..) {
+                for (port, rvalue) in continuation.output.drain(..) {
                     egress.process(
                         &simd_json::to_string_pretty(&value.suffix().value())?,
                         &event,

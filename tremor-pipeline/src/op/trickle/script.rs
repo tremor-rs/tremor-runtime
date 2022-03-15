@@ -45,7 +45,6 @@ impl Operator for Script {
 
             match value {
                 Ok(Return::EmitEvent { port }) => Some(port.map_or(OUT, Cow::from)),
-
                 Ok(Return::Emit { value, port }) => {
                     *unwind_event = value;
                     Some(port.map_or(OUT, Cow::from))
@@ -63,6 +62,18 @@ impl Operator for Script {
             }
         });
 
-        Ok(port.map_or_else(EventAndInsights::default, |port| vec![(port, event)].into()))
+        Ok(if let Some(port) = port {
+            EventAndInsights {
+                events: vec![(port, event)],
+                ..EventAndInsights::default()
+            }
+        } else if event.transactional {
+            EventAndInsights {
+                insights: vec![event.insight_ack()],
+                ..EventAndInsights::default()
+            }
+        } else {
+            EventAndInsights::default()
+        })
     }
 }
