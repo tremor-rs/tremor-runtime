@@ -33,7 +33,7 @@ const URL_SCHEME: &str = "tremor-ws-client";
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    // FIXME: we want to configure both ws client / ws server (or any connector possible)
+    // FIXME: (HG) we want to configure both ws client / ws server (or any connector possible)
     //        with the same definiten of endpoint not one with host + port, other other with a rul
     url: String,
     #[serde(default = "default_ttl")]
