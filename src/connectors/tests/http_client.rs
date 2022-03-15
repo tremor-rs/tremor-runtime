@@ -34,7 +34,6 @@ pub(crate) async fn find_free_tcp_endpoint_str() -> String {
     format!("{}:{}", "localhost", port) // NOTE we use localhost rather than an IP for cmopat with TLS
 }
 
-
 struct TestHttpServer {
     acceptor: Option<JoinHandle<Result<()>>>,
 }
@@ -409,7 +408,7 @@ async fn http_client_request_auth_basic() -> Result<()> {
         "http",
         &target,
         "string",
-        literal!({ 
+        literal!({
             "method": "patch", 
             "headers": { 
                 "content-type": [ "application/json"]
