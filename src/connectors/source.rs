@@ -783,7 +783,6 @@ where
                 Ok(Control::Continue)
             }
             CbAction::Open => {
-                // FIXME: only start polling for data if we received at least 1 CbAction::Open
                 info!("{} Circuit Breaker: Open.", &self.ctx);
                 self.cb_open_received = true;
                 self.ctx

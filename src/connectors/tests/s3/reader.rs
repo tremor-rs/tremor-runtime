@@ -178,9 +178,6 @@ async fn connector_s3_reader() -> Result<()> {
         }
     });
 
-    let _client = get_client(http_port);
-    // FIXME: populate the bucket, what is the client for?
-
     let harness = ConnectorHarness::new("s3-reader", &connector_yaml).await?;
     let _out_pipe = harness
         .out()
