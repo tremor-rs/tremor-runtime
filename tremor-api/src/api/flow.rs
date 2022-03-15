@@ -17,8 +17,6 @@
 use crate::api::prelude::*;
 use tremor_runtime::instance::State;
 
-// FIXME: apply default API timeout for each endpoint here
-
 pub(crate) async fn list_flows(req: Request) -> Result<Response> {
     let world = &req.state().world;
     let flows = world.get_flows().await?;

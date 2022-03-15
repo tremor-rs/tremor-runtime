@@ -71,7 +71,8 @@ impl ConnectorHarness {
     pub(crate) async fn new_with_ports<T: ToString>(
         connector_type: T,
         defn: &Value<'static>,
-        ports: Vec<Cow<'static, str>>,
+        input_ports: Vec<Cow<'static, str>>,
+        output_ports: Vec<Cow<'static, str>>,
     ) -> Result<Self> {
         let mut connector_id_gen = ConnectorIdGen::new();
         let mut known_connectors = HashMap::new();
@@ -90,7 +91,7 @@ impl ConnectorHarness {
         let mut pipes = HashMap::new();
 
         let (link_tx, link_rx) = async_std::channel::unbounded();
-        for port in ports {
+        for port in input_ports {
             // try to connect a fake pipeline outbound
             let pipeline_id = DeployEndpoint::new(
                 &format!("TEST__{}_pipeline", port),
@@ -99,7 +100,32 @@ impl ConnectorHarness {
             );
             let pipeline = TestPipeline::new(pipeline_id.alias().to_string());
             connector_addr
-                .send(connectors::Msg::Link {
+                .send(connectors::Msg::LinkInput {
+                    port: port.clone(),
+                    pipelines: vec![(pipeline_id, pipeline.addr.clone())],
+                    result_tx: link_tx.clone(),
+                })
+                .await?;
+
+            if let Err(e) = link_rx.recv().await? {
+                info!(
+                    "Error connecting fake pipeline to port {} of connector {}: {}",
+                    &port, id, e
+                );
+            } else {
+                pipes.insert(port, pipeline);
+            }
+        }
+        for port in output_ports {
+            // try to connect a fake pipeline outbound
+            let pipeline_id = DeployEndpoint::new(
+                &format!("TEST__{}_pipeline", port),
+                &IN,
+                &NodeMeta::default(),
+            );
+            let pipeline = TestPipeline::new(pipeline_id.alias().to_string());
+            connector_addr
+                .send(connectors::Msg::LinkOutput {
                     port: port.clone(),
                     pipelines: vec![(pipeline_id, pipeline.addr.clone())],
                     result_tx: link_tx.clone(),
@@ -124,7 +150,7 @@ impl ConnectorHarness {
         })
     }
     pub(crate) async fn new<T: ToString>(connector_type: T, defn: &Value<'static>) -> Result<Self> {
-        Self::new_with_ports(connector_type, defn, vec![IN, OUT, ERR]).await
+        Self::new_with_ports(connector_type, defn, vec![IN], vec![OUT, ERR]).await
     }
 
     pub(crate) async fn start(&self) -> Result<()> {

@@ -16,6 +16,7 @@ use crate::{
     connectors::{self, ConnectorResult, Known},
     errors::{Error, Kind as ErrorKind, Result},
     instance::State,
+    log_error,
     permge::PriorityMerge,
     pipeline::{self, InputTarget},
 };
@@ -271,9 +272,9 @@ async fn link(
 
             let (tx, rx) = bounded(1);
 
-            let msg = connectors::Msg::Link {
+            let msg = connectors::Msg::LinkOutput {
                 port: from.port().to_string().into(),
-                pipelines: vec![(to.clone(), pipeline)],
+                pipelines: vec![(to.clone(), pipeline.clone())],
                 result_tx: tx.clone(),
             };
             connector
@@ -281,7 +282,6 @@ async fn link(
                 .await
                 .map_err(|e| -> Error { format!("Could not send to connector: {}", e).into() })?;
             rx.recv().timeout(timeout).await???;
-            // FIXME: move the connector message from connector to pipeline here
         }
         ConnectStmt::PipelineToConnector { from, to, .. } => {
             let pipeline = pipelines.get(from.alias()).ok_or(format!(
@@ -316,7 +316,7 @@ async fn link(
 
             let (tx, rx) = bounded(1);
 
-            let msg = connectors::Msg::Link {
+            let msg = connectors::Msg::LinkInput {
                 port: to.port().to_string().into(),
                 pipelines: vec![(from.clone(), pipeline.clone())],
                 result_tx: tx.clone(),
@@ -448,12 +448,14 @@ async fn spawn_task(
     let mut drain_senders = Vec::with_capacity(1);
     let mut stop_senders = Vec::with_capacity(1);
 
+    let prefix = format!("[Flow::{alias}]");
+
     task::spawn::<_, Result<()>>(async move {
         let mut wait_for_start_responses: usize = 0;
         while let Some(wrapped) = input_channel.next().await {
             match wrapped {
                 MsgWrapper::Msg(Msg::Start) if state == State::Initializing => {
-                    info!("[Flow::{alias}] Starting...");
+                    info!("{prefix} Starting...");
                     // start all pipelines first - order doesnt matter as connectors aren't started yet
                     for pipe in &pipelines {
                         pipe.start().await?;
@@ -461,87 +463,66 @@ async fn spawn_task(
 
                     if connectors.is_empty() {
                         state = State::Running;
-                        info!("[Flow::{alias}] Started.");
+                        info!("{prefix} Started.");
                     } else {
-                        // start sink connectors first
-                        for conn in &end_points {
+                        // start sink connectors first then source/sink connectors then source only connectors
+                        for conn in end_points.iter().chain(&mixed_pickles).chain(&start_points) {
                             conn.start(start_tx.clone()).await?;
+                            wait_for_start_responses += 1;
                         }
-                        wait_for_start_responses += end_points.len();
 
-                        // start source/sink connectors in random order
-                        for conn in &mixed_pickles {
-                            conn.start(start_tx.clone()).await?;
-                        }
-                        wait_for_start_responses += mixed_pickles.len();
-
-                        // wait for mixed pickles to be connected
-                        // start source only connectors
-                        for conn in &start_points {
-                            conn.start(start_tx.clone()).await?;
-                        }
-                        wait_for_start_responses += start_points.len();
-                        debug!("[Flow::{alias}] Waiting for {wait_for_start_responses} connectors to start.");
+                        debug!(
+                            "{prefix} Waiting for {wait_for_start_responses} connectors to start."
+                        );
                     }
                 }
                 MsgWrapper::Msg(Msg::Start) => {
-                    info!("[Flow::{alias}] Ignoring Start message. Current state: {state}");
+                    info!("{prefix} Ignoring Start message. Current state: {state}");
                 }
                 MsgWrapper::Msg(Msg::Pause) if state == State::Running => {
-                    info!("[Flow::{alias}] Pausing...");
-                    for source in &start_points {
+                    info!("{prefix} Pausing...");
+                    for source in start_points.iter().chain(&mixed_pickles).chain(&end_points) {
                         source.pause().await?;
-                    }
-                    for source_n_sink in &mixed_pickles {
-                        source_n_sink.pause().await?;
-                    }
-                    for sink in &end_points {
-                        sink.pause().await?;
                     }
                     for pipeline in &pipelines {
                         pipeline.pause().await?;
                     }
                     state = State::Paused;
-                    info!("[Flow::{alias}] Paused.");
+                    info!("{prefix} Paused.");
                 }
                 MsgWrapper::Msg(Msg::Pause) => {
-                    info!("[Flow::{alias}] Ignoring Pause message. Current state: {state}",);
+                    info!("{prefix} Ignoring Pause message. Current state: {state}",);
                 }
                 MsgWrapper::Msg(Msg::Resume) if state == State::Paused => {
-                    info!("[Flow::{alias}] Resuming...");
+                    info!("{prefix} Resuming...");
 
                     for pipeline in &pipelines {
                         pipeline.resume().await?;
                     }
-                    for sink in &end_points {
+                    for sink in end_points.iter().chain(&mixed_pickles).chain(&start_points) {
                         sink.resume().await?;
                     }
-                    for source_n_sink in &mixed_pickles {
-                        source_n_sink.resume().await?;
-                    }
-                    for source in &start_points {
-                        source.resume().await?;
-                    }
                     state = State::Running;
-                    info!("[Flow::{alias}] Resumed.");
+                    info!("{prefix} Resumed.");
                 }
                 MsgWrapper::Msg(Msg::Resume) => {
-                    info!("[Flow::{alias}] Ignoring Resume message. Current state: {state}",);
+                    info!("{prefix} Ignoring Resume message. Current state: {state}",);
                 }
                 MsgWrapper::Msg(Msg::Drain(_sender)) if state == State::Draining => {
-                    info!("[Flow::{alias}] Ignoring Drain message. Current state: {state}",);
+                    info!("{prefix} Ignoring Drain message. Current state: {state}",);
                 }
                 MsgWrapper::Msg(Msg::Drain(sender)) => {
-                    info!("[Flow::{alias}] Draining...");
+                    info!("{prefix} Draining...");
 
                     state = State::Draining;
 
                     // handling the weird case of no connectors
                     if connectors.is_empty() {
-                        info!("[Flow::{alias}] Nothing to drain.");
-                        if let Err(e) = sender.send(Ok(())).await {
-                            error!("[Flow::{alias}] Error sending drain result: {e}");
-                        }
+                        info!("{prefix} Nothing to drain.");
+                        log_error!(
+                            sender.send(Ok(())).await,
+                            "{prefix} Error sending drain result: {e}"
+                        );
                     } else {
                         drain_senders.push(sender);
 
@@ -552,55 +533,32 @@ async fn spawn_task(
                         //   b) we timed out
 
                         // source only connectors
-                        for start_point in &start_points {
-                            if let Err(e) = start_point.drain(drain_tx.clone()).await {
-                                error!(
-                                    "[Flow::{alias}] Error starting Draining Connector {start_point:?}: {e}",
-                                );
-                            } else {
-                                expected_drains += 1;
-                            }
-                        }
-                        // source/sink connectors
-                        for mixed_pickle in &mixed_pickles {
-                            if let Err(e) = mixed_pickle.drain(drain_tx.clone()).await {
-                                error!(
-                                    "[Flow::{alias}] Error starting Draining Connector {mixed_pickle:?}: {e}",
-                                );
-                            } else {
-                                expected_drains += 1;
-                            }
-                        }
-                        // sink only connectors
-                        for end_point in &end_points {
-                            if let Err(e) = end_point.drain(drain_tx.clone()).await {
-                                error!(
-                                    "[Flow::{alias}] Error starting Draining Connector {end_point:?}: {e}",
-                                );
-                            } else {
+                        for addr in start_points.iter().chain(&mixed_pickles).chain(&end_points) {
+                            if !log_error!(
+                                addr.drain(drain_tx.clone()).await,
+                                "{prefix} Error starting Draining Connector {addr:?}: {e}"
+                            ) {
                                 expected_drains += 1;
                             }
                         }
                     }
                 }
                 MsgWrapper::Msg(Msg::Stop(sender)) => {
-                    info!("[Flow::{alias}] Stopping...");
+                    info!("{prefix} Stopping...");
                     if connectors.is_empty() {
-                        if let Err(e) = sender.send(Ok(())).await {
-                            error!("[Flow::{alias}] Error sending Stop result: {e}");
-                        }
+                        log_error!(
+                            sender.send(Ok(())).await,
+                            "{prefix} Error sending Stop result: {e}"
+                        );
                     } else {
                         stop_senders.push(sender);
-                        for connector in end_points
-                            .iter()
-                            .chain(start_points.iter())
-                            .chain(mixed_pickles.iter())
+                        for connector in
+                            end_points.iter().chain(&start_points).chain(&mixed_pickles)
                         {
-                            if let Err(e) = connector.stop(stop_tx.clone()).await {
-                                error!(
-                                    "[Flow::{alias}] Error stopping connector {connector:?}: {e}"
-                                );
-                            } else {
+                            if !log_error!(
+                                connector.stop(stop_tx.clone()).await,
+                                "{prefix} Error stopping connector {connector}: {e}"
+                            ) {
                                 expected_stops += 1;
                             }
                         }
@@ -608,7 +566,7 @@ async fn spawn_task(
 
                     for pipeline in &pipelines {
                         if let Err(e) = pipeline.stop().await {
-                            error!("[Flow::{alias}] Error stopping pipeline {pipeline:?}: {e}");
+                            error!("{prefix} Error stopping pipeline {pipeline:?}: {e}");
                         }
                     }
 
@@ -622,65 +580,70 @@ async fn spawn_task(
                         status: state,
                         connectors,
                     };
-                    if let Err(e) = sender.send(Ok(report)).await {
-                        error!("[Flow::{alias}] Error sending status report: {e}");
-                    }
+                    log_error!(
+                        sender.send(Ok(report)).await,
+                        "{prefix} Error sending status report: {e}"
+                    );
                 }
                 MsgWrapper::Msg(Msg::GetConnector(connector_id, reply_tx)) => {
-                    if reply_tx
-                        .send(connectors.get(&connector_id).cloned().ok_or_else(|| {
-                            ErrorKind::ConnectorNotFound(alias.clone(), connector_id.0).into()
-                        }))
-                        .await
-                        .is_err()
-                    {
-                        error!("[Flow::{alias}] Error sending GetConnector response");
-                    }
+                    log_error!(
+                        reply_tx
+                            .send(connectors.get(&connector_id).cloned().ok_or_else(|| {
+                                ErrorKind::ConnectorNotFound(alias.clone(), connector_id.0).into()
+                            }))
+                            .await,
+                        "{prefix} Error sending GetConnector response: {e}"
+                    );
                 }
                 MsgWrapper::Msg(Msg::GetConnectors(reply_tx)) => {
                     let res = connectors.values().cloned().collect::<Vec<_>>();
-                    if reply_tx.send(Ok(res)).await.is_err() {
-                        error!("[Flow::{alias}] Error sending GetConnectors response");
-                    }
+                    log_error!(
+                        reply_tx.send(Ok(res)).await,
+                        "{prefix} Error sending GetConnectors response: {e}"
+                    );
                 }
 
                 MsgWrapper::DrainResult(conn_res) => {
                     info!("[Flow::{}] Connector {} drained.", &alias, &conn_res.alias);
-                    if let Err(e) = conn_res.res {
-                        error!(
-                            "[Flow::{alias}] Error during Draining in Connector {}: {e}",
-                            &conn_res.alias
-                        );
-                    }
+
+                    log_error!(
+                        conn_res.res,
+                        "{prefix} Error during Draining in Connector {}: {e}",
+                        &conn_res.alias
+                    );
+
                     let old = expected_drains;
                     expected_drains = expected_drains.saturating_sub(1);
                     if expected_drains == 0 && old > 0 {
-                        info!("[Flow::{alias}] All connectors are drained.");
+                        info!("{prefix} All connectors are drained.");
                         // upon last drain
                         for drain_sender in drain_senders.drain(..) {
-                            if drain_sender.send(Ok(())).await.is_err() {
-                                error!("[Flow::{alias}] Error sending successful Drain result");
-                            }
+                            log_error!(
+                                drain_sender.send(Ok(())).await,
+                                "{prefix} Error sending successful Drain result: {e}"
+                            );
                         }
                     }
                 }
                 MsgWrapper::StopResult(conn_res) => {
                     info!("[Flow::{}] Connector {} stopped.", &alias, &conn_res.alias);
-                    if let Err(e) = conn_res.res {
-                        error!(
-                            "[Flow::{alias}] Error during Draining in Connector {}: {e}",
-                            &conn_res.alias
-                        );
-                    }
+
+                    log_error!(
+                        conn_res.res,
+                        "{prefix} Error during Draining in Connector {}: {e}",
+                        &conn_res.alias
+                    );
+
                     let old = expected_stops;
                     expected_stops = expected_stops.saturating_sub(1);
                     if expected_stops == 0 && old > 0 {
-                        info!("[Flow::{alias}] All connectors are stopped.");
+                        info!("{prefix} All connectors are stopped.");
                         // upon last stop
                         for stop_sender in stop_senders.drain(..) {
-                            if stop_sender.send(Ok(())).await.is_err() {
-                                error!("[Flow::{alias}] Error sending successful Stop result");
-                            }
+                            log_error!(
+                                stop_sender.send(Ok(())).await,
+                                "{prefix} Error sending successful Stop result: {e}"
+                            );
                         }
                         break;
                     }
@@ -688,26 +651,26 @@ async fn spawn_task(
                 MsgWrapper::StartResult(conn_res) => {
                     if let Err(e) = conn_res.res {
                         error!(
-                            "[Flow::{alias}] Error starting Connector {conn}: {e}",
+                            "{prefix} Error starting Connector {conn}: {e}",
                             conn = conn_res.alias
                         );
                         if state != State::Failed {
                             // only report failed upon the first connector failure
                             state = State::Failed;
-                            info!("[Flow::{alias}] Failed.");
+                            info!("{prefix} Failed.");
                         }
                     } else if state == State::Initializing {
                         // report started flow if all connectors started
                         wait_for_start_responses = wait_for_start_responses.saturating_sub(1);
                         if wait_for_start_responses == 0 {
                             state = State::Running;
-                            info!("[Flow::{alias}] Started.");
+                            info!("{prefix} Started.");
                         }
                     }
                 }
             }
         }
-        info!("[Flow::{alias}] Stopped.");
+        info!("{prefix} Stopped.");
         Ok(())
     });
     Ok(addr)

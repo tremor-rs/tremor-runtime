@@ -834,6 +834,7 @@ where
             error!("{} Tried to connect to invalid port: {}", &self.ctx, &port);
             return Ok(Control::Continue);
         };
+        // We can not move this to the system flow since we need to know about transactionality
         for (pipeline_url, p) in &pipelines {
             self.ctx.log_err(
                 p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
