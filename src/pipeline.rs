@@ -26,14 +26,14 @@ use beef::Cow;
 use std::{fmt, sync::atomic::Ordering, time::Duration};
 use tremor_common::{ids::OperatorIdGen, time::nanotime};
 use tremor_pipeline::{
-    errors::ErrorKind as PipelineErrorKind, CbAction, Event, ExecutableGraph, SignalKind,
+    errors::ErrorKind as PipelineErrorKind, CbAction, Event, ExecutableGraph, GraphReturns,
+    SignalKind,
 };
 use tremor_script::{ast::DeployEndpoint, highlighter::Dumb, prelude::BaseExpr};
 
 const TICK_MS: u64 = 100;
 type Inputs = halfbrown::HashMap<DeployEndpoint, (bool, InputTarget)>;
 type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(DeployEndpoint, OutputTarget)>>;
-type Eventset = Vec<(Cow<'static, str>, Event)>;
 /// Address for a pipeline
 #[derive(Clone)]
 pub struct Addr {
@@ -280,8 +280,13 @@ impl OutputTarget {
 }
 
 #[inline]
-async fn send_events(eventset: &mut Eventset, dests: &mut Dests) -> Result<()> {
-    for (output, event) in eventset.drain(..) {
+async fn send_events(
+    eventset: &mut GraphReturns,
+    dests: &mut Dests,
+    pipeline: &mut ExecutableGraph,
+    inputs: &Inputs,
+) -> Result<()> {
+    for (output, event) in eventset.output.drain(..) {
         if let Some(destinations) = dests.get_mut(&output) {
             if let Some((last, rest)) = destinations.split_last_mut() {
                 for (id, dest) in rest {
@@ -290,8 +295,16 @@ async fn send_events(eventset: &mut Eventset, dests: &mut Dests) -> Result<()> {
                 }
                 let last_port = last.0.port().to_string().into();
                 last.1.send_event(last_port, event).await?;
+            } else if event.transactional {
+                // We send to a non connected output port, so we acknowledge the event
+                // TODO: some kind of linter here so we don't create silent errors?
+                handle_cf_msg(CfMsg::Insight(event.insight_ack()), pipeline, inputs).await?;
             }
         };
+    }
+    // Events dropped or send to a dead end
+    for event in eventset.dead_ends.drain(..) {
+        handle_cf_msg(CfMsg::Insight(event.insight_ack()), pipeline, inputs).await?;
     }
     Ok(())
 }
@@ -396,7 +409,7 @@ pub(crate) async fn pipeline_task(
 
     let mut dests: Dests = halfbrown::HashMap::new();
     let mut inputs: Inputs = halfbrown::HashMap::new();
-    let mut eventset: Eventset = Vec::new();
+    let mut eventset = GraphReturns::default();
 
     let mut state: State = State::Initializing;
 
@@ -417,7 +430,9 @@ pub(crate) async fn pipeline_task(
                 match pipeline.enqueue(&input, event, &mut eventset).await {
                     Ok(()) => {
                         handle_insights(&mut pipeline, &inputs).await;
-                        maybe_send(send_events(&mut eventset, &mut dests).await);
+                        maybe_send(
+                            send_events(&mut eventset, &mut dests, &mut pipeline, &inputs).await,
+                        );
                     }
                     Err(e) => {
                         let err_str = if let PipelineErrorKind::Script(script_kind) = e.0 {
@@ -442,7 +457,9 @@ pub(crate) async fn pipeline_task(
                 } else {
                     maybe_send(send_signal(&alias, signal, &mut dests).await);
                     handle_insights(&mut pipeline, &inputs).await;
-                    maybe_send(send_events(&mut eventset, &mut dests).await);
+                    maybe_send(
+                        send_events(&mut eventset, &mut dests, &mut pipeline, &inputs).await,
+                    );
                 }
             }
             AnyMsg::Mgmt(MgmtMsg::ConnectInput {
