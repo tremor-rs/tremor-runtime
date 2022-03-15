@@ -326,7 +326,6 @@ where
     F: (Fn(&Value<'_>) -> Option<T>) + Send + Sync,
     B: SinkMetaBehaviour + Send + Sync,
 {
-    /// FIXME: (MW) use reply_channel to only ack delivery once it is successfully sent via TCP
     async fn on_event(
         &mut self,
         _input: &str,
