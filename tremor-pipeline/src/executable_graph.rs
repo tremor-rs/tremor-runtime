@@ -262,7 +262,14 @@ pub struct ExecutableGraph {
 }
 
 /// The return of a graph execution
-pub type Returns = Vec<(Cow<'static, str>, Event)>;
+#[derive(Default, Debug)]
+pub struct Returns {
+    /// Resulting events
+    pub output: Vec<(Cow<'static, str>, Event)>,
+    /// Dropped events
+    pub dead_ends: Vec<Event>,
+}
+
 impl ExecutableGraph {
     /// Tries to optimise a pipeline
     pub fn optimize(&mut self) -> Option<()> {
@@ -454,7 +461,7 @@ impl ExecutableGraph {
                 return Err(e);
             }
         } {}
-        returns.reverse();
+        returns.output.reverse();
         Ok(())
     }
 
@@ -464,12 +471,12 @@ impl ExecutableGraph {
             // If we have emitted a signal event we got to handle it as a signal flow
             // the signal flow will
             if event.kind.is_some() {
-                stry!(self.signalflow(event));
+                stry!(self.signalflow(event, returns));
             } else {
                 // count ingres
                 let node = unsafe { self.graph.get_unchecked_mut(idx) };
                 if let NodeKind::Output(port) = &node.kind {
-                    returns.push((port.clone(), event));
+                    returns.output.push((port.clone(), event));
                 } else {
                     // ALLOW: We know the state was initiated
                     let state = unsafe { self.state.ops.get_unchecked_mut(idx) };
@@ -482,7 +489,7 @@ impl ExecutableGraph {
                     for insight in insights {
                         self.insights.push((idx, insight));
                     }
-                    self.enqueue_events(idx, events);
+                    self.enqueue_events(idx, events, returns);
                 };
             }
             Ok(!self.stack.is_empty())
@@ -531,8 +538,16 @@ impl ExecutableGraph {
             }
         }
     }
+    // Takes the ouptu of one o9perator, identified by `idx` and puts them on the stack
+    // for the connected operators to pick up.
+    // If the output is not connected we register this as a droppped event
     #[inline]
-    fn enqueue_events(&mut self, idx: usize, events: Vec<(Cow<'static, str>, Event)>) {
+    fn enqueue_events(
+        &mut self,
+        idx: usize,
+        events: Vec<(Cow<'static, str>, Event)>,
+        returns: &mut Returns,
+    ) {
         for (out_port, event) in events {
             if let Some((last, rest)) = self
                 .port_indexes
@@ -546,6 +561,8 @@ impl ExecutableGraph {
                 let (idx, in_port) = last;
                 unsafe { self.metrics.get_unchecked_mut(*idx) }.inc_input(in_port);
                 self.stack.push((*idx, in_port.clone(), event));
+            } else if event.transactional {
+                returns.dead_ends.push(event);
             }
         }
     }
@@ -567,13 +584,13 @@ impl ExecutableGraph {
     /// if the singal fails to be processed in the singal flow or if any forward going
     /// events spawned by this signal fail to be processed
     pub fn enqueue_signal(&mut self, signal: Event, returns: &mut Returns) -> Result<()> {
-        if stry!(self.signalflow(signal)) {
+        if stry!(self.signalflow(signal, returns)) {
             stry!(self.run(returns));
         }
         Ok(())
     }
 
-    fn signalflow(&mut self, mut signal: Event) -> Result<bool> {
+    fn signalflow(&mut self, mut signal: Event, returns: &mut Returns) -> Result<bool> {
         let mut has_events = false;
         // We can't use an iterator over signalfow here
         // rust refuses to let us use enqueue_events if we do
@@ -587,7 +604,7 @@ impl ExecutableGraph {
             };
             self.insights.extend(insights.into_iter().map(|cf| (i, cf)));
             has_events = has_events || !events.is_empty();
-            self.enqueue_events(i, events);
+            self.enqueue_events(i, events, returns);
         }
         Ok(has_events)
     }
