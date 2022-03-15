@@ -464,7 +464,7 @@ impl EventId {
     }
 
     #[must_use]
-    /// get minimum event id for a given source and stream, if it is tracked
+    /// get minimum pull id for a given source and stream, if it is tracked
     ///
     /// This also always checks the actual eventId, not only the tracked ones, this way we can save allocations when used within insights
     pub fn get_min_by_stream(&self, source_id: u64, stream_id: u64) -> Option<u64> {

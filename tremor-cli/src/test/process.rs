@@ -127,8 +127,8 @@ pub(crate) async fn run_process(
     let run_after = Arc::new(AtomicBool::new(true));
 
     let signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
-    let _signal_handle = signals.handle();
-    let _signal_handler_task = async_std::task::spawn(handle_signals(
+    let signal_handle = signals.handle();
+    let signal_handler_task = async_std::task::spawn(handle_signals(
         signals,
         test_dir.to_path_buf(),
         env.clone(),
@@ -165,6 +165,9 @@ pub(crate) async fn run_process(
     };
     evidence.insert("test: stdout".to_string(), slurp_string(&fg_out_file)?);
     evidence.insert("test: stderr".to_string(), slurp_string(&fg_err_file)?);
+
+    signal_handle.close();
+    signal_handler_task.cancel().await;
 
     let mut stats = stats::Stats::new();
     if let Some((report_stats, report)) = report {

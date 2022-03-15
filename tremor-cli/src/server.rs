@@ -200,10 +200,13 @@ impl ServerRun {
                 }
                 log_and_print_error!("We are SHUTTING DOWN due to errors during initialization!");
 
-                // ALLOW: main.rs
+                // ALLOW: we are purposefully exiting the process here
                 ::std::process::exit(1);
             }
-            Ok(res) => ::std::process::exit(res),
+            Ok(res) => {
+                // ALLOW: we are purposefully exiting the process here
+                ::std::process::exit(res)
+            }
         }
     }
 }

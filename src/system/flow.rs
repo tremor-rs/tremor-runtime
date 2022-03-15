@@ -364,7 +364,7 @@ async fn link(
     Ok(())
 }
 
-/// task handling each binding instance control plane
+/// task handling flow instance control plane
 #[allow(clippy::too_many_lines)]
 async fn spawn_task(
     alias: String,
@@ -426,17 +426,17 @@ async fn spawn_task(
 
     let start_points: Vec<_> = source_connectors
         .difference(&sink_connectors)
-        .map(|p| connectors.get(p).unwrap())
+        .filter_map(|p| connectors.get(p))
         .cloned()
         .collect();
     let mixed_pickles: Vec<_> = sink_connectors
         .intersection(&source_connectors)
-        .map(|p| connectors.get(p).unwrap())
+        .filter_map(|p| connectors.get(p))
         .cloned()
         .collect();
     let end_points: Vec<_> = sink_connectors
         .difference(&source_connectors)
-        .map(|p| connectors.get(p).unwrap())
+        .filter_map(|p| connectors.get(p))
         .cloned()
         .collect();
 
