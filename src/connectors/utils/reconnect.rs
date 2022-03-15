@@ -323,7 +323,6 @@ impl ReconnectRuntime {
     }
 
     pub(crate) async fn enqueue_retry(&mut self, _ctx: &ConnectorContext) -> bool {
-        // FIXME: ensure we have only 1 retry wait task running
         if let ShouldRetry::No(msg) = self.strategy.should_reconnect(&self.attempt) {
             warn!("[Connector::{}] Not reconnecting: {}", &self.alias, msg);
             false
