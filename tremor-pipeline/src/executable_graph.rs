@@ -538,9 +538,9 @@ impl ExecutableGraph {
             }
         }
     }
-    // Takes the ouptu of one o9perator, identified by `idx` and puts them on the stack
+    // Takes the output of one operator, identified by `idx` and puts them on the stack
     // for the connected operators to pick up.
-    // If the output is not connected we register this as a droppped event
+    // If the output is not connected we register this as a dropped event
     #[inline]
     fn enqueue_events(
         &mut self,
