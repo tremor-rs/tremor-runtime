@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::connectors::prelude::*;
-use async_std::fs::File;
-use async_std::io::ReadExt;
+use async_std::io::prelude::BufReadExt;
+use async_std::stream::StreamExt;
+use async_std::{fs::File, io};
 use tremor_common::asy::file::open;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -21,10 +22,6 @@ use tremor_common::asy::file::open;
 pub struct Config {
     /// path to file to load data from
     path: Option<String>,
-
-    #[serde(default = "default_chunk_size")]
-    pub chunk_size: usize,
-
     // timeout in millis
     #[serde(default = "default_timeout")]
     timeout: u64,
@@ -32,11 +29,6 @@ pub struct Config {
     // only expect the latest event to be acked, the earliest to be failed
     #[serde(default = "default_expect_batched")]
     expect_batched: bool,
-}
-
-fn default_chunk_size() -> usize {
-    // equals default chunk size for BufReader
-    8 * 1024
 }
 
 /// 10 seconds
@@ -199,8 +191,7 @@ impl ReceivedCbs {
 }
 
 struct CbSource {
-    file: File,
-    buf: Vec<u8>,
+    file: io::Lines<io::BufReader<File>>,
     num_sent: usize,
     last_sent: u64,
     received_cbs: ReceivedCbs,
@@ -214,8 +205,7 @@ impl CbSource {
         if let Some(path) = config.path.as_ref() {
             let file = open(path).await?;
             Ok(Self {
-                file,
-                buf: vec![0; config.chunk_size],
+                file: io::BufReader::new(file).lines(),
                 num_sent: 0,
                 last_sent: 0,
                 received_cbs: ReceivedCbs::default(),
@@ -240,8 +230,18 @@ impl CbSource {
 #[async_trait::async_trait()]
 impl Source for CbSource {
     async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        let bytes_read = self.file.read(&mut self.buf).await?;
-        if bytes_read == 0 {
+        if let Some(line) = self.file.next().await {
+            self.num_sent += 1;
+            self.last_sent = self.last_sent.max(*pull_id);
+
+            Ok(SourceReply::Data {
+                data: line?.into_bytes(),
+                meta: None,
+                stream: DEFAULT_STREAM_ID,
+                port: None,
+                origin_uri: self.origin_uri.clone(),
+            })
+        } else {
             let wait = 100_u64;
             if self.finished {
                 if self.config.timeout == 0 {
@@ -276,18 +276,6 @@ impl Source for CbSource {
                     meta: None,
                 })
             }
-        } else {
-            self.num_sent += 1;
-            self.last_sent = self.last_sent.max(*pull_id);
-            // ALLOW: we know bytes_read is smaller than or equal buf_size
-            let data = self.buf[0..bytes_read].to_vec();
-            Ok(SourceReply::Data {
-                data,
-                meta: None,
-                stream: DEFAULT_STREAM_ID,
-                port: None,
-                origin_uri: self.origin_uri.clone(),
-            })
         }
     }
 

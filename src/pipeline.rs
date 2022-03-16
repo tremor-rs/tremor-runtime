@@ -300,6 +300,10 @@ async fn send_events(
                 // TODO: some kind of linter here so we don't create silent errors?
                 handle_cf_msg(CfMsg::Insight(event.insight_ack()), pipeline, inputs).await?;
             }
+        } else if event.transactional {
+            // We send to a non connected output port, so we acknowledge the event
+            // TODO: some kind of linter here so we don't create silent errors?
+            handle_cf_msg(CfMsg::Insight(event.insight_ack()), pipeline, inputs).await?;
         };
     }
     // Events dropped or send to a dead end

@@ -22,7 +22,7 @@ pub(crate) use crate::connectors::source::{
     ChannelSource, ChannelSourceRuntime, Source, SourceAddr, SourceContext, SourceManagerBuilder,
     SourceReply, StreamReader, DEFAULT_POLL_INTERVAL,
 };
-pub(crate) use crate::connectors::utils::reconnect::Attempt;
+pub(crate) use crate::connectors::utils::{reconnect::Attempt, url::Url};
 pub(crate) use crate::connectors::{
     CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context, StreamDone,
     StreamIdGen,
