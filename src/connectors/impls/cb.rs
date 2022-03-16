@@ -311,6 +311,8 @@ impl Source for CbSource {
                     .unwrap_or_default())
         {
             eprintln!("All required CB events received.");
+            eprintln!("Got acks: {:?}", self.received_cbs.ack);
+            eprintln!("Got fails: {:?}", self.received_cbs.fail);
         }
         Ok(())
     }
@@ -325,6 +327,8 @@ impl Source for CbSource {
                     .unwrap_or_default())
         {
             eprintln!("All required CB events received.");
+            eprintln!("Got acks: {:?}", self.received_cbs.ack);
+            eprintln!("Got fails: {:?}", self.received_cbs.fail);
         }
         Ok(())
     }
