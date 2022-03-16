@@ -3,9 +3,7 @@ name: cb-drop-dead-ends
 asserts:
   - source: fg.err.log
     contains:
-      - |
-        All required CB events received.
-  - source: fg,out.log
+      - All required CB events received.
+  - source: fg.out.log
     contains:
-      - |
-        passthrough
+      - passthrough

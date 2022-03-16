@@ -77,7 +77,6 @@ flow
   end;
   define connector input from cb
   with
-    preprocessors = ["lines"],
     config =  {
       "path": "in.json",
       "timeout": 10000,

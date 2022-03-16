@@ -6,7 +6,6 @@ flow
   define connector cb_in from cb
   with
     codec = "json",
-    preprocessors = ["lines"],
     config = {
       "path": "in.json",
       "timeout": 2000 # 2 seconds

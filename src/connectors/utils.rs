@@ -29,3 +29,41 @@ pub(crate) mod mime;
 
 /// Protocol Buffer utilities
 pub(crate) mod pb;
+
+pub(crate) mod url {
+
+    use crate::errors::Result;
+    use serde::{Deserialize, Serialize};
+
+    /// Endpoint URL
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct Url(url::Url);
+
+    impl std::fmt::Display for Url {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.0)
+        }
+    }
+
+    impl Default for Url {
+        fn default() -> Self {
+            // ALLOW: this is a known safe url, we have a test for it
+            Self(url::Url::parse("http://localhost").unwrap())
+        }
+    }
+
+    impl Url {
+        pub fn parse(input: &str) -> Result<Self> {
+            Ok(Self(url::Url::parse(input)?))
+        }
+    }
+
+    #[cfg(test)]
+    mod test {
+        use super::*;
+        #[test]
+        fn default() {
+            Url::default();
+        }
+    }
+}

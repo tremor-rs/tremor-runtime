@@ -35,11 +35,8 @@ const CONNECTOR_TYPE: &str = "otel_client";
 pub struct Config {
     // FIXME: (HG) replace host/port pair with http(s) `endpoint`
     /// The hostname or IP address for the remote OpenTelemetry collector endpoint
-    #[serde(default = "default_localhost")]
-    pub host: String,
-    /// The TCP port for the remote OpenTelemetry collector endpoint
-    #[serde(default = "default_port")]
-    pub port: u16,
+    #[serde(default = "default_url")]
+    pub url: Url,
     #[serde(default = "d_true")]
     pub logs: bool,
     /// Enables the trace service
@@ -50,12 +47,8 @@ pub struct Config {
     pub metrics: bool,
 }
 
-fn default_localhost() -> String {
-    "localhost".to_string()
-}
-
-fn default_port() -> u16 {
-    4317
+fn default_url() -> Url {
+    Url::parse("http://localhost:4317").unwrap_or_default()
 }
 
 fn d_true() -> bool {
@@ -179,7 +172,7 @@ impl Connector for Client {
     }
 
     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        let endpoint = format!("http://{}:{}", self.config.host, self.config.port);
+        let endpoint = self.config.url.to_string();
         let channel = TonicEndpoint::from_shared(endpoint)
             .map_err(|e| format!("Unable to connect to remote otel endpoint: {}", e))?
             .connect()
