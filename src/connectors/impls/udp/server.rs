@@ -21,10 +21,9 @@ use async_std::prelude::*;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     /// The port to listen on.
-    pub port: u16,
-    pub host: String,
+    pub(crate) url: Url<super::UdpDefaults>,
     // UDP: receive buffer size
     #[serde(default = "default_buf_size")]
     buf_size: usize,
@@ -88,8 +87,8 @@ impl UdpServerSource {
         let buffer = vec![0; config.buf_size];
         let origin_uri = EventOriginUri {
             scheme: "udp-server".to_string(),
-            host: config.host.clone(),
-            port: Some(config.port),
+            host: config.url.host_or_local().to_string(),
+            port: Some(config.url.port_or_dflt()),
             path: vec![],
         };
         Self {
@@ -104,7 +103,11 @@ impl UdpServerSource {
 #[async_trait::async_trait]
 impl Source for UdpServerSource {
     async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
-        let listener = UdpSocket::bind((self.config.host.as_str(), self.config.port)).await?;
+        let listener = UdpSocket::bind((
+            self.config.url.host_or_local(),
+            self.config.url.port_or_dflt(),
+        ))
+        .await?;
         self.listener = Some(listener);
         Ok(true)
     }

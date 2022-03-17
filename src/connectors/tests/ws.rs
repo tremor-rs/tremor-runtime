@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::{find_free_tcp_port, setup_for_tls, ConnectorHarness};
+use crate::connectors::{impls::ws::WsDefaults, utils::url::Url};
 use crate::errors::Result;
 use async_std::{
     channel::{bounded, Receiver, Sender, TryRecvError},
@@ -67,7 +68,6 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
             .add_pem_file(&mut pem)
             .expect("Unable to create configuration object.");
         assert_eq!(1, certs);
-        use url::Url;
         let tcp_stream = TcpStream::connect(&format!("localhost:{}", port))
             .await
             .unwrap();
@@ -76,7 +76,7 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
             .connect("localhost", tcp_stream)
             .await
             .expect("Expected to successfully connect using TLS.");
-        let maybe_connect = client_async(Url::parse(&url).unwrap(), tls_stream).await;
+        let maybe_connect = client_async(&url, tls_stream).await;
         if let Ok((client, _http_response)) = maybe_connect {
             Self { client }
         } else {
@@ -125,9 +125,8 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
 impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
     fn new(url: String) -> Self {
         use async_tungstenite::tungstenite::connect;
-        use url::Url;
 
-        let maybe_connect = connect(Url::parse(&url).unwrap());
+        let maybe_connect = connect(Url::<WsDefaults>::parse(&url).unwrap().url());
         if let Ok((client, _http_response)) = maybe_connect {
             Self { client }
         } else {
@@ -281,8 +280,7 @@ async fn connector_ws_server_text_routing() -> Result<()> {
     let defn = literal!({
       "codec": "json",
       "config": {
-          "host": "127.0.0.1",
-          "port": free_port
+        "url": format!("ws://localhost:{free_port}")
       }
     });
 
@@ -460,13 +458,12 @@ async fn connector_wss_server_text_routing() -> Result<()> {
     let defn = literal!({
       "codec": "json",
       "config": {
-          "host": "localhost",
-          "port": free_port,
+          "url": format!("wss://localhost:{free_port}"),
           "tls": {
             "cert": "./tests/localhost.cert",
             "key": "./tests/localhost.key",
             "domain": "localhost"
-            }
+          }
         }
     });
 
@@ -536,9 +533,8 @@ async fn connector_wss_server_binary_routing() -> Result<()> {
     let defn = literal!({
       "codec": "json",
       "config": {
-          "host": "localhost",
-          "port": free_port,
-          "tls": {
+        "url": format!("wss://localhost:{free_port}"),
+        "tls": {
             "cert": "./tests/localhost.cert",
             "key": "./tests/localhost.key",
             "domain": "localhost"

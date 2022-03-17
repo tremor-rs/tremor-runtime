@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::{
+    common::{d_true, OtelDefaults},
+    logs, metrics, trace,
+};
+use crate::connectors::prelude::*;
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
-
-use super::{logs, metrics, trace};
-use crate::connectors::{prelude::*, spawn_task};
 use async_std::task::JoinHandle;
 use tremor_otelapis::all::{self, OpenTelemetryEvents};
 const CONNECTOR_TYPE: &str = "otel_server";
@@ -23,40 +25,24 @@ const CONNECTOR_TYPE: &str = "otel_server";
 // TODO Consider concurrency cap?
 
 #[derive(Debug, Clone, Deserialize, Default)]
-pub struct Config {
-    // FIXME: (HG) replace host/port pair with http(s) `endpoint`
+pub(crate) struct Config {
     /// The hostname or IP address for the remote OpenTelemetry collector endpoint
-    #[serde(default = "default_localhost")]
-    pub host: String,
-    /// The TCP port for the remote OpenTelemetry collector endpoint
-    #[serde(default = "default_port")]
-    pub port: u16,
+    #[serde(default = "Default::default")]
+    pub(crate) url: Url<OtelDefaults>,
     #[serde(default = "d_true")]
-    pub logs: bool,
+    pub(crate) logs: bool,
     /// Enables the trace service
     #[serde(default = "d_true")]
-    pub trace: bool,
+    pub(crate) trace: bool,
     /// Enables the metrics service
     #[serde(default = "d_true")]
-    pub metrics: bool,
-}
-
-fn default_localhost() -> String {
-    "localhost".to_string()
-}
-
-fn default_port() -> u16 {
-    4317
-}
-
-fn d_true() -> bool {
-    true
+    pub(crate) metrics: bool,
 }
 
 impl ConfigImpl for Config {}
 
 /// The `OpenTelemetry` client connector
-pub struct Server {
+pub(crate) struct Server {
     config: Config,
     #[allow(dead_code)]
     id: String,
@@ -88,6 +74,7 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let origin_uri = EventOriginUri {
             scheme: "tremor-otel-server".to_string(),
+            // FIXME: This should be replaced on requests
             host: "localhost".to_string(),
             port: None,
             path: vec![],
@@ -136,7 +123,17 @@ impl Connector for Server {
     }
 
     async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        let endpoint = format!("{}:{}", self.config.host, self.config.port).parse()?;
+        let host = self
+            .config
+            .url
+            .host_str()
+            .ok_or("Missing host for otel server")?;
+        let port = self
+            .config
+            .url
+            .port()
+            .ok_or("Missing prot for otel server")?;
+        let endpoint = format!("{}:{}", host, port).parse()?;
 
         if let Some(previous_handle) = self.accept_task.take() {
             previous_handle.cancel().await;

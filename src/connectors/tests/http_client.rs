@@ -13,10 +13,12 @@
 // limitations under the License.
 
 use super::{find_free_tcp_port, setup_for_tls, ConnectorHarness};
-use crate::errors::Result;
+use crate::{
+    connectors::{prelude::Url, utils::url::HttpDefaults},
+    errors::Result,
+};
 use async_std::task::{spawn, JoinHandle};
 use http_types::Method;
-use http_types::Url;
 use log::error;
 use rustls::NoClientAuth;
 use std::time::Duration;
@@ -75,7 +77,7 @@ impl TestHttpServer {
         let mut instance = TestHttpServer { acceptor: None };
         instance.acceptor = Some(spawn(async move {
             // dbg!("Fake http server started");
-            let url: Url = Url::parse(&raw_url)?;
+            let url: Url<HttpDefaults> = Url::parse(&raw_url)?;
             if "https" == url.scheme() {
                 dbg!("starting server on", &raw_url);
                 let cert_file = "./tests/localhost.cert";
@@ -266,7 +268,7 @@ async fn http_client_request_override_codec() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
     let res = rtt("http", &target, "json", literal!({ "method": "patch"})).await?;
 
-    let base_url: &str = &format!("http://{}", target);
+    let base_url: &str = &format!("http://{}/", target);
     assert_with_request_meta!(res, meta, {
         assert_eq!(Some(base_url), meta.get_str("url"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));
@@ -288,7 +290,7 @@ async fn http_client_request_override_headers() -> Result<()> {
     )
     .await?;
 
-    let base_url: &str = &format!("http://{}", target);
+    let base_url: &str = &format!("http://{}/", target);
     assert_with_request_meta!(res, meta, {
         assert_eq!(Some(base_url), meta.get_str("url"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));
@@ -322,7 +324,7 @@ async fn http_client_request_override_content_type() -> Result<()> {
     )
     .await?;
 
-    let base_url: &str = &format!("http://{}", target);
+    let base_url: &str = &format!("http://{}/", target);
     assert_with_request_meta!(res, meta, {
         assert_eq!(Some(base_url), meta.get_str("url"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));
@@ -367,7 +369,7 @@ async fn http_client_request_auth_none() -> Result<()> {
     )
     .await?;
 
-    let base_url: &str = &format!("http://{}", target);
+    let base_url: &str = &format!("http://{}/", target);
     assert_with_request_meta!(res, meta, {
         assert_eq!(Some(base_url), meta.get_str("url"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));
@@ -419,7 +421,7 @@ async fn http_client_request_auth_basic() -> Result<()> {
     )
     .await?;
 
-    let base_url: &str = &format!("http://{}", target);
+    let base_url: &str = &format!("http://{}/", target);
     assert_with_request_meta!(res, meta, {
         assert_eq!(Some(base_url), meta.get_str("url"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));

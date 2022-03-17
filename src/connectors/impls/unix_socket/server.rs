@@ -28,8 +28,8 @@
 //! ```
 //!
 //! We try to route the event to the connection with `stream_id` `123`.
-use crate::connectors::{prelude::*, spawn_task};
-use crate::connectors::{sink::channel_sink::ChannelSinkMsg, ACCEPT_TIMEOUT};
+use crate::connectors::prelude::*;
+use crate::connectors::sink::channel_sink::ChannelSinkMsg;
 use crate::errors::{Kind as ErrorKind, Result};
 use async_std::os::unix::net::UnixListener;
 use async_std::path::PathBuf;

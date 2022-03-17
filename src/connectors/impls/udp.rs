@@ -13,3 +13,11 @@
 // limitations under the License.
 pub(crate) mod client;
 pub(crate) mod server;
+
+use crate::connectors::prelude::Defaults;
+
+pub(crate) struct UdpDefaults;
+impl Defaults for UdpDefaults {
+    const DEFAULT: &'static str = "udp://localhost";
+    const PORT: u16 = 0;
+}

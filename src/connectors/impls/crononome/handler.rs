@@ -237,8 +237,7 @@ impl ChronomicQueue {
 mod tests {
     use super::*;
     use chrono::{self, DateTime};
-    use std::convert::TryFrom;
-    use std::time::Duration;
+    use std::{convert::TryFrom, thread, time::Duration};
 
     #[test]
     pub fn test_deserialize_cron_entry() -> Result<()> {
@@ -282,9 +281,9 @@ mod tests {
         let due = tpq.drain();
         assert_eq!(vec![n1.clone(), n2], due);
 
-        std::thread::sleep(Duration::from_millis(1000));
+        thread::sleep(Duration::from_millis(1000));
         assert!(tpq.drain().is_empty());
-        std::thread::sleep(Duration::from_millis(1000));
+        thread::sleep(Duration::from_millis(1000));
         assert!(tpq.drain().is_empty());
 
         Ok(())
@@ -315,9 +314,9 @@ mod tests {
         assert_eq!(Some(n1), tpq.pop());
         assert_eq!(Some(n2), tpq.pop());
 
-        std::thread::sleep(Duration::from_millis(1000));
+        thread::sleep(Duration::from_millis(1000));
         assert!(tpq.pop().is_none());
-        std::thread::sleep(Duration::from_millis(1000));
+        thread::sleep(Duration::from_millis(1000));
         assert!(tpq.pop().is_none());
 
         Ok(())
@@ -346,10 +345,10 @@ mod tests {
         let due = cq.drain();
         assert_eq!(0, due.len());
 
-        std::thread::sleep(Duration::from_millis(1000));
+        thread::sleep(Duration::from_millis(1000));
         assert_eq!(1, cq.drain().len());
 
-        std::thread::sleep(Duration::from_millis(1000));
+        thread::sleep(Duration::from_millis(1000));
         assert_eq!(1, cq.drain().len());
 
         Ok(())
@@ -377,10 +376,10 @@ mod tests {
         cq.enqueue(&n3);
         assert!(cq.next().is_none());
 
-        std::thread::sleep(Duration::from_millis(1000));
+        thread::sleep(Duration::from_millis(1000));
         assert!(cq.next().is_some());
         assert!(cq.next().is_none());
-        std::thread::sleep(Duration::from_millis(1000));
+        thread::sleep(Duration::from_millis(1000));
         assert!(cq.next().is_some());
 
         Ok(())
