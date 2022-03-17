@@ -29,6 +29,7 @@ lto = "thin"
 opt-level = 3
 
 [dependencies]
+dashmap = "5.2"
 anyhow = "1"
 async-broadcast = "0.4"
 async-compat = "0.2"

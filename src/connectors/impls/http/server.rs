@@ -20,19 +20,21 @@ use crate::postprocessor::Postprocessors;
 use crate::{codec, connectors::spawn_task};
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use async_std::task::JoinHandle;
-use halfbrown::HashMap;
+use dashmap::DashMap;
 use http_types::headers::HeaderValue;
 use http_types::Mime;
-use simd_json::{StaticNode, ValueAccess};
-use std::str::FromStr;
+use simd_json::ValueAccess;
+use std::{str::FromStr, sync::Arc};
 use tide_rustls::TlsListener;
 use tremor_common::time::nanotime;
 use uuid::adapter::Urn;
 use uuid::Uuid;
 
+const URN_HEADER: &str = "x-tremor-http-urn";
+
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     /// Our target URL
     #[serde(default = "Default::default")]
     url: Url,
@@ -49,18 +51,9 @@ fn default_mime_codec_map() -> MimeCodecMap {
 
 impl ConfigImpl for Config {}
 
-#[derive(Debug)]
-struct HttpSourceReply(Option<Sender<ValueAndMeta<'static>>>, SourceReply);
-
-impl From<SourceReply> for HttpSourceReply {
-    fn from(reply: SourceReply) -> Self {
-        Self(None, reply)
-    }
-}
-
 struct HttpServerState {
     idgen: EventIdGenerator,
-    tx: Sender<Rendezvous>,
+    tx: Sender<RendezvousRequest>,
     uid: u64,
     codec: Box<dyn Codec>,
     codec_map: MimeCodecMap,
@@ -79,11 +72,11 @@ impl Clone for HttpServerState {
 }
 
 #[allow(clippy::module_name_repetitions)]
-pub struct HttpServer {
+pub(crate) struct HttpServer {
     config: Config,
     origin_uri: EventOriginUri,
     tls_server_config: Option<TLSServerConfig>,
-    rendezvous: (Sender<Rendezvous>, Receiver<Rendezvous>),
+    inflight: Arc<DashMap<String, Sender<RendezvousResponse>>>,
     codec: Box<dyn Codec>,
     codec_map: MimeCodecMap,
 }
@@ -104,30 +97,25 @@ impl ConnectorBuilder for Builder {
     ) -> crate::errors::Result<Box<dyn Connector>> {
         if let Some(config) = &raw_config.config {
             let config = Config::new(config)?;
-
             let tls_server_config = config.tls.clone();
-
             let origin_uri = EventOriginUri {
                 scheme: "http-server".to_string(),
                 host: "localhost".to_string(),
                 port: None,
                 path: vec![],
             };
-
-            let codec = if let Some(codec) = &raw_config.codec {
-                codec::resolve(codec)?
-            } else {
-                codec::resolve(&"json".into())?
-            };
+            let codec = raw_config
+                .codec
+                .as_ref()
+                .map_or_else(|| codec::resolve(&"json".into()), codec::resolve)?;
             let codec_map = config.codec_map.clone();
-
-            let rendezvous = bounded(crate::QSIZE.load(Ordering::Relaxed));
+            let inflight = Arc::default();
 
             Ok(Box::new(HttpServer {
                 config,
                 origin_uri,
                 tls_server_config,
-                rendezvous,
+                inflight,
                 codec,
                 codec_map,
             }))
@@ -137,18 +125,20 @@ impl ConnectorBuilder for Builder {
     }
 }
 
-#[derive(Debug)]
-enum Rendezvous {
-    Request(Vec<u8>, Value<'static>, u64, Urn, Sender<Rendezvous>),
-    Response(ValueAndMeta<'static>),
+struct RendezvousResponse(ValueAndMeta<'static>);
+struct RendezvousRequest {
+    data: Vec<u8>,
+    meta: Value<'static>,
+    urn: Urn,
+    response_channel: Sender<RendezvousResponse>,
 }
 
 struct HttpServerSource {
     url: Url,
     origin_uri: EventOriginUri,
-    inflight: HashMap<Urn, Sender<Rendezvous>>,
-    inflighttracker_rx: Receiver<Rendezvous>,
-    inflighttracker_tx: Sender<Rendezvous>,
+    inflight: Arc<DashMap<String, Sender<RendezvousResponse>>>,
+    request_rx: Receiver<RendezvousRequest>,
+    request_tx: Sender<RendezvousRequest>,
     accept_task: Option<JoinHandle<()>>,
     tls_server_config: Option<TLSServerConfig>,
     codec: Box<dyn Codec>,
@@ -158,7 +148,7 @@ struct HttpServerSource {
 struct HttpServerSink {
     #[allow(dead_code)]
     origin_uri: EventOriginUri,
-    inflighttracker_tx: Sender<Rendezvous>,
+    inflight: Arc<DashMap<String, Sender<RendezvousResponse>>>,
 }
 
 #[async_trait::async_trait()]
@@ -172,11 +162,12 @@ impl Connector for HttpServer {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
+        let (request_tx, request_rx) = bounded(128);
         let source = HttpServerSource {
             url: self.config.url.clone(),
-            inflight: HashMap::new(),
-            inflighttracker_tx: self.rendezvous.0.clone(),
-            inflighttracker_rx: self.rendezvous.1.clone(),
+            inflight: self.inflight.clone(),
+            request_tx,
+            request_rx,
             origin_uri: self.origin_uri.clone(),
             accept_task: None,
             tls_server_config: self.tls_server_config.clone(),
@@ -192,7 +183,7 @@ impl Connector for HttpServer {
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = HttpServerSink {
-            inflighttracker_tx: self.rendezvous.0.clone(),
+            inflight: self.inflight.clone(),
             origin_uri: self.origin_uri.clone(),
         };
         builder.spawn(sink, sink_context).map(Some)
@@ -222,7 +213,7 @@ async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Resul
         path: vec![String::default()],
     };
 
-    let headers = req
+    let mut headers = req
         .header_names()
         .map(|name| {
             (
@@ -244,10 +235,9 @@ async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Resul
         .collect::<Value>();
 
     let linking_uuid = Uuid::new_v4().to_urn();
-    // remove if/when RV issues resolved - useful for debugging for now
-    //  - specifically changes to SourceReply::BatchData ( punctuation + metadata ) and
-    //  - and resolution of the http cli/srv in the same process ( future ) issue
-    // headers.insert("x-tremor-http-urn", Value::from(linking_uuid.to_string()))?;
+
+    // This is how we link a request to a response, this might not go away, unless we can do that with event ids somehow?
+    headers.insert(URN_HEADER, Value::from(linking_uuid.to_string()))?;
 
     let ct: Option<Mime> = req.content_type();
     let _codec_override = ct.map(|ct| ct.essence().to_string());
@@ -278,31 +268,24 @@ async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Resul
     let data = req.body_bytes().await?;
 
     // Dispatch
-    let (call, call_response) = bounded(1);
+    let (response_channel, call_response) = bounded(1);
     req.state()
         .tx
-        .send(Rendezvous::Request(
+        .send(RendezvousRequest {
             data,
             meta,
-            ingest_ns,
-            linking_uuid,
-            call,
-        ))
+            urn: linking_uuid,
+            response_channel,
+        })
         .await?;
 
     let event = call_response.recv().await?;
 
-    if let Rendezvous::Response(_) = event {
-        let codec: &(dyn Codec + 'static) = req.state().codec.as_ref();
-        let codec_map = &req.state().codec_map;
-        let mut processors = Vec::new();
-        if let Ok(response) = make_response(ingest_ns, codec, codec_map, &mut processors, &event) {
-            Ok(response)
-        } else {
-            Ok(tide::Response::builder(503)
-                .body(tide::Body::empty())
-                .build())
-        }
+    let codec: &(dyn Codec + 'static) = req.state().codec.as_ref();
+    let codec_map = &req.state().codec_map;
+    let mut processors = Vec::new();
+    if let Ok(response) = make_response(ingest_ns, codec, codec_map, &mut processors, &event.0) {
+        Ok(response)
     } else {
         Ok(tide::Response::builder(503)
             .body(tide::Body::empty())
@@ -311,22 +294,6 @@ async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Resul
 }
 
 fn make_response(
-    ingest_ns: u64,
-    default_codec: &dyn Codec,
-    codec_map: &MimeCodecMap,
-    postprocessors: &mut Postprocessors,
-    event: &Rendezvous,
-) -> Result<tide::Response> {
-    if let Rendezvous::Response(event) = event {
-        _make_response(ingest_ns, default_codec, codec_map, postprocessors, event)
-    } else {
-        Err(Error::from(
-            "Unexpected rendezvous event variant in response builder",
-        ))
-    }
-}
-
-fn _make_response(
     ingest_ns: u64,
     default_codec: &dyn Codec,
     codec_map: &MimeCodecMap,
@@ -458,7 +425,7 @@ impl Source for HttpServerSource {
             accept_task.cancel().await;
         }
 
-        let tx = self.inflighttracker_tx.clone();
+        let tx = self.request_tx.clone();
         if self.tls_server_config.is_some() && self.url.scheme() != "https" {
             return Err("Using SSL certificates requires setting up a https endpoint".into());
         }
@@ -513,71 +480,44 @@ impl Source for HttpServerSource {
             return Ok(SourceReply::Empty(100));
         }
 
-        match self.inflighttracker_rx.try_recv() {
-            Ok(Rendezvous::Request(data, mut meta, _ingest_ns, urn, response_channel)) => {
+        match self.request_rx.try_recv() {
+            Ok(RendezvousRequest {
+                data,
+                meta,
+                urn,
+                response_channel,
+            }) => {
                 // At this point we lose association of urn and call-response tx channel for this event's
                 // rpc context. The sink will in fact receive the response ( pipeline originated ) so we need
                 // to rendezvous the response somehow - and we use the urn for this
 
-                let reply = if data.is_empty() {
+                if self
+                    .inflight
+                    .insert(urn.to_string(), response_channel)
+                    .is_some()
+                {
+                    error!("Request tracking urn collision: {}", urn);
+                };
+                Ok(if data.is_empty() {
                     // NOTE GET, HEAD ...
-                    let value = Value::Static(StaticNode::Null);
-                    if self.inflight.insert(urn, response_channel).is_some() {
-                        error!("Request tracking urn collision: {}", urn);
-                    };
                     SourceReply::Structured {
                         origin_uri: self.origin_uri.clone(),
-                        payload: EventPayload::from(ValueAndMeta::from_parts(value, meta)),
+                        payload: EventPayload::from(ValueAndMeta::from_parts(
+                            Value::const_null(),
+                            meta,
+                        )),
                         stream: DEFAULT_STREAM_ID,
                         port: None,
                     }
                 } else {
-                    // FIXME:  (MW)
-                    // Sketch of alternate to using BatchData vi structured
-                    //  - benefit of using batch data is proc+codec is for free
-                    //  - but it lacks punctuation so makes batch response handling harder
-                    //
-                    // let mut chunks =
-                    //     preprocess(&mut self.preprocessors, &mut ingest_ns, data, "chunked")?;
-                    // let mut batch_data = Vec::with_capacity(chunks.len());
-
-                    if self.inflight.insert(urn, response_channel).is_some() {
-                        error!("Request tracking urn collision: {}", urn);
-                    };
-                    meta.insert("batch-urn", urn.to_string())?;
-                    SourceReply::BatchData {
+                    SourceReply::Data {
                         origin_uri: self.origin_uri.clone(),
-                        batch_data: vec![(data, Some(meta))],
+                        data,
+                        meta: Some(meta),
                         stream: DEFAULT_STREAM_ID,
                         port: None,
                     }
-                };
-
-                Ok(reply)
-            }
-            Ok(Rendezvous::Response(ref vm)) => {
-                if let Some(request) = vm.meta().get("request") {
-                    if let Some(headers) = request.get("headers") {
-                        if let Some(urn) = headers.get("x-tremor-http-urn") {
-                            let urn = Urn::from_uuid(Uuid::from_str(&urn.to_string())?);
-                            if let Some(callresponse) = self.inflight.remove(&urn) {
-                                callresponse.send(Rendezvous::Response(vm.clone())).await?;
-                            }
-                        }
-                    }
-                } else if let Some(urn) = vm.meta().get("batch-urn") {
-                    // NOTE Batch - this is limping along *but* technically not correct as tremor does not punctuate BatchData batches so we have no start/end demarcation hints to work with
-                    let urn = Urn::from_uuid(Uuid::from_str(&urn.to_string())?);
-                    if let Some(callresponse) = self.inflight.remove(&urn) {
-                        callresponse
-                            .send(Rendezvous::Response(ValueAndMeta::from_parts(
-                                Value::Static(StaticNode::Null),
-                                literal!({ "response": { "status": 201 }}),
-                            )))
-                            .await?;
-                    }
-                }
-                Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
+                })
             }
             Err(TryRecvError::Closed) => Err(TryRecvError::Closed.into()),
             Err(TryRecvError::Empty) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
@@ -604,20 +544,14 @@ impl Sink for HttpServerSink {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        if "in" == input {
-            // Pipeline processing was successful
-            for (v, m) in event.value_meta_iter() {
-                let vm = ValueAndMeta::from_parts(v.clone_static(), m.clone_static());
-                if let Err(_e) = self.inflighttracker_tx.send(Rendezvous::Response(vm)).await {
-                    error!("{} Internal server error", &ctx);
-                    ctx.notifier().connection_lost().await?;
-                }
-            }
-            // send the event back to
-        } else if "err" == input {
+        if input == "err" {
             // There was an issue with the pipeline processing
-            for (v, reqm) in event.value_meta_iter() {
-                let reqm = if let Some(reqm) = reqm.get("request") {
+            for (v, m) in event.value_meta_iter() {
+                let headers = m.get("headers");
+                let urn = headers.get_str(URN_HEADER).ok_or("No Urn provided")?;
+                let tx = self.inflight.get(urn).ok_or("Unknown Urn")?;
+
+                let reqm = if let Some(reqm) = m.get("request") {
                     reqm.clone_static()
                 } else {
                     literal!({})
@@ -629,15 +563,19 @@ impl Sink for HttpServerSink {
                     }
                 });
                 let vm = ValueAndMeta::from_parts(v.clone_static(), m.clone_static());
-                if let Err(_e) = self.inflighttracker_tx.send(Rendezvous::Response(vm)).await {
-                    error!("{} Internal server error", &ctx);
+                if let Err(_e) = tx.send(RendezvousResponse(vm)).await {
+                    error!("{ctx} Internal server error");
                     ctx.notifier().connection_lost().await?;
                 }
             }
         } else {
             for (v, m) in event.value_meta_iter() {
+                let headers = m.get("headers");
+                let urn = headers.get_str(URN_HEADER).ok_or("No Urn provided")?;
+                let tx = self.inflight.get(urn).ok_or("Unknown Urn")?;
+
                 let vm = ValueAndMeta::from_parts(v.clone_static(), m.clone_static());
-                if let Err(_e) = self.inflighttracker_tx.send(Rendezvous::Response(vm)).await {
+                if let Err(_e) = tx.send(RendezvousResponse(vm)).await {
                     error!("{} Internal server error", &ctx);
                     ctx.notifier().connection_lost().await?;
                 }
