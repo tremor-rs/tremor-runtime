@@ -547,11 +547,12 @@ impl Sink for HttpServerSink {
         if input == "err" {
             // There was an issue with the pipeline processing
             for (v, m) in event.value_meta_iter() {
-                let headers = m.get("headers");
+                let request = m.get("request");
+                let headers = request.get("headers");
                 let urn = headers.get_str(URN_HEADER).ok_or("No Urn provided")?;
                 let tx = self.inflight.get(urn).ok_or("Unknown Urn")?;
 
-                let reqm = if let Some(reqm) = m.get("request") {
+                let reqm = if let Some(reqm) = request {
                     reqm.clone_static()
                 } else {
                     literal!({})
@@ -570,7 +571,8 @@ impl Sink for HttpServerSink {
             }
         } else {
             for (v, m) in event.value_meta_iter() {
-                let headers = m.get("headers");
+                let request = m.get("request");
+                let headers = request.get("headers");
                 let urn = headers.get_str(URN_HEADER).ok_or("No Urn provided")?;
                 let tx = self.inflight.get(urn).ok_or("Unknown Urn")?;
 

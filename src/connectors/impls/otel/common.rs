@@ -26,7 +26,9 @@ use value_trait::ValueAccess;
 pub(crate) struct OtelDefaults;
 impl url::Defaults for OtelDefaults {
     // We do add the port here since it's different from http's default
-    const DEFAULT: &'static str = "https://localhost:4317";
+
+    const SCHEME: &'static str = "https";
+    const HOST: &'static str = "localhost";
     const PORT: u16 = 4317;
 }
 pub(crate) fn d_true() -> bool {

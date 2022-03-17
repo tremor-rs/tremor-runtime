@@ -18,6 +18,7 @@ use crate::connectors::prelude::Defaults;
 
 pub(crate) struct UdpDefaults;
 impl Defaults for UdpDefaults {
-    const DEFAULT: &'static str = "udp://localhost";
+    const SCHEME: &'static str = "udp";
+    const HOST: &'static str = "localhost";
     const PORT: u16 = 0;
 }

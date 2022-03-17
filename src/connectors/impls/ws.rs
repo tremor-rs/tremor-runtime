@@ -25,7 +25,8 @@ use simd_json::StaticNode;
 
 pub(crate) struct WsDefaults;
 impl Defaults for WsDefaults {
-    const DEFAULT: &'static str = "ws://localhost";
+    const SCHEME: &'static str = "ws";
+    const HOST: &'static str = "localhost";
     const PORT: u16 = 80;
 }
 
