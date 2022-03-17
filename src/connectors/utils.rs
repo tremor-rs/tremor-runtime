@@ -54,20 +54,25 @@ pub(crate) mod url {
     use std::marker::PhantomData;
 
     pub(crate) trait Defaults {
-        /// Default url
-        const DEFAULT: &'static str;
+        /// Default scheme
+        const SCHEME: &'static str;
+        /// Default host
+        const HOST: &'static str;
+        /// Default port
         const PORT: u16;
     }
 
     // Default HTTP
     pub(crate) struct HttpDefaults;
     impl Defaults for HttpDefaults {
-        const DEFAULT: &'static str = "http://localhost";
+        const HOST: &'static str = "localhost";
+        const SCHEME: &'static str = "http";
         const PORT: u16 = 80;
     }
     pub(crate) struct HttpsDefaults;
     impl Defaults for HttpsDefaults {
-        const DEFAULT: &'static str = "https://localhost";
+        const SCHEME: &'static str = "http";
+        const HOST: &'static str = "localhost";
         const PORT: u16 = 443;
     }
     /// Endpoint URL
@@ -87,10 +92,23 @@ pub(crate) mod url {
         where
             D: serde::Deserializer<'de>,
         {
-            Ok(Self {
-                url: url::Url::deserialize(deserializer)?,
-                _marker: PhantomData::default(),
-            })
+            let input = String::deserialize(deserializer)?;
+            match url::Url::parse(&input) {
+                Ok(url) => Ok(Self {
+                    url,
+                    _marker: PhantomData::default(),
+                }),
+                Err(e) => {
+                    if let Ok(url) = url::Url::parse(&format!("{}://{}", Dflt::SCHEME, input)) {
+                        Ok(Self {
+                            url,
+                            ..Self::default()
+                        })
+                    } else {
+                        Err(serde::de::Error::custom(e))
+                    }
+                }
+            }
         }
     }
 
@@ -145,7 +163,7 @@ pub(crate) mod url {
         fn default() -> Self {
             Self {
                 // ALLOW: this is a known safe url, we have a test for it
-                url: url::Url::parse(D::DEFAULT).unwrap(),
+                url: url::Url::parse(&format!("{}://{}:{}", D::SCHEME, D::HOST, D::PORT)).unwrap(),
                 _marker: PhantomData::default(),
             }
         }
@@ -153,10 +171,23 @@ pub(crate) mod url {
 
     impl<D: Defaults> Url<D> {
         pub(crate) fn parse(input: &str) -> Result<Self> {
-            Ok(Self {
-                url: url::Url::parse(input)?,
-                ..Self::default()
-            })
+            match url::Url::parse(input) {
+                Ok(url) => Ok(Self {
+                    url,
+                    ..Self::default()
+                }),
+                Err(e) => {
+                    // Is this good enough?
+                    if let Ok(url) = url::Url::parse(&format!("{}://{}", D::SCHEME, input)) {
+                        Ok(Self {
+                            url,
+                            ..Self::default()
+                        })
+                    } else {
+                        Err(e.into())
+                    }
+                }
+            }
         }
         pub(crate) fn port_or_dflt(&self) -> u16 {
             self.url.port().unwrap_or(D::PORT)

@@ -296,9 +296,9 @@ impl Sink for HttpRequestSink {
                                 })
                                 .await?;
                         }
-                        Err(_e) => {
+                        Err(e) => {
                             error!(
-                                "Unhandled / unexpected condition responding to http_server event"
+                                "Unhandled / unexpected condition responding to http_server event: {e}"
                             );
                         }
                     };
