@@ -184,7 +184,7 @@ tonic = { version = "0.5.2", default-features = false, features = [
   "transport",
   "tls",
 ] }
-tremor-otelapis = { version = "0.2.2" }
+tremor-otelapis = { version = "0.2.3" }
 
 # aws-s3
 aws-sdk-s3 = "0.8.0"

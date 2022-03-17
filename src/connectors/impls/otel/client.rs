@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use async_std::channel::{bounded, Receiver, Sender};
-
 use super::{
     common::{d_true, OtelDefaults},
     logs, metrics, trace,
@@ -21,13 +19,10 @@ use super::{
 use crate::connectors::prelude::*;
 use tonic::transport::Channel as TonicChannel;
 use tonic::transport::Endpoint as TonicEndpoint;
-use tremor_otelapis::{
-    all::OpenTelemetryEvents,
-    opentelemetry::proto::collector::{
-        logs::v1::{logs_service_client::LogsServiceClient, ExportLogsServiceRequest},
-        metrics::v1::{metrics_service_client::MetricsServiceClient, ExportMetricsServiceRequest},
-        trace::v1::{trace_service_client::TraceServiceClient, ExportTraceServiceRequest},
-    },
+use tremor_otelapis::opentelemetry::proto::collector::{
+    logs::v1::{logs_service_client::LogsServiceClient, ExportLogsServiceRequest},
+    metrics::v1::{metrics_service_client::MetricsServiceClient, ExportMetricsServiceRequest},
+    trace::v1::{trace_service_client::TraceServiceClient, ExportTraceServiceRequest},
 };
 
 const CONNECTOR_TYPE: &str = "otel_client";
@@ -73,13 +68,11 @@ fn json_otel_metrics_to_pb(json: &Value<'_>) -> Result<ExportMetricsServiceReque
 }
 
 /// The `OpenTelemetry` client connector
-pub struct Client {
+pub(crate) struct Client {
     config: Config,
     #[allow(dead_code)]
     id: String,
     origin_uri: EventOriginUri,
-    tx: Sender<OpenTelemetryEvents>,
-    rx: Receiver<OpenTelemetryEvents>,
     remote: Option<RemoteOpenTelemetryEndpoint>,
 }
 
@@ -103,21 +96,19 @@ impl ConnectorBuilder for Builder {
         id: &str,
         connector_config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
-        let origin_uri = EventOriginUri {
-            scheme: "tremor-otel-client".to_string(),
-            // FIXME: this should be replaced on requests
-            host: "localhost".to_string(),
-            port: None,
-            path: vec![],
-        };
-        let (tx, rx) = bounded(128);
         if let Some(config) = &connector_config.config {
+            let config = Config::new(config)?;
+            let origin_uri = EventOriginUri {
+                scheme: "tremor-otel-client".to_string(),
+                host: config.url.host_or_local().to_string(),
+                port: config.url.port(),
+                path: vec![],
+            };
+
             Ok(Box::new(Client {
-                config: Config::new(config)?,
+                config,
                 id: id.to_string(),
                 origin_uri,
-                tx,
-                rx,
                 remote: None,
             }))
         } else {
@@ -127,7 +118,7 @@ impl ConnectorBuilder for Builder {
 }
 
 #[derive(Clone)]
-pub struct RemoteOpenTelemetryEndpoint {
+pub(crate) struct RemoteOpenTelemetryEndpoint {
     logs_client: LogsServiceClient<TonicChannel>,
     metrics_client: MetricsServiceClient<TonicChannel>,
     trace_client: TraceServiceClient<TonicChannel>,
@@ -141,15 +132,10 @@ impl Connector for Client {
 
     async fn create_source(
         &mut self,
-        source_context: SourceContext,
-        builder: SourceManagerBuilder,
+        _source_context: SourceContext,
+        _builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = OtelSource {
-            origin_uri: self.origin_uri.clone(),
-            config: self.config.clone(),
-            rx: self.rx.clone(),
-        };
-        builder.spawn(source, source_context).map(Some)
+        Ok(None)
     }
 
     async fn create_sink(
@@ -160,7 +146,6 @@ impl Connector for Client {
         let sink = OtelSink {
             origin_uri: self.origin_uri.clone(),
             config: self.config.clone(),
-            tx: self.tx.clone(),
             remote: self.remote.clone(),
         };
         builder.spawn(sink, sink_context).map(Some)
@@ -187,76 +172,10 @@ impl Connector for Client {
     }
 }
 
-/// Time to await an answer before handing control back to the source manager
-const SOURCE_RECV_TIMEOUT: u64 = 50;
-
-struct OtelSource {
-    origin_uri: EventOriginUri,
-    config: Config,
-    rx: Receiver<OpenTelemetryEvents>,
-}
-
-#[async_trait::async_trait()]
-impl Source for OtelSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        match self.rx.try_recv() {
-            Ok(OpenTelemetryEvents::Metrics(metrics)) => {
-                if self.config.metrics {
-                    let data: Value = metrics::resource_metrics_to_json(metrics);
-                    return Ok(SourceReply::Structured {
-                        origin_uri: self.origin_uri.clone(),
-                        payload: data.into(),
-                        stream: DEFAULT_STREAM_ID,
-                        port: None,
-                    });
-                }
-                warn!("Otel Source received metrics event when trace support is disabled. Dropping trace");
-            }
-            Ok(OpenTelemetryEvents::Logs(logs)) => {
-                if self.config.logs {
-                    let data: Value = logs::resource_logs_to_json(logs)?;
-                    return Ok(SourceReply::Structured {
-                        origin_uri: self.origin_uri.clone(),
-                        payload: data.into(),
-                        stream: DEFAULT_STREAM_ID,
-                        port: None,
-                    });
-                }
-                warn!(
-                    "Otel Source received log event when trace support is disabled. Dropping trace"
-                );
-            }
-            Ok(OpenTelemetryEvents::Trace(traces)) => {
-                if self.config.trace {
-                    let data: Value = trace::resource_spans_to_json(traces);
-                    return Ok(SourceReply::Structured {
-                        origin_uri: self.origin_uri.clone(),
-                        payload: data.into(),
-                        stream: DEFAULT_STREAM_ID,
-                        port: None,
-                    });
-                }
-                warn!("Otel Source received trace event when trace support is disabled. Dropping trace");
-            }
-            _ => (),
-        };
-        Ok(SourceReply::Empty(SOURCE_RECV_TIMEOUT))
-    }
-
-    fn is_transactional(&self) -> bool {
-        true
-    }
-
-    fn asynchronous(&self) -> bool {
-        true
-    }
-}
-
 #[allow(dead_code)]
 struct OtelSink {
     origin_uri: EventOriginUri,
     config: Config,
-    tx: Sender<OpenTelemetryEvents>,
     remote: Option<RemoteOpenTelemetryEndpoint>,
 }
 

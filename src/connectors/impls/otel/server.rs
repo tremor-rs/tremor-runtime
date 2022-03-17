@@ -74,7 +74,6 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let origin_uri = EventOriginUri {
             scheme: "tremor-otel-server".to_string(),
-            // FIXME: This should be replaced on requests
             host: "localhost".to_string(),
             port: None,
             path: vec![],
@@ -161,12 +160,17 @@ struct OtelSource {
 #[async_trait::async_trait()]
 impl Source for OtelSource {
     async fn pull_data(&mut self, _pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+        let mut origin_uri = self.origin_uri.clone();
         match self.rx.try_recv() {
-            Ok(OpenTelemetryEvents::Metrics(metrics)) => {
+            Ok(OpenTelemetryEvents::Metrics(metrics, remote)) => {
                 if self.config.metrics {
                     let data: Value = metrics::resource_metrics_to_json(metrics);
+                    if let Some(remote) = remote {
+                        origin_uri.host = remote.ip().to_string();
+                        origin_uri.port = Some(remote.port());
+                    }
                     return Ok(SourceReply::Structured {
-                        origin_uri: self.origin_uri.clone(),
+                        origin_uri,
                         payload: data.into(),
                         stream: DEFAULT_STREAM_ID,
                         port: None,
@@ -174,9 +178,13 @@ impl Source for OtelSource {
                 }
                 warn!("Otel Source received metrics event when trace support is disabled. Dropping trace");
             }
-            Ok(OpenTelemetryEvents::Logs(logs)) => {
+            Ok(OpenTelemetryEvents::Logs(logs, remote)) => {
                 if self.config.logs {
                     let data: Value = logs::resource_logs_to_json(logs)?;
+                    if let Some(remote) = remote {
+                        origin_uri.host = remote.ip().to_string();
+                        origin_uri.port = Some(remote.port());
+                    }
                     return Ok(SourceReply::Structured {
                         origin_uri: self.origin_uri.clone(),
                         payload: data.into(),
@@ -188,9 +196,13 @@ impl Source for OtelSource {
                     "Otel Source received log event when trace support is disabled. Dropping trace"
                 );
             }
-            Ok(OpenTelemetryEvents::Trace(traces)) => {
+            Ok(OpenTelemetryEvents::Trace(traces, remote)) => {
                 if self.config.trace {
                     let data: Value = trace::resource_spans_to_json(traces);
+                    if let Some(remote) = remote {
+                        origin_uri.host = remote.ip().to_string();
+                        origin_uri.port = Some(remote.port());
+                    }
                     return Ok(SourceReply::Structured {
                         origin_uri: self.origin_uri.clone(),
                         payload: data.into(),
