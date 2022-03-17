@@ -121,18 +121,6 @@ pub enum SourceReply {
         /// Port to send to, defaults to `out`
         port: Option<Cow<'static, str>>,
     },
-    /// a bunch of separated `Vec<u8>` with optional metadata
-    /// for when the source knows where boundaries are, maybe because it receives chunks already
-    BatchData {
-        /// origin uri
-        origin_uri: EventOriginUri,
-        /// batched raw data with optional metadata
-        batch_data: Vec<(Vec<u8>, Option<Value<'static>>)>,
-        /// Port to send to, defaults to `out`
-        port: Option<Cow<'static, str>>,
-        /// stream id
-        stream: u64,
-    },
     /// A stream is closed
     /// This might result in additional events being flushed from
     /// preprocessors, that is why we have `origin_uri` and `meta`
@@ -985,15 +973,6 @@ where
                 self.handle_data(stream, pull_id, origin_uri, port, data, meta)
                     .await?;
             }
-            SourceReply::BatchData {
-                origin_uri,
-                batch_data,
-                stream,
-                port,
-            } => {
-                self.handle_batch_data(stream, batch_data, pull_id, origin_uri, port)
-                    .await?;
-            }
             SourceReply::Structured {
                 origin_uri,
                 payload,
@@ -1092,48 +1071,6 @@ where
                 self.source.fail(stream, pull_id, &self.ctx).await,
                 "fail upon error sending events from structured data source reply failed",
             );
-        }
-        Ok(())
-    }
-
-    async fn handle_batch_data(
-        &mut self,
-        stream: u64,
-        batch_data: Vec<(Vec<u8>, Option<Value<'static>>)>,
-        pull_id: u64,
-        origin_uri: EventOriginUri,
-        port: Option<Cow<'static, str>>,
-    ) -> Result<()> {
-        let mut ingest_ns = nanotime();
-        let stream_state = self.streams.get_or_create_stream(stream, &self.ctx)?;
-        let connector_url = &self.ctx.alias;
-        let mut results = Vec::with_capacity(batch_data.len());
-        for (data, meta) in batch_data {
-            let mut events = build_events(
-                connector_url,
-                stream_state,
-                &mut ingest_ns,
-                pull_id,
-                origin_uri.clone(), // TODO: use split_last on batch_data to avoid last clone
-                port.as_ref(),
-                data,
-                &meta.unwrap_or_else(Value::object),
-                self.is_transactional,
-            );
-            results.append(&mut events);
-        }
-        if results.is_empty() {
-            if let Err(e) = self.source.on_no_events(pull_id, stream, &self.ctx).await {
-                error!("{} Error on no events callback: {e}", self.ctx);
-            }
-        } else {
-            let error = self.route_events(results).await;
-            if error {
-                self.ctx.log_err(
-                    self.source.fail(stream, pull_id, &self.ctx).await,
-                    "fail upon error sending events from batched data source reply failed",
-                );
-            }
         }
         Ok(())
     }
