@@ -19,28 +19,12 @@ use crate::connectors::prelude::*;
 use async_std::net::UdpSocket;
 
 #[derive(Deserialize, Debug, Clone)]
-struct Host {
-    host: String,
-    port: u16,
-}
-impl Default for Host {
-    fn default() -> Self {
-        Self {
-            host: String::from("0.0.0.0"),
-            port: 0,
-        }
-    }
-}
-
-#[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     /// Host to connect to
-    host: String,
-    /// port to connect to
-    port: u16,
-    #[serde(default = "Host::default")]
-    bind: Host,
+    url: Url<super::UdpDefaults>,
+    #[serde(default = "Default::default")]
+    bind: Url<super::UdpDefaults>,
 }
 
 impl ConfigImpl for Config {}
@@ -64,9 +48,13 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         if let Some(config) = &raw_config.config {
             let config: Config = Config::new(config)?;
+            if config.url.port().is_none() {
+                return Err("Missing port for UDP client".into());
+            }
+
             Ok(Box::new(UdpClient { config }))
         } else {
-            Err(ErrorKind::MissingConfiguration(String::from("udp-client")).into())
+            Err(ErrorKind::MissingConfiguration(String::from("udp_client")).into())
         }
     }
 }
@@ -115,10 +103,16 @@ impl UdpClientSink {
 #[async_trait::async_trait()]
 impl Sink for UdpClientSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let socket =
-            UdpSocket::bind((self.config.bind.host.as_str(), self.config.bind.port)).await?;
+        let socket = UdpSocket::bind((
+            self.config.bind.host_or_local(),
+            self.config.bind.port_or_dflt(),
+        ))
+        .await?;
         socket
-            .connect((self.config.host.as_str(), self.config.port))
+            .connect((
+                self.config.url.host_or_local(),
+                self.config.url.port_or_dflt(),
+            ))
             .await?;
         self.socket = Some(socket);
         Ok(true)

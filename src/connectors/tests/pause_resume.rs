@@ -39,8 +39,7 @@ async fn connector_udp_pause_resume() -> Result<()> {
       "codec": "string",
       "preprocessors": ["lines"],
       "config": {
-          "host": "127.0.0.1",
-          "port": free_port,
+          "url": format!("udp://localhost:{free_port}"),
           "buf_size": 4096
       }
     });
@@ -133,8 +132,7 @@ async fn connector_tcp_server_pause_resume() -> Result<()> {
       "codec": "string",
       "preprocessors": ["lines"],
       "config": {
-          "host": "127.0.0.1",
-          "port": free_port,
+          "url": format!("tcp://localhost:{free_port}"),
           "buf_size": 4096
       }
     });

@@ -61,7 +61,7 @@ use value_trait::{Builder, Mutable};
 pub(crate) use utils::{metrics, reconnect};
 
 /// Accept timeout
-const ACCEPT_TIMEOUT: Duration = Duration::from_millis(100);
+pub(crate) const ACCEPT_TIMEOUT: Duration = Duration::from_millis(100);
 
 /// connector address
 #[derive(Clone, Debug)]

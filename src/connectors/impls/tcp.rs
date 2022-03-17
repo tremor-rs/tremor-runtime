@@ -22,6 +22,12 @@ use futures::{
     AsyncReadExt, AsyncWriteExt,
 };
 
+pub(crate) struct TcpDefaults;
+impl Defaults for TcpDefaults {
+    const DEFAULT: &'static str = "tcp://localhost";
+    const PORT: u16 = 4242;
+}
+
 struct TcpReader<S>
 where
     S: futures::io::AsyncRead + std::marker::Unpin + std::marker::Sync + std::marker::Send,

@@ -14,7 +14,10 @@
 
 use async_std::channel::{bounded, Receiver, Sender};
 
-use super::{logs, metrics, trace};
+use super::{
+    common::{d_true, OtelDefaults},
+    logs, metrics, trace,
+};
 use crate::connectors::prelude::*;
 use tonic::transport::Channel as TonicChannel;
 use tonic::transport::Endpoint as TonicEndpoint;
@@ -32,27 +35,18 @@ const CONNECTOR_TYPE: &str = "otel_client";
 // TODO Consider concurrency cap?
 
 #[derive(Debug, Clone, Deserialize, Default)]
-pub struct Config {
-    // FIXME: (HG) replace host/port pair with http(s) `endpoint`
+pub(crate) struct Config {
     /// The hostname or IP address for the remote OpenTelemetry collector endpoint
-    #[serde(default = "default_url")]
-    pub url: Url,
+    #[serde(default = "Default::default")]
+    pub(crate) url: Url<OtelDefaults>,
     #[serde(default = "d_true")]
-    pub logs: bool,
+    pub(crate) logs: bool,
     /// Enables the trace service
     #[serde(default = "d_true")]
-    pub trace: bool,
+    pub(crate) trace: bool,
     /// Enables the metrics service
     #[serde(default = "d_true")]
-    pub metrics: bool,
-}
-
-fn default_url() -> Url {
-    Url::parse("http://localhost:4317").unwrap_or_default()
-}
-
-fn d_true() -> bool {
-    true
+    pub(crate) metrics: bool,
 }
 
 impl ConfigImpl for Config {}
@@ -111,6 +105,7 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let origin_uri = EventOriginUri {
             scheme: "tremor-otel-client".to_string(),
+            // FIXME: this should be replaced on requests
             host: "localhost".to_string(),
             port: None,
             path: vec![],
@@ -176,12 +171,7 @@ impl Connector for Client {
         let channel = TonicEndpoint::from_shared(endpoint)
             .map_err(|e| format!("Unable to connect to remote otel endpoint: {}", e))?
             .connect()
-            .await;
-
-        let channel = match channel {
-            Ok(channel) => channel,
-            Err(e) => return Err(format!("Unable to open remote otel channel {}", e).into()),
-        };
+            .await?;
 
         let logs_client = LogsServiceClient::new(channel.clone());
         let metrics_client = MetricsServiceClient::new(channel.clone());

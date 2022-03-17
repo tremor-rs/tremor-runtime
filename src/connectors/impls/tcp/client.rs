@@ -33,8 +33,7 @@ const URL_SCHEME: &str = "tremor-tcp-client";
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    host: String,
-    port: u16,
+    url: Url<super::TcpDefaults>,
     ttl: Option<u32>,
     #[serde(default = "default_no_delay")]
     no_delay: bool,
@@ -69,12 +68,15 @@ impl ConnectorBuilder for Builder {
     async fn from_config(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
         if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
+            if config.url.port().is_none() {
+                return Err("Missing port for TCP client".into());
+            }
             let (tls_connector, tls_domain) = match config.tls.as_ref() {
                 Some(Either::Right(true)) => {
                     // default config
                     (
                         Some(tls_client_connector(&TLSClientConfig::default()).await?),
-                        Some(config.host.clone()),
+                        Some(config.url.host_str().ok_or("missing host")?.to_string()),
                     )
                 }
                 Some(Either::Left(tls_config)) => (
@@ -199,7 +201,11 @@ impl Sink for TcpClientSink {
         let buf_size = self.config.buf_size;
 
         // connect TCP stream
-        let stream = TcpStream::connect((self.config.host.as_str(), self.config.port)).await?;
+        let stream = TcpStream::connect((
+            self.config.url.host_or_local(),
+            self.config.url.port_or_dflt(),
+        ))
+        .await?;
         let local_addr = stream.local_addr()?;
         if let Some(ttl) = self.config.ttl {
             stream.set_ttl(ttl)?;
@@ -208,8 +214,8 @@ impl Sink for TcpClientSink {
 
         let origin_uri = EventOriginUri {
             scheme: URL_SCHEME.to_string(),
-            host: self.config.host.clone(),
-            port: Some(self.config.port),
+            host: self.config.url.host_or_local().to_string(),
+            port: self.config.url.port(),
             path: vec![local_addr.port().to_string()], // local port
         };
         if let Some(tls_connector) = self.tls_connector.as_ref() {
@@ -218,7 +224,7 @@ impl Sink for TcpClientSink {
                 .connect(
                     self.tls_domain
                         .as_ref()
-                        .map_or_else(|| self.config.host.as_str(), String::as_str),
+                        .map_or_else(|| self.config.url.host_or_local(), String::as_str),
                     stream.clone(),
                 )
                 .await?;
@@ -226,8 +232,8 @@ impl Sink for TcpClientSink {
             let meta = ctx.meta(literal!({
                 "tls": true,
                 "peer": {
-                    "host": self.config.host.clone(),
-                    "port": self.config.port
+                    "host": self.config.url.host_or_local().to_string(),
+                    "port": self.config.url.port()
                 }
             }));
             // register writer
@@ -250,8 +256,8 @@ impl Sink for TcpClientSink {
                 "tls": false,
                 // TODO: what to put into meta here?
                 "peer": {
-                    "host": self.config.host.clone(),
-                    "port": self.config.port
+                    "host": self.config.url.host_or_local().to_string(),
+                    "port": self.config.url.port()
                 }
             }));
             // register writer

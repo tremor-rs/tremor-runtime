@@ -25,17 +25,14 @@ use async_tungstenite::client_async;
 use async_tungstenite::stream::Stream;
 use either::Either;
 use futures::StreamExt;
-use http_types::Url;
 use std::net::SocketAddr;
 
 const URL_SCHEME: &str = "tremor-ws-client";
 
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
-    // FIXME: (HG) we want to configure both ws client / ws server (or any connector possible)
-    //        with the same definiten of endpoint not one with host + port, other other with a rul
-    url: String,
+pub(crate) struct Config {
+    url: Url<super::WsDefaults>,
     #[serde(default = "default_ttl")]
     ttl: Option<u32>,
     #[serde(default = "default_no_delay")]
@@ -54,7 +51,7 @@ fn default_ttl() -> Option<u32> {
 
 impl ConfigImpl for Config {}
 
-pub struct WsClient {
+pub(crate) struct WsClient {
     config: Config,
     source_runtime: Option<ChannelSourceRuntime>,
     sink_runtime: Option<SingleStreamSinkRuntime>,
@@ -66,12 +63,12 @@ pub(crate) struct Builder {}
 async fn resolve_tls_config(
     config: &Config,
 ) -> Result<(Option<TlsConnector>, Option<String>, String)> {
-    let url = Url::parse(&config.url)?;
-    let host = match url.host() {
+    // TODO: support other
+    let host = match config.url.host() {
         Some(host) => host.to_string(),
         None => return Err("Not a valid WS type url - host specification missing".into()),
     };
-    let port = match url.port() {
+    let port = match config.url.port() {
         Some(port) => port.to_string(),
         None => return Err("Not a valid WS type url - port specification missing".into()),
     };
