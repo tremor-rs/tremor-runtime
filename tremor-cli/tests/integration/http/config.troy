@@ -32,10 +32,11 @@ flow
     }
   end;
 
-#  define pipeline instrument
-#  pipeline
-#    select { "event": event, "meta": $ } from in into out
-#  end;
+  define pipeline instrument
+  pipeline
+    select { "event": event, "meta": $ } from in into out
+  end;
+  create pipeline instrument;
 
   create connector data_in from integration::read_file;
   create connector data_out from integration::write_file;
@@ -51,6 +52,8 @@ flow
 
   # Echo http server: <http:req> -> server -> server_side -> <http:resp>
   connect /connector/https to /pipeline/echo;
+  connect /connector/https to /pipeline/instrument;
+  connect /pipeline/instrument to /connector/stdio;
   connect /pipeline/echo to /connector/https;
 
   # Replay recorded events over http to server

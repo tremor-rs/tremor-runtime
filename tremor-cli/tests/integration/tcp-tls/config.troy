@@ -10,8 +10,7 @@ flow
     postprocessors = ["lines"],
     codec = "json",
     config = {
-      "host": "0.0.0.0",
-      "port": 65535,
+      "url": "0.0.0.0:65535",
       "buf_size": 1024,
       "tls": {
           "cert": "./before/localhost.cert",
@@ -54,8 +53,7 @@ flow
     postprocessors = ["lines"],
     codec = "json",
     config = {
-      "host": "127.0.0.1",
-      "port": 65535,
+      "url": "127.0.0.1:65535",
       "ttl": 64,
       "no_delay": false,
       "buf_size": 1024,

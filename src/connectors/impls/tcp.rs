@@ -24,7 +24,8 @@ use futures::{
 
 pub(crate) struct TcpDefaults;
 impl Defaults for TcpDefaults {
-    const DEFAULT: &'static str = "tcp://localhost";
+    const SCHEME: &'static str = "tcp";
+    const HOST: &'static str = "localhost";
     const PORT: u16 = 4242;
 }
 

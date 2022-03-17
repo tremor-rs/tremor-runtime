@@ -20,8 +20,7 @@ flow
     codec = "yaml",
     postprocessors = ["base64"],
     config = {
-      "host": "127.0.0.1",
-      "port": 4242
+      "url": "127.0.0.1:4242",
     }
   end;
   
