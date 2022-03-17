@@ -30,8 +30,6 @@ pub struct EventOriginUri {
     pub port: Option<u16>,
     /// path part
     pub path: Vec<String>,
-    // implement query params if we find a good usecase for it
-    //pub query: Hashmap<String, String>
 }
 
 impl EventOriginUri {

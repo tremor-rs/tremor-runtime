@@ -11,14 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use super::{TcpReader, TcpWriter};
+use super::{TcpDefaults, TcpReader, TcpWriter};
 use crate::{
     connectors::{
         prelude::*,
         sink::channel_sink::ChannelSinkMsg,
-        spawn_task,
-        utils::tls::{load_server_config, TLSServerConfig},
-        ACCEPT_TIMEOUT,
+        utils::{
+            tls::{load_server_config, TLSServerConfig},
+            ConnectionMeta,
+        },
     },
     errors::Kind as ErrorKind,
 };
@@ -32,7 +33,6 @@ use async_tls::TlsAcceptor;
 use futures::io::AsyncReadExt;
 use rustls::ServerConfig;
 use simd_json::ValueAccess;
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 const URL_SCHEME: &str = "tremor-tcp-server";
@@ -40,9 +40,7 @@ const URL_SCHEME: &str = "tremor-tcp-server";
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    // kept as a str, so it is re-resolved upon each connect
-    host: String,
-    port: u16,
+    url: Url<TcpDefaults>,
     tls: Option<TLSServerConfig>,
     // TCP: receive buffer size
     #[serde(default = "default_buf_size")]
@@ -50,21 +48,6 @@ pub struct Config {
 }
 
 impl ConfigImpl for Config {}
-
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-struct ConnectionMeta {
-    host: String,
-    port: u16,
-}
-
-impl From<SocketAddr> for ConnectionMeta {
-    fn from(sa: SocketAddr) -> Self {
-        Self {
-            host: sa.ip().to_string(),
-            port: sa.port(),
-        }
-    }
-}
 
 #[allow(clippy::module_name_repetitions)]
 pub struct TcpServer {
@@ -89,7 +72,9 @@ impl ConnectorBuilder for Builder {
     ) -> crate::errors::Result<Box<dyn Connector>> {
         if let Some(raw_config) = &raw_config.config {
             let config = Config::new(raw_config)?;
-
+            if config.url.port().is_none() {
+                return Err("Missing port for TCP server".into());
+            }
             let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
                 Some(load_server_config(tls_config)?)
             } else {
@@ -187,7 +172,7 @@ impl TcpServerSource {
 impl Source for TcpServerSource {
     #[allow(clippy::too_many_lines)]
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
-        let path = vec![self.config.port.to_string()];
+        let path = vec![self.config.url.port_or_dflt().to_string()];
         let accept_ctx = ctx.clone();
         let buf_size = self.config.buf_size;
 
@@ -196,7 +181,10 @@ impl Source for TcpServerSource {
             previous_handle.cancel().await;
         }
 
-        let listener = TcpListener::bind((self.config.host.as_str(), self.config.port)).await?;
+        let host = self.config.url.host_or_local();
+        let port = self.config.url.port_or_dflt();
+
+        let listener = TcpListener::bind((host, port)).await?;
 
         let ctx = ctx.clone();
         let tls_server_config = self.tls_server_config.clone();

@@ -405,7 +405,7 @@ mod tests {
             &connector_config,
         )?;
         let http_meta = HttpRequestMeta::from_config(&config, "json")?;
-        assert_eq!("https://localhost:443/", http_meta.endpoint);
+        assert_eq!("http://localhost/", http_meta.endpoint.to_string());
 
         let connector_config = literal!({
             "id": "my_rest_client",
@@ -420,7 +420,7 @@ mod tests {
             &connector_config,
         )?;
         let http_meta = HttpRequestMeta::from_config(&config, "json")?;
-        assert_eq!("https://tremor.rs/", http_meta.endpoint);
+        assert_eq!("https://tremor.rs/", http_meta.endpoint.to_string());
         Ok(())
     }
 
@@ -440,7 +440,10 @@ mod tests {
         )?;
         let http_meta = HttpRequestMeta::from_config(&config, "json")?;
         assert_eq!("json", http_meta.codec.name());
-        assert_eq!("https://tremor.rs/benchmarks/", http_meta.endpoint);
+        assert_eq!(
+            "https://tremor.rs/benchmarks/",
+            http_meta.endpoint.to_string()
+        );
         assert_eq!(Method::Post, http_meta.method);
 
         let connector_config = literal!({
@@ -458,7 +461,7 @@ mod tests {
         )?;
         let http_meta = HttpRequestMeta::from_config(&config, "json")?;
         assert_eq!("json", http_meta.codec.name());
-        assert_eq!("https://tremor.rs/", http_meta.endpoint);
+        assert_eq!("https://tremor.rs/", http_meta.endpoint.url().to_string());
         assert_eq!(Method::Get, http_meta.method);
         Ok(())
     }
@@ -479,7 +482,7 @@ mod tests {
         )?;
         let http_meta = HttpRequestMeta::from_config(&config, "json")?;
         assert_eq!("json", http_meta.codec.name());
-        assert_eq!("https://localhost:443/", http_meta.endpoint);
+        assert_eq!("http://localhost/", http_meta.endpoint.url().to_string());
         assert_eq!(Method::Put, http_meta.method);
         assert_eq!(0, http_meta.headers.len());
 
@@ -501,7 +504,7 @@ mod tests {
         )?;
         let http_meta = HttpRequestMeta::from_config(&config, "json")?;
         assert_eq!("json", http_meta.codec.name());
-        assert_eq!("https://tremor.rs/", http_meta.endpoint);
+        assert_eq!("https://tremor.rs/", http_meta.endpoint.url().to_string());
         assert_eq!(Method::Patch, http_meta.method);
         assert_eq!(1, http_meta.headers.len());
         assert_eq!(

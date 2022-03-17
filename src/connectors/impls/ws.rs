@@ -23,6 +23,12 @@ use futures::prelude::*;
 use futures::stream::SplitSink;
 use simd_json::StaticNode;
 
+pub(crate) struct WsDefaults;
+impl Defaults for WsDefaults {
+    const DEFAULT: &'static str = "ws://localhost";
+    const PORT: u16 = 80;
+}
+
 struct WsReader<S>
 where
     S: std::marker::Unpin

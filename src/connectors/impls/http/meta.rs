@@ -12,29 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::auth::Auth;
+use crate::codec::{self, Codec};
+use crate::connectors::impls::http::utils::{SurfRequest, SurfRequestBuilder, SurfResponse};
+use crate::connectors::prelude::*;
+use crate::connectors::utils::mime::MimeCodecMap;
+use crate::postprocessor::{postprocess, Postprocessor, Postprocessors};
+use crate::preprocessor::{preprocess, Preprocessor, Preprocessors};
 use beef::Cow;
 use halfbrown::HashMap;
 use http_types::headers::HeaderValue;
-use http_types::{Method, Mime, Url};
+use http_types::{Method, Mime};
 use std::str::FromStr;
 use tremor_common::time::nanotime;
 use tremor_pipeline::{CbAction, Event, EventOriginUri, DEFAULT_STREAM_ID};
 use tremor_script::{EventPayload, ValueAndMeta};
 use tremor_value::{literal, structurize, Value};
 use value_trait::{Builder, Mutable, ValueAccess};
-
-use super::auth::Auth;
-
-use crate::codec::{self, Codec};
-use crate::connectors::impls::http::utils::{SurfRequest, SurfRequestBuilder, SurfResponse};
-use crate::connectors::prelude::ConfigImpl;
-use crate::connectors::source::SourceReply;
-use crate::connectors::utils::mime::MimeCodecMap;
-use crate::connectors::ConnectorConfig;
-use crate::connectors::ConnectorType;
-use crate::errors::{Error, Result};
-use crate::postprocessor::{postprocess, Postprocessor, Postprocessors};
-use crate::preprocessor::{preprocess, Preprocessor, Preprocessors};
 
 // NOTE Initial attempt at extracting request/response handling for reuse in other HTTP based connectors
 // TODO Extract headers into separate struct, separate out Config which is http client connector specific
@@ -47,8 +41,8 @@ use crate::preprocessor::{preprocess, Preprocessor, Preprocessors};
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// Target URL
-    #[serde(default = "default_url")]
-    pub(crate) url: String,
+    #[serde(default = "Default::default")]
+    pub(crate) url: Url,
     /// Authorization method
     #[serde(default = "default_auth")]
     pub(crate) auth: Auth,
@@ -56,7 +50,7 @@ pub struct Config {
     #[serde(default = "default_concurrency")]
     pub(crate) concurrency: usize,
     /// Default HTTP headers
-    #[serde(default = "default_headers")]
+    #[serde(default = "Default::default")]
     pub(crate) headers: HashMap<String, Vec<String>>,
     /// Default HTTP method
     #[serde(default = "default_method")]
@@ -64,14 +58,6 @@ pub struct Config {
     /// MIME mapping to/from tremor codecs
     #[serde(default = "default_mime_codec_map")]
     pub(crate) codec_map: MimeCodecMap,
-}
-
-fn default_url() -> String {
-    "https://localhost:443/".to_string()
-}
-
-fn default_headers() -> HashMap<String, Vec<String>> {
-    HashMap::new()
 }
 
 const DEFAULT_CONCURRENCY: usize = 4;
@@ -236,7 +222,7 @@ impl HttpResponseMeta {
 }
 pub(crate) struct HttpRequestMeta {
     pub(crate) codec_map: MimeCodecMap,
-    pub(crate) endpoint: String,
+    pub(crate) endpoint: Url,
     pub(crate) method: Method,
     //    pub(crate) auth: HttpAuth,
     pub(crate) headers: HashMap<String, Vec<HeaderValue>>,
@@ -247,7 +233,7 @@ pub(crate) struct HttpRequestMeta {
 
 #[derive(Debug)]
 pub(crate) struct BatchItemMeta {
-    endpoint: String,
+    endpoint: Url,
     method: Method,
     //    auth: HttpAuth, TODO - consider custom per request auth
     headers: HashMap<String, Vec<HeaderValue>>,
@@ -268,7 +254,7 @@ impl BatchItemMeta {
         }
         let headers = Value::Object(Box::new(headers));
         literal!({
-            "url": self.endpoint.clone(),
+            "url": self.endpoint.to_string(),
             "method": self.method.to_string(),
             "headers": headers,
             "codec": self.codec.name(),
@@ -379,7 +365,6 @@ impl HttpRequestMeta {
     }
 
     pub(crate) fn from_config(config: &ConnectorConfig, default_codec: &str) -> Result<Self> {
-        let _connector_type = ConnectorType("http_client".to_string());
         let preprocessors = if let Some(preprocessors) = &config.preprocessors {
             crate::preprocessor::make_preprocessors(preprocessors)?
         } else {
@@ -443,7 +428,7 @@ impl HttpRequestMeta {
 
     fn new(
         codec_map: MimeCodecMap,
-        default_endpoint: String,
+        default_endpoint: Url,
         default_method: Method,
         default_headers: HashMap<String, Vec<HeaderValue>>,
         codec: Box<dyn Codec>,
@@ -466,7 +451,7 @@ impl HttpRequestMeta {
         if let Some(overrides) = meta.get("request") {
             let active_endpoint = overrides
                 .get_str("url")
-                .map_or_else(|| self.endpoint.clone(), ToString::to_string);
+                .map_or_else(|| Ok(self.endpoint.clone()), Url::parse)?;
             let active_method = overrides
                 .get_str("method")
                 .map_or_else(|| Ok(self.method), Method::from_str)?;
@@ -537,14 +522,13 @@ impl HttpRequestMeta {
 
     fn into_request(meta: &BatchItemMeta, body: &[u8]) -> Result<SurfRequest> {
         debug!("Rest endpoint [{}] chosen", &meta.endpoint);
-        let endpoint_url = Url::parse(&meta.endpoint)?;
-        let host = match (endpoint_url.host(), endpoint_url.port()) {
+        let host = match (meta.endpoint.host(), meta.endpoint.port()) {
             (Some(host), Some(port)) => Some(format!("{}:{}", host, port)),
             (Some(host), _) => Some(host.to_string()),
             _ => None,
         };
 
-        let mut request_builder = SurfRequestBuilder::new(meta.method, endpoint_url);
+        let mut request_builder = SurfRequestBuilder::new(meta.method, meta.endpoint.url().clone());
 
         // Build headers from meta - effectively overwrite config headers in case of conflict
         for (k, v) in &meta.headers {

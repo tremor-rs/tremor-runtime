@@ -22,10 +22,13 @@ pub(crate) use crate::connectors::source::{
     ChannelSource, ChannelSourceRuntime, Source, SourceAddr, SourceContext, SourceManagerBuilder,
     SourceReply, StreamReader, DEFAULT_POLL_INTERVAL,
 };
-pub(crate) use crate::connectors::utils::{reconnect::Attempt, url::Url};
+pub(crate) use crate::connectors::utils::{
+    reconnect::Attempt,
+    url::{Defaults, Url},
+};
 pub(crate) use crate::connectors::{
-    CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context, StreamDone,
-    StreamIdGen,
+    spawn_task, CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context,
+    StreamDone, StreamIdGen, ACCEPT_TIMEOUT,
 };
 pub(crate) use crate::errors::{Error, Kind as ErrorKind, Result};
 pub(crate) use crate::utils::hostname;

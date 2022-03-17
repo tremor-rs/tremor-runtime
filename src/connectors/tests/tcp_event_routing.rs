@@ -26,7 +26,7 @@ use tremor_value::{literal, Value};
 use value_trait::{Builder, ValueAccess};
 
 #[async_std::test]
-async fn connector_tcp_event_routing() -> Result<()> {
+async fn event_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
     let free_port = {
@@ -42,9 +42,8 @@ async fn connector_tcp_event_routing() -> Result<()> {
       "codec": "string",
       "preprocessors": ["lines"],
       "config": {
-          "host": "127.0.0.1",
-          "port": free_port,
-          "buf_size": 4096
+        "url": format!("tcp://localhost:{free_port}"),
+        "buf_size": 4096
       }
     });
 

@@ -13,11 +13,8 @@
 // limitations under the License.
 
 use super::{WsReader, WsWriter};
-use crate::connectors::{prelude::*, spawn_task};
-use crate::connectors::{
-    utils::tls::{load_server_config, TLSServerConfig},
-    ACCEPT_TIMEOUT,
-};
+use crate::connectors::utils::tls::{load_server_config, TLSServerConfig};
+use crate::connectors::{prelude::*, utils::ConnectionMeta};
 use async_std::task::JoinHandle;
 use async_std::{net::TcpListener, prelude::FutureExt};
 use async_tls::TlsAcceptor;
@@ -32,34 +29,16 @@ const URL_SCHEME: &str = "tremor-ws-server";
 
 #[derive(Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
-    // FIXME: (HG) we want to configure both ws client / ws server (or any connector possible)
-    //        with the same definiten of endpoint not one with host + port, other other with a rul
+pub(crate) struct Config {
     // kept as a str, so it is re-resolved upon each connect
-    host: String,
-    port: u16,
+    url: Url<super::WsDefaults>,
     tls: Option<TLSServerConfig>,
 }
 
 impl ConfigImpl for Config {}
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
-struct ConnectionMeta {
-    host: String,
-    port: u16,
-}
-
-impl From<SocketAddr> for ConnectionMeta {
-    fn from(sa: SocketAddr) -> Self {
-        Self {
-            host: sa.ip().to_string(),
-            port: sa.port(),
-        }
-    }
-}
-
 #[allow(clippy::module_name_repetitions)]
-pub struct WsServer {
+pub(crate) struct WsServer {
     alias: String,
     config: Config,
     accept_task: Option<JoinHandle<()>>,
@@ -172,7 +151,7 @@ impl Connector for WsServer {
     #[allow(clippy::too_many_lines)]
     async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         // TODO: this can be simplified as the connect can be moved into the source
-        let path = vec![self.config.port.to_string()];
+        let path = vec![self.config.url.port_or_dflt().to_string()];
         let accept_url = self.alias.clone();
 
         let source_runtime = self
@@ -189,7 +168,18 @@ impl Connector for WsServer {
             previous_handle.cancel().await;
         }
 
-        let listener = TcpListener::bind((self.config.host.as_str(), self.config.port)).await?;
+        // TODO: allow for other sockets
+        let host = self.config.url.host_or_local();
+        let port = self
+            .config
+            .url
+            .port()
+            .unwrap_or(if self.config.url.scheme() == "wss" {
+                443
+            } else {
+                80
+            });
+        let listener = TcpListener::bind((host, port)).await?;
 
         let ctx = ctx.clone();
         let tls_server_config = self.tls_server_config.clone();

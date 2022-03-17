@@ -12,11 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::codec::Codec;
+use crate::connectors::prelude::*;
+use crate::connectors::utils::{mime::MimeCodecMap, tls::TLSServerConfig};
+use crate::postprocessor::postprocess;
+use crate::postprocessor::Postprocessors;
+use crate::{codec, connectors::spawn_task};
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use async_std::task::JoinHandle;
 use halfbrown::HashMap;
 use http_types::headers::HeaderValue;
-use http_types::{Mime, Url};
+use http_types::Mime;
 use simd_json::{StaticNode, ValueAccess};
 use std::str::FromStr;
 use tide_rustls::TlsListener;
@@ -24,29 +30,17 @@ use tremor_common::time::nanotime;
 use uuid::adapter::Urn;
 use uuid::Uuid;
 
-use crate::codec::Codec;
-use crate::connectors::prelude::*;
-use crate::connectors::utils::mime::MimeCodecMap;
-use crate::connectors::utils::tls::TLSServerConfig;
-use crate::postprocessor::postprocess;
-use crate::postprocessor::Postprocessors;
-use crate::{codec, connectors::spawn_task};
-
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// Our target URL
-    #[serde(default = "default_url")]
-    url: String,
+    #[serde(default = "Default::default")]
+    url: Url,
     /// TLS configuration, if required
     tls: Option<TLSServerConfig>,
     /// MIME mapping to/from tremor codecs
     #[serde(default = "default_mime_codec_map")]
     codec_map: MimeCodecMap,
-}
-
-fn default_url() -> String {
-    "https://localhost:443/".to_string()
 }
 
 fn default_mime_codec_map() -> MimeCodecMap {
@@ -111,12 +105,10 @@ impl ConnectorBuilder for Builder {
         if let Some(config) = &raw_config.config {
             let config = Config::new(config)?;
 
-            let _url = Url::parse(&config.url)?;
-
             let tls_server_config = config.tls.clone();
 
             let origin_uri = EventOriginUri {
-                scheme: "http_server".to_string(),
+                scheme: "http-server".to_string(),
                 host: "localhost".to_string(),
                 port: None,
                 path: vec![],
@@ -152,7 +144,7 @@ enum Rendezvous {
 }
 
 struct HttpServerSource {
-    url: String,
+    url: Url,
     origin_uri: EventOriginUri,
     inflight: HashMap<Urn, Sender<Rendezvous>>,
     inflighttracker_rx: Receiver<Rendezvous>,
@@ -220,7 +212,7 @@ async fn handle_request(req: tide::Request<HttpServerState>) -> tide::Result<tid
 async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Result<tide::Response> {
     let ingest_ns = nanotime();
     let _origin_uri = EventOriginUri {
-        scheme: "http_server".to_string(),
+        scheme: "http-server".to_string(),
         host: req
             .host()
             .unwrap_or("tremor-rest-server-host.remote")
@@ -451,12 +443,16 @@ impl Source for HttpServerSource {
     }
 
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
-        let url = Url::parse(&self.url)?;
-
-        let hostport = match (url.host(), url.port()) {
-            (Some(host), Some(port)) => format!("{}:{}", host, port),
-            _unlikely => "localhost:443".to_string(),
-        };
+        // TODO handle other sockets that are not host/port based
+        let host = self.url.host_or_local();
+        let port = self.url.port().unwrap_or_else(|| {
+            if self.url.scheme() == "https" {
+                443
+            } else {
+                80
+            }
+        });
+        let hostport = format!("{}:{}", host, port);
 
         // cancel last accept task if necessary, this will drop the previous listener
         if let Some(accept_task) = self.accept_task.take() {
@@ -464,6 +460,9 @@ impl Source for HttpServerSource {
         }
 
         let tx = self.inflighttracker_tx.clone();
+        if self.tls_server_config.is_some() && self.url.scheme() != "https" {
+            return Err("Using SSL certificates requires setting up a https endpoint".into());
+        }
 
         let ctx = ctx.clone();
         let tls_server_config = self.tls_server_config.clone();
