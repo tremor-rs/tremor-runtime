@@ -4,7 +4,7 @@ flow
   use std::time::nanos;
   define connector in from ws_server
   with
-    preprocessors = ["lines-no-buffer"],
+    preprocessors = [{"name": "lines", "config":{"buffered": false}}],
     codec = "json",
     config = {
       "url": "127.0.0.1:4242",
