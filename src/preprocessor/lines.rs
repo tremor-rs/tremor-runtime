@@ -26,11 +26,16 @@ const INITIAL_LINES_PER_CHUNK: usize = 64;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
+    #[serde(default = "default_separator")]
     separator: String,
     #[serde(default = "Default::default", skip_serializing_if = "Option::is_none")]
     max_length: Option<usize>,
     #[serde(default = "default_buffered")]
     buffered: bool,
+}
+
+fn default_separator() -> String {
+    "\n".to_string()
 }
 
 fn default_buffered() -> bool {

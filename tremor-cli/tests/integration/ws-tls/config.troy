@@ -31,8 +31,7 @@ flow
     preprocessors = ["lines"],
     codec = "json",
     config = {
-      "host": "0.0.0.0",
-      "port": 65535,
+      "url": "0.0.0.0:65535",
       "tls": {
         "cert": "./before/localhost.cert",
         "key": "./before/localhost.key",
