@@ -95,15 +95,14 @@ impl SinkReply {
         }
     }
 
-    /// Acknowledges
+    /// Decide according to the given flag if we return a ack or a none
     #[must_use]
-    pub(crate) fn ack() -> Self {
-        Self::ACK
-    }
-    /// Fails
-    #[must_use]
-    pub(crate) fn fail() -> Self {
-        Self::FAIL
+    pub(crate) fn ack_or_none(needs_fail: bool) -> Self {
+        if needs_fail {
+            Self::ACK
+        } else {
+            Self::NONE
+        }
     }
 }
 impl From<bool> for SinkReply {

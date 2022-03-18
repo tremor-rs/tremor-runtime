@@ -70,10 +70,7 @@ fn json_otel_metrics_to_pb(json: &Value<'_>) -> Result<ExportMetricsServiceReque
 /// The `OpenTelemetry` client connector
 pub(crate) struct Client {
     config: Config,
-    #[allow(dead_code)]
-    id: String,
     origin_uri: EventOriginUri,
-    remote: Option<RemoteOpenTelemetryEndpoint>,
 }
 
 impl std::fmt::Debug for Client {
@@ -93,7 +90,7 @@ impl ConnectorBuilder for Builder {
 
     async fn from_config(
         &self,
-        id: &str,
+        _id: &str,
         connector_config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
         if let Some(config) = &connector_config.config {
@@ -105,12 +102,7 @@ impl ConnectorBuilder for Builder {
                 path: vec![],
             };
 
-            Ok(Box::new(Client {
-                config,
-                id: id.to_string(),
-                origin_uri,
-                remote: None,
-            }))
+            Ok(Box::new(Client { config, origin_uri }))
         } else {
             Err(ErrorKind::MissingConfiguration(String::from("OtelClient")).into())
         }
@@ -130,14 +122,6 @@ impl Connector for Client {
         CodecReq::Structured
     }
 
-    async fn create_source(
-        &mut self,
-        _source_context: SourceContext,
-        _builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
-        Ok(None)
-    }
-
     async fn create_sink(
         &mut self,
         sink_context: SinkContext,
@@ -146,12 +130,22 @@ impl Connector for Client {
         let sink = OtelSink {
             origin_uri: self.origin_uri.clone(),
             config: self.config.clone(),
-            remote: self.remote.clone(),
+            remote: None,
         };
         builder.spawn(sink, sink_context).map(Some)
     }
+}
 
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
+#[allow(dead_code)]
+struct OtelSink {
+    origin_uri: EventOriginUri,
+    config: Config,
+    remote: Option<RemoteOpenTelemetryEndpoint>,
+}
+
+#[async_trait::async_trait()]
+impl Sink for OtelSink {
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let endpoint = self.config.url.to_string();
         let channel = TonicEndpoint::from_shared(endpoint)
             .map_err(|e| format!("Unable to connect to remote otel endpoint: {}", e))?
@@ -170,17 +164,6 @@ impl Connector for Client {
 
         Ok(true)
     }
-}
-
-#[allow(dead_code)]
-struct OtelSink {
-    origin_uri: EventOriginUri,
-    config: Config,
-    remote: Option<RemoteOpenTelemetryEndpoint>,
-}
-
-#[async_trait::async_trait()]
-impl Sink for OtelSink {
     async fn on_event(
         &mut self,
         _input: &str,
@@ -189,6 +172,7 @@ impl Sink for OtelSink {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
+        // FIXME, what if we have no remote?
         if let Some(remote) = &mut self.remote {
             // Up
             for value in event.value_iter() {
@@ -201,13 +185,7 @@ impl Sink for OtelSink {
                         if let Err(e) = remote.metrics_client.export(request).await {
                             error!("Failed to dispatch otel/gRPC metrics message: {}", e);
                             ctx.notifier().connection_lost().await?;
-                            return if event.transactional {
-                                // Ok(vec![qos::fail(&mut event.clone()), qos::close(&mut event)])
-                                Ok(SinkReply::fail())
-                            } else {
-                                // Ok(vec![qos::close(&mut event)])
-                                Ok(SinkReply::fail_or_none(false))
-                            };
+                            return Ok(SinkReply::fail_or_none(false));
                         };
                         continue;
                     }
@@ -218,13 +196,7 @@ impl Sink for OtelSink {
                         if let Err(e) = remote.logs_client.export(request).await {
                             error!("Failed to dispatch otel/gRPC logs message: {}", e);
                             ctx.notifier().connection_lost().await?;
-                            return if event.transactional {
-                                // Ok(vec![qos::fail(&mut event.clone()), qos::close(&mut event)])
-                                Ok(SinkReply::fail())
-                            } else {
-                                // Ok(vec![qos::close(&mut event)])
-                                Ok(SinkReply::fail_or_none(false))
-                            };
+                            return Ok(SinkReply::fail_or_none(false));
                         }
                         continue;
                     }
@@ -237,13 +209,7 @@ impl Sink for OtelSink {
                         if let Err(e) = remote.trace_client.export(request).await {
                             error!("Failed to dispatch otel/gRPC logs message: {}", e);
                             ctx.notifier().connection_lost().await?;
-                            return if event.transactional {
-                                // Ok(vec![qos::fail(&mut event.clone()), qos::close(&mut event)])
-                                Ok(SinkReply::fail())
-                            } else {
-                                // Ok(vec![qos::close(&mut event)])
-                                Ok(SinkReply::fail_or_none(false))
-                            };
+                            return Ok(SinkReply::fail_or_none(event.transactional));
                         }
                         continue;
                     }
@@ -251,14 +217,11 @@ impl Sink for OtelSink {
                 }
             }
 
-            return if event.transactional {
-                Ok(SinkReply::ack())
-            } else {
-                Ok(SinkReply::NONE)
-            };
+            Ok(SinkReply::ack_or_none(event.transactional))
+        } else {
+            error!("{ctx} Sending to a non connected sink!");
+            Ok(SinkReply::fail_or_none(event.transactional))
         }
-
-        Ok(SinkReply::NONE)
     }
 
     async fn on_signal(
