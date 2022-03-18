@@ -159,7 +159,7 @@ tonic = { version = "0.5.2", default-features = false, features = [
   "transport",
   "tls",
 ] }
-tremor-otelapis = { version = "0.2.2" }
+tremor-otelapis = { version = "0.2.3" }
 
 # gcp
 googapis = { version = "0.5", default-features = false, features = [
