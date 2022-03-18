@@ -123,12 +123,12 @@ impl TargetProcess {
 
         let current_dir = {
             let tmp = dir.as_ref();
-            if tmp.is_relative() {
+            let buf = if tmp.is_relative() {
                 std::env::current_dir()?.join(tmp)
             } else {
                 tmp.to_path_buf()
-            }
-            .canonicalize()?
+            };
+            buf.canonicalize()?
         };
         let cmdline = format!(
             "{}{} {}",

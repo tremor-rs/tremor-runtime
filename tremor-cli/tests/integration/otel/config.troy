@@ -1,14 +1,49 @@
-define flow main
+define flow server
+flow
+  use integration;
+  use troy::connectors;
+
+  define connector otel_server from otel_server
+  with
+    config = {
+      "url": "127.0.0.1:4317",
+    }
+  end;
+
+  define pipeline instrument
+  into out, exit
+  pipeline
+    # recording
+    select event from in into out;
+    
+    # quiescence
+    select { "exit": 0, "delay": 10 } from in 
+    where present event.trace[0].instrumentation_library_spans[0].spans[0].attributes.`http.target`
+    into exit;
+  end;
+
+  create connector data_out from integration::write_file;
+  create connector exit from integration::exit;
+  create connector otels from otel_server;
+
+  create pipeline echo from instrument;
+  
+  # Echo otel server: <otel:req> -> server -> server_side -> <file>
+  connect /connector/otels to /pipeline/echo;
+  connect /pipeline/echo to /connector/data_out;
+  connect /pipeline/echo/exit to /connector/exit;
+
+end;
+
+define flow client
 flow
   use integration;
   use troy::pipelines;
-  use troy::connectors;
 
   define connector otel_client from otel_client
   with
     config = {
-      "host": "0.0.0.0",
-      "port": 4317,
+      "url": "127.0.0.1:4317",
     },
     reconnect = {
       "retry": {
@@ -19,44 +54,16 @@ flow
     }
   end;
 
-  define connector otel_server from otel_server
-  with
-    config = {
-      "host": "0.0.0.0",
-      "port": 4317,
-    }
-  end;
-
-  define pipeline instrument
-  pipeline
-    # recording
-    select event from in into out;
-    
-    # quiescence
-    select { "exit": 0, "delay": 10 } from in 
-    where present event.trace[0].instrumentation_library_spans[0].spans[0].attributes.`http.target`
-    into out/exit;
-  end;
-
-  create connector data_in from integration::event_order::read_file;
-  create connector data_out from integration::event_order::write_file;
-  create connector exit from integration::exit;
-  create connector otels from otel_server;
+  create connector data_in from integration::read_file;
   create connector otelc from otel_client;
-  create connector exit from connectors::exit;
-
+  create connector stdio from connectors::console;
   create pipeline replay from pipelines::passthrough;
-  create pipeline echo from instrument;
   
   # Replay recorded events over otel client to server
   connect /connector/data_in to /pipeline/replay;
   connect /pipeline/replay to /connector/otelc;
 
-  # Echo otel server: <otel:req> -> server -> server_side -> <file>
-  connect /connector/otels to /pipeline/echo;
-  connect /pipeline/echo to /connector/data_out;
-  connect /pipeline/echo/exit to /connector/exit;
-
 end;
 
-deploy flow main;
+deploy flow server;
+deploy flow client;
