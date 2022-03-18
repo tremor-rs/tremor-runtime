@@ -6,7 +6,6 @@ flow
 
   define connector http_client from http_client
   with
-#    preprocessors = ["lines"],
     postprocessors = ["lines"],
     codec = "json-sorted",
     config = {
