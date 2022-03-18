@@ -241,8 +241,7 @@ mod tests {
             "id": "my_otel_server",
             "type": "otel_server",
             "config": {
-                "host": "localhost",
-                "port": 4317,
+                "url": "localhost:4317",
             },
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
