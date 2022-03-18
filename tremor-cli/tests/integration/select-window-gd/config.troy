@@ -6,7 +6,8 @@ flow
     codec = "json",
     config = {
       "path": "in.json",
-      "timeout": 1000
+      "timeout": 1000,
+      "expect_batched": true
     }
   end;
   define pipeline main
