@@ -523,7 +523,7 @@ async fn connector_task(
                     result_tx,
                 } => {
                     for (url, _) in &pipelines_to_link {
-                        info!("{ctx} Connecting {url} via port {port}",);
+                        info!("{ctx} Connecting {url} via port {port}");
                     }
 
                     if let Some(port_pipes) = connected_pipelines.get_mut(&port) {
