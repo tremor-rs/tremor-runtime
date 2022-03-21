@@ -99,7 +99,8 @@ pub(crate) mod url {
                     _marker: PhantomData::default(),
                 }),
                 Err(e) => {
-                    if let Ok(url) = url::Url::parse(&format!("{}://{}", Dflt::SCHEME, input)) {
+                    if let Ok(url) = url::Url::parse(dbg!(&format!("{}://{}", Dflt::SCHEME, input)))
+                    {
                         Ok(Self {
                             url,
                             ..Self::default()
