@@ -25,6 +25,7 @@ mod file_xz;
 mod http_client;
 #[cfg(feature = "kafka-integration")]
 mod kafka;
+#[cfg(feature = "metronome-integration")]
 mod metronome;
 mod pause_resume;
 #[cfg(feature = "s3-integration")]
