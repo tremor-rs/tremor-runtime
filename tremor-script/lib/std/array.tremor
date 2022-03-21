@@ -82,4 +82,13 @@ intrinsic fn join(array, string) as array::join;
 ## ```
 ##
 ## Returns an `array`
-intrinsic fn concatenate(left, right) as array::concatenate
+intrinsic fn concatenate(left, right) as array::concatenate;
+
+## Sorts an array
+##
+## ```tremor
+## array::concatenate([3, 2, 3, 1, 4]) == [1, 2, 3, 3, 4]
+## ```
+##
+## Returns an `array`
+intrinsic fn sort(left, right) as array::sort;
