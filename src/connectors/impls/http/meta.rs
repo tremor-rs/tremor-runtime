@@ -166,23 +166,6 @@ impl HttpResponseMeta {
             "request": request_meta,
         });
 
-        // Calculate CB disposition using HTTP status code
-        let _cb_disposition = if status.is_client_error() || status.is_server_error() {
-            if log::log_enabled!(log::Level::Debug) {
-                if let Ok(body) = response.body_string().await {
-                    error!(
-                        "[Rest::{}] HTTP request failed: {} => {}",
-                        &origin_uri, status, body
-                    );
-                } else {
-                    error!("[Rest:{}] HTTP request failed: {}", &origin_uri, status);
-                }
-            }
-            CbAction::Fail
-        } else {
-            CbAction::Ack
-        };
-
         // Propagate header values
         let mut headers = Value::object_with_capacity(8);
         {

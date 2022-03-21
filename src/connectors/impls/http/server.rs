@@ -202,16 +202,6 @@ async fn handle_request(req: tide::Request<HttpServerState>) -> tide::Result<tid
 }
 async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Result<tide::Response> {
     let ingest_ns = nanotime();
-    let _origin_uri = EventOriginUri {
-        scheme: "http-server".to_string(),
-        host: req
-            .host()
-            .unwrap_or("tremor-rest-server-host.remote")
-            .to_string(),
-        port: None,
-        // TODO add server port here (like for tcp onramp)
-        path: vec![String::default()],
-    };
 
     let mut headers = req
         .header_names()
@@ -240,7 +230,6 @@ async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Resul
     headers.insert(URN_HEADER, Value::from(linking_uuid.to_string()))?;
 
     let ct: Option<Mime> = req.content_type();
-    let _codec_override = ct.map(|ct| ct.essence().to_string());
 
     let mut meta = Value::object_with_capacity(1);
     let mut request_meta = Value::object_with_capacity(3);

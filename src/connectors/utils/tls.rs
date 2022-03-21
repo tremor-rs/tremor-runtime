@@ -31,6 +31,7 @@ lazy_static! {
         for cert in load_native_certs().expect("Unable to load system TLS certificates.") {
             roots
                 .add(&Certificate(cert.0))
+                // ALLOW: this is expected to panic if we cannot load system certificates
                 .expect("Unable to add root TLS certificate to RootCertStore");
         }
         roots

@@ -52,18 +52,9 @@ impl ConnectorBuilder for Builder {
         _id: &str,
         connector_config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
-        let _preprocessor_configs = connector_config.preprocessors.clone().unwrap_or_default();
-        let _postprocessor_configs = connector_config.postprocessors.clone().unwrap_or_default();
         if let Some(config) = &connector_config.config {
             let config = Config::new(config)?;
-            let _codec_map: MimeCodecMap =
-                if let Some(codec_map) = &connector_config.config.get("codec_map") {
-                    let value: Value = (*codec_map).clone();
-                    structurize::<MimeCodecMap>(value)?
-                } else {
-                    MimeCodecMap::with_builtin()
-                };
-            let (response_tx, response_rx) = bounded(128);
+            let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
             Ok(Box::new(Client {
                 max_concurrency: config.concurrency,
                 response_tx,
@@ -235,7 +226,6 @@ impl Sink for HttpRequestSink {
 
         if let Some(client) = self.clients.next() {
             let response_tx = self.response_tx.clone();
-            //            let _reply_tx = self.reply_tx.clone();
             let origin_uri = self.origin_uri.clone();
 
             let (request, request_meta) = self.http_meta.process(&event)?;
@@ -345,7 +335,7 @@ mod tests {
         )?;
 
         let builder = super::Builder::default();
-        let _connector = builder.from_config("foo", &config).await?;
+        builder.from_config("foo", &config).await?;
 
         Ok(())
     }
