@@ -1,4 +1,1 @@
-["snot", "badger"]
-["fleek", "flook"]
-{"asdf": null, "NaN": 42.0}
-"exit"
+[{"NaN":42.0,"asdf":null},["fleek","flook"],["snot","badger"],"exit"]
