@@ -17,6 +17,7 @@ mod elastic;
 mod file;
 mod file_non_existent;
 mod file_xz;
+#[cfg(feature = "http-integration")]
 mod http_client;
 #[cfg(feature = "kafka-integration")]
 mod kafka;
@@ -45,14 +46,11 @@ use crate::{
 };
 use async_std::{
     channel::{bounded, Receiver},
-    net::TcpListener,
     prelude::FutureExt,
 };
 use beef::Cow;
 use log::{debug, info};
 use std::collections::HashMap;
-use std::process::Stdio;
-use std::sync::Once;
 use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::{
     ids::ConnectorIdGen,
@@ -369,8 +367,14 @@ impl TestPipeline {
     }
 }
 
+#[cfg(any(
+    feature = "http-integration",
+    feature = "ws-integration",
+    feature = "s3-integration"
+))]
 /// Find free TCP port for use in test server endpoints
 pub(crate) async fn find_free_tcp_port() -> u16 {
+    use async_std::net::TcpListener;
     let listener = TcpListener::bind("127.0.0.1:0").await;
     let listener = match listener {
         Err(_) => return 65535, // TODO error handling
@@ -384,10 +388,13 @@ pub(crate) async fn find_free_tcp_port() -> u16 {
     port
 }
 
-static TLS_SETUP: Once = Once::new();
-
+#[cfg(any(feature = "http-integration", feature = "ws-integration",))]
 pub(crate) fn setup_for_tls() {
     use std::process::Command;
+    use std::process::Stdio;
+    use std::sync::Once;
+
+    static TLS_SETUP: Once = Once::new();
 
     // create TLS cert and key only once at the beginning of the test execution to avoid
     // multiple threads stepping on each others toes
