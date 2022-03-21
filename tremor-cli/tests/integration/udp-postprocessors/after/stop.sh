@@ -1,6 +1,4 @@
 #!/bin/bash
-
-echo "If a pid file exists, quiesce"
 if test -f before.pid; then
     kill -QUIT $( cat before.pid )
     # Remove pid file

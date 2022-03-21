@@ -9,7 +9,7 @@ flow
   with
     codec = "string",
     config = { 
-      "url": "127.0.0.1:4242",
+      "url": "localhost:4242",
     }
   end;
 

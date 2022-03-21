@@ -50,8 +50,14 @@ impl From<SocketAddr> for ConnectionMeta {
 pub(crate) mod url {
 
     use crate::errors::Result;
+    use regex::Regex;
     use serde::{Deserialize, Serialize};
     use std::marker::PhantomData;
+
+    lazy_static! {
+        // ALLOW: we know this regex is valid
+        static ref URL_SCHEME_REGEX: Regex = Regex::new("^[A-Za-z-]+://").expect("Invalid Regex");
+    }
 
     pub(crate) trait Defaults {
         /// Default scheme
@@ -93,23 +99,7 @@ pub(crate) mod url {
             D: serde::Deserializer<'de>,
         {
             let input = String::deserialize(deserializer)?;
-            match url::Url::parse(&input) {
-                Ok(url) => Ok(Self {
-                    url,
-                    _marker: PhantomData::default(),
-                }),
-                Err(e) => {
-                    if let Ok(url) = url::Url::parse(dbg!(&format!("{}://{}", Dflt::SCHEME, input)))
-                    {
-                        Ok(Self {
-                            url,
-                            ..Self::default()
-                        })
-                    } else {
-                        Err(serde::de::Error::custom(e))
-                    }
-                }
-            }
+            Url::parse(&input).map_err(|e| serde::de::Error::custom(e))
         }
     }
 
@@ -154,7 +144,7 @@ pub(crate) mod url {
         }
     }
 
-    impl std::fmt::Display for Url {
+    impl<D: Defaults> std::fmt::Display for Url<D> {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "{}", self.url)
         }
@@ -172,29 +162,24 @@ pub(crate) mod url {
 
     impl<D: Defaults> Url<D> {
         pub(crate) fn parse(input: &str) -> Result<Self> {
-            match url::Url::parse(input) {
+            let parsed = if URL_SCHEME_REGEX.is_match(input) {
+                url::Url::parse(input)
+            } else {
+                url::Url::parse(&format!("{}://{}", D::SCHEME, input))
+            };
+            match parsed {
                 Ok(url) => Ok(Self {
                     url,
                     ..Self::default()
                 }),
-                Err(e) => {
-                    // Is this good enough?
-                    if let Ok(url) = url::Url::parse(&format!("{}://{}", D::SCHEME, input)) {
-                        Ok(Self {
-                            url,
-                            ..Self::default()
-                        })
-                    } else {
-                        Err(e.into())
-                    }
-                }
+                Err(e) => Err(e.into()),
             }
         }
         pub(crate) fn port_or_dflt(&self) -> u16 {
             self.url.port().unwrap_or(D::PORT)
         }
         pub(crate) fn host_or_local(&self) -> &str {
-            self.url.host_str().unwrap_or("localhost")
+            self.url.host_str().unwrap_or(D::HOST)
         }
 
         pub(crate) fn url(&self) -> &url::Url {
@@ -209,6 +194,20 @@ pub(crate) mod url {
         fn default() {
             Url::<HttpDefaults>::default();
             Url::<HttpsDefaults>::default();
+        }
+
+        use test_case::test_case;
+
+        #[test_case("127.0.0.1", "http://127.0.0.1/"; "ensure scheme without port")]
+        #[test_case("localhost:42", "http://localhost:42/"; "ensure scheme")]
+        #[test_case("scheme://host:42/path?query=1&query=2#fragment", "scheme://host:42/path?query=1&query=2#fragment"; "all the url features")]
+        fn serialize_deserialize(input: &str, expected: &str) -> Result<()> {
+            let mut input = format!("\"{input}\""); // prepare for json compat
+            let url: Url = simd_json::from_str(&mut input)?;
+
+            let serialized = url.to_string();
+            assert_eq!(expected, &serialized);
+            Ok(())
         }
     }
 }
