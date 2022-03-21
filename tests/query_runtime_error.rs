@@ -24,6 +24,7 @@ use tremor_script::FN_REGISTRY;
 use tremor_pipeline::errors::{Error as PipelineError, ErrorKind as PipelineErrorKind};
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::Dumb;
+use tremor_script::module::Manager;
 use tremor_script::utils::*;
 
 fn to_pipe(query: &str) -> Result<ExecutableGraph> {
@@ -48,6 +49,8 @@ macro_rules! test_cases {
                 let err_file: PathBuf = [&query_dir, "error.txt"].iter().collect();
                 let in_file: PathBuf = [&query_dir, "in"].iter().collect();
                 let out_file: PathBuf = [&query_dir, "out"].iter().collect();
+
+                Manager::add_path(&"tremor-script/lib")?;
 
                 println!("Loading query: {}", query_file.display());
                 let mut file = file::open(&query_file)?;
