@@ -42,7 +42,7 @@ async fn event_routing() -> Result<()> {
       "codec": "string",
       "preprocessors": ["lines"],
       "config": {
-        "url": format!("tcp://localhost:{free_port}"),
+        "url": format!("tcp://127.0.0.1:{free_port}"),
         "buf_size": 4096
       }
     });
