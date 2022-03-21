@@ -13,12 +13,11 @@
 // limitations under the License.
 
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
-use tremor_value::{literal, structurize};
+use tremor_value::literal;
 
 use super::meta::{Config, HttpRequestMeta, HttpResponseMeta, ResponseEventCont};
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
-use crate::connectors::utils::mime::MimeCodecMap;
 use crate::postprocessor::{self, Postprocessors};
 use crate::preprocessor::{self, Preprocessors};
 
