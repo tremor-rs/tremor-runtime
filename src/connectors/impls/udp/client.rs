@@ -49,7 +49,6 @@ impl ConnectorBuilder for Builder {
         if let Some(config) = &raw_config.config {
             let config: Config = Config::new(config)?;
             if config.url.port().is_none() {
-                dbg!(config.url);
                 return Err("Missing port for UDP client".into());
             }
 

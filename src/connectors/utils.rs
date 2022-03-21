@@ -153,8 +153,8 @@ pub(crate) mod url {
     impl<D: Defaults> Default for Url<D> {
         fn default() -> Self {
             Self {
-                // ALLOW: this is a known safe url
                 url: url::Url::parse(&format!("{}://{}:{}", D::SCHEME, D::HOST, D::PORT))
+                    // ALLOW: this is a known safe url
                     .expect("DEFAULT URL INVALID"),
                 _marker: PhantomData::default(),
             }
