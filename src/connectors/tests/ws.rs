@@ -275,12 +275,11 @@ async fn connector_ws_server_text_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
     let free_port = find_free_tcp_port().await;
-    let server_addr = format!("0.0.0.0:{}", &free_port);
 
     let defn = literal!({
       "codec": "json",
       "config": {
-        "url": format!("ws://localhost:{free_port}")
+        "url": format!("ws://0.0.0.0:{free_port}")
       }
     });
 
@@ -295,7 +294,7 @@ async fn connector_ws_server_text_routing() -> Result<()> {
     //
     // Send from ws client to server and check received event
     //
-    let mut c1 = TestClient::new(format!("ws://{}/", server_addr));
+    let mut c1 = TestClient::new(format!("ws://localhost:{free_port}/"));
     c1.send("\"Hello WebSocket Server\"")?;
 
     let event = out_pipeline
