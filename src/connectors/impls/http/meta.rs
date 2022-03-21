@@ -515,12 +515,12 @@ impl HttpRequestMeta {
         }
 
         Ok((
-            Self::into_request(&active_meta, &body)?,
+            Self::into_request(&active_meta, &body),
             active_meta.to_value(),
         ))
     }
 
-    fn into_request(meta: &BatchItemMeta, body: &[u8]) -> Result<SurfRequest> {
+    fn into_request(meta: &BatchItemMeta, body: &[u8]) -> SurfRequest {
         debug!("Rest endpoint [{}] chosen", &meta.endpoint);
         let host = match (meta.endpoint.host(), meta.endpoint.port()) {
             (Some(host), Some(port)) => Some(format!("{}:{}", host, port)),
@@ -550,6 +550,6 @@ impl HttpRequestMeta {
             request_builder = request_builder.header("Host", host);
         }
         request_builder = request_builder.body_bytes(body);
-        Ok(request_builder.build())
+        request_builder.build()
     }
 }
