@@ -231,10 +231,16 @@ default = []
 128bit = ["tremor-value/128bit"]
 bert = ["tremor-pipeline/bert"]
 
-integration = ["es-integration", "s3-integration", "kafka-integration"]
+integration = [
+  "es-integration",
+  "s3-integration",
+  "kafka-integration",
+  "ws-integration",
+]
 es-integration = []
 s3-integration = []
 kafka-integration = []
+ws-integration = []
 
 [patch.crates-io]
 rust-bert = { git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989' }
