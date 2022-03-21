@@ -229,8 +229,6 @@ async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Resul
     // This is how we link a request to a response, this might not go away, unless we can do that with event ids somehow?
     headers.insert(URN_HEADER, Value::from(linking_uuid.to_string()))?;
 
-    let ct: Option<Mime> = req.content_type();
-
     let mut meta = Value::object_with_capacity(1);
     let mut request_meta = Value::object_with_capacity(3);
     let mut url_meta = Value::object_with_capacity(7);

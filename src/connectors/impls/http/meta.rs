@@ -25,7 +25,7 @@ use http_types::headers::HeaderValue;
 use http_types::{Method, Mime};
 use std::str::FromStr;
 use tremor_common::time::nanotime;
-use tremor_pipeline::{CbAction, Event, EventOriginUri, DEFAULT_STREAM_ID};
+use tremor_pipeline::{Event, EventOriginUri, DEFAULT_STREAM_ID};
 use tremor_script::{EventPayload, ValueAndMeta};
 use tremor_value::{literal, structurize, Value};
 use value_trait::{Builder, Mutable, ValueAccess};
