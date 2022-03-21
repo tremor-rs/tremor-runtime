@@ -26,6 +26,7 @@ mod pause_resume;
 mod s3;
 mod tcp_event_routing;
 mod unix_socket;
+#[cfg(feature = "ws-integration")]
 mod ws;
 
 // some tests don't use everything and this would generate warnings for those
@@ -252,6 +253,7 @@ impl ConnectorHarness {
         self.pipes.get(&port.into())
     }
 
+    #[cfg(feature = "ws-integration")]
     /// get the out pipeline - if any
     pub(crate) fn in_port(&self) -> Option<&TestPipeline> {
         self.get_pipe(IN)
