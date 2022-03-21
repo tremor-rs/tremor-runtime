@@ -99,7 +99,7 @@ pub(crate) mod url {
             D: serde::Deserializer<'de>,
         {
             let input = String::deserialize(deserializer)?;
-            Url::parse(&input).map_err(|e| serde::de::Error::custom(e))
+            Url::parse(&input).map_err(serde::de::Error::custom)
         }
     }
 
@@ -153,8 +153,9 @@ pub(crate) mod url {
     impl<D: Defaults> Default for Url<D> {
         fn default() -> Self {
             Self {
-                // ALLOW: this is a known safe url, we have a test for it
-                url: url::Url::parse(&format!("{}://{}:{}", D::SCHEME, D::HOST, D::PORT)).unwrap(),
+                // ALLOW: this is a known safe url
+                url: url::Url::parse(&format!("{}://{}:{}", D::SCHEME, D::HOST, D::PORT))
+                    .expect("DEFAULT URL INVALID"),
                 _marker: PhantomData::default(),
             }
         }
