@@ -237,12 +237,14 @@ integration = [
   "kafka-integration",
   "ws-integration",
   "http-integration",
+  "file-integration",
 ]
 es-integration = []
 s3-integration = []
 kafka-integration = []
 ws-integration = []
 http-integration = []
+file-integration = []
 
 [patch.crates-io]
 rust-bert = { git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989' }

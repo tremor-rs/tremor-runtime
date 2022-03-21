@@ -14,6 +14,7 @@
 mod crononome;
 #[cfg(feature = "es-integration")]
 mod elastic;
+#[cfg(feature = "file-integration")]
 mod file;
 mod file_non_existent;
 mod file_xz;
