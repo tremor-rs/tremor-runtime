@@ -34,7 +34,7 @@ use crate::{
 };
 use beef::Cow;
 use sha2::Digest;
-use std::{collections::hash_map::Entry, mem::transmute};
+use std::collections::hash_map::Entry;
 use std::{collections::HashMap, fmt::Debug};
 
 use std::sync::RwLock;
@@ -241,8 +241,7 @@ impl Module {
         let lexemes = Tokenizer::new(src, arena_idx)
             .filter_map(std::result::Result::ok)
             .filter(|t| !t.value.is_ignorable());
-        let raw: ModuleRaw = crate::parser::g::ModuleFileParser::new().parse(lexemes)?;
-        let raw = unsafe { transmute::<ModuleRaw<'_>, ModuleRaw<'static>>(raw) };
+        let raw: ModuleRaw<'static> = crate::parser::g::ModuleFileParser::new().parse(lexemes)?;
 
         for s in raw.stmts {
             match s {
