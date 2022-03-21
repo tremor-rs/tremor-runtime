@@ -172,7 +172,6 @@ impl Sink for OtelSink {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        // FIXME, what if we have no remote?
         if let Some(remote) = &mut self.remote {
             // Up
             for value in event.value_iter() {
@@ -220,6 +219,7 @@ impl Sink for OtelSink {
             Ok(SinkReply::ack_or_none(event.transactional))
         } else {
             error!("{ctx} Sending to a non connected sink!");
+            ctx.notifier().connection_lost().await?;
             Ok(SinkReply::fail_or_none(event.transactional))
         }
     }
