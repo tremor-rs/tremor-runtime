@@ -19,7 +19,7 @@ jobs:
       - uses: Swatinem/rust-cache@v1
       - name: Run tests and validate lockfile
         env:
-          PROPTEST_CASES: 1000
+          PROPTEST_CASES: 2500
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
           RUST_LOG: debug
           RUST_BACKTRACE: 1
@@ -37,10 +37,10 @@ jobs:
       - name: Run cargo-tarpaulin
         uses: actions-rs/tarpaulin@v0.1
         env:
-          PROPTEST_CASES: 1000
+          PROPTEST_CASES: 2500
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
         with:
-          version: "0.19.1"
+          version: "0.20.0"
           args: " --exclude-files target* tremor-cli tremor-api **/errors.rs depricated --out Lcov --all --features integration"
       - name: Coveralls
         uses: coverallsapp/github-action@master
