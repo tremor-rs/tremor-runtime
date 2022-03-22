@@ -22,6 +22,7 @@ jobs:
           PROPTEST_CASES: 1000
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
           RUST_LOG: debug
+          RUST_BACKTRACE: 1
         run: cargo test --all --locked --features integration
   code-coverage:
     runs-on: ubuntu-latest
