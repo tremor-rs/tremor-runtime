@@ -14,8 +14,8 @@
 
 use super::ConnectorHarness;
 use crate::errors::Result;
-use std::time::Duration;
 use async_std::task;
+use std::time::Duration;
 use tremor_value::prelude::*;
 
 #[async_std::test]
