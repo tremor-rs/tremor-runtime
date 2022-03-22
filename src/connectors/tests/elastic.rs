@@ -37,7 +37,8 @@ async fn connector_elastic() -> Result<()> {
 
     let docker = clients::Cli::default();
     let image = GenericImage::new(format!("elasticsearch:{}", ELASTICSEARCH_VERSION))
-        .with_env_var("discovery.type", "single-node");
+        .with_env_var("discovery.type", "single-node")
+        .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m");
 
     let container = docker.run_with_args(
         image,
