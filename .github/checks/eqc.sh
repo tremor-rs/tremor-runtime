@@ -14,8 +14,6 @@ do
         if [ -f "$PIDFILE" ]
         then
             kill $(cat "$PIDFILE"); rm -f "$PIDFILE"
-        else
-            pkill tremor
         fi
     }
     trap stop_tremor EXIT
