@@ -64,6 +64,8 @@ use tremor_common::{
 use tremor_pipeline::{CbAction, EventId};
 use tremor_script::{ast::DeployEndpoint, NodeMeta, Value};
 
+use super::sink::SinkMsg;
+
 pub(crate) struct ConnectorHarness {
     connector_id: String,
     world: World,
@@ -282,8 +284,6 @@ impl ConnectorHarness {
         feature = "ws-integration"
     ))]
     pub(crate) async fn send_to_sink(&self, event: Event, port: Cow<'static, str>) -> Result<()> {
-        use super::sink::SinkMsg;
-
         self.addr.send_sink(SinkMsg::Event { event, port }).await
     }
 

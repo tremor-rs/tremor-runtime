@@ -18,7 +18,6 @@
 use super::{WsReader, WsWriter};
 use crate::connectors::prelude::*;
 use crate::connectors::utils::tls::{tls_client_connector, TLSClientConfig};
-use async_dup::{Arc as DupArc, Mutex as DupMutex};
 use async_std::net::TcpStream;
 use async_tls::TlsConnector;
 use async_tungstenite::client_async;
@@ -180,11 +179,9 @@ impl Connector for WsClient {
         if let Some(tls_connector) = self.tls_connector.as_ref() {
             // TLS
             // wrap it into arcmutex, because we need to clone it in order to close it properly
-            let tls_stream = DupArc::new(DupMutex::new(
-                tls_connector.connect(&self.tls_domain, tcp_stream).await?,
-            ));
+            let tls_stream = tls_connector.connect(&self.tls_domain, tcp_stream).await?;
             let (ws_stream, _http_response) =
-                client_async(self.config.url.as_str(), tls_stream.clone()).await?;
+                client_async(self.config.url.as_str(), tls_stream).await?;
             let origin_uri = EventOriginUri {
                 scheme: URL_SCHEME.to_string(),
                 host: local_addr.ip().to_string(),
@@ -197,19 +194,13 @@ impl Connector for WsClient {
 
             sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer);
 
-            let ws_reader = WsReader::new(
-                reader,
-                tls_stream,
-                sink_runtime.clone(),
-                origin_uri,
-                meta,
-                ctx.clone(),
-            );
+            let ws_reader =
+                WsReader::new(reader, sink_runtime.clone(), origin_uri, meta, ctx.clone());
             source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
         } else {
             // No TLS
             let (ws_stream, _http_response) =
-                client_async(self.config.url.as_str(), tcp_stream.clone()).await?;
+                client_async(self.config.url.as_str(), tcp_stream).await?;
             let origin_uri = EventOriginUri {
                 scheme: URL_SCHEME.to_string(),
                 host: local_addr.ip().to_string(),
@@ -222,14 +213,8 @@ impl Connector for WsClient {
             let ws_writer = WsWriter::new_tungstenite_client(writer);
             sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer);
 
-            let ws_reader = WsReader::new(
-                reader,
-                tcp_stream,
-                sink_runtime.clone(),
-                origin_uri,
-                meta,
-                ctx.clone(),
-            );
+            let ws_reader =
+                WsReader::new(reader, sink_runtime.clone(), origin_uri, meta, ctx.clone());
             source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
         }
 

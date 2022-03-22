@@ -15,7 +15,6 @@
 use super::{WsReader, WsWriter};
 use crate::connectors::utils::tls::{load_server_config, TLSServerConfig};
 use crate::connectors::{prelude::*, utils::ConnectionMeta};
-use async_dup::{Arc as DupArc, Mutex as DupMutex};
 use async_std::task::JoinHandle;
 use async_std::{net::TcpListener, prelude::FutureExt};
 use async_tls::TlsAcceptor;
@@ -206,9 +205,7 @@ impl Connector for WsServer {
                         if let Some(acceptor) = tls_acceptor {
                             let meta = ctx.meta(WsServer::meta(peer_addr, true));
                             // TODO: this should live in its own task, as it requires rome roundtrips :()
-                            let tls_stream =
-                                DupArc::new(DupMutex::new(acceptor.accept(tcp_stream).await?));
-                            let underlying_stream = tls_stream.clone();
+                            let tls_stream = acceptor.accept(tcp_stream).await?;
                             let ws_stream = accept_async(tls_stream).await?;
                             debug!("{ctx} new connection from {peer_addr}");
 
@@ -224,7 +221,6 @@ impl Connector for WsServer {
 
                             let ws_reader = WsReader::new(
                                 ws_read,
-                                underlying_stream,
                                 sink_runtime.clone(),
                                 origin_uri.clone(),
                                 meta,
@@ -232,7 +228,7 @@ impl Connector for WsServer {
                             );
                             source_runtime.register_stream_reader(stream_id, &ctx, ws_reader);
                         } else {
-                            let ws_stream = match accept_async(tcp_stream.clone()).await {
+                            let ws_stream = match accept_async(tcp_stream).await {
                                 Ok(s) => s,
                                 Err(e) => {
                                     error!("{ctx} Websocket connection error: {e}");
@@ -256,7 +252,6 @@ impl Connector for WsServer {
 
                             let ws_reader = WsReader::new(
                                 ws_read,
-                                tcp_stream,
                                 sink_runtime.clone(),
                                 origin_uri.clone(),
                                 meta,

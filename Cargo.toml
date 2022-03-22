@@ -38,7 +38,6 @@ async-compression = { version = "0.3", features = [
   "futures-io",
   "stream",
 ] }
-async-dup = "1.2"
 async-std = { version = "1.10.0", features = [
   "unstable",
   "attributes",

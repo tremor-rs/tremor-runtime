@@ -36,7 +36,6 @@ where
     Runtime: SinkRuntime,
 {
     stream: SplitStream<WebSocketStream<Stream>>,
-    underlying_stream: Stream,
     // we keep this around for closing the writing part if the reader is done
     sink_runtime: Runtime,
     origin_uri: EventOriginUri,
@@ -52,7 +51,6 @@ where
 {
     fn new(
         stream: SplitStream<WebSocketStream<Stream>>,
-        underlying_stream: Stream,
         sink_runtime: Runtime,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
@@ -60,7 +58,6 @@ where
     ) -> Self {
         Self {
             stream,
-            underlying_stream,
             sink_runtime,
             origin_uri,
             meta,
@@ -130,11 +127,6 @@ where
             self.sink_runtime.unregister_stream_writer(stream).await,
             "Error unregistering stream",
         );
-        // close the underlying stream
-        self.ctx.log_err(
-            self.underlying_stream.close().await,
-            "Error closing the Read Half of WS Stream",
-        );
         StreamDone::StreamClosed
     }
 }
@@ -152,18 +144,10 @@ impl WsWriter<async_std::net::TcpStream> {
     }
 }
 
-impl
-    WsWriter<
-        async_dup::Arc<async_dup::Mutex<async_tls::server::TlsStream<async_std::net::TcpStream>>>,
-    >
-{
+impl WsWriter<async_tls::server::TlsStream<async_std::net::TcpStream>> {
     fn new_tls_server(
         sink: SplitSink<
-            WebSocketStream<
-                async_dup::Arc<
-                    async_dup::Mutex<async_tls::server::TlsStream<async_std::net::TcpStream>>,
-                >,
-            >,
+            WebSocketStream<async_tls::server::TlsStream<async_std::net::TcpStream>>,
             Message,
         >,
     ) -> Self {
@@ -179,18 +163,10 @@ impl WsWriter<async_std::net::TcpStream> {
     }
 }
 
-impl
-    WsWriter<
-        async_dup::Arc<async_dup::Mutex<async_tls::client::TlsStream<async_std::net::TcpStream>>>,
-    >
-{
+impl WsWriter<async_tls::client::TlsStream<async_std::net::TcpStream>> {
     fn new_tls_client(
         sink: SplitSink<
-            WebSocketStream<
-                async_dup::Arc<
-                    async_dup::Mutex<async_tls::client::TlsStream<async_std::net::TcpStream>>,
-                >,
-            >,
+            WebSocketStream<async_tls::client::TlsStream<async_std::net::TcpStream>>,
             Message,
         >,
     ) -> Self {
