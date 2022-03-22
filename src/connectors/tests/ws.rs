@@ -14,7 +14,7 @@
 
 use super::{find_free_tcp_port, setup_for_tls, ConnectorHarness};
 use crate::connectors::{impls::ws::WsDefaults, utils::url::Url};
-use crate::errors::Result;
+use crate::errors::{Error, Result, ResultExt};
 use async_std::{
     channel::{bounded, Receiver, Sender, TryRecvError},
     net::{TcpListener, TcpStream},
@@ -25,7 +25,7 @@ use async_std::{
 use async_tls::TlsConnector;
 use async_tungstenite::{
     accept_async, client_async,
-    tungstenite::{stream::MaybeTlsStream, Message, WebSocket},
+    tungstenite::{stream::MaybeTlsStream, Error as WsError, Message, WebSocket},
     WebSocketStream,
 };
 use futures::SinkExt;
@@ -104,10 +104,11 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
                 Some(Ok(Message::Binary(data))) => return Ok(ExpectMessage::Binary(data)),
                 Some(Ok(other)) => return Ok(ExpectMessage::Unexpected(other)),
                 Some(Err(e)) => return Err(e.into()),
-                None => continue,
+                None => return Err("EOF".into()), // stream end
             }
         }
     }
+
     async fn close(&mut self) -> Result<()> {
         info!("Closing Test client...");
         let _ = self.client.flush().await; // ignore errors
@@ -135,13 +136,22 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
         }
     }
 
+    fn ping(&mut self) -> Result<()> {
+        self.client
+            .write_message(Message::Ping(vec![1, 2, 3, 4]))
+            .chain_err(|| "Failed to send ping to ws server")
+    }
+
+    fn pong(&mut self) -> Result<()> {
+        self.client
+            .write_message(Message::Pong(vec![5, 6, 7, 8]))
+            .chain_err(|| "Failed to send pong to ws server")
+    }
+
     fn send(&mut self, data: &str) -> Result<()> {
-        let status = self.client.write_message(Message::Text(data.into()));
-        if status.is_err() {
-            Err("Failed to send to ws server".into())
-        } else {
-            Ok(())
-        }
+        self.client
+            .write_message(Message::Text(data.into()))
+            .chain_err(|| "Failed to send to ws server")
     }
 
     fn port(&mut self) -> Result<u16> {
@@ -159,14 +169,20 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
             Err(e) => Err(e.into()),
         }
     }
+
+    fn recv(&mut self) -> Result<Message> {
+        self.client.read_message().map_err(Error::from)
+    }
+
     async fn close(&mut self) -> Result<()> {
-        info!("Closing TLS test client...");
+        info!("Closing WS test client...");
         self.client.close(Some(CloseFrame {
             code: CloseCode::Normal,
-            reason: "TLS Test client closing.".into(),
+            reason: "WS Test client closing.".into(),
         }))?;
-        let _ = self.client.write_pending();
-        info!("TLS test client closed.");
+        // finish closing handshake
+        self.client.write_pending()?;
+        info!("WS test client closed.");
         Ok(())
     }
 }
@@ -591,6 +607,69 @@ async fn connector_wss_server_binary_routing() -> Result<()> {
     assert!(err.is_empty());
 
     c1.close().await?;
+
+    Ok(())
+}
+
+#[async_std::test]
+async fn server_control_frames() -> Result<()> {
+    let _ = env_logger::try_init();
+
+    let free_port = find_free_tcp_port().await;
+
+    let defn = literal!({
+      "codec": "json",
+      "config": {
+        "url": format!("ws://0.0.0.0:{free_port}")
+      }
+    });
+
+    let harness = ConnectorHarness::new("ws_server", &defn).await?;
+    let out_pipeline = harness
+        .out()
+        .expect("No pipeline connected to 'out' port of ws_server connector");
+
+    harness.start().await?;
+    harness.wait_for_connected(Duration::from_secs(5)).await?;
+
+    let mut c1 = TestClient::new(format!("ws://localhost:{free_port}/"));
+
+    // check ping
+    c1.ping()?;
+    let pong = c1.recv()?;
+    assert_eq!(Message::Pong(vec![1, 2, 3, 4]), pong);
+
+    // we ignore pings, they shouldn't get through as events
+    assert!(out_pipeline.get_event().await.is_err());
+
+    // check pong
+    c1.pong()?;
+    // expect no response and no event, as we ignore pong frames
+    assert!(out_pipeline.get_event().await.is_err());
+
+    // check close
+    c1.close().await?;
+    // expect a close frame as response
+    let close = c1.recv()?;
+    assert_eq!(
+        Message::Close(Some(CloseFrame {
+            code: CloseCode::Normal,
+            reason: "WS Test client closing.".into()
+        })),
+        close
+    );
+    harness.signal_tick_to_sink().await?;
+
+    // this should fail, as the server should close the connection
+    assert!(matches!(
+        c1.recv(),
+        Err(Error(
+            crate::errors::ErrorKind::WsError(WsError::ConnectionClosed),
+            _
+        ))
+    ));
+    // expect no response and no event, the stream should have been closed though
+    assert!(out_pipeline.get_event().await.is_err());
 
     Ok(())
 }
