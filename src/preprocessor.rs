@@ -173,29 +173,6 @@ pub fn finish(
     }
 }
 
-trait SliceTrim {
-    fn trim(&self) -> &Self;
-}
-
-impl SliceTrim for [u8] {
-    fn trim(&self) -> &[u8] {
-        fn is_not_whitespace(c: u8) -> bool {
-            c != b'\t' && c != b' '
-        }
-
-        self.iter()
-            .position(|v| is_not_whitespace(*v))
-            .map_or(&[] as &[u8], |first| {
-                self.iter()
-                    .rposition(|v| is_not_whitespace(*v))
-                    .map_or_else(
-                        || self.get(first..).unwrap_or_default(),
-                        |last| self.get(first..=last).unwrap_or_default(),
-                    )
-            })
-    }
-}
-
 pub(crate) use lines::Lines;
 
 #[derive(Default, Debug, Clone)]
@@ -212,19 +189,6 @@ impl Preprocessor for FilterEmpty {
         } else {
             Ok(vec![data.to_vec()])
         }
-    }
-}
-
-#[derive(Clone, Default, Debug)]
-pub(crate) struct Nulls {}
-impl Preprocessor for Nulls {
-    #[cfg(not(tarpaulin_include))]
-    fn name(&self) -> &str {
-        "nulls"
-    }
-
-    fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        Ok(data.split(|c| *c == b'\0').map(Vec::from).collect())
     }
 }
 
@@ -521,6 +485,9 @@ mod test {
 
         assert_eq!(data, decoded);
         assert_eq!(in_ns, 42);
+
+        // data too short
+        assert!(pre_p.process(&mut in_ns, &[0_u8]).is_err());
         Ok(())
     }
 

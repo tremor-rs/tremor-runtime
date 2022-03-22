@@ -305,8 +305,33 @@ impl Postprocessor for Zstd {
 mod test {
     use super::*;
 
+    const LOOKUP_TABLE: [&str; 12] = [
+        "lines",
+        "base64",
+        "gzip",
+        "zlib",
+        "xz2",
+        "snappy",
+        "lz4",
+        "gelf-chunking",
+        "ingest-ns",
+        "length-prefixed",
+        "textual-length-prefix",
+        "zstd",
+    ];
+
     #[test]
-    fn line() {
+    fn test_lookup() -> Result<()> {
+        for t in LOOKUP_TABLE.iter() {
+            assert!(lookup(t).is_ok());
+        }
+        let t = "snot";
+        assert!(lookup(&t).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn line() -> Result<()> {
         let mut line = Lines {};
         let data: [u8; 0] = [];
         assert_eq!(Ok(vec![vec![b'\n']]), line.process(0, 0, &data));
@@ -314,10 +339,12 @@ mod test {
             Ok(vec![vec![b'f', b'o', b'o', b'b', b'\n']]),
             line.process(0, 0, b"foob")
         );
+        assert!(line.finish(None)?.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn base64() {
+    fn base64() -> Result<()> {
         let mut post = Base64 {};
         let data: [u8; 0] = [];
 
@@ -326,13 +353,18 @@ mod test {
         assert_eq!(Ok(vec![b"Cg==".to_vec()]), post.process(0, 0, b"\n"));
 
         assert_eq!(Ok(vec![b"c25vdA==".to_vec()]), post.process(0, 0, b"snot"));
+
+        assert!(post.finish(None)?.is_empty());
+        Ok(())
     }
 
     #[test]
-    fn textual_length_prefix_postp() {
+    fn textual_length_prefix_postp() -> Result<()> {
         let mut post = TextualLength {};
         let data = vec![1_u8, 2, 3];
         let encoded = post.process(42, 23, &data).unwrap().pop().unwrap();
         assert_eq!("3 \u{1}\u{2}\u{3}", str::from_utf8(&encoded).unwrap());
+        assert!(post.finish(None)?.is_empty());
+        Ok(())
     }
 }
