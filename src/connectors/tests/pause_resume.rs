@@ -136,7 +136,6 @@ async fn connector_tcp_server_pause_resume() -> Result<()> {
           "buf_size": 4096
       }
     });
-
     let harness = ConnectorHarness::new("tcp_server", &defn).await?;
     let out_pipeline = harness
         .out()

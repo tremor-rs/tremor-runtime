@@ -447,12 +447,10 @@ impl Operator for Wal {
 
 #[cfg(test)]
 mod test {
-    use std::time::Duration;
-
-    use crate::EventIdGenerator;
-    use crate::SignalKind;
-
     use super::*;
+    use crate::{EventIdGenerator, SignalKind};
+    use async_std::task;
+    use std::time::Duration;
     use tempfile::Builder as TempDirBuilder;
 
     #[test]
@@ -650,10 +648,10 @@ mod test {
         Ok(())
     }
 
-    #[test]
+    #[async_std::test]
     // tests that the wal works fine
     // after a restart of the tremor server
-    fn restart_wal_regression() -> Result<()> {
+    async fn restart_wal_regression() -> Result<()> {
         let temp_dir = TempDirBuilder::new()
             .prefix("tremor-pipeline-wal")
             .tempdir()?;
@@ -686,7 +684,7 @@ mod test {
         }
 
         // Sleep for a second so the lock is gone, this is terrible
-        std::thread::sleep(Duration::from_millis(100));
+        task::sleep(Duration::from_millis(100)).await;
 
         {
             // create the operator - second time

@@ -15,7 +15,6 @@
 use crate::errors::Result;
 use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
 use crate::{cli::Run, env};
-use async_std::task::block_on;
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use tremor_common::{file, ids::OperatorIdGen, time::nanotime};
@@ -418,26 +417,24 @@ impl Run {
         Ok(())
     }
 
-    fn run_troy_source(&self) -> Result<()> {
+    async fn run_troy_source(&self) -> Result<()> {
         env_logger::init();
 
-        block_on(async {
-            let config = WorldConfig {
-                debug_connectors: true,
-                ..WorldConfig::default()
-            };
-            let (world, _handle) = World::start(config).await?;
-            tremor_runtime::load_troy_file(&world, &self.script).await?;
-            async_std::task::sleep(std::time::Duration::from_millis(150_000)).await;
-            world.stop(ShutdownMode::Graceful).await
-        })?;
+        let config = WorldConfig {
+            debug_connectors: true,
+            ..WorldConfig::default()
+        };
+        let (world, _handle) = World::start(config).await?;
+        tremor_runtime::load_troy_file(&world, &self.script).await?;
+        async_std::task::sleep(std::time::Duration::from_millis(150_000)).await;
+        world.stop(ShutdownMode::Graceful).await?;
 
         Ok(())
     }
 
-    pub(crate) fn run(&self) -> Result<()> {
+    pub(crate) async fn run(&self) -> Result<()> {
         match get_source_kind(&self.script) {
-            SourceKind::Troy => self.run_troy_source(),
+            SourceKind::Troy => self.run_troy_source().await,
             SourceKind::Trickle => self.run_trickle_source(),
             SourceKind::Tremor => self.run_tremor_source(),
             SourceKind::Json | SourceKind::Unsupported(_) => {
