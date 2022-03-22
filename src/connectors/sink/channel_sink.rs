@@ -19,13 +19,15 @@ use crate::connectors::{Context, StreamDone};
 use crate::errors::Result;
 use crate::QSIZE;
 use async_std::channel::{bounded, Receiver, Sender};
-use async_std::task;
+use async_std::prelude::FutureExt;
+use async_std::task::{self, JoinHandle};
 use bimap::BiMap;
 use either::Either;
 use hashbrown::HashMap;
 use std::hash::Hash;
 use std::marker::PhantomData;
 use std::sync::atomic::Ordering;
+use std::time::Duration;
 use tremor_common::time::nanotime;
 use tremor_pipeline::{CbAction, Event, SignalKind};
 use tremor_value::Value;
@@ -233,10 +235,25 @@ where
     tx: Sender<ChannelSinkMsg<T>>,
 }
 
+#[async_trait::async_trait()]
+impl<T> SinkRuntime for ChannelSinkRuntime<T>
+where
+    T: Hash + Eq + Send + 'static,
+{
+    /// This will cause the writer to stop as its receiving channel will be closed.
+    /// The writer should receive an error when the channel is empty, so we safely drain all messages.
+    /// We will get a double `RemoveStream` message, but this is fine
+    async fn unregister_stream_writer(&self, stream: u64) -> Result<()> {
+        Ok(self.tx.send(ChannelSinkMsg::RemoveStream(stream)).await?)
+    }
+}
+
 impl<T> ChannelSinkRuntime<T>
 where
     T: Hash + Eq + Send + 'static,
 {
+    const RECV_TIMEOUT: Duration = Duration::from_millis(100);
+
     pub(crate) fn new(tx: Sender<ChannelSinkMsg<T>>) -> Self {
         Self { tx }
     }
@@ -247,7 +264,8 @@ where
         connection_meta: Option<T>,
         ctx: &C,
         mut writer: W,
-    ) where
+    ) -> JoinHandle<Result<()>>
+    where
         W: StreamWriter + 'static,
         C: Context + Send + Sync + 'static,
     {
@@ -263,33 +281,43 @@ where
             })
             .await?;
             // receive loop from channel sink
-            while let (
-                true,
-                Ok(SinkData {
-                    data,
-                    meta,
-                    contraflow,
-                    start,
-                }),
-            ) = (
+            while let (true, sinkdata) = (
                 ctx.quiescence_beacon().continue_writing().await,
-                stream_rx.recv().await,
+                // we timeout to not hang here but to check the beacon from time to time
+                stream_rx.recv().timeout(Self::RECV_TIMEOUT).await,
             ) {
-                let failed = writer.write(data, meta).await.is_err();
-
-                // send async contraflow insights if requested (only if event.transactional)
-                if let Some((cf_data, sender)) = contraflow {
-                    let reply = if failed {
-                        AsyncSinkReply::Fail(cf_data)
-                    } else {
-                        AsyncSinkReply::Ack(cf_data, nanotime() - start)
-                    };
-                    if let Err(e) = sender.send(reply).await {
-                        error!("{ctx} Error sending async sink reply: {e}");
+                match sinkdata {
+                    Err(_) => {
+                        // timeout, just continue
+                        continue;
                     }
-                }
-                if failed {
-                    break;
+                    Ok(Ok(SinkData {
+                        data,
+                        meta,
+                        contraflow,
+                        start,
+                    })) => {
+                        let failed = writer.write(data, meta).await.is_err();
+
+                        // send async contraflow insights if requested (only if event.transactional)
+                        if let Some((cf_data, sender)) = contraflow {
+                            let reply = if failed {
+                                AsyncSinkReply::Fail(cf_data)
+                            } else {
+                                AsyncSinkReply::Ack(cf_data, nanotime() - start)
+                            };
+                            if let Err(e) = sender.send(reply).await {
+                                error!("{ctx} Error sending async sink reply: {e}");
+                            }
+                        }
+                        if failed {
+                            break;
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        error!("{ctx} Error receiving data from ChannelSink: {e}");
+                        break;
+                    }
                 }
             }
             let error = match writer.on_done(stream).await {
@@ -304,7 +332,7 @@ where
                 .send(ChannelSinkMsg::RemoveStream(stream))
                 .await?;
             Result::Ok(())
-        });
+        })
     }
 }
 

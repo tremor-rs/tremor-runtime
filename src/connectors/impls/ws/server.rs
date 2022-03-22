@@ -15,6 +15,7 @@
 use super::{WsReader, WsWriter};
 use crate::connectors::utils::tls::{load_server_config, TLSServerConfig};
 use crate::connectors::{prelude::*, utils::ConnectionMeta};
+use async_dup::{Arc as DupArc, Mutex as DupMutex};
 use async_std::task::JoinHandle;
 use async_std::{net::TcpListener, prelude::FutureExt};
 use async_tls::TlsAcceptor;
@@ -39,7 +40,6 @@ impl ConfigImpl for Config {}
 
 #[allow(clippy::module_name_repetitions)]
 pub(crate) struct WsServer {
-    alias: String,
     config: Config,
     accept_task: Option<JoinHandle<()>>,
     sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
@@ -57,7 +57,7 @@ impl ConnectorBuilder for Builder {
     }
     async fn from_config(
         &self,
-        id: &str,
+        _id: &str,
         raw_config: &ConnectorConfig,
     ) -> crate::errors::Result<Box<dyn Connector>> {
         if let Some(raw_config) = &raw_config.config {
@@ -70,7 +70,6 @@ impl ConnectorBuilder for Builder {
             };
 
             Ok(Box::new(WsServer {
-                alias: id.to_string(),
                 config,
                 accept_task: None,  // not yet started
                 sink_runtime: None, // replaced in create_sink()
@@ -152,7 +151,6 @@ impl Connector for WsServer {
     async fn connect(&mut self, ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         // TODO: this can be simplified as the connect can be moved into the source
         let path = vec![self.config.url.port_or_dflt().to_string()];
-        let accept_url = self.alias.clone();
 
         let source_runtime = self
             .source_runtime
@@ -208,12 +206,11 @@ impl Connector for WsServer {
                         if let Some(acceptor) = tls_acceptor {
                             let meta = ctx.meta(WsServer::meta(peer_addr, true));
                             // TODO: this should live in its own task, as it requires rome roundtrips :()
-                            let tls_stream = acceptor.accept(tcp_stream.clone()).await?;
+                            let tls_stream =
+                                DupArc::new(DupMutex::new(acceptor.accept(tcp_stream).await?));
+                            let underlying_stream = tls_stream.clone();
                             let ws_stream = accept_async(tls_stream).await?;
-                            debug!(
-                                "[Connector::{}] new connection from {}",
-                                &accept_url, peer_addr
-                            );
+                            debug!("{ctx} new connection from {peer_addr}");
 
                             let (ws_write, ws_read) = ws_stream.split();
 
@@ -225,28 +222,30 @@ impl Connector for WsServer {
                                 ws_writer,
                             );
 
-                            let ws_reader = WsReader::new(ws_read, origin_uri.clone(), meta);
+                            let ws_reader = WsReader::new(
+                                ws_read,
+                                underlying_stream,
+                                sink_runtime.clone(),
+                                origin_uri.clone(),
+                                meta,
+                                ctx.clone(),
+                            );
                             source_runtime.register_stream_reader(stream_id, &ctx, ws_reader);
                         } else {
-                            let ws_stream = match accept_async(tcp_stream).await {
+                            let ws_stream = match accept_async(tcp_stream.clone()).await {
                                 Ok(s) => s,
                                 Err(e) => {
-                                    error!("Websaocket connection error: {}", e);
+                                    error!("{ctx} Websocket connection error: {e}");
                                     continue;
                                 }
                             };
-                            debug!(
-                                "[Connector::{}] new connection from {}",
-                                &accept_url, peer_addr
-                            );
+                            debug!("{ctx} new connection from {peer_addr}",);
 
                             let (ws_write, ws_read) = ws_stream.split();
 
                             let meta = ctx.meta(WsServer::meta(peer_addr, false));
-                            let ws_reader = WsReader::new(ws_read, origin_uri.clone(), meta);
 
                             let ws_writer = WsWriter::new(ws_write);
-                            source_runtime.register_stream_reader(stream_id, &ctx, ws_reader);
 
                             sink_runtime.register_stream_writer(
                                 stream_id,
@@ -254,6 +253,16 @@ impl Connector for WsServer {
                                 &ctx,
                                 ws_writer,
                             );
+
+                            let ws_reader = WsReader::new(
+                                ws_read,
+                                tcp_stream,
+                                sink_runtime.clone(),
+                                origin_uri.clone(),
+                                meta,
+                                ctx.clone(),
+                            );
+                            source_runtime.register_stream_reader(stream_id, &ctx, ws_reader);
                         }
                     }
                     Ok(Err(e)) => return Err(e.into()),

@@ -6401,6 +6401,7 @@ dependencies = [
  "async-broadcast",
  "async-compat",
  "async-compression",
+ "async-dup",
  "async-nats",
  "async-std",
  "async-std-resolver",

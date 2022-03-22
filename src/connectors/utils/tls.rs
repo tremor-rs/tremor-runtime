@@ -114,7 +114,6 @@ pub(crate) fn load_server_config(config: &TLSServerConfig) -> Result<ServerConfi
 
 /// if we have a cafile configured, we only load it, and no other ca certificates
 /// if there is no cafile configured, we load the default webpki-roots from Mozilla
-#[allow(dead_code)]
 pub(crate) async fn tls_client_connector(config: &TLSClientConfig) -> Result<TlsConnector> {
     Ok(if let Some(cafile) = config.cafile.as_ref() {
         let mut config = ClientConfig::new();

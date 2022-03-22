@@ -69,14 +69,27 @@ impl ConnectorBuilder for Builder {
         if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
             if config.url.port().is_none() {
-                return Err("Missing port for TCP client".into());
+                return Err(ErrorKind::InvalidConfiguration(
+                    id.to_string(),
+                    "Missing port for TCP client".to_string(),
+                )
+                .into());
             }
+            let host = match config.url.host_str() {
+                Some(host) => host.to_string(),
+                None => {
+                    return Err(Error::from(ErrorKind::InvalidConfiguration(
+                        id.to_string(),
+                        "missing host for TCP client".to_string(),
+                    )))
+                }
+            };
             let (tls_connector, tls_domain) = match config.tls.as_ref() {
                 Some(Either::Right(true)) => {
                     // default config
                     (
                         Some(tls_client_connector(&TLSClientConfig::default()).await?),
-                        Some(config.url.host_str().ok_or("missing host")?.to_string()),
+                        Some(host),
                     )
                 }
                 Some(Either::Left(tls_config)) => (
