@@ -58,9 +58,9 @@ mod test {
 
         let mut codec = Yaml {};
         let mut as_raw = codec.encode(&seed)?;
-        let as_json = codec.decode(as_raw.as_mut_slice(), 0);
+        let as_json = codec.decode(as_raw.as_mut_slice(), 0)?;
 
-        let _ = dbg!(as_json);
+        assert_eq!(Some(seed), as_json);
 
         Ok(())
     }

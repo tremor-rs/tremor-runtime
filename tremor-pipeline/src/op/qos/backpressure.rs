@@ -271,7 +271,7 @@ mod test {
     }
 
     #[test]
-    fn block_on_error() {
+    fn halt_on_error() {
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],
@@ -367,7 +367,7 @@ mod test {
     }
 
     #[test]
-    fn block_on_error_cb() -> Result<()> {
+    fn halt_on_error_cb() -> Result<()> {
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],

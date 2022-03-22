@@ -30,7 +30,9 @@ mod metronome;
 mod pause_resume;
 #[cfg(feature = "s3-integration")]
 mod s3;
+#[cfg(feature = "tcp-integration")]
 mod tcp_event_routing;
+#[cfg(feature = "socket-integration")]
 mod unix_socket;
 #[cfg(feature = "ws-integration")]
 mod ws;
@@ -40,9 +42,7 @@ mod ws;
 
 use crate::{
     config,
-    connectors::{
-        self, builtin_connector_types, sink::SinkMsg, source::SourceMsg, Connectivity, StatusReport,
-    },
+    connectors::{self, builtin_connector_types, source::SourceMsg, Connectivity, StatusReport},
     errors::Result,
     instance::State,
     pipeline,
@@ -273,8 +273,16 @@ impl ConnectorHarness {
     pub(crate) fn err(&self) -> Option<&TestPipeline> {
         self.get_pipe(ERR)
     }
-
+    #[cfg(any(
+        feature = "http-integration",
+        feature = "es-integration",
+        feature = "socket-integration",
+        feature = "tcp-integration",
+        feature = "ws-integration"
+    ))]
     pub(crate) async fn send_to_sink(&self, event: Event, port: Cow<'static, str>) -> Result<()> {
+        use super::sink::SinkMsg;
+
         self.addr.send_sink(SinkMsg::Event { event, port }).await
     }
 
