@@ -236,11 +236,12 @@ impl ChronomicQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_std::task;
     use chrono::{self, DateTime};
-    use std::{convert::TryFrom, thread, time::Duration};
+    use std::{convert::TryFrom, time::Duration};
 
     #[test]
-    pub fn test_deserialize_cron_entry() -> Result<()> {
+    fn test_deserialize_cron_entry() -> Result<()> {
         let mut s = b"{\"name\": \"test\", \"expr\": \"* 0 0 * * * *\"}".to_vec();
         let entry = CronEntryInt::try_from(simd_json::from_slice::<CronEntry>(s.as_mut_slice())?)?;
         assert_eq!("test", entry.name);
@@ -249,7 +250,7 @@ mod tests {
     }
 
     #[test]
-    pub fn test_deserialize_cron_entry_error() -> Result<()> {
+    fn test_deserialize_cron_entry_error() -> Result<()> {
         let mut s = b"{\"name\": \"test\", \"expr\": \"snot snot\"}".to_vec();
         let entry: CronEntry = simd_json::from_slice(s.as_mut_slice())?;
         assert_eq!("test", entry.name);
@@ -257,8 +258,8 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    pub fn test_tpq_fill_drain() -> Result<()> {
+    #[async_std::test]
+    async fn test_tpq_fill_drain() -> Result<()> {
         use chrono::prelude::Utc;
         let mut tpq = TemporalPriorityQueue::default();
         let n1 = TemporalItem {
@@ -281,16 +282,16 @@ mod tests {
         let due = tpq.drain();
         assert_eq!(vec![n1.clone(), n2], due);
 
-        thread::sleep(Duration::from_millis(1000));
+        task::sleep(Duration::from_millis(1000)).await;
         assert!(tpq.drain().is_empty());
-        thread::sleep(Duration::from_millis(1000));
+        task::sleep(Duration::from_millis(1000)).await;
         assert!(tpq.drain().is_empty());
 
         Ok(())
     }
 
-    #[test]
-    pub fn test_tpq_fill_pop() -> Result<()> {
+    #[async_std::test]
+    async fn test_tpq_fill_pop() -> Result<()> {
         use chrono::prelude::Utc;
         let mut tpq = TemporalPriorityQueue::default();
         let n1 = TemporalItem {
@@ -314,16 +315,16 @@ mod tests {
         assert_eq!(Some(n1), tpq.pop());
         assert_eq!(Some(n2), tpq.pop());
 
-        thread::sleep(Duration::from_millis(1000));
+        task::sleep(Duration::from_millis(1000)).await;
         assert!(tpq.pop().is_none());
-        thread::sleep(Duration::from_millis(1000));
+        task::sleep(Duration::from_millis(1000)).await;
         assert!(tpq.pop().is_none());
 
         Ok(())
     }
 
-    #[test]
-    pub fn test_cq_fill_drain_refill() -> Result<()> {
+    #[async_std::test]
+    async fn test_cq_fill_drain_refill() -> Result<()> {
         let mut cq = ChronomicQueue::default();
         // Dates before Jan 1st 1970 are invalid
         let n1 = CronEntryInt::try_from(literal!({
@@ -345,17 +346,17 @@ mod tests {
         let due = cq.drain();
         assert_eq!(0, due.len());
 
-        thread::sleep(Duration::from_millis(1000));
+        task::sleep(Duration::from_millis(1000)).await;
         assert_eq!(1, cq.drain().len());
 
-        thread::sleep(Duration::from_millis(1000));
+        task::sleep(Duration::from_millis(1000)).await;
         assert_eq!(1, cq.drain().len());
 
         Ok(())
     }
 
-    #[test]
-    pub fn test_cq_fill_pop_refill() -> Result<()> {
+    #[async_std::test]
+    async fn test_cq_fill_pop_refill() -> Result<()> {
         let mut cq = ChronomicQueue::default();
         // Dates before Jan 1st 1970 are invalid
         let n1 = CronEntryInt::try_from(literal!({
@@ -376,10 +377,10 @@ mod tests {
         cq.enqueue(&n3);
         assert!(cq.next().is_none());
 
-        thread::sleep(Duration::from_millis(1000));
+        task::sleep(Duration::from_millis(1000)).await;
         assert!(cq.next().is_some());
         assert!(cq.next().is_none());
-        thread::sleep(Duration::from_millis(1000));
+        task::sleep(Duration::from_millis(1000)).await;
         assert!(cq.next().is_some());
 
         Ok(())

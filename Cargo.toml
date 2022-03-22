@@ -240,6 +240,8 @@ integration = [
   "file-integration",
   "crononome-integration",
   "metronome-integration",
+  "socket-integration",
+  "tcp-integration",
 ]
 es-integration = []
 s3-integration = []
@@ -249,6 +251,8 @@ http-integration = []
 file-integration = []
 crononome-integration = []
 metronome-integration = []
+socket-integration = []
+tcp-integration = []
 
 [patch.crates-io]
 rust-bert = { git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989' }

@@ -18,7 +18,6 @@ use crate::errors::{Error, ErrorKind, Result};
 use crate::util::slurp_string;
 use crate::{job, job::TargetProcess};
 use async_std::future::timeout;
-use async_std::task;
 use std::{
     collections::HashMap,
     fs,
@@ -76,7 +75,7 @@ impl Before {
             current_working_dir.display()
         );
 
-        self.block_on(&mut process, base).await?;
+        self.wait_for(&mut process, base).await?;
         debug!("Before process ready.");
         Ok(process)
     }
@@ -94,7 +93,7 @@ impl Before {
         )
     }
 
-    pub(crate) async fn block_on(
+    pub(crate) async fn wait_for(
         &self,
         process: &mut job::TargetProcess,
         base: &Path,
@@ -131,10 +130,11 @@ impl Before {
                         }
                         "http-ok" => {
                             for endpoint in v {
-                                let res = task::block_on(timeout(
+                                let res = timeout(
                                     Duration::from_secs(self.until.min(5)),
                                     surf::get(endpoint).send(),
-                                ))?;
+                                )
+                                .await?;
                                 success &= match res {
                                     Ok(res) => res.status().is_success(),
                                     Err(_) => false,

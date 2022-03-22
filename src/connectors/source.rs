@@ -605,6 +605,7 @@ where
     /// - if we have no pipelines connected
     fn needs_control_plane_msg(&self) -> bool {
         matches!(self.state, SourceState::Paused | SourceState::Initialized)
+            || self.connectivity == Connectivity::Disconnected
             || !self.rx.is_empty()
             || self.pipelines_out.is_empty()
     }
@@ -1144,6 +1145,16 @@ where
     async fn control_plane(&mut self) -> Result<Control> {
         loop {
             if !self.needs_control_plane_msg() {
+                // This yeild is needed since otherwise we could creeate a tight loop that never
+                // yields for another task on the executor.
+                //
+                // The loop would be:
+                // run -> control_plane -> should_pull_data == false && pull_wait_start == None -> run ...
+                //
+                // This becomes a problem if, for example, we starve the executors and do not let
+                // any the 'Open' message so we never get to `should_pull_data` but also never
+                // get another control plane message.
+                task::yield_now().await;
                 return Ok(Control::Continue);
             }
             if let Ok(msg) = self.rx.recv().await {

@@ -116,7 +116,7 @@ async fn run(cli: Cli) -> Result<()> {
         }
         Command::Test(t) => t.run().await,
         Command::Dbg(d) => d.run(),
-        Command::Run(r) => r.run(),
+        Command::Run(r) => r.run().await,
         Command::Doc(d) => d.run(),
         Command::Api(_) => todo!(),
     }
