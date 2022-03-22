@@ -16,11 +16,10 @@ pub(crate) mod client;
 pub(crate) mod server;
 
 use crate::connectors::prelude::*;
-use async_tungstenite::tungstenite::Error;
 use async_tungstenite::tungstenite::Message;
 use async_tungstenite::WebSocketStream;
 use futures::prelude::*;
-use futures::stream::SplitSink;
+use futures::stream::{SplitSink, SplitStream};
 use simd_json::StaticNode;
 
 pub(crate) struct WsDefaults;
@@ -30,45 +29,56 @@ impl Defaults for WsDefaults {
     const PORT: u16 = 80;
 }
 
-struct WsReader<S>
+struct WsReader<Stream, Ctx, Runtime>
 where
-    S: std::marker::Unpin
-        + std::marker::Sync
-        + std::marker::Send
-        + futures::Stream<Item = std::result::Result<Message, Error>>,
+    Stream: futures::AsyncRead + futures::AsyncWrite + Send + Sync + Unpin,
+    Ctx: Context + Send,
+    Runtime: SinkRuntime,
 {
-    wrapped_stream: S,
+    stream: SplitStream<WebSocketStream<Stream>>,
+    underlying_stream: Stream,
+    // we keep this around for closing the writing part if the reader is done
+    sink_runtime: Runtime,
     origin_uri: EventOriginUri,
     meta: Value<'static>,
+    ctx: Ctx,
 }
 
-impl<S> WsReader<S>
+impl<Stream, Ctx, Runtime> WsReader<Stream, Ctx, Runtime>
 where
-    S: std::marker::Unpin
-        + std::marker::Sync
-        + std::marker::Send
-        + futures::Stream<Item = std::result::Result<Message, Error>>,
+    Stream: futures::AsyncRead + futures::AsyncWrite + Send + Sync + Unpin,
+    Ctx: Context + Send + Sync,
+    Runtime: SinkRuntime,
 {
-    fn new(stream: S, origin_uri: EventOriginUri, meta: Value<'static>) -> Self {
+    fn new(
+        stream: SplitStream<WebSocketStream<Stream>>,
+        underlying_stream: Stream,
+        sink_runtime: Runtime,
+        origin_uri: EventOriginUri,
+        meta: Value<'static>,
+        ctx: Ctx,
+    ) -> Self {
         Self {
-            wrapped_stream: stream,
+            stream,
+            underlying_stream,
+            sink_runtime,
             origin_uri,
             meta,
+            ctx,
         }
     }
 }
 
 #[async_trait::async_trait]
-impl<S> StreamReader for WsReader<S>
+impl<Stream, Ctx, Runtime> StreamReader for WsReader<Stream, Ctx, Runtime>
 where
-    S: std::marker::Unpin
-        + std::marker::Sync
-        + std::marker::Send
-        + futures::Stream<Item = std::result::Result<Message, Error>>,
+    Stream: futures::AsyncRead + futures::AsyncWrite + Send + Sync + Unpin,
+    Ctx: Context + Send + Sync,
+    Runtime: SinkRuntime,
 {
     async fn read(&mut self, stream: u64) -> Result<SourceReply> {
         let mut is_binary = false;
-        match self.wrapped_stream.next().await {
+        match self.stream.next().await {
             Some(Ok(message)) => {
                 let data = match message {
                     Message::Text(text) => text.into_bytes(),
@@ -77,13 +87,22 @@ where
                         binary
                     }
                     Message::Close(_) => {
+                        // read from the stream once again to drive the closing handshake
+                        let after_close = self.stream.next().await;
+                        debug_assert!(
+                            after_close.is_none(),
+                            "WS reader not behaving as expected after receiving a close message"
+                        );
                         return Ok(SourceReply::EndStream {
                             origin_uri: self.origin_uri.clone(),
                             stream,
                             meta: Some(self.meta.clone()),
                         });
                     }
-                    _ => todo!(),
+                    Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {
+                        // ignore those, but don't let the source wait
+                        return Ok(SourceReply::Empty(0));
+                    }
                 };
                 let mut meta = self.meta.clone();
                 if is_binary {
@@ -105,75 +124,77 @@ where
         }
     }
 
-    async fn on_done(&mut self, _stream: u64) -> StreamDone {
-        // NOTE We depend on the StreamWriter to cascade an actual close
+    async fn on_done(&mut self, stream: u64) -> StreamDone {
+        // make the writer stop, otherwise the underlying socket will never be closed
+        self.ctx.log_err(
+            self.sink_runtime.unregister_stream_writer(stream).await,
+            "Error unregistering stream",
+        );
+        // close the underlying stream
+        self.ctx.log_err(
+            self.underlying_stream.close().await,
+            "Error closing the Read Half of WS Stream",
+        );
         StreamDone::StreamClosed
     }
 }
 
 struct WsWriter<S>
 where
-    S: futures::AsyncRead + futures::AsyncWrite + std::marker::Unpin + std::marker::Sync,
+    S: async_std::io::Read + async_std::io::Write + std::marker::Unpin + std::marker::Sync,
 {
-    wrapped_stream: SplitSink<WebSocketStream<S>, Message>,
+    sink: SplitSink<WebSocketStream<S>, Message>,
 }
 
 impl WsWriter<async_std::net::TcpStream> {
-    fn new(stream: SplitSink<WebSocketStream<async_std::net::TcpStream>, Message>) -> Self {
-        Self {
-            wrapped_stream: stream,
-        }
-    }
-}
-
-impl WsWriter<async_tls::server::TlsStream<async_std::net::TcpStream>> {
-    fn new_tls_server(
-        stream: SplitSink<
-            WebSocketStream<async_tls::server::TlsStream<async_std::net::TcpStream>>,
-            Message,
-        >,
-    ) -> Self {
-        Self {
-            wrapped_stream: stream,
-        }
+    fn new(sink: SplitSink<WebSocketStream<async_std::net::TcpStream>, Message>) -> Self {
+        Self { sink }
     }
 }
 
 impl
     WsWriter<
-        async_tungstenite::stream::Stream<
-            async_std::net::TcpStream,
-            async_tls::client::TlsStream<async_std::net::TcpStream>,
-        >,
+        async_dup::Arc<async_dup::Mutex<async_tls::server::TlsStream<async_std::net::TcpStream>>>,
     >
 {
-    fn new_tungstenite_client(
-        stream: SplitSink<
+    fn new_tls_server(
+        sink: SplitSink<
             WebSocketStream<
-                async_tungstenite::stream::Stream<
-                    async_std::net::TcpStream,
-                    async_tls::client::TlsStream<async_std::net::TcpStream>,
+                async_dup::Arc<
+                    async_dup::Mutex<async_tls::server::TlsStream<async_std::net::TcpStream>>,
                 >,
             >,
             Message,
         >,
     ) -> Self {
-        Self {
-            wrapped_stream: stream,
-        }
+        Self { sink }
     }
 }
 
-impl WsWriter<async_tls::client::TlsStream<async_std::net::TcpStream>> {
+impl WsWriter<async_std::net::TcpStream> {
+    fn new_tungstenite_client(
+        sink: SplitSink<WebSocketStream<async_std::net::TcpStream>, Message>,
+    ) -> Self {
+        Self { sink }
+    }
+}
+
+impl
+    WsWriter<
+        async_dup::Arc<async_dup::Mutex<async_tls::client::TlsStream<async_std::net::TcpStream>>>,
+    >
+{
     fn new_tls_client(
-        stream: SplitSink<
-            WebSocketStream<async_tls::client::TlsStream<async_std::net::TcpStream>>,
+        sink: SplitSink<
+            WebSocketStream<
+                async_dup::Arc<
+                    async_dup::Mutex<async_tls::client::TlsStream<async_std::net::TcpStream>>,
+                >,
+            >,
             Message,
         >,
     ) -> Self {
-        Self {
-            wrapped_stream: stream,
-        }
+        Self { sink }
     }
 }
 
@@ -192,23 +213,23 @@ where
                 // If metadata is set, check for a binary framing flag
                 if let Some(true) = meta.get_bool("binary") {
                     let message = Message::Binary(chunk);
-                    self.wrapped_stream.send(message).await?;
+                    self.sink.send(message).await?;
                 } else {
                     let message = std::str::from_utf8(&chunk)?;
                     let message = Message::Text(message.to_string());
-                    self.wrapped_stream.send(message).await?;
+                    self.sink.send(message).await?;
                 }
             } else {
                 // No metadata, default to text ws framing
                 let message = std::str::from_utf8(&chunk)?;
                 let message = Message::Text(message.to_string());
-                self.wrapped_stream.send(message).await?;
+                self.sink.send(message).await?;
             };
         }
         Ok(())
     }
     async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
-        self.wrapped_stream.close().await?;
+        self.sink.close().await?;
         Ok(StreamDone::StreamClosed)
     }
 }

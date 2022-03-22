@@ -16,8 +16,9 @@
 //!
 //! With some shenanigans removed, compared to `ChannelSink`.
 
-use crate::connectors::{sink::SinkReply, ConnectorContext, StreamDone};
+use crate::connectors::{sink::SinkReply, sink::SinkRuntime, ConnectorContext, StreamDone};
 use crate::errors::Result;
+use async_std::task::JoinHandle;
 use async_std::{
     channel::{bounded, Receiver, Sender},
     task,
@@ -79,9 +80,17 @@ pub(crate) struct SinkData {
 
 /// The runtime receiving and writing data out
 #[derive(Clone)]
-pub struct SingleStreamSinkRuntime {
+pub(crate) struct SingleStreamSinkRuntime {
     rx: Receiver<SinkData>,
     reply_tx: Sender<AsyncSinkReply>,
+}
+
+#[async_trait::async_trait()]
+impl SinkRuntime for SingleStreamSinkRuntime {
+    async fn unregister_stream_writer(&self, _stream: u64) -> Result<()> {
+        self.rx.close();
+        Ok(())
+    }
 }
 
 impl SingleStreamSinkRuntime {
@@ -90,7 +99,8 @@ impl SingleStreamSinkRuntime {
         stream: u64,
         ctx: &ConnectorContext,
         mut writer: W,
-    ) where
+    ) -> JoinHandle<Result<()>>
+    where
         W: StreamWriter + 'static,
     {
         let ctx = ctx.clone();
@@ -137,7 +147,7 @@ impl SingleStreamSinkRuntime {
                 );
             }
             Result::Ok(())
-        });
+        })
     }
 }
 

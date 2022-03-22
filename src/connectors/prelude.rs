@@ -15,7 +15,7 @@
 pub(crate) use crate::connectors::sink::{
     AsyncSinkReply, ChannelSink, ChannelSinkRuntime, ContraflowData, EventSerializer,
     SingleStreamSink, SingleStreamSinkRuntime, Sink, SinkAck, SinkAddr, SinkContext,
-    SinkManagerBuilder, SinkMeta, SinkReply, StreamWriter,
+    SinkManagerBuilder, SinkMeta, SinkReply, SinkRuntime, StreamWriter,
 };
 
 pub(crate) use crate::connectors::source::{

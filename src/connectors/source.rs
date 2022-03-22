@@ -59,7 +59,7 @@ use value_trait::Builder;
 
 use super::{CodecReq, Connectivity};
 
-/// The default poll interval for `try_recv` on channels in connectors
+/// The default poll interval in milliseconds for `try_recv` on channels in connectors
 pub const DEFAULT_POLL_INTERVAL: u64 = 10;
 /// A duration for the default poll interval
 pub const DEFAULT_POLL_DURATION: Duration = Duration::from_millis(10);
@@ -1187,7 +1187,7 @@ where
                 self.pull_counter += 1;
             };
             if self.pull_wait_start.is_some() {
-                // sleep for a quick 10ms in order to stay responsive
+                // sleep for a quick 10ms (maximum) in order to stay responsive
                 task::sleep(DEFAULT_POLL_DURATION.min(self.pull_wait)).await;
             }
         }

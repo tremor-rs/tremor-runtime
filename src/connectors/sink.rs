@@ -262,6 +262,11 @@ pub(crate) trait StreamWriter: Send + Sync {
         Ok(StreamDone::StreamClosed)
     }
 }
+
+#[async_trait::async_trait]
+pub(crate) trait SinkRuntime: Send + Sync {
+    async fn unregister_stream_writer(&self, stream: u64) -> Result<()>;
+}
 /// context for the connector sink
 #[derive(Clone)]
 pub(crate) struct SinkContext {

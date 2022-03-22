@@ -102,6 +102,7 @@ impl ConnectorHarness {
                 &IN,
                 &NodeMeta::default(),
             );
+            // connect pipeline to connector
             let pipeline = TestPipeline::new(pipeline_id.alias().to_string());
             connector_addr
                 .send(connectors::Msg::LinkInput {
@@ -284,6 +285,14 @@ impl ConnectorHarness {
         use super::sink::SinkMsg;
 
         self.addr.send_sink(SinkMsg::Event { event, port }).await
+    }
+
+    pub(crate) async fn signal_tick_to_sink(&self) -> Result<()> {
+        self.addr
+            .send_sink(SinkMsg::Signal {
+                signal: Event::signal_tick(),
+            })
+            .await
     }
 
     #[cfg(feature = "kafka-integration")]
