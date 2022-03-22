@@ -97,11 +97,11 @@ lazy_static! {
     pub static ref QSIZE: AtomicUsize = AtomicUsize::new(128);
 }
 
-/// Loads a config yaml file
+/// Loads a Troy file
+///
 /// # Errors
 /// Fails if the file can not be loaded
 pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
-    // use std::ffi::OsStr;
     use std::io::Read;
     info!("Loading troy from {}", file_name);
 
@@ -143,4 +143,38 @@ macro_rules! log_error {
             false
         }
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::system::{ShutdownMode, WorldConfig};
+    use std::io::Write;
+    use tempfile;
+
+    #[async_std::test]
+    async fn test_load_troy_file() -> Result<()> {
+        let (world, handle) = World::start(WorldConfig::default()).await?;
+        let troy_file = tempfile::NamedTempFile::new()?;
+        troy_file.as_file().write_all(
+            r#"
+        define flow my_flow
+        flow
+            define pipeline foo
+            pipeline
+                select event from in into out;
+            end;
+        end;
+        "#
+            .as_bytes(),
+        )?;
+        troy_file.as_file().flush()?;
+        let path = troy_file.path().display().to_string();
+        let num_deploys = load_troy_file(&world, &path).await?;
+        assert_eq!(0, num_deploys);
+        world.stop(ShutdownMode::Graceful).await?;
+        handle.cancel().await;
+        troy_file.close()?;
+        Ok(())
+    }
 }

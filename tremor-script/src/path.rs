@@ -86,17 +86,6 @@ impl ModulePath {
         }
         None
     }
-    /// Determines the module id for a path
-    pub fn resolve_module<S: AsRef<Path>>(rel_file: S) -> Option<Vec<String>> {
-        let p: &Path = rel_file.as_ref();
-        let mut root = p
-            .parent()?
-            .iter()
-            .map(|s| Some(s.to_str()?.to_string()))
-            .collect::<Option<Vec<_>>>()?;
-        root.push(p.file_stem()?.to_str()?.to_string());
-        Some(root)
-    }
 
     /// Load module path
     #[must_use]

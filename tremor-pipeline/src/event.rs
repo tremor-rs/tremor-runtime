@@ -233,30 +233,6 @@ impl Event {
         }
     }
 
-    /// Creates a CB fail insight from the given `event` (the cause of this fail)
-    #[must_use]
-    pub fn to_fail(&self) -> Self {
-        Event {
-            id: self.id.clone(),
-            ingest_ns: self.ingest_ns,
-            op_meta: self.op_meta.clone(),
-            cb: CbAction::Fail,
-            ..Event::default()
-        }
-    }
-
-    /// Create a CB ack insight from the given `event` (the cause of this ack)
-    #[must_use]
-    pub fn to_ack(&self) -> Self {
-        Event {
-            id: self.id.clone(),
-            ingest_ns: self.ingest_ns,
-            op_meta: self.op_meta.clone(),
-            cb: CbAction::Ack,
-            ..Event::default()
-        }
-    }
-
     #[must_use]
     /// return the number of events contained within this event
     /// normally 1, but for batched events possibly > 1
@@ -644,9 +620,6 @@ mod test {
 
         let mut clone2 = e.clone();
         clone2.op_meta.insert(42, OwnedValue::null());
-        let clone_fail = clone2.to_fail();
-        assert_eq!(clone_fail.cb, CbAction::Fail);
-        assert!(clone_fail.op_meta.contains_key(42));
     }
 
     #[test]
