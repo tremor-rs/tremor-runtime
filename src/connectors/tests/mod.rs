@@ -287,6 +287,9 @@ impl ConnectorHarness {
         self.addr.send_sink(SinkMsg::Event { event, port }).await
     }
 
+    // this is only used in integration tests,
+    // otherwise this throws an error when compiled for non-integration tests
+    #[allow(dead_code)]
     pub(crate) async fn signal_tick_to_sink(&self) -> Result<()> {
         self.addr
             .send_sink(SinkMsg::Signal {

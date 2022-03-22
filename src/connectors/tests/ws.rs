@@ -217,8 +217,13 @@ impl TestServer {
             .expect("Error during WS handshake sequence");
 
         while !stopped.load(Ordering::Acquire) {
-            let msg = ws.next().await.unwrap().unwrap();
-            let _sent = sender.send(msg).await.unwrap();
+            let msg = match ws.next().await {
+                Some(Ok(message)) => message,
+                Some(Err(_)) | None => break,
+            };
+            if let Err(_) = sender.send(msg).await {
+                break;
+            }
         }
     }
 
