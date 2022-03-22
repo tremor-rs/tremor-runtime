@@ -897,7 +897,7 @@ async fn connector_kafka_consumer_unresolvable() -> Result<()> {
         }
     });
     let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
-    assert!(harness.start().await).is_err();
+    assert!(harness.start().await.is_err());
 
     let (out_events, err_events) = harness.stop().await?;
     assert!(out_events.is_empty());
