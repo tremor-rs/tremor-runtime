@@ -39,6 +39,7 @@ pub enum State {
 
 impl State {
     /// checks if the state is stopped
+    #[cfg(not(tarpaulin_include))] // just a simple eq
     #[must_use]
     pub fn is_stopped(&self) -> bool {
         *self == State::Stopped
@@ -46,6 +47,7 @@ impl State {
 }
 
 impl Display for State {
+    #[cfg(not(tarpaulin_include))] // just a simple match
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Self::Initializing => "initialized",

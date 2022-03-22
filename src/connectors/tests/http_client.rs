@@ -42,7 +42,6 @@ struct TestHttpServer {
 
 async fn fake_server_dispatch(req: tide::Request<()>) -> tide::Result<tide::Response> {
     use tide::StatusCode;
-    dbg!(&req);
     match &req.method() {
         Method::Get => {
             let mut res = tide::Response::new(StatusCode::Ok);
