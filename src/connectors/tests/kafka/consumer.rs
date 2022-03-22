@@ -885,19 +885,19 @@ async fn connector_kafka_consumer_unresolvable() -> Result<()> {
         ],
         "config": {
             "brokers": [
-                "snot:9092"
+                "unresolvable_broker:9092"
             ],
             "group_id": "cannot_resolve",
             "topics": [
-                "snot"
+                "unresolvable"
             ],
             "rdkafka_options": {
-            //    "debug": "all"
+               "debug": "all"
             }
         }
     });
     let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
-    assert!(harness.start().await.is_err());
+    assert!(dbg!(harness.start().await).is_err());
 
     let (out_events, err_events) = harness.stop().await?;
     assert!(out_events.is_empty());

@@ -436,7 +436,7 @@ mod test {
 
     #[test]
     fn bad_url() {
-        assert!(TremorUrl::parse("snot://").is_err())
+        assert!(TremorUrl::parse("invalid-url://").is_err())
     }
 
     #[test]
