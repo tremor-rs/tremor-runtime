@@ -181,9 +181,10 @@ impl World {
             }
             ShutdownMode::Forceful => {}
         }
-        if let Err(e) = self.system.send(flow_supervisor::Msg::Stop).await {
-            error!("Error stopping all Flows: {}", e);
+        let res = self.system.send(flow_supervisor::Msg::Stop).await;
+        if let Err(e) = &res {
+            error!("Error stopping all Flows: {e}");
         }
-        Ok(self.system.send(flow_supervisor::Msg::Stop).await?)
+        Ok(res?)
     }
 }
