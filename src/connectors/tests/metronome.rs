@@ -14,9 +14,9 @@
 
 use super::ConnectorHarness;
 use crate::errors::Result;
+use async_std::task;
 use std::time::Duration;
 use tremor_value::prelude::*;
-use async_std::task;
 
 #[async_std::test]
 async fn connector_metronome_routing() -> Result<()> {
