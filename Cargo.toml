@@ -231,10 +231,9 @@ default = []
 128bit = ["tremor-value/128bit"]
 bert = ["tremor-pipeline/bert"]
 
-integration = [
-  "es-integration",
-  "s3-integration",
-  "kafka-integration",
+integration = ["integration-docker", "integration-local"]
+integration-docker = ["es-integration", "s3-integration", "kafka-integration"]
+integration-local = [
   "ws-integration",
   "http-integration",
   "file-integration",
