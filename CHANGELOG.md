@@ -60,7 +60,7 @@
 - Fix some errors in otel pb <-> json translation
 - Fix windowed queries emitting events with `null` metadata on tick
 - Fix sorting for artefacts
-- Fix issde where the test framework would generate reports without being asked for it [#1072](https://github.com/tremor-rs/tremor-runtime/issues/1072)
+- Fix issue where the test framework would generate reports without being asked for it [#1072](https://github.com/tremor-rs/tremor-runtime/issues/1072)
 - Remove the need for eviction_period for time based windows
 - Remove dead code and unneeded allows in otel and gcp code
 - Fix test and suite names not being printed
