@@ -63,6 +63,8 @@ pub struct World {
 
 impl World {
     /// Instantiate a flow from
+    /// # Errors
+    /// If the flow can't be started
     pub async fn start_flow(&self, flow: &ast::DeployFlow<'static>) -> Result<()> {
         let (tx, rx) = bounded(1);
         self.system
