@@ -36,9 +36,9 @@ macro_rules! test_cases {
             #[test]
             fn $file() -> Result<()> {
 
-                let deploy_dir = concat!("tests/deploy_errors/", stringify!($file), "/").to_string();
-                let deploy_file = concat!("tests/deploy_errors/", stringify!($file), "/deploy.troy");
-                let err_file = concat!("tests/deploy_errors/", stringify!($file), "/error.txt");
+                let deploy_dir = concat!("tests/flow_errors/", stringify!($file), "/").to_string();
+                let deploy_file = concat!("tests/flow_errors/", stringify!($file), "/flow.troy");
+                let err_file = concat!("tests/flow_errors/", stringify!($file), "/error.txt");
                 let l = UNIQUE.lock();
                 Manager::clear_path()?;
                 Manager::add_path(&deploy_dir)?;

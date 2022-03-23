@@ -12,14 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use std::io::prelude::*;
+use std::time::Duration;
 use tremor_common::file;
+use tremor_runtime::{
+    errors::*,
+    system::{ShutdownMode, World, WorldConfig},
+};
+use tremor_script::{deploy::Deploy, module::Manager};
 
-use tremor_script::deploy::Deploy;
-
-use tremor_script::errors::*;
-use tremor_script::module::Manager;
-
-fn parse<'script>(deploy: &str) -> tremor_script::Result<tremor_script::deploy::Deploy> {
+fn parse(deploy: &str) -> tremor_script::Result<tremor_script::deploy::Deploy> {
     let aggr_reg = tremor_script::aggr_registry();
     let reg = tremor_script::registry::registry();
     Deploy::parse(deploy, &reg, &aggr_reg)
@@ -32,10 +33,10 @@ macro_rules! test_cases {
             use super::*;
 
             $(
-                #[test]
-                fn $file() -> Result<()> {
-                    let deploy_dir = concat!("tests/deploys/", stringify!($file), "/").to_string();
-                    let deploy_file = concat!("tests/deploys/", stringify!($file), "/deploy.troy");
+                #[async_std::test]
+                async fn $file() -> Result<()> {
+                    let deploy_dir = concat!("tests/flows/", stringify!($file), "/").to_string();
+                    let deploy_file = concat!("tests/flows/", stringify!($file), "/flow.troy");
                     Manager::add_path(&"tremor-script/lib")?;
                     Manager::add_path(&deploy_dir)?;
 
@@ -45,7 +46,15 @@ macro_rules! test_cases {
                     file.read_to_string(&mut contents)?;
 
                     match parse(&contents) {
-                        Ok(_) => (),
+                        Ok(deployable) => {
+                            let (world, _) = World::start(WorldConfig::default()).await?;
+                            for flow in deployable.iter_flows() {
+                                world.start_flow(flow).await?;
+                            }
+                            // this isn't good
+                            async_std::task::sleep(Duration::from_millis(200)).await;
+                            world.stop(ShutdownMode::Forceful).await?;
+                        },
                         otherwise => {
                             println!("Expected valid deployment file, compile phase, but got an unexpected error: {:?}", otherwise);
                             assert!(false);
