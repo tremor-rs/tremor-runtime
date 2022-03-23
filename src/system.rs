@@ -63,7 +63,7 @@ pub struct World {
 
 impl World {
     /// Instantiate a flow from
-    pub(crate) async fn start_deploy(&self, flow: &ast::DeployFlow<'static>) -> Result<()> {
+    pub async fn start_flow(&self, flow: &ast::DeployFlow<'static>) -> Result<()> {
         let (tx, rx) = bounded(1);
         self.system
             .send(flow_supervisor::Msg::StartDeploy {
