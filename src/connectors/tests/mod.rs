@@ -37,6 +37,9 @@ mod unix_socket;
 #[cfg(feature = "ws-integration")]
 mod ws;
 
+const TIMEOUT: Duration = Duration::from_secs(10);
+const GET_EVENT_TIMEOUT: Duration = Duration::from_millis(1000);
+
 // some tests don't use everything and this would generate warnings for those
 // which it shouldn't
 
@@ -216,11 +219,12 @@ impl ConnectorHarness {
     /// # Errors
     ///
     /// If communication with the connector fails or we time out without reaching connected state.
-    pub(crate) async fn wait_for_connected(&self, timeout: Duration) -> Result<()> {
+    pub(crate) async fn wait_for_connected(&self, timeout: Option<Duration>) -> Result<()> {
+        let timeout = timeout.unwrap_or(TIMEOUT);
         let start = std::time::Instant::now();
         while self.status().await?.connectivity != Connectivity::Connected {
             // TODO create my own future here that succeeds on poll when status is connected
-            async_std::task::sleep(Duration::from_millis(100)).await;
+            async_std::task::sleep(timeout / 10).await;
             if start.elapsed() >= timeout {
                 return Err(format!(
                     "Connector {} didn't reach connected within {:?}",
@@ -237,10 +241,16 @@ impl ConnectorHarness {
     /// # Errors
     ///
     /// If communication with the connector fails or we time out without reaching the desired state
-    pub(crate) async fn wait_for_state(&self, state: State, timeout: Duration) -> Result<()> {
+    pub(crate) async fn wait_for_state(
+        &self,
+        state: State,
+        timeout: Option<Duration>,
+    ) -> Result<()> {
+        let timeout = timeout.unwrap_or(TIMEOUT);
         let start = std::time::Instant::now();
         while self.status().await?.status != state {
-            async_std::task::sleep(Duration::from_millis(100)).await;
+            // TODO create my own future here that succeeds on poll when status is connected
+            async_std::task::sleep(timeout / 10).await;
             if start.elapsed() >= timeout {
                 return Err(format!(
                     "Connector {} didn't reach state {} within {:?}",
@@ -371,7 +381,7 @@ impl TestPipeline {
     /// wait for up to 2 seconds for an event to arrive
     pub(crate) async fn get_event(&self) -> Result<Event> {
         loop {
-            match self.rx.recv().timeout(Duration::from_secs(2)).await {
+            match self.rx.recv().timeout(TIMEOUT).await {
                 Ok(Ok(msg)) => {
                     match *msg {
                         pipeline::Msg::Event { event, .. } => break Ok(event),
