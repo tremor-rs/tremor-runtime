@@ -2442,9 +2442,9 @@ checksum = "62aca2aba2d62b4a7f5b33f3712cb1b0692779a56fb510499d5c0aa594daeaf3"
 
 [[package]]
 name = "halfbrown"
-version = "0.1.13"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49e26621a30b9fdb4f949b9c6a7fa42ce88112851c33ac4ca00bfa7848d26fb4"
+checksum = "102968a036b06654b555049d9a6c4f46046805d1e1b22647720e93e0704d4c60"
 dependencies = [
  "fxhash",
  "hashbrown 0.12.0",
