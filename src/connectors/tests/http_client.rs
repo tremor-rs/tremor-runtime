@@ -21,7 +21,6 @@ use async_std::task::{spawn, JoinHandle};
 use http_types::Method;
 use log::error;
 use rustls::NoClientAuth;
-use std::time::Duration;
 use tide;
 use tide_rustls::TlsListener;
 use tremor_common::url::ports::IN;
@@ -153,7 +152,7 @@ async fn rtt(
 
     harness.start().await?;
     harness
-        .wait_for_connected(Duration::from_millis(100))
+        .wait_for_connected(None)
         .await?;
 
     let meta = literal!({ "request": meta });

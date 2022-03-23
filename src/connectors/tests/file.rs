@@ -15,7 +15,6 @@
 use super::ConnectorHarness;
 use crate::errors::Result;
 use async_std::path::Path;
-use std::time::Duration;
 use tremor_value::literal;
 use value_trait::ValueAccess;
 
@@ -43,7 +42,7 @@ async fn file_connector() -> Result<()> {
     let out = harness.out().expect("No out pipeline");
     harness.start().await?;
 
-    harness.wait_for_connected(Duration::from_secs(5)).await?;
+    harness.wait_for_connected(None).await?;
 
     let event = out.get_event().await?;
     assert_eq!(1, event.len());

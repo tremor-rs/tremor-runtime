@@ -146,7 +146,7 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
-    harness.wait_for_connected(Duration::from_secs(10)).await?;
+    harness.wait_for_connected(None).await?;
 
     // TODO: it seems to work reliably which hints at a timeout inside redpanda
     // TODO: verify
@@ -419,7 +419,7 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
-    harness.wait_for_connected(Duration::from_secs(10)).await?;
+    harness.wait_for_connected(None).await?;
 
     // TODO: it seems to work reliably which hints at a timeout inside redpanda
     // TODO: verify
@@ -677,7 +677,7 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
-    harness.wait_for_connected(Duration::from_secs(10)).await?;
+    harness.wait_for_connected(None).await?;
 
     // TODO: it seems to work reliably which hints at a timeout inside redpanda
     // TODO: verify
@@ -1001,7 +1001,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     harness.start().await?;
-    harness.wait_for_connected(Duration::from_secs(10)).await?;
+    harness.wait_for_connected(None).await?;
 
     task::sleep(Duration::from_secs(5)).await;
 

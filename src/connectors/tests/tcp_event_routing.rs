@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::ConnectorHarness;
+use super::{ConnectorHarness, TIMEOUT};
 use crate::errors::Result;
 use async_std::{
     io::WriteExt,
     net::{TcpListener, TcpStream},
     prelude::*,
 };
-use std::time::Duration;
 use tremor_common::url::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, Value};
@@ -53,7 +52,7 @@ async fn event_routing() -> Result<()> {
         .expect("No pipeline connected to 'out' port of tcp_server connector");
 
     harness.start().await?;
-    harness.wait_for_connected(Duration::from_secs(5)).await?;
+    harness.wait_for_connected(None).await?;
 
     // connect 2 client sockets
     let mut socket1 = TcpStream::connect(&server_addr).await?;
@@ -62,7 +61,7 @@ async fn event_routing() -> Result<()> {
     socket1.write_all("snot\n".as_bytes()).await?;
     let event = out_pipeline
         .get_event()
-        .timeout(Duration::from_millis(400))
+        .timeout(TIMEOUT)
         .await??;
     let (_data, meta) = event.data.parts();
 
@@ -92,7 +91,7 @@ async fn event_routing() -> Result<()> {
     let mut buf = vec![0_u8; 8192];
     let bytes_read = socket1
         .read(&mut buf)
-        .timeout(Duration::from_millis(500))
+        .timeout(TIMEOUT)
         .await??;
     let data = &buf[0..bytes_read];
     assert_eq!("badger", &String::from_utf8_lossy(data));
@@ -103,7 +102,7 @@ async fn event_routing() -> Result<()> {
 
     let event = out_pipeline
         .get_event()
-        .timeout(Duration::from_millis(400))
+        .timeout(TIMEOUT)
         .await??;
     // send an event and route it via eventid to socket 2
     let mut id2 = EventId::default();
@@ -116,7 +115,7 @@ async fn event_routing() -> Result<()> {
     harness.send_to_sink(event2, IN).await?;
     let bytes_read = socket2
         .read(&mut buf)
-        .timeout(Duration::from_millis(500))
+        .timeout(TIMEOUT)
         .await??;
     let data = &buf[0..bytes_read];
     assert_eq!("fleek", &String::from_utf8_lossy(data));
