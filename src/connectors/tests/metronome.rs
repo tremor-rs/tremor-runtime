@@ -36,7 +36,7 @@ async fn connector_metronome_routing() -> Result<()> {
 
     harness.start().await?;
     harness
-        .wait_for_connected(Duration::from_millis(100))
+        .wait_for_connected(None)
         .await?;
 
     task::sleep(Duration::from_secs(1)).await;

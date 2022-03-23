@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::ConnectorHarness;
+use super::{ConnectorHarness, GET_EVENT_TIMEOUT, TIMEOUT};
 use crate::{errors::Result, instance::State};
 use async_std::{
     io::WriteExt,
     net::{TcpListener, TcpStream, UdpSocket},
     prelude::FutureExt,
 };
-use std::time::Duration;
 use tremor_value::prelude::*;
 
 #[async_std::test]
-async fn connector_udp_pause_resume() -> Result<()> {
+async fn udp_pause_resume() -> Result<()> {
     let _ = env_logger::try_init();
 
     let free_port = {
@@ -50,7 +49,7 @@ async fn connector_udp_pause_resume() -> Result<()> {
         .out()
         .expect("No pipeline connected to 'out' port of udp_server");
     harness.start().await?;
-    harness.wait_for_connected(Duration::from_secs(5)).await?;
+    harness.wait_for_connected(None).await?;
 
     // connect client socket
     let socket = UdpSocket::bind("127.0.0.1:0").await?;
@@ -66,25 +65,20 @@ async fn connector_udp_pause_resume() -> Result<()> {
     }
     // pause connector
     harness.pause().await?;
-    harness
-        .wait_for_state(State::Paused, Duration::from_secs(5))
-        .await?;
+    harness.wait_for_state(State::Paused, None).await?;
     // make sure the udp_server source got out of its last pull_data call and now knows it should pause
-    async_std::task::sleep(Duration::from_millis(200)).await;
+    async_std::task::sleep(GET_EVENT_TIMEOUT).await;
 
     // send some more data
     let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
     socket.send(data2.as_bytes()).await?;
 
     // ensure nothing is received (pause is actually doing the right thing)
-    let timeout_err =
-        async_std::future::timeout(Duration::from_millis(500), out_pipeline.get_event()).await;
+    let timeout_err = out_pipeline.get_event().timeout(GET_EVENT_TIMEOUT).await;
     assert!(timeout_err.is_err(), "Didnt expect: {:?}", &timeout_err);
     // resume connector
     harness.resume().await?;
-    harness
-        .wait_for_state(State::Running, Duration::from_secs(5))
-        .await?;
+    harness.wait_for_state(State::Running, None).await?;
     // receive the data sent during pause
     // first line, continueing the stuff from last send
     assert_eq!(
@@ -116,7 +110,7 @@ async fn connector_udp_pause_resume() -> Result<()> {
 }
 
 #[async_std::test]
-async fn connector_tcp_server_pause_resume() -> Result<()> {
+async fn tcp_server_pause_resume() -> Result<()> {
     let _ = env_logger::try_init();
 
     let free_port = {
@@ -141,7 +135,7 @@ async fn connector_tcp_server_pause_resume() -> Result<()> {
         .out()
         .expect("No pipeline connected to 'out' port of tcp_server connector");
     harness.start().await?;
-    harness.wait_for_connected(Duration::from_secs(5)).await?;
+    harness.wait_for_connected(None).await?;
     debug!("Connected.");
     // connect client socket
     let mut socket = TcpStream::connect(&server_addr).await?;
@@ -151,19 +145,14 @@ async fn connector_tcp_server_pause_resume() -> Result<()> {
     // expect data being received, the last item is not received yet
     for expected in data.split('\n').take(4) {
         debug!("expecting: '{}'", expected);
-        let event = out_pipeline
-            .get_event()
-            .timeout(Duration::from_secs(2))
-            .await??;
+        let event = out_pipeline.get_event().timeout(TIMEOUT).await??;
         let content = event.data.suffix().value().as_str().unwrap();
         debug!("received '{}'", content);
         assert_eq!(expected, content);
     }
     // pause connector
     harness.pause().await?;
-    harness
-        .wait_for_state(State::Paused, Duration::from_secs(5))
-        .await?;
+    harness.wait_for_state(State::Paused, None).await?;
     // send some more data
     let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
     socket.write_all(data2.as_bytes()).await?;
@@ -171,14 +160,12 @@ async fn connector_tcp_server_pause_resume() -> Result<()> {
     // ensure nothing is received (pause is actually doing the right thing)
     assert!(out_pipeline
         .get_event()
-        .timeout(Duration::from_millis(500))
+        .timeout(GET_EVENT_TIMEOUT)
         .await
         .is_err());
     // resume connector
     harness.resume().await?;
-    harness
-        .wait_for_state(State::Running, Duration::from_secs(5))
-        .await?;
+    harness.wait_for_state(State::Running, None).await?;
     // receive the data sent during pause
     assert_eq!(
         format!(
@@ -201,7 +188,7 @@ async fn connector_tcp_server_pause_resume() -> Result<()> {
         debug!("expecting: '{}'", expected);
         let event = out_pipeline
             .get_event()
-            .timeout(Duration::from_secs(2))
+            .timeout(GET_EVENT_TIMEOUT)
             .await??;
         let content = event.data.suffix().value().as_str().unwrap();
         debug!("received '{}'", content);
