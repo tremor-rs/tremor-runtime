@@ -6,4 +6,5 @@ flow
   pipeline
     select args.snot from in into out;
   end;
-end
+end;
+deploy flow test
