@@ -443,9 +443,9 @@ dependencies = [
 
 [[package]]
 name = "async-std"
-version = "1.10.0"
+version = "1.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8056f1455169ab86dd47b47391e4ab0cbd25410a70e9fe675544f49bafaf952"
+checksum = "52580991739c5cdb36cde8b2a516371c0a3b70dda36d916cc08b82372916808c"
 dependencies = [
  "async-attributes",
  "async-channel",
@@ -652,7 +652,7 @@ dependencies = [
  "bytes 1.1.0",
  "hex",
  "http",
- "hyper 0.14.17",
+ "hyper 0.14.18",
  "ring",
  "tokio 1.17.0",
  "tower",
@@ -788,7 +788,7 @@ dependencies = [
  "percent-encoding",
  "regex",
  "ring",
- "time 0.3.7",
+ "time 0.3.9",
  "tracing",
 ]
 
@@ -818,7 +818,7 @@ dependencies = [
  "fastrand",
  "http",
  "http-body 0.4.4",
- "hyper 0.14.17",
+ "hyper 0.14.18",
  "hyper-rustls 0.22.1",
  "lazy_static",
  "pin-project",
@@ -852,7 +852,7 @@ dependencies = [
  "futures-core",
  "http",
  "http-body 0.4.4",
- "hyper 0.14.17",
+ "hyper 0.14.18",
  "percent-encoding",
  "pin-project",
  "tokio 1.17.0",
@@ -903,7 +903,7 @@ dependencies = [
  "itoa 1.0.1",
  "num-integer",
  "ryu",
- "time 0.3.7",
+ "time 0.3.9",
 ]
 
 [[package]]
@@ -2515,9 +2515,9 @@ checksum = "eabb4a44450da02c90444cf74558da904edde8fb4e9035a9a6a4e15445af0bd7"
 
 [[package]]
 name = "halfbrown"
-version = "0.1.13"
+version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49e26621a30b9fdb4f949b9c6a7fa42ce88112851c33ac4ca00bfa7848d26fb4"
+checksum = "102968a036b06654b555049d9a6c4f46046805d1e1b22647720e93e0704d4c60"
 dependencies = [
  "fxhash",
  "hashbrown 0.12.0",
@@ -2760,9 +2760,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "0.14.17"
+version = "0.14.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "043f0e083e9901b6cc658a77d1eb86f4fc650bbb977a4337dd63192826aa85dd"
+checksum = "b26ae0a80afebe130861d90abf98e3814a4f28a4c6ffeb5ab8ebb2be311e0ef2"
 dependencies = [
  "bytes 1.1.0",
  "futures-channel",
@@ -2790,7 +2790,7 @@ checksum = "5f9f7a97316d44c0af9b0301e65010573a853a9fc97046d7331d7f6bc0fd5a64"
 dependencies = [
  "ct-logs",
  "futures-util",
- "hyper 0.14.17",
+ "hyper 0.14.18",
  "log",
  "rustls 0.19.1",
  "rustls-native-certs 0.5.0",
@@ -2806,7 +2806,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d87c48c02e0dc5e3b849a2041db3029fd066650f8f717c07bf8ed78ccb895cac"
 dependencies = [
  "http",
- "hyper 0.14.17",
+ "hyper 0.14.18",
  "rustls 0.20.4",
  "tokio 1.17.0",
  "tokio-rustls 0.23.3",
@@ -2818,7 +2818,7 @@ version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbb958482e8c7be4bc3cf272a766a2b0bf1a6755e7a6ae777f017a31d11b13b1"
 dependencies = [
- "hyper 0.14.17",
+ "hyper 0.14.18",
  "pin-project-lite 0.2.8",
  "tokio 1.17.0",
  "tokio-io-timeout",
@@ -3279,9 +3279,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.15"
+version = "0.4.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c4dcd960cc540667f619483fc99102f88d6118b87730e24e8fbe8054b7445e4"
+checksum = "6389c490849ff5bc16be905ae24bc913a9c8892e19b2341dbc175e14c341c2b8"
 dependencies = [
  "cfg-if 1.0.0",
  "serde",
@@ -4602,7 +4602,7 @@ dependencies = [
  "h2 0.3.12",
  "http",
  "http-body 0.4.4",
- "hyper 0.14.17",
+ "hyper 0.14.18",
  "hyper-rustls 0.23.0",
  "ipnet",
  "js-sys",
@@ -5860,9 +5860,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.7"
+version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "004cbc98f30fa233c61a38bc77e96a9106e65c88f2d3bef182ae952027e5753d"
+checksum = "c2702e08a7a860f005826c6815dcac101b19b5eb330c27fe4a5928fec1d20ddd"
 dependencies = [
  "libc",
  "num_threads",
@@ -6125,7 +6125,7 @@ dependencies = [
  "h2 0.3.12",
  "http",
  "http-body 0.4.4",
- "hyper 0.14.17",
+ "hyper 0.14.18",
  "hyper-timeout",
  "percent-encoding",
  "pin-project",
