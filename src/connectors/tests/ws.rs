@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{find_free_tcp_port, setup_for_tls, ConnectorHarness, TIMEOUT};
+use super::{find_free_tcp_port, setup_for_tls, ConnectorHarness};
 use crate::connectors::{impls::ws::WsDefaults, utils::url::Url};
 use crate::errors::{Error, Result, ResultExt};
 use async_std::{
     channel::{bounded, Receiver, Sender, TryRecvError},
     net::{TcpListener, TcpStream},
     path::Path,
-    prelude::{FutureExt, StreamExt},
+    prelude::StreamExt,
     task,
 };
 use async_tls::TlsConnector;
@@ -39,9 +39,8 @@ use std::{
 };
 use tremor_common::url::ports::IN;
 use tremor_pipeline::{Event, EventId};
-use tremor_value::{literal, Value};
+use tremor_value::{literal, prelude::*, Value};
 use tungstenite::protocol::{frame::coding::CloseCode, CloseFrame};
-use value_trait::ValueAccess;
 
 /// A minimal websocket test client harness
 struct TestClient<S> {
@@ -309,7 +308,7 @@ async fn ws_server_text_routing() -> Result<()> {
         .expect("No pipeline connected to 'out' port of ws_server connector");
 
     harness.start().await?;
-    harness.wait_for_connected(None).await?;
+    harness.wait_for_connected().await?;
 
     //
     // Send from ws client to server and check received event
@@ -317,7 +316,7 @@ async fn ws_server_text_routing() -> Result<()> {
     let mut c1 = TestClient::new(format!("ws://localhost:{free_port}/"));
     c1.send("\"Hello WebSocket Server\"")?;
 
-    let event = out_pipeline.get_event().timeout(TIMEOUT).await??;
+    let event = out_pipeline.get_event().await?;
     let (data, meta) = event.data.parts();
     assert_eq!("Hello WebSocket Server", &data.to_string());
 
@@ -367,7 +366,7 @@ async fn ws_client_binary_routing() -> Result<()> {
 
     let harness = ConnectorHarness::new("ws_client", &defn).await?;
     harness.start().await?;
-    harness.wait_for_connected(None).await?;
+    harness.wait_for_connected().await?;
 
     let _out_pipeline = harness
         .out()
@@ -423,7 +422,7 @@ async fn ws_client_text_routing() -> Result<()> {
     let harness = ConnectorHarness::new("ws_client", &defn).await?;
 
     harness.start().await?;
-    harness.wait_for_connected(None).await?;
+    harness.wait_for_connected().await?;
 
     let _out_pipeline = harness
         .out()
@@ -489,7 +488,7 @@ async fn wss_server_text_routing() -> Result<()> {
         .expect("No pipeline connected to 'out' port of ws_server connector");
 
     harness.start().await?;
-    harness.wait_for_connected(None).await?;
+    harness.wait_for_connected().await?;
     //
     // Send from ws client to server and check received event
     //
@@ -497,7 +496,7 @@ async fn wss_server_text_routing() -> Result<()> {
         TestClient::new_tls(format!("wss://localhost:{}/", free_port), free_port as u16).await;
     c1.send("\"Hello WebSocket Server\"").await?;
 
-    let event = out_pipeline.get_event().timeout(TIMEOUT).await??;
+    let event = out_pipeline.get_event().await?;
     let (data, meta) = event.data.parts();
     assert_eq!("Hello WebSocket Server", &data.to_string());
 
@@ -561,7 +560,7 @@ async fn wss_server_binary_routing() -> Result<()> {
         .expect("No pipeline connected to 'out' port of ws_server connector");
 
     harness.start().await?;
-    harness.wait_for_connected(None).await?;
+    harness.wait_for_connected().await?;
     //
     // Send from ws client to server and check received event
     //
@@ -569,7 +568,7 @@ async fn wss_server_binary_routing() -> Result<()> {
         TestClient::new_tls(format!("wss://localhost:{}/", free_port), free_port as u16).await;
     c1.send("\"Hello WebSocket Server\"").await?;
 
-    let event = out_pipeline.get_event().timeout(TIMEOUT).await??;
+    let event = out_pipeline.get_event().await?;
     let (data, meta) = event.data.parts();
     assert_eq!("Hello WebSocket Server", &data.to_string());
 
@@ -625,7 +624,7 @@ async fn server_control_frames() -> Result<()> {
         .expect("No pipeline connected to 'out' port of ws_server connector");
 
     harness.start().await?;
-    harness.wait_for_connected(None).await?;
+    harness.wait_for_connected().await?;
 
     let mut c1 = TestClient::new(format!("ws://localhost:{free_port}/"));
 
