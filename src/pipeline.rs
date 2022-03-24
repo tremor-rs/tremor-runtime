@@ -643,17 +643,13 @@ pub(crate) async fn pipeline_task(
 #[cfg(test)]
 mod tests {
 
+    use super::*;
+    use crate::connectors::{prelude::SinkAddr, source::SourceAddr};
     use std::time::Instant;
-
-    use async_std::prelude::FutureExt;
     use tremor_common::url::ports::{IN, OUT};
     use tremor_pipeline::{EventId, OpMeta};
     use tremor_script::{aggr_registry, ast::NodeMeta, FN_REGISTRY};
-
-    use crate::connectors::{prelude::SinkAddr, source::SourceAddr};
     use tremor_value::Value;
-
-    use super::*;
 
     #[async_std::test]
     async fn pipeline_spawn() -> Result<()> {
@@ -729,9 +725,9 @@ mod tests {
         };
         addr.send(Box::new(Msg::Event { event, input: IN })).await?;
 
-        let mut sink_msg = sink_rx.recv().timeout(Duration::from_secs(2)).await??;
+        let mut sink_msg = sink_rx.recv().await?;
         while let SinkMsg::Signal { .. } = sink_msg {
-            sink_msg = sink_rx.recv().timeout(Duration::from_secs(2)).await??;
+            sink_msg = sink_rx.recv().await?;
         }
         match sink_msg {
             SinkMsg::Event { event, port: _ } => {
@@ -746,7 +742,7 @@ mod tests {
             .await?;
 
         let start = Instant::now();
-        let mut sink_msg = sink_rx.recv().timeout(Duration::from_secs(2)).await??;
+        let mut sink_msg = sink_rx.recv().await?;
         while !matches!(
             sink_msg,
             SinkMsg::Signal {
@@ -759,13 +755,13 @@ mod tests {
             if start.elapsed() > Duration::from_secs(4) {
                 assert!(false, "Timed out waiting for drain signal on the sink");
             }
-            sink_msg = sink_rx.recv().timeout(Duration::from_secs(2)).await??;
+            sink_msg = sink_rx.recv().await?;
         }
 
         let event_id = EventId::from_id(1, 1, 1);
         addr.send_insight(Event::cb_ack(0, event_id.clone(), OpMeta::default()))
             .await?;
-        let source_msg = source_rx.recv().timeout(Duration::from_secs(2)).await??;
+        let source_msg = source_rx.recv().await?;
         if let SourceMsg::Cb(cb_action, cb_id) = source_msg {
             assert_eq!(event_id, cb_id);
             assert_eq!(CbAction::Ack, cb_action);
