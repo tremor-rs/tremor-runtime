@@ -317,10 +317,7 @@ async fn ws_server_text_routing() -> Result<()> {
     let mut c1 = TestClient::new(format!("ws://localhost:{free_port}/"));
     c1.send("\"Hello WebSocket Server\"")?;
 
-    let event = out_pipeline
-        .get_event()
-        .timeout(TIMEOUT)
-        .await??;
+    let event = out_pipeline.get_event().timeout(TIMEOUT).await??;
     let (data, meta) = event.data.parts();
     assert_eq!("Hello WebSocket Server", &data.to_string());
 
@@ -500,10 +497,7 @@ async fn wss_server_text_routing() -> Result<()> {
         TestClient::new_tls(format!("wss://localhost:{}/", free_port), free_port as u16).await;
     c1.send("\"Hello WebSocket Server\"").await?;
 
-    let event = out_pipeline
-        .get_event()
-        .timeout(TIMEOUT)
-        .await??;
+    let event = out_pipeline.get_event().timeout(TIMEOUT).await??;
     let (data, meta) = event.data.parts();
     assert_eq!("Hello WebSocket Server", &data.to_string());
 
@@ -575,10 +569,7 @@ async fn wss_server_binary_routing() -> Result<()> {
         TestClient::new_tls(format!("wss://localhost:{}/", free_port), free_port as u16).await;
     c1.send("\"Hello WebSocket Server\"").await?;
 
-    let event = out_pipeline
-        .get_event()
-        .timeout(TIMEOUT)
-        .await??;
+    let event = out_pipeline.get_event().timeout(TIMEOUT).await??;
     let (data, meta) = event.data.parts();
     assert_eq!("Hello WebSocket Server", &data.to_string());
 
