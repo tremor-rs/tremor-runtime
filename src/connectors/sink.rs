@@ -309,6 +309,7 @@ impl Context for SinkContext {
 }
 
 /// messages a sink can receive
+#[derive(Debug)]
 pub(crate) enum SinkMsg {
     /// receive an event to handle
     Event {
