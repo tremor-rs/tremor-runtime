@@ -371,9 +371,9 @@ impl ReconnectRuntime {
 
 #[cfg(test)]
 mod tests {
-    use crate::connectors::{utils::quiescence::QuiescenceBeacon, CodecReq};
-
     use super::*;
+    use crate::connectors::{utils::quiescence::QuiescenceBeacon, CodecReq};
+    use async_std::prelude::FutureExt;
 
     /// does not connect
     struct FakeConnector {
@@ -467,7 +467,6 @@ mod tests {
     // This tight requirements for timing are extremely problematic in tests
     // and lead to frequent issues with the test being flaky or unrelaibale
     #[async_std::test]
-    #[cfg(feature = "timed-tests")]
     async fn backoff_runtime() -> Result<()> {
         let (tx, rx) = async_std::channel::bounded(1);
         let notifier = ConnectionLostNotifier::new(tx.clone());
@@ -500,29 +499,30 @@ mod tests {
             runtime.attempt(&mut connector, &ctx).await?,
             (Connectivity::Disconnected, true)
         ));
-        async_std::task::sleep(Duration::from_millis(20)).await;
-
-        assert_eq!(1, rx.len(), "1 reconnect attempt has been made");
-        assert!(matches!(rx.try_recv()?, Msg::Reconnect));
+        // we cannot test exact timings, but we can ensure it behaves as expected
+        assert!(matches!(
+            rx.recv().timeout(Duration::from_secs(5)).await??,
+            Msg::Reconnect
+        ));
 
         // 2nd failing attempt
         assert!(matches!(
             runtime.attempt(&mut connector, &ctx).await?,
             (Connectivity::Disconnected, true)
         ));
-        async_std::task::sleep(Duration::from_millis(30)).await;
-
-        assert_eq!(1, rx.len(), "1 reconnect attempt has been made");
-        assert!(matches!(rx.try_recv()?, Msg::Reconnect));
+        assert!(matches!(
+            rx.recv().timeout(Duration::from_secs(5)).await??,
+            Msg::Reconnect
+        ));
 
         // 3rd failing attempt
         assert!(matches!(
             runtime.attempt(&mut connector, &ctx).await?,
             (Connectivity::Disconnected, false)
         ));
-        async_std::task::sleep(Duration::from_millis(50)).await;
 
-        assert!(rx.is_empty()); // no reconnect attempt has been made
+        // assert we don't receive nothing, but run into a timeout
+        assert!(rx.recv().timeout(Duration::from_millis(100)).await.is_err()); // no reconnect attempt has been made
 
         Ok(())
     }
