@@ -675,3 +675,218 @@ async fn spawn_task(
     });
     Ok(addr)
 }
+
+#[cfg(test)]
+mod tests {
+
+    use crate::{connectors::ConnectorBuilder, instance};
+
+    use super::*;
+    use async_std::prelude::FutureExt;
+    use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
+    use tremor_script::{ast::DeployStmt, deploy::Deploy, FN_REGISTRY};
+    use tremor_value::literal;
+
+    mod connector {
+
+        use async_std::channel::Sender;
+
+        use crate::connectors::prelude::*;
+
+        struct FakeConnector {
+            tx: Sender<Event>,
+        }
+        #[async_trait::async_trait]
+        impl Connector for FakeConnector {
+            async fn create_source(
+                &mut self,
+                source_context: SourceContext,
+                builder: SourceManagerBuilder,
+            ) -> Result<Option<SourceAddr>> {
+                let source = FakeSource {};
+                builder.spawn(source, source_context).map(Some)
+            }
+
+            async fn create_sink(
+                &mut self,
+                sink_context: SinkContext,
+                builder: SinkManagerBuilder,
+            ) -> Result<Option<SinkAddr>> {
+                let sink = FakeSink::new(self.tx.clone());
+                builder.spawn(sink, sink_context).map(Some)
+            }
+
+            fn codec_requirements(&self) -> CodecReq {
+                CodecReq::Required
+            }
+        }
+
+        struct FakeSource {}
+        #[async_trait::async_trait]
+        impl Source for FakeSource {
+            async fn pull_data(
+                &mut self,
+                _pull_id: &mut u64,
+                _ctx: &SourceContext,
+            ) -> Result<SourceReply> {
+                Ok(SourceReply::Data {
+                    origin_uri: EventOriginUri::default(),
+                    data: r#"{"snot":"badger"}"#.as_bytes().to_vec(),
+                    meta: Some(Value::object()),
+                    stream: DEFAULT_STREAM_ID,
+                    port: None,
+                })
+            }
+            fn is_transactional(&self) -> bool {
+                // for covering all the transactional bits
+                true
+            }
+            fn asynchronous(&self) -> bool {
+                false
+            }
+        }
+
+        struct FakeSink {
+            tx: Sender<Event>,
+        }
+
+        impl FakeSink {
+            fn new(tx: Sender<Event>) -> Self {
+                Self { tx }
+            }
+        }
+
+        #[async_trait::async_trait]
+        impl Sink for FakeSink {
+            async fn on_event(
+                &mut self,
+                _input: &str,
+                event: Event,
+                _ctx: &SinkContext,
+                _serializer: &mut EventSerializer,
+                _start: u64,
+            ) -> Result<SinkReply> {
+                self.tx.send(event).await?;
+                Ok(SinkReply::NONE)
+            }
+
+            fn auto_ack(&self) -> bool {
+                true
+            }
+        }
+
+        #[derive(Debug)]
+        pub(crate) struct FakeBuilder {
+            pub(crate) tx: Sender<Event>,
+        }
+
+        #[async_trait::async_trait]
+        impl ConnectorBuilder for FakeBuilder {
+            fn connector_type(&self) -> ConnectorType {
+                "fake".into()
+            }
+            async fn from_config(
+                &self,
+                _alias: &str,
+                _config: &ConnectorConfig,
+            ) -> Result<Box<dyn Connector>> {
+                Ok(Box::new(FakeConnector {
+                    tx: self.tx.clone(),
+                }))
+            }
+        }
+    }
+
+    #[async_std::test]
+    async fn flow_spawn() -> Result<()> {
+        let mut operator_id_gen = OperatorIdGen::default();
+        let mut connector_id_gen = ConnectorIdGen::default();
+        let aggr_reg = tremor_script::aggr_registry();
+        let src = r#"
+        define flow test
+        flow
+            define connector foo from fake
+            with
+                codec = "json",
+                config = {}
+            end;
+
+            define pipeline main
+            pipeline
+                select event from in into out;
+            end;
+
+            create connector foo;
+            create pipeline main;
+
+            connect /connector/foo to /pipeline/main;
+            connect /pipeline/main to /connector/foo;
+        end;
+        deploy flow test;
+        "#;
+        let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg)?;
+        let deploy = deployable
+            .deploy
+            .stmts
+            .into_iter()
+            .find_map(|stmt| match stmt {
+                DeployStmt::DeployFlowStmt(deploy_flow) => Some((*deploy_flow).clone()),
+                _other => None,
+            })
+            .expect("No deploy in the given troy file");
+        let mut known_connectors = Known::new();
+        let (connector_tx, connector_rx) = unbounded();
+        let builder = connector::FakeBuilder { tx: connector_tx };
+        known_connectors.insert(builder.connector_type(), Box::new(builder));
+        let flow = Flow::start(
+            deploy,
+            &mut operator_id_gen,
+            &mut connector_id_gen,
+            &known_connectors,
+        )
+        .await?;
+
+        let connector = flow.get_connector("foo".to_string()).await?;
+        assert_eq!("foo", &connector.alias);
+
+        let connectors = flow.get_connectors().await?;
+        assert_eq!(1, connectors.len());
+        assert_eq!("foo", &connectors[0].alias);
+
+        // assert the flow has started and events are flowing
+        let event = connector_rx
+            .recv()
+            .timeout(Duration::from_secs(2))
+            .await??;
+        assert_eq!(
+            &literal!({
+                "snot": "badger"
+            }),
+            event.data.suffix().value()
+        );
+
+        let report = flow.report_status().await?;
+        assert_eq!(instance::State::Running, report.status);
+        assert_eq!(1, report.connectors.len());
+
+        flow.pause().await?;
+        let report = flow.report_status().await?;
+        assert_eq!(instance::State::Paused, report.status);
+        assert_eq!(1, report.connectors.len());
+
+        flow.resume().await?;
+        let report = flow.report_status().await?;
+        assert_eq!(instance::State::Running, report.status);
+        assert_eq!(1, report.connectors.len());
+
+        // drain and stop the flow
+        let (tx, rx) = bounded(1);
+        flow.drain(tx.clone()).await?;
+        rx.recv().timeout(Duration::from_secs(2)).await???;
+
+        flow.stop(tx).await?;
+        rx.recv().timeout(Duration::from_secs(2)).await???;
+
+        Ok(())
+    }
+}
