@@ -110,7 +110,7 @@ postgres-protocol = "0.6"
 tokio-postgres = "0.7"
 
 # amqp
-lapin = { version = "2.0.1", default-features = false, features = [
+lapin = { version = "2.1.0", default-features = false, features = [
   "rustls",
   "rustls-native-certs",
 ] }
@@ -121,7 +121,7 @@ elasticsearch = { version = "=7.14.0-alpha.1", default-features = false, feature
 ] }
 
 # ws
-async-tungstenite = { version = "0.17.1", features = [
+async-tungstenite = { version = "0.17.2", features = [
   "async-std-runtime",
   "async-tls",
 ] }

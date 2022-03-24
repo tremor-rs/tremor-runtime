@@ -567,9 +567,9 @@ dependencies = [
 
 [[package]]
 name = "async-tungstenite"
-version = "0.17.1"
+version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7922abeade7dd8948c20dfa1f85dc48cc952d2e0791f7c42b8b1cbb07a57129d"
+checksum = "a1b71b31561643aa8e7df3effe284fa83ab1a840e52294c5f4bd7bfd8b2becbb"
 dependencies = [
  "async-std",
  "async-tls 0.11.0",
@@ -3096,9 +3096,9 @@ dependencies = [
 
 [[package]]
 name = "lapin"
-version = "2.0.3"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf0ed57ec20c679e1a88af72b412ca05c0d5bb7f21a86d48b325d166792c6ea6"
+checksum = "afe666f160ceed00abc310aa2fa58295664cf892ebffc857bbf9b754c78122ce"
 dependencies = [
  "amq-protocol",
  "async-global-executor-trait",
@@ -6406,7 +6406,7 @@ dependencies = [
  "async-std-resolver",
  "async-tls 0.11.0",
  "async-trait",
- "async-tungstenite 0.17.1",
+ "async-tungstenite 0.17.2",
  "aws-config",
  "aws-sdk-s3",
  "aws-types",
