@@ -42,7 +42,7 @@ jobs:
           RUST_BACKTRACE: 1
         with:
           version: "0.20.0"
-          args: " --exclude-files target* tremor-cli tremor-api **/errors.rs depricated --out Lcov --all --no-default-features --features integration-local"
+          args: " --exclude-files target* tremor-cli tremor-api **/errors.rs depricated --out Lcov --all --no-default-features --features integration-cal"
       - name: Coveralls
         uses: coverallsapp/github-action@master
         with:

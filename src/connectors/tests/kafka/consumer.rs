@@ -876,6 +876,7 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
 
 #[async_std::test]
 #[serial(kafka)]
+#[cfg(feature = "timed-tests")]
 async fn connector_kafka_consumer_unresolvable() -> Result<()> {
     let _ = env_logger::try_init();
     let connector_config = literal!({
