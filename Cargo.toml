@@ -195,7 +195,7 @@ aws-config = "0.8.0"
 
 
 # gcp
-googapis = { version = "0.5", default-features = false, features = [
+googapis = { version = "0.6", default-features = false, features = [
   "google-pubsub-v1",
 ] }
 gouth = { version = "0.2" }
