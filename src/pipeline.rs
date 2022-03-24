@@ -645,10 +645,13 @@ mod tests {
 
     use std::time::Instant;
 
+    use async_std::prelude::FutureExt;
     use tremor_common::url::ports::{IN, OUT};
+    use tremor_pipeline::{EventId, OpMeta};
     use tremor_script::{aggr_registry, ast::NodeMeta, FN_REGISTRY};
 
     use crate::connectors::{prelude::SinkAddr, source::SourceAddr};
+    use tremor_value::Value;
 
     use super::*;
 
@@ -677,13 +680,13 @@ mod tests {
         assert!(report.outputs.is_empty());
 
         // connect a fake source as input
-        let (source_tx, _source_rx) = unbounded();
+        let (source_tx, source_rx) = unbounded();
         let source_addr = SourceAddr { addr: source_tx };
         let target = InputTarget::Source(source_addr);
         addr.send_mgmt(MgmtMsg::ConnectInput {
             endpoint: DeployEndpoint::new(&"source_01", &OUT, &NodeMeta::default()),
             target,
-            is_transactional: false,
+            is_transactional: true,
         })
         .await?;
 
@@ -699,7 +702,7 @@ mod tests {
         );
 
         // connect a fake sink as output
-        let (sink_tx, _sink_rx) = unbounded();
+        let (sink_tx, sink_rx) = unbounded();
         let sink_addr = SinkAddr { addr: sink_tx };
         let target = OutputTarget::Sink(sink_addr);
         addr.send_mgmt(MgmtMsg::ConnectOutput {
@@ -719,7 +722,56 @@ mod tests {
             report.outputs.get(&OUT.to_string())
         );
 
-        // send a signal and an event
+        // send an event
+        let event = Event {
+            data: (Value::from(42), Value::from(true)).into(),
+            ..Event::default()
+        };
+        addr.send(Box::new(Msg::Event { event, input: IN })).await?;
+
+        let mut sink_msg = sink_rx.recv().timeout(Duration::from_secs(2)).await??;
+        while let SinkMsg::Signal { .. } = sink_msg {
+            sink_msg = sink_rx.recv().timeout(Duration::from_secs(2)).await??;
+        }
+        match sink_msg {
+            SinkMsg::Event { event, port: _ } => {
+                assert_eq!(Value::from(42), event.data.suffix().value());
+                assert_eq!(Value::from(true), event.data.suffix().meta());
+            }
+            other => assert!(false, "Expected Event, got: {:?}", other),
+        }
+
+        // send a signal
+        addr.send(Box::new(Msg::Signal(Event::signal_drain(42))))
+            .await?;
+
+        let start = Instant::now();
+        let mut sink_msg = sink_rx.recv().timeout(Duration::from_secs(2)).await??;
+        while !matches!(
+            sink_msg,
+            SinkMsg::Signal {
+                signal: Event {
+                    kind: Some(SignalKind::Drain(42)),
+                    ..
+                }
+            }
+        ) {
+            if start.elapsed() > Duration::from_secs(4) {
+                assert!(false, "Timed out waiting for drain signal on the sink");
+            }
+            sink_msg = sink_rx.recv().timeout(Duration::from_secs(2)).await??;
+        }
+
+        let event_id = EventId::from_id(1, 1, 1);
+        addr.send_insight(Event::cb_ack(0, event_id.clone(), OpMeta::default()))
+            .await?;
+        let source_msg = source_rx.recv().timeout(Duration::from_secs(2)).await??;
+        if let SourceMsg::Cb(cb_action, cb_id) = source_msg {
+            assert_eq!(event_id, cb_id);
+            assert_eq!(CbAction::Ack, cb_action);
+        } else {
+            assert!(false, "Expected SourceMsg::Cb, got: {:?}", source_msg);
+        }
 
         // test pause and resume
         addr.pause().await?;
