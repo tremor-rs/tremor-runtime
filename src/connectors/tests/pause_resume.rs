@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{ConnectorHarness, GET_EVENT_TIMEOUT, TIMEOUT};
+use super::ConnectorHarness;
 use crate::{errors::Result, instance::State};
 use async_std::{
     io::WriteExt,
     net::{TcpListener, TcpStream, UdpSocket},
-    prelude::FutureExt,
 };
 use tremor_value::prelude::*;
 
@@ -49,7 +48,7 @@ async fn udp_pause_resume() -> Result<()> {
         .out()
         .expect("No pipeline connected to 'out' port of udp_server");
     harness.start().await?;
-    harness.wait_for_connected(None).await?;
+    harness.wait_for_connected().await?;
 
     // connect client socket
     let socket = UdpSocket::bind("127.0.0.1:0").await?;
@@ -65,20 +64,20 @@ async fn udp_pause_resume() -> Result<()> {
     }
     // pause connector
     harness.pause().await?;
-    harness.wait_for_state(State::Paused, None).await?;
+    harness.wait_for_state(State::Paused).await?;
     // make sure the udp_server source got out of its last pull_data call and now knows it should pause
-    async_std::task::sleep(GET_EVENT_TIMEOUT).await;
+    async_std::task::sleep(std::time::Duration::from_secs(1)).await;
 
     // send some more data
     let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
     socket.send(data2.as_bytes()).await?;
 
     // ensure nothing is received (pause is actually doing the right thing)
-    let timeout_err = out_pipeline.get_event().timeout(GET_EVENT_TIMEOUT).await;
+    let timeout_err = out_pipeline.get_event().await;
     assert!(timeout_err.is_err(), "Didnt expect: {:?}", &timeout_err);
     // resume connector
     harness.resume().await?;
-    harness.wait_for_state(State::Running, None).await?;
+    harness.wait_for_state(State::Running).await?;
     // receive the data sent during pause
     // first line, continueing the stuff from last send
     assert_eq!(
@@ -135,7 +134,7 @@ async fn tcp_server_pause_resume() -> Result<()> {
         .out()
         .expect("No pipeline connected to 'out' port of tcp_server connector");
     harness.start().await?;
-    harness.wait_for_connected(None).await?;
+    harness.wait_for_connected().await?;
     debug!("Connected.");
     // connect client socket
     let mut socket = TcpStream::connect(&server_addr).await?;
@@ -145,27 +144,23 @@ async fn tcp_server_pause_resume() -> Result<()> {
     // expect data being received, the last item is not received yet
     for expected in data.split('\n').take(4) {
         debug!("expecting: '{}'", expected);
-        let event = out_pipeline.get_event().timeout(TIMEOUT).await??;
+        let event = out_pipeline.get_event().await?;
         let content = event.data.suffix().value().as_str().unwrap();
         debug!("received '{}'", content);
         assert_eq!(expected, content);
     }
     // pause connector
     harness.pause().await?;
-    harness.wait_for_state(State::Paused, None).await?;
+    harness.wait_for_state(State::Paused).await?;
     // send some more data
     let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
     socket.write_all(data2.as_bytes()).await?;
 
     // ensure nothing is received (pause is actually doing the right thing)
-    assert!(out_pipeline
-        .get_event()
-        .timeout(GET_EVENT_TIMEOUT)
-        .await
-        .is_err());
+    assert!(out_pipeline.get_event().await.is_err());
     // resume connector
     harness.resume().await?;
-    harness.wait_for_state(State::Running, None).await?;
+    harness.wait_for_state(State::Running).await?;
     // receive the data sent during pause
     assert_eq!(
         format!(
@@ -186,10 +181,7 @@ async fn tcp_server_pause_resume() -> Result<()> {
     drop(socket); // closing the socket, ensuring the last bits are flushed from preprocessors etc
     for expected in data2[..data2.len() - 1].split('\n').skip(1) {
         debug!("expecting: '{}'", expected);
-        let event = out_pipeline
-            .get_event()
-            .timeout(GET_EVENT_TIMEOUT)
-            .await??;
+        let event = out_pipeline.get_event().await?;
         let content = event.data.suffix().value().as_str().unwrap();
         debug!("received '{}'", content);
         assert_eq!(expected, content);

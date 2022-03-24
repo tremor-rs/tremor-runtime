@@ -164,6 +164,7 @@ impl<I> TemporalPriorityQueue<I> {
             None
         }
     }
+    #[cfg(feature = "timed-tests")]
     #[cfg(test)]
     pub fn drain(&mut self) -> Vec<TemporalItem<I>> {
         let now = Utc::now().timestamp();
@@ -214,6 +215,8 @@ impl ChronomicQueue {
             });
         }
     }
+
+    #[cfg(feature = "timed-tests")]
     #[cfg(test)]
     pub fn drain(&mut self) -> Vec<(String, Option<Value<'static>>)> {
         let due = self.tpq.drain();
@@ -236,9 +239,14 @@ impl ChronomicQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::convert::TryFrom;
+
+    #[cfg(feature = "timed-tests")]
     use async_std::task;
-    use chrono::{self, DateTime};
-    use std::{convert::TryFrom, time::Duration};
+    #[cfg(feature = "timed-tests")]
+    use chrono::DateTime;
+    #[cfg(feature = "timed-tests")]
+    use std::time::Duration;
 
     #[test]
     fn test_deserialize_cron_entry() -> Result<()> {
@@ -258,6 +266,9 @@ mod tests {
         Ok(())
     }
 
+    // This tight requirements for timing are extremely problematic in tests
+    // and lead to frequent issues with the test being flaky or unrelaibale
+    #[cfg(feature = "timed-tests")]
     #[async_std::test]
     async fn test_tpq_fill_drain() -> Result<()> {
         use chrono::prelude::Utc;
@@ -290,6 +301,9 @@ mod tests {
         Ok(())
     }
 
+    // This tight requirements for timing are extremely problematic in tests
+    // and lead to frequent issues with the test being flaky or unrelaibale
+    #[cfg(feature = "timed-tests")]
     #[async_std::test]
     async fn test_tpq_fill_pop() -> Result<()> {
         use chrono::prelude::Utc;
@@ -323,6 +337,9 @@ mod tests {
         Ok(())
     }
 
+    // This tight requirements for timing are extremely problematic in tests
+    // and lead to frequent issues with the test being flaky or unrelaibale
+    #[cfg(feature = "timed-tests")]
     #[async_std::test]
     async fn test_cq_fill_drain_refill() -> Result<()> {
         let mut cq = ChronomicQueue::default();
@@ -355,6 +372,9 @@ mod tests {
         Ok(())
     }
 
+    // This tight requirements for timing are extremely problematic in tests
+    // and lead to frequent issues with the test being flaky or unrelaibale
+    #[cfg(feature = "timed-tests")]
     #[async_std::test]
     async fn test_cq_fill_pop_refill() -> Result<()> {
         let mut cq = ChronomicQueue::default();
