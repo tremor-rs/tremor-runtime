@@ -679,10 +679,8 @@ async fn spawn_task(
 #[cfg(test)]
 mod tests {
 
-    use crate::{connectors::ConnectorBuilder, instance};
-
     use super::*;
-    use async_std::prelude::FutureExt;
+    use crate::{connectors::ConnectorBuilder, instance};
     use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
     use tremor_script::{ast::DeployStmt, deploy::Deploy, FN_REGISTRY};
     use tremor_value::literal;
@@ -854,10 +852,7 @@ mod tests {
         assert_eq!("foo", &connectors[0].alias);
 
         // assert the flow has started and events are flowing
-        let event = connector_rx
-            .recv()
-            .timeout(Duration::from_secs(2))
-            .await??;
+        let event = connector_rx.recv().await?;
         assert_eq!(
             &literal!({
                 "snot": "badger"
@@ -882,10 +877,10 @@ mod tests {
         // drain and stop the flow
         let (tx, rx) = bounded(1);
         flow.drain(tx.clone()).await?;
-        rx.recv().timeout(Duration::from_secs(2)).await???;
+        rx.recv().await??;
 
         flow.stop(tx).await?;
-        rx.recv().timeout(Duration::from_secs(2)).await???;
+        rx.recv().await??;
 
         Ok(())
     }

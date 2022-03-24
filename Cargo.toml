@@ -225,7 +225,7 @@ testcontainers = "0.12"
 
 
 [features]
-default = ["timed-tests", "integration-local"]
+default = ["integration-local"]
 
 # support for 128bit numbers in tremor-value
 128bit = ["tremor-value/128bit"]
@@ -252,7 +252,7 @@ crononome-integration = []
 metronome-integration = []
 socket-integration = []
 tcp-integration = []
-timed-tests = []
+tarpaulin-exclude = []
 
 [patch.crates-io]
 rust-bert = { git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989' }
