@@ -151,9 +151,7 @@ async fn rtt(
         .expect("No pipeline connected to 'out' port of connector");
 
     harness.start().await?;
-    harness
-        .wait_for_connected(None)
-        .await?;
+    harness.wait_for_connected(None).await?;
 
     let meta = literal!({ "request": meta });
     let data = literal!(null);

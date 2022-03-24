@@ -35,9 +35,7 @@ async fn connector_metronome_routing() -> Result<()> {
         .expect("No pipeline connected to 'in' port of ws_server connector");
 
     harness.start().await?;
-    harness
-        .wait_for_connected(None)
-        .await?;
+    harness.wait_for_connected(None).await?;
 
     task::sleep(Duration::from_secs(1)).await;
 

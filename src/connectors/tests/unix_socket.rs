@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{ConnectorHarness, TIMEOUT, GET_EVENT_TIMEOUT};
+use super::{ConnectorHarness, GET_EVENT_TIMEOUT, TIMEOUT};
 use crate::errors::Result;
 use async_std::os::unix::net::UnixStream;
 use async_std::prelude::*;
@@ -77,10 +77,7 @@ async fn unix_socket_event_routing() -> Result<()> {
     harness.send_to_sink(event1, IN).await?;
 
     let mut buf = vec![0_u8; 8192];
-    let bytes_read = socket1
-        .read(&mut buf)
-        .timeout(TIMEOUT)
-        .await??;
+    let bytes_read = socket1.read(&mut buf).timeout(TIMEOUT).await??;
     let data = &buf[0..bytes_read];
     assert_eq!("badger", &String::from_utf8_lossy(data));
     debug!("Received event 1 via socket1");
@@ -88,10 +85,7 @@ async fn unix_socket_event_routing() -> Result<()> {
     // send something to socket 2
     socket2.write_all("carfuffle\n".as_bytes()).await?;
 
-    let event = out_pipeline
-        .get_event()
-        .timeout(TIMEOUT)
-        .await??;
+    let event = out_pipeline.get_event().timeout(TIMEOUT).await??;
     // send an event and route it via eventid to socket 2
     let mut id2 = EventId::default();
     id2.track(&event.id);
@@ -101,10 +95,7 @@ async fn unix_socket_event_routing() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(event2, IN).await?;
-    let bytes_read = socket2
-        .read(&mut buf)
-        .timeout(TIMEOUT)
-        .await??;
+    let bytes_read = socket2.read(&mut buf).timeout(TIMEOUT).await??;
     let data = &buf[0..bytes_read];
     assert_eq!("fleek", &String::from_utf8_lossy(data));
     debug!("Received event 2 via socket1");
