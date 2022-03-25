@@ -1,7 +1,21 @@
 define flow test
 flow
+  define connector metronome from metronome
+  with
+    config = {
+      "interval": 1
+    }
+  end;
+  define connector exit from exit;
   define pipeline identity
   pipeline
     select event from in into out;
   end;
+  create connector metronome;
+  create connector exit;
+  create pipeline identity;
+  connect /connector/metronome to /pipeline/identity;
+  connect /pipeline/identity to /connector/exit;
 end;
+
+deploy flow test
