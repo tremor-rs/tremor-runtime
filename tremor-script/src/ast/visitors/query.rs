@@ -28,7 +28,7 @@ pub trait Visitor<'script> {
     /// if the walker function fails
     fn visit_definitional_args_with(
         &mut self,
-        _with: &mut DefinitioalArgsWith<'script>,
+        _with: &mut DefinitionalArgsWith<'script>,
     ) -> Result<VisitRes> {
         Ok(Walk)
     }
@@ -39,7 +39,7 @@ pub trait Visitor<'script> {
     /// if the walker function fails
     fn leave_definitional_args_with(
         &mut self,
-        _with: &mut DefinitioalArgsWith<'script>,
+        _with: &mut DefinitionalArgsWith<'script>,
     ) -> Result<()> {
         Ok(())
     }
@@ -50,7 +50,7 @@ pub trait Visitor<'script> {
     /// if the walker function fails
     fn visit_definitional_args(
         &mut self,
-        _with: &mut DefinitioalArgs<'script>,
+        _with: &mut DefinitionalArgs<'script>,
     ) -> Result<VisitRes> {
         Ok(Walk)
     }
@@ -59,7 +59,7 @@ pub trait Visitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn leave_definitional_args(&mut self, _with: &mut DefinitioalArgs<'script>) -> Result<()> {
+    fn leave_definitional_args(&mut self, _with: &mut DefinitionalArgs<'script>) -> Result<()> {
         Ok(())
     }
 

@@ -652,6 +652,7 @@ async fn server_control_frames() -> Result<()> {
         })),
         close
     );
+    // send a signal so the server sink can clean out the channel
     harness.signal_tick_to_sink().await?;
 
     // this should fail, as the server should close the connection

@@ -23,7 +23,7 @@ pub use codespan::{
     LineOffset,
 };
 /// A location in a source file
-#[derive(Copy, Clone, Default, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct Location {
     /// The Line
     pub(crate) line: usize,
@@ -33,6 +33,31 @@ pub struct Location {
     pub(crate) absolute: usize,
     /// Absolute location in bytes starting from 0
     pub(crate) aid: arena::Index,
+}
+
+impl Location {
+    /// #YOLO #dontcare constructor
+    #[must_use]
+    pub fn yolo() -> Self {
+        Self::start_of_file(arena::INVALID_INDEX)
+    }
+
+    /// constructor for a `Location` at the start of the file referenced by `aid`
+    #[must_use]
+    pub fn start_of_file(aid: arena::Index) -> Self {
+        Self {
+            line: 1,
+            column: 1,
+            absolute: 0,
+            aid,
+        }
+    }
+}
+
+impl Default for Location {
+    fn default() -> Self {
+        Self::yolo()
+    }
 }
 
 impl std::fmt::Debug for Location {
@@ -46,8 +71,8 @@ impl std::ops::Sub for Location {
     fn sub(self, rhs: Location) -> Self::Output {
         debug_assert_eq!(self.aid, rhs.aid);
         Location {
-            line: self.line.saturating_sub(rhs.line),
-            column: self.column.saturating_sub(rhs.column),
+            line: self.line.saturating_sub(rhs.line).max(1),
+            column: self.column.saturating_sub(rhs.column).max(1),
             absolute: self.absolute.saturating_sub(rhs.absolute),
             aid: self.aid,
         }
@@ -67,7 +92,7 @@ pub(crate) fn span(start: Location, end: Location) -> Span {
 }
 
 /// A Spanned element, position plus element
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Spanned<'tkn> {
     /// The span
     pub span: Span,
@@ -76,7 +101,7 @@ pub struct Spanned<'tkn> {
 }
 
 /// A span in a file between two locations
-#[derive(Copy, Clone, Default, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct Span {
     pub(crate) start: Location,
     pub(crate) end: Location,
@@ -89,6 +114,24 @@ impl std::fmt::Debug for Span {
 }
 
 impl Span {
+    /// New empty span at the beginning of a file with an invalid `arena::Index`
+    #[must_use]
+    pub fn yolo() -> Self {
+        Self {
+            start: Location::yolo(),
+            end: Location::yolo(),
+        }
+    }
+
+    /// span at a single location
+    #[must_use]
+    pub fn at(loc: Location) -> Self {
+        Self {
+            start: loc,
+            end: loc,
+        }
+    }
+
     /// New span
     #[must_use]
     pub fn new(start: Location, end: Location) -> Self {
@@ -117,6 +160,12 @@ impl Span {
 impl From<(Location, Location)> for Span {
     fn from((start, end): (Location, Location)) -> Self {
         Self { start, end }
+    }
+}
+
+impl From<&Location> for Span {
+    fn from(loc: &Location) -> Self {
+        Self::at(*loc)
     }
 }
 
@@ -189,5 +238,35 @@ impl Location {
             self.column -= 1;
             self.absolute -= ch.len_utf8();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    #[test]
+    fn location() {
+        let loc = Location::start_of_file(1_usize.into());
+        let res = loc + 'A';
+        assert_eq!(1, res.absolute());
+        assert_eq!(1, res.line());
+        assert_eq!(2, res.column());
+
+        let res = res + '\n';
+        assert_eq!(2, res.absolute());
+        assert_eq!(2, res.line());
+        assert_eq!(1, res.column());
+
+        let loc2 = Location::new(4, 1, 128, 1_usize.into());
+        let res = loc2 - res;
+        assert_eq!(126, res.absolute());
+        assert_eq!(2, res.line());
+        assert_eq!(1, res.column());
+    }
+
+    #[test]
+    fn span() {
+        // FIXME
     }
 }

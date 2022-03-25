@@ -18,7 +18,7 @@ pub(crate) use crate::ast::walkers::{self, DeployWalker, ExprWalker, ImutExprWal
 pub(crate) use crate::ast::{
     ArgsExpr, ArrayPattern, ArrayPredicatePattern, BinExpr, Bytes, BytesPart, ClauseGroup,
     ClausePreCondition, Comprehension, ConnectStmt, ConnectorDefinition, CreateStmt,
-    CreateTargetDefinition, CreationalWith, DefaultCase, DefinitioalArgs, DefinitioalArgsWith,
+    CreateTargetDefinition, CreationalWith, DefaultCase, DefinitionalArgs, DefinitionalArgsWith,
     DeployEndpoint, EmitExpr, EventPath, Expr, ExprPath, Exprs, Field, FlowDefinition, FnDefn,
     GroupBy, Helper, Ident, IfElse, ImutExpr, Invoke, InvokeAggr, List, Literal, LocalPath, Match,
     Merge, MetadataPath, OperatorCreate, OperatorDefinition, Patch, PatchOperation, Path, Pattern,

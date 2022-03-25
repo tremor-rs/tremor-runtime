@@ -26,7 +26,7 @@ use crate::{
         error_generic,
         node_id::NodeId,
         query::raw::{
-            ConfigRaw, CreationalWithRaw, DefinitioalArgsRaw, DefinitioalArgsWithRaw,
+            ConfigRaw, CreationalWithRaw, DefinitionalArgsRaw, DefinitionalArgsWithRaw,
             PipelineDefinitionRaw,
         },
         raw::{IdentRaw, UseRaw},
@@ -157,7 +157,7 @@ pub type DeployStmtsRaw<'script> = Vec<DeployStmtRaw<'script>>;
 pub struct ConnectorDefinitionRaw<'script> {
     pub(crate) id: String,
     pub(crate) kind: IdentRaw<'script>,
-    pub(crate) params: DefinitioalArgsWithRaw<'script>,
+    pub(crate) params: DefinitionalArgsWithRaw<'script>,
     pub(crate) docs: Option<Vec<Cow<'script, str>>>,
     pub(crate) mid: Box<NodeMeta>,
 }
@@ -260,7 +260,7 @@ impl<'script> Upable<'script> for ConnectStmtRaw<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FlowDefinitionRaw<'script> {
     pub(crate) id: String,
-    pub(crate) params: DefinitioalArgsRaw<'script>,
+    pub(crate) params: DefinitionalArgsRaw<'script>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
     pub(crate) stmts: Vec<FlowStmtRaw<'script>>,
     pub(crate) mid: Box<NodeMeta>,
@@ -382,7 +382,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
         let target = self.target.clone();
         let outer = self.extent();
         let inner = self.id.extent();
-        let params = self.params.up(helper)?;
+
         let defn = match self.kind {
             CreateKind::Connector => {
                 if let Some(artefact) = helper.get(&target)? {
@@ -414,7 +414,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
 
         let create_stmt = CreateStmt {
             mid: self.mid.box_with_name(&self.id.id),
-            with: params,
+            with: self.params.up(helper)?,
             instance_alias: self.id.id.to_string(),
             from_target: target,
             defn,
@@ -440,9 +440,7 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
     type Target = DeployFlow<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         // TODO check that names across pipeline/flow/connector definitions are unique or else hygienic error
-
         let target = self.target.clone();
-
         let mut defn = if let Some(artefact) = helper.get::<FlowDefinition>(&target)? {
             artefact.clone()
         } else {
@@ -462,9 +460,8 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
             )
             .into());
         };
-        let params = self.params.up(helper)?;
-
-        defn.params.ingest_creational_with(&params)?;
+        let upped_params = self.params.up(helper)?;
+        defn.params.ingest_creational_with(&upped_params)?;
 
         let create_stmt = DeployFlow {
             mid: self.mid.box_with_name(&self.id.id),

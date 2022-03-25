@@ -648,7 +648,7 @@ mod tests {
     use std::time::Instant;
     use tremor_common::url::ports::{IN, OUT};
     use tremor_pipeline::{EventId, OpMeta};
-    use tremor_script::{aggr_registry, ast::NodeMeta, FN_REGISTRY};
+    use tremor_script::{aggr_registry, lexer::Location, NodeMeta, FN_REGISTRY};
     use tremor_value::Value;
 
     #[async_std::test]
@@ -679,8 +679,9 @@ mod tests {
         let (source_tx, source_rx) = unbounded();
         let source_addr = SourceAddr { addr: source_tx };
         let target = InputTarget::Source(source_addr);
+        let mid = NodeMeta::new(Location::yolo(), Location::yolo());
         addr.send_mgmt(MgmtMsg::ConnectInput {
-            endpoint: DeployEndpoint::new(&"source_01", &OUT, &NodeMeta::default()),
+            endpoint: DeployEndpoint::new(&"source_01", &OUT, &mid),
             target,
             is_transactional: true,
         })
@@ -702,7 +703,7 @@ mod tests {
         let sink_addr = SinkAddr { addr: sink_tx };
         let target = OutputTarget::Sink(sink_addr);
         addr.send_mgmt(MgmtMsg::ConnectOutput {
-            endpoint: DeployEndpoint::new(&"sink_01", &IN, &NodeMeta::default()),
+            endpoint: DeployEndpoint::new(&"sink_01", &IN, &mid),
             port: OUT,
             target,
         })
@@ -720,7 +721,7 @@ mod tests {
 
         // send an event
         let event = Event {
-            data: (Value::from(42), Value::from(true)).into(),
+            data: (Value::from(42_u64), Value::from(true)).into(),
             ..Event::default()
         };
         addr.send(Box::new(Msg::Event { event, input: IN })).await?;
@@ -731,7 +732,7 @@ mod tests {
         }
         match sink_msg {
             SinkMsg::Event { event, port: _ } => {
-                assert_eq!(Value::from(42), event.data.suffix().value());
+                assert_eq!(Value::from(42_usize), event.data.suffix().value());
                 assert_eq!(Value::from(true), event.data.suffix().meta());
             }
             other => assert!(false, "Expected Event, got: {:?}", other),

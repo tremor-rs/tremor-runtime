@@ -1,2 +1,3 @@
 Error: 
-      | ^ An unexpected end of stream was found
+    1 | let test = 
+      |              ^ An unexpected end of stream was found

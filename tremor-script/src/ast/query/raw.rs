@@ -19,7 +19,7 @@ use std::collections::HashSet;
 
 use super::{
     super::raw::{IdentRaw, ImutExprRaw, ScriptRaw},
-    ArgsExprs, CreationalWith, DefinitioalArgs, DefinitioalArgsWith, WithExprs,
+    ArgsExprs, CreationalWith, DefinitionalArgs, DefinitionalArgsWith, WithExprs,
 };
 use super::{
     error_generic, error_no_locals, BaseExpr, GroupBy, HashMap, Helper, OperatorCreate,
@@ -49,7 +49,7 @@ pub struct QueryRaw<'script> {
     pub(crate) mid: Box<NodeMeta>,
     pub(crate) config: ConfigRaw<'script>,
     pub(crate) stmts: StmtsRaw<'script>,
-    pub(crate) params: DefinitioalArgsRaw<'script>,
+    pub(crate) params: DefinitionalArgsRaw<'script>,
 }
 impl<'script> QueryRaw<'script> {
     pub(crate) fn up_script<'registry>(
@@ -94,11 +94,11 @@ impl<'script> QueryRaw<'script> {
             config.insert(k.to_string(), v);
         }
         if from.is_empty() {
-            from.push(Ident::from_str("in"));
+            from.push(Ident::new(Cow::const_str("in"), self.mid.clone()));
         }
         if into.is_empty() {
-            into.push(Ident::from_str("out"));
-            into.push(Ident::from_str("err"));
+            into.push(Ident::new(Cow::const_str("out"), self.mid.clone()));
+            into.push(Ident::new(Cow::const_str("err"), self.mid.clone()));
         }
         Ok(Query {
             mid: self.mid,
@@ -201,7 +201,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
 pub struct OperatorDefinitionRaw<'script> {
     pub(crate) kind: OperatorKindRaw,
     pub(crate) id: String,
-    pub(crate) params: DefinitioalArgsWithRaw<'script>,
+    pub(crate) params: DefinitionalArgsWithRaw<'script>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
     pub(crate) mid: Box<NodeMeta>,
 }
@@ -226,7 +226,7 @@ impl<'script> Upable<'script> for OperatorDefinitionRaw<'script> {
 pub struct PipelineDefinitionRaw<'script> {
     pub(crate) id: String,
     pub(crate) config: ConfigRaw<'script>,
-    pub(crate) params: DefinitioalArgsRaw<'script>,
+    pub(crate) params: DefinitionalArgsRaw<'script>,
     pub(crate) pipeline: StmtsRaw<'script>,
     pub(crate) from: Option<Vec<IdentRaw<'script>>>,
     pub(crate) into: Option<Vec<IdentRaw<'script>>>,
@@ -344,12 +344,11 @@ impl_expr!(OperatorCreateRaw);
 impl<'script> Upable<'script> for OperatorCreateRaw<'script> {
     type Target = OperatorCreate<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let params = self.params.up(helper)?;
         Ok(OperatorCreate {
             mid: self.mid.box_with_name(&self.id),
             id: self.id,
             target: self.target,
-            params,
+            params: self.params.up(helper)?,
         })
     }
 }
@@ -358,7 +357,7 @@ impl<'script> Upable<'script> for OperatorCreateRaw<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ScriptDefinitionRaw<'script> {
     pub(crate) id: String,
-    pub(crate) params: DefinitioalArgsRaw<'script>,
+    pub(crate) params: DefinitionalArgsRaw<'script>,
     pub(crate) script: ScriptRaw<'script>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
     pub(crate) mid: Box<NodeMeta>,
@@ -411,11 +410,10 @@ impl_expr!(ScriptCreateRaw);
 impl<'script> Upable<'script> for ScriptCreateRaw<'script> {
     type Target = ScriptCreate<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let params = self.params.up(helper)?;
         Ok(ScriptCreate {
             mid: self.mid.box_with_name(&self.id),
             id: self.id,
-            params,
+            params: self.params.up(helper)?,
             target: self.target,
         })
     }
@@ -639,32 +637,58 @@ impl<'script> Upable<'script> for StreamStmtRaw {
 
 pub type StmtsRaw<'script> = Vec<StmtRaw<'script>>;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Default)]
-pub struct DefinitioalArgsRaw<'script> {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DefinitionalArgsRaw<'script> {
     pub args: ArgsExprsRaw<'script>,
     pub(crate) mid: Box<NodeMeta>,
 }
 
-impl<'script> Upable<'script> for DefinitioalArgsRaw<'script> {
-    type Target = DefinitioalArgs<'script>;
+impl<'script> DefinitionalArgsRaw<'script> {
+    /// no args
+    pub(crate) fn none(mid: Box<NodeMeta>) -> Self {
+        Self {
+            args: ArgsExprsRaw::default(),
+            mid,
+        }
+    }
+}
+
+impl<'script> Upable<'script> for DefinitionalArgsRaw<'script> {
+    type Target = DefinitionalArgs<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        Ok(DefinitioalArgs {
+        Ok(DefinitionalArgs {
             args: self.args.up(helper)?,
             mid: self.mid,
         })
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Default)]
-pub struct DefinitioalArgsWithRaw<'script> {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DefinitionalArgsWithRaw<'script> {
+    pub mid: Box<NodeMeta>,
     pub args: ArgsExprsRaw<'script>,
     pub with: WithExprsRaw<'script>,
 }
 
-impl<'script> Upable<'script> for DefinitioalArgsWithRaw<'script> {
-    type Target = DefinitioalArgsWith<'script>;
+impl<'script> DefinitionalArgsWithRaw<'script> {
+    /// no args
+    pub(crate) fn none(mid: Box<NodeMeta>) -> Self {
+        Self {
+            args: ArgsExprsRaw::default(),
+            with: WithExprsRaw {
+                mid: mid.clone(),
+                exprs: Vec::default(),
+            },
+            mid,
+        }
+    }
+}
+
+impl<'script> Upable<'script> for DefinitionalArgsWithRaw<'script> {
+    type Target = DefinitionalArgsWith<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        Ok(DefinitioalArgsWith {
+        Ok(DefinitionalArgsWith {
+            mid: self.mid,
             args: self.args.up(helper)?,
             with: self.with.up(helper)?,
         })
@@ -673,7 +697,30 @@ impl<'script> Upable<'script> for DefinitioalArgsWithRaw<'script> {
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct CreationalWithRaw<'script> {
+    pub mid: Box<NodeMeta>,
     pub with: WithExprsRaw<'script>,
+}
+
+impl<'script> CreationalWithRaw<'script> {
+    /// empty with
+    pub(crate) fn none(mid: Box<NodeMeta>) -> Self {
+        Self {
+            mid: mid.clone(),
+            with: WithExprsRaw {
+                mid,
+                exprs: Vec::default(),
+            },
+        }
+    }
+}
+
+impl<'script> From<WithExprsRaw<'script>> for CreationalWithRaw<'script> {
+    fn from(with_exprs: WithExprsRaw<'script>) -> Self {
+        Self {
+            mid: with_exprs.mid.clone(),
+            with: with_exprs,
+        }
+    }
 }
 
 impl<'script> Upable<'script> for CreationalWithRaw<'script> {
@@ -687,7 +734,7 @@ impl<'script> Upable<'script> for CreationalWithRaw<'script> {
 
 pub type ConfigRaw<'script> = Vec<(IdentRaw<'script>, ImutExprRaw<'script>)>;
 
-#[derive(Clone, Debug, PartialEq, Serialize, Default)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct WithExprsRaw<'script> {
     pub(crate) mid: Box<NodeMeta>,
     pub exprs: Vec<(IdentRaw<'script>, ImutExprRaw<'script>)>,

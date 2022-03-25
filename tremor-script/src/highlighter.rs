@@ -100,7 +100,7 @@ impl From<&ScriptError> for Error {
     fn from(error: &ScriptError) -> Self {
         let (start, end) = match error.context() {
             (_, Some(inner)) => (inner.start(), inner.end()),
-            _ => (Location::default(), Location::default()),
+            _ => (Location::yolo(), Location::yolo()),
         };
         Self {
             start,
