@@ -57,12 +57,16 @@ ConfigDirective: (IdentRaw<'input>, ImutExprRaw<'input>) = {
 ///  config = {},
 ///  oops = args.arg1
 /// end;
-ArgsWithEnd: DefinitioalArgsWithRaw<'input> = {
-    <args:ArgsClause?> <with:WithEndClause> => {
-        DefinitioalArgsWithRaw {
+ArgsWithEnd: DefinitionalArgsWithRaw<'input> = {
+    <start:@L> <args:ArgsClause?> <with:WithEndClause> <end:@L> => {
+        DefinitionalArgsWithRaw {
+            mid: NodeMeta::new_box(start, end),
             args: args.unwrap_or_default(),
             with: with
         }
+    },
+    <start:@L> => {
+        DefinitionalArgsWithRaw::none(NodeMeta::new_box(start, start))
     }
 }
 
@@ -70,8 +74,8 @@ ArgsWithEnd: DefinitioalArgsWithRaw<'input> = {
 ///   arg1,
 ///   arg2 = 5
 /// # something else
-DefinitionArgs: DefinitioalArgsRaw<'input> = {
-    <start:@L> <args:ArgsClause?> <end:@L> => DefinitioalArgsRaw {
+DefinitionArgs: DefinitionalArgsRaw<'input> = {
+    <start:@L> <args:ArgsClause?> <end:@L> => DefinitionalArgsRaw {
         args: args.unwrap_or_default(),
         mid: NodeMeta::new_box(start, end)
     }
@@ -79,10 +83,6 @@ DefinitionArgs: DefinitioalArgsRaw<'input> = {
 
 ArgsClause: ArgsExprsRaw<'input> = {
     "args" <ArgsExprs> => ArgsExprsRaw(<>),
-}
-
-ArgsEndClause: ArgsExprsRaw<'input> = {
-    <ArgsClause> "end" => <>,
 }
 
 ArgsExprs: Vec<(IdentRaw<'input>, Option<ImutExprRaw<'input>>)> = {
@@ -99,11 +99,13 @@ ArgsExpr: (IdentRaw<'input>, Option<ImutExprRaw<'input>>) = {
 ///   b = args.xxx
 /// end
 CreationWithEnd: CreationalWithRaw<'input> = {
-    <WithEndClause?> => CreationalWithRaw{ with: <>.unwrap_or_default() }
+    <WithEndClause> => CreationalWithRaw::from(<>),
+    <start:@L> => CreationalWithRaw::none(NodeMeta::new_box(start, start))
 }
 
 CreationWith: CreationalWithRaw<'input> = {
-    <WithClause?> => CreationalWithRaw{ with: <>.unwrap_or_default() }
+    <WithClause> => CreationalWithRaw::from(<>),
+    <start:@L> => CreationalWithRaw::none(NodeMeta::new_box(start, start))
 }
 
 WithClause: WithExprsRaw<'input> = {
@@ -124,7 +126,7 @@ WithExpr: (IdentRaw<'input>, ImutExprRaw<'input>) = {
 
 
 ModuleBody: ModuleRaw<'input> = {
-    <start:@L> <doc:ModComment> <stmts:ModuleStmts> <end:@L> => ModuleRaw{name: IdentRaw::from(""), mid: NodeMeta::new_box(start, end), stmts, doc},
+    <start:@L> <doc:ModComment> <stmts:ModuleStmts> <end:@L> => ModuleRaw{name: IdentRaw::none(NodeMeta::new_box(start, end)), mid: NodeMeta::new_box(start, end), stmts, doc},
 }
 
 pub(crate) ModuleFile: ModuleRaw<'input> = {
@@ -274,21 +276,21 @@ Connect: ConnectStmtRaw<'input> = {
 }
 
 ConnectFromConnector: DeployEndpointRaw<'input> = {
-    <start:@L> "connector" "/" <alias:Ident> <port:MaybePort> <end:@L> => DeployEndpointRaw{mid: NodeMeta::new_box(start, end),alias, port: port.unwrap_or_else(|| "out".into())},
+    <start:@L> "connector" "/" <alias:Ident> <port_pos:@L> <port:MaybePort> <end:@L> => DeployEndpointRaw{mid: NodeMeta::new_box(start, end),alias, port: port.unwrap_or_else(|| IdentRaw::literal(NodeMeta::new_box(port_pos, port_pos), "out"))},
 }
 ConnectFromPipeline: DeployEndpointRaw<'input> = {
-    <start:@L> "pipeline" "/" <alias:Ident> <port:MaybePort> <end:@L> => DeployEndpointRaw{mid: NodeMeta::new_box(start, end), alias, port: port.unwrap_or_else(|| "out".into())},
+    <start:@L> "pipeline" "/" <alias:Ident> <port_pos:@L> <port:MaybePort> <end:@L> => DeployEndpointRaw{mid: NodeMeta::new_box(start, end), alias, port: port.unwrap_or_else(|| IdentRaw::literal(NodeMeta::new_box(port_pos, port_pos), "out"))},
 }
 ConnectToPipeline: DeployEndpointRaw<'input> = {
-    <start:@L>  "pipeline" "/" <alias:Ident> <port:MaybePort> <end:@L>  => DeployEndpointRaw{mid: NodeMeta::new_box(start, end), alias, port: port.unwrap_or_else(|| "in".into())},
+    <start:@L>  "pipeline" "/" <alias:Ident> <port_pos:@L> <port:MaybePort> <end:@L>  => DeployEndpointRaw{mid: NodeMeta::new_box(start, end), alias, port: port.unwrap_or_else(|| IdentRaw::literal(NodeMeta::new_box(port_pos, port_pos), "in"))},
 }
 ConnectToConnector: DeployEndpointRaw<'input> = {
-    <start:@L> "connector" "/" <alias:Ident> <port:MaybePort> <end:@L>  => DeployEndpointRaw{mid: NodeMeta::new_box(start, end), alias, port: port.unwrap_or_else(|| "in".into())},
+    <start:@L> "connector" "/" <alias:Ident> <port_pos:@L> <port:MaybePort> <end:@L>  => DeployEndpointRaw{mid: NodeMeta::new_box(start, end), alias, port: port.unwrap_or_else(|| IdentRaw::literal(NodeMeta::new_box(port_pos, port_pos), "in"))},
 }
 
 DefineConnector: ConnectorDefinitionRaw<'input> =  {
     // Connectors - these define connectors for deployment
-    <start:@L> <docs:DocComment> "define" "connector" <id:Ident> "from" <kind:ConnectorKind> <params:ArgsWithEnd?> <end:@L> => ConnectorDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), kind, params: params.unwrap_or_default(), docs },
+    <start:@L> <docs:DocComment> "define" "connector" <id:Ident> "from" <kind:ConnectorKind> <params:ArgsWithEnd> <end:@L> => ConnectorDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), kind, params, docs },
 }
 
 DefineFlow: FlowDefinitionRaw<'input> = {
@@ -301,8 +303,8 @@ DefineFlow: FlowDefinitionRaw<'input> = {
 
 /// Root
 pub(crate) Query : QueryRaw<'input> = {
-    <start:@L> <config:ConfigDirectives> <stmts:Stmts> "<end-of-stream>"? <end:@L>  => QueryRaw{mid: NodeMeta::new_box(start, end), config: config, stmts, params: DefinitioalArgsRaw::default()},
-    <start:@L> <stmts:Stmts> "<end-of-stream>"? <end:@L> => QueryRaw{mid: NodeMeta::new_box(start, end), config: vec![], stmts, params: DefinitioalArgsRaw::default()},
+    <start:@L> <config:ConfigDirectives> <stmts:Stmts> "<end-of-stream>"? <end:@L>  => QueryRaw{mid: NodeMeta::new_box(start, end), config: config, stmts, params: DefinitionalArgsRaw::none(NodeMeta::new_box(start, end))},
+    <start:@L> <stmts:Stmts> "<end-of-stream>"? <end:@L> => QueryRaw{mid: NodeMeta::new_box(start, end), config: vec![], stmts, params: DefinitionalArgsRaw::none(NodeMeta::new_box(start, end))},
 }
 
 Stmts: StmtsRaw<'input> = {
@@ -341,8 +343,8 @@ DefineWindow: WindowDefinitionRaw<'input> = {
 }
 
 DefineOperator: OperatorDefinitionRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" "operator" <id:Ident> "from" <kind:OperatorKind> <params:ArgsWithEnd?> <end:@L> =>  {
-        OperatorDefinitionRaw { mid: NodeMeta::new_box(start, end), kind, id: id.to_string(), params: params.unwrap_or_default(), doc }
+    <doc:DocComment> <start:@L> "define" "operator" <id:Ident> "from" <kind:OperatorKind> <params:ArgsWithEnd> <end:@L> =>  {
+        OperatorDefinitionRaw { mid: NodeMeta::new_box(start, end), kind, id: id.to_string(), params: params, doc }
     }
 }
 
@@ -364,7 +366,7 @@ CreateScript: StmtRaw<'input> = {
         StmtRaw::ScriptCreate(ScriptCreateRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), target: id.into(), params })
     },
 
-    // With ModulartTarget
+    // With ModularTarget
     <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
         StmtRaw::ScriptCreate(ScriptCreateRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), target, params })
     }
@@ -464,7 +466,7 @@ EmbeddedScriptImut: Option<ScriptRaw<'input>> = {
 }
 
 EmbeddedScriptContent: Option<ScriptRaw<'input>> = {
-    <ExprImut> => Some(ScriptRaw::new(vec![TopLevelExprRaw::Expr(ExprRaw::Imut(<>))], None)),
+    <start:@L> <expr:ExprImut> <end:@L> => Some(ScriptRaw::new(NodeMeta::new_box(start, end), vec![TopLevelExprRaw::Expr(ExprRaw::Imut(expr))], None)),
 }
 
 
@@ -477,7 +479,7 @@ OperatorKind: OperatorKindRaw = {
 }
 
 EmbeddedScript: ScriptRaw<'input> = {
-    "script" <exprs:TopLevelExprs> "end" => ScriptRaw::new(exprs, None),
+    "script" <start:@L> <exprs:TopLevelExprs> <end:@L> "end" => ScriptRaw::new(NodeMeta::new_box(start, end), exprs, None),
 }
 
 Pipeline: (ConfigRaw<'input>, StmtsRaw<'input>) = {
@@ -500,7 +502,7 @@ PipelineCreateInner : StmtsRaw<'input> = {
 // These statements for the root of the language.
 
 pub(crate) Script : ScriptRaw<'input> = {
-    <doc:ModComment> <exprs:TopLevelExprs> "<end-of-stream>"? => ScriptRaw::new(exprs, doc),
+    <start:@L> <doc:ModComment> <exprs:TopLevelExprs> <end:@L> "<end-of-stream>"? => ScriptRaw::new(NodeMeta::new_box(start, end), exprs, doc),
 }
 
 /// List of expressions at the root of the script
@@ -1427,9 +1429,9 @@ Bytes: Vec<BytesPartRaw<'input>> = {
 }
 
 BytesPart: BytesPartRaw<'input> = {
-    <start:@L> <data:SimpleExprImut> <end:@L> => BytesPartRaw{mid: NodeMeta::new_box(start, end), data, ..Default::default()},
-    <start:@L> <data:SimpleExprImut> ":" <bits:"int"> <end:@L> => BytesPartRaw{mid: NodeMeta::new_box(start, end), data, bits: Some(bits), ..Default::default()},
-    <start:@L> <data:SimpleExprImut> "/" <data_type:Ident> <end:@L> => BytesPartRaw{mid: NodeMeta::new_box(start, end), data, data_type, ..Default::default()},
+    <start:@L> <data:SimpleExprImut> <end:@L> => BytesPartRaw{mid: NodeMeta::new_box(start, end), data, data_type: IdentRaw::none(NodeMeta::new_box(start, end)), bits: None},
+    <start:@L> <data:SimpleExprImut> ":" <bits:"int"> <end:@L> => BytesPartRaw{mid: NodeMeta::new_box(start, end), data, data_type: IdentRaw::none(NodeMeta::new_box(start, end)), bits: Some(bits)},
+    <start:@L> <data:SimpleExprImut> "/" <data_type:Ident> <end:@L> => BytesPartRaw{mid: NodeMeta::new_box(start, end), data, data_type, bits: None },
     <start:@L> <data:SimpleExprImut> ":" <bits:"int"> "/" <data_type:Ident>  <end:@L> => BytesPartRaw{mid: NodeMeta::new_box(start, end), data, bits: Some(bits), data_type},
 }
 

@@ -428,8 +428,8 @@ impl Manager {
 
         let p = path.resolve_id(node_id).ok_or_else(|| {
             crate::errors::ErrorKind::ModuleNotFound(
-                Span::default(),
-                Span::default(),
+                Span::yolo(),
+                Span::yolo(),
                 node_id.fqn(),
                 path.mounts.clone(),
             )
@@ -440,8 +440,8 @@ impl Manager {
         let id = Id::from(src.as_bytes());
         if ids.iter().any(|(other, _)| &id == other) {
             return Err(ErrorKind::CyclicUse(
-                Span::default(),
-                Span::default(),
+                Span::yolo(),
+                Span::yolo(),
                 ids.iter().map(|v| &v.1).cloned().collect(),
             )
             .into());

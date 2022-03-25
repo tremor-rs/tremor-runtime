@@ -249,6 +249,7 @@ mod tests {
         };
         let host = format!("127.0.0.1:{free_port}");
         let api_handle = serve(host.clone(), &world);
+        info!("Listening on: {}", host);
 
         let src = r#"
         define flow api_test
@@ -291,18 +292,18 @@ mod tests {
             .get("/v1/status")
             .await?
             .body_json::<StaticValue>()
-            .await?
-            .into_value();
-        while !body.get_bool("all_running").unwrap_or_default() {
+            .await
+            .map(StaticValue::into_value);
+        while body.is_err() || !body.get_bool("all_running").unwrap_or_default() {
             if start.elapsed() > Duration::from_secs(2) {
-                assert!(false, "Timeout waiting for all flows to run: {body}");
+                assert!(false, "Timeout waiting for all flows to run: {body:?}");
             } else {
                 body = client
                     .get("/v1/status")
                     .await?
                     .body_json::<StaticValue>()
-                    .await?
-                    .into_value();
+                    .await
+                    .map(StaticValue::into_value);
             }
         }
         assert_eq!(
@@ -313,7 +314,7 @@ mod tests {
                 "num_flows": 1_u64,
                 "all_running": true
             }),
-            body
+            body?
         );
 
         // check the version endpoint

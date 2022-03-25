@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::ast::{
-    helper::raw::WindowName, module::Content, CreationalWith, DefinitioalArgs, WithExpr,
+    helper::raw::WindowName, module::Content, CreationalWith, DefinitionalArgs, WithExpr,
 };
 
 use super::super::visitors::prelude::*;
@@ -140,7 +140,7 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_definitional_args(&mut self, args: &mut DefinitioalArgs<'script>) -> Result<()> {
+    fn walk_definitional_args(&mut self, args: &mut DefinitionalArgs<'script>) -> Result<()> {
         stop!(
             self.visit_definitional_args(args),
             self.leave_definitional_args(args)
@@ -157,7 +157,7 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     /// if the walker function fails
     fn walk_definitinal_args_with(
         &mut self,
-        args: &mut DefinitioalArgsWith<'script>,
+        args: &mut DefinitionalArgsWith<'script>,
     ) -> Result<()> {
         stop!(
             self.visit_definitional_args_with(args),

@@ -176,6 +176,7 @@ impl ErrorKind {
         };
         match self {
             NoClauseHit(outer)
+            | UnexpectedEndOfStream(outer)
             | Oops(outer, _, _)
             | QueryNodeDuplicateName(outer, _)
             | QueryNodeReservedName(outer, _) => (Some(outer.expand_lines(2)), Some(*outer)),
@@ -260,9 +261,8 @@ impl ErrorKind {
             | ParseIntError(_)
             | ParserError(_)
             | Self::__Nonexhaustive { .. }
-            | UnexpectedEndOfStream
             | Utf8Error(_)
-            | ValueError(_) => (Some(Span::default()), None),
+            | ValueError(_) => (Some(Span::yolo()), None),
         }
     }
     pub(crate) fn token(&self) -> Option<UnfinishedToken> {
@@ -619,7 +619,7 @@ error_chain! {
 
         }
 
-        UnexpectedEndOfStream {
+        UnexpectedEndOfStream(loc: Span) {
             description("An unexpected end of stream was found")
                 display("An unexpected end of stream was found")
 

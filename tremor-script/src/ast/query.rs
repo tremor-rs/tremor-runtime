@@ -41,7 +41,7 @@ pub struct Query<'script> {
     /// Statements
     pub stmts: Stmts<'script>,
     /// Params if this is a modular query
-    pub params: DefinitioalArgs<'script>,
+    pub params: DefinitionalArgs<'script>,
     /// definitions
     pub scope: Scope<'script>,
     /// metadata
@@ -175,7 +175,7 @@ pub struct OperatorDefinition<'script> {
     /// Type of the operator
     pub kind: OperatorKind,
     /// Parameters for the operator
-    pub params: DefinitioalArgsWith<'script>,
+    pub params: DefinitionalArgsWith<'script>,
 }
 impl_expr!(OperatorDefinition);
 
@@ -200,7 +200,7 @@ pub struct ScriptDefinition<'script> {
     /// The ID and Module of the Script
     pub id: String,
     /// Parameters of a script definition
-    pub params: DefinitioalArgs<'script>,
+    pub params: DefinitionalArgs<'script>,
     /// The script itself
     pub script: Script<'script>,
 }
@@ -231,7 +231,7 @@ pub struct PipelineDefinition<'script> {
     /// metadata id
     pub(crate) mid: Box<NodeMeta>,
     /// Parameters of a subquery definition
-    pub params: DefinitioalArgs<'script>,
+    pub params: DefinitionalArgs<'script>,
     /// Input Ports
     pub from: Vec<Ident<'script>>,
     /// Output Ports
@@ -285,7 +285,7 @@ impl<'script> PipelineDefinition<'script> {
             .stmts
             .iter()
             .cloned()
-            .map(|s| s.apply_args(&inner_args, helper))
+            .map(|s| s.apply_args(&inner_args, helper, params.meta()))
             .collect::<Result<_>>()?;
 
         Ok(Query {
@@ -432,7 +432,7 @@ impl<'script> CreationalWith<'script> {
         args: &Value<'script>,
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<()> {
-        self.with.substitute_args(args, helper)
+        self.with.substitute_args(args, helper, &self.mid)
     }
 
     /// Renders a with clause into a k/v pair
@@ -448,15 +448,17 @@ impl<'script> CreationalWith<'script> {
 }
 
 /// A args / with block in a definitional statement
-#[derive(Clone, Debug, PartialEq, Serialize, Default)]
-pub struct DefinitioalArgsWith<'script> {
-    /// `args` seection
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DefinitionalArgsWith<'script> {
+    /// `args` section
     pub args: ArgsExprs<'script>,
     /// With section
     pub with: WithExprs<'script>,
+    /// node meta
+    pub mid: Box<NodeMeta>,
 }
 
-impl<'script> DefinitioalArgsWith<'script> {
+impl<'script> DefinitionalArgsWith<'script> {
     /// Combines the definitional args and with block along with the creational with block
     /// here the following happens:
     /// 1) The creational with is merged into the definitial with, overwriting defaults
@@ -515,7 +517,7 @@ impl<'script> DefinitioalArgsWith<'script> {
             .iter()
             .map(|(k, v)| {
                 let mut expr = v.clone();
-                ArgsRewriter::new(args.clone(), helper).rewrite_expr(&mut expr)?;
+                ArgsRewriter::new(args.clone(), helper, &self.mid).rewrite_expr(&mut expr)?;
                 Ok((k.id.to_string(), ConstFolder::reduce_to_val(helper, expr)?))
             })
             .collect();
@@ -524,15 +526,15 @@ impl<'script> DefinitioalArgsWith<'script> {
 }
 
 /// A args block in a definitional statement
-#[derive(Clone, Debug, PartialEq, Serialize, Default)]
-pub struct DefinitioalArgs<'script> {
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct DefinitionalArgs<'script> {
     /// `args` seection
     pub(crate) args: ArgsExprs<'script>,
     pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr!(DefinitioalArgs);
+impl_expr!(DefinitionalArgs);
 
-impl<'script> DefinitioalArgs<'script> {
+impl<'script> DefinitionalArgs<'script> {
     /// Combines the definitional args and with block along with the creational with block
     /// here the following happens:
     /// 1) The creational with is merged into the definitial with, overwriting defaults
@@ -593,13 +595,14 @@ impl<'script> WithExprs<'script> {
         &mut self,
         args: &Value<'script>,
         helper: &mut Helper<'script, 'registry>,
+        mid: &NodeMeta,
     ) -> Result<()> {
         let mut old = Vec::new();
         std::mem::swap(&mut old, &mut self.0);
         self.0 = old
             .into_iter()
             .map(|(name, mut value_expr)| {
-                ArgsRewriter::new(args.clone(), helper).rewrite_expr(&mut value_expr)?;
+                ArgsRewriter::new(args.clone(), helper, mid).rewrite_expr(&mut value_expr)?;
                 ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut value_expr)?;
                 Ok((name, value_expr))
             })
@@ -620,6 +623,7 @@ impl<'script> Stmt<'script> {
         mut self,
         args: &Value<'script>,
         helper: &mut Helper<'script, '_>,
+        mid: &NodeMeta,
     ) -> Result<Self> {
         match &mut self {
             // For definitions, select andstreams we do not substitute incomming args
@@ -630,7 +634,7 @@ impl<'script> Stmt<'script> {
             | Stmt::PipelineDefinition(_)
             | Stmt::StreamStmt(_) => (),
             Stmt::SelectStmt(s) => {
-                ArgsRewriter::new(args.clone(), helper).walk_select_stmt(s)?;
+                ArgsRewriter::new(args.clone(), helper, mid).walk_select_stmt(s)?;
                 ConstFolder::new(helper).walk_select_stmt(s)?;
             }
             Stmt::OperatorCreate(d) => d.params.substitute_args(args, helper)?,
