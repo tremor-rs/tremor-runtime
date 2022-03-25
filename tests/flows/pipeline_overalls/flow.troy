@@ -1,9 +1,0 @@
-define flow test
-flow
-  define pipeline identity
-  args
-    snot = "1",
-  pipeline
-    select args from in into out;
-  end;
-end
