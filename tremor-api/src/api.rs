@@ -209,3 +209,337 @@ pub fn serve(host: String, world: &World) -> JoinHandle<Result<()>> {
         }
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Instant;
+
+    use async_std::net::TcpListener;
+    use http_types::Url;
+    use simd_json::ValueAccess;
+    use tremor_runtime::{
+        errors::Result as RuntimeResult,
+        instance::State as InstanceState,
+        system::{
+            flow::{ConnectorId, StatusReport},
+            ShutdownMode, WorldConfig,
+        },
+    };
+    use tremor_script::{aggr_registry, ast::DeployStmt, deploy::Deploy, FN_REGISTRY};
+    use tremor_value::{literal, value::StaticValue};
+
+    use crate::flow::PatchStatus;
+
+    use super::*;
+
+    #[async_std::test]
+    async fn test_api() -> RuntimeResult<()> {
+        let _ = env_logger::try_init();
+        let config = WorldConfig {
+            qsize: 16,
+            debug_connectors: true,
+        };
+        let (world, world_handle) = World::start(config).await?;
+        let src = r#"
+        define flow api_test
+        flow
+            define pipeline main
+            pipeline
+                select event from in into out;
+            end;
+            create pipeline main;
+
+            define connector my_null from `null`;
+            create connector my_null;
+
+            connect /connector/my_null to /pipeline/main;
+            connect /pipeline/main to /connector/my_null;
+        end;
+        deploy flow api_test;
+        "#;
+        let aggr_reg = aggr_registry();
+        let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg)?;
+        let deploy = deployable
+            .deploy
+            .stmts
+            .into_iter()
+            .find_map(|stmt| match stmt {
+                DeployStmt::DeployFlowStmt(deploy_flow) => Some((*deploy_flow).clone()),
+                _other => None,
+            })
+            .expect("No deploy in the given troy file");
+        world.start_flow(&deploy).await?;
+        let free_port = {
+            let listener = TcpListener::bind("127.0.0.1:0").await?;
+            let port = listener.local_addr()?.port();
+            drop(listener);
+            port
+        };
+        let host = format!("127.0.0.1:{free_port}");
+        let api_handle = serve(host.clone(), &world);
+
+        // check the status endpoint
+        let start = Instant::now();
+        let client: surf::Client = surf::Config::new()
+            .set_base_url(Url::parse(&format!("http://{host}/"))?)
+            .try_into()
+            .expect("Could not create surf client");
+
+        let mut body = client
+            .get("/v1/status")
+            .await?
+            .body_json::<StaticValue>()
+            .await?
+            .into_value();
+        while !body.get_bool("all_running").unwrap_or_default() {
+            if start.elapsed() > Duration::from_secs(2) {
+                assert!(false, "Timeout waiting for all flows to run: {body}");
+            } else {
+                body = client
+                    .get("/v1/status")
+                    .await?
+                    .body_json::<StaticValue>()
+                    .await?
+                    .into_value();
+            }
+        }
+        assert_eq!(
+            literal!({
+                "flows": {
+                    "running": 1_u64
+                },
+                "num_flows": 1_u64,
+                "all_running": true
+            }),
+            body
+        );
+
+        // check the version endpoint
+        let body = client
+            .get("/v1/version")
+            .await?
+            .body_json::<StaticValue>()
+            .await?
+            .into_value();
+        assert!(body.contains_key("version"));
+        assert!(body.contains_key("debug"));
+
+        // list flows
+        let body = client
+            .get("/v1/flows")
+            .await?
+            .body_json::<Vec<StatusReport>>()
+            .await?;
+        assert_eq!(1, body.len());
+        assert_eq!("api_test".to_string(), body[0].alias);
+        assert_eq!(InstanceState::Running, body[0].status);
+        assert_eq!(1, body[0].connectors.len());
+        assert_eq!(ConnectorId::from("my_null"), body[0].connectors[0]);
+
+        // get flow
+        let res = client.get("/v1/flows/i_do_not_exist").await?;
+        assert_eq!(StatusCode::NotFound, res.status());
+
+        let body = client
+            .get("/v1/flows/api_test")
+            .await?
+            .body_json::<StatusReport>()
+            .await?;
+
+        assert_eq!("api_test".to_string(), body.alias);
+        assert_eq!(InstanceState::Running, body.status);
+        assert_eq!(1, body.connectors.len());
+        assert_eq!(ConnectorId::from("my_null"), body.connectors[0]);
+
+        // patch flow status
+        let body = client
+            .patch("/v1/flows/api_test")
+            .body_json(&PatchStatus {
+                status: InstanceState::Paused,
+            })?
+            .await?
+            .body_json::<StatusReport>()
+            .await?;
+
+        assert_eq!("api_test".to_string(), body.alias);
+        assert_eq!(InstanceState::Paused, body.status);
+        assert_eq!(1, body.connectors.len());
+        assert_eq!(ConnectorId::from("my_null"), body.connectors[0]);
+
+        // invalid patch
+        let mut res = client
+            .patch("/v1/flows/api_test")
+            .body_json(&PatchStatus {
+                status: InstanceState::Failed,
+            })?
+            .await?;
+        assert_eq!(StatusCode::BadRequest, res.status());
+        let _ = res.body_bytes().await?; // consume the body
+
+        // resume
+        let body = client
+            .patch("/v1/flows/api_test")
+            .body_json(&PatchStatus {
+                status: InstanceState::Running,
+            })?
+            .await?
+            .body_json::<StatusReport>()
+            .await?;
+
+        assert_eq!("api_test".to_string(), body.alias);
+        assert_eq!(InstanceState::Running, body.status);
+        assert_eq!(1, body.connectors.len());
+        assert_eq!(ConnectorId::from("my_null"), body.connectors[0]);
+
+        // list flow connectors
+        let body = client
+            .get("/v1/flows/api_test/connectors")
+            .await?
+            .body_json::<StaticValue>()
+            .await?
+            .into_value();
+        assert_eq!(
+            literal!([
+                {
+                    "alias": "my_null",
+                    "status": "running",
+                    "connectivity": "connected",
+                    "pipelines": {
+                        "out": [
+                            {
+                                "port":  "in",
+                                "alias": "main"
+                            }
+                        ],
+                        "in": [
+                            {
+                                "port": "out",
+                                "alias": "main"
+                            }
+                        ]
+                    }
+                }
+            ]),
+            body
+        );
+
+        // get flow connector
+        let mut res = client
+            .get("/v1/flows/api_test/connectors/i_do_not_exist")
+            .await?;
+        assert_eq!(StatusCode::NotFound, res.status());
+        let _ = res.body_bytes().await?; //consume body
+
+        let body = client
+            .get("/v1/flows/api_test/connectors/my_null")
+            .await?
+            .body_json::<StaticValue>()
+            .await?
+            .into_value();
+        assert_eq!(
+            literal!({
+                "alias": "my_null",
+                "status": "running",
+                "connectivity": "connected",
+                "pipelines": {
+                    "out": [
+                        {
+                            "port":  "in",
+                            "alias": "main"
+                        }
+                    ],
+                    "in": [
+                        {
+                            "port": "out",
+                            "alias": "main"
+                        }
+                    ]
+                }
+            }),
+            body
+        );
+
+        // patch flow connector status
+        let body = client
+            .patch("/v1/flows/api_test/connectors/my_null")
+            .body_json(&PatchStatus {
+                status: InstanceState::Paused,
+            })?
+            .await?
+            .body_json::<StaticValue>()
+            .await?
+            .into_value();
+
+        assert_eq!(
+            literal!({
+                "alias": "my_null",
+                "status": "paused",
+                "connectivity": "connected",
+                "pipelines": {
+                    "out": [
+                        {
+                            "port":  "in",
+                            "alias": "main"
+                        }
+                    ],
+                    "in": [
+                        {
+                            "port": "out",
+                            "alias": "main"
+                        }
+                    ]
+                }
+            }),
+            body
+        );
+
+        // invalid patch
+        let mut res = client
+            .patch("/v1/flows/api_test/connectors/my_null")
+            .body_json(&PatchStatus {
+                status: InstanceState::Failed,
+            })?
+            .await?;
+        assert_eq!(StatusCode::BadRequest, res.status());
+        let _ = res.body_bytes().await?; // consume the body
+
+        // resume
+        let body = client
+            .patch("/v1/flows/api_test/connectors/my_null")
+            .body_json(&PatchStatus {
+                status: InstanceState::Running,
+            })?
+            .await?
+            .body_json::<StaticValue>()
+            .await?
+            .into_value();
+        assert_eq!(
+            literal!({
+                "alias": "my_null",
+                "status": "running",
+                "connectivity": "connected",
+                "pipelines": {
+                    "out": [
+                        {
+                            "port":  "in",
+                            "alias": "main"
+                        }
+                    ],
+                    "in": [
+                        {
+                            "port": "out",
+                            "alias": "main"
+                        }
+                    ]
+                }
+            }),
+            body
+        );
+
+        // cleanup
+        world.stop(ShutdownMode::Graceful).await?;
+        world_handle.cancel().await;
+        api_handle.cancel().await;
+        Ok(())
+    }
+}

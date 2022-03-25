@@ -1157,6 +1157,7 @@ pub(crate) fn debug_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>
     vec![
         Box::new(impls::cb::Builder::default()),
         Box::new(impls::bench::Builder::default()),
+        Box::new(impls::null::Builder::default()),
     ]
 }
 
