@@ -11,12 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use async_std::prelude::FutureExt;
 use std::io::prelude::*;
 use std::time::Duration;
 use tremor_common::file;
 use tremor_runtime::{
     errors::*,
-    system::{ShutdownMode, World, WorldConfig},
+    system::{World, WorldConfig},
 };
 use tremor_script::{deploy::Deploy, module::Manager};
 
@@ -29,9 +30,8 @@ fn parse(deploy: &str) -> tremor_script::Result<tremor_script::deploy::Deploy> {
 macro_rules! test_cases {
 
     ($($file:ident),* ,) => {
-        mod deploys {
+        mod flows {
             use super::*;
-
             $(
                 #[async_std::test]
                 async fn $file() -> Result<()> {
@@ -47,13 +47,12 @@ macro_rules! test_cases {
 
                     match parse(&contents) {
                         Ok(deployable) => {
-                            let (world, _) = World::start(WorldConfig::default()).await?;
+                            let (world, h) = World::start(WorldConfig::default()).await?;
                             for flow in deployable.iter_flows() {
                                 world.start_flow(flow).await?;
                             }
                             // this isn't good
-                            async_std::task::sleep(Duration::from_millis(200)).await;
-                            world.stop(ShutdownMode::Forceful).await?;
+                            h.timeout(Duration::from_secs(1)).await??;
                         },
                         otherwise => {
                             println!("Expected valid deployment file, compile phase, but got an unexpected error: {:?}", otherwise);
@@ -68,9 +67,4 @@ macro_rules! test_cases {
     };
 }
 
-test_cases!(
-    pipeline_identity,
-    pipeline_args,
-    pipeline_with,
-    pipeline_overalls, // TODO: Work through args and config
-);
+test_cases!(pipeline_identity, pipeline_args, pipeline_with,);
