@@ -93,12 +93,12 @@ pub trait Expression: Clone + std::fmt::Debug + PartialEq + Serialize {
     /// tests if the expression is a null literal
     fn is_null_lit(&self) -> bool;
 
-    /// a null literal
-    fn null_lit() -> Self;
+    /// crteate a null literal
+    fn null_lit(mid: Box<NodeMeta>) -> Self;
 }
 
 /// Node metadata
-#[derive(Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct NodeMeta {
     range: Span,
     name: Option<String>,
@@ -118,13 +118,6 @@ impl NodeMeta {
     pub(crate) fn new_box(start: Location, end: Location) -> Box<Self> {
         Box::new(Self::new(start, end))
     }
-    /// Creates a new boxed meta node with a name
-    pub(crate) fn new_box_with_name<S>(start: Location, end: Location, name: &S) -> Box<Self>
-    where
-        S: ToString + ?Sized,
-    {
-        Box::new(Self::new_with_name(start, end, name))
-    }
     /// Creates a new meta node
     #[must_use]
     pub fn new(start: Location, end: Location) -> Self {
@@ -133,19 +126,12 @@ impl NodeMeta {
             name: None,
         }
     }
-    /// Creates a new meta node witha  name
-    pub(crate) fn new_with_name<S>(start: Location, end: Location, name: &S) -> Self
-    where
-        S: ToString + ?Sized,
-    {
-        NodeMeta {
-            range: Span::new(start, end),
-            name: Some(name.to_string()),
-        }
-    }
     #[cfg(test)]
     pub fn dummy() -> Box<Self> {
-        Box::default()
+        Box::new(NodeMeta::new(
+            Location::start_of_file(arena::INVALID_INDEX),
+            Location::start_of_file(arena::INVALID_INDEX),
+        ))
     }
     pub(crate) fn name(&self) -> Option<&str> {
         self.name.as_deref()
@@ -422,12 +408,6 @@ pub struct Ident<'script> {
 }
 
 impl<'script> Ident<'script> {
-    pub(crate) fn from_str(id: &'script str) -> Self {
-        Self {
-            id: id.into(),
-            mid: Box::default(),
-        }
-    }
     /// Creates a new ident
     #[must_use]
     pub fn new(id: beef::Cow<'script, str>, mid: Box<NodeMeta>) -> Self {
@@ -459,7 +439,7 @@ pub struct Field<'script> {
 }
 impl_expr!(Field);
 
-#[derive(Clone, Debug, PartialEq, Serialize, Default)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulation of a record structure
 pub struct Record<'script> {
     /// Id
@@ -471,6 +451,16 @@ pub struct Record<'script> {
 }
 impl_expr!(Record);
 impl<'script> Record<'script> {
+    /// empty record
+    #[must_use]
+    pub fn empty(mid: Box<NodeMeta>) -> Self {
+        Self {
+            mid,
+            base: Object::new(),
+            fields: Fields::new(),
+        }
+    }
+
     /// Gets the expression for a given name
     /// Attention: Clones its values!
     #[must_use]
@@ -517,7 +507,7 @@ pub struct List<'script> {
 impl_expr!(List);
 
 /// A Literal
-#[derive(Clone, Debug, PartialEq, Serialize, Default)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Literal<'script> {
     /// Id
     pub mid: Box<NodeMeta>,
@@ -528,6 +518,13 @@ pub struct Literal<'script> {
 impl<'script> Literal<'script> {
     pub(crate) fn boxed_expr(mid: Box<NodeMeta>, value: Value<'script>) -> Box<ImutExpr<'script>> {
         Box::new(ImutExpr::Literal(Literal { mid, value }))
+    }
+
+    pub(crate) fn null(mid: Box<NodeMeta>) -> Self {
+        Self {
+            mid,
+            value: Value::null(),
+        }
     }
 }
 impl_expr!(Literal);
@@ -635,8 +632,8 @@ impl<'script> Expression for Expr<'script> {
         matches!(self, Expr::Imut(ImutExpr::Literal(Literal { value, .. })) if value.is_null())
     }
 
-    fn null_lit() -> Self {
-        Expr::Imut(ImutExpr::Literal(Literal::default()))
+    fn null_lit(mid: Box<NodeMeta>) -> Self {
+        Expr::Imut(ImutExpr::Literal(Literal::null(mid)))
     }
 }
 
@@ -750,8 +747,8 @@ impl<'script> Expression for ImutExpr<'script> {
     fn is_null_lit(&self) -> bool {
         matches!(self, ImutExpr::Literal(Literal { value, .. }) if value.is_null())
     }
-    fn null_lit() -> Self {
-        Self::Literal(Literal::default())
+    fn null_lit(mid: Box<NodeMeta>) -> Self {
+        Self::Literal(Literal::null(mid))
     }
 }
 
@@ -1972,7 +1969,7 @@ pub enum Segment<'script> {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Default)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// A path local to the current program
 pub struct LocalPath<'script> {
     /// Local Index
@@ -2216,7 +2213,7 @@ mod test {
     fn as_record() {
         let i = v("snot");
         assert!(i.as_record().is_none());
-        let i = ImutExpr::Record(Record::default());
+        let i = ImutExpr::Record(Record::empty(Box::new(i.meta().clone())));
         assert!(i.as_record().is_some());
     }
     #[test]

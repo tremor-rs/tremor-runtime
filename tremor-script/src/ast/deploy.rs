@@ -16,8 +16,8 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::{
-    docs::Docs, helper::Scope, node_id::BaseRef, raw::BaseExpr, CreationalWith, DefinitioalArgs,
-    DefinitioalArgsWith, NodeMeta,
+    docs::Docs, helper::Scope, node_id::BaseRef, raw::BaseExpr, CreationalWith, DefinitionalArgs,
+    DefinitionalArgsWith, NodeMeta,
 };
 use super::{node_id::NodeId, PipelineDefinition};
 use super::{HashMap, Value};
@@ -93,7 +93,7 @@ pub struct ConnectorDefinition<'script> {
     /// Identifer for the connector
     pub id: String,
     /// Resolved argument defaults
-    pub params: DefinitioalArgsWith<'script>,
+    pub params: DefinitionalArgsWith<'script>,
     /// Internal / intrinsic builtin name
     pub builtin_kind: String,
     /// The rendered config of this connector
@@ -204,7 +204,7 @@ pub struct FlowDefinition<'script> {
     /// Identifer for the flow
     pub id: String,
     /// Resolved argument defaults
-    pub params: DefinitioalArgs<'script>,
+    pub params: DefinitionalArgs<'script>,
     /// Links between artefacts in the flow
     pub connections: Vec<ConnectStmt>,
     /// Deployment atoms

@@ -62,7 +62,7 @@ use tremor_common::{
     url::ports::{ERR, IN, OUT},
 };
 use tremor_pipeline::{CbAction, EventId};
-use tremor_script::{ast::DeployEndpoint, NodeMeta, Value};
+use tremor_script::{ast::DeployEndpoint, lexer::Location, NodeMeta, Value};
 
 use super::sink::SinkMsg;
 
@@ -89,20 +89,17 @@ impl ConnectorHarness {
         let connector_type = connector_type.to_string();
 
         let (world, _) = World::start(WorldConfig::default()).await?;
+        let id = format!("test_{connector_type}");
         let raw_config = config::Connector::from_config(connector_type.into(), defn)?;
-        let id = String::from("test");
         let connector_addr =
             connectors::spawn(&id, &mut connector_id_gen, &known_connectors, raw_config).await?;
         let mut pipes = HashMap::new();
 
         let (link_tx, link_rx) = async_std::channel::unbounded();
+        let mid = NodeMeta::new(Location::yolo(), Location::yolo());
         for port in input_ports {
             // try to connect a fake pipeline outbound
-            let pipeline_id = DeployEndpoint::new(
-                &format!("TEST__{}_pipeline", port),
-                &IN,
-                &NodeMeta::default(),
-            );
+            let pipeline_id = DeployEndpoint::new(&format!("TEST__{}_pipeline", port), &IN, &mid);
             // connect pipeline to connector
             let pipeline = TestPipeline::new(pipeline_id.alias().to_string());
             connector_addr
@@ -124,11 +121,7 @@ impl ConnectorHarness {
         }
         for port in output_ports {
             // try to connect a fake pipeline outbound
-            let pipeline_id = DeployEndpoint::new(
-                &format!("TEST__{}_pipeline", port),
-                &IN,
-                &NodeMeta::default(),
-            );
+            let pipeline_id = DeployEndpoint::new(&format!("TEST__{}_pipeline", port), &IN, &mid);
             let pipeline = TestPipeline::new(pipeline_id.alias().to_string());
             connector_addr
                 .send(connectors::Msg::LinkOutput {

@@ -1224,36 +1224,37 @@ mod tests {
 
     #[test]
     fn test_patch_operation() {
+        let mid = NodeMeta::dummy();
         assert!(PatchOperation::Insert {
             ident: "snot".into(),
-            expr: ImutExpr::null_lit(),
+            expr: ImutExpr::null_lit(mid.clone()),
             mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::Insert {
             ident: "snot".into(),
-            expr: ImutExpr::null_lit(),
+            expr: ImutExpr::null_lit(mid.clone()),
             mid: NodeMeta::dummy(),
         }));
 
         assert!(PatchOperation::Upsert {
             ident: "snot".into(),
-            expr: ImutExpr::null_lit(),
+            expr: ImutExpr::null_lit(mid.clone()),
             mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::Upsert {
             ident: "snot".into(),
-            expr: ImutExpr::null_lit(),
+            expr: ImutExpr::null_lit(mid.clone()),
             mid: NodeMeta::dummy(),
         }));
 
         assert!(PatchOperation::Update {
             ident: "snot".into(),
-            expr: ImutExpr::null_lit(),
+            expr: ImutExpr::null_lit(mid.clone()),
             mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::Update {
             ident: "snot".into(),
-            expr: ImutExpr::null_lit(),
+            expr: ImutExpr::null_lit(mid.clone()),
             mid: NodeMeta::dummy(),
         }));
 
@@ -1289,41 +1290,41 @@ mod tests {
 
         assert!(PatchOperation::Merge {
             ident: "snot".into(),
-            expr: ImutExpr::null_lit(),
+            expr: ImutExpr::null_lit(mid.clone()),
             mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::Merge {
             ident: "snot".into(),
-            expr: ImutExpr::null_lit(),
+            expr: ImutExpr::null_lit(mid.clone()),
             mid: NodeMeta::dummy(),
         }));
 
         assert!(PatchOperation::MergeRecord {
-            expr: ImutExpr::null_lit(),
+            expr: ImutExpr::null_lit(mid.clone()),
             mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::MergeRecord {
-            expr: ImutExpr::null_lit(),
+            expr: ImutExpr::null_lit(mid.clone()),
             mid: NodeMeta::dummy(),
         }));
 
         assert!(PatchOperation::Default {
             ident: "snot".into(),
-            expr: ImutExpr::null_lit(),
+            expr: ImutExpr::null_lit(mid.clone()),
             mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::Default {
             ident: "snot".into(),
-            expr: ImutExpr::null_lit(),
+            expr: ImutExpr::null_lit(mid.clone()),
             mid: NodeMeta::dummy(),
         }));
 
         assert!(PatchOperation::DefaultRecord {
-            expr: ImutExpr::null_lit(),
+            expr: ImutExpr::null_lit(mid.clone()),
             mid: NodeMeta::dummy(),
         }
         .ast_eq(&PatchOperation::DefaultRecord {
-            expr: ImutExpr::null_lit(),
+            expr: ImutExpr::null_lit(mid.clone()),
             mid: NodeMeta::dummy(),
         }));
     }

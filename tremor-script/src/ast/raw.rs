@@ -31,7 +31,6 @@ use crate::{
         err_generic, error_generic, error_missing_effector, Error, Kind as ErrorKind, Result,
     },
     impl_expr, impl_expr_exraw, impl_expr_no_lt,
-    pos::Location,
     prelude::*,
     tilde::Extractor,
     KnownKey, Value,
@@ -60,16 +59,18 @@ impl_expr_no_lt!(UseRaw);
 /// A raw script we got to put this here because of silly lalrpoop focing it to be public
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ScriptRaw<'script> {
+    mid: Box<NodeMeta>,
     exprs: TopLevelExprsRaw<'script>,
     doc: Option<Vec<Cow<'script, str>>>,
 }
 
 impl<'script> ScriptRaw<'script> {
     pub(crate) fn new(
+        mid: Box<NodeMeta>,
         exprs: TopLevelExprsRaw<'script>,
         doc: Option<Vec<Cow<'script, str>>>,
     ) -> Self {
-        Self { exprs, doc }
+        Self { mid, exprs, doc }
     }
 
     #[allow(clippy::too_many_lines)]
@@ -78,12 +79,7 @@ impl<'script> ScriptRaw<'script> {
         mut helper: &mut Helper<'script, 'registry>,
     ) -> Result<Script<'script>> {
         let mut exprs = vec![];
-        let start = Location::default();
-        let end = Location::default();
 
-        // TODO - Some kind of token for the source origin in a mangled name would aid debuggability
-        let meta_name = "<script>".to_string();
-        let mid = NodeMeta::new_box_with_name(start, end, &meta_name);
         for e in self.exprs {
             let range = e.meta().range;
             match e {
@@ -145,9 +141,9 @@ impl<'script> ScriptRaw<'script> {
             }
         } else {
             let expr = EmitExpr {
-                mid: mid.clone(),
+                mid: self.mid.clone(),
                 expr: ImutExpr::Path(Path::Event(EventPath {
-                    mid: mid.clone(),
+                    mid: self.mid.clone(),
                     segments: vec![],
                 })),
                 port: None,
@@ -163,7 +159,7 @@ impl<'script> ScriptRaw<'script> {
         });
 
         Ok(Script {
-            mid,
+            mid: self.mid,
             exprs,
             locals: helper.locals.len(),
             docs: helper.docs.clone(),
@@ -205,16 +201,6 @@ pub struct BytesPartRaw<'script> {
 }
 impl_expr!(BytesPartRaw);
 
-impl<'script> Default for BytesPartRaw<'script> {
-    fn default() -> Self {
-        BytesPartRaw {
-            mid: Box::new(NodeMeta::default()),
-            data: ImutExprRaw::Literal(LiteralRaw::default()),
-            data_type: IdentRaw::default(),
-            bits: None,
-        }
-    }
-}
 impl<'script> Upable<'script> for BytesPartRaw<'script> {
     type Target = BytesPart<'script>;
     // We allow this for casting the bits
@@ -291,25 +277,34 @@ impl<'script> Upable<'script> for BytesRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Debug, PartialEq, Serialize, Clone, Default)]
+#[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct IdentRaw<'script> {
     pub(crate) mid: Box<NodeMeta>,
     pub id: beef::Cow<'script, str>,
 }
 impl_expr!(IdentRaw);
 
-impl<'script> ToString for IdentRaw<'script> {
-    fn to_string(&self) -> String {
-        self.id.to_string()
+impl<'script> IdentRaw<'script> {
+    /// empty ident
+    pub(crate) fn none(mid: Box<NodeMeta>) -> Self {
+        Self {
+            mid,
+            id: Cow::const_str(""),
+        }
+    }
+
+    /// literal ident injected at position `mid`
+    pub(crate) fn literal(mid: Box<NodeMeta>, s: &'static str) -> Self {
+        Self {
+            mid,
+            id: Cow::const_str(s),
+        }
     }
 }
 
-impl<'script> From<&'script str> for IdentRaw<'script> {
-    fn from(id: &'script str) -> Self {
-        IdentRaw {
-            mid: Box::new(NodeMeta::default()),
-            id: id.into(),
-        }
+impl<'script> ToString for IdentRaw<'script> {
+    fn to_string(&self) -> String {
+        self.id.to_string()
     }
 }
 
@@ -381,7 +376,7 @@ impl<'script> Upable<'script> for ListRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize, Default)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct LiteralRaw<'script> {
     pub(crate) value: Value<'script>,
     pub(crate) mid: Box<NodeMeta>,
@@ -2096,7 +2091,7 @@ where
         }) = patterns.last_mut()
         {
             let mut es = Vec::new();
-            let mut last = Ex::Target::null_lit();
+            let mut last = Ex::Target::null_lit(self.mid.clone());
             std::mem::swap(exprs, &mut es);
             std::mem::swap(last_expr, &mut last);
             if es.is_empty() {

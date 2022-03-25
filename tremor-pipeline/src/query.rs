@@ -433,7 +433,8 @@ impl Query {
                     // we const fold twice to ensure that we are able
                     ConstFolder::new(&helper).walk_definitional_args(&mut defn.params)?;
                     let inner_args = defn.params.render()?;
-                    ArgsRewriter::new(inner_args, &mut helper).walk_script_defn(&mut defn)?;
+                    ArgsRewriter::new(inner_args, &mut helper, defn.params.meta())
+                        .walk_script_defn(&mut defn)?;
                     ConstFolder::new(&helper).walk_script_defn(&mut defn)?;
 
                     let e = defn.extent();

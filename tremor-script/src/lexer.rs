@@ -819,8 +819,8 @@ impl<'input> Tokenizer<'input> {
     #[must_use]
     pub fn new(input: &'input str, aid: arena::Index) -> Self {
         let lexer = Lexer::new(input, aid);
-        let start = Location::default();
-        let end = Location::default();
+        let start = Location::start_of_file(aid);
+        let end = Location::start_of_file(aid);
         Tokenizer {
             eos: false,
             iter: lexer.peekable(),
@@ -1112,7 +1112,10 @@ impl<'input> Lexer<'input> {
 
     /// handle pattern begin
     fn pb(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        match self.lookahead().ok_or(ErrorKind::UnexpectedEndOfStream)? {
+        match self
+            .lookahead()
+            .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()))?
+        {
             (end, '[') => {
                 self.bump();
                 Ok(spanned(start, end + '[', Token::LPatBracket))
@@ -1131,7 +1134,10 @@ impl<'input> Lexer<'input> {
 
     /// handle pattern end
     fn pe(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        match self.lookahead().ok_or(ErrorKind::UnexpectedEndOfStream)? {
+        match self
+            .lookahead()
+            .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()))?
+        {
             (end, '=') => {
                 self.bump();
                 Ok(spanned(start, end + '=', Token::NotEq))
@@ -1142,7 +1148,10 @@ impl<'input> Lexer<'input> {
 
     /// handle tilde
     fn tl(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        match self.lookahead().ok_or(ErrorKind::UnexpectedEndOfStream)? {
+        match self
+            .lookahead()
+            .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()))?
+        {
             (end, '=') => {
                 self.bump();
                 Ok(spanned(start, end + '=', Token::TildeEq))
@@ -1160,7 +1169,10 @@ impl<'input> Lexer<'input> {
     }
 
     fn next_index(&mut self) -> Result<Location> {
-        let (loc, _) = self.chars.next().ok_or(ErrorKind::UnexpectedEndOfStream)?;
+        let (loc, _) = self
+            .chars
+            .next()
+            .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()))?;
         Ok(loc)
     }
 
@@ -1169,7 +1181,10 @@ impl<'input> Lexer<'input> {
         string_start: &Location,
         start: Location,
     ) -> Result<(Location, char)> {
-        match self.bump().ok_or(ErrorKind::UnexpectedEndOfStream)? {
+        match self
+            .bump()
+            .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()))?
+        {
             (e, '\'') => Ok((e, '\'')),
             (e, '"') => Ok((e, '"')),
             (e, '\\') => Ok((e, '\\')),
@@ -1793,7 +1808,10 @@ impl<'input> Lexer<'input> {
     }
 
     fn test_escape_code(&mut self, start: &Location, s: &str) -> Result<Option<char>> {
-        match self.bump().ok_or(ErrorKind::UnexpectedEndOfStream)? {
+        match self
+            .bump()
+            .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()))?
+        {
             (_, '\\') => Ok(Some('\\')),
             (_, '|') => Ok(Some('|')),
             (_end, '\n') => Ok(None),
