@@ -69,7 +69,7 @@ lapin = { version = "1.10.0", features = [
   "rustls-native-certs",
 ], default-features = false }
 lazy_static = "1"
-libflate = "1.1"
+libflate = "1.2"
 log = "0.4"
 lz4 = "1.23.3"
 pin-project-lite = "0.2"
