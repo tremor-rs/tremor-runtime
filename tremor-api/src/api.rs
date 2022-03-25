@@ -240,6 +240,16 @@ mod tests {
             debug_connectors: true,
         };
         let (world, world_handle) = World::start(config).await?;
+
+        let free_port = {
+            let listener = TcpListener::bind("127.0.0.1:0").await?;
+            let port = listener.local_addr()?.port();
+            drop(listener);
+            port
+        };
+        let host = format!("127.0.0.1:{free_port}");
+        let api_handle = serve(host.clone(), &world);
+
         let src = r#"
         define flow api_test
         flow
@@ -269,14 +279,6 @@ mod tests {
             })
             .expect("No deploy in the given troy file");
         world.start_flow(&deploy).await?;
-        let free_port = {
-            let listener = TcpListener::bind("127.0.0.1:0").await?;
-            let port = listener.local_addr()?.port();
-            drop(listener);
-            port
-        };
-        let host = format!("127.0.0.1:{free_port}");
-        let api_handle = serve(host.clone(), &world);
 
         // check the status endpoint
         let start = Instant::now();
