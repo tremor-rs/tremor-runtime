@@ -51,8 +51,8 @@ impl From<&str> for Id {
 }
 
 /// unique identifier of a connector within a deployment
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize)]
-pub(crate) struct ConnectorId(String);
+#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
+pub struct ConnectorId(String);
 
 impl From<&DeployEndpoint> for ConnectorId {
     fn from(e: &DeployEndpoint) -> Self {
@@ -129,14 +129,14 @@ pub struct Flow {
 }
 
 /// Status Report for a Flow instance
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct StatusReport {
     /// the url of the instance this report describes
-    pub(crate) alias: String,
+    pub alias: String,
     /// the current state
     pub status: State,
     /// the crated connectors
-    pub(crate) connectors: Vec<ConnectorId>,
+    pub connectors: Vec<ConnectorId>,
 }
 
 impl Flow {
@@ -150,12 +150,20 @@ impl Flow {
         self.addr.send(Msg::Drain(tx)).await.map_err(Error::from)
     }
 
+    /// request a `StatusReport` from this `Flow`
+    ///
+    /// # Errors
+    /// if the flow is not running anymore and can't be reached
     pub async fn report_status(&self) -> Result<StatusReport> {
         let (tx, rx) = bounded(1);
         self.addr.send(Msg::Report(tx)).await?;
         rx.recv().await?
     }
 
+    /// get the Address used to send messages of a connector within this flow, identified by `connector_id`
+    ///
+    /// # Errors
+    /// if the flow is not running anymore and can't be reached or if the connector is not part of the flow
     pub async fn get_connector(&self, connector_id: String) -> Result<connectors::Addr> {
         let connector_id = ConnectorId(connector_id);
         let (tx, rx) = bounded(1);
@@ -163,16 +171,30 @@ impl Flow {
         rx.recv().await?
     }
 
+    /// Get the Addresses of all connectors of this flow
+    ///
+    /// # Errors
+    /// if the flow is not running anymore and can't be reached
     pub async fn get_connectors(&self) -> Result<Vec<connectors::Addr>> {
         let (tx, rx) = bounded(1);
         self.addr.send(Msg::GetConnectors(tx)).await?;
         rx.recv().await?
     }
 
+    /// Pause this flow and all connectors in it.
+    ///
+    /// # Errors
+    /// if the connector is not running anymore and can't be reached
+    /// or if the connector is in a state where it can't be paused (e.g. failed)
     pub async fn pause(&self) -> Result<()> {
         self.addr.send(Msg::Pause).await.map_err(Error::from)
     }
 
+    /// Resume this flow and all connectors in it.
+    ///
+    /// # Errors
+    /// if the connector is not running anymore and can't be reached
+    /// or if the connector is in a state where it can't be resumed (e.g. failed)
     pub async fn resume(&self) -> Result<()> {
         self.addr.send(Msg::Resume).await.map_err(Error::from)
     }

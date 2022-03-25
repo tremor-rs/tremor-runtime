@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod flow;
+/// contains Flow definition, control plane task and lifecycle management
+pub mod flow;
 mod flow_supervisor;
 
 use self::flow::Flow;

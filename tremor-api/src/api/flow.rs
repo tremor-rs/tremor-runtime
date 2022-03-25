@@ -36,9 +36,9 @@ pub(crate) async fn get_flow(req: Request) -> Result<Response> {
     reply(&req, report, StatusCode::Ok)
 }
 
-#[derive(Deserialize, Debug)]
-struct PatchStatus {
-    status: State,
+#[derive(Serialize, Deserialize, Debug)]
+pub(crate) struct PatchStatus {
+    pub(crate) status: State,
 }
 
 pub(crate) async fn patch_flow_status(mut req: Request) -> Result<Response> {
