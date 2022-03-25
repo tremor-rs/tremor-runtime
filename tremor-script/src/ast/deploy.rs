@@ -161,6 +161,7 @@ pub struct DeployEndpoint {
     alias: String,
     /// Refers to a local artefact being deployed in a troy definition
     port: String,
+    #[serde(skip_serializing)]
     mid: Box<NodeMeta>,
 }
 impl_expr_no_lt!(DeployEndpoint);

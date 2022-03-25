@@ -57,3 +57,6 @@ pub(crate) mod unix_socket;
 pub(crate) mod wal;
 /// `WebSockets`
 pub(crate) mod ws;
+
+/// Never send any events and swallow all events it receives into the void.
+pub(crate) mod null;

@@ -98,7 +98,7 @@ pub trait Expression: Clone + std::fmt::Debug + PartialEq + Serialize {
 }
 
 /// Node metadata
-#[derive(Default, Clone, Serialize, PartialEq, Eq, Hash)]
+#[derive(Default, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct NodeMeta {
     range: Span,
     name: Option<String>,
