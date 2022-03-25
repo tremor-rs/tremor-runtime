@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::{find_free_tcp_port, ConnectorHarness};
+use super::super::{free_port::find_free_tcp_port, ConnectorHarness};
 use super::{EnvHelper, SignalHandler};
 use crate::errors::{Error, Result};
 use aws_sdk_s3::{self as s3, client::Client as S3Client, Credentials, Endpoint, Region};
@@ -230,8 +230,8 @@ async fn spawn_docker<'d, D: Docker>(
     docker: &'d D,
     image: GenericImage,
 ) -> (Container<'d, D, GenericImage>, u16, u16) {
-    let http_port = find_free_tcp_port().await;
-    let https_port = find_free_tcp_port().await;
+    let http_port = find_free_tcp_port().await.unwrap_or(11080);
+    let https_port = find_free_tcp_port().await.unwrap_or(11443);
     let container = docker.run_with_args(
         image,
         RunArgs::default()

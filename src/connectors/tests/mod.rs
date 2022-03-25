@@ -393,20 +393,49 @@ impl TestPipeline {
     feature = "ws-integration",
     feature = "s3-integration"
 ))]
-/// Find free TCP port for use in test server endpoints
-pub(crate) async fn find_free_tcp_port() -> u16 {
-    use async_std::net::TcpListener;
-    let listener = TcpListener::bind("127.0.0.1:0").await;
-    let listener = match listener {
-        Err(_) => return 65535, // TODO error handling
-        Ok(listener) => listener,
-    };
-    let port = match listener.local_addr().ok() {
-        Some(addr) => addr.port(),
-        None => return 65535,
-    };
-    info!("free port: {}", port);
-    port
+mod free_port {
+
+    use std::ops::RangeInclusive;
+
+    use crate::errors::Result;
+    use async_std::{net::TcpListener, sync::Mutex};
+
+    struct FreePort {
+        port: u16,
+    }
+
+    impl FreePort {
+        const RANGE: RangeInclusive<u16> = 10000..=65535;
+
+        fn new() -> Self {
+            Self {
+                port: *Self::RANGE.start(),
+            }
+        }
+
+        async fn next(&mut self) -> Result<u16> {
+            let mut candidate = self.port;
+            self.port = self.port.wrapping_add(1);
+            loop {
+                if let Ok(listener) = TcpListener::bind(("127.0.0.1", candidate)).await {
+                    let port = listener.local_addr()?.port();
+                    drop(listener);
+                    return Ok(port);
+                } else {
+                    candidate = self.port;
+                    self.port = self.port.wrapping_add(1);
+                }
+            }
+        }
+    }
+
+    lazy_static! {
+        static ref FREE_PORT: Mutex<FreePort> = Mutex::new(FreePort::new());
+    }
+    /// Find free TCP port for use in test server endpoints
+    pub(crate) async fn find_free_tcp_port() -> Result<u16> {
+        FREE_PORT.lock().await.next().await
+    }
 }
 
 #[cfg(any(feature = "http-integration", feature = "ws-integration",))]

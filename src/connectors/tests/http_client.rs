@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{find_free_tcp_port, setup_for_tls, ConnectorHarness};
+use super::{free_port::find_free_tcp_port, setup_for_tls, ConnectorHarness};
 use crate::{
     connectors::{prelude::Url, utils::url::HttpDefaults},
     errors::Result,
@@ -31,8 +31,8 @@ use value_trait::ValueAccess;
 
 /// Find free TCP host:port for use in test server endpoints
 pub(crate) async fn find_free_tcp_endpoint_str() -> String {
-    let port = find_free_tcp_port().await.to_string();
-    format!("{}:{}", "localhost", port) // NOTE we use localhost rather than an IP for cmopat with TLS
+    let port = find_free_tcp_port().await.unwrap_or(65535);
+    format!("localhost:{port}") // NOTE we use localhost rather than an IP for cmopat with TLS
 }
 
 struct TestHttpServer {
