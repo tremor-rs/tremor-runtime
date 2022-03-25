@@ -52,7 +52,7 @@ macro_rules! test_cases {
                                 world.start_flow(flow).await?;
                             }
                             // this isn't good
-                            h.timeout(Duration::from_secs(1)).await??;
+                            h.timeout(Duration::from_secs(10)).await??;
                         },
                         otherwise => {
                             println!("Expected valid deployment file, compile phase, but got an unexpected error: {:?}", otherwise);
