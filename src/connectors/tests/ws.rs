@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{find_free_tcp_port, setup_for_tls, ConnectorHarness};
+use super::{free_port::find_free_tcp_port, setup_for_tls, ConnectorHarness};
 use crate::connectors::{impls::ws::WsDefaults, utils::url::Url};
 use crate::errors::{Error, Result, ResultExt};
+use async_std::prelude::FutureExt;
 use async_std::{
     channel::{bounded, Receiver, Sender, TryRecvError},
     net::{TcpListener, TcpStream},
@@ -30,6 +31,7 @@ use async_tungstenite::{
 };
 use futures::SinkExt;
 use rustls::ClientConfig;
+use std::time::Duration;
 use std::{
     net::SocketAddr,
     sync::{
@@ -293,7 +295,7 @@ async fn ws_client_bad_config() -> Result<()> {
 async fn ws_server_text_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
-    let free_port = find_free_tcp_port().await;
+    let free_port = find_free_tcp_port().await?;
 
     let defn = literal!({
       "codec": "json",
@@ -353,7 +355,7 @@ async fn ws_server_text_routing() -> Result<()> {
 async fn ws_client_binary_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
-    let free_port = find_free_tcp_port().await;
+    let free_port = find_free_tcp_port().await?;
     let mut ts = TestServer::new("127.0.0.1", free_port);
     ts.start().await?;
 
@@ -408,7 +410,7 @@ async fn ws_client_binary_routing() -> Result<()> {
 async fn ws_client_text_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
-    let free_port = find_free_tcp_port().await;
+    let free_port = find_free_tcp_port().await?;
     let mut ts = TestServer::new("127.0.0.1", free_port);
     ts.start().await?;
 
@@ -467,7 +469,7 @@ async fn wss_server_text_routing() -> Result<()> {
 
     setup_for_tls();
 
-    let free_port = find_free_tcp_port().await;
+    let free_port = find_free_tcp_port().await?;
     let _server_addr = format!("localhost:{}", &free_port);
 
     let defn = literal!({
@@ -539,7 +541,7 @@ async fn wss_server_binary_routing() -> Result<()> {
 
     setup_for_tls();
 
-    let free_port = find_free_tcp_port().await;
+    let free_port = find_free_tcp_port().await?;
     let _server_addr = format!("localhost:{}", &free_port);
 
     let defn = literal!({
@@ -609,7 +611,7 @@ async fn wss_server_binary_routing() -> Result<()> {
 async fn server_control_frames() -> Result<()> {
     let _ = env_logger::try_init();
 
-    let free_port = find_free_tcp_port().await;
+    let free_port = find_free_tcp_port().await?;
 
     let defn = literal!({
       "codec": "json",
@@ -634,12 +636,20 @@ async fn server_control_frames() -> Result<()> {
     assert_eq!(Message::Pong(vec![1, 2, 3, 4]), pong);
 
     // we ignore pings, they shouldn't get through as events
-    assert!(out_pipeline.get_event().await.is_err());
+    assert!(out_pipeline
+        .get_event()
+        .timeout(Duration::from_secs(1))
+        .await
+        .is_err());
 
     // check pong
     c1.pong()?;
     // expect no response and no event, as we ignore pong frames
-    assert!(out_pipeline.get_event().await.is_err());
+    assert!(out_pipeline
+        .get_event()
+        .timeout(Duration::from_secs(1))
+        .await
+        .is_err());
 
     // check close
     c1.close().await?;
@@ -664,7 +674,11 @@ async fn server_control_frames() -> Result<()> {
         ))
     ));
     // expect no response and no event, the stream should have been closed though
-    assert!(out_pipeline.get_event().await.is_err());
+    assert!(out_pipeline
+        .get_event()
+        .timeout(Duration::from_secs(1))
+        .await
+        .is_err());
 
     Ok(())
 }
