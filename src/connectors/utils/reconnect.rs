@@ -345,19 +345,26 @@ impl ReconnectRuntime {
             if spawn_retry {
                 let duration = Duration::from_millis(interval);
                 let sender = self.addr.sender.clone();
-                let url = self.alias.clone();
+                let alias = self.alias.clone();
                 self.retry_task = Some(task::spawn(async move {
                     task::sleep(duration).await;
                     if sender.send(Msg::Reconnect).await.is_err() {
                         error!(
                             "[Connector::{}] Error sending reconnect msg to connector.",
-                            &url
+                            &alias
                         );
                     }
                 }));
             }
 
             true
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn await_retry(&mut self) {
+        if let Some(retry_task) = self.retry_task.as_mut() {
+            retry_task.await;
         }
     }
 
@@ -432,7 +439,7 @@ mod tests {
 
     #[async_std::test]
     async fn failfast_runtime() -> Result<()> {
-        let (tx, rx) = async_std::channel::bounded(1);
+        let (tx, rx) = async_std::channel::unbounded();
         let notifier = ConnectionLostNotifier::new(tx.clone());
         let alias = String::from("test");
         let addr = Addr {
@@ -466,7 +473,7 @@ mod tests {
     #[async_std::test]
     async fn backoff_runtime() -> Result<()> {
         use async_std::prelude::FutureExt;
-        let (tx, rx) = async_std::channel::bounded(1);
+        let (tx, rx) = async_std::channel::unbounded();
         let notifier = ConnectionLostNotifier::new(tx.clone());
         let alias = String::from("test");
         let addr = Addr {
@@ -504,6 +511,7 @@ mod tests {
         ));
 
         // 2nd failing attempt
+        runtime.await_retry().await;
         assert!(matches!(
             runtime.attempt(&mut connector, &ctx).await?,
             (Connectivity::Disconnected, true)
@@ -514,6 +522,7 @@ mod tests {
         ));
 
         // 3rd failing attempt
+        runtime.await_retry().await;
         assert!(matches!(
             runtime.attempt(&mut connector, &ctx).await?,
             (Connectivity::Disconnected, false)
