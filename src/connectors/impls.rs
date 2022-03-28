@@ -13,12 +13,15 @@
 // limitations under the License.
 
 /// benchmarking connector
+#[cfg(not(tarpaulin_include))] // This is for benchmarking and testing
 pub(crate) mod bench;
 /// connector for checking guaranteed delivery and circuit breaker logic
+#[cfg(not(tarpaulin_include))] // This is for benchmarking and testing
 pub(crate) mod cb;
 /// Crononome
 pub(crate) mod crononome;
 /// Discord connector
+#[cfg(not(tarpaulin_include))] // We need a life discord api for this
 pub(crate) mod discord;
 /// DNS
 pub(crate) mod dns;
@@ -28,7 +31,6 @@ pub(crate) mod elastic;
 pub(crate) mod exit;
 /// file connector implementation
 pub(crate) mod file;
-
 /// HTTP
 pub(crate) mod http;
 /// Kafka consumer and producer
@@ -39,6 +41,8 @@ pub(crate) mod kv;
 pub(crate) mod metrics;
 /// Metronome
 pub(crate) mod metronome;
+/// Never send any events and swallow all events it receives into the void.
+pub(crate) mod null;
 /// `OpenTelemetry`
 pub(crate) mod otel;
 /// AWS S3 connectors
@@ -49,7 +53,6 @@ pub(crate) mod stdio;
 pub(crate) mod tcp;
 /// udp connector impls
 pub(crate) mod udp;
-
 /// Unix Domain socket impls
 #[cfg(unix)]
 pub(crate) mod unix_socket;
@@ -57,6 +60,3 @@ pub(crate) mod unix_socket;
 pub(crate) mod wal;
 /// `WebSockets`
 pub(crate) mod ws;
-
-/// Never send any events and swallow all events it receives into the void.
-pub(crate) mod null;
