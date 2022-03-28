@@ -15,7 +15,6 @@
 use super::{free_port::find_free_tcp_port, setup_for_tls, ConnectorHarness};
 use crate::connectors::{impls::ws::WsDefaults, utils::url::Url};
 use crate::errors::{Error, Result, ResultExt};
-use async_std::prelude::FutureExt;
 use async_std::{
     channel::{bounded, Receiver, Sender, TryRecvError},
     net::{TcpListener, TcpStream},
@@ -637,19 +636,17 @@ async fn server_control_frames() -> Result<()> {
 
     // we ignore pings, they shouldn't get through as events
     assert!(out_pipeline
-        .get_event()
-        .timeout(Duration::from_secs(1))
+        .expect_no_event_for(Duration::from_secs(1))
         .await
-        .is_err());
+        .is_ok());
 
     // check pong
     c1.pong()?;
     // expect no response and no event, as we ignore pong frames
     assert!(out_pipeline
-        .get_event()
-        .timeout(Duration::from_secs(1))
+        .expect_no_event_for(Duration::from_secs(1))
         .await
-        .is_err());
+        .is_ok());
 
     // check close
     c1.close().await?;
@@ -675,10 +672,9 @@ async fn server_control_frames() -> Result<()> {
     ));
     // expect no response and no event, the stream should have been closed though
     assert!(out_pipeline
-        .get_event()
-        .timeout(Duration::from_secs(1))
+        .expect_no_event_for(Duration::from_secs(1))
         .await
-        .is_err());
+        .is_ok());
 
     Ok(())
 }

@@ -55,7 +55,7 @@ use async_std::{
 };
 use beef::Cow;
 use log::{debug, info};
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Instant};
 use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::{
     ids::ConnectorIdGen,
@@ -342,7 +342,7 @@ impl TestPipeline {
         feature = "s3-integration"
     ))]
     pub(crate) async fn get_contraflow(&self) -> Result<Event> {
-        match self.rx_cf.recv().await? {
+        match self.rx_cf.recv().timeout(Duration::from_secs(20)).await?? {
             pipeline::CfMsg::Insight(event) => Ok(event),
         }
     }
@@ -366,8 +366,10 @@ impl TestPipeline {
     /// get a single event from the pipeline
     /// wait for up to 2 seconds for an event to arrive
     pub(crate) async fn get_event(&self) -> Result<Event> {
+        let start = Instant::now();
+        const TIMEOUT: Duration = Duration::from_secs(20);
         loop {
-            match self.rx.recv().timeout(Duration::from_secs(20)).await {
+            match self.rx.recv().timeout(TIMEOUT).await {
                 Ok(Ok(msg)) => {
                     match *msg {
                         pipeline::Msg::Event { event, .. } => break Ok(event),
@@ -381,8 +383,36 @@ impl TestPipeline {
                     return Err(e.into());
                 }
                 Err(_) => {
-                    return Err("Did not receive an event for 2 seconds".into());
+                    return Err(format!("Did not receive an event for {TIMEOUT:?}").into());
                 }
+            }
+            if start.elapsed() > TIMEOUT {
+                return Err(format!("Did not receive an event for {TIMEOUT:?}").into());
+            }
+        }
+    }
+
+    pub(crate) async fn expect_no_event_for(&self, duration: Duration) -> Result<()> {
+        let start = Instant::now();
+        loop {
+            match self.rx.recv().timeout(duration).await {
+                Err(_timeout_error) => {
+                    return Ok(());
+                }
+                Ok(Ok(msg)) => match *msg {
+                    pipeline::Msg::Signal(_signal) => (),
+                    pipeline::Msg::Event { event, .. } => {
+                        return Err(
+                            format!("Expected no event for {duration:?}, got: {event:?}").into(),
+                        );
+                    }
+                },
+                Ok(Err(e)) => {
+                    return Err(e.into());
+                }
+            }
+            if start.elapsed() > duration {
+                return Ok(());
             }
         }
     }

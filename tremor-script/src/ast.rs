@@ -129,8 +129,8 @@ impl NodeMeta {
     #[cfg(test)]
     pub fn dummy() -> Box<Self> {
         Box::new(NodeMeta::new(
-            Location::start_of_file(arena::INVALID_INDEX),
-            Location::start_of_file(arena::INVALID_INDEX),
+            Location::start_of_file(arena::Index::INVALID),
+            Location::start_of_file(arena::Index::INVALID),
         ))
     }
     pub(crate) fn name(&self) -> Option<&str> {

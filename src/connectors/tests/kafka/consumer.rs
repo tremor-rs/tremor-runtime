@@ -501,7 +501,10 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
         .await?;
 
     // we don't get no event
-    assert!(out.get_event().await.is_err());
+    assert!(out
+        .expect_no_event_for(Duration::from_millis(200))
+        .await
+        .is_ok());
 
     // send another event and check that the previous one isn't replayed
     let record3 = BaseRecord::to(topic)
@@ -760,7 +763,10 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
         .await?;
 
     // we don't get no event
-    assert!(out.get_event().await.is_err());
+    assert!(out
+        .expect_no_event_for(Duration::from_millis(200))
+        .await
+        .is_ok());
 
     // send another event and check that the previous one isn't replayed
     let record3 = BaseRecord::to(topic)
@@ -1037,7 +1043,10 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     }
     producer.flush(Duration::from_secs(1));
     // we didn't receive shit because we are paused
-    assert!(out.get_event().await.is_err());
+    assert!(out
+        .expect_no_event_for(Duration::from_millis(200))
+        .await
+        .is_ok());
 
     harness.resume().await?;
     debug!("BEFORE GET EVENT 2");

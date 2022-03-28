@@ -37,13 +37,15 @@ pub struct Arena {
 )]
 pub struct Index(usize);
 
-/// invalid index, assuming we never gonna have that many data chunks loaded
-pub const INVALID_INDEX: Index = Index(usize::MAX);
-
 impl std::fmt::Display for Index {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", &self.0)
     }
+}
+
+impl Index {
+    /// invalid index, assuming we never gonna have that many data chunks loaded
+    pub const INVALID: Self = Self(usize::MAX);
 }
 
 impl From<usize> for Index {
