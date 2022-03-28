@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::time::Duration;
-
 ///! The UDP server will close the udp spcket on stop
 use crate::connectors::prelude::*;
 use async_std::net::UdpSocket;
-use async_std::prelude::*;
+use futures::future::poll_immediate;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -81,8 +79,6 @@ struct UdpServerSource {
 }
 
 impl UdpServerSource {
-    const READ_TIMEOUT: Duration = Duration::from_millis(100);
-
     fn new(config: Config) -> Self {
         let buffer = vec![0; config.buf_size];
         let origin_uri = EventOriginUri {
@@ -117,12 +113,8 @@ impl Source for UdpServerSource {
             .listener
             .as_ref()
             .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
-        match socket
-            .recv(&mut self.buffer)
-            .timeout(Self::READ_TIMEOUT)
-            .await
-        {
-            Ok(Ok(bytes_read)) => {
+        match poll_immediate(socket.recv(&mut self.buffer)).await {
+            Some(Ok(bytes_read)) => {
                 if bytes_read == 0 {
                     Ok(SourceReply::EndStream {
                         origin_uri: self.origin_uri.clone(),
@@ -140,7 +132,7 @@ impl Source for UdpServerSource {
                     })
                 }
             }
-            Ok(Err(e)) => {
+            Some(Err(e)) => {
                 error!(
                     "{} Error receiving from socket: {}. Initiating reconnect...",
                     ctx, &e
@@ -149,7 +141,7 @@ impl Source for UdpServerSource {
                 ctx.notifier().connection_lost().await?;
                 return Err(e.into());
             }
-            Err(_) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
+            None => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
         }
     }
 
