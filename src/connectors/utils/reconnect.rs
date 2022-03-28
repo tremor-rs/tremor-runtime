@@ -463,68 +463,65 @@ mod tests {
         Ok(())
     }
 
-    // This tight requirements for timing are extremely problematic in tests
-    // and lead to frequent issues with the test being flaky or unrelaibale
-    // FIXME: disabled to fix something else
-    // #[async_std::test]
-    // async fn backoff_runtime() -> Result<()> {
-    //     use async_std::prelude::FutureExt;
-    //     let (tx, rx) = async_std::channel::bounded(1);
-    //     let notifier = ConnectionLostNotifier::new(tx.clone());
-    //     let alias = String::from("test");
-    //     let addr = Addr {
-    //         alias: alias.clone(),
-    //         source: None,
-    //         sink: None,
-    //         sender: tx.clone(),
-    //     };
-    //     let config = Reconnect::Retry {
-    //         interval_ms: 10,
-    //         growth_rate: 2.0,
-    //         max_retries: Some(3),
-    //         randomized: true,
-    //     };
-    //     let mut runtime = ReconnectRuntime::inner(addr, alias.clone(), notifier, &config);
-    //     let mut connector = FakeConnector {
-    //         answer: Some(false),
-    //     };
-    //     let qb = QuiescenceBeacon::default();
-    //     let ctx = ConnectorContext {
-    //         alias,
-    //         connector_type: "fake".into(),
-    //         quiescence_beacon: qb,
-    //         notifier: runtime.notifier(),
-    //     };
-    //     // 1st failing attempt
-    //     assert!(matches!(
-    //         runtime.attempt(&mut connector, &ctx).await?,
-    //         (Connectivity::Disconnected, true)
-    //     ));
-    //     // we cannot test exact timings, but we can ensure it behaves as expected
-    //     assert!(matches!(
-    //         rx.recv().timeout(Duration::from_secs(5)).await??,
-    //         Msg::Reconnect
-    //     ));
+    #[async_std::test]
+    async fn backoff_runtime() -> Result<()> {
+        use async_std::prelude::FutureExt;
+        let (tx, rx) = async_std::channel::bounded(1);
+        let notifier = ConnectionLostNotifier::new(tx.clone());
+        let alias = String::from("test");
+        let addr = Addr {
+            alias: alias.clone(),
+            source: None,
+            sink: None,
+            sender: tx.clone(),
+        };
+        let config = Reconnect::Retry {
+            interval_ms: 10,
+            growth_rate: 2.0,
+            max_retries: Some(3),
+            randomized: true,
+        };
+        let mut runtime = ReconnectRuntime::inner(addr, alias.clone(), notifier, &config);
+        let mut connector = FakeConnector {
+            answer: Some(false),
+        };
+        let qb = QuiescenceBeacon::default();
+        let ctx = ConnectorContext {
+            alias,
+            connector_type: "fake".into(),
+            quiescence_beacon: qb,
+            notifier: runtime.notifier(),
+        };
+        // 1st failing attempt
+        assert!(matches!(
+            runtime.attempt(&mut connector, &ctx).await?,
+            (Connectivity::Disconnected, true)
+        ));
+        // we cannot test exact timings, but we can ensure it behaves as expected
+        assert!(matches!(
+            rx.recv().timeout(Duration::from_secs(5)).await??,
+            Msg::Reconnect
+        ));
 
-    //     // 2nd failing attempt
-    //     assert!(matches!(
-    //         runtime.attempt(&mut connector, &ctx).await?,
-    //         (Connectivity::Disconnected, true)
-    //     ));
-    //     assert!(matches!(
-    //         rx.recv().timeout(Duration::from_secs(5)).await??,
-    //         Msg::Reconnect
-    //     ));
+        // 2nd failing attempt
+        assert!(matches!(
+            runtime.attempt(&mut connector, &ctx).await?,
+            (Connectivity::Disconnected, true)
+        ));
+        assert!(matches!(
+            rx.recv().timeout(Duration::from_secs(5)).await??,
+            Msg::Reconnect
+        ));
 
-    //     // 3rd failing attempt
-    //     assert!(matches!(
-    //         runtime.attempt(&mut connector, &ctx).await?,
-    //         (Connectivity::Disconnected, false)
-    //     ));
+        // 3rd failing attempt
+        assert!(matches!(
+            runtime.attempt(&mut connector, &ctx).await?,
+            (Connectivity::Disconnected, false)
+        ));
 
-    //     // assert we don't receive nothing, but run into a timeout
-    //     assert!(rx.recv().timeout(Duration::from_millis(100)).await.is_err()); // no reconnect attempt has been made
+        // assert we don't receive nothing, but run into a timeout
+        assert!(rx.recv().timeout(Duration::from_millis(100)).await.is_err()); // no reconnect attempt has been made
 
-    //     Ok(())
-    // }
+        Ok(())
+    }
 }
