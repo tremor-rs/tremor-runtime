@@ -882,38 +882,6 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
 
 #[async_std::test]
 #[serial(kafka)]
-#[cfg(not(feature = "tarpaulin-exclude"))]
-async fn connector_kafka_consumer_unresolvable() -> Result<()> {
-    let _ = env_logger::try_init();
-    let connector_config = literal!({
-        "codec": "json-sorted",
-        "preprocessors": [
-            "lines"
-        ],
-        "config": {
-            "brokers": [
-                "unresolvable_broker:9092"
-            ],
-            "group_id": "cannot_resolve",
-            "topics": [
-                "unresolvable"
-            ],
-            "rdkafka_options": {
-               "debug": "all"
-            }
-        }
-    });
-    let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
-    assert!(harness.start().await.is_err());
-
-    let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
-    Ok(())
-}
-
-#[async_std::test]
-#[serial(kafka)]
 async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     let _ = env_logger::try_init();
 
