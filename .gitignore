@@ -48,5 +48,6 @@ lcov.info
 tremor-value/proptest-regressions/
 *.release
 tremor-script/current_counterexample.eqc
-docs
+/docs
+/tremor-script/docs
 lalrpop-docgen
