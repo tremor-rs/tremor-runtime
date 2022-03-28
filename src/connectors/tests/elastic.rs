@@ -29,7 +29,7 @@ use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value::StaticValue};
 use value_trait::{Mutable, Value, ValueAccess};
 
-const ELASTICSEARCH_VERSION: &str = "7.14.2";
+const ELASTICSEARCH_VERSION: &str = "7.17.1";
 
 #[async_std::test]
 async fn connector_elastic() -> Result<()> {
@@ -40,9 +40,10 @@ async fn connector_elastic() -> Result<()> {
         .with_env_var("discovery.type", "single-node")
         .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m");
 
+    // let port = super::free_port::find_free_tcp_port().await?;
     let container = docker.run_with_args(
         image,
-        RunArgs::default().with_mapped_port((9200_u16, 9200_u16)),
+        RunArgs::default(),
     );
     // signal handling - stop and rm the container, even if we quit the test in the middle of everything
     let container_id = container.id().to_string();
@@ -55,13 +56,13 @@ async fn connector_elastic() -> Result<()> {
             signal_docker.rm(container_id.as_str());
         }
     });
-    let port = container.get_host_port(9200).unwrap_or(9200);
+    let port = container.get_host_port(9200).unwrap();
 
     // wait for the image to be reachable
     let elastic = Elasticsearch::new(Transport::single_node(
-        format!("http://127.0.0.1:{}", port).as_str(),
+        format!("http://127.0.0.1:{port}").as_str(),
     )?);
-    let wait_for = Duration::from_secs(30); // that shit takes a while
+    let wait_for = Duration::from_secs(60); // that shit takes a while
     let start = Instant::now();
     while let Err(e) = elastic
         .cluster()
@@ -94,7 +95,7 @@ async fn connector_elastic() -> Result<()> {
         },
         "config": {
             "nodes": [
-                format!("http://127.0.0.1:{}", port)
+                format!("http://127.0.0.1:{port}")
             ]
         }
     });
@@ -346,7 +347,7 @@ async fn connector_elastic() -> Result<()> {
     let err_msg = err_event_meta.remove("error")?;
     let err_msg_str = err_msg.unwrap();
     let err = err_msg_str.as_str().unwrap();
-    assert!(err.starts_with("error sending request for url (http://127.0.0.1:9200/my_index/_bulk): error trying to connect: tcp connect error: Connection refused"));
+    assert!(err.contains("tcp connect error: Connection refused"), "{err} does not contain Connection refused");
 
     assert_eq!(
         literal!({
