@@ -363,7 +363,8 @@ impl ReconnectRuntime {
 
     #[cfg(test)]
     pub(crate) async fn await_retry(&mut self) {
-        if let Some(retry_task) = self.retry_task.as_mut() {
+        // take the task out to avoid having it be awaited from multiple tasks ?
+        if let Some(retry_task) = self.retry_task.take() {
             retry_task.await;
         }
     }
