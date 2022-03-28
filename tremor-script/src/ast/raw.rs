@@ -1694,8 +1694,6 @@ impl<'script> Upable<'script> for PathRaw<'script> {
 pub struct SegmentRangeRaw<'script> {
     pub(crate) range_start: ImutExprRaw<'script>,
     pub(crate) range_end: ImutExprRaw<'script>,
-    pub(crate) lower_mid: Box<NodeMeta>,
-    pub(crate) upper_mid: Box<NodeMeta>,
 }
 
 impl<'script> Upable<'script> for SegmentRangeRaw<'script> {
@@ -1704,15 +1702,13 @@ impl<'script> Upable<'script> for SegmentRangeRaw<'script> {
         let SegmentRangeRaw {
             range_start,
             range_end,
-            lower_mid,
-            upper_mid,
         } = self;
-        let mid = NodeMeta::new_box(lower_mid.range.start, upper_mid.range.end);
+        let start = range_start.up(helper)?;
+        let end = range_end.up(helper)?;
+        let mid = NodeMeta::new_box(start.s(), end.e());
         Ok(Segment::RangeExpr {
-            lower_mid,
-            upper_mid,
-            start: Box::new(range_start.up(helper)?),
-            end: Box::new(range_end.up(helper)?),
+            start: Box::new(start),
+            end: Box::new(end),
             mid,
         })
     }
