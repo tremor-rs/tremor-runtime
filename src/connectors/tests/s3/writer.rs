@@ -12,16 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::{free_port::find_free_tcp_port, ConnectorHarness, TestPipeline};
-use super::{EnvHelper, SignalHandler};
-use crate::errors::{Error, Result};
-use aws_sdk_s3::{self as s3, client::Client as S3Client, Credentials, Endpoint, Region};
+use std::io::Read;
+
+use super::super::{ConnectorHarness, TestPipeline};
+use super::{
+    get_client, random_bucket_name, spawn_docker, wait_for_s3mock, EnvHelper, SignalHandler,
+};
+use crate::errors::Result;
+use aws_sdk_s3::Client;
 use bytes::Buf;
 use rand::{distributions::Alphanumeric, Rng};
 use serial_test::serial;
-use std::io::Read;
-use std::time::{Duration, Instant};
-use testcontainers::{clients, images::generic::GenericImage, Container, Docker, RunArgs};
+use testcontainers::{clients, images::generic::GenericImage};
 use tremor_common::url::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value};
@@ -238,22 +240,6 @@ async fn connector_s3() -> Result<()> {
     Ok(())
 }
 
-async fn wait_for_s3mock(port: u16) -> Result<()> {
-    let s3_client: S3Client = get_client(port);
-
-    let wait_for = Duration::from_secs(30);
-    let start = Instant::now();
-
-    while let Err(e) = s3_client.list_buckets().send().await {
-        if start.elapsed() > wait_for {
-            return Err(Error::from(e).chain_err(|| "Waiting for mock-s3 container timed out"));
-        }
-
-        async_std::task::sleep(Duration::from_secs(1)).await;
-    }
-    Ok(())
-}
-
 async fn send_to_sink(
     harness: &ConnectorHarness,
     event: &Event,
@@ -268,7 +254,7 @@ async fn send_to_sink(
     Ok(())
 }
 
-async fn get_object(client: &S3Client, bucket: &str, key: &str) -> Vec<u8> {
+async fn get_object(client: &Client, bucket: &str, key: &str) -> Vec<u8> {
     let resp = client
         .get_object()
         .bucket(bucket.clone())
@@ -290,7 +276,7 @@ async fn get_object(client: &S3Client, bucket: &str, key: &str) -> Vec<u8> {
     v
 }
 
-async fn get_object_value(client: &S3Client, bucket: &str, key: &str) -> value::Value<'static> {
+async fn get_object_value(client: &Client, bucket: &str, key: &str) -> value::Value<'static> {
     let mut v = get_object(client, bucket, key).await;
     let obj = value::parse_to_value(&mut v).unwrap();
     return obj.into_static();
@@ -472,50 +458,4 @@ fn random_alphanum_string(str_size: usize) -> String {
         .take(str_size)
         .map(char::from)
         .collect()
-}
-
-fn get_client(http_port: u16) -> S3Client {
-    let s3_config = s3::config::Config::builder()
-        .credentials_provider(Credentials::new(
-            "KEY_NOT_REQD",
-            "KEY_NOT_REQD",
-            None,
-            None,
-            "Environment",
-        ))
-        .region(Region::new("ap-south-1"))
-        .endpoint_resolver(Endpoint::immutable(
-            format!("http://localhost:{http_port}").parse().unwrap(),
-        ))
-        .build();
-
-    S3Client::from_conf(s3_config)
-}
-
-async fn spawn_docker<'d, D: Docker>(
-    docker: &'d D,
-    image: GenericImage,
-) -> (Container<'d, D, GenericImage>, u16, u16) {
-    let http_port = find_free_tcp_port().await.unwrap_or(10080);
-    let https_port = find_free_tcp_port().await.unwrap_or(10443);
-    let container = docker.run_with_args(
-        image,
-        RunArgs::default()
-            .with_mapped_port((http_port, 9090_u16))
-            .with_mapped_port((https_port, 9191_u16)),
-    );
-
-    (container, http_port, https_port)
-}
-
-fn random_bucket_name(prefix: &str) -> String {
-    format!(
-        "{}-{}",
-        prefix,
-        rand::thread_rng()
-            .sample_iter(Alphanumeric)
-            .map(char::from)
-            .take(10)
-            .collect::<String>()
-    )
 }
