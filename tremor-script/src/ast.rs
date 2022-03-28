@@ -43,7 +43,6 @@ pub use self::helper::Helper;
 pub use self::node_id::{BaseRef, NodeId};
 use self::walkers::ImutExprWalker;
 use self::{base_expr::Ranged, visitors::ConstFolder};
-pub use crate::lexer::CompilationUnit;
 use crate::{
     arena,
     ast::{

@@ -1,0 +1,4 @@
+Error: 
+    1 | match event of
+    2 |   case ~ re|\s
+      |              ^ An unexpected escape code 's' was found

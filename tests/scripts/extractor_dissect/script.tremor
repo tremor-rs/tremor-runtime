@@ -5,8 +5,8 @@ end;
 
 #let bar = match { "test": "2019-04-20------------------- high 3 foo bar" } of
 #  case foo = %{test ~= dissect|%{date}%{_(-)} %{?priority} %{&priority} %{+snot} %{+snot}| } => foo
-let bar = match { "test": "2019-04-20 ------------------- high 3 foo bar" } of
-  case foo = %{test ~= dissect|%{date} %{_(-)} %{?priority} %{&priority} %{+snot} %{+snot}| } => foo
+let bar = match { "test": "2019-04-20|------------------- high 3 foo bar" } of
+  case foo = %{test ~= dissect|%{date}\|%{_(-)} %{?priority} %{&priority} %{+snot} %{+snot}| } => foo
   default => "ko"
 end;
 

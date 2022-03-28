@@ -136,6 +136,10 @@ test_cases!(
     pp_cyclic,
     pp_nest_cyclic,
     // INSERT
+    lexer_invalid_float_exp,
+    invalid_escape_extractor,
+    tailing_heredoc,
+    invalid_utf8_3,
     lexer_invalid_pp,
     const_expr_id_into_arr,
     const_expr_range_on_non_array,
