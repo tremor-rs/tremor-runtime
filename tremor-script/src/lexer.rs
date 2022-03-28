@@ -1209,7 +1209,7 @@ impl<'input> Lexer<'input> {
                             e.shift(' ');
                             let token_str =
                                 self.slice_full_lines(string_start, &e).unwrap_or_default();
-                            let range = dbg!(Span::new(escape_start, e));
+                            let range = Span::new(escape_start, e);
                             return Err(ErrorKind::InvalidUtf8Sequence(
                                 Span::new(start, e).expand_lines(2),
                                 range,
@@ -1224,7 +1224,7 @@ impl<'input> Lexer<'input> {
                         let token_str = self
                             .slice_full_lines(string_start, &end)
                             .unwrap_or_default();
-                        let range = Span::new(dbg!(escape_start), end);
+                        let range = Span::new(escape_start, end);
 
                         return Err(ErrorKind::InvalidUtf8Sequence(
                             Span::new(escape_start, end).expand_lines(2),
