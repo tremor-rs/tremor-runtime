@@ -784,7 +784,7 @@ impl<'input> CharLocations<'input> {
         S: ?Sized + ParserSource,
     {
         CharLocations {
-            location: Location::new(1, 1, input.start_index().to_usize(), aid),
+            location: Location::with_byte_index(input.start_index().to_usize(), aid),
             chars: input.src().chars().peekable(),
         }
     }
@@ -1200,7 +1200,7 @@ impl<'input> Lexer<'input> {
             // TODO: Unicode escape codes
             (mut end, 'u') => {
                 let mut escape_start = end;
-                escape_start.extend_left('u');
+                escape_start.shift_left('u');
                 let mut digits = String::with_capacity(4);
                 for _i in 0..4 {
                     if let Some((mut e, c)) = self.bump() {
@@ -1209,7 +1209,7 @@ impl<'input> Lexer<'input> {
                             e.shift(' ');
                             let token_str =
                                 self.slice_full_lines(string_start, &e).unwrap_or_default();
-                            let range = Span::new(escape_start, e);
+                            let range = dbg!(Span::new(escape_start, e));
                             return Err(ErrorKind::InvalidUtf8Sequence(
                                 Span::new(start, e).expand_lines(2),
                                 range,
@@ -1224,7 +1224,7 @@ impl<'input> Lexer<'input> {
                         let token_str = self
                             .slice_full_lines(string_start, &end)
                             .unwrap_or_default();
-                        let range = Span::new(escape_start, end);
+                        let range = Span::new(dbg!(escape_start), end);
 
                         return Err(ErrorKind::InvalidUtf8Sequence(
                             Span::new(escape_start, end).expand_lines(2),
