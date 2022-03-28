@@ -41,10 +41,7 @@ async fn connector_elastic() -> Result<()> {
         .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m");
 
     // let port = super::free_port::find_free_tcp_port().await?;
-    let container = docker.run_with_args(
-        image,
-        RunArgs::default(),
-    );
+    let container = docker.run_with_args(image, RunArgs::default());
     // signal handling - stop and rm the container, even if we quit the test in the middle of everything
     let container_id = container.id().to_string();
     let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
@@ -347,7 +344,10 @@ async fn connector_elastic() -> Result<()> {
     let err_msg = err_event_meta.remove("error")?;
     let err_msg_str = err_msg.unwrap();
     let err = err_msg_str.as_str().unwrap();
-    assert!(err.contains("tcp connect error: Connection refused"), "{err} does not contain Connection refused");
+    assert!(
+        err.contains("tcp connect error: Connection refused"),
+        "{err} does not contain Connection refused"
+    );
 
     assert_eq!(
         literal!({
