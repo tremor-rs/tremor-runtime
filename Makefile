@@ -97,6 +97,19 @@ lalrpop-doc: lalrpop-docgen
 	if test -f docs/language/grammar.md; then  mv docs/language/grammar.md docs/language/EBNF.md; fi
 	if test -f docs/language/Use.md; then mv docs/language/Use.md docs/language/ModuleSystem.md; fi
 
+lint-lalrpop-doc: lalrpop-docgen
+	-mkdir docs/language
+	cd lalrpop-docgen && cargo build --all
+	lalrpop-docgen/target/debug/lalrpop-docgen \
+	  --lint \
+          -mp static/language/prolog -lp \
+          -me static/language/epilog -le \
+          -gc "Use,Deploy,Query,Script" \
+          --out-dir docs/language \
+          tremor-script/src/grammar.lalrpop
+	if test -f docs/language/grammar.md; then  mv docs/language/grammar.md docs/language/EBNF.md; fi
+	if test -f docs/language/Use.md; then mv docs/language/Use.md docs/language/ModuleSystem.md; fi
+
 chk_copyright:
 	@./.github/checks/copyright.sh
 
