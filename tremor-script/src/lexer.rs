@@ -28,7 +28,6 @@ use beef::Cow;
 use simd_json::Writable;
 use std::fmt;
 use std::iter::Peekable;
-use std::path::Path;
 use std::str::Chars;
 use std::{collections::VecDeque, mem};
 use unicode_xid::UnicodeXID;
@@ -409,12 +408,6 @@ pub enum Token<'input> {
     Deploy,
 }
 
-impl<'input> Default for Token<'input> {
-    fn default() -> Self {
-        Self::EndOfStream
-    }
-}
-
 impl<'input> Token<'input> {
     /// Is the token ignorable except when syntax or error highlighting.
     /// Is the token insignificant when parsing ( a correct ... ) source.
@@ -591,7 +584,7 @@ impl<'input> __ToTriple<'input> for Spanned<'input> {
 
 // Format a token for display
 //
-
+#[cfg(not(tarpaulin_include))]
 impl<'input> fmt::Display for Token<'input> {
     #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -859,31 +852,6 @@ impl<'input> Iterator for Tokenizer<'input> {
                 Some(Ok(t))
             }
         }
-    }
-}
-
-/// A compilation unit
-#[derive(Clone, Debug)]
-pub struct CompilationUnit {
-    file_path: Box<Path>,
-}
-
-impl CompilationUnit {
-    /// Returns the path of the file for this
-    #[must_use]
-    pub fn file_path(&self) -> &Path {
-        &self.file_path
-    }
-}
-impl PartialEq for CompilationUnit {
-    fn eq(&self, other: &Self) -> bool {
-        self.file_path == other.file_path
-    }
-}
-
-impl fmt::Display for CompilationUnit {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.file_path.to_string_lossy())
     }
 }
 
@@ -1185,13 +1153,9 @@ impl<'input> Lexer<'input> {
             .bump()
             .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()))?
         {
-            (e, '\'') => Ok((e, '\'')),
             (e, '"') => Ok((e, '"')),
             (e, '\\') => Ok((e, '\\')),
-            // Some((e, '{')) => Ok((e, '{')),
-            // Some((e, '}')) => Ok((e, '}')),
             (e, '#') => Ok((e, '#')),
-            (e, '/') => Ok((e, '/')),
             (e, 'b') => Ok((e, '\u{8}')), // Backspace
             (e, 'f') => Ok((e, '\u{c}')), // Form Feed
             (e, 'n') => Ok((e, '\n')),

@@ -892,7 +892,6 @@ StrLitElements: StrLitElementsRaw<'input> = {
 
     <literal:StringPart> => vec![literal.into()],
     "\\#" => vec!["#".into()],
-
     "#{" <expr:ExprImut> "}" => vec![expr.into()],
 }
 

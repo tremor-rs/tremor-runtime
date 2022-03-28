@@ -1,0 +1,4 @@
+match event of
+  case ~ re|\snot| => true
+  _ => false
+end;
