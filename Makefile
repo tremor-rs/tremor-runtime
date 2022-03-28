@@ -95,7 +95,7 @@ lalrpop-doc: lalrpop-docgen
           --out-dir docs/language \
           tremor-script/src/grammar.lalrpop
 	if test -f docs/language/grammar.md; then  mv docs/language/grammar.md docs/language/EBNF.md; fi
-	if test -f docs/language/Use.md; then mv docs/language/Use.md docs/language/ModuleSystem.md; fi
+	if test -f docs/language/Use.md; then mv docs/language/Use.md docs/language/module_system.md; fi
 
 lint-lalrpop-doc: lalrpop-docgen
 	-mkdir docs/language
