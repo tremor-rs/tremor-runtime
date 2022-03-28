@@ -1955,10 +1955,6 @@ pub enum Segment<'script> {
     },
     /// A range dynamic start and end values
     RangeExpr {
-        /// Lower-inclusive
-        lower_mid: Box<NodeMeta>,
-        /// Max-exclusive
-        upper_mid: Box<NodeMeta>,
         /// Id
         mid: Box<NodeMeta>,
         /// Start of range value expression

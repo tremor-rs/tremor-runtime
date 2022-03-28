@@ -1058,12 +1058,10 @@ PathSegments: SegmentsRaw<'input> = {
 
 /// A path selector aka [...]
 Selector: SegmentRaw<'input> = {
-    <start_lower:@L> <range_start:ComplexExprImut> <end_lower:@L> ":" <start_upper:@L> <range_end:ComplexExprImut> <end_upper:@L> => {
+    <range_start:ComplexExprImut> ":" <range_end:ComplexExprImut> => {
         SegmentRaw::Range(Box::new(SegmentRangeRaw{
             range_start,
             range_end,
-            lower_mid: NodeMeta::new_box(start_lower, end_lower),
-            upper_mid: NodeMeta::new_box(start_upper, end_upper)
         }))
     },
     <start:@L> <expr:ComplexExprImut> <end:@L>  => SegmentRaw::Element(Box::new(SegmentElementRaw{expr, mid: NodeMeta::new_box(start, end)})),
