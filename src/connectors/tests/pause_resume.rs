@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::time::Duration;
+
 use super::ConnectorHarness;
 use crate::{errors::Result, instance::State};
 use async_std::{
@@ -157,7 +159,10 @@ async fn tcp_server_pause_resume() -> Result<()> {
     socket.write_all(data2.as_bytes()).await?;
 
     // ensure nothing is received (pause is actually doing the right thing)
-    assert!(out_pipeline.get_event().await.is_err());
+    assert!(out_pipeline
+        .expect_no_event_for(Duration::from_millis(500))
+        .await
+        .is_ok());
     // resume connector
     harness.resume().await?;
     harness.wait_for_state(State::Running).await?;
