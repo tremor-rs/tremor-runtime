@@ -76,7 +76,7 @@ impl Location {
     /// resets the column to the beginning
     #[must_use]
     pub fn start_of_line(mut self) -> Self {
-        self.absolute = self.absolute - (self.column - Self::COLUMN_START);
+        self.absolute -= self.column - Self::COLUMN_START;
         self.column = Self::COLUMN_START;
         self
     }
