@@ -70,15 +70,32 @@ force:
 
 ###############################################################################
 
+docs: stdlib-doc aggr-doc lalrpop-doc
+	-cp tremor-script/docs/library/overview.md docs/library
+
 stdlib-doc:
 	-rm -rf docs
-	-mkdir docs
-	-TREMOR_PATH=./tremor-script/lib cargo run -p tremor-cli -- doc tremor-script/lib docs
+	-mkdir -p docs/library/stdlib
+	-TREMOR_PATH=./tremor-script/lib cargo run -p tremor-cli -- doc tremor-script/lib docs/library/stdlib
 
 aggr-doc:
-	-rm -rf aggr-docs
-	-mkdir aggr-docs
-	-TREMOR_PATH=./tremor-script/docs cargo run -p tremor-cli -- doc tremor-script/docs aggr-docs
+	-TREMOR_PATH=./tremor-script/docs/library cargo run -p tremor-cli -- doc tremor-script/docs/library docs/library
+
+lalrpop-docgen:
+	-git clone https://github.com/darach/lalrpop lalrpop-docgen
+	cd lalrpop-docgen && git checkout docgen
+
+lalrpop-doc: lalrpop-docgen
+	-mkdir docs/language
+	cd lalrpop-docgen && cargo build --all
+	lalrpop-docgen/target/debug/lalrpop-docgen \
+          -mp static/language/prolog \
+          -me static/language/epilog \
+          -gc "Use,Deploy,Query,Script" \
+          --out-dir docs/language \
+          tremor-script/src/grammar.lalrpop
+	if test -f docs/language/grammar.md; then  mv docs/language/grammar.md docs/language/EBNF.md; fi
+	if test -f docs/language/Use.md; then mv docs/language/Use.md docs/language/ModuleSystem.md; fi
 
 chk_copyright:
 	@./.github/checks/copyright.sh
