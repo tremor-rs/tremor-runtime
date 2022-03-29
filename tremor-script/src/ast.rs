@@ -59,7 +59,7 @@ use crate::{
     script::Return,
     stry,
     tilde::Extractor,
-    KnownKey, Value, NO_AGGRS, NO_CONSTS,
+    KnownKey, Value,
 };
 pub(crate) use analyzer::*;
 pub use base_expr::BaseExpr;
@@ -127,7 +127,7 @@ impl NodeMeta {
         }
     }
     #[cfg(test)]
-    pub fn dummy() -> Box<Self> {
+    pub(crate) fn dummy() -> Box<Self> {
         Box::new(NodeMeta::new(
             Location::start_of_file(arena::Index::INVALID),
             Location::start_of_file(arena::Index::INVALID),
@@ -183,13 +183,13 @@ pub struct BytesPart<'script> {
     /// metadata id
     pub(crate) mid: Box<NodeMeta>,
     /// data
-    pub data: ImutExpr<'script>,
+    pub(crate) data: ImutExpr<'script>,
     /// type we want to convert this to
-    pub data_type: BytesDataType,
+    pub(crate) data_type: BytesDataType,
     /// Endianness
-    pub endianess: Endian,
+    pub(crate) endianess: Endian,
     /// bits allocated for this
-    pub bits: u64,
+    pub(crate) bits: u64,
 }
 impl_expr!(BytesPart);
 
@@ -332,7 +332,7 @@ impl<'script> Script<'script> {
     ///
     /// # Errors
     /// on runtime errors
-    pub fn run<'event>(
+    pub(crate) fn run<'event>(
         &self,
         context: &crate::EventContext,
         aggr: AggrType,
@@ -441,18 +441,9 @@ pub struct Record<'script> {
 }
 impl_expr!(Record);
 impl<'script> Record<'script> {
-    /// empty record
-    #[must_use]
-    pub fn empty(mid: Box<NodeMeta>) -> Self {
-        Self {
-            mid,
-            base: Object::new(),
-            fields: Fields::new(),
-        }
-    }
-
     /// Gets the expression for a given name
     /// Attention: Clones its values!
+    /// used only in the test suite
     #[must_use]
     pub fn cloned_field_expr(&self, name: &str) -> Option<ImutExpr> {
         self.base
@@ -476,6 +467,7 @@ impl<'script> Record<'script> {
             })
     }
     /// Tries to fetch a literal from a record and clones it, snot!
+    /// used only in the test suite
     #[must_use]
     pub fn cloned_field_literal(&self, name: &str) -> Option<Value> {
         if let Some(ImutExpr::Literal(Literal { value, .. })) = self.cloned_field_expr(name) {
@@ -931,7 +923,7 @@ impl<'script> Invocable<'script> {
     ///
     /// # Errors
     /// if the funciton fails to be invoked
-    pub fn invoke<'event, 'run>(
+    pub(crate) fn invoke<'event, 'run>(
         &'run self,
         env: &'run Env<'run, 'event>,
         args: &'run [&'run Value<'event>],
@@ -1560,7 +1552,7 @@ impl<'script> Pattern<'script> {
         match (self, other) {
             // Two literals that are different are distinct
             (Pattern::Expr(ImutExpr::Literal(l1)), Pattern::Expr(ImutExpr::Literal(l2))) => {
-                l1 != l2
+                !l1.ast_eq(&l2)
             }
             // For record patterns we compare directly
             (Pattern::Record(r1), Pattern::Record(r2)) => {
@@ -1664,16 +1656,16 @@ impl<'script> PredicatePattern<'script> {
                 PredicatePattern::Bin {
                     lhs: lhs1,
                     kind: BinOpKind::Eq,
-                    rhs: rhs1,
+                    rhs: ImutExpr::Literal(l1),
                     ..
                 },
                 PredicatePattern::Bin {
                     lhs: lhs2,
                     kind: BinOpKind::Eq,
-                    rhs: rhs2,
+                    rhs: ImutExpr::Literal(l2),
                     ..
                 },
-            ) if lhs1 == lhs2 && !rhs1.ast_eq(rhs2) => true,
+            ) if lhs1 == lhs2 && !l1.ast_eq(l2) => true,
             (
                 PredicatePattern::Bin { lhs: lhs1, .. },
                 PredicatePattern::FieldAbsent { lhs: lhs2, .. },
@@ -1749,7 +1741,7 @@ impl<'script> PredicatePattern<'script> {
     /// Get key
     #[must_use]
     #[cfg(not(tarpaulin_include))] // this is a simple asccessor
-    pub fn key(&self) -> &KnownKey<'script> {
+    pub(crate) fn key(&self) -> &KnownKey<'script> {
         use PredicatePattern::{
             ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
             TuplePatternEq,
@@ -1884,7 +1876,7 @@ pub enum Path<'script> {
 impl<'script> Path<'script> {
     /// Get segments as slice
     #[must_use]
-    pub fn segments(&self) -> &Segments<'script> {
+    pub(crate) fn segments(&self) -> &Segments<'script> {
         match self {
             Path::Local(path) => &path.segments,
             Path::Meta(path) => &path.segments,
@@ -1898,7 +1890,7 @@ impl<'script> Path<'script> {
     /// Get segments as slice
     #[must_use]
     #[cfg(not(tarpaulin_include))] // this is a simple asccessor
-    pub fn segments_mut(&mut self) -> &mut Segments<'script> {
+    pub(crate) fn segments_mut(&mut self) -> &mut Segments<'script> {
         match self {
             Path::Local(path) => &mut path.segments,
             Path::Meta(path) => &mut path.segments,
@@ -2153,83 +2145,4 @@ pub struct UnaryExpr<'script> {
 impl_expr!(UnaryExpr);
 
 #[cfg(test)]
-mod test {
-
-    use crate::{
-        ast::{Expr, ImutExpr, Invocable, Invoke, NodeId, Record},
-        prelude::*,
-        CustomFn, NodeMeta,
-    };
-
-    fn v(s: &'static str) -> super::ImutExpr<'static> {
-        super::ImutExpr::Literal(super::Literal {
-            mid: NodeMeta::dummy(),
-            value: Value::from(s),
-        })
-    }
-
-    #[test]
-    fn record() {
-        let f1 = super::Field {
-            mid: NodeMeta::dummy(),
-            name: "snot".into(),
-            value: v("badger"),
-        };
-        let f2 = super::Field {
-            mid: NodeMeta::dummy(),
-            name: "badger".into(),
-            value: v("snot"),
-        };
-
-        let r = super::Record {
-            base: crate::Object::new(),
-            mid: NodeMeta::dummy(),
-            fields: vec![f1, f2],
-        };
-
-        assert_eq!(r.cloned_field_expr("snot"), Some(v("badger")));
-        assert_eq!(r.cloned_field_expr("nots"), None);
-
-        let lit = r.cloned_field_literal("badger");
-        assert_eq!(lit.as_str(), Some("snot"));
-        assert_eq!(r.cloned_field_expr("adgerb"), None);
-    }
-
-    #[test]
-    fn as_record() {
-        let i = v("snot");
-        assert!(i.as_record().is_none());
-        let i = ImutExpr::Record(Record::empty(Box::new(i.meta().clone())));
-        assert!(i.as_record().is_some());
-    }
-    #[test]
-    fn as_invoke() {
-        let invocable = Invocable::Tremor(CustomFn {
-            name: "f".into(),
-            body: Vec::new(),
-            args: Vec::new(),
-            open: false,
-            locals: 0,
-            is_const: false,
-            inline: false,
-        });
-        let i = Invoke {
-            mid: NodeMeta::dummy(),
-            node_id: NodeId {
-                module: Vec::new(),
-                id: "fun".to_string(),
-            },
-            invocable,
-            args: Vec::new(),
-        };
-        assert!(Expr::Imut(v("snut")).as_invoke().is_none());
-        let e = ImutExpr::Invoke(i.clone());
-        assert!(Expr::Imut(e).as_invoke().is_some());
-        let e = ImutExpr::Invoke1(i.clone());
-        assert!(Expr::Imut(e).as_invoke().is_some());
-        let e = ImutExpr::Invoke2(i.clone());
-        assert!(Expr::Imut(e).as_invoke().is_some());
-        let e = ImutExpr::Invoke3(i.clone());
-        assert!(Expr::Imut(e).as_invoke().is_some());
-    }
-}
+mod test;
