@@ -45,6 +45,7 @@ pub struct TLSServerConfig {
 }
 
 #[derive(Deserialize, Debug, Default, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct TLSClientConfig {
     pub(crate) cafile: Option<PathBuf>,
     pub(crate) domain: Option<String>,
@@ -102,7 +103,9 @@ pub(crate) fn load_keys(path: &Path) -> Result<PrivateKey> {
 
 pub(crate) fn load_server_config(config: &TLSServerConfig) -> Result<ServerConfig> {
     let certs = load_certs(&config.cert)?;
+    certs.len();
     let keys = load_keys(&config.key)?;
+    keys.0.len();
 
     let mut server_config = ServerConfig::new(NoClientAuth::new());
     server_config

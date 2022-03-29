@@ -34,6 +34,7 @@ const URL_SCHEME: &str = "tremor-tcp-client";
 #[serde(deny_unknown_fields)]
 pub struct Config {
     url: Url<super::TcpDefaults>,
+    /// IP_TTL field in terms of in seconds or network hops
     ttl: Option<u32>,
     #[serde(default = "default_no_delay")]
     no_delay: bool,
