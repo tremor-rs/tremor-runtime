@@ -216,6 +216,7 @@ fn str_to_record_type(s: &str) -> Result<RecordType> {
     }
 }
 
+#[cfg(not(tarpaulin_include))] // simple mapping function
 fn rdata_to_value(r: &RData) -> Option<Value<'static>> {
     Some(match r {
         RData::A(v) => literal!({ "A": v.to_string() }),
@@ -252,4 +253,37 @@ fn lookup_to_value(l: &Lookup) -> Value<'static> {
                 .and_then(|mut v| v.try_insert("ttl", ttl))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn test_str_to_record_type() {
+        assert_eq!(str_to_record_type("A"), Ok(RecordType::A));
+        assert_eq!(str_to_record_type("AAAA"), Ok(RecordType::AAAA));
+        assert_eq!(str_to_record_type("ANAME"), Ok(RecordType::ANAME));
+        assert_eq!(str_to_record_type("ANY"), Ok(RecordType::ANY));
+        assert_eq!(str_to_record_type("AXFR"), Ok(RecordType::AXFR));
+        assert_eq!(str_to_record_type("CAA"), Ok(RecordType::CAA));
+        assert_eq!(str_to_record_type("CNAME"), Ok(RecordType::CNAME));
+        assert_eq!(str_to_record_type("HINFO"), Ok(RecordType::HINFO));
+        assert_eq!(str_to_record_type("HTTPS"), Ok(RecordType::HTTPS));
+        assert_eq!(str_to_record_type("IXFR"), Ok(RecordType::IXFR));
+        assert_eq!(str_to_record_type("MX"), Ok(RecordType::MX));
+        assert_eq!(str_to_record_type("NAPTR"), Ok(RecordType::NAPTR));
+        assert_eq!(str_to_record_type("NS"), Ok(RecordType::NS));
+        assert_eq!(str_to_record_type("NULL"), Ok(RecordType::NULL));
+        assert_eq!(str_to_record_type("OPENPGPKEY"), Ok(RecordType::OPENPGPKEY));
+        assert_eq!(str_to_record_type("OPT"), Ok(RecordType::OPT));
+        assert_eq!(str_to_record_type("PTR"), Ok(RecordType::PTR));
+        assert_eq!(str_to_record_type("SOA"), Ok(RecordType::SOA));
+        assert_eq!(str_to_record_type("SRV"), Ok(RecordType::SRV));
+        assert_eq!(str_to_record_type("SSHFP"), Ok(RecordType::SSHFP));
+        assert_eq!(str_to_record_type("SVCB"), Ok(RecordType::SVCB));
+        assert_eq!(str_to_record_type("TLSA"), Ok(RecordType::TLSA));
+        assert_eq!(str_to_record_type("TXT"), Ok(RecordType::TXT));
+        assert_eq!(str_to_record_type("ZERO"), Ok(RecordType::ZERO));
+        assert!(str_to_record_type("NOT A DNS ENTRIE").is_err());
+    }
 }
