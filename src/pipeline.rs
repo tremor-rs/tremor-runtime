@@ -476,7 +476,7 @@ pub(crate) async fn pipeline_task(
 
     let mut state: State = State::Initializing;
 
-    info!("[Pipeline::{}] Starting Pipeline.", alias);
+    info!("[Pipeline::{alias}] Starting Pipeline.");
 
     let ff = rx.map(|e| AnyMsg::Flow(*e));
     let cf = cf_rx.map(AnyMsg::Contraflow);
@@ -500,11 +500,13 @@ pub(crate) async fn pipeline_task(
                     Err(e) => {
                         let err_str = if let PipelineErrorKind::Script(script_kind) = e.0 {
                             let script_error = tremor_script::errors::Error(script_kind, e.1);
-                            Dumb::error_to_string(&script_error)?
+
+                            Dumb::error_to_string(&script_error)
+                                .unwrap_or_else(|e| format!(" {script_error}: {e}"))
                         } else {
-                            format!(" {}", e)
+                            format!(" {e}")
                         };
-                        error!("Error handling event:{}", err_str);
+                        error!("[Pipeline::{alias}] Error handling event:{err_str}");
                     }
                 }
             }

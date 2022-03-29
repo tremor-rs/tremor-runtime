@@ -14,8 +14,6 @@
 
 use super::ConnectorHarness;
 use crate::errors::Result;
-use async_std::task;
-use std::time::Duration;
 use tremor_value::prelude::*;
 
 #[async_std::test]
@@ -41,8 +39,6 @@ async fn connector_crononome_routing() -> Result<()> {
 
     harness.start().await?;
     harness.wait_for_connected().await?;
-
-    task::sleep(Duration::from_secs(1)).await;
 
     let event = out_pipeline.get_event().await?;
     let (data, _meta) = event.data.parts();

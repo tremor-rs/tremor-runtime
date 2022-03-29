@@ -154,9 +154,11 @@ pub trait Highlighter {
     /// # Errors
     /// on io errors
     fn format_error(&mut self, error: &crate::errors::Error) -> io::Result<()> {
-        if let (Some(r), _) = error.context() {
-            let aid = r.aid();
-            let script = Arena::io_get(aid)?;
+        if let Some((r, aid, script)) = error
+            .context()
+            .0
+            .and_then(|r| Some((r, r.aid(), Arena::io_get(r.aid()).ok()?)))
+        {
             // i wanna use map_while here, but it is still unstable :(
             let tokens: Vec<_> = lexer::Tokenizer::new(script, aid)
                 .tokenize_until_err()

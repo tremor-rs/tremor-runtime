@@ -47,6 +47,7 @@ flow
   end;
 
   define pipeline response_handling
+  into out, exit, err
   pipeline
     select {
       "action": $elastic.action,
@@ -68,7 +69,7 @@ flow
     }
     from in where $elastic.success == false into err;
 
-    select "exit" from in where match event.payload of case %{ present exit } => true default => false end into out/exit;
+    select "exit" from in where match event.payload of case %{ present exit } => true default => false end into exit;
   end;
 
   define connector elastic from elastic
