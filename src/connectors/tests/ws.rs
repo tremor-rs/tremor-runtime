@@ -79,7 +79,6 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
         if let Ok((client, _http_response)) = maybe_connect {
             Self { client }
         } else {
-            dbg!(&maybe_connect);
             panic!("Could not connect to server");
         }
     }
@@ -130,7 +129,6 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
         if let Ok((client, _http_response)) = maybe_connect {
             Self { client }
         } else {
-            dbg!(&maybe_connect);
             panic!("Could not connect to server");
         }
     }
@@ -279,7 +277,7 @@ async fn ws_client_bad_config() -> Result<()> {
       "config": {
           "snot": "ws://127.0.0.1:8080",
           "tls": {
-              "cacert": "./tests/localhost.cert",
+              "cafile": "./tests/localhost.cert",
               "domain": "localhost"
           }
       }
