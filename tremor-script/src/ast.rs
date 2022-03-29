@@ -1552,7 +1552,7 @@ impl<'script> Pattern<'script> {
         match (self, other) {
             // Two literals that are different are distinct
             (Pattern::Expr(ImutExpr::Literal(l1)), Pattern::Expr(ImutExpr::Literal(l2))) => {
-                !l1.ast_eq(&l2)
+                !l1.ast_eq(l2)
             }
             // For record patterns we compare directly
             (Pattern::Record(r1), Pattern::Record(r2)) => {
