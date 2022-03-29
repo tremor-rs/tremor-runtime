@@ -30,7 +30,7 @@ use tremor_common::stry;
 use tremor_script::{
     self,
     ast::{self, ImutExpr, RunConsts, SelectStmt},
-    errors::Result as TSResult,
+    errors::{err_generic, Result as TSResult},
     interpreter::{Env, LocalStack},
     prelude::*,
     utils::sorted_serialize,
@@ -155,6 +155,7 @@ fn env<'run, 'script>(
     }
 }
 
+#[derive(Debug)]
 /// Simple enum to decide what we return
 enum Res {
     Event,
@@ -229,7 +230,9 @@ impl Operator for Select {
                 return Ok(Res::None);
             };
 
+            let mut inner = select.meta();
             let group_values = if let Some(group_by) = &select.maybe_group_by {
+                 inner = group_by.meta();
                 let groups = stry!(group_by.generate_groups(&ctx, data, meta));
                 groups.into_iter().map(Value::from).collect()
             } else if windows.is_empty() {
@@ -281,6 +284,7 @@ impl Operator for Select {
 
                 // see if we know the group already, we use the `entry` here so we don't
                 // need to add / remove from the groups unenessessarily
+                dbg!(&group_str, ctx.cardinality);
                 match groups.entry(group_str) {
                     Entry::Occupied(mut o) => {
                         // If we found a group execute it, and remove it if it is not longer
@@ -294,18 +298,17 @@ impl Operator for Select {
                         // the group value of it
                         dflt_group.value = group_value;
                         dflt_group.value.try_push(v.key().to_string());
-
                         // execute it
                         if !stry!(dflt_group.on_event(sel_ctx, consts, event, &mut events)) {
                             // if we can't delete it check if we're having too many groups,
                             // if so, error.
                             if ctx.cardinality >= *max_groups {
-                                return Err(format!(
-                                    "Maxmimum amount of groups reached ({}). Ignoring group [{}]",
-                                    max_groups,
-                                    *max_groups + 1
-                                )
-                                .into());
+                                return Err(
+                                    err_generic(select.as_ref(), inner, &format!(
+                                        "Maxmimum amount of groups reached ({}). Ignoring group [{}]",
+                                        max_groups,
+                                        *max_groups + 1
+                                    )));
                             }
                             // otherwise we clone the default group (this is a cost we got to pay)
                             // and reset it . If we didn't clone here we'd need to allocate a new

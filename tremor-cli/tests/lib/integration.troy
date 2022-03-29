@@ -25,13 +25,12 @@ with
 end;
 
 define pipeline out_or_exit
-into 
-    out, exit
+into out, exit
 args
   delay = 0
 pipeline
-    select event from in where event != "exit" into out/out;
-    select {"exit": 0, "delay": args.delay} from in where event == "exit" into out/exit;
+    select event from in where event != "exit" into out;
+    select {"exit": 0, "delay": args.delay} from in where event == "exit" into exit;
 end;
 
 define pipeline out_and_exit
@@ -41,5 +40,5 @@ args
   delay = 0
 pipeline
     select event from in into out; # include 'exit'
-    select {"exit": 0, "delay": args.delay} from in where event == "exit" into out/exit;
+    select {"exit": 0, "delay": args.delay} from in where event == "exit" into exit;
 end;
