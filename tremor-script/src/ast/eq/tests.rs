@@ -536,6 +536,7 @@ fn predicate_pattern() {
         }
     }));
 }
+
 #[test]
 fn reserved_path() {
     assert!(ReservedPath::Args {
