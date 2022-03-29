@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::atomic::AtomicBool;
-
-use crate::connectors::{prelude::*, spawn_task};
+#![cfg(not(tarpaulin_include))] // We need a life discord api for this
 
 mod handler;
 mod utils;
 
+use crate::connectors::{prelude::*, spawn_task};
 use async_std::{
     channel::{bounded, Receiver, Sender, TryRecvError},
     task::JoinHandle,
 };
 use handler::Handler;
 use serenity::{client::bridge::gateway::GatewayIntents, Client};
+use std::sync::atomic::AtomicBool;
 use utils::Intents;
 
 #[derive(Deserialize, Clone)]

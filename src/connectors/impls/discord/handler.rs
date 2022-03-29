@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#![cfg(not(tarpaulin_include))] // We need a life discord api for this
 use super::utils::{to_reactions, DiscordMessage};
 use async_std::{
     channel::{Receiver, Sender},
