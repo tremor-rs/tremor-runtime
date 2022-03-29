@@ -201,34 +201,35 @@ where
 {
     #[allow(clippy::suspicious_operation_groupings)]
     fn ast_eq(&self, other: &Self) -> bool {
+        use ClauseGroup::{Combined, SearchTree, Simple, Single};
         match (self, other) {
             (
-                ClauseGroup::Single {
-                    precondition: precon1,
-                    pattern: p1,
+                Single {
+                    precondition,
+                    pattern,
                 },
-                ClauseGroup::Single {
-                    precondition: precon2,
-                    pattern: p2,
+                Single {
+                    precondition: pc,
+                    pattern: p,
                 },
-            ) => precon1.ast_eq(precon2) && p1.ast_eq(p2),
+            ) => precondition.ast_eq(pc) && pattern.ast_eq(p),
             (
-                ClauseGroup::Simple {
-                    precondition: precon1,
-                    patterns: ps1,
+                Simple {
+                    precondition,
+                    patterns,
                 },
-                ClauseGroup::Simple {
-                    precondition: precon2,
-                    patterns: ps2,
+                Simple {
+                    precondition: pc,
+                    patterns: p,
                 },
-            ) => precon1.ast_eq(precon2) && ps1.ast_eq(ps2),
+            ) => precondition.ast_eq(pc) && patterns.ast_eq(p),
             (
-                ClauseGroup::SearchTree {
+                SearchTree {
                     precondition: precon1,
                     tree: t1,
                     rest: rest1,
                 },
-                ClauseGroup::SearchTree {
+                SearchTree {
                     precondition: precon2,
                     tree: t2,
                     rest: rest2,
@@ -245,15 +246,15 @@ where
                         })
             }
             (
-                ClauseGroup::Combined {
-                    precondition: pc1,
-                    groups: g1,
+                Combined {
+                    precondition,
+                    groups,
                 },
-                ClauseGroup::Combined {
-                    precondition: pc2,
-                    groups: g2,
+                Combined {
+                    precondition: p,
+                    groups: g,
                 },
-            ) => pc1.ast_eq(pc2) && g1.ast_eq(g2),
+            ) => precondition.ast_eq(p) && groups.ast_eq(g),
             _ => false,
         }
     }
