@@ -30,7 +30,7 @@ use tremor_common::stry;
 use tremor_script::{
     self,
     ast::{self, ImutExpr, RunConsts, SelectStmt},
-    errors::{err_generic, Result as TSResult},
+    errors::{error_generic, Result as TSResult},
     interpreter::{Env, LocalStack},
     prelude::*,
     utils::sorted_serialize,
@@ -194,7 +194,6 @@ impl Operator for Select {
             max_groups,
             ..
         } = self;
-
         let Event {
             ingest_ns,
             ref mut data,
@@ -220,13 +219,11 @@ impl Operator for Select {
             let (data, meta) = event.parts_mut();
             let locals = tremor_script::interpreter::LocalStack::with_size(*locals);
 
-            //
             // Before any select processing, we filter by where clause
             //
             let guard = &select.maybe_where;
             let e = env(&ctx, consts.run(), *recursion_limit);
-            let w_guard = run_guard(select, guard, opts, &e, data, meta, &locals)?;
-            if !w_guard {
+            if !run_guard(select, guard, opts, &e, data, meta, &locals)? {
                 return Ok(Res::None);
             };
 
@@ -245,8 +242,7 @@ impl Operator for Select {
 
                 let e = env(&ctx, consts.run(), *recursion_limit);
                 let value = stry!(select.target.run(opts, &e, data, &NULL, meta, &locals));
-                let h_guard = &select.maybe_having;
-                let h_guard = run_guard(select, h_guard, opts, &e, &value, meta, &locals);
+                let h_guard = run_guard(select, &select.maybe_having, opts, &e, &value, meta, &locals);
                 return if stry!(h_guard) {
                     *data = value.into_owned();
                     Ok(Res::Event)
@@ -303,12 +299,11 @@ impl Operator for Select {
                             // if we can't delete it check if we're having too many groups,
                             // if so, error.
                             if ctx.cardinality >= *max_groups {
-                                return Err(
-                                    err_generic(select.as_ref(), inner, &format!(
+                                return error_generic(select.as_ref(), inner, &format!(
                                         "Maxmimum amount of groups reached ({}). Ignoring group [{}]",
                                         max_groups,
                                         *max_groups + 1
-                                    )));
+                                    ));
                             }
                             // otherwise we clone the default group (this is a cost we got to pay)
                             // and reset it . If we didn't clone here we'd need to allocate a new
