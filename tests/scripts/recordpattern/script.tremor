@@ -1,0 +1,7 @@
+match event of
+  case %{ key == 7 } => 1
+  case %{ key == 42 } => 2
+  case %{ key ~= %(42) } => 3
+  case %{ key ~= %{key2 == 42} } => 4
+  default => "default"
+end
