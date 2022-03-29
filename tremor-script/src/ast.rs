@@ -156,9 +156,6 @@ impl NodeMeta {
         Box::new(self.with_name(name))
     }
 
-    pub(crate) fn name_dflt(&self) -> &str {
-        self.name().unwrap_or_default()
-    }
     pub(crate) fn end(&self) -> Location {
         self.range.end()
     }
@@ -2065,8 +2062,8 @@ pub enum BinOpKind {
     /// we're forced to make this pub because of lalrpop
     And,
 
-    /// we're forced to make this pub because of lalrpop
-    BitOr,
+    // NOT IMPLEMENTED /// we're forced to make this pub because of lalrpop
+    // BitOr,
     /// we're forced to make this pub because of lalrpop
     BitXor,
     /// we're forced to make this pub because of lalrpop

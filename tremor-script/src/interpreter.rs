@@ -46,8 +46,8 @@ use crate::{
         err_need_obj, error_array_out_of_bound, error_bad_array_index, error_bad_key,
         error_bad_key_err, error_decreasing_range, error_guard_not_bool, error_invalid_binary,
         error_invalid_bitshift, error_need_arr, error_need_int, error_need_obj, error_need_str,
-        error_oops, error_oops_err, error_patch_key_exists, error_patch_merge_type_conflict,
-        error_patch_update_key_missing, Result,
+        error_oops, error_patch_key_exists, error_patch_merge_type_conflict,
+        error_patch_update_key_missing, unknown_local, Result,
     },
     prelude::*,
     stry, EventContext, Value, NO_AGGRS, NO_CONSTS,
@@ -123,14 +123,11 @@ impl<'stack> LocalStack<'stack> {
     ///
     /// # Errors
     /// if the variable isn't known
-    pub fn get<O>(&self, idx: usize, outer: &O, mid: &NodeMeta) -> Result<&Option<Value<'stack>>>
+    pub fn get<O>(&self, idx: usize, o: &O, m: &NodeMeta) -> Result<&Option<Value<'stack>>>
     where
         O: BaseExpr,
     {
-        self.values.get(idx).ok_or_else(|| {
-            let e = format!("Unknown local variable: `{}`", mid.name_dflt());
-            error_oops_err(outer, 0xdead_000f, &e)
-        })
+        self.values.get(idx).ok_or_else(|| unknown_local(o, m))
     }
 
     /// Fetches a local variable
@@ -140,16 +137,13 @@ impl<'stack> LocalStack<'stack> {
     pub fn get_mut<O>(
         &mut self,
         idx: usize,
-        outer: &O,
-        mid: &NodeMeta,
+        o: &O,
+        m: &NodeMeta,
     ) -> Result<&mut Option<Value<'stack>>>
     where
         O: BaseExpr,
     {
-        self.values.get_mut(idx).ok_or_else(|| {
-            let e = format!("Unknown local variable: `{}`", mid.name_dflt());
-            error_oops_err(outer, 0xdead_000f, &e)
-        })
+        self.values.get_mut(idx).ok_or_else(|| unknown_local(o, m))
     }
 }
 
@@ -267,13 +261,13 @@ where
     'event: 'run,
 {
     use BinOpKind::{
-        Add, BitAnd, BitOr, BitXor, Div, Gt, Gte, LBitShift, Lt, Lte, Mod, Mul, RBitShiftSigned,
+        Add, BitAnd, BitXor, Div, Gt, Gte, LBitShift, Lt, Lte, Mod, Mul, RBitShiftSigned,
         RBitShiftUnsigned, Sub,
     };
     if let (Some(l), Some(r)) = (lhs.as_u64(), rhs.as_u64()) {
         match op {
             BitAnd => Ok(Cow::Owned(Value::from(l & r))),
-            BitOr => Ok(Cow::Owned(Value::from(l | r))),
+            // BitOr => Ok(Cow::Owned(Value::from(l | r))),
             BitXor => Ok(Cow::Owned(Value::from(l ^ r))),
             Gt => Ok(static_bool!(l > r)),
             Gte => Ok(static_bool!(l >= r)),
@@ -296,16 +290,11 @@ where
             Div => Ok(Cow::Owned(Value::from((l as f64) / (r as f64)))),
             Mod => Ok(Cow::Owned(Value::from(l % r))),
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            RBitShiftSigned => match (l).checked_shr(r as u32) {
-                Some(n) => Ok(Cow::Owned(Value::from(n))),
-                None => error_invalid_bitshift(outer, inner),
-            },
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            RBitShiftUnsigned => match (l as u64).checked_shr(r as u32) {
-                #[allow(clippy::cast_possible_wrap)]
-                Some(n) => Ok(Cow::Owned(Value::from(n as i64))),
-                None => error_invalid_bitshift(outer, inner),
-            },
+            RBitShiftUnsigned | RBitShiftSigned => l.checked_shr(r as u32).map_or_else(
+                || error_invalid_bitshift(outer, inner),
+                |n| Ok(Cow::Owned(Value::from(n))),
+            ),
+
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
             LBitShift => match l.checked_shl(r as u32) {
                 Some(n) => Ok(Cow::Owned(Value::from(n))),
@@ -316,7 +305,7 @@ where
     } else if let (Some(l), Some(r)) = (lhs.as_i64(), rhs.as_i64()) {
         match op {
             BitAnd => Ok(Cow::Owned(Value::from(l & r))),
-            BitOr => Ok(Cow::Owned(Value::from(l | r))),
+            // BitOr => Ok(Cow::Owned(Value::from(l | r))),
             BitXor => Ok(Cow::Owned(Value::from(l ^ r))),
             Gt => Ok(static_bool!(l > r)),
             Gte => Ok(static_bool!(l >= r)),
@@ -328,21 +317,20 @@ where
             Div => Ok(Cow::Owned(Value::from((l as f64) / (r as f64)))),
             Mod => Ok(Cow::Owned(Value::from(l % r))),
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            RBitShiftSigned => match (l).checked_shr(r as u32) {
-                Some(n) => Ok(Cow::Owned(Value::from(n))),
-                None => error_invalid_bitshift(outer, inner),
-            },
+            RBitShiftSigned => l.checked_shr(r as u32).map_or_else(
+                || error_invalid_bitshift(outer, inner),
+                |n| Ok(Cow::Owned(Value::from(n))),
+            ),
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            RBitShiftUnsigned => match (l as u64).checked_shr(r as u32) {
-                #[allow(clippy::cast_possible_wrap)]
-                Some(n) => Ok(Cow::Owned(Value::from(n as i64))),
-                None => error_invalid_bitshift(outer, inner),
-            },
+            RBitShiftUnsigned => (l as u64).checked_shr(r as u32).map_or_else(
+                || error_invalid_bitshift(outer, inner),
+                |n| Ok(Cow::Owned(Value::from(n as i64))),
+            ),
             #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-            LBitShift => match l.checked_shl(r as u32) {
-                Some(n) => Ok(Cow::Owned(Value::from(n))),
-                None => error_invalid_bitshift(outer, inner),
-            },
+            LBitShift => l.checked_shl(r as u32).map_or_else(
+                || error_invalid_bitshift(outer, inner),
+                |n| Ok(Cow::Owned(Value::from(n))),
+            ),
             _ => error_invalid_binary(outer, inner, op, lhs, rhs),
         }
     } else if let (Some(l), Some(r)) = (lhs.cast_f64(), rhs.cast_f64()) {
@@ -376,7 +364,7 @@ where
 {
     // Lazy Heinz doesn't want to write that 10000 times
     // - snot badger - Darach
-    use BinOpKind::{Add, And, BitAnd, BitOr, BitXor, Eq, Gt, Gte, Lt, Lte, NotEq, Or, Xor};
+    use BinOpKind::{Add, And, BitAnd, BitXor, Eq, Gt, Gte, Lt, Lte, NotEq, Or, Xor};
     use StaticNode::Bool;
     use Value::{Bytes, Static, String};
     match (op, lhs, rhs) {
@@ -389,7 +377,8 @@ where
 
         // Bool
         (And | BitAnd, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l && *r)),
-        (Or | BitOr, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l || *r)),
+        // error_invalid_bitshift(outer, inner) missing as we don't have it implemented
+        (Or, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l || *r)),
         (Xor | BitXor, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l != *r)),
 
         // Binary
