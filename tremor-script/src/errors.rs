@@ -170,9 +170,9 @@ impl ErrorKind {
             ParseIntError, ParserError, PatchKeyExists, PipelineUnknownPort,
             QueryNodeDuplicateName, QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit,
             RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
-            UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
-            UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
-            UpdateKeyMissing, Utf8Error, ValueError,
+            UnexpectedEscapeCode, UnknownLocal, UnrecognizedToken, UnterminatedExtractor,
+            UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
+            UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error, ValueError,
         };
         match self {
             NoClauseHit(outer)
@@ -243,6 +243,7 @@ impl ErrorKind {
             | UnterminatedIdentLiteral(outer, inner, _)
             | UnterminatedInterpolation(outer, inner, _)
             | UnterminatedStringLiteral(outer, inner, _)
+            | UnknownLocal(outer, inner, _)
             | CyclicUse(outer, inner, _)
             | UpdateKeyMissing(outer, inner, _) => (Some(*outer), Some(*inner)),
             // Special cases
@@ -646,7 +647,10 @@ error_chain! {
         /*
          * Resolve / Assign path walking
          */
-
+        UnknownLocal(outer: Span, inner: Span, name: String) {
+            description("Unknown local variable")
+                display("Unknown local variable: `{}`", name)
+        }
         BadAccessInLocal(expr: Span, inner: Span, key: String, options: Vec<String>) {
             description("Trying to access a non existing local key")
                 display("Trying to access a non existing local key `{}`", key)
@@ -1225,6 +1229,15 @@ pub(crate) fn error_bad_key<'script, T, O: Ranged, I: Ranged>(
     options: Vec<String>,
 ) -> Result<T> {
     Err(error_bad_key_err(outer, inner, path, key, options))
+}
+
+pub(crate) fn unknown_local<'script, O: Ranged, I: BaseExpr>(outer: &O, inner: &I) -> Error {
+    ErrorKind::UnknownLocal(
+        outer.extent(),
+        inner.extent(),
+        inner.name_dflt().to_string(),
+    )
+    .into()
 }
 
 pub(crate) fn error_bad_key_err<'script, O: Ranged, I: Ranged>(
