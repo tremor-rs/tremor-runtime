@@ -11,6 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+#![cfg(not(tarpaulin_include))] // This is for benchmarking and testing
+
 use crate::connectors::prelude::*;
 use async_std::io::prelude::BufReadExt;
 use async_std::stream::StreamExt;

@@ -13,15 +13,12 @@
 // limitations under the License.
 
 /// benchmarking connector
-#[cfg(not(tarpaulin_include))] // This is for benchmarking and testing
 pub(crate) mod bench;
 /// connector for checking guaranteed delivery and circuit breaker logic
-#[cfg(not(tarpaulin_include))] // This is for benchmarking and testing
 pub(crate) mod cb;
 /// Crononome
 pub(crate) mod crononome;
 /// Discord connector
-#[cfg(not(tarpaulin_include))] // We need a life discord api for this
 pub(crate) mod discord;
 /// DNS
 pub(crate) mod dns;
