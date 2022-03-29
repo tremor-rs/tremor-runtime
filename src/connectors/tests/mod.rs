@@ -31,7 +31,7 @@ mod pause_resume;
 #[cfg(feature = "s3-integration")]
 mod s3;
 #[cfg(feature = "tcp-integration")]
-mod tcp_event_routing;
+mod tcp;
 #[cfg(feature = "socket-integration")]
 mod unix_socket;
 #[cfg(feature = "ws-integration")]

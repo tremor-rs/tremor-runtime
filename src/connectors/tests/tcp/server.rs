@@ -1,4 +1,4 @@
-// Copyright 2021, The Tremor Team
+// Copyright 2022, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,28 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::ConnectorHarness;
+use crate::connectors::tests::{free_port, ConnectorHarness};
 use crate::errors::Result;
-use async_std::{
-    io::WriteExt,
-    net::{TcpListener, TcpStream},
-    prelude::*,
-};
+use async_std::{io::WriteExt, net::TcpStream, prelude::*};
 use tremor_common::url::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
 use value_trait::Builder;
 
 #[async_std::test]
-async fn event_routing() -> Result<()> {
+async fn server_event_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
-    let free_port = {
-        let listener = TcpListener::bind("127.0.0.1:0").await?;
-        let port = listener.local_addr()?.port();
-        drop(listener);
-        port
-    };
+    let free_port = free_port::find_free_tcp_port().await?;
 
     let server_addr = format!("127.0.0.1:{}", free_port);
 
