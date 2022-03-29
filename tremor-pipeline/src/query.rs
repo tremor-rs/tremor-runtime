@@ -81,8 +81,8 @@ impl BaseExpr for OutputPort {
 
 fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
     InputPort {
-        id: common_cow(&port.0.id),
-        port: common_cow(&port.1.id),
+        id: common_cow(port.0.as_str()),
+        port: common_cow(port.1.as_str()),
         had_port: true,
         mid: Box::new(port.0.meta().clone()),
     }
@@ -90,8 +90,8 @@ fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
 
 fn resolve_output_port(port: &(Ident, Ident)) -> OutputPort {
     OutputPort {
-        id: common_cow(&port.0.id),
-        port: common_cow(&port.1.id),
+        id: common_cow(port.0.as_str()),
+        port: common_cow(port.1.as_str()),
         had_port: true,
         mid: Box::new(port.0.meta().clone()),
     }
