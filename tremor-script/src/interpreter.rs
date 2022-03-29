@@ -1283,6 +1283,7 @@ where
 /// %[ _ ] ~= [1] = true
 /// %[ _ ] ~= [x, y, z] = true
 #[inline]
+// TODO this is a bit of a mess, we should probably think about array patterns
 fn match_ap_expr<'event, Expr>(
     outer: &Expr,
     opts: ExecOpts,
