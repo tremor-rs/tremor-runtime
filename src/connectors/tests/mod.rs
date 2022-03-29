@@ -340,7 +340,7 @@ impl TestPipeline {
         feature = "kafka-integration",
         feature = "es-integration",
         feature = "s3-integration",
-        feature = "tcp-integration"
+        feature = "tcp-integration",
     ))]
     pub(crate) async fn get_contraflow(&self) -> Result<Event> {
         match self.rx_cf.recv().timeout(Duration::from_secs(20)).await?? {
