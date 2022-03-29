@@ -13,7 +13,7 @@ flow
     create script runtime;
 
     select event from in where event != "exit" into runtime;
-    select event from in where event == "exit" into out/exit;
+    select event from in where event == "exit" into exit;
     select event from runtime into out;
   end;
 

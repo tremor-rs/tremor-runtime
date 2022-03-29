@@ -120,6 +120,7 @@ flow
     end;
 
     define pipeline consume
+    into out, exit, err
     pipeline
         define script clean_kafka_meta
         script
@@ -131,8 +132,8 @@ flow
         create script clean_kafka_meta;
 
         select event from in into clean_kafka_meta;
-        select {"event": event, "meta": $} from clean_kafka_meta where event != "exit" into out/out;
-        select event from clean_kafka_meta where event == "exit" into out/exit;
+        select {"event": event, "meta": $} from clean_kafka_meta where event != "exit" into out;
+        select event from clean_kafka_meta where event == "exit" into exit;
         select event from clean_kafka_meta/err into err;
     end;
     

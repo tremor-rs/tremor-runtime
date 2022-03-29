@@ -30,7 +30,7 @@ pipeline
     select event from in into process;
 
     select event from process into diverge;
-    select event from process/err into out/err;
+    select event from process/err into err;
 
     select event from diverge/batch into batch;
     select event from batch into out;
@@ -51,7 +51,7 @@ pipeline
             end
     } from in where !helpers::is_put_exit(event, $) into out;
 
-    select event from in where helpers::is_put_exit(event, $) into out/exit;
+    select event from in where helpers::is_put_exit(event, $) into exit;
 end;
 
 define pipeline err
