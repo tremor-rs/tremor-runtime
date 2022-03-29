@@ -267,7 +267,7 @@ pub(crate) trait Context: Display + Clone {
         M: Display + ?Sized,
     {
         if let Err(e) = expr {
-            error!("{} {}: {}", self, msg, e);
+            error!("{self} {msg}: {e}");
         }
     }
 

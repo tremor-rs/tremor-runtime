@@ -169,6 +169,7 @@ pub(crate) trait Source: Send {
     }
 
     /// Pulls custom metrics from the source
+    #[cfg(not(tarpaulin_include))] // trait placeholder function
     fn metrics(&mut self, _timestamp: u64, _ctx: &SourceContext) -> Vec<EventPayload> {
         vec![]
     }
@@ -212,6 +213,7 @@ pub(crate) trait Source: Send {
     /// Expected reaction is to pause receiving messages, which is handled automatically by the runtime
     /// Source implementations might want to close connections or signal a pause to the upstream entity it connects to if not done in the connector (the default)
     // TODO: add info of Cb event origin (port, origin_uri)?
+    #[cfg(not(tarpaulin_include))] // trait placeholder function
     async fn on_cb_close(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
@@ -230,12 +232,14 @@ pub(crate) trait Source: Send {
     }
     /// an event has failed along its way and can be considered failed
     /// multiple fails for the same set of ids are always possible
+    #[cfg(not(tarpaulin_include))] // trait placeholder function
     async fn fail(&mut self, _stream_id: u64, _pull_id: u64, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
 
     // connectivity stuff
     /// called when connector lost connectivity
+    #[cfg(not(tarpaulin_include))] // trait placeholder function
     async fn on_connection_lost(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
@@ -262,6 +266,7 @@ pub(crate) trait StreamReader: Send {
     async fn read(&mut self, stream: u64) -> Result<SourceReply>;
 
     /// called when the reader is finished or encountered an error
+    #[cfg(not(tarpaulin_include))] // trait placeholder function
     async fn on_done(&mut self, _stream: u64) -> StreamDone {
         StreamDone::StreamClosed
     }
@@ -509,7 +514,7 @@ struct StreamState {
 }
 
 /// possible states of a source implementation
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 enum SourceState {
     Initialized,
     Running,
@@ -517,6 +522,13 @@ enum SourceState {
     Draining,
     Drained,
     Stopped,
+}
+
+#[cfg(not(tarpaulin_include))]
+impl Display for SourceState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
 }
 
 /// entity driving the source task
@@ -613,95 +625,78 @@ where
     /// Handle a control plane message
     async fn handle_control_plane_msg(&mut self, msg: SourceMsg) -> Result<Control> {
         use SourceState::{Initialized, Paused, Running, Stopped};
-
+        let state = self.state;
         match msg {
             SourceMsg::Link { port, pipelines } => self.handle_link(port, pipelines).await,
             SourceMsg::Start if self.state == Initialized => {
-                info!("{} Starting...", &self.ctx);
+                info!("{} Starting...", self.ctx);
                 self.state = Running;
                 self.ctx
                     .log_err(self.source.on_start(&self.ctx).await, "on_start failed");
 
                 if let Err(e) = self.send_signal(Event::signal_start(self.ctx.uid)).await {
-                    error!("{} Error sending start signal: {e}", &self.ctx);
+                    error!("{} Error sending start signal: {e}", self.ctx);
                 }
                 Ok(Control::Continue)
             }
             SourceMsg::Start => {
-                info!(
-                    "{} Ignoring Start msg in {:?} state",
-                    &self.ctx, &self.state
-                );
+                info!("{} Ignoring Start msg in {state} state", self.ctx);
                 Ok(Control::Continue)
             }
             SourceMsg::Connect(sender, attempt) => {
-                info!("{} Connecting...", &self.ctx);
+                info!("{} Connecting...", self.ctx);
                 let connect_result = self.source.connect(&self.ctx, &attempt).await;
                 self.connectivity = match &connect_result {
                     Ok(true) => {
-                        info!("{} Connected.", &self.ctx);
+                        info!("{} Connected.", self.ctx);
                         Connectivity::Connected
                     }
                     Ok(false) | Err(_) => Connectivity::Disconnected,
                 };
-                self.ctx.log_err(
-                    sender.send(connect_result).await,
-                    "Error sending source connect result",
-                );
+                let res = sender.send(connect_result).await;
+                self.ctx.log_err(res, "Error sending source connect result");
                 Ok(Control::Continue)
             }
             SourceMsg::Resume if self.state == Paused => {
                 self.state = Running;
-                self.ctx
-                    .log_err(self.source.on_resume(&self.ctx).await, "on_resume failed");
+                let res = self.source.on_resume(&self.ctx).await;
+                self.ctx.log_err(res, "on_resume failed");
                 Ok(Control::Continue)
             }
             SourceMsg::Resume => {
-                info!(
-                    "{} Ignoring Resume msg in {:?} state",
-                    &self.ctx, &self.state
-                );
+                info!("{} Ignoring Resume msg in {state} state", self.ctx);
                 Ok(Control::Continue)
             }
             SourceMsg::Pause if self.state == Running => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
-                info!("{} Paused.", &self.ctx);
+                info!("{} Paused.", self.ctx);
                 self.state = Paused;
-                self.ctx
-                    .log_err(self.source.on_pause(&self.ctx).await, "on_pause failed");
+                let res = self.source.on_pause(&self.ctx).await;
+                self.ctx.log_err(res, "on_pause failed");
                 Ok(Control::Continue)
             }
             SourceMsg::Pause => {
-                info!(
-                    "{} Ignoring Pause msg in {:?} state",
-                    &self.ctx, &self.state
-                );
+                info!("{} Ignoring Pause msg in {state} state", self.ctx);
                 Ok(Control::Continue)
             }
             SourceMsg::Stop(sender) => {
-                info!("{} Stopping...", &self.ctx);
+                info!("{} Stopping...", self.ctx);
                 self.state = Stopped;
-                self.ctx.log_err(
-                    sender.send(self.source.on_stop(&self.ctx).await).await,
-                    "Error sending Stop reply",
-                );
+                let res = sender.send(self.source.on_stop(&self.ctx).await).await;
+                self.ctx.log_err(res, "Error sending Stop reply");
                 Ok(Control::Terminate)
             }
             SourceMsg::Drain(drained_sender) => self.handle_drain(drained_sender).await,
             SourceMsg::ConnectionLost => {
                 self.connectivity = Connectivity::Disconnected;
-                self.ctx.log_err(
-                    self.source.on_connection_lost(&self.ctx).await,
-                    "on_connection_lost failed",
-                );
+                let res = self.source.on_connection_lost(&self.ctx).await;
+                self.ctx.log_err(res, "on_connection_lost failed");
                 Ok(Control::Continue)
             }
             SourceMsg::ConnectionEstablished => {
                 self.connectivity = Connectivity::Connected;
-                self.ctx.log_err(
-                    self.source.on_connection_established(&self.ctx).await,
-                    "on_connection_established failed",
-                );
+                let res = self.source.on_connection_established(&self.ctx).await;
+                self.ctx.log_err(res, "on_connection_established failed");
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(cb, id) => self.handle_cb(cb, id).await,
@@ -709,26 +704,23 @@ where
     }
 
     async fn handle_drain(&mut self, drained_sender: Sender<Msg>) -> Result<Control> {
+        let ctx = &self.ctx;
+        let state = self.state;
         match self.state {
-            SourceState::Drained => self.ctx.log_err(
+            SourceState::Drained => ctx.log_err(
                 drained_sender.send(Msg::SourceDrained).await,
                 "Error sending SourceDrained message",
             ),
             SourceState::Draining => {
-                info!(
-                    "{} Ignoring incoming Drain message in {:?} state",
-                    &self.ctx, &self.state
-                );
+                info!("{ctx} Ignoring incoming Drain message in {state} state",);
             }
             _ => {
                 // if we are not connected to any pipeline, we cannot take part in the draining protocol like this
                 // we are drained
-                info!("{} Draining...", &self.ctx);
+                info!("{ctx} Draining...");
                 if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
-                    self.ctx.log_err(
-                        drained_sender.send(Msg::SourceDrained).await,
-                        "sending SourceDrained message failed",
-                    );
+                    let res = drained_sender.send(Msg::SourceDrained).await;
+                    ctx.log_err(res, "sending SourceDrained message failed");
                     self.state = SourceState::Drained;
                 } else {
                     self.connector_channel = Some(drained_sender);
@@ -748,38 +740,32 @@ where
     }
 
     async fn handle_cb(&mut self, cb: CbAction, id: EventId) -> Result<Control> {
+        let ctx = &self.ctx;
         match cb {
             CbAction::Fail => {
                 if let Some((stream_id, id)) = id.get_min_by_source(self.ctx.uid) {
-                    self.ctx.log_err(
-                        self.source.fail(stream_id, id, &self.ctx).await,
-                        "fail failed",
-                    );
+                    ctx.log_err(self.source.fail(stream_id, id, ctx).await, "fail failed");
                 }
                 Ok(Control::Continue)
             }
             CbAction::Ack => {
                 if let Some((stream_id, id)) = id.get_max_by_source(self.ctx.uid) {
-                    self.ctx.log_err(
-                        self.source.ack(stream_id, id, &self.ctx).await,
-                        "ack failed",
-                    );
+                    ctx.log_err(self.source.ack(stream_id, id, ctx).await, "ack failed");
                 }
                 Ok(Control::Continue)
             }
             CbAction::Close => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
-                info!("{} Circuit Breaker: Close.", self.ctx);
-                let res = self.source.on_cb_close(&self.ctx).await;
-                self.ctx.log_err(res, "on_cb_close failed");
+                info!("{ctx} Circuit Breaker: Close.");
+                let res = self.source.on_cb_close(ctx).await;
+                ctx.log_err(res, "on_cb_close failed");
                 self.state = SourceState::Paused;
                 Ok(Control::Continue)
             }
             CbAction::Open => {
-                info!("{} Circuit Breaker: Open.", &self.ctx);
+                info!("{ctx} Circuit Breaker: Open.");
                 self.cb_open_received = true;
-                self.ctx
-                    .log_err(self.source.on_cb_open(&self.ctx).await, "on_cb_open failed");
+                ctx.log_err(self.source.on_cb_open(ctx).await, "on_cb_open failed");
                 // avoid a race condition where the necessary start routine wasnt executed
                 // because a `CbAction::Open` was there first, and thus the `Start` msg was ignored
                 if self.state != SourceState::Initialized {
@@ -788,22 +774,18 @@ where
                 Ok(Control::Continue)
             }
             CbAction::Drained(uid) => {
-                debug!("{} Drained contraflow message for {}", &self.ctx, uid);
+                debug!("{ctx} Drained contraflow message for {uid}");
                 // only account for Drained CF which we caused
                 // as CF is sent back the DAG to all destinations
                 if uid == self.ctx.uid {
                     self.expected_drained = self.expected_drained.saturating_sub(1);
-                    debug!("{} Drained message is for us!", &self.ctx);
+                    debug!("{ctx} Drained message is for us!");
                     if self.expected_drained == 0 {
                         // we received 1 drain CB event per connected pipeline (hopefully)
                         if let Some(connector_channel) = self.connector_channel.as_ref() {
-                            debug!("{} Drain completed, sending data now!", &self.ctx);
-                            if connector_channel.send(Msg::SourceDrained).await.is_err() {
-                                error!(
-                                    "{} Error sending SourceDrained message to Connector",
-                                    &self.ctx
-                                );
-                            }
+                            debug!("{ctx} Drain completed, sending data now!");
+                            let res = connector_channel.send(Msg::SourceDrained).await;
+                            ctx.log_err(res, "Error sending SourceDrained message to Connector");
                         }
                     }
                 }
@@ -855,6 +837,7 @@ where
     async fn route_events(&mut self, events: Vec<(Cow<'static, str>, Event)>) -> bool {
         let mut send_error = false;
 
+        let ctx = &self.ctx;
         for (port, event) in events {
             let pipelines = if port.eq_ignore_ascii_case(OUT.as_ref()) {
                 self.metrics_reporter.increment_out();
@@ -863,17 +846,14 @@ where
                 self.metrics_reporter.increment_err();
                 &mut self.pipelines_err
             } else {
-                error!(
-                    "{} Trying to send event to invalid port: {}",
-                    &self.ctx, &port
-                );
+                error!("{ctx} Trying to send event to invalid port: {port}");
                 continue;
             };
 
             // flush metrics reporter or similar
             if let Some(t) = self.metrics_reporter.periodic_flush(event.ingest_ns) {
                 self.metrics_reporter
-                    .send_source_metrics(self.source.metrics(t, &self.ctx));
+                    .send_source_metrics(self.source.metrics(t, ctx));
             }
 
             if let Some((last, pipelines)) = pipelines.split_last_mut() {
@@ -886,8 +866,8 @@ where
                         .await
                     {
                         error!(
-                            "{} Failed to send event {} to pipeline {}: {}",
-                            &self.ctx, &event.id, &pipe_url, e
+                            "{ctx} Failed to send event {} to pipeline {pipe_url}: {e}",
+                            event.id,
                         );
                         send_error = true;
                     }
@@ -901,23 +881,17 @@ where
                     }))
                     .await
                 {
-                    error!(
-                        "{} Failed to send event to pipeline {}: {}",
-                        self.ctx, &last.0, e
-                    );
+                    error!("{ctx} Failed to send event to pipeline {}: {e}", &last.0);
                     send_error = true;
                 }
-            } else {
+            } else if event.transactional {
                 // NO PIPELINES TO SEND THE EVENT TO
                 // handle with ack if event is transactional
-                if event.transactional {
-                    log_error!(
-                        self.source
-                            .ack(event.id.stream_id(), event.id.pull_id(), &self.ctx)
-                            .await,
-                        "Failed to ack:{e}"
-                    );
-                }
+                let res = self
+                    .source
+                    .ack(event.id.stream_id(), event.id.pull_id(), ctx)
+                    .await;
+                log_error!(res, "Failed to ack:{e}");
             }
         }
         send_error
