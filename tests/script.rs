@@ -127,7 +127,7 @@ test_cases!(
     record_comprehension_imut,
     record_comprehension,
     record,
-    recordpattern_eq,
+    recordpattern,
     regex,
     simple_match,
     state_null,
