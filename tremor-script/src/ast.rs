@@ -103,6 +103,7 @@ pub struct NodeMeta {
     name: Option<String>,
 }
 
+#[cfg(not(tarpaulin_include))]
 impl std::fmt::Debug for NodeMeta {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(name) = &self.name {
@@ -166,12 +167,6 @@ impl NodeMeta {
     }
     pub(crate) fn aid(&self) -> arena::Index {
         self.range.aid()
-    }
-}
-
-impl From<Span> for NodeMeta {
-    fn from(range: Span) -> Self {
-        Self { range, name: None }
     }
 }
 
@@ -317,9 +312,7 @@ impl<'script> Script<'script> {
 
         let env = Env {
             context,
-            consts: NO_CONSTS.run(),
-            aggrs: &NO_AGGRS,
-            recursion_limit: crate::recursion_limit(),
+            ..Env::default()
         };
 
         self.exprs.last().map_or(Ok(Return::Drop), |expr| {
@@ -360,9 +353,7 @@ impl<'script> Script<'script> {
 
         let env = Env {
             context,
-            consts: NO_CONSTS.run(),
-            aggrs: &NO_AGGRS,
-            recursion_limit: crate::recursion_limit(),
+            ..Env::default()
         };
 
         while let Some(expr) = exprs.next() {

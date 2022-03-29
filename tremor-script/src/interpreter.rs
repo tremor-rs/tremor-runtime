@@ -41,6 +41,7 @@ use crate::{
         InvokeAggrFn, NodeMeta, Patch, PatchOperation, Path, Pattern, PredicatePattern,
         RecordPattern, ReservedPath, RunConsts, Segment, TuplePattern, UnaryOpKind,
     },
+    ctx::NO_CONTEXT,
     errors::{
         err_need_obj, error_array_out_of_bound, error_bad_array_index, error_bad_key,
         error_bad_key_err, error_decreasing_range, error_guard_not_bool, error_invalid_binary,
@@ -91,6 +92,16 @@ where
     pub aggrs: &'run [InvokeAggrFn<'event>],
     /// Maximal recursion depth in custom functions
     pub recursion_limit: u32,
+}
+impl Default for Env<'static, 'static> {
+    fn default() -> Self {
+        Self {
+            context: &NO_CONTEXT,
+            consts: NO_CONSTS.run(),
+            aggrs: &NO_AGGRS,
+            recursion_limit: crate::recursion_limit(),
+        }
+    }
 }
 
 /// Local variable stack

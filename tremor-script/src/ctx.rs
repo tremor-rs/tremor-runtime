@@ -115,11 +115,19 @@ impl default::Default for EventOriginUri {
     }
 }
 
+pub(crate) const NO_CONTEXT: EventContext<'static> = EventContext {
+    at: 0,
+    origin_uri: None,
+    panic_on_assert: false,
+    cardinality: 0,
+};
+
 // TODO check if we need all of these derives here still
 
 /// Context in that an event is executed
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize)]
 pub struct EventContext<'run> {
+    /// The ingest_ns
     at: u64,
     /// URI of the origin
     pub origin_uri: Option<&'run EventOriginUri>,
