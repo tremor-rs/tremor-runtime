@@ -93,7 +93,7 @@ lalrpop-doc: lalrpop-docgen
           --out-dir docs/language \
           tremor-script/src/grammar.lalrpop
 	if test -f docs/language/grammar.md; then  mv docs/language/grammar.md docs/language/EBNF.md; fi
-	if test -f docs/language/use.md; then mv docs/language/Use.md docs/language/module_system.md; fi
+	if test -f docs/language/use.md; then mv docs/language/use.md docs/language/module_system.md; fi
 
 lint-lalrpop-doc: lalrpop-docgen
 	-mkdir docs/language
@@ -107,7 +107,7 @@ lint-lalrpop-doc: lalrpop-docgen
           --out-dir docs/language \
           tremor-script/src/grammar.lalrpop
 	if test -f docs/language/grammar.md; then  mv docs/language/grammar.md docs/language/EBNF.md; fi
-	if test -f docs/language/Use.md; then mv docs/language/Use.md docs/language/module_system.md; fi
+	if test -f docs/language/use.md; then mv docs/language/use.md docs/language/module_system.md; fi
 
 chk_copyright:
 	@./.github/checks/copyright.sh
