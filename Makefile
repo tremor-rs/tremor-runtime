@@ -86,7 +86,8 @@ lalrpop-doc: lalrpop-docgen
 	-mkdir docs/language
 	cd lalrpop-docgen && cargo build --all
 	lalrpop-docgen/target/debug/lalrpop-docgen \
-          -mp static/language/prolog/ \
+	  -rp "./" \
+	  -mp static/language/prolog/ \
           -me static/language/epilog/ \
           -gc "Use,Deploy,Query,Script" \
           --out-dir docs/language \
@@ -99,7 +100,8 @@ lint-lalrpop-doc: lalrpop-docgen
 	cd lalrpop-docgen && cargo build --all
 	lalrpop-docgen/target/debug/lalrpop-docgen \
 	  --lint \
-          -mp static/language/prolog \
+	  -rp "./" \
+	  -mp static/language/prolog \
           -me static/language/epilog \
           -gc "Use,Deploy,Query,Script" \
           --out-dir docs/language \
