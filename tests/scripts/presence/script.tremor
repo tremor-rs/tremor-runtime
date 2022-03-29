@@ -26,7 +26,7 @@ let bad_idx = 42;
   "present-local-nested-not": present $data[ne],
   "present-local-arr": present event.arr[1],
   "present-local-arr2": present event.arr[good_idx],
-  "present-local-arr-range": present event.arr[1:2],
+  "present-local-arr-range": present event.arr[1:2][0:1][1],
   "present-local-arr-range-not": present event.arr[1:42],
   "present-local-arr-not": present event.arr[42],
   "present-local-arr-not2": present event.arr[bad_idx],
