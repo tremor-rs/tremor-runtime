@@ -133,6 +133,10 @@ pub trait BaseExpr: Clone {
     fn name(&self) -> Option<&str> {
         self.meta().name.as_deref()
     }
+    /// The name or an empty string
+    fn name_dflt(&self) -> &str {
+        self.name().unwrap_or_default()
+    }
 }
 
 impl BaseExpr for NodeMeta {

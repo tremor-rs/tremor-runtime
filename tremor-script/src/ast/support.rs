@@ -34,7 +34,7 @@ impl BinOpKind {
             Self::Or => "or",
             Self::Xor => "xor",
             Self::And => "and",
-            Self::BitOr => "|",
+            // not implemented Self::BitOr => "|",
             Self::BitXor => "^",
             Self::BitAnd => "&",
             Self::Eq => "==",
