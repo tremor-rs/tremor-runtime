@@ -6385,7 +6385,6 @@ dependencies = [
  "async-std",
  "beef",
  "rand 0.8.5",
- "serde",
  "url",
 ]
 
