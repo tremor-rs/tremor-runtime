@@ -32,7 +32,7 @@ use testcontainers::{
     images::generic::{GenericImage, Stream as WaitForStream, WaitFor},
     Docker, Image, RunArgs,
 };
-use tremor_common::url::ports::IN;
+use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, EventId};
 use tremor_value::literal;
 

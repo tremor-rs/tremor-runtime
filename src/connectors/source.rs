@@ -50,7 +50,7 @@ use crate::{
 };
 use async_std::channel::{Receiver, Sender};
 use beef::Cow;
-use tremor_common::url::ports::{ERR, OUT};
+use tremor_common::ports::{ERR, OUT};
 use tremor_pipeline::{
     CbAction, Event, EventId, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
 };
@@ -643,7 +643,7 @@ where
             SourceMsg::Connect(sender, attempt) => {
                 info!("{} Connecting...", self.ctx);
                 let connect_result = self.source.connect(&self.ctx, &attempt).await;
-                self.connectivity = if connect_result.unwrap_or_default() {
+                self.connectivity = if matches!(connect_result, Ok(true)) {
                     info!("{} Connected.", self.ctx);
                     Connectivity::Connected
                 } else {

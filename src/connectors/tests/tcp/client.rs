@@ -18,7 +18,7 @@ use crate::{
     connectors::tests::{free_port, tcp::EchoServer, ConnectorHarness},
     errors::Result,
 };
-use tremor_common::url::ports::IN;
+use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, Value};
 use value_trait::{Builder, ValueAccess};

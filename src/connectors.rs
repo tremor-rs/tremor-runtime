@@ -50,7 +50,7 @@ use futures::Future;
 use halfbrown::HashMap;
 use std::{fmt::Display, sync::atomic::Ordering, time::Duration};
 use tremor_common::ids::ConnectorIdGen;
-use tremor_common::url::ports::{ERR, IN, OUT};
+use tremor_common::ports::{ERR, IN, OUT};
 use tremor_pipeline::METRICS_CHANNEL;
 use tremor_script::ast::DeployEndpoint;
 use tremor_value::Value;

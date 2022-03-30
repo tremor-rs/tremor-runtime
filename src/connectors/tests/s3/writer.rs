@@ -24,7 +24,7 @@ use bytes::Buf;
 use rand::{distributions::Alphanumeric, Rng};
 use serial_test::serial;
 use testcontainers::{clients, images::generic::GenericImage};
-use tremor_common::url::ports::IN;
+use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value};
 use value_trait::{Builder, Mutable, ValueAccess};

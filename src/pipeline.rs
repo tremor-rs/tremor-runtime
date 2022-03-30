@@ -648,7 +648,7 @@ mod tests {
     use super::*;
     use crate::connectors::{prelude::SinkAddr, source::SourceAddr};
     use std::time::Instant;
-    use tremor_common::url::ports::{IN, OUT};
+    use tremor_common::ports::{IN, OUT};
     use tremor_pipeline::{EventId, OpMeta};
     use tremor_script::{aggr_registry, lexer::Location, NodeMeta, FN_REGISTRY};
     use tremor_value::Value;
