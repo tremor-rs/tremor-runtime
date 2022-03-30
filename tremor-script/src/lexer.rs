@@ -17,13 +17,13 @@
 
 #[cfg_attr(feature = "cargo-clippy", allow(clippy::all, clippy::unwrap_used))]
 use crate::parser::g::__ToTriple;
-use crate::pos;
 pub use crate::pos::*;
 use crate::Value;
 use crate::{
     arena,
     errors::{Error, Kind as ErrorKind, Result, ResultExt, UnfinishedToken},
 };
+use crate::{errors::unexpected_character, pos};
 use beef::Cow;
 use simd_json::Writable;
 use std::fmt;
@@ -888,6 +888,14 @@ impl<'input> Lexer<'input> {
         self.chars.chars.peek().map(|b| (loc, *b))
     }
 
+    fn must_lookahead(&mut self) -> Result<(Location, char)> {
+        self.lookahead().ok_or_else(|| {
+            Error::from(ErrorKind::UnexpectedEndOfStream(
+                self.chars.current().into(),
+            ))
+        })
+    }
+
     fn starts_with(&mut self, start: Location, s: &str) -> Option<(Location, &'input str)> {
         let mut end = start;
         for c in s.chars() {
@@ -933,7 +941,7 @@ impl<'input> Lexer<'input> {
         self.input.get(start_idx..).map(|f| {
             f.split('\n')
                 .take(take_lines)
-                .collect::<Vec<&'input str>>()
+                .collect::<Vec<_>>()
                 .join("\n")
         })
     }
@@ -1080,10 +1088,7 @@ impl<'input> Lexer<'input> {
 
     /// handle pattern begin
     fn pb(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        match self
-            .lookahead()
-            .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()))?
-        {
+        match self.must_lookahead()? {
             (end, '[') => {
                 self.bump();
                 Ok(spanned(start, end + '[', Token::LPatBracket))
@@ -1102,10 +1107,7 @@ impl<'input> Lexer<'input> {
 
     /// handle pattern end
     fn pe(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        match self
-            .lookahead()
-            .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()))?
-        {
+        match self.must_lookahead()? {
             (end, '=') => {
                 self.bump();
                 Ok(spanned(start, end + '=', Token::NotEq))
@@ -1116,10 +1118,7 @@ impl<'input> Lexer<'input> {
 
     /// handle tilde
     fn tl(&mut self, start: Location) -> Result<TokenSpan<'input>> {
-        match self
-            .lookahead()
-            .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()))?
-        {
+        match self.must_lookahead()? {
             (end, '=') => {
                 self.bump();
                 Ok(spanned(start, end + '=', Token::TildeEq))
@@ -1138,8 +1137,7 @@ impl<'input> Lexer<'input> {
 
     fn next_index(&mut self) -> Result<Location> {
         let (loc, _) = self
-            .chars
-            .next()
+            .bump()
             .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()))?;
         Ok(loc)
     }
@@ -1965,17 +1963,19 @@ impl<'input> Lexer<'input> {
         // ALLOW: this takes the whole string and can not panic
         match int {
             "0" => match self.lookahead() {
-                Some((_, ch)) if is_ident_start(ch) => Err(ErrorKind::UnexpectedCharacter(
-                    Span::new(start, end).expand_lines(2),
-                    Span::new(start, end),
-                    UnfinishedToken::new(
-                        Span::new(start, end),
-                        self.slice_until_eol(&start)
-                            .map_or_else(|| hex.to_string(), ToString::to_string),
-                    ),
-                    ch,
-                )
-                .into()),
+                Some((_, ch)) if is_ident_start(ch) => {
+                    let r = Span::new(start, end);
+                    Err(unexpected_character(
+                        &r.expand_lines(2),
+                        &r,
+                        UnfinishedToken::new(
+                            r,
+                            self.slice_until_eol(&start)
+                                .map_or_else(|| hex.to_string(), ToString::to_string),
+                        ),
+                        ch,
+                    ))
+                }
                 _ => {
                     if hex.is_empty() {
                         Err(ErrorKind::InvalidHexLiteral(

@@ -136,6 +136,7 @@ test_cases!(
     pp_cyclic,
     pp_nest_cyclic,
     // INSERT
+    tailing_gt,
     lexer_invalid_float_exp,
     invalid_escape_extractor,
     tailing_heredoc,
