@@ -67,4 +67,10 @@ macro_rules! test_cases {
     };
 }
 
-test_cases!(pipeline_identity, pipeline_args, pipeline_with,);
+test_cases!(
+    pipeline_identity,
+    pipeline_args,
+    pipeline_with,
+    // INSERT
+    chained_pielines,
+);
