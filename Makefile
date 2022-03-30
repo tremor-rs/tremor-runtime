@@ -109,6 +109,34 @@ lint-lalrpop-doc: lalrpop-docgen
 	if test -f docs/language/grammar.md; then  mv docs/language/grammar.md docs/language/EBNF.md; fi
 	if test -f docs/language/use.md; then mv docs/language/use.md docs/language/module_system.md; fi
 
+pdf-doc: lalrpop-doc
+	-mkdir docs/pdf
+	cd docs && \
+	pandoc --toc -f gfm  \
+	  --pdf-engine xelatex  \
+	  --variable mainfont="Helvetica" \
+	  --variable sansfont="Courier New" \
+	  --highlight-style=haddock  \
+	  language.md language/full.md language/EBNF.md \
+	  -o pdf/tremor-langauge-reference.pdf
+	cd docs/library && \
+	pandoc --toc -f gfm \
+	  --pdf-engine xelatex  \
+	  --variable mainfont="Helvetica" \
+	  --variable sansfont="Courier New" \
+	  --highlight-style=haddock  \
+	  overview.md \
+	  std.md std/*.md std/time/*.md std/integer/*.md \
+	  tremor.md tremor/*.md \
+          cncf.md cncf/otel.md \
+	  cncf/otel/span_id.md cncf/otel/trace_id.md \
+	  cncf/otel/logs.md cncf/otel/logs/*.md \
+	  cncf/otel/metrics.md cncf/otel/metrics/*.md \
+	  cncf/otel/trace.md cncf/otel/trace/status.md cncf/otel/trace/status/*.md cncf/otel/trace/spankind.md \
+	  overview.md aggr.md aggr/stats.md aggr/win.md \
+	  -o ../pdf/tremor-library-reference.pdf
+	  
+
 chk_copyright:
 	@./.github/checks/copyright.sh
 
