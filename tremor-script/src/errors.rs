@@ -1263,3 +1263,12 @@ pub(crate) fn error_bad_key_err<'script, O: Ranged, I: Ranged>(
         }
     }
 }
+
+pub(crate) fn unexpected_character<'script, O: Ranged, I: Ranged>(
+    outer: &O,
+    inner: &I,
+    tkn: UnfinishedToken,
+    ch: char,
+) -> Error {
+    ErrorKind::UnexpectedCharacter(outer.extent(), inner.extent(), tkn, ch).into()
+}
