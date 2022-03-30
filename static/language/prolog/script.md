@@ -9,3 +9,7 @@ A legal script is composed of:
 * A sequence of top level expressions. There must be at least one defined.
 * An optional end of stream token
 
+### Scrpting Language Entrypoint
+
+This is the top level of the tremor scripting language `tremor`
+
