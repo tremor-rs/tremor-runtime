@@ -931,18 +931,11 @@ impl<'script> Upable<'script> for RecurRaw<'script> {
                 ErrorKind::InvalidRecur(self.extent().expand_lines(2), self.extent()).into(),
             );
         };
-        if (helper.is_open && helper.fn_argc < self.exprs.len())
-            || (!helper.is_open && helper.fn_argc != self.exprs.len())
-        {
-            return error_generic(
-                &self,
-                &self,
-                &format!(
-                    "Wrong number of arguments expected {} but got {}",
-                    helper.fn_argc,
-                    self.exprs.len()
-                ),
-            );
+        let argc = helper.fn_argc;
+        let arglen = self.exprs.len();
+        if (helper.is_open && argc < arglen) || (!helper.is_open && argc != arglen) {
+            let m = format!("Wrong number of arguments {argc} != {arglen}");
+            return error_generic(&self, &self, &m);
         }
         let exprs = self.exprs.up(helper)?.into_iter().collect();
         helper.possible_leaf = was_leaf;
@@ -951,7 +944,6 @@ impl<'script> Upable<'script> for RecurRaw<'script> {
             mid: self.mid,
             argc: helper.fn_argc,
             open: helper.is_open,
-
             exprs,
         })
     }
@@ -1740,13 +1732,9 @@ impl<'script> Upable<'script> for SegmentElementRaw<'script> {
                     if let Some(idx) = other.as_usize() {
                         Ok(Segment::Idx { idx, mid })
                     } else {
-                        Err(ErrorKind::TypeConflict(
-                            r.expand_lines(2),
-                            r,
-                            other.value_type(),
-                            vec![ValueType::I64, ValueType::String],
-                        )
-                        .into())
+                        let exp = vec![ValueType::I64, ValueType::String];
+                        let o = r.expand_lines(2);
+                        Err(ErrorKind::TypeConflict(o, r, other.value_type(), exp).into())
                     }
                 }
             },
@@ -2030,15 +2018,15 @@ where
 impl_expr_exraw!(MatchRaw);
 
 // Sort clauses, move up cheaper clauses as long as they're exclusive
+#[allow(
+    // No clippy, we really mean j.exclusive(k) || k.exclusive(j)...
+    clippy::suspicious_operation_groupings,
+    // also what is wrong with you clippy ...
+    clippy::blocks_in_if_conditions
+)]
 fn sort_clauses<Ex: Expression>(patterns: &mut [PredicateClause<Ex>]) {
     for i in (0..patterns.len()).rev() {
         for j in (1..=i).rev() {
-            #[allow(
-                // No clippy, we really mean j.exclusive(k) || k.exclusive(j)...
-                clippy::suspicious_operation_groupings,
-                // also what is wrong with you clippy ...
-                clippy::blocks_in_if_conditions
-            )]
             if patterns
                 .get(j)
                 .and_then(|jv| Some((jv, patterns.get(j - 1)?)))
