@@ -941,7 +941,7 @@ async fn handle_replies(
         SinkAck::Ack => send_contraflow(ps, url, cf_builder.into_ack(duration)).await,
         SinkAck::Fail => send_contraflow(ps, url, cf_builder.into_fail()).await,
         SinkAck::None if send_auto_ack => {
-            send_contraflow(ps, url, cf_builder.into_ack(duration)).await
+            send_contraflow(ps, url, cf_builder.into_ack(duration)).await;
         }
         SinkAck::None => (),
     }
