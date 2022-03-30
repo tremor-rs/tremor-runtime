@@ -12,39 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Tremor common utility functions
-#![deny(missing_docs)]
-#![recursion_limit = "1024"]
-#![deny(
-    clippy::all,
-    clippy::unwrap_used,
-    clippy::unnecessary_unwrap,
-    clippy::pedantic
-)]
+use beef::Cow;
 
-/// functions for async related code
-pub mod asy;
-mod errors;
-/// File related functions
-pub mod file;
-/// Time related functions
-pub mod time;
+/// standard input port
+pub const IN: Cow<'static, str> = Cow::const_str("in");
 
-/// common id handling
-pub mod ids;
+/// standard output port
+pub const OUT: Cow<'static, str> = Cow::const_str("out");
 
-/// Random numbers
-pub mod rand;
+/// standard err port
+pub const ERR: Cow<'static, str> = Cow::const_str("err");
 
-/// Common ports
-pub mod ports;
-
-pub use errors::Error;
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
+/// standard metrics port
+pub const METRICS: Cow<'static, str> = Cow::const_str("metrics");

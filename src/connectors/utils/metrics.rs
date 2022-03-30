@@ -14,7 +14,7 @@
 
 use beef::Cow;
 use halfbrown::HashMap;
-use tremor_common::url::ports::{ERR, IN, OUT};
+use tremor_common::ports::{ERR, IN, OUT};
 use tremor_pipeline::metrics::{value, value_count};
 use tremor_pipeline::MetricsSender;
 use tremor_script::EventPayload;

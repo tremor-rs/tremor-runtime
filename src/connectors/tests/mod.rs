@@ -59,7 +59,7 @@ use std::{collections::HashMap, time::Instant};
 use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::{
     ids::ConnectorIdGen,
-    url::ports::{ERR, IN, OUT},
+    ports::{ERR, IN, OUT},
 };
 use tremor_pipeline::{CbAction, EventId};
 use tremor_script::{ast::DeployEndpoint, lexer::Location, NodeMeta, Value};

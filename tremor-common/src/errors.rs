@@ -13,8 +13,6 @@
 // limitations under the License.
 use std::fmt::Display;
 
-pub type Result<T> = std::result::Result<T, Error>;
-
 /// A shared error for common functions
 #[derive(Debug)]
 pub enum Error {
