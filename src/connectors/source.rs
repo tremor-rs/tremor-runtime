@@ -639,19 +639,15 @@ where
                 }
                 Ok(Control::Continue)
             }
-            SourceMsg::Start => {
-                info!("{} Ignoring Start msg in {state} state", self.ctx);
-                Ok(Control::Continue)
-            }
+
             SourceMsg::Connect(sender, attempt) => {
                 info!("{} Connecting...", self.ctx);
                 let connect_result = self.source.connect(&self.ctx, &attempt).await;
-                self.connectivity = match &connect_result {
-                    Ok(true) => {
-                        info!("{} Connected.", self.ctx);
-                        Connectivity::Connected
-                    }
-                    Ok(false) | Err(_) => Connectivity::Disconnected,
+                self.connectivity = if connect_result.unwrap_or_default() {
+                    info!("{} Connected.", self.ctx);
+                    Connectivity::Connected
+                } else {
+                    Connectivity::Disconnected
                 };
                 let res = sender.send(connect_result).await;
                 self.ctx.log_err(res, "Error sending source connect result");
@@ -663,20 +659,13 @@ where
                 self.ctx.log_err(res, "on_resume failed");
                 Ok(Control::Continue)
             }
-            SourceMsg::Resume => {
-                info!("{} Ignoring Resume msg in {state} state", self.ctx);
-                Ok(Control::Continue)
-            }
+
             SourceMsg::Pause if self.state == Running => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
                 info!("{} Paused.", self.ctx);
                 self.state = Paused;
                 let res = self.source.on_pause(&self.ctx).await;
                 self.ctx.log_err(res, "on_pause failed");
-                Ok(Control::Continue)
-            }
-            SourceMsg::Pause => {
-                info!("{} Ignoring Pause msg in {state} state", self.ctx);
                 Ok(Control::Continue)
             }
             SourceMsg::Stop(sender) => {
@@ -700,6 +689,10 @@ where
                 Ok(Control::Continue)
             }
             SourceMsg::Cb(cb, id) => self.handle_cb(cb, id).await,
+            m @ (SourceMsg::Start | SourceMsg::Resume | SourceMsg::Pause) => {
+                info!("{} Ignoring {m:?} msg in {state} state", self.ctx);
+                Ok(Control::Continue)
+            }
         }
     }
 
@@ -858,29 +851,22 @@ where
 
             if let Some((last, pipelines)) = pipelines.split_last_mut() {
                 for (pipe_url, addr) in pipelines {
-                    if let Err(e) = addr
-                        .send(Box::new(pipeline::Msg::Event {
-                            input: pipe_url.port().to_string().into(),
-                            event: event.clone(),
-                        }))
-                        .await
-                    {
+                    let input = pipe_url.port().to_string().into();
+                    let msg = Box::new(pipeline::Msg::Event {
+                        input,
+                        event: event.clone(),
+                    });
+                    if let Err(e) = addr.send(msg).await {
                         error!(
-                            "{ctx} Failed to send event {} to pipeline {pipe_url}: {e}",
+                            "{ctx} Failed to send {} to pipeline {pipe_url}: {e}",
                             event.id,
                         );
                         send_error = true;
                     }
                 }
-
-                if let Err(e) = last
-                    .1
-                    .send(Box::new(pipeline::Msg::Event {
-                        input: last.0.port().to_string().into(),
-                        event,
-                    }))
-                    .await
-                {
+                let input = last.0.port().to_string().into();
+                let msg = Box::new(pipeline::Msg::Event { input, event });
+                if let Err(e) = last.1.send(msg).await {
                     error!("{ctx} Failed to send event to pipeline {}: {e}", &last.0);
                     send_error = true;
                 }
