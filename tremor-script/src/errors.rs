@@ -1231,7 +1231,7 @@ pub(crate) fn error_bad_key<'script, T, O: Ranged, I: Ranged>(
     Err(error_bad_key_err(outer, inner, path, key, options))
 }
 
-pub(crate) fn unknown_local<'script, O: Ranged, I: BaseExpr>(outer: &O, inner: &I) -> Error {
+pub(crate) fn unknown_local<O: Ranged, I: BaseExpr>(outer: &O, inner: &I) -> Error {
     ErrorKind::UnknownLocal(
         outer.extent(),
         inner.extent(),
@@ -1264,7 +1264,7 @@ pub(crate) fn error_bad_key_err<'script, O: Ranged, I: Ranged>(
     }
 }
 
-pub(crate) fn unexpected_character<'script, O: Ranged, I: Ranged>(
+pub(crate) fn unexpected_character<O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     tkn: UnfinishedToken,

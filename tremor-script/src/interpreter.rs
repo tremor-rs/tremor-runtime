@@ -321,7 +321,11 @@ where
                 || error_invalid_bitshift(outer, inner),
                 |n| Ok(Cow::Owned(Value::from(n))),
             ),
-            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            #[allow(
+                clippy::cast_possible_truncation,
+                clippy::cast_sign_loss,
+                clippy::cast_possible_wrap
+            )]
             RBitShiftUnsigned => (l as u64).checked_shr(r as u32).map_or_else(
                 || error_invalid_bitshift(outer, inner),
                 |n| Ok(Cow::Owned(Value::from(n as i64))),
