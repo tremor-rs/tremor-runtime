@@ -1,0 +1,9 @@
+define script route
+script
+  emit => "not_out"
+end;
+
+create script route;
+
+select event from in into route;
+select event from route/not_out into out;

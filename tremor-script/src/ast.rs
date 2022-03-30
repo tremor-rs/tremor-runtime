@@ -283,7 +283,6 @@ pub struct Script<'script> {
 impl_expr!(Script);
 
 impl<'script> Script<'script> {
-    const NOT_IMUT: &'static str = "Not an imutable expression";
     /// Runs the script and evaluates to a resulting event.
     /// This expects the script to be imutable!
     ///
@@ -313,16 +312,12 @@ impl<'script> Script<'script> {
         };
 
         self.exprs.last().map_or(Ok(Return::Drop), |expr| {
-            if let Expr::Imut(imut) = expr {
-                let v = stry!(imut.run(opts.with_result(), &env, event, state, meta, &local));
-                Ok(Return::Emit {
-                    value: v.into_owned(),
-                    port: None,
-                })
-            } else {
-                let e = expr.extent();
-                error_generic(&e.expand_lines(2), expr, &Self::NOT_IMUT)
-            }
+            let imut = expr.as_imut()?;
+            let v = stry!(imut.run(opts.with_result(), &env, event, state, meta, &local));
+            Ok(Return::Emit {
+                value: v.into_owned(),
+                port: None,
+            })
         })
     }
     /// Runs the script and evaluates to a resulting event
@@ -445,12 +440,7 @@ impl<'script> Record<'script> {
     pub fn cloned_field_expr(&self, name: &str) -> Option<ImutExpr> {
         self.base
             .get(name)
-            .map(|base_value| {
-                ImutExpr::Literal(Literal {
-                    mid: self.mid.clone(),
-                    value: base_value.clone(),
-                })
-            })
+            .map(|base_value| ImutExpr::literal(self.mid.clone(), base_value.clone()))
             .or_else(|| {
                 self.fields.iter().find_map(|f| {
                     f.name.as_str().and_then(|n| {
@@ -496,7 +486,7 @@ pub struct Literal<'script> {
 
 impl<'script> Literal<'script> {
     pub(crate) fn boxed_expr(mid: Box<NodeMeta>, value: Value<'script>) -> Box<ImutExpr<'script>> {
-        Box::new(ImutExpr::Literal(Literal { mid, value }))
+        Box::new(ImutExpr::literal(mid, value))
     }
 
     pub(crate) fn null(mid: Box<NodeMeta>) -> Self {
@@ -569,6 +559,8 @@ pub enum Expr<'script> {
 }
 
 impl<'script> Expr<'script> {
+    const NOT_IMUT: &'static str = "Not an imutable expression";
+
     /// Tries to borrow the Expor as an `Invoke`
     #[must_use]
     pub fn as_invoke(&self) -> Option<&Invoke<'script>> {
@@ -580,6 +572,15 @@ impl<'script> Expr<'script> {
                 | ImutExpr::Invoke3(i),
             ) => Some(i),
             _ => None,
+        }
+    }
+
+    fn as_imut(&self) -> Result<&ImutExpr<'script>> {
+        if let Expr::Imut(imut) = self {
+            Ok(imut)
+        } else {
+            let e = self.extent();
+            error_generic(&e.expand_lines(2), self, &Self::NOT_IMUT)
         }
     }
 }
@@ -684,6 +685,9 @@ pub enum ImutExpr<'script> {
 }
 
 impl<'script> ImutExpr<'script> {
+    pub(crate) fn literal(mid: Box<NodeMeta>, value: Value<'script>) -> Self {
+        ImutExpr::Literal(Literal { mid, value })
+    }
     /// Tries to borrow the `ImutExpr` as a `Record`
     #[must_use]
     pub fn as_record(&self) -> Option<&Record<'script>> {
