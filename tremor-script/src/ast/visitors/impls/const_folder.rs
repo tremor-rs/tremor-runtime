@@ -100,10 +100,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script
                 if used > 0 {
                     bytes.push(buf >> (8 - used));
                 }
-                ImutExpr::Literal(Literal {
-                    mid,
-                    value: Value::Bytes(bytes.into()),
-                })
+                ImutExpr::literal(mid, Value::Bytes(bytes.into()))
             }
             e @ ImutExpr::Bytes(_) => e,
 
@@ -170,10 +167,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script
                 let value = expr.try_into_value(self.helper)?;
                 let outer = e.extent();
                 let (value, segments) = reduce_path(outer, value, segments)?;
-                let lit = ImutExpr::Literal(Literal {
-                    mid: mid.clone(),
-                    value,
-                });
+                let lit = ImutExpr::literal(mid.clone(), value);
                 if segments.is_empty() {
                     lit
                 } else {
@@ -208,10 +202,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script
                     .invocable
                     .invoke(&env, &args2)
                     .map_err(|e| e.into_err(&ex, &ex, Some(self.helper.reg)))?;
-                ImutExpr::Literal(Literal {
-                    value: v,
-                    mid: i.mid,
-                })
+                ImutExpr::literal(i.mid, v)
             }
             e @ (ImutExpr::Path(_)
             | ImutExpr::String(_)

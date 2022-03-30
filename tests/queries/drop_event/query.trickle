@@ -1,0 +1,7 @@
+define script bye
+script
+  drop
+end;
+create script bye;
+select event from in into bye;
+select event from bye into out;

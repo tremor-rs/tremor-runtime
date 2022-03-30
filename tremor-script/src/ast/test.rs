@@ -19,10 +19,7 @@ use crate::{
 };
 
 fn v(s: &'static str) -> super::ImutExpr<'static> {
-    super::ImutExpr::Literal(super::Literal {
-        mid: NodeMeta::dummy(),
-        value: Value::from(s),
-    })
+    ImutExpr::literal(NodeMeta::dummy(), Value::from(s))
 }
 
 #[test]
@@ -103,4 +100,18 @@ fn as_invoke() {
     assert!(Expr::Imut(e).as_invoke().is_some());
     let e = ImutExpr::Invoke3(i.clone());
     assert!(Expr::Imut(e).as_invoke().is_some());
+}
+
+#[test]
+fn as_imut() {
+    let i = ImutExpr::List(List {
+        mid: NodeMeta::dummy(),
+        exprs: vec![],
+    });
+    assert!(Expr::Imut(i).as_imut().is_ok());
+    assert!(Expr::Drop {
+        mid: NodeMeta::dummy()
+    }
+    .as_imut()
+    .is_err());
 }
