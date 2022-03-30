@@ -110,7 +110,7 @@ impl<'script> ScriptRaw<'script> {
                         value: value.clone(),
                     };
                     helper.scope.insert_const(c)?;
-                    exprs.push(Expr::Imut(ImutExpr::Literal(Literal { mid, value })));
+                    exprs.push(Expr::Imut(ImutExpr::literal(mid, value)));
                     helper.add_const_doc(&name, comment, value_type);
                 }
                 TopLevelExprRaw::FnDefn(f) => {
@@ -1658,10 +1658,7 @@ impl<'script> Upable<'script> for PathRaw<'script> {
                         helper.get(&NodeId::from(&id))?.ok_or("invalid constant")?;
                     let mid = p.mid.box_with_name(&id);
                     Path::Expr(ExprPath {
-                        expr: Box::new(ImutExpr::Literal(Literal {
-                            mid: c.mid,
-                            value: c.value,
-                        })),
+                        expr: Box::new(ImutExpr::literal(c.mid, c.value)),
                         segments: p.segments.up(helper)?,
                         var: 0,
                         mid,

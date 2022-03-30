@@ -130,6 +130,8 @@ test_cases!(
     pp_alias_operator,
     pp_config_directive,
     // INSERT
+    route_emit,
+    drop_event,
     pipeline_group_by_size,
     pipeline_complex_args,
     pipeline_nested_script,
