@@ -64,13 +64,8 @@ pub struct Client {
 
 #[async_trait::async_trait()]
 impl Connector for Client {
-    async fn create_sink(
-        &mut self,
-        sink_context: SinkContext,
-        builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
-        let sink = UnixSocketClientSink::new(self.config.clone(), self.source_tx.clone());
-        builder.spawn(sink, sink_context).map(Some)
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Required
     }
 
     async fn create_source(
@@ -83,18 +78,23 @@ impl Connector for Client {
         builder.spawn(source, source_context).map(Some)
     }
 
-    fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Required
+    async fn create_sink(
+        &mut self,
+        sink_context: SinkContext,
+        builder: SinkManagerBuilder,
+    ) -> Result<Option<SinkAddr>> {
+        let sink = UnixSocketSink::new(self.config.clone(), self.source_tx.clone());
+        builder.spawn(sink, sink_context).map(Some)
     }
 }
 
-struct UnixSocketClientSink {
+struct UnixSocketSink {
     config: Config,
     source_runtime: ChannelSourceRuntime,
     stream: Option<UnixStream>,
 }
 
-impl UnixSocketClientSink {
+impl UnixSocketSink {
     fn new(config: Config, source_tx: Sender<SourceReply>) -> Self {
         let source_runtime = ChannelSourceRuntime::new(source_tx);
         Self {
@@ -127,7 +127,7 @@ impl UnixSocketClientSink {
 }
 
 #[async_trait::async_trait()]
-impl Sink for UnixSocketClientSink {
+impl Sink for UnixSocketSink {
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let path = PathBuf::from(&self.config.path);
         if !path.exists().await {
