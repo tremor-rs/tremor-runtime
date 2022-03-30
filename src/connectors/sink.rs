@@ -16,13 +16,13 @@
 
 /// Providing a `Sink` implementation for connectors handling multiple Streams
 pub(crate) mod channel_sink;
-
+/// Utility for limiting concurrency (by sending `CB::Close` messages when a maximum concurrency value is reached)
+pub(crate) mod concurrency_cap;
 /// Providing a `Sink` implementation for connectors handling only a single Stream
 pub(crate) mod single_stream_sink;
 
-/// Utility for limiting concurrency (by sending `CB::Close` messages when a maximum concurrency value is reached)
-pub(crate) mod concurrency_cap;
-
+pub(crate) use self::channel_sink::SinkMeta;
+use super::{utils::metrics::SinkReporter, CodecReq};
 use crate::codec::{self, Codec};
 use crate::config::{
     Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
@@ -40,18 +40,12 @@ use beef::Cow;
 pub(crate) use channel_sink::{ChannelSink, ChannelSinkRuntime};
 pub(crate) use single_stream_sink::{SingleStreamSink, SingleStreamSinkRuntime};
 use std::borrow::Borrow;
-use std::collections::btree_map::Entry;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{btree_map::Entry, BTreeMap, HashSet};
 use std::fmt::Display;
 use tremor_common::time::nanotime;
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::{ast::DeployEndpoint, EventPayload};
-
 use tremor_value::Value;
-
-pub(crate) use self::channel_sink::SinkMeta;
-
-use super::{utils::metrics::SinkReporter, CodecReq};
 
 /// Result for a sink function that may provide insights or response.
 ///
@@ -60,7 +54,7 @@ use super::{utils::metrics::SinkReporter, CodecReq};
 /// circuit breaker events, guaranteed delivery events, etc.
 ///
 /// A response is an event generated from the sink delivery.
-#[derive(Clone, Debug, Default, Copy)]
+#[derive(Clone, Debug, Default, Copy, PartialEq)]
 pub(crate) struct SinkReply {
     /// guaranteed delivery response - did we sent the event successfully `SinkAck::Ack` or did it fail `SinkAck::Fail`
     pub(crate) ack: SinkAck,
@@ -97,26 +91,18 @@ impl SinkReply {
 
     /// Decide according to the given flag if we return a ack or a none
     #[must_use]
-    pub(crate) fn ack_or_none(needs_fail: bool) -> Self {
-        if needs_fail {
+    pub(crate) fn ack_or_none(needs_ack: bool) -> Self {
+        if needs_ack {
             Self::ACK
         } else {
             Self::NONE
         }
     }
 }
-impl From<bool> for SinkReply {
-    fn from(ok: bool) -> Self {
-        SinkReply {
-            ack: SinkAck::from(ok),
-            ..SinkReply::default()
-        }
-    }
-}
 
 /// stuff a sink replies back upon an event or a signal
 /// to the calling sink/connector manager
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, PartialEq)]
 pub(crate) enum SinkAck {
     /// no reply - maybe no reply yet, maybe replies come asynchronously...
     None,
@@ -193,6 +179,7 @@ pub(crate) trait Sink: Send {
     /// }
     /// ```
     ///
+    #[cfg(not(tarpaulin_include))] // trait placeholder function
     async fn metrics(&mut self, _timestamp: u64, _ctx: &SinkContext) -> Vec<EventPayload> {
         vec![]
     }
@@ -245,6 +232,7 @@ pub(crate) trait Sink: Send {
 
     /// if true events are sent asynchronously, not necessarily when `on_event` returns.
     /// if false events can be considered delivered once `on_event` returns.
+    #[cfg(not(tarpaulin_include))] // trait placeholder function
     fn asynchronous(&self) -> bool {
         false
     }
@@ -258,6 +246,7 @@ pub(crate) trait StreamWriter: Send + Sync {
     /// handle the stream being done, by error or regular end of stream
     /// This controls the reaction of the runtime:
     /// Should the connector be considered disconnected now? Or is this just one stream amongst many?
+    #[cfg(not(tarpaulin_include))] // trait placeholder function
     async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
         Ok(StreamDone::StreamClosed)
     }
@@ -547,6 +536,13 @@ enum SinkState {
     Stopped,
 }
 
+#[cfg(not(tarpaulin_include))]
+impl std::fmt::Display for SinkState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+
 pub(crate) struct SinkManager<S>
 where
     S: Sink,
@@ -607,9 +603,12 @@ where
                 SinkMsgWrapper::ToSink(sink_msg) => {
                     match sink_msg {
                         SinkMsg::Link {
-                            port: _port,
                             mut pipelines,
+                            port,
                         } => {
+                            if port != "in" {
+                                error!("{} Trying to connect invalid port {port}", self.ctx);
+                            }
                             self.pipelines.append(&mut pipelines);
                         }
                         SinkMsg::Start if self.state == Initialized => {
@@ -617,12 +616,6 @@ where
                             self.ctx.log_err(
                                 self.sink.on_start(&self.ctx).await,
                                 "Error during on_start",
-                            );
-                        }
-                        SinkMsg::Start => {
-                            info!(
-                                "{} Ignoring Start message in {:?} state",
-                                &self.ctx, &self.state
                             );
                         }
                         SinkMsg::Connect(sender, attempt) => {
@@ -643,12 +636,6 @@ where
                                 "Error during on_resume",
                             );
                         }
-                        SinkMsg::Resume => {
-                            info!(
-                                "[Sink::{}] Ignoring Resume message in {:?} state",
-                                &self.ctx.alias, &self.state
-                            );
-                        }
                         SinkMsg::Pause if self.state == Running => {
                             self.state = Paused;
                             self.ctx.log_err(
@@ -656,14 +643,8 @@ where
                                 "Error during on_pause",
                             );
                         }
-                        SinkMsg::Pause => {
-                            info!(
-                                "[Sink::{}] Ignoring Pause message in {:?} state",
-                                &self.ctx.alias, &self.state
-                            );
-                        }
                         SinkMsg::Stop(sender) => {
-                            info!("[Sink::{}] Stopping...", &self.ctx.alias);
+                            info!("{} Stopping...", &self.ctx);
                             self.state = Stopped;
                             self.ctx.log_err(
                                 sender.send(self.sink.on_stop(&self.ctx).await).await,
@@ -674,45 +655,46 @@ where
                         }
                         SinkMsg::Drain(_sender) if self.state == Draining => {
                             info!(
-                                "[Sink::{}] Ignoring Drain message in {:?} state",
-                                &self.ctx.alias, &self.state
+                                "{} Ignoring Drain message in {} state",
+                                self.ctx, self.state
                             );
                         }
+
                         SinkMsg::Drain(sender) if self.state == Drained => {
                             debug!(
-                                "[Sink::{}] Received Drain msg while already being drained.",
-                                &self.ctx.alias
+                                "{} Received Drain msg while already being drained.",
+                                self.ctx
                             );
                             if sender.send(Msg::SinkDrained).await.is_err() {
-                                error!(
-                                    "[Sink::{}] Error sending SinkDrained message.",
-                                    &self.ctx.alias
-                                );
+                                error!("{} Error sending SinkDrained message.", self.ctx);
                             }
                         }
                         SinkMsg::Drain(sender) => {
                             // send message back if we already received Drain signal from all input pipelines
-                            debug!("[Sink::{}] Draining...", &self.ctx.alias);
+                            debug!("{} Draining...", self.ctx);
                             self.state = Draining;
                             self.drain_channel = Some(sender);
                             if self.drains_received.is_superset(&self.starts_received) {
                                 // we are all drained
-                                debug!("[Sink::{}] Drained.", &self.ctx.alias);
+                                debug!("{} Drained.", self.ctx);
                                 self.state = Drained;
                                 if let Some(sender) = self.drain_channel.take() {
                                     if sender.send(Msg::SinkDrained).await.is_err() {
-                                        error!(
-                                            "[Sink::{}] Error sending SinkDrained message",
-                                            &self.ctx.alias
-                                        );
+                                        error!("{} Error sending SinkDrained message", self.ctx);
                                     }
                                 }
                             } else {
-                                debug!("[Sink::{}] Not all drains received yet, waiting for drains from: {:?}", &self.ctx.alias, self.starts_received.difference(&self.drains_received).collect::<Vec<_>>());
+                                debug!(
+                                    "{} Not all drains received yet, waiting for drains from: {:?}",
+                                    self.ctx,
+                                    self.starts_received
+                                        .difference(&self.drains_received)
+                                        .collect::<Vec<_>>()
+                                );
                             }
                         }
                         SinkMsg::ConnectionEstablished => {
-                            debug!("[Sink::{}] Connection established", &self.ctx.alias);
+                            debug!("{} Connection established", self.ctx);
                             self.ctx.log_err(
                                 self.sink.on_connection_established(&self.ctx).await,
                                 "Error during on_connection_established",
@@ -785,22 +767,16 @@ where
                             // special treatment
                             match signal.kind {
                                 Some(SignalKind::Drain(source_uid)) => {
-                                    debug!(
-                                        "[Sink::{}] Drain signal received from {}",
-                                        &self.ctx.alias, source_uid
-                                    );
+                                    debug!("{} Drain signal received from {source_uid}", self.ctx);
                                     // account for all received drains per source
                                     self.drains_received.insert(source_uid);
                                     // check if all "reachable sources" did send a `Drain` signal
                                     if self.drains_received.is_superset(&self.starts_received) {
-                                        debug!("[Sink::{}] Sink Drained.", &self.ctx.alias);
+                                        debug!("{} Sink Drained.", self.ctx);
                                         self.state = Drained;
                                         if let Some(sender) = self.drain_channel.take() {
                                             if sender.send(Msg::SinkDrained).await.is_err() {
-                                                error!(
-                                                    "[Sink::{}] Error sending SinkDrained message",
-                                                    &self.ctx.alias
-                                                );
+                                                error!("{} Error sending SinkDrained", self.ctx);
                                             }
                                         }
                                     }
@@ -811,10 +787,7 @@ where
                                     send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
                                 }
                                 Some(SignalKind::Start(source_uid)) => {
-                                    debug!(
-                                        "[Sink::{}] Received Start signal from {}",
-                                        &self.ctx.alias, source_uid
-                                    );
+                                    debug!("{} Received Start signal from {source_uid}", self.ctx);
                                     self.starts_received.insert(source_uid);
                                 }
                                 _ => {} // ignore
@@ -841,12 +814,12 @@ where
                                 }
                                 Err(e) => {
                                     // logging here is ok, as this is mostly limited to ticks (every 100ms)
-                                    error!(
-                                        "[Connector::{}] Error handling signal: {}",
-                                        &self.ctx.alias, e
-                                    );
+                                    error!("{} Error handling signal: {e}", self.ctx);
                                 }
                             }
+                        }
+                        st @ (SinkMsg::Start | SinkMsg::Resume | SinkMsg::Pause) => {
+                            info!("{} Ignoring {st:?} message in {}", self.ctx, self.state);
                         }
                     }
                 }
@@ -956,23 +929,32 @@ async fn handle_replies(
     connector_url: &str,
     send_auto_ack: bool,
 ) {
+    let ps = pipelines;
+    let url = connector_url;
     if reply.cb != CbAction::None {
         // we do not maintain a merged op_meta here, to avoid the cost
         // the downside is, only operators which this event passed get to know this CB event
         // but worst case is, 1 or 2 more events are lost - totally worth it
-        send_contraflow(pipelines, connector_url, cf_builder.cb(reply.cb)).await;
+        send_contraflow(ps, url, cf_builder.cb(reply.cb)).await;
     }
     match reply.ack {
-        SinkAck::Ack => {
-            send_contraflow(pipelines, connector_url, cf_builder.into_ack(duration)).await;
+        SinkAck::Ack => send_contraflow(ps, url, cf_builder.into_ack(duration)).await,
+        SinkAck::Fail => send_contraflow(ps, url, cf_builder.into_fail()).await,
+        SinkAck::None if send_auto_ack => {
+            send_contraflow(ps, url, cf_builder.into_ack(duration)).await
         }
-        SinkAck::Fail => {
-            send_contraflow(pipelines, connector_url, cf_builder.into_fail()).await;
-        }
-        SinkAck::None => {
-            if send_auto_ack {
-                send_contraflow(pipelines, connector_url, cf_builder.into_ack(duration)).await;
-            }
-        }
+        SinkAck::None => (),
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn sink_reply_constructors() {
+        assert_eq!(SinkReply::fail_or_none(true), SinkReply::FAIL);
+        assert_eq!(SinkReply::fail_or_none(false), SinkReply::NONE);
+        assert_eq!(SinkReply::ack_or_none(true), SinkReply::ACK);
+        assert_eq!(SinkReply::ack_or_none(false), SinkReply::NONE);
     }
 }
