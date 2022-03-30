@@ -34,7 +34,7 @@ pub(crate) use crate::errors::{Error, Kind as ErrorKind, Result};
 pub(crate) use crate::utils::hostname;
 pub(crate) use crate::{Event, QSIZE};
 pub(crate) use std::sync::atomic::Ordering;
-pub(crate) use tremor_common::url::ports::{ERR, IN, OUT};
+pub(crate) use tremor_common::ports::{ERR, IN, OUT};
 pub use tremor_pipeline::{
     CbAction, ConfigImpl, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
 };

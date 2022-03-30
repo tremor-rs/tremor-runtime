@@ -15,7 +15,7 @@
 use crate::connectors::tests::{free_port, ConnectorHarness};
 use crate::errors::Result;
 use async_std::{io::WriteExt, net::TcpStream, prelude::*};
-use tremor_common::url::ports::IN;
+use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
 use value_trait::Builder;

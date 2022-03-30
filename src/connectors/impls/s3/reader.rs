@@ -234,19 +234,15 @@ async fn fetch_keys_task(
     debug!("Fetched {} keys of {}.", resp.key_count(), resp.max_keys());
 
     let mut stream = 0; // for the Channel Source
-    'outer: loop {
-        match resp.contents.take() {
-            None => {}
-            Some(entries) => {
-                for object_data in entries {
-                    sender
-                        .send(KeyPayload {
-                            object_data,
-                            stream,
-                        })
-                        .await?;
-                    stream += 1;
-                }
+    loop {
+        if let Some(entries) = resp.contents.take() {
+            for object_data in entries {
+                let p = KeyPayload {
+                    object_data,
+                    stream,
+                };
+                sender.send(p).await?;
+                stream += 1;
             }
         }
 
@@ -254,7 +250,7 @@ async fn fetch_keys_task(
             continuation_token = resp.next_continuation_token().map(ToString::to_string);
         } else {
             // No more pages to fetch.
-            break 'outer;
+            break;
         }
 
         resp = fetch_keys(continuation_token.take()).await?;

@@ -23,7 +23,7 @@ use log::error;
 use rustls::NoClientAuth;
 use tide;
 use tide_rustls::TlsListener;
-use tremor_common::url::ports::IN;
+use tremor_common::ports::IN;
 use tremor_pipeline::Event;
 use tremor_pipeline::EventId;
 use tremor_script::{literal, Value, ValueAndMeta};

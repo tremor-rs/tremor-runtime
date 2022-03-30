@@ -16,7 +16,7 @@ use super::ConnectorHarness;
 use crate::errors::Result;
 use async_std::os::unix::net::UnixStream;
 use async_std::prelude::*;
-use tremor_common::url::ports::IN;
+use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
 use value_trait::Builder;
