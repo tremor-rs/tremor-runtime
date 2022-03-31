@@ -162,13 +162,12 @@ impl World {
     pub async fn drain(&self, timeout: Duration) -> Result<()> {
         let (tx, rx) = bounded(1);
         self.system.send(flow_supervisor::Msg::Drain(tx)).await?;
-        match rx.recv().timeout(timeout).await {
-            Err(_) => {
-                warn!("Timeout draining all Flows after {}s", timeout.as_secs());
-                Ok(())
-            }
-            Ok(res) => res?,
+        if let Ok(res) = rx.recv().timeout(timeout).await {
+            res??;
+        } else {
+            warn!("Timeout draining all Flows after {}s", timeout.as_secs());
         }
+        Ok(())
     }
 
     /// Stop the runtime
@@ -176,13 +175,10 @@ impl World {
     /// # Errors
     ///  * if the system failed to stop
     pub async fn stop(&self, mode: ShutdownMode) -> Result<()> {
-        match mode {
-            ShutdownMode::Graceful => {
-                if let Err(e) = self.drain(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT).await {
-                    error!("Error draining all Flows: {}", e);
-                }
+        if mode == ShutdownMode::Graceful {
+            if let Err(e) = self.drain(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT).await {
+                error!("Error draining all Flows: {}", e);
             }
-            ShutdownMode::Forceful => {}
         }
         let res = self.system.send(flow_supervisor::Msg::Stop).await;
         if let Err(e) = &res {
