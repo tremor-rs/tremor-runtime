@@ -341,7 +341,7 @@ impl S3Instance {
             // meh, we need to clone the chunk :(
             self.tx
                 .send(self.event_from(chunk.as_ref().to_vec(), stream))
-                .await?
+                .await?;
         }
         Ok(())
     }
@@ -370,7 +370,7 @@ impl S3Instance {
                 // meh, we need to clone the chunk :(
                 self.tx
                     .send(self.event_from(chunk.as_ref().to_vec(), stream))
-                    .await?
+                    .await?;
             }
 
             // update for next iteration.
