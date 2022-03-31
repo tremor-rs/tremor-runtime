@@ -52,6 +52,7 @@ pub(crate) struct Server {
     rx: Receiver<OpenTelemetryEvents>,
 }
 
+#[cfg(not(tarpaulin_include))]
 impl std::fmt::Debug for Server {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "OtelServer")
@@ -160,64 +161,41 @@ struct OtelSource {
 #[async_trait::async_trait()]
 impl Source for OtelSource {
     async fn pull_data(&mut self, _pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
-        let mut origin_uri = self.origin_uri.clone();
-        match self.rx.try_recv() {
-            Ok(OpenTelemetryEvents::Metrics(metrics, remote)) => {
-                if self.config.metrics {
-                    let data: Value = metrics::resource_metrics_to_json(metrics);
-                    if let Some(remote) = remote {
-                        origin_uri.host = remote.ip().to_string();
-                        origin_uri.port = Some(remote.port());
-                    }
-                    return Ok(SourceReply::Structured {
-                        origin_uri,
-                        payload: data.into(),
-                        stream: DEFAULT_STREAM_ID,
-                        port: None,
-                    });
-                }
-                warn!("Otel Source received metrics event when trace support is disabled. Dropping trace");
+        let r = match self.rx.try_recv() {
+            Ok(OpenTelemetryEvents::Metrics(metrics, remote)) if self.config.metrics => {
+                Some((metrics::resource_metrics_to_json(metrics), remote))
             }
-            Ok(OpenTelemetryEvents::Logs(logs, remote)) => {
-                if self.config.logs {
-                    let data: Value = logs::resource_logs_to_json(logs)?;
-                    if let Some(remote) = remote {
-                        origin_uri.host = remote.ip().to_string();
-                        origin_uri.port = Some(remote.port());
-                    }
-                    return Ok(SourceReply::Structured {
-                        origin_uri: self.origin_uri.clone(),
-                        payload: data.into(),
-                        stream: DEFAULT_STREAM_ID,
-                        port: None,
-                    });
-                }
-                warn!(
-                    "Otel Source received log event when trace support is disabled. Dropping trace"
-                );
+            Ok(OpenTelemetryEvents::Logs(logs, remote)) if self.config.logs => {
+                Some((logs::resource_logs_to_json(logs)?, remote))
             }
-            Ok(OpenTelemetryEvents::Trace(traces, remote)) => {
-                if self.config.trace {
-                    let data: Value = trace::resource_spans_to_json(traces);
-                    if let Some(remote) = remote {
-                        origin_uri.host = remote.ip().to_string();
-                        origin_uri.port = Some(remote.port());
-                    }
-                    return Ok(SourceReply::Structured {
-                        origin_uri: self.origin_uri.clone(),
-                        payload: data.into(),
-                        stream: DEFAULT_STREAM_ID,
-                        port: None,
-                    });
-                }
-                warn!("Otel Source received trace event when trace support is disabled. Dropping trace");
+            Ok(OpenTelemetryEvents::Trace(traces, remote)) if self.config.trace => {
+                Some((trace::resource_spans_to_json(traces), remote))
+            }
+            Ok(_) => {
+                warn!("{ctx} Source received event when support is disabled. Dropping.");
+                None
             }
             Err(TryRecvError::Closed) => {
                 ctx.notifier().connection_lost().await?;
+                None
             }
-            _ => (),
+            _ => None,
         };
-        Ok(SourceReply::Empty(SOURCE_RECV_TIMEOUT))
+        if let Some((data, remote)) = r {
+            let mut origin_uri = self.origin_uri.clone();
+            if let Some(remote) = remote {
+                origin_uri.host = remote.ip().to_string();
+                origin_uri.port = Some(remote.port());
+            }
+            Ok(SourceReply::Structured {
+                origin_uri,
+                payload: data.into(),
+                stream: DEFAULT_STREAM_ID,
+                port: None,
+            })
+        } else {
+            Ok(SourceReply::Empty(SOURCE_RECV_TIMEOUT))
+        }
     }
 
     fn is_transactional(&self) -> bool {
