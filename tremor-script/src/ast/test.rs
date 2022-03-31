@@ -12,14 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{
-    ast::{Expr, Fields, ImutExpr, Invocable, Invoke, List, NodeId, Record},
-    prelude::*,
-    CustomFn, NodeMeta,
-};
+use super::*;
+use crate::{CustomFn, NodeMeta};
 
-fn v(s: &'static str) -> super::ImutExpr<'static> {
+fn v(s: &'static str) -> ImutExpr<'static> {
     ImutExpr::literal(NodeMeta::dummy(), Value::from(s))
+}
+
+fn p() -> ImutExpr<'static> {
+    ImutExpr::Path(Path::State(StatePath {
+        mid: NodeMeta::dummy(),
+        segments: vec![],
+    }))
 }
 
 #[test]
@@ -114,4 +118,31 @@ fn as_imut() {
     }
     .as_imut()
     .is_err());
+}
+
+#[test]
+fn try_into_value() -> crate::errors::Result<()> {
+    let aggr_reg = crate::registry::aggr();
+    let reg = &*crate::FN_REGISTRY.read()?;
+    let helper = Helper::new(reg, &aggr_reg);
+
+    let val = v("value");
+    assert!(val.try_into_value(&helper).is_ok());
+
+    let list = ImutExpr::List(List {
+        mid: NodeMeta::dummy(),
+        exprs: vec![],
+    });
+    assert!(list.try_into_value(&helper).is_ok());
+
+    let path = p();
+    assert!(path.try_into_value(&helper).is_err());
+
+    Ok(())
+}
+#[test]
+fn str_lit_as_str() {
+    assert_eq!(StrLitElement::Lit("string".into()).as_str(), Some("string"));
+    assert_eq!(StrLitElement::Expr(v("string")).as_str(), Some("string"));
+    assert_eq!(StrLitElement::Expr(p()).as_str(), None);
 }
