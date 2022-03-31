@@ -6475,6 +6475,7 @@ dependencies = [
  "async-tungstenite 0.17.2",
  "aws-config",
  "aws-sdk-s3",
+ "aws-smithy-http",
  "aws-types",
  "base64 0.13.0",
  "beef",
