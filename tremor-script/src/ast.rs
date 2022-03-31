@@ -565,12 +565,7 @@ impl<'script> Expr<'script> {
     #[must_use]
     pub fn as_invoke(&self) -> Option<&Invoke<'script>> {
         match self {
-            Expr::Imut(
-                ImutExpr::Invoke(i)
-                | ImutExpr::Invoke1(i)
-                | ImutExpr::Invoke2(i)
-                | ImutExpr::Invoke3(i),
-            ) => Some(i),
+            Expr::Imut(i) => i.as_invoke(),
             _ => None,
         }
     }
@@ -685,6 +680,13 @@ pub enum ImutExpr<'script> {
 }
 
 impl<'script> ImutExpr<'script> {
+    fn as_invoke(&self) -> Option<&Invoke<'script>> {
+        use ImutExpr::{Invoke, Invoke1, Invoke2, Invoke3};
+        match self {
+            Invoke(i) | Invoke1(i) | Invoke2(i) | Invoke3(i) => Some(i),
+            _ => None,
+        }
+    }
     pub(crate) fn literal(mid: Box<NodeMeta>, value: Value<'script>) -> Self {
         ImutExpr::Literal(Literal { mid, value })
     }
