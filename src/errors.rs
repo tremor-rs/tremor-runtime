@@ -141,6 +141,7 @@ error_chain! {
         AsyncChannelTryRecvError(async_std::channel::TryRecvError);
         Base64Error(base64::DecodeError);
         ChannelReceiveError(std::sync::mpsc::RecvError);
+        Clickhouse(clickhouse_rs::errors::Error);
         Common(tremor_common::Error);
         CronError(cron::error::Error);
         CsvError(csv::Error);
