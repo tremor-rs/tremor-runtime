@@ -46,33 +46,13 @@ pub(crate) struct Config {
 
 impl ConfigImpl for Config {}
 
-fn json_otel_logs_to_pb(json: &Value<'_>) -> Result<ExportLogsServiceRequest> {
-    let pb = ExportLogsServiceRequest {
-        resource_logs: logs::resource_logs_to_pb(json)?,
-    };
-    Ok(pb)
-}
-
-fn json_otel_trace_to_pb(json: &Value<'_>) -> Result<ExportTraceServiceRequest> {
-    let pb = ExportTraceServiceRequest {
-        resource_spans: trace::resource_spans_to_pb(Some(json))?,
-    };
-    Ok(pb)
-}
-
-fn json_otel_metrics_to_pb(json: &Value<'_>) -> Result<ExportMetricsServiceRequest> {
-    let pb = ExportMetricsServiceRequest {
-        resource_metrics: metrics::resource_metrics_to_pb(Some(json))?,
-    };
-    Ok(pb)
-}
-
 /// The `OpenTelemetry` client connector
 pub(crate) struct Client {
     config: Config,
     origin_uri: EventOriginUri,
 }
 
+#[cfg(not(tarpaulin_include))]
 impl std::fmt::Debug for Client {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "OtelClient")
@@ -148,18 +128,14 @@ impl Sink for OtelSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let endpoint = self.config.url.to_string();
         let channel = TonicEndpoint::from_shared(endpoint)
-            .map_err(|e| format!("Unable to connect to remote otel endpoint: {}", e))?
+            .map_err(|e| format!("Unable to connect to remote otel endpoint: {e}"))?
             .connect()
             .await?;
 
-        let logs_client = LogsServiceClient::new(channel.clone());
-        let metrics_client = MetricsServiceClient::new(channel.clone());
-        let trace_client = TraceServiceClient::new(channel);
-
         self.remote = Some(RemoteOpenTelemetryEndpoint {
-            logs_client,
-            metrics_client,
-            trace_client,
+            logs_client: LogsServiceClient::new(channel.clone()),
+            metrics_client: MetricsServiceClient::new(channel.clone()),
+            trace_client: TraceServiceClient::new(channel),
         });
 
         Ok(true)
@@ -173,46 +149,30 @@ impl Sink for OtelSink {
         _start: u64,
     ) -> Result<SinkReply> {
         if let Some(remote) = &mut self.remote {
-            // Up
             for value in event.value_iter() {
-                let o = value
-                    .as_object()
-                    .ok_or_else(|| format!("Unsupported event received by OTEL sink: {}", value))?;
-                if o.contains_key("metrics") {
-                    if self.config.metrics {
-                        let request = json_otel_metrics_to_pb(value)?;
-                        if let Err(e) = remote.metrics_client.export(request).await {
-                            error!("Failed to dispatch otel/gRPC metrics message: {}", e);
-                            ctx.notifier().connection_lost().await?;
-                            return Ok(SinkReply::fail_or_none(false));
-                        };
-                        continue;
-                    }
-                    warn!("Otel Source received metrics event when metrics support is disabled. Dropping trace");
-                } else if o.contains_key("logs") {
-                    if self.config.logs {
-                        let request = json_otel_logs_to_pb(value)?;
-                        if let Err(e) = remote.logs_client.export(request).await {
-                            error!("Failed to dispatch otel/gRPC logs message: {}", e);
-                            ctx.notifier().connection_lost().await?;
-                            return Ok(SinkReply::fail_or_none(false));
-                        }
-                        continue;
-                    }
-                    warn!(
-                        "Otel Sink received log event when log support is disabled. Dropping trace"
-                    );
-                } else if o.contains_key("trace") {
-                    if self.config.trace {
-                        let request = json_otel_trace_to_pb(value)?;
-                        if let Err(e) = remote.trace_client.export(request).await {
-                            error!("Failed to dispatch otel/gRPC logs message: {}", e);
-                            ctx.notifier().connection_lost().await?;
-                            return Ok(SinkReply::fail_or_none(event.transactional));
-                        }
-                        continue;
-                    }
-                    warn!("Otel Sink received trace event when trace support is disabled. Dropping trace");
+                let err = if self.config.metrics && value.contains_key("metrics") {
+                    let request = ExportMetricsServiceRequest {
+                        resource_metrics: metrics::resource_metrics_to_pb(Some(value))?,
+                    };
+                    remote.metrics_client.export(request).await.err()
+                } else if self.config.logs && value.contains_key("logs") {
+                    let request = ExportLogsServiceRequest {
+                        resource_logs: logs::resource_logs_to_pb(value)?,
+                    };
+                    remote.logs_client.export(request).await.err()
+                } else if self.config.trace && value.contains_key("trace") {
+                    let request = ExportTraceServiceRequest {
+                        resource_spans: trace::resource_spans_to_pb(Some(value))?,
+                    };
+                    remote.trace_client.export(request).await.err()
+                } else {
+                    warn!("{ctx} Invalid or disabled otel payload: {value}");
+                    None
+                };
+                if let Some(e) = err {
+                    error!("Failed to dispatch otel/gRPC logs message: {}", e);
+                    ctx.notifier().connection_lost().await?;
+                    return Ok(SinkReply::fail_or_none(event.transactional));
                 }
             }
 
