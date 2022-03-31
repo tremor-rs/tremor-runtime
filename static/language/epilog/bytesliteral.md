@@ -18,8 +18,14 @@ use std::binary;
 # +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 # |            Checksum           |         Urgent Pointer        |
 # +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-# |                    Options                    |    Padding    | IGNORED
+# |                    Options                    |    Padding    |
 # +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+#                                                                 |
+#  Data section proceeding packet header is optional and may or   |
+#  it is up to the user whether or not to include this in a       |
+#  binary literal or not                                          |
+#                                                                 |
+#  . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . . .|
 
 # Record representation of a TCP packet
 let event = {
@@ -33,7 +39,7 @@ let event = {
   "win": 4,
   "checksum": 5,
   "urgent": 6,
-  "data": "snot badger!"
+  "data": "snot badger!" # For encoding we 
 };
 
 # Convert the record into a binary encoded TCP packet
