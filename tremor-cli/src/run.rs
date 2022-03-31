@@ -30,7 +30,7 @@ use tremor_script::{
     arena::Arena,
     ctx::EventContext,
     highlighter::{Error as HighlighterError, Highlighter, Term as TermHighlighter},
-    lexer::Tokenizer,
+    lexer::Lexer,
     prelude::*,
     query::Query,
     script::{AggrType, Return, Script},
@@ -261,7 +261,7 @@ impl Run {
                                 if let (Some(r), _) = e.context() {
                                     let mut inner = TermHighlighter::stderr();
                                     let tokens: Vec<_> =
-                                        Tokenizer::new(raw, aid).tokenize_until_err().collect();
+                                        Lexer::new(raw, aid).tokenize_until_err().collect();
 
                                     if let Err(highlight_error) = inner.highlight_error(
                                         Some(&src),
@@ -370,7 +370,7 @@ impl Run {
                                 let input = Arena::io_get(aid)?;
 
                                 let tokens: Vec<_> =
-                                    Tokenizer::new(input, aid).tokenize_until_err().collect();
+                                    Lexer::new(input, aid).tokenize_until_err().collect();
 
                                 if let Err(highlight_error) = inner.highlight_error(
                                     Some(&file),

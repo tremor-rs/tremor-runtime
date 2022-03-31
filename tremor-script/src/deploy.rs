@@ -17,7 +17,7 @@ use crate::{
     ast::{self, helper::Warning, DeployStmt},
     errors::{Error, Result},
     highlighter::Highlighter,
-    lexer::{self, Tokenizer},
+    lexer::{self, Lexer},
     prelude::*,
 };
 use std::collections::BTreeSet;
@@ -73,7 +73,7 @@ where
         let (aid, script) = Arena::insert(script)?;
         let mut helper = ast::Helper::new(reg, aggr_reg);
         //let cu = include_stack.push(&file_name)?;
-        let tokens = Tokenizer::new(script, aid).collect::<Result<Vec<_>>>()?;
+        let tokens = Lexer::new(script, aid).collect::<Result<Vec<_>>>()?;
         let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
         let script_stage_1 = crate::parser::g::DeployParser::new().parse(filtered_tokens)?;
         let deploy = script_stage_1.up_script(&mut helper)?;
@@ -95,7 +95,7 @@ where
     pub fn format_error_with<H: Highlighter>(h: &mut H, e: &Error) -> std::io::Result<()> {
         let aid = e.aid();
 
-        let tokens: Vec<_> = lexer::Tokenizer::new(Arena::io_get(aid)?, aid)
+        let tokens: Vec<_> = lexer::Lexer::new(Arena::io_get(aid)?, aid)
             .tokenize_until_err()
             .collect();
         match e.context() {
@@ -116,7 +116,7 @@ where
     /// on io errors
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> std::io::Result<()> {
         for w in &self.warnings {
-            let tokens: Vec<_> = lexer::Tokenizer::new(Arena::io_get(self.aid)?, self.aid)
+            let tokens: Vec<_> = lexer::Lexer::new(Arena::io_get(self.aid)?, self.aid)
                 .tokenize_until_err()
                 .collect();
             h.highlight_error(None, &tokens, "", true, Some(w.outer), Some(w.into()))?;
