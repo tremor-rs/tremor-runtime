@@ -305,17 +305,16 @@ impl S3Instance {
             stream,
         }) = self.rx.recv().await
         {
-            let mut err = false; // marks an error
             debug!("{} Fetching key {key:?}...", self.ctx);
-            if size <= self.multipart_threshold {
+            let err = if size <= self.multipart_threshold {
                 // Perform a single fetch.
-                err = err || self.fetch_no_multipart(stream, key).await;
+                self.fetch_no_multipart(stream, key).await
             } else {
-                err = err || self.fetch_multipart(stream, key, size).await;
-            }
+                self.fetch_multipart(stream, key, size).await
+            };
 
             // Close the stream
-            let stream_finish_reply = if err {
+            let stream_finish_reply = if err.is_err() {
                 SourceReply::StreamFail(stream)
             } else {
                 SourceReply::EndStream {
@@ -329,52 +328,24 @@ impl S3Instance {
         Ok(())
     }
 
-    async fn fetch_no_multipart(&self, stream: u64, key: Option<String>) -> bool {
-        match self.fetch_object_stream(key.clone(), None).await {
-            Ok(mut obj_stream) => {
-                loop {
-                    // we iterate over the chunks the response provides
-                    match obj_stream.try_next().await {
-                        Ok(Some(chunk)) => {
-                            debug!(
-                                "{} Received chunk with {} bytes for key {key:?}.",
-                                self.ctx,
-                                chunk.len()
-                            );
-                            // meh, we need to clone the chunk :(
-                            if self
-                                .tx
-                                .send(self.event_from(chunk.as_ref().to_vec(), stream))
-                                .await
-                                .is_err()
-                            {
-                                error!(
-                                    "{} Error sending data for key {key:?} to source.",
-                                    self.ctx
-                                );
-                                return true;
-                            }
-                        }
-                        Ok(None) => {
-                            // stream finished
-                            return false;
-                        }
-                        Err(e) => {
-                            error!("{} Error fetching data for key {key:?}: {e}", self.ctx);
-                            // TODO: emit event to `err` port?
-                            return true;
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                error!("{} Error fetching key {key:?}: {e}", self.ctx);
-                true
-            }
+    async fn fetch_no_multipart(&self, stream: u64, key: Option<String>) -> Result<()> {
+        let mut obj_stream = self.fetch_object_stream(key.clone(), None).await?;
+
+        while let Some(chunk) = obj_stream.try_next().await? {
+            // we iterate over the chunks the response provides
+            debug!(
+                "{} Received chunk with {} bytes for key {key:?}.",
+                self.ctx,
+                chunk.len()
+            );
+            // meh, we need to clone the chunk :(
+            self.tx
+                .send(self.event_from(chunk.as_ref().to_vec(), stream))
+                .await?
         }
+        Ok(())
     }
-    async fn fetch_multipart(&self, stream: u64, key: Option<String>, size: i64) -> bool {
-        let mut err = false;
+    async fn fetch_multipart(&self, stream: u64, key: Option<String>, size: i64) -> Result<()> {
         // Fetch multipart.
         let mut fetched_bytes = 0; // represent the next byte to fetch.
 
@@ -383,55 +354,28 @@ impl S3Instance {
             let range = Some(format!("bytes={}-{}", fetched_bytes, fetch_till - 1)); // -1 is reqd here as range is inclusive.
 
             debug!(
-                "{} Fetching byte range: bytes={}-{} for key {key:?}",
+                "{} Fetching byte range: bytes={fetched_bytes}-{} for key {key:?}",
                 self.ctx,
-                fetched_bytes,
                 fetch_till - 1
             );
             // fetch the range.
-            match self.fetch_object_stream(key.clone(), range.clone()).await {
-                Ok(mut obj_stream) => {
-                    'inner_range: loop {
-                        // stream over the response chunks
-                        match obj_stream.try_next().await {
-                            Ok(Some(chunk)) => {
-                                debug!("{} Received chunk with {} bytes for range {range:?} for key {key:?}.", self.ctx, chunk.len());
-                                // meh, we need to clone the chunk :(
-                                if self
-                                    .tx
-                                    .send(self.event_from(chunk.as_ref().to_vec(), stream))
-                                    .await
-                                    .is_err()
-                                {
-                                    error!("{} Error sending data for range {range:?} for key {key:?} to source.", self.ctx);
-                                    err = true;
-                                    break 'inner_range;
-                                }
-                            }
-                            Ok(None) => {
-                                // object range stream finished
-                                break 'inner_range;
-                            }
-                            Err(e) => {
-                                error!("{} Error fetching data for range {range:?} for key {key:?}: {e}", self.ctx);
-                                // TODO: emit event to `err` port?
-                                err = true;
-                                break 'inner_range; // wait for next key
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    error!(
-                        "{} Error fetching range {range:?} for key {key:?}: {e}",
-                        self.ctx
-                    );
-                    err = true;
-                }
+            let mut obj_stream = self.fetch_object_stream(key.clone(), range).await?;
+            while let Some(chunk) = obj_stream.try_next().await? {
+                // stream over the response chunks
+                debug!(
+                    "{} Received chunk with {} bytes for key {key:?}.",
+                    self.ctx,
+                    chunk.len()
+                );
+                // meh, we need to clone the chunk :(
+                self.tx
+                    .send(self.event_from(chunk.as_ref().to_vec(), stream))
+                    .await?
             }
+
             // update for next iteration.
             fetched_bytes = fetch_till;
         }
-        err
+        Ok(())
     }
 }
