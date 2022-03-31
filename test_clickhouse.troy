@@ -1,0 +1,71 @@
+define flow clickhouse
+flow
+    use troy::connectors;
+    use troy::pipelines;
+
+    define connector stdin from stdio
+    with
+        codec = "json"
+    end;
+
+
+    # sink only connector
+    define connector clickhouse from clickhouse
+    with
+        config = {
+            "host": "localhost",
+            # Defaults to 9000 - the default clickhouse port
+            "port": 9000,
+            "database": "tremor_testing",
+
+
+            "table": "people",
+            "columns": [
+                {
+                    "name": "name",
+                    "type": "utf8"
+                },
+                {
+                    "name": "birthday",
+                    "type": "datetime",
+                    "default": "1970-01-01"
+                }
+            ]
+        }
+    end;
+
+    # event format
+
+    # ["John Doe", "1970-01-01"]
+    # {
+    #     "birthday": "1970-01-01",
+    #     "name": "John Doe",
+    # }
+    # {}
+    # ["John Doe"]
+    # null
+
+    create pipeline main from pipelines::passthrough;
+
+    create connector stdin;
+    create connector clickhouse;
+
+    connect /connector/stdin/out to /pipeline/main/in;
+    connect /pipeline/main to /connector/clickhouse/in;
+    
+
+end;
+
+deploy flow clickhouse;
+
+# While deploying this troy file, the following error is emitted:
+#
+# > tremor version: 0.11.4 (DEBUG) clickhouse:144d105bcb6d5bfd6fbc82946a3729b63785fd71
+# > tremor instance: tremor
+# > rd_kafka version: 0x000002ff, 1.8.2
+# > allocator: snmalloc
+# > [2022-04-02T11:48:36Z ERROR tremor_runtime::system] Error starting deployment of flow clickhouse: Connector clickhouse not found: main
+# > Error: An error occurred while loading the file `test_clickhouse.troy`: Error deploying Flow clickhouse: Connector clickhouse not found: main
+# > [2022-04-02T11:48:36Z ERROR tremor::server] Error: An error occurred while loading the file `test_clickhouse.troy`: Error deploying Flow clickhouse: Connector clickhouse not found: main
+# > We are SHUTTING DOWN due to errors during initialization!
+# > [2022-04-02T11:48:36Z ERROR tremor::server] We are SHUTTING DOWN due to errors during initialization!

@@ -50,6 +50,9 @@ bimap = { version = "0.6", features = ["serde"] }
 byteorder = "1"
 bytes = "1.1"
 chrono = "0.4"
+clickhouse-rs = { version = "1.0.0-alpha.1", default-features = false, features = [
+  "async_std",
+] }
 csv = "1.1"
 dashmap = "5.3"
 either = { version = "1.7", features = ["serde"] }

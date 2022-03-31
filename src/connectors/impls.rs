@@ -16,6 +16,8 @@
 pub(crate) mod bench;
 /// connector for checking guaranteed delivery and circuit breaker logic
 pub(crate) mod cb;
+/// Clickhouse connector
+pub(crate) mod clickhouse;
 /// Crononome
 pub(crate) mod crononome;
 /// Discord connector
