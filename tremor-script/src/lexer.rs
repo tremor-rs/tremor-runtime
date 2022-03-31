@@ -782,8 +782,8 @@ impl<'input> CharLocations<'input> {
         }
     }
 
-    pub(crate) fn current(&self) -> &Location {
-        &self.location
+    pub(crate) fn current(&self) -> Location {
+        self.location
     }
 }
 
@@ -889,11 +889,12 @@ impl<'input> Lexer<'input> {
     }
 
     fn must_lookahead(&mut self) -> Result<(Location, char)> {
-        self.lookahead().ok_or_else(|| {
-            Error::from(ErrorKind::UnexpectedEndOfStream(
-                self.chars.current().into(),
-            ))
-        })
+        self.lookahead()
+            .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()).into())
+    }
+    fn must_bump(&mut self) -> Result<(Location, char)> {
+        self.bump()
+            .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()).into())
     }
 
     fn starts_with(&mut self, start: Location, s: &str) -> Option<(Location, &'input str)> {
@@ -934,27 +935,25 @@ impl<'input> Lexer<'input> {
     }
 
     /// return a slice from `start` to eol of the line `end` is on
-    fn slice_full_lines(&self, start: &Location, end: &Location) -> Option<String> {
+    fn slice_full_lines(&self, start: Location, end: Location) -> Option<String> {
         let start_idx = start.absolute();
         let take_lines = end.line().saturating_sub(start.line()) + 1;
 
         self.input.get(start_idx..).map(|f| {
-            f.split('\n')
-                .take(take_lines)
-                .collect::<Vec<_>>()
-                .join("\n")
+            let v: Vec<_> = f.split('\n').take(take_lines).collect();
+            v.join("\n")
         })
     }
 
     /// return a slice from start to the end of the line
-    fn slice_until_eol(&self, start: &Location) -> Option<&'input str> {
+    fn slice_until_eol(&self, start: Location) -> Option<&'input str> {
         let start = start.absolute();
 
         self.input.get(start..).and_then(|f| f.split('\n').next())
     }
 
     // return a slice from start to the end of the input
-    fn slice_until_eof(&self, start: &Location) -> Option<&'input str> {
+    fn slice_until_eof(&self, start: Location) -> Option<&'input str> {
         let start = start.absolute();
         self.input.get(start..)
     }
@@ -1042,12 +1041,10 @@ impl<'input> Lexer<'input> {
 
     /// handle colons
     fn colon(&mut self, start: Location) -> TokenSpan<'input> {
-        let (end, lexeme) = self.take_while(start, |ch| ch == ':');
-
-        match lexeme {
-            "::" => spanned(start, end, Token::ColonColon),
-            ":" => spanned(start, end, Token::Colon),
-            _ => spanned(start, end, Token::Bad(lexeme.to_string())),
+        match self.take_while(start, |ch| ch == ':') {
+            (end, "::") => spanned(start, end, Token::ColonColon),
+            (end, ":") => spanned(start, end, Token::Colon),
+            (end, lexeme) => spanned(start, end, Token::Bad(lexeme.to_string())),
         }
     }
 
@@ -1136,21 +1133,12 @@ impl<'input> Lexer<'input> {
     }
 
     fn next_index(&mut self) -> Result<Location> {
-        let (loc, _) = self
-            .bump()
-            .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()))?;
+        let (loc, _) = self.must_bump()?;
         Ok(loc)
     }
 
-    fn escape_code(
-        &mut self,
-        string_start: &Location,
-        start: Location,
-    ) -> Result<(Location, char)> {
-        match self
-            .bump()
-            .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()))?
-        {
+    fn escape_code(&mut self, str_start: Location, start: Location) -> Result<(Location, char)> {
+        match self.must_bump()? {
             (e, '"') => Ok((e, '"')),
             (e, '\\') => Ok((e, '\\')),
             (e, '#') => Ok((e, '#')),
@@ -1164,68 +1152,40 @@ impl<'input> Lexer<'input> {
                 let mut escape_start = end;
                 escape_start.shift_left('u');
                 let mut digits = String::with_capacity(4);
-                for _i in 0..4 {
-                    if let Some((mut e, c)) = self.bump() {
-                        digits.push(c);
-                        if u32::from_str_radix(&format!("{}", c), 16).is_err() {
-                            e.shift(' ');
-                            let token_str =
-                                self.slice_full_lines(string_start, &e).unwrap_or_default();
-                            let range = Span::new(escape_start, e);
-                            return Err(ErrorKind::InvalidUtf8Sequence(
-                                Span::new(start, e).expand_lines(2),
-                                range,
-                                UnfinishedToken::new(range, token_str),
-                            )
-                            .into());
+                let r = (|| {
+                    for _i in 0..4 {
+                        if let Some((e, c)) = self.bump() {
+                            digits.push(c);
+                            end = e;
+                            if u32::from_str_radix(&format!("{}", c), 16).is_err() {
+                                return None;
+                            }
+                        } else {
+                            return None;
                         }
-                        end = e;
-                    } else {
-                        end.shift(' ');
-
-                        let token_str = self
-                            .slice_full_lines(string_start, &end)
-                            .unwrap_or_default();
-                        let range = Span::new(escape_start, end);
-
-                        return Err(ErrorKind::InvalidUtf8Sequence(
-                            Span::new(escape_start, end).expand_lines(2),
-                            range,
-                            UnfinishedToken::new(range, token_str),
-                        )
-                        .into());
                     }
-                }
-
-                if let Ok(Some(c)) = u32::from_str_radix(&digits, 16).map(std::char::from_u32) {
-                    Ok((end, c))
-                } else {
-                    let token_str = self
-                        .slice_full_lines(string_start, &end)
-                        .unwrap_or_default();
+                    u32::from_str_radix(&digits, 16)
+                        .map(std::char::from_u32)
+                        .ok()
+                        .flatten()
+                        .map(|c| (end, c))
+                })();
+                r.ok_or_else(|| {
                     end.shift(' ');
-                    let range = Span::new(escape_start, end);
-                    Err(ErrorKind::InvalidUtf8Sequence(
-                        Span::new(escape_start, end).expand_lines(2),
-                        range,
-                        UnfinishedToken::new(range, token_str),
-                    )
-                    .into())
-                }
+                    let token_str = self.slice_full_lines(str_start, end).unwrap_or_default();
+                    let inner = Span::new(escape_start, end);
+                    let outer = inner.expand_lines(2);
+                    let tkn = UnfinishedToken::new(inner, token_str);
+                    ErrorKind::InvalidUtf8Sequence(outer, inner, tkn).into()
+                })
             }
             (mut end, ch) => {
-                let token_str = self
-                    .slice_full_lines(string_start, &end)
-                    .unwrap_or_default();
                 end.shift(' ');
-                let range = Span::new(start, end);
-                Err(ErrorKind::UnexpectedEscapeCode(
-                    Span::new(start, end).expand_lines(2),
-                    range,
-                    UnfinishedToken::new(range, token_str),
-                    ch,
-                )
-                .into())
+                let token_str = self.slice_full_lines(str_start, end).unwrap_or_default();
+                let inner = Span::new(start, end);
+                let outer = inner.expand_lines(2);
+                let tkn = UnfinishedToken::new(inner, token_str);
+                Err(ErrorKind::UnexpectedEscapeCode(outer, inner, tkn, ch).into())
             }
         }
     }
@@ -1301,15 +1261,10 @@ impl<'input> Lexer<'input> {
                 self.bump();
                 // We don't allow anything tailing the initial `"""`
                 match self.bump().ok_or_else(|| {
-                    let token_str = self
-                        .slice_until_eol(&start)
-                        .map_or_else(|| r#"""""#.to_string(), ToString::to_string);
-                    let range = Span::new(start, end);
-                    ErrorKind::UnterminatedHereDoc(
-                        range.expand_lines(2),
-                        range,
-                        UnfinishedToken::new(range, token_str),
-                    )
+                    let tkn = self.slice_until_eol(start).unwrap_or(r#"""""#).into();
+                    let inner = Span::new(start, end);
+                    let outer = inner.expand_lines(2);
+                    ErrorKind::UnterminatedHereDoc(outer, inner, UnfinishedToken::new(inner, tkn))
                 })? {
                     (mut newline_loc, '\n') => {
                         res = vec![spanned(start, end + '"', Token::HereDocStart)]; // (0, vec![]))];
@@ -1318,17 +1273,13 @@ impl<'input> Lexer<'input> {
                         self.heredoc(heredoc_start, newline_loc, end, false, &string, res)
                     }
                     (end, ch) => {
-                        let token_str = self
-                            .slice_until_eol(&start)
+                        let tnk = self
+                            .slice_until_eol(start)
                             .map_or_else(|| format!(r#""""{}"#, ch), ToString::to_string);
-                        let range = Span::new(start, end);
-                        Err(ErrorKind::TailingHereDoc(
-                            range.expand_lines(2),
-                            range,
-                            UnfinishedToken::new(range, token_str),
-                            ch,
-                        )
-                        .into())
+                        let inner = Span::new(start, end);
+                        let outer = inner.expand_lines(2);
+                        let tkn = UnfinishedToken::new(inner, tnk);
+                        Err(ErrorKind::TailingHereDoc(outer, inner, tkn, ch).into())
                     }
                 }
             } else {
@@ -1368,28 +1319,24 @@ impl<'input> Lexer<'input> {
 
         let Error(kind, ..) = error;
 
-        let token_str = self
-            .slice_full_lines(&total_start, &end_location)
-            .unwrap_or_else(|| format!("{}{}", error_prefix, content));
+        let tkn = self.slice_full_lines(total_start, end_location);
+        let tkn = tkn.unwrap_or_else(|| format!("{}{}", error_prefix, content));
         let mut end = total_start;
-        end.shift_str(&token_str);
-        let unfinished_token =
-            UnfinishedToken::new(Span::new(total_start, end_location), token_str);
+        end.shift_str(&tkn);
+        let unfinished_token = UnfinishedToken::new(Span::new(total_start, end_location), tkn);
         match kind {
-            ErrorKind::UnterminatedExtractor(outer, location, _) => {
+            ErrorKind::UnterminatedExtractor(o, location, _) => {
                 // expand to start line of heredoc, so we get a proper context
-                let outer =
-                    outer.expand_lines(outer.start().line().saturating_sub(total_start.line()));
+                let outer = o.expand_lines(o.start().line().saturating_sub(total_start.line()));
                 ErrorKind::UnterminatedExtractor(outer, location, unfinished_token)
             }
-            ErrorKind::UnterminatedIdentLiteral(outer, location, _) => {
+            ErrorKind::UnterminatedIdentLiteral(o, location, _) => {
                 // expand to start line of heredoc, so we get a proper context
-                let outer =
-                    outer.expand_lines(outer.start().line().saturating_sub(total_start.line()));
+                let outer = o.expand_lines(o.start().line().saturating_sub(total_start.line()));
                 ErrorKind::UnterminatedIdentLiteral(outer, location, unfinished_token)
             }
-            ErrorKind::UnterminatedHereDoc(outer, location, _)
-            | ErrorKind::TailingHereDoc(outer, location, _, _) => {
+            ErrorKind::UnterminatedHereDoc(o, location, _)
+            | ErrorKind::TailingHereDoc(o, location, _, _) => {
                 if is_hd {
                     // unterminated heredocs within interpolation are better reported
                     // as unterminated interpolation
@@ -1399,28 +1346,23 @@ impl<'input> Lexer<'input> {
                         unfinished_token,
                     )
                 } else {
-                    let outer =
-                        outer.expand_lines(outer.start().line().saturating_sub(total_start.line()));
-
+                    let outer = o.expand_lines(o.start().line().saturating_sub(total_start.line()));
                     ErrorKind::UnterminatedHereDoc(outer, location, unfinished_token)
                 }
             }
-            ErrorKind::UnterminatedInterpolation(outer, location, _) => {
+            ErrorKind::UnterminatedInterpolation(o, location, _) => {
                 // expand to start line of heredoc, so we get a proper context
-                let outer =
-                    outer.expand_lines(outer.start().line().saturating_sub(total_start.line()));
+                let outer = o.expand_lines(o.start().line().saturating_sub(total_start.line()));
                 ErrorKind::UnterminatedInterpolation(outer, location, unfinished_token)
             }
-            ErrorKind::UnexpectedEscapeCode(outer, location, _, found) => {
+            ErrorKind::UnexpectedEscapeCode(o, location, _, found) => {
                 // expand to start line of heredoc, so we get a proper context
-                let outer =
-                    outer.expand_lines(outer.start().line().saturating_sub(total_start.line()));
+                let outer = o.expand_lines(o.start().line().saturating_sub(total_start.line()));
                 ErrorKind::UnexpectedEscapeCode(outer, location, unfinished_token, found)
             }
-            ErrorKind::UnterminatedStringLiteral(outer, location, _) => {
+            ErrorKind::UnterminatedStringLiteral(o, location, _) => {
                 // expand to start line of heredoc, so we get a proper context
-                let outer =
-                    outer.expand_lines(outer.start().line().saturating_sub(total_start.line()));
+                let outer = o.expand_lines(o.start().line().saturating_sub(total_start.line()));
                 if is_hd {
                     ErrorKind::UnterminatedStringLiteral(outer, location, unfinished_token)
                 } else {
@@ -1434,10 +1376,9 @@ impl<'input> Lexer<'input> {
                     )
                 }
             }
-            ErrorKind::InvalidUtf8Sequence(outer, location, _) => {
+            ErrorKind::InvalidUtf8Sequence(o, location, _) => {
                 // expand to start line of heredoc, so we get a proper context
-                let outer =
-                    outer.expand_lines(outer.start().line().saturating_sub(total_start.line()));
+                let outer = o.expand_lines(o.start().line().saturating_sub(total_start.line()));
                 ErrorKind::InvalidUtf8Sequence(outer, location, unfinished_token)
             }
             e => e,
@@ -1486,12 +1427,12 @@ impl<'input> Lexer<'input> {
             let next = self.next().ok_or_else(|| {
                 let end_location = self.chars.current();
                 let token_str = self
-                    .slice_full_lines(&total_start, end_location)
+                    .slice_full_lines(total_start, end_location)
                     .unwrap_or_else(|| format!("{}{}", error_prefix, content));
                 ErrorKind::UnterminatedInterpolation(
                     Span::new(total_start, end.move_down_lines(2)),
                     Span::new(*segment_start, *end),
-                    UnfinishedToken::new(Span::new(total_start, *end_location), token_str),
+                    UnfinishedToken::new(Span::new(total_start, end_location), token_str),
                 )
             })?;
 
@@ -1515,19 +1456,12 @@ impl<'input> Lexer<'input> {
                     res.push(s);
                     if first {
                         let end_location = *segment_start;
-                        let token_str = self
-                            .slice_full_lines(&total_start, &end_location)
-                            .unwrap_or_else(|| format!("{}{}", error_prefix, content));
-
-                        let unfinished_token =
-                            UnfinishedToken::new(Span::new(start, end_location), token_str);
-
-                        return Err(ErrorKind::EmptyInterpolation(
-                            Span::new(total_start, end_location),
-                            Span::new(start, end_location),
-                            unfinished_token,
-                        )
-                        .into());
+                        let tkn = self.slice_full_lines(total_start, end_location);
+                        let tkn = tkn.unwrap_or_else(|| format!("{}{}", error_prefix, content));
+                        let tkn = UnfinishedToken::new(Span::new(start, end_location), tkn);
+                        let outer = Span::new(total_start, end_location);
+                        let inner = Span::new(start, end_location);
+                        return Err(ErrorKind::EmptyInterpolation(outer, inner, tkn).into());
                     }
                     break;
                 }
@@ -1564,7 +1498,7 @@ impl<'input> Lexer<'input> {
     {
         match lc {
             (end_inner, '\\') => {
-                let (mut e, c) = self.escape_code(&total_start, end_inner)?;
+                let (mut e, c) = self.escape_code(total_start, end_inner)?;
                 if c == '#' {
                     if !content.is_empty() {
                         let mut c = String::new();
@@ -1635,7 +1569,7 @@ impl<'input> Lexer<'input> {
             let next = self.bump().ok_or_else(|| {
                 // We reached EOF
                 let token_str = self
-                    .slice_until_eof(&heredoc_start)
+                    .slice_until_eof(heredoc_start)
                     .map_or_else(|| format!(r#""""\n{}"#, content), ToString::to_string);
                 let range = Span::new(heredoc_start, end);
                 ErrorKind::UnterminatedHereDoc(
@@ -1737,19 +1671,14 @@ impl<'input> Lexer<'input> {
                     return Ok(res);
                 }
                 (end, '\n') => {
-                    let token_str = self
-                        .slice_until_eol(&total_start)
-                        .map_or_else(|| format!("\"{}", string), ToString::to_string);
-
+                    let tkn = self.slice_until_eol(total_start);
+                    let tkn = tkn.map_or_else(|| format!("\"{}", string), ToString::to_string);
                     let mut token_end = total_start;
-                    token_end.shift_str(&token_str);
-                    let range = Span::new(total_start, end);
-                    return Err(ErrorKind::UnterminatedStringLiteral(
-                        range.expand_lines(2),
-                        range,
-                        UnfinishedToken::new(Span::new(total_start, token_end), token_str),
-                    )
-                    .into());
+                    token_end.shift_str(&tkn);
+                    let inner = Span::new(total_start, end);
+                    let outer = inner.expand_lines(2);
+                    let tkn = UnfinishedToken::new(Span::new(total_start, token_end), tkn);
+                    return Err(ErrorKind::UnterminatedStringLiteral(outer, inner, tkn).into());
                 }
                 lc => {
                     self.handle_string_heredoc_generic(
@@ -1769,11 +1698,8 @@ impl<'input> Lexer<'input> {
         }
     }
 
-    fn test_escape_code(&mut self, start: &Location, s: &str) -> Result<Option<char>> {
-        match self
-            .bump()
-            .ok_or_else(|| ErrorKind::UnexpectedEndOfStream(self.chars.current().into()))?
-        {
+    fn test_escape_code(&mut self, start: Location, s: &str) -> Result<Option<char>> {
+        match self.must_bump()? {
             (_, '\\') => Ok(Some('\\')),
             (_, '|') => Ok(Some('|')),
             (_end, '\n') => Ok(None),
@@ -1781,21 +1707,17 @@ impl<'input> Lexer<'input> {
                 let token_str = format!("|{}\\{}", s, ch);
                 let mut token_end = end;
                 token_end.shift(ch);
-                let range = Span::new(end, end);
-                Err(ErrorKind::UnexpectedEscapeCode(
-                    range.expand_lines(2),
-                    range,
-                    UnfinishedToken::new(Span::new(*start, token_end), token_str),
-                    ch,
-                )
-                .into())
+                let inner = Span::new(end, end);
+                let outer = inner.expand_lines(2);
+                let tkn = UnfinishedToken::new(Span::new(start, token_end), token_str);
+                Err(ErrorKind::UnexpectedEscapeCode(outer, inner, tkn, ch).into())
             }
         }
     }
 
     fn unfinished_extractor(&self, string: &str, start: Location) -> ErrorKind {
         let token_str = self
-            .slice_until_eol(&start)
+            .slice_until_eol(start)
             .map_or_else(|| format!("|{}", string), ToString::to_string);
         let mut token_end = start;
         token_end.shift_str(&token_str);
@@ -1807,16 +1729,15 @@ impl<'input> Lexer<'input> {
         )
     }
     fn unfinished_string(&self, string: &str, start: Location) -> ErrorKind {
-        let token_str = self
-            .slice_until_eol(&start)
-            .map_or_else(|| format!("\"{}", string), ToString::to_string);
+        let tkn = self.slice_until_eol(start);
+        let tkn = tkn.map_or_else(|| format!("\"{}", string), ToString::to_string);
         let mut token_end = start;
-        token_end.shift_str(&token_str);
+        token_end.shift_str(&tkn);
         let range = Span::new(start, token_end);
         ErrorKind::UnterminatedStringLiteral(
             range.expand_lines(2),
             range,
-            UnfinishedToken::new(Span::new(start, token_end), token_str),
+            UnfinishedToken::new(Span::new(start, token_end), tkn),
         )
     }
 
@@ -1831,7 +1752,7 @@ impl<'input> Lexer<'input> {
                 .ok_or_else(|| self.unfinished_extractor(&string, total_start))?;
             match next {
                 (_e, '\\') => {
-                    if let Some(ch) = self.test_escape_code(&total_start, &string)? {
+                    if let Some(ch) = self.test_escape_code(total_start, &string)? {
                         string.push(ch);
                     } else {
                         strings.push(string);
@@ -1856,20 +1777,15 @@ impl<'input> Lexer<'input> {
                     return Ok(spanned(total_start, end, token));
                 }
                 (end, '\n') => {
-                    let token_str = self
-                        .slice_until_eol(&total_start)
-                        .map_or_else(|| format!("|{}", string), ToString::to_string);
-                    let range = Span::new(total_start, end);
-                    return Err(ErrorKind::UnterminatedExtractor(
-                        range.expand_lines(2),
-                        range,
-                        UnfinishedToken::new(range, token_str),
-                    )
-                    .into());
+                    let tkn = self.slice_until_eol(total_start);
+                    let tkn = tkn.map_or_else(|| format!("|{}", string), ToString::to_string);
+                    let inner = Span::new(total_start, end);
+                    let outer = inner.expand_lines(2);
+                    let tkn = UnfinishedToken::new(inner, tkn);
+                    return Err(ErrorKind::UnterminatedExtractor(outer, inner, tkn).into());
                 }
                 (_e, other) => {
                     string.push(other as char);
-                    continue;
                 }
             }
         }
@@ -1903,7 +1819,7 @@ impl<'input> Lexer<'input> {
                                     Span::new(start, end),
                                     UnfinishedToken::new(
                                         Span::new(start, end),
-                                        self.slice_until_eol(&start)
+                                        self.slice_until_eol(start)
                                             .map_or_else(|| float.to_string(), ToString::to_string),
                                     ),
                                 )
@@ -1917,7 +1833,7 @@ impl<'input> Lexer<'input> {
                         Span::new(start, end),
                         UnfinishedToken::new(
                             Span::new(start, end),
-                            self.slice_until_eol(&start)
+                            self.slice_until_eol(start)
                                 .map_or_else(|| float.to_string(), ToString::to_string),
                         ),
                     )
@@ -1929,7 +1845,7 @@ impl<'input> Lexer<'input> {
                 Span::new(start, end),
                 UnfinishedToken::new(
                     Span::new(start, end),
-                    self.slice_until_eol(&start)
+                    self.slice_until_eol(start)
                         .map_or_else(|| int.to_string(), ToString::to_string),
                 ),
                 ch,
@@ -1945,7 +1861,7 @@ impl<'input> Lexer<'input> {
                             Span::new(start, end),
                             UnfinishedToken::new(
                                 Span::new(start, end),
-                                self.slice_until_eol(&start)
+                                self.slice_until_eol(start)
                                     .map_or_else(|| float.to_string(), ToString::to_string),
                             ),
                         )
@@ -1970,7 +1886,7 @@ impl<'input> Lexer<'input> {
                         &r,
                         UnfinishedToken::new(
                             r,
-                            self.slice_until_eol(&start)
+                            self.slice_until_eol(start)
                                 .map_or_else(|| hex.to_string(), ToString::to_string),
                         ),
                         ch,
@@ -1983,7 +1899,7 @@ impl<'input> Lexer<'input> {
                             Span::new(start, end),
                             UnfinishedToken::new(
                                 Span::new(start, end),
-                                self.slice_until_eol(&start)
+                                self.slice_until_eol(start)
                                     .map_or_else(|| hex.to_string(), ToString::to_string),
                             ),
                         )
@@ -1997,7 +1913,7 @@ impl<'input> Lexer<'input> {
                                 Span::new(start, end),
                                 UnfinishedToken::new(
                                     Span::new(start, end),
-                                    self.slice_until_eol(&start)
+                                    self.slice_until_eol(start)
                                         .map_or_else(|| hex.to_string(), ToString::to_string),
                                 ),
                             )
@@ -2011,7 +1927,7 @@ impl<'input> Lexer<'input> {
                 Span::new(start, end),
                 UnfinishedToken::new(
                     Span::new(start, end),
-                    self.slice_until_eol(&start)
+                    self.slice_until_eol(start)
                         .map_or_else(|| int.to_string(), ToString::to_string),
                 ),
             )
@@ -2031,7 +1947,7 @@ impl<'input> Lexer<'input> {
                 Span::new(char_loc, char_loc),
                 UnfinishedToken::new(
                     Span::new(start, end),
-                    self.slice_until_eol(&start)
+                    self.slice_until_eol(start)
                         .map_or_else(|| int.to_string(), ToString::to_string),
                 ),
                 ch,
@@ -2046,7 +1962,7 @@ impl<'input> Lexer<'input> {
                         Span::new(start, end),
                         UnfinishedToken::new(
                             Span::new(start, end),
-                            self.slice_until_eol(&start)
+                            self.slice_until_eol(start)
                                 .map_or_else(|| int.to_string(), ToString::to_string),
                         ),
                     ))
@@ -2143,534 +2059,4 @@ fn indentation(strings: &[String]) -> usize {
 }
 
 #[cfg(test)]
-mod tests {
-
-    use super::*;
-
-    macro_rules! lex_ok {
-        ($src:expr, $($span:expr => $token:expr,)*) => {{
-            let lexed_tokens: Vec<_> = Tokenizer::new($src, arena::Index::from(0usize)).filter(|t| match t {
-                Ok(Spanned { value: Token::EndOfStream, .. }) => false,
-                Ok(Spanned { value: t, .. }) => !t.is_ignorable(),
-                Err(_) => true
-            }).map(|t| match t {
-                Ok(Spanned { value: t, span: tspan }) => Ok((t, tspan.start.column(), tspan.end.column())),
-                Err(e) => Err(e)
-            }).collect();
-            // locations are 1-based, so we need to add 1 to every loc, end position needs another +1
-            let expected_tokens = vec![$({
-                Ok(($token, $span.find("~").unwrap() + 1, $span.rfind("~").unwrap() + 2))
-            }),*];
-
-            assert_eq!(lexed_tokens, expected_tokens);
-        }};
-    }
-
-    #[rustfmt::skip]
-    #[test]
-    fn interpolate() -> Result<()> {
-        lex_ok! {
-            r#"  "" "#,
-            r#"  ~ "# => Token::DQuote,
-            r#"   ~ "# => Token::DQuote,
-        };
-        lex_ok! {
-            r#"  "hello" "#,
-            r#"  ~ "# => Token::DQuote,
-            r#"   ~~~~~ "# => Token::StringLiteral("hello".into()),
-            r#"        ~ "# => Token::DQuote,
-        };
-        lex_ok! {
-            r#"  "hello #{7}" "#,
-            r#"  ~ "# => Token::DQuote,
-            r#"   ~~~~~~ "# => Token::StringLiteral("hello ".into()),
-            r#"         ~~ "# => Token::Interpol,
-            r#"           ~ "# => Token::IntLiteral(7),
-            r#"            ~ "# => Token::RBrace,
-            r#"             ~ "# => Token::DQuote,
-
-        };
-        // We can't use `r#""#` for the string since we got a a `"#` in it
-        lex_ok! {
-            "  \"#{7} hello\" ",
-            r#"  ~ "# => Token::DQuote,
-            r#"   ~~ "# => Token::Interpol,
-            r#"     ~ "# => Token::IntLiteral(7),
-            r#"      ~ "# => Token::RBrace,
-            r#"       ~~~~~~ "# => Token::StringLiteral(" hello".into()),
-            r#"             ~ "# => Token::DQuote,
-
-        };
-        lex_ok! {
-            r#"  "hello #{ "snot #{7}" }" "#,
-            r#"  ~ "# => Token::DQuote,
-            r#"   ~~~~~~ "# => Token::StringLiteral("hello ".into()),
-            r#"         ~~ "# => Token::Interpol,
-            r#"            ~ "# => Token::DQuote,
-            r#"             ~~~~~ "# => Token::StringLiteral("snot ".into()),
-            r#"                  ~~ "# => Token::Interpol,
-            r#"                    ~ "# => Token::IntLiteral(7),
-            r#"                     ~ "# => Token::RBrace,
-            r#"                      ~ "# => Token::DQuote,
-            r#"                        ~ "# => Token::RBrace,
-            r#"                         ~ "# => Token::DQuote,
-        };
-        Ok(())
-    }
-
-    #[rustfmt::skip]
-    #[test]
-    fn number_parsing() -> Result<()> {
-        lex_ok! {
-        "1_000_000",
-        "~~~~~~~~~" => Token::IntLiteral(1_000_000), };
-        lex_ok! {
-        "1_000_000_",
-        "~~~~~~~~~~" => Token::IntLiteral(1_000_000), };
-
-        lex_ok! {
-        "100.0000",
-        "~~~~~~~~" => Token::FloatLiteral(100.0000, "100.0000".to_string()), };
-        lex_ok! {
-        "1_00.0_000_",
-        "~~~~~~~~~~~" => Token::FloatLiteral(100.0000, "100.0000".to_string()), };
-
-        lex_ok! {
-        "0xFFAA00",
-        "~~~~~~~~" => Token::IntLiteral(16_755_200), };
-        lex_ok! {
-        "0xFF_AA_00",
-        "~~~~~~~~~~" => Token::IntLiteral(16_755_200), };
-        Ok(())
-    }
-
-    #[rustfmt::skip]
-    #[test]
-    fn paths() -> Result<()> {
-        lex_ok! {
-            "  hello-hahaha8ABC ",
-            "  ~~~~~~~~~~~~~~~~ " => Token::Ident("hello-hahaha8ABC".into(), false),
-        };
-        lex_ok! {
-            "  .florp ",
-            "  ~ " => Token::Dot,
-            "   ~~~~~ " => Token::Ident("florp".into(), false),
-        };
-        lex_ok! {
-            "  $borp ",
-            "  ~ " => Token::Dollar,
-            "   ~~~~ " => Token::Ident("borp".into(), false),
-        };
-        lex_ok! {
-            "  $`borp`",
-            "  ~ " => Token::Dollar,
-            "   ~~~~~~ " => Token::Ident("borp".into(), true),
-        };
-        Ok(())
-    }
-
-    #[rustfmt::skip]
-    #[test]
-    fn keywords() -> Result<()> {
-        lex_ok! {
-        " let ",
-        " ~~~ " => Token::Let, };
-        lex_ok! {
-            " match ",
-            " ~~~~~ " => Token::Match, };
-        lex_ok! {
-            " case ",
-            " ~~~~ " => Token::Case, };
-        lex_ok! {
-            " of ",
-            " ~~ " => Token::Of, };
-        lex_ok! {
-            " end ",
-            " ~~~ " => Token::End, };
-        lex_ok! {
-            " drop ",
-            " ~~~~ " => Token::Drop, };
-        lex_ok! {
-            " emit ",
-            " ~~~~ " => Token::Emit, };
-        lex_ok! {
-            " event ",
-            " ~~~~~ " => Token::Event, };
-        lex_ok! {
-            " state ",
-            " ~~~~~ " => Token::State, };
-        lex_ok! {
-            " set ",
-            " ~~~ " => Token::Set, };
-        lex_ok! {
-            " each ",
-            " ~~~~ " => Token::Each, };
-        lex_ok! {
-            " intrinsic ",
-            " ~~~~~~~~~ " => Token::Intrinsic, };
-        Ok(())
-    }
-
-    #[rustfmt::skip]
-    #[test]
-    fn operators() -> Result<()> {
-        lex_ok! {
-            " not null ",
-            " ~~~ " => Token::Not,
-            "     ~~~~ " => Token::Nil,
-        };
-        lex_ok! {
-            " != null ",
-            " ~~ " => Token::NotEq,
-            "    ~~~~ " => Token::Nil,
-        };
-        lex_ok! {
-            " !1 ",
-            " ~  " => Token::BitNot,
-            "  ~ " => Token::IntLiteral(1),
-        };
-        lex_ok! {
-            " ! ",
-            " ~ " => Token::BitNot,
-        };
-        lex_ok! {
-            " and ",
-            " ~~~ " => Token::And,
-        };
-        lex_ok! {
-            " or ",
-            " ~~ " => Token::Or,
-        };
-        lex_ok! {
-            " xor ",
-            " ~~~ " => Token::Xor,
-        };
-        lex_ok! {
-            " & ",
-            " ~ " => Token::BitAnd,
-        };
-        /* TODO: enable
-        lex_ok! {
-            " | ",
-            " ~ " => Token::BitOr,
-        };*/
-        lex_ok! {
-            " ^ ",
-            " ~ " => Token::BitXor,
-        };
-        lex_ok! {
-            " = ",
-            " ~ " => Token::Eq,
-        };
-        lex_ok! {
-            " == ",
-            " ~~ " => Token::EqEq,
-        };
-        lex_ok! {
-            " != ",
-            " ~~ " => Token::NotEq,
-        };
-        lex_ok! {
-            " >= ",
-            " ~~ " => Token::Gte,
-        };
-        lex_ok! {
-            " > ",
-            " ~ " => Token::Gt,
-        };
-        lex_ok! {
-            " <= ",
-            " ~~ " => Token::Lte,
-        };
-        lex_ok! {
-            " < ",
-            " ~ " => Token::Lt,
-        };
-        lex_ok! {
-            " >> ",
-            " ~~ " => Token::RBitShiftSigned,
-        };
-        lex_ok! {
-            " >>> ",
-            " ~~~ " => Token::RBitShiftUnsigned,
-        };
-        lex_ok! {
-            " << ",
-            " ~~ " => Token::LBitShift,
-        };
-        lex_ok! {
-            " + ",
-            " ~ " => Token::Add,
-        };
-        lex_ok! {
-            " - ",
-            " ~ " => Token::Sub,
-        };
-        lex_ok! {
-            " * ",
-            " ~ " => Token::Mul,
-        };
-        lex_ok! {
-            " / ",
-            " ~ " => Token::Div,
-        };
-        lex_ok! {
-            " % ",
-            " ~ " => Token::Mod,
-        };
-        Ok(())
-    }
-
-    #[test]
-    fn should_disambiguate() -> Result<()> {
-        // Starts with ':'
-        lex_ok! {
-            " : ",
-            " ~ " => Token::Colon,
-        };
-        lex_ok! {
-            " :: ",
-            " ~~ " => Token::ColonColon,
-        };
-
-        // Starts with '-'
-        lex_ok! {
-            " - ",
-            " ~ " => Token::Sub,
-        };
-
-        // Starts with '='
-        lex_ok! {
-            " = ",
-            " ~ " => Token::Eq,
-        };
-        lex_ok! {
-            " == ",
-            " ~~ " => Token::EqEq,
-        };
-        lex_ok! {
-            " => ",
-            " ~~ " => Token::EqArrow,
-        };
-
-        // Starts with '%'
-        lex_ok! {
-            " % ",
-            " ~ " => Token::Mod,
-        }
-        lex_ok! {
-            " %{ ",
-            " ~~ " => Token::LPatBrace,
-        }
-        lex_ok! {
-            " %[ ",
-            " ~~ " => Token::LPatBracket,
-        }
-        lex_ok! {
-            " %( ",
-            " ~~ " => Token::LPatParen,
-        }
-        // Starts with '.'
-        lex_ok! {
-            " . ",
-            " ~ " => Token::Dot,
-        };
-
-        Ok(())
-    }
-
-    #[test]
-    fn delimiters() -> Result<()> {
-        lex_ok! {
-                    " ( ) { } [ ] ",
-                    " ~           " => Token::LParen,
-                    "   ~         " => Token::RParen,
-                    "     ~       " => Token::LBrace,
-                    "       ~     " => Token::RBrace,
-                    "         ~   " => Token::LBracket,
-                    "           ~ " => Token::RBracket,
-        };
-        Ok(())
-    }
-
-    #[test]
-    fn string() -> Result<()> {
-        lex_ok! {
-            r#" "\n" "#,
-            r#" ~    "# => Token::DQuote,
-            r#"  ~~  "# => Token::StringLiteral("\n".into()),
-            r#"    ~ "# => Token::DQuote,
-        };
-        lex_ok! {
-            r#" "\r" "#,
-            r#" ~    "# => Token::DQuote,
-            r#"  ~~  "# => Token::StringLiteral("\r".into()),
-            r#"    ~ "# => Token::DQuote,
-        };
-        lex_ok! {
-            r#" "\t" "#,
-            r#" ~    "# => Token::DQuote,
-            r#"  ~~  "# => Token::StringLiteral("\t".into()),
-            r#"    ~ "# => Token::DQuote,
-        };
-        lex_ok! {
-             r#" "\\" "#,
-             r#" ~    "# => Token::DQuote,
-             r#"  ~~  "# => Token::StringLiteral("\\".into()),
-             r#"    ~ "# => Token::DQuote,
-        };
-        lex_ok! {
-            r#" "\"" "#,
-            r#" ~    "# => Token::DQuote,
-            r#"  ~~  "# => Token::StringLiteral("\"".into()),
-            r#"    ~ "# => Token::DQuote,
-        };
-        lex_ok! {
-            r#" "{" "#,
-            r#" ~    "# => Token::DQuote,
-            r#"  ~  "# => Token::StringLiteral("{".into()),
-            r#"   ~ "# => Token::DQuote,
-        };
-        lex_ok! {
-            r#" "}" "#,
-            r#" ~    "# => Token::DQuote,
-            r#"  ~  "# => Token::StringLiteral("}".into()),
-            r#"   ~ "# => Token::DQuote,
-        };
-        lex_ok! {
-            r#" "{}" "#,
-            r#" ~    "# => Token::DQuote,
-            r#"  ~~  "# => Token::StringLiteral("{}".into()),
-            r#"    ~ "# => Token::DQuote,
-        };
-        lex_ok! {
-            r#" "}" "#,
-            r#" ~    "# => Token::DQuote,
-            r#"  ~   "# => Token::StringLiteral("}".into()),
-            r#"   ~  "# => Token::DQuote,
-        };
-
-        lex_ok! {
-            r#" "a\nb}}" "#,
-            r#" ~        "# => Token::DQuote,
-            r#"  ~~~~~~  "# => Token::StringLiteral("a\nb}}".into()),
-            r#"        ~ "# => Token::DQuote,
-        };
-
-        lex_ok! {
-            r#" "\"\"" "#,
-            r#" ~      "# => Token::DQuote,
-            r#"  ~~~~  "# => Token::StringLiteral("\"\"".into()),
-            r#"      ~ "# => Token::DQuote,
-        };
-
-        lex_ok! {
-            r#" "\\\"" "#,
-            r#" ~      "# => Token::DQuote,
-            r#"  ~~~~  "# => Token::StringLiteral("\\\"".into()),
-            r#"      ~ "# => Token::DQuote,
-        };
-
-        lex_ok! {
-            r#" "\"\"""\"\"" "#,
-            r#" ~            "# => Token::DQuote,
-            r#"  ~~~~        "# => Token::StringLiteral("\"\"".into()),
-            r#"      ~       "# => Token::DQuote,
-            r#"       ~      "# => Token::DQuote,
-            r#"        ~~~~  "# => Token::StringLiteral("\"\"".into()),
-            r#"            ~ "# => Token::DQuote,
-        };
-        //lex_ko! { r#" "\\\" "#, " ~~~~~ " => ErrorKind::UnterminatedStringLiteral { start: Location::new(1,2,2), end: Location::new(1,7,7) } }
-        Ok(())
-    }
-
-    #[rustfmt::skip]
-    #[test]
-    fn heredoc() -> Result<()> {
-        lex_ok! {
-            r#""""
-              """"#,
-            r#"~~~"# => Token::HereDocStart,
-            r#"~~~~~~~~~~~~~~"# => Token::HereDocLiteral("              ".into()),
-            r#"              ~~~"# => Token::HereDocEnd,
-        };
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_preprocessor() -> Result<()> {
-        lex_ok! {
-            r#"use "foo.tremor" ;"#,
-            r#"~~~               "# => Token::Use,
-            r#"    ~             "# => Token::DQuote,
-            r#"     ~~~~~~~~~~   "# => Token::StringLiteral("foo.tremor".into()),
-            r#"               ~  "# => Token::DQuote,
-            r#"                 ~"# => Token::Semi,
-        };
-        Ok(())
-    }
-
-    #[test]
-    fn test_test_literal_format_bug_regression() -> Result<()> {
-        let snot = "match %{ test ~= base64|| } of default => \"badger\" end ".to_string();
-
-        let mut res = String::new();
-        for b in Tokenizer::new(&snot, arena::Index::default())
-            .filter_map(Result::ok)
-            .collect::<Vec<TokenSpan>>()
-        {
-            res.push_str(&format!("{}", b.value));
-        }
-        assert_eq!(snot, res);
-        Ok(())
-    }
-
-    #[test]
-    fn lexer_long_float() -> Result<()> {
-        let f = 48_354_865_651_623_290_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000.0;
-        let source = format!("{:.1}", f); // ensure we keep the .0
-        match Tokenizer::new(&source, arena::Index::default()).next() {
-            Some(Ok(token)) => match token.value {
-                Token::FloatLiteral(f_token, _) => {
-                    assert_eq!(f, f_token);
-                }
-                t => assert!(false, "{:?} not a float", t),
-            },
-            e => assert!(false, "{:?} unexpected", e),
-        };
-        Ok(())
-    }
-    use proptest::prelude::*;
-
-    proptest! {
-        // negative floats are constructed in the AST later
-        #[test]
-        fn float_literals_precision(f in 0_f64..f64::MAX) {
-            if f.round() != f {
-                let float = format!("{:.}", f);
-                for token in Tokenizer::new(&float, arena::Index::default()) {
-                    let _ = token?;
-                }
-            }
-        }
-    }
-
-    proptest! {
-        // negative floats are constructed in the AST later
-        #[test]
-        fn float_literals_scientific(f in 0_f64..f64::MAX) {
-            let float = format!("{:e}", f);
-            for token in Tokenizer::new(&float, arena::Index::default()) {
-                match token {
-                    Ok(spanned) =>
-                        match spanned.value {
-                            Token::FloatLiteral(f_token, _f_str) => assert_eq!(f, f_token),
-                            _ => ()
-                        }
-                    _ => ()
-                }
-            }
-        }
-    }
-}
+mod test;

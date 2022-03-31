@@ -240,9 +240,9 @@ impl From<(Location, Location)> for Span {
     }
 }
 
-impl From<&Location> for Span {
-    fn from(loc: &Location) -> Self {
-        Self::at(*loc)
+impl From<Location> for Span {
+    fn from(loc: Location) -> Self {
+        Self::at(loc)
     }
 }
 
