@@ -31,7 +31,7 @@ grammar<'input>;
 // Statements or partials shared between grammers
 
 pub(crate) ModuleFile: ModuleRaw<'input> = {
-    <ModuleBody> "<end-of-stream>"  => <>,
+    <ModuleBody> => <>,
 }
 
 ModuleBody: ModuleRaw<'input> = {
@@ -201,8 +201,8 @@ ModularTarget: NodeId = {
 
 /// Root
 pub(crate) Deploy : DeployRaw<'input> = {
-    <config:ConfigDirectives> <doc:ModComment> <stmts:DeployStmts> "<end-of-stream>"? => DeployRaw{config, stmts, doc},
-    <doc:ModComment> <stmts:DeployStmts> "<end-of-stream>"? => DeployRaw{config: vec![], stmts, doc},
+    <config:ConfigDirectives> <doc:ModComment> <stmts:DeployStmts> => DeployRaw{config, stmts, doc},
+    <doc:ModComment> <stmts:DeployStmts>=> DeployRaw{config: vec![], stmts, doc},
 }
 
 DeployStmts: DeployStmtsRaw<'input> = {
@@ -301,8 +301,8 @@ DefineFlow: FlowDefinitionRaw<'input> = {
 
 /// Root
 pub(crate) Query : QueryRaw<'input> = {
-    <start:@L> <config:ConfigDirectives> <stmts:Stmts> "<end-of-stream>"? <end:@L>  => QueryRaw{mid: NodeMeta::new_box(start, end), config: config, stmts, params: DefinitionalArgsRaw::none(NodeMeta::new_box(start, end))},
-    <start:@L> <stmts:Stmts> "<end-of-stream>"? <end:@L> => QueryRaw{mid: NodeMeta::new_box(start, end), config: vec![], stmts, params: DefinitionalArgsRaw::none(NodeMeta::new_box(start, end))},
+    <start:@L> <config:ConfigDirectives> <stmts:Stmts> <end:@L>  => QueryRaw{mid: NodeMeta::new_box(start, end), config: config, stmts, params: DefinitionalArgsRaw::none(NodeMeta::new_box(start, end))},
+    <start:@L> <stmts:Stmts> <end:@L> => QueryRaw{mid: NodeMeta::new_box(start, end), config: vec![], stmts, params: DefinitionalArgsRaw::none(NodeMeta::new_box(start, end))},
 }
 
 Stmts: StmtsRaw<'input> = {
@@ -510,7 +510,7 @@ PipelineCreateInner : StmtsRaw<'input> = {
 // These statements for the root of the language.
 
 pub(crate) Script : ScriptRaw<'input> = {
-    <start:@L> <doc:ModComment> <exprs:TopLevelExprs> <end:@L> "<end-of-stream>"? => ScriptRaw::new(NodeMeta::new_box(start, end), exprs, doc),
+    <start:@L> <doc:ModComment> <exprs:TopLevelExprs> <end:@L>  => ScriptRaw::new(NodeMeta::new_box(start, end), exprs, doc),
 }
 
 /// List of expressions at the root of the script
@@ -1599,7 +1599,6 @@ extern {
         "<extractor>" => Token::TestLiteral(_, <Vec<String>>),
         "<ident>" => Token::Ident(<Cow<'input, str>>, <bool>),
         "<error>" => Token::Bad(<String>),
-        "<end-of-stream>" => Token::EndOfStream,
         "<newline>" => Token::NewLine,
 
         "select" => Token::Select,

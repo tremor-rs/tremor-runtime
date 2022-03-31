@@ -145,7 +145,7 @@ pub trait Highlighter {
         let aid = r.aid();
         let script = Arena::io_get(aid)?;
         let tokens: Vec<_> =
-            lexer::Tokenizer::new(script, aid).collect::<crate::errors::Result<_>>()?;
+            lexer::Lexer::new(script, aid).collect::<crate::errors::Result<_>>()?;
         self.highlight(None, &tokens, line_prefix, true, Some(r))?;
         io::Result::Ok(())
     }
@@ -160,7 +160,7 @@ pub trait Highlighter {
             .and_then(|r| Some((r, r.aid(), Arena::io_get(r.aid()).ok()?)))
         {
             // i wanna use map_while here, but it is still unstable :(
-            let tokens: Vec<_> = lexer::Tokenizer::new(script, aid)
+            let tokens: Vec<_> = lexer::Lexer::new(script, aid)
                 .tokenize_until_err()
                 .collect();
             self.highlight_error(None, &tokens, "", true, Some(r), Some(error.into()))?;
@@ -201,7 +201,7 @@ pub trait Highlighter {
     fn highlight_str(&mut self, source: &str, ident: &str, emit_lines: bool) -> io::Result<()> {
         // TODO: do we really want to input this here?
         let (aid, source) = Arena::insert(source)?;
-        let tokens: Vec<_> = crate::lexer::Tokenizer::new(source, aid)
+        let tokens: Vec<_> = crate::lexer::Lexer::new(source, aid)
             .filter_map(Result::ok)
             .collect();
         self.highlight(Some(source), &tokens, ident, emit_lines, None)

@@ -130,7 +130,7 @@ pub(crate) fn highlight(is_pretty: bool, value: &Value) -> Result<()> {
         }
     );
     let (aid, result) = Arena::insert(&result)?;
-    let lexed_tokens: Vec<_> = lexer::Tokenizer::new(result, aid)
+    let lexed_tokens: Vec<_> = lexer::Lexer::new(result, aid)
         .tokenize_until_err()
         .collect();
 

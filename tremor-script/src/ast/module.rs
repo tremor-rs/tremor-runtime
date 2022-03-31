@@ -28,7 +28,7 @@ use crate::{
     arena::{self, Arena},
     errors::{already_defined_err, Error, Kind as ErrorKind, Result},
     impl_expr,
-    lexer::{Span, Tokenizer},
+    lexer::{Lexer, Span},
     path::ModulePath,
     FN_REGISTRY,
 };
@@ -238,7 +238,7 @@ impl Module {
         let reg = &*FN_REGISTRY.read()?;
         let mut helper = Helper::new(reg, &aggr_reg);
 
-        let lexemes = Tokenizer::new(src, arena_idx)
+        let lexemes = Lexer::new(src, arena_idx)
             .filter_map(std::result::Result::ok)
             .filter(|t| !t.value.is_ignorable());
         let raw: ModuleRaw<'static> = crate::parser::g::ModuleFileParser::new().parse(lexemes)?;

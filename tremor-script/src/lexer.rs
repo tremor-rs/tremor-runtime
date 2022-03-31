@@ -344,9 +344,6 @@ pub enum Token<'input> {
     /// Right bracket `]`
     RBracket,
 
-    /// End of stream token
-    EndOfStream,
-
     // Query
     /// The `select` keyword
     Select,
@@ -728,7 +725,6 @@ impl<'input> fmt::Display for Token<'input> {
             Token::Add => write!(f, "+"),
             Token::Sub => write!(f, "-"),
             Token::Mod => write!(f, "%"),
-            Token::EndOfStream => write!(f, ""),
             // Query
             Token::Select => write!(f, "select"),
             Token::From => write!(f, "from"),
@@ -799,62 +795,6 @@ impl<'input> Iterator for CharLocations<'input> {
     }
 }
 
-/// A Tremor tokeniser
-pub struct Tokenizer<'input> {
-    //cu: usize,
-    eos: bool,
-    pos: Span,
-    iter: Peekable<Lexer<'input>>,
-}
-
-impl<'input> Tokenizer<'input> {
-    /// Creates a new tokeniser
-    #[must_use]
-    pub fn new(input: &'input str, aid: arena::Index) -> Self {
-        let lexer = Lexer::new(input, aid);
-        let start = Location::start_of_file(aid);
-        let end = Location::start_of_file(aid);
-        Tokenizer {
-            eos: false,
-            iter: lexer.peekable(),
-            pos: span(start, end),
-        }
-    }
-
-    /// Turn this Tokenizer into an `Iterator` of tokens that are produced until the first error is hit
-    ///
-    /// The purpose of this method is to not accidentally consume tokens after an error,
-    /// which might be completely incorrect, but would still show up in the resulting iterator if
-    /// used with `filter_map(Result::ok)` for example.
-    pub fn tokenize_until_err(self) -> impl Iterator<Item = Spanned<'input>> {
-        // i wanna use map_while here, but it is still unstable :(
-        self.scan((), |_, item| item.ok()).fuse()
-    }
-}
-
-impl<'input> Iterator for Tokenizer<'input> {
-    type Item = Result<TokenSpan<'input>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let token = self.iter.next();
-        match (self.eos, token) {
-            (false, None) => {
-                self.eos = true;
-                Some(Ok(Spanned {
-                    value: Token::EndOfStream,
-                    span: self.pos,
-                }))
-            }
-            (true, _) => None,
-            (_, Some(Err(x))) => Some(Err(x)),
-            (_, Some(Ok(t))) => {
-                self.pos = t.clone().span;
-                Some(Ok(t))
-            }
-        }
-    }
-}
-
 /// An iterator over a source string that yeilds `Token`s for subsequent use by
 /// the parser
 pub struct Lexer<'input> {
@@ -872,8 +812,16 @@ pub(crate) fn spanned(start: Location, end: Location, value: Token) -> Spanned {
     }
 }
 impl<'input> Lexer<'input> {
+    /// The purpose of this method is to not accidentally consume tokens after an error,
+    /// which might be completely incorrect, but would still show up in the resulting iterator if
+    /// used with `filter_map(Result::ok)` for example.
+    pub fn tokenize_until_err(self) -> impl Iterator<Item = Spanned<'input>> {
+        // i wanna use map_while here, but it is still unstable :(
+        self.scan((), |_, item| item.ok()).fuse()
+    }
+
     /// Create a new lexer from the source string
-    pub(crate) fn new(input: &'input str, aid: arena::Index) -> Self {
+    pub fn new(input: &'input str, aid: arena::Index) -> Self {
         let chars = CharLocations::new(input, aid);
         Lexer {
             input: input.src(),

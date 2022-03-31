@@ -18,8 +18,8 @@ use proptest::prelude::*;
 
 macro_rules! lex_ok {
     ($src:expr, $($span:expr => $token:expr,)*) => {{
-        let lexed_tokens: Vec<_> = Tokenizer::new($src, arena::Index::from(0usize)).filter_map(|t| match t {
-            Ok(Spanned { value: t, span: tspan }) if !t.is_ignorable() && t !=  Token::EndOfStream => Some((t, tspan.start.column(), tspan.end.column())),
+        let lexed_tokens: Vec<_> = Lexer::new($src, arena::Index::from(0usize)).filter_map(|t| match t {
+            Ok(Spanned { value: t, span: tspan }) if !t.is_ignorable() => Some((t, tspan.start.column(), tspan.end.column())),
             _ => None
         }).collect();
         // locations are 1-based, so we need to add 1 to every loc, end position needs another +1
@@ -481,7 +481,7 @@ fn test_test_literal_format_bug_regression() -> Result<()> {
     let snot = "match %{ test ~= base64|| } of default => \"badger\" end ".to_string();
 
     let mut res = String::new();
-    for b in Tokenizer::new(&snot, arena::Index::default())
+    for b in Lexer::new(&snot, arena::Index::default())
         .filter_map(Result::ok)
         .collect::<Vec<TokenSpan>>()
     {
@@ -495,7 +495,7 @@ fn test_test_literal_format_bug_regression() -> Result<()> {
 fn lexer_long_float() -> Result<()> {
     let f = 48_354_865_651_623_290_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000_000.0;
     let source = format!("{:.1}", f); // ensure we keep the .0
-    let token = Tokenizer::new(&source, arena::Index::default())
+    let token = Lexer::new(&source, arena::Index::default())
         .next()
         .ok_or("unexpected")??
         .value;
@@ -509,7 +509,7 @@ proptest! {
     fn float_literals_precision(f in 0_f64..f64::MAX) {
         if f.round() != f {
             let float = format!("{:.}", f);
-            for token in Tokenizer::new(&float, arena::Index::default()) {
+            for token in Lexer::new(&float, arena::Index::default()) {
                 let _ = token?;
             }
         }
@@ -521,7 +521,7 @@ proptest! {
     #[test]
     fn float_literals_scientific(f in 0_f64..f64::MAX) {
         let float = format!("{:e}", f);
-        for token in Tokenizer::new(&float, arena::Index::default()) {
+        for token in Lexer::new(&float, arena::Index::default()) {
             match token {
                 Ok(spanned) =>
                     match spanned.value {

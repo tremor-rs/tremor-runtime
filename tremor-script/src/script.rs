@@ -25,7 +25,7 @@ use crate::{
     ctx::EventContext,
     errors::Result,
     highlighter::Highlighter,
-    lexer::{self, Tokenizer},
+    lexer::{self, Lexer},
     parser::g as grammar,
     registry::{Aggr as AggrRegistry, Registry},
     Value,
@@ -82,7 +82,7 @@ impl Script {
         let mut warnings = Warnings::new();
         let (aid, script) = Arena::insert(script)?;
 
-        let tokens = Tokenizer::new(script, aid).collect::<Result<Vec<_>>>()?;
+        let tokens = Lexer::new(script, aid).collect::<Result<Vec<_>>>()?;
         let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
 
         let script_raw = grammar::ScriptParser::new().parse(filtered_tokens)?;
@@ -112,7 +112,7 @@ impl Script {
     /// on io errors
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> io::Result<()> {
         for w in self.warnings() {
-            let tokens: Vec<_> = lexer::Tokenizer::new(Arena::io_get(self.aid)?, self.aid)
+            let tokens: Vec<_> = lexer::Lexer::new(Arena::io_get(self.aid)?, self.aid)
                 .tokenize_until_err()
                 .collect();
             h.highlight_error(None, &tokens, "", true, Some(w.outer), Some(w.into()))?;

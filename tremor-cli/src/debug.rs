@@ -18,7 +18,7 @@ use crate::{
 };
 use crate::{env, errors::Result};
 use io::BufReader;
-use lexer::Tokenizer;
+use lexer::Lexer;
 use std::io::Write;
 use std::io::{self, Read};
 use termcolor::{Color, ColorSpec};
@@ -121,7 +121,7 @@ impl DbgSrc {
             "Lexemes",
             "Lexical token stream before preprocessing",
         )?;
-        let lexemes: Vec<_> = Tokenizer::new(src, aid).tokenize_until_err().collect();
+        let lexemes: Vec<_> = Lexer::new(src, aid).tokenize_until_err().collect();
         dbg_tokens(h, lexemes)?;
 
         h.reset()?;
