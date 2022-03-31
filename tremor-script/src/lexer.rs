@@ -821,6 +821,7 @@ impl<'input> Lexer<'input> {
     }
 
     /// Create a new lexer from the source string
+    #[must_use]
     pub fn new(input: &'input str, aid: arena::Index) -> Self {
         let chars = CharLocations::new(input, aid);
         Lexer {
