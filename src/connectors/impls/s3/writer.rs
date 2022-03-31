@@ -13,7 +13,7 @@
 // limitations under the License.
 use crate::connectors::prelude::*;
 use crate::Event;
-use std::{error::Error as StdError, mem};
+use std::mem;
 use value_trait::ValueAccess;
 
 use super::auth;
@@ -23,7 +23,7 @@ use s3::Client as S3Client;
 
 const CONNECTOR_TYPE: &str = "s3-writer";
 
-const FIVEMBS: usize = 5 * 1024 * 1024 + 100; // Some extra bytes to keep aws happy.
+const MORE_THEN_FIVEMBS: usize = 5 * 1024 * 1024 + 100; // Some extra bytes to keep aws happy.
 
 #[derive(Deserialize, Debug, Default, Clone)]
 pub struct S3Config {
@@ -38,7 +38,7 @@ pub struct S3Config {
 // Defaults for the config.
 impl S3Config {
     fn fivembs() -> usize {
-        FIVEMBS
+        MORE_THEN_FIVEMBS
     }
 }
 
@@ -59,12 +59,12 @@ impl ConnectorBuilder for Builder {
         raw_config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
         if let Some(config) = &raw_config.config {
-            let mut config = S3Config::new(config)?;
+            let config = S3Config::new(config)?;
 
             // Maintain the minimum size of 5 MBs.
-            if config.min_part_size < FIVEMBS {
-                info!("[Connector::{id}] Setting 'min_part_size' to 5MB, as S3 doesn't allow smaller parts.");
-                config.min_part_size = FIVEMBS;
+            if config.min_part_size < MORE_THEN_FIVEMBS {
+                let e = format!("[Connector::{id}] Setting 'min_part_size' to 5MB, as S3 doesn't allow smaller parts.");
+                return Err(e.into());
             }
 
             Ok(Box::new(S3Connector { config }))
@@ -146,14 +146,8 @@ impl Sink for S3Sink {
             .send()
             .await
             .map_err(|e| {
-                let msg = if let Some(err) = e.source() {
-                    format!(
-                        "Failed to access Bucket \"{}\": {}.",
-                        &self.config.bucket, err
-                    )
-                } else {
-                    format!("Failed to access Bucket \"{}\".", &self.config.bucket)
-                };
+                let bkt = &self.config.bucket;
+                let msg = format!("Failed to access Bucket `{bkt}`: {e}");
                 Error::from(ErrorKind::S3Error(msg))
             })?;
 
@@ -277,7 +271,7 @@ impl S3Sink {
 
         debug!(
             "{ctx} key: {} uploading part {}",
-            &self.current_key, self.part_number,
+            self.current_key, self.part_number,
         );
 
         // Upload the part
@@ -298,7 +292,7 @@ impl S3Sink {
         }
         debug!(
             "{ctx} Key {} part {} uploaded.",
-            &self.current_key, &self.part_number
+            self.current_key, self.part_number
         );
         // Insert into the list of completed parts
         self.parts.push(completed.build());
@@ -341,11 +335,7 @@ struct S3Meta<'a, 'value> {
 impl<'a, 'value> S3Meta<'a, 'value> {
     fn new(meta: &'a Value<'value>) -> Self {
         Self {
-            meta: if let Some(s3_meta) = meta.get("s3") {
-                Some(s3_meta)
-            } else {
-                None
-            },
+            meta: meta.get("s3"),
         }
     }
 
