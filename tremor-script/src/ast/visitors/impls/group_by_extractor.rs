@@ -39,7 +39,6 @@ impl<'script> GroupByVisitor<'script> for GroupByExprExtractor<'script> {
 
 #[cfg(test)]
 mod test {
-
     use crate::{
         ast::{GroupBy, List},
         errors::Result,
