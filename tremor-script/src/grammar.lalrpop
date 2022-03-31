@@ -27,13 +27,72 @@ use beef::Cow;
 
 grammar<'input>;
 
-////////////////////////////// Generic statements //////////////////////////////
+////////////////////////////// Module system  //////////////////////////////
 // Statements or partials shared between grammers
 
+pub(crate) ModuleFile: ModuleRaw<'input> = {
+    <ModuleBody> "<end-of-stream>"  => <>,
+}
 
-Use: UseRaw = {
-    <start:@L> "use" <module:ModularTarget> <end:@L>  => UseRaw{module, alias: None, mid: NodeMeta::new_box(start, end)},
-    <start:@L> "use" <module:ModularTarget> "as" <alias:Ident> <end:@L> => UseRaw{module, alias: Some(alias.to_string()), mid: NodeMeta::new_box(start, end)},
+ModuleBody: ModuleRaw<'input> = {
+    <start:@L> <doc:ModComment> <stmts:ModuleStmts> <end:@L> => ModuleRaw{name: IdentRaw::none(NodeMeta::new_box(start, end)), mid: NodeMeta::new_box(start, end), stmts, doc},
+}
+
+ModComment: Option<Vec<Cow<'input, str>>> = {
+    (<ModComment_>)? => <>
+}
+  
+ModComment_: Vec<Cow<'input, str>> = {
+    <c:"<mod-comment>"> => vec![c.into()],
+    <v:ModComment_> <c:"<mod-comment>"> => {
+        let mut v = v;
+        v.push(c.into());
+        v
+    },
+}
+
+/// Comments
+DocComment: Option<Vec<Cow<'input, str>>> = {
+    (<DocComment_>)? => <>
+}
+DocComment_: Vec<Cow<'input, str>> = {
+    <c:"<doc-comment>"> => vec![c.into()],
+    <v:DocComment_> <c:"<doc-comment>"> => {
+        let mut v = v;
+        v.push(c.into());
+        v
+    },
+}
+
+/// List of expressions at the root of the script
+ModuleStmts: ModuleStmtsRaw<'input> = {
+    <stmt:ModuleStmt> ";" <list:ModuleStmts> => {
+       let mut list = list;
+       list.insert(0,stmt);
+       list
+    },
+    <item:ModuleStmt> ";"? => vec![item],
+}
+
+// In case we need to limit the content of deploy stmt
+ModuleStmt: ModuleStmtRaw<'input> = {
+   // Generic
+   Use => ModuleStmtRaw::Use(<>),
+   
+   // Script
+   Const => ModuleStmtRaw::Const(<>),
+   FnDefn => ModuleStmtRaw::FnDefn(<>),
+   Intrinsic => ModuleStmtRaw::FnDefn(<>),
+
+   // Trickle
+   DefineWindow => ModuleStmtRaw::Window(<>),
+   DefineOperator => ModuleStmtRaw::Operator(<>),
+   DefineScript => ModuleStmtRaw::Script(<>),
+   DefinePipeline => ModuleStmtRaw::Pipeline(<>),
+
+   /// Troy
+   DefineConnector => ModuleStmtRaw::Connector(<>),
+   DefineFlow => ModuleStmtRaw::Flow(<>),
 }
 
 ConfigDirectives: ConfigRaw<'input> = {
@@ -48,6 +107,12 @@ ConfigDirectives: ConfigRaw<'input> = {
 ConfigDirective: (IdentRaw<'input>, ImutExprRaw<'input>) = {
     "#!config" <WithExpr> => <>
 }
+
+Use: UseRaw = {
+    <start:@L> "use" <module:ModularTarget> <end:@L>  => UseRaw{module, alias: None, mid: NodeMeta::new_box(start, end)},
+    <start:@L> "use" <module:ModularTarget> "as" <alias:Ident> <end:@L> => UseRaw{module, alias: Some(alias.to_string()), mid: NodeMeta::new_box(start, end)},
+}
+
 
 ///
 /// args
@@ -124,80 +189,13 @@ WithExpr: (IdentRaw<'input>, ImutExprRaw<'input>) = {
     <name:Ident> "=" <expr:ExprImut> => (name, expr)
 }
 
-
-ModuleBody: ModuleRaw<'input> = {
-    <start:@L> <doc:ModComment> <stmts:ModuleStmts> <end:@L> => ModuleRaw{name: IdentRaw::none(NodeMeta::new_box(start, end)), mid: NodeMeta::new_box(start, end), stmts, doc},
-}
-
-pub(crate) ModuleFile: ModuleRaw<'input> = {
-    <ModuleBody> "<end-of-stream>"  => <>,
-}
-
-
-
-/// List of expressions at the root of the script
-ModuleStmts: ModuleStmtsRaw<'input> = {
-     <stmt:ModuleStmt> ";" <list:ModuleStmts> => {
-        let mut list = list;
-        list.insert(0,stmt);
-        list
-     },
-     <item:ModuleStmt> ";"? => vec![item],
- }
-
- // In case we need to limit the content of deploy stmt
-ModuleStmt: ModuleStmtRaw<'input> = {
-    // Generic
-    Use => ModuleStmtRaw::Use(<>),
-    
-    // Script
-    Const => ModuleStmtRaw::Const(<>),
-    FnDefn => ModuleStmtRaw::FnDefn(<>),
-    Intrinsic => ModuleStmtRaw::FnDefn(<>),
-
-    // Trickle
-    DefineWindow => ModuleStmtRaw::Window(<>),
-    DefineOperator => ModuleStmtRaw::Operator(<>),
-    DefineScript => ModuleStmtRaw::Script(<>),
-    DefinePipeline => ModuleStmtRaw::Pipeline(<>),
-
-    /// troy
-    DefineConnector => ModuleStmtRaw::Connector(<>),
-    DefineFlow => ModuleStmtRaw::Flow(<>),
-}
-
 /// Module target
 ModularTarget: NodeId = {
     <Ident> => NodeId::from(<>),
     <m:ModPath> "::" <target:Ident> => NodeId{id: target.to_string(), module: m.iter().map(ToString::to_string).collect()},
 }
 
-/// Comments
-DocComment: Option<Vec<Cow<'input, str>>> = {
-    (<DocComment_>)? => <>
-}
-DocComment_: Vec<Cow<'input, str>> = {
-    <c:"<doc-comment>"> => vec![c.into()],
-    <v:DocComment_> <c:"<doc-comment>"> => {
-        let mut v = v;
-        v.push(c.into());
-        v
-    },
-}
   
-  ModComment: Option<Vec<Cow<'input, str>>> = {
-      (<ModComment_>)? => <>
-  }
-  
-  ModComment_: Vec<Cow<'input, str>> = {
-      <c:"<mod-comment>"> => vec![c.into()],
-      <v:ModComment_> <c:"<mod-comment>"> => {
-          let mut v = v;
-          v.push(c.into());
-          v
-      },
-  }
-
 ////////////////////////////// Troy statements //////////////////////////////
 // These statements for the root of the language.
 
@@ -329,9 +327,8 @@ Stmt: StmtRaw<'input> = {
     CreateOperator => <>,
     CreateScript => <>,
     CreatePipeline => <>,
-    <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::StreamStmt(StreamStmtRaw { mid: NodeMeta::new_box(start, end), id: id.to_string() }),
-
-    <start:@L> "select" <target:ComplexExprImut> "from" <from:StreamPort> <windows:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:StreamPort> <maybe_having:HavingClause> <end:@L> => StmtRaw::SelectStmt(Box::new(SelectRaw { mid: NodeMeta::new_box(start, end), from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
+    CreateStream => <>,
+    OperatorSelect => <>,
 }
 
 //// DEFINEs
@@ -360,7 +357,18 @@ DefinePipeline: PipelineDefinitionRaw<'input> = {
     }
 }
 
+//// BUILTIN OPERATORS
+
+OperatorSelect: StmtRaw<'input> = {
+    <start:@L> "select" <target:ComplexExprImut> "from" <from:StreamPort> <windows:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:StreamPort> <maybe_having:HavingClause> <end:@L> => StmtRaw::SelectStmt(Box::new(SelectRaw { mid: NodeMeta::new_box(start, end), from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
+}
+
 //// CREATEs
+
+CreateStream: StmtRaw<'input> = {
+    <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::StreamStmt(StreamStmtRaw { mid: NodeMeta::new_box(start, end), id: id.to_string() }),
+}
+
 CreateScript: StmtRaw<'input> = {
     <start:@L> "create" "script" <id:Ident> <params:CreationWithEnd> <end:@L> => {
         StmtRaw::ScriptCreate(ScriptCreateRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), target: id.into(), params })
