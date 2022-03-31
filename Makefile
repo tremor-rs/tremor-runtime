@@ -89,11 +89,11 @@ lalrpop-doc: lalrpop-docgen
 	  -rp "./" \
 	  -mp static/language/prolog/ \
           -me static/language/epilog/ \
-          -gc "Use,Deploy,Query,Script" \
+          -gc "ModuleFile,Deploy,Query,Script" \
           --out-dir docs/language \
           tremor-script/src/grammar.lalrpop
 	if test -f docs/language/grammar.md; then  mv docs/language/grammar.md docs/language/EBNF.md; fi
-	if test -f docs/language/use.md; then mv docs/language/use.md docs/language/module_system.md; fi
+	if test -f docs/language/modulefile.md; then mv docs/language/modulefile.md docs/language/module_system.md; fi
 
 lint-lalrpop-doc: lalrpop-docgen
 	-mkdir docs/language
@@ -103,20 +103,28 @@ lint-lalrpop-doc: lalrpop-docgen
 	  -rp "./" \
 	  -mp static/language/prolog \
           -me static/language/epilog \
-          -gc "Use,Deploy,Query,Script" \
+          -gc "ModuleFile,Deploy,Query,Script" \
           --out-dir docs/language \
           tremor-script/src/grammar.lalrpop
 	if test -f docs/language/grammar.md; then  mv docs/language/grammar.md docs/language/EBNF.md; fi
-	if test -f docs/language/use.md; then mv docs/language/use.md docs/language/module_system.md; fi
+	if test -f docs/language/modulefile.md; then mv docs/language/modulefile.md docs/language/module_system.md; fi
+
 
 pdf-doc: lalrpop-doc
 	-mkdir docs/pdf
 	cd docs && \
-	pandoc --toc -f gfm  \
-	  --pdf-engine xelatex  \
+	echo pandoc --toc -f gfm  --verbose \
+	  -F /Users/dennis/.nvm/versions/node/v16.13.0/bin/mermaid-filter \
+	  --pdf-engine /usr/local/texlive/2021/bin/universal-darwin/xelatex \
 	  --variable mainfont="Helvetica" \
 	  --variable sansfont="Courier New" \
-	  --highlight-style=haddock  \
+	  --syntax-definition=../tremor.xml \
+	  --syntax-definition=../trickle.xml \
+	  --syntax-definition=../troy.xml \
+	  --syntax-definition=../ebnf.xml \ 
+	  -V papersize=a4 -V geometry=margin=2cm \
+	  --columns 80 --wrap auto \
+	  --highlight-style=tango --include-in-header ../chapter.tex \
 	  language.md language/full.md language/EBNF.md \
 	  -o pdf/tremor-langauge-reference.pdf
 	cd docs/library && \
