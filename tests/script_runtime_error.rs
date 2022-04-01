@@ -16,6 +16,7 @@ use std::io::prelude::*;
 use tremor_common::file;
 use tremor_script::FN_REGISTRY;
 
+use serial_test::serial;
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::Dumb;
 use tremor_script::module::Manager;
@@ -28,6 +29,7 @@ macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
+            #[serial(script_runtime_error)]
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
@@ -41,6 +43,7 @@ macro_rules! test_cases {
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
 
+                Manager::clear_path()?;
                 Manager::add_path(&script_dir)?;
                 Manager::add_path(&"tremor-script/lib")?;
                 let script = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
@@ -79,6 +82,7 @@ macro_rules! ignore_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
+            #[serial(script_runtime_error)]
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
@@ -92,6 +96,7 @@ macro_rules! ignore_cases {
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
 
+                Manager::clear_path()?;
                 Manager::add_path(&script_dir)?;
                 Manager::add_path(&"tremor-script/lib")?;
                 let script = Script::parse(&contents, &*FN_REGISTRY.read()?)?;

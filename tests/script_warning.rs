@@ -16,6 +16,7 @@ use std::io::prelude::*;
 use tremor_common::file;
 use tremor_script::FN_REGISTRY;
 
+use serial_test::serial;
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::{Dumb, Highlighter};
 use tremor_script::{module::Manager, Script};
@@ -24,12 +25,14 @@ macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
+            #[serial(script_warning)]
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
                 let script_dir = concat!("tests/script_warnings/", stringify!($file), "/").to_string();
                 let script_file = concat!("tests/script_warnings/", stringify!($file), "/script.tremor");
                 let err_file = concat!("tests/script_warnings/", stringify!($file), "/warning.txt");
+                Manager::clear_path()?;
                 Manager::add_path(&"tremor-script/lib")?;
                 Manager::add_path(&script_dir)?;
 
