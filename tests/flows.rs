@@ -75,5 +75,5 @@ test_cases!(
     pipeline_args,
     pipeline_with,
     // INSERT
-    chained_pielines,
+    chained_pipelines,
 );
