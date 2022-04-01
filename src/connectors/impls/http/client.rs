@@ -122,7 +122,7 @@ impl Source for HttpRequestSource {
     }
 
     fn is_transactional(&self) -> bool {
-        true
+        false
     }
 
     fn asynchronous(&self) -> bool {

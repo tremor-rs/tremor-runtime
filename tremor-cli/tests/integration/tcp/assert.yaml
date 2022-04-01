@@ -1,5 +1,5 @@
 status: 0
-name: tcp tls connectors
+name: tcp connector
 asserts:
   - source: client_out.log
     equals_file: expected_client.json

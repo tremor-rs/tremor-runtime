@@ -14,7 +14,7 @@ flow
       "buf_size": 1024,
     }
   end;
-  
+
   create connector server_out from integration::write_file
   with
     file = "server_out.log"
@@ -50,7 +50,6 @@ flow
     codec = "json",
     config = {
       "url": "127.0.0.1:65535",
-      "ttl": 64,
       "no_delay": false,
       "buf_size": 1024,
     },
