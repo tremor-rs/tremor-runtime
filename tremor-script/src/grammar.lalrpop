@@ -19,6 +19,7 @@ use crate::lexer::Token;
 use crate::pos::Location;
 use crate::Value;
 use crate::prelude::*;
+use crate::ast::aggregate_fn::*;
 use beef::Cow;
 
 grammar<'input>;
@@ -108,6 +109,7 @@ Stmt: StmtRaw<'input> = {
 
     DefineSubquery => <>,
     CreateSubquery => <>,
+    AggregateFnDecl => StmtRaw::AggregateFnDecl(<>),
 
     <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::Stream(StreamStmtRaw { start, end, id: id.to_string() }),
 
@@ -583,6 +585,14 @@ ModuleExpr: ExprRaw<'input> = {
     FnDecl => ExprRaw::FnDecl(<>),
     Intrinsic => ExprRaw::FnDecl(<>),
     Module => ExprRaw::Module(<>),
+}
+
+AggregateFnDecl: AggrFnDeclRaw<'input> = {
+    <doc:DocComment> <start:@L> "aggregate" <name:Ident> "of" <body:AggregateFnBody> "end" <end:@L> => AggrFnDeclRaw{start, end, name, body}
+}
+
+AggregateFnBody: AggrFnBodyRaw<'input> = {
+    <start:@L> "init" "(" ")" <init_body:Effectors> "aggregate" "(" <aggregate_args:FnArgs> ")" <aggregate_body:Effectors> "mergein" "(" <merge_args:FnArgs> ")" <merge_body:Effectors> "emit" "(" <emit_args:FnArgs> ")" <emit_body:Effectors> <end:@L> => AggrFnBodyRaw{start, end, init: InitDeclRaw(init_body), aggregate: AggregateDeclRaw(aggregate_args, aggregate_body), merge: MergeInDeclRaw(merge_args, merge_body), emit: EmitDeclRaw(emit_args, emit_body)}
 }
 
 FnDecl: AnyFnRaw<'input> = {
@@ -1468,6 +1478,9 @@ extern {
         "as" => Token::As,
 
         "#!config" => Token::ConfigDirective,
+        "aggregate" => Token::Aggregate,
+        "init" => Token::Init,
+        "mergein" => Token::MergeIn
     }
 }
 

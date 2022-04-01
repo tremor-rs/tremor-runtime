@@ -410,6 +410,7 @@ impl Query {
                     outputs.push(id);
                 }
                 Stmt::WindowDecl(_)
+                | Stmt::AggregateFnDecl(_)
                 | Stmt::ScriptDecl(_)
                 | Stmt::OperatorDecl(_)
                 | Stmt::SubqueryDecl(_) => {}

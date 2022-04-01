@@ -16,6 +16,7 @@ use crate::{Event, EventId, EventIdGenerator, OpMeta};
 use beef::Cow;
 use std::borrow::Cow as SCow;
 use tremor_common::stry;
+use tremor_script::ast::InvocableAggregate;
 use tremor_script::{
     self,
     ast::{AggrSlice, Aggregates, Consts, NodeMetas, RunConsts, Select, WindowDecl},
@@ -72,29 +73,89 @@ impl GroupWindow {
         aggrs: &AggrSlice<'static>,
         id: &EventId,
         mut iter: I,
-    ) -> Option<Box<Self>>
+        ctx: &EventContext,
+        node_meta: &NodeMetas,
+        consts: RunConsts,
+        recursion_limit: u32,
+    ) -> Result<Option<Box<Self>>>
     where
         I: std::iter::Iterator<Item = &'i Window>,
     {
-        iter.next().map(|w| {
-            Box::new(Self {
+        if let Some(w) = iter.next() {
+            let mut aggrs_vec = aggrs.to_vec();
+
+            for aggr in &mut aggrs_vec {
+                match aggr.invocable {
+                    InvocableAggregate::Intrinsic(_) => {}
+                    InvocableAggregate::Tremor(ref mut x) => {
+                        let env = Env {
+                            context: ctx,
+                            consts,
+                            aggrs: &NO_AGGRS,
+                            meta: node_meta,
+                            recursion_limit,
+                        };
+
+                        x.init(&env).map_err(|e| {
+                            let r: Option<&Registry> = None;
+                            e.into_err(aggr, aggr, r, node_meta)
+                        })?;
+                    }
+                }
+            }
+
+            Ok(Some(Box::new(Self {
                 window: w.window_impl.clone(),
-                aggrs: aggrs.to_vec(),
+                aggrs: aggrs_vec,
                 id: id.clone(),
                 name: w.name.clone().into(),
                 transactional: false,
-                next: GroupWindow::from_windows(aggrs, id, iter),
+                next: GroupWindow::from_windows(
+                    aggrs,
+                    id,
+                    iter,
+                    ctx,
+                    node_meta,
+                    consts,
+                    recursion_limit,
+                )?,
                 holds_data: false,
-            })
-        })
+            })))
+        } else {
+            Ok(None)
+        }
     }
     /// Resets the aggregates and transactionality of this window
-    pub(crate) fn reset(&mut self) {
+    pub(crate) fn reset(
+        &mut self,
+        ctx: &EventContext,
+        node_meta: &NodeMetas,
+        consts: RunConsts,
+        recursion_limit: u32,
+    ) -> Result<()> {
         for aggr in &mut self.aggrs {
-            aggr.invocable.init();
+            match aggr.invocable {
+                InvocableAggregate::Intrinsic(ref mut x) => x.init(),
+                InvocableAggregate::Tremor(ref mut x) => {
+                    let env = Env {
+                        context: ctx,
+                        consts,
+                        aggrs: &NO_AGGRS,
+                        meta: node_meta,
+                        recursion_limit,
+                    };
+
+                    x.init(&env).map_err(|e| {
+                        let r: Option<&Registry> = None;
+                        e.into_err(aggr, aggr, r, node_meta)
+                    })?;
+                }
+            }
         }
         self.transactional = false;
         self.holds_data = false;
+
+        Ok(())
     }
 
     /// Accumultes data into the window
@@ -156,28 +217,60 @@ impl GroupWindow {
             for arg in &argv {
                 argv1.push(arg);
             }
-            // now execute the fnctions
-            stry!(invocable.accumulate(argv1.as_slice()).map_err(|e| {
-                // TODO nice error
-                let r: Option<&Registry> = None;
-                e.into_err(aggr, aggr, r, node_meta)
-            }));
+            // now execute the functions
+            match invocable {
+                InvocableAggregate::Intrinsic(ref mut x) => {
+                    stry!(x.accumulate(argv1.as_slice()).map_err(|e| {
+                        // TODO nice error
+                        let r: Option<&Registry> = None;
+                        e.into_err(aggr, aggr, r, node_meta)
+                    }));
+                }
+                InvocableAggregate::Tremor(ref mut x) => x
+                    .aggregate(argv1.as_slice(), &env)
+                    .map_err(|x| x.into_err(aggr, aggr, None, node_meta))?,
+            }
         }
         Ok(())
     }
 
     /// Merge data from the privious tilt frame / window into this one
-    fn merge(&mut self, ctx: &SelectCtx, prev: &AggrSlice<'static>) -> Result<()> {
+    fn merge(
+        &mut self,
+        ctx: &SelectCtx,
+        prev: &AggrSlice<'static>,
+        consts: RunConsts,
+    ) -> Result<()> {
         // Track the parents id's and transactionality
         self.id.track(&ctx.event_id);
         self.transactional |= ctx.transactional;
         self.holds_data = true;
         // Ingest the data
         for (this, prev) in self.aggrs.iter_mut().zip(prev.iter()) {
-            stry!(this.invocable.merge(&prev.invocable).map_err(|e| {
-                let r: Option<&Registry> = None;
-                e.into_err(prev, prev, r, ctx.node_meta)
-            }));
+            match (&mut this.invocable, &prev.invocable) {
+                (
+                    InvocableAggregate::Intrinsic(ref mut x),
+                    InvocableAggregate::Intrinsic(ref y),
+                ) => stry!(x.merge(y).map_err(|e| {
+                    let r: Option<&Registry> = None;
+                    e.into_err(prev, prev, r, ctx.node_meta)
+                })),
+                (InvocableAggregate::Tremor(ref mut x), InvocableAggregate::Tremor(ref y)) => {
+                    let env = Env {
+                        context: ctx.ctx,
+                        consts,
+                        aggrs: &NO_AGGRS,
+                        meta: ctx.node_meta,
+                        recursion_limit: ctx.recursion_limit,
+                    };
+
+                    x.merge(y, &env).map_err(|e| {
+                        let r: Option<&Registry> = None;
+                        e.into_err(prev, prev, r, ctx.node_meta)
+                    })?;
+                }
+                _ => return Err(tremor_script::errors::ErrorKind::AggregateTypeMismatch.into()),
+            }
         }
         Ok(())
     }
@@ -212,7 +305,7 @@ impl GroupWindow {
                 // We are not a top level window so we merge the previos
                 // window data
                 if had_data {
-                    stry!(self.merge(ctx, prev));
+                    stry!(self.merge(ctx, prev, consts));
                 };
             } else {
                 // We are a root level window so we accumulate the event data
@@ -268,7 +361,7 @@ impl GroupWindow {
                     ));
             }
             // since we emitted we now can reset this window
-            self.reset();
+            self.reset(ctx.ctx, ctx.node_meta, consts, ctx.recursion_limit)?;
         }
         if window_event.include {
             // if include is set we recorded the event earlier, meaning that
@@ -280,7 +373,7 @@ impl GroupWindow {
             // event data
             if let Some((had_data, prev)) = prev {
                 if had_data {
-                    stry!(self.merge(ctx, prev));
+                    stry!(self.merge(ctx, prev, consts));
                 };
             } else {
                 stry!(self.accumulate(ctx, consts, data));
@@ -305,13 +398,21 @@ impl Group {
     /// from `GroupWindow::reset` in that it not only resets
     /// the data but also sets to windo into a state of 'never
     /// having seen an element'.
-    pub(crate) fn reset(&mut self) {
+    pub(crate) fn reset(
+        &mut self,
+        ctx: &EventContext,
+        node_meta: &NodeMetas,
+        consts: RunConsts,
+        recursion_limit: u32,
+    ) -> Result<()> {
         let mut w = &mut self.windows;
         while let Some(g) = w {
-            g.reset();
+            g.reset(ctx, node_meta, consts, recursion_limit)?;
             g.window.reset();
             w = &mut g.next;
         }
+
+        Ok(())
     }
 
     /// The group receives an event we propagate it through

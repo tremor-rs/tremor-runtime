@@ -445,6 +445,7 @@ impl<'script> BaseExpr for ExprRaw<'script> {
             ExprRaw::Emit(e) => e.s(meta),
             ExprRaw::FnDecl(e) => e.s(meta),
             ExprRaw::Imut(e) => e.s(meta),
+            ExprRaw::AggregateFnDecl(e) => e.s(meta),
         }
     }
 
@@ -458,6 +459,7 @@ impl<'script> BaseExpr for ExprRaw<'script> {
             ExprRaw::Emit(e) => e.e(meta),
             ExprRaw::FnDecl(e) => e.e(meta),
             ExprRaw::Imut(e) => e.e(meta),
+            ExprRaw::AggregateFnDecl(e) => e.e(meta),
         }
     }
 }
@@ -496,6 +498,7 @@ impl<'script> BaseExpr for StmtRaw<'script> {
             StmtRaw::Select(s) => s.start,
             StmtRaw::Stream(s) => s.start,
             StmtRaw::WindowDecl(s) => s.start,
+            StmtRaw::AggregateFnDecl(s) => s.start,
             StmtRaw::Expr(s) => s.s(meta),
         }
     }
@@ -511,6 +514,7 @@ impl<'script> BaseExpr for StmtRaw<'script> {
             StmtRaw::Select(e) => e.end,
             StmtRaw::Stream(e) => e.end,
             StmtRaw::WindowDecl(e) => e.end,
+            StmtRaw::AggregateFnDecl(s) => s.end,
             StmtRaw::Expr(e) => e.e(meta),
         }
     }

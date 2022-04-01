@@ -69,11 +69,26 @@ impl Select {
             .collect();
         let select = srs::Select::try_new_from_stmt(stmt)?;
         let event_id_gen = EventIdGenerator::new(operator_uid);
-        if let ast::Stmt::Select(SelectStmt { aggregates, .. }) = stmt.suffix() {
+        if let ast::Stmt::Select(SelectStmt {
+            aggregates,
+            consts,
+            node_meta,
+            ..
+        }) = stmt.suffix()
+        {
             let windows_itr = windows.iter();
             let dflt_group = Group {
                 value: Value::const_null(),
-                windows: GroupWindow::from_windows(aggregates, &EventId::default(), windows_itr),
+                // fixme probably the default for event context isn't right here
+                windows: GroupWindow::from_windows(
+                    aggregates,
+                    &EventId::default(),
+                    windows_itr,
+                    &tremor_script::ctx::EventContext::default(),
+                    node_meta,
+                    consts.run(),
+                    tremor_script::recursion_limit(),
+                )?,
             };
             let windows_itr = windows.iter();
             let max_groups = windows_itr
@@ -186,6 +201,7 @@ impl Res {
 impl Operator for Select {
     // Note: we don't use state in this function as select does not allow mutation
     // so the state can never be changed.
+    #[allow(clippy::too_many_lines)]
     fn on_event(
         &mut self,
         _uid: u64,
@@ -233,10 +249,7 @@ impl Operator for Select {
                 let locals = tremor_script::interpreter::LocalStack::with_size(*locals);
 
                 let (data, meta) = event.parts_mut();
-                //
                 // Before any select processing, we filter by where clause
-                //
-
                 let guard = &select.maybe_where;
                 let e = env(&ctx, consts.run(), node_meta, *recursion_limit);
                 let w_guard = run_guard(select, guard, opts, &e, data, &locals, node_meta);
@@ -248,11 +261,9 @@ impl Operator for Select {
                     let groups = stry!(group_by.generate_groups(&ctx, data, node_meta, meta));
                     groups.into_iter().map(Value::from).collect()
                 } else if windows.is_empty() {
-                    //
                     // select without group by or windows
                     // event stays the same, only the value might change based on select clause
                     // and we might drop it altogether based on having clause.
-                    //
                     consts.group = Value::from(vec![Value::const_null(), Value::from("[null]")]);
 
                     let e = env(&ctx, consts.run(), node_meta, *recursion_limit);
@@ -311,18 +322,18 @@ impl Operator for Select {
                             dflt_group.value = group_value;
                             dflt_group.value.try_push(v.key().to_string());
 
+                            let recursion_limit = sel_ctx.recursion_limit;
+                            let node_meta = sel_ctx.node_meta;
                             // execute it
                             if !stry!(dflt_group.on_event(sel_ctx, consts, event, &mut events)) {
-                                // if we can't delete it check if we're having too many groups,
-                                // if so, error.
+                                // if we can't delete it check if we're having too many groups, if so, error.
                                 if ctx.cardinality >= *max_groups {
                                     return Err(format!("Maxmimum amount of groups reached ({}). Ignoring group [{}]", max_groups, *max_groups+1).into());
                                 }
-                                // otherwise we clone the default group (this is a cost we got to pay)
-                                // and reset it . If we didn't clone here we'd need to allocate a new
-                                // group for every event we haven't seen yet
+                                // otherwise we clone the default group (this is a cost we got to pay) and reset it.
+                                // If we didn't clone here we'd need to allocate a new group for every event we haven't seen yet
                                 v.insert(dflt_group.clone());
-                                dflt_group.reset();
+                                dflt_group.reset(&ctx, node_meta, consts.run(), recursion_limit)?;
                             }
                         }
                     }
@@ -436,7 +447,7 @@ impl Operator for Select {
                                 can_remove,
                             )?;
                         }
-                        w.reset();
+                        w.reset(ctx.ctx, ctx.node_meta, consts.run(), ctx.recursion_limit)?;
                     }
                     if can_remove {
                         to_remove.push(group_str.clone());

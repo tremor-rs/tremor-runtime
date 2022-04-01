@@ -124,6 +124,8 @@ macro_rules! test_cases {
 }
 
 test_cases!(
+    aggregate_init_fail,
+    aggregate_aggregate_fail,
     const_in_select,
     let_in_select,
     local_in_having,

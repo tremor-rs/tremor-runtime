@@ -1,0 +1,15 @@
+aggregate ag of
+    init ( ) =>
+        0
+
+    aggregate(st, x) =>
+        1 * []
+
+    mergein(st, x) =>
+        st + x
+
+    emit(st) =>
+        st
+end;
+
+select ag(event) from in into out;

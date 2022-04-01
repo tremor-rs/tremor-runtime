@@ -16,6 +16,8 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
+use crate::ast::aggregate_fn::AggrFnDeclRaw;
+use crate::ast::InvocableAggregate;
 use crate::{
     ast::{
         base_expr, query, upable::Upable, ArrayPattern, ArrayPredicatePattern, AssignPattern,
@@ -323,6 +325,11 @@ impl<'script> ModuleRaw<'script> {
 
                     helper.register_fun(f)?;
                 }
+                ExprRaw::AggregateFnDecl(f) => {
+                    let f = f.up(helper)?;
+
+                    helper.register_aggregate_fun(f);
+                }
                 // ALLOW: the gramer doesn't allow this
                 _ => unreachable!("Can't have expressions inside of modules"),
             }
@@ -581,6 +588,8 @@ pub enum ExprRaw<'script> {
     FnDecl(AnyFnRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Imut(ImutExprRaw<'script>),
+    /// we're forced to make this pub because of lalrpop
+    AggregateFnDecl(AggrFnDeclRaw<'script>),
 }
 impl<'script> ExpressionRaw<'script> for ExprRaw<'script> {}
 
@@ -607,7 +616,10 @@ impl<'script> Upable<'script> for ExprRaw<'script> {
     type Target = Expr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(match self {
-            ExprRaw::FnDecl(_) | ExprRaw::Const { .. } | ExprRaw::Module(ModuleRaw { .. }) => {
+            ExprRaw::FnDecl(_)
+            | ExprRaw::Const { .. }
+            | ExprRaw::Module(ModuleRaw { .. })
+            | ExprRaw::AggregateFnDecl(_) => {
                 // ALLOW: There is no code path that leads here,
                 unreachable!()
             }
@@ -2414,7 +2426,7 @@ impl<'script> InvokeRaw<'script> {
             let module = self.module.get(1).cloned().unwrap_or_default();
             helper.aggr_reg.find(&module, &self.fun).is_ok()
         } else {
-            false
+            helper.aggregate_vec.iter().any(|x| x.name == self.fun)
         }
     }
 
@@ -2452,11 +2464,45 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
             .into());
         };
         helper.is_in_aggr = true;
+
+        // todo check for module path here
+        let user_defined_aggregate = helper
+            .aggregate_vec
+            .iter()
+            .find(|x| x.name == self.fun)
+            .map(|x| x.clone().into_static());
+        if let Some(x) = user_defined_aggregate {
+            let name = x.name.clone();
+            let invocable = InvocableAggregate::Tremor(x);
+
+            // todo validate arity
+            let aggr_id = helper.aggregates.len();
+            let invoke_meta_id = helper.add_meta_w_name(self.start, self.end, &name); // todo this should be the name with module
+            let args = self.args.up(helper)?.into_iter().map(ImutExpr).collect();
+
+            helper.aggregates.push(InvokeAggrFn {
+                mid: invoke_meta_id,
+                invocable,
+                args,
+                module: self.module.clone(),
+                fun: self.fun.clone(),
+            });
+
+            helper.is_in_aggr = false;
+
+            return Ok(InvokeAggr {
+                mid: invoke_meta_id,
+                module: "todo".to_string(), // todo replace with real module name
+                fun: name.to_string(),
+                aggr_id,
+            });
+        }
         let invocable = helper
             .aggr_reg
             .find(&self.module, &self.fun)
             .map_err(|e| e.into_err(&self, &self, Some(helper.reg), &helper.meta))?
             .clone();
+
         if !invocable.valid_arity(self.args.len()) {
             return Err(ErrorKind::BadArity(
                 self.extent(&helper.meta),
@@ -2478,7 +2524,7 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
 
         helper.aggregates.push(InvokeAggrFn {
             mid: invoke_meta_id,
-            invocable,
+            invocable: InvocableAggregate::Intrinsic(invocable),
             args,
             module: self.module.clone(),
             fun: self.fun.clone(),
