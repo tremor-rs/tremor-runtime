@@ -21,6 +21,7 @@ use tremor_pipeline::ExecutableGraph;
 use tremor_pipeline::{Event, EventId, GraphReturns};
 use tremor_script::FN_REGISTRY;
 
+use serial_test::serial;
 use tremor_pipeline::errors::{Error as PipelineError, ErrorKind as PipelineErrorKind};
 use tremor_runtime::errors::*;
 use tremor_script::highlighter::Dumb;
@@ -41,6 +42,7 @@ macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[async_std::test]
+            #[serial(query_runtime_error)]
             async fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
@@ -50,6 +52,7 @@ macro_rules! test_cases {
                 let in_file: PathBuf = [&query_dir, "in"].iter().collect();
                 let out_file: PathBuf = [&query_dir, "out"].iter().collect();
 
+                Manager::clear_path()?;
                 Manager::add_path(&"tremor-script/lib")?;
 
                 println!("Loading query: {}", query_file.display());

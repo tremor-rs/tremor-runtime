@@ -12,19 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use pretty_assertions::assert_eq;
-use std::{io::prelude::*, sync::Mutex};
+use serial_test::serial;
+use std::io::prelude::*;
 use tremor_common::file;
 use tremor_runtime::errors::*;
 use tremor_script::{highlighter::Dumb, module::Manager, Script, FN_REGISTRY};
-
-lazy_static::lazy_static! {
-    static ref UNIQUE: Mutex<()> = Mutex::new(());
-}
 
 macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
+            #[serial(script_error)]
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
@@ -43,12 +41,10 @@ macro_rules! test_cases {
                 file.read_to_string(&mut err)?;
                 let err = err.trim();
 
-                let l = UNIQUE.lock();
                 Manager::clear_path()?;
                 Manager::add_path(&script_dir)?;
                 Manager::add_path(&"tremor-script/lib")?;
                 let s = Script::parse(&contents, &*FN_REGISTRY.read()?);
-                drop(l);
                 if let Err(e) = s {
                     let got = Dumb::error_to_string(&e)?;
                     println!("{}", got);
@@ -67,6 +63,7 @@ macro_rules! ignored_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
+            #[serial(script_error)]
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
@@ -85,12 +82,10 @@ macro_rules! ignored_cases {
                 file.read_to_string(&mut err)?;
                 let _err = err.trim();
 
-                let l = UNIQUE.lock();
                 Manager::clear_path()?;
                 Manager::add_path(&script_dir)?;
                 Manager::add_path(&"tremor-script/lib")?;
                 let s = Script::parse(&contents, &*FN_REGISTRY.read()?);
-                drop(l);
                 if let Err(e) = s {
                     let got = Dumb::error_to_string(&e)?;
                     println!("{}", got);

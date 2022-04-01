@@ -11,7 +11,6 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use async_std::sync::Mutex;
 use pretty_assertions::assert_eq;
 use std::io::prelude::*;
 use tremor_common::{file, ids::OperatorIdGen};
@@ -20,13 +19,10 @@ use tremor_pipeline::ExecutableGraph;
 use tremor_pipeline::{Event, EventId, GraphReturns};
 use tremor_script::FN_REGISTRY;
 
+use serial_test::serial;
 use tremor_runtime::errors::*;
 use tremor_script::module::Manager;
 use tremor_script::utils::*;
-
-lazy_static::lazy_static! {
-    static ref UNIQUE: Mutex<()> = Mutex::new(());
-}
 
 fn to_pipe(query: String) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
@@ -40,25 +36,21 @@ macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[async_std::test]
+            #[serial(query)]
             async fn $file() -> Result<()> {
                 tremor_runtime::functions::load()?;
                 let query_dir = concat!("tests/queries/", stringify!($file), "/").to_string();
                 let query_file = concat!("tests/queries/", stringify!($file), "/query.trickle");
                 let in_file = concat!("tests/queries/", stringify!($file), "/in");
                 let out_file = concat!("tests/queries/", stringify!($file), "/out");
-                let l = UNIQUE.lock().await;
-                let pipeline = (||{
-                    Manager::clear_path()?;
-                    Manager::add_path(&"tremor-script/lib")?;
-                    Manager::add_path(&query_dir)?;
-                    println!("Loading query: {}", query_file);
-                    let mut file = file::open(query_file)?;
-                    let mut contents = String::new();
-                    file.read_to_string(&mut contents)?;
-                    to_pipe(contents)
-                })();
-                drop(l);
-                let mut pipeline = pipeline?;
+                Manager::clear_path()?;
+                Manager::add_path(&"tremor-script/lib")?;
+                Manager::add_path(&query_dir)?;
+                println!("Loading query: {}", query_file);
+                let mut file = file::open(query_file)?;
+                let mut contents = String::new();
+                file.read_to_string(&mut contents)?;
+                let mut pipeline = to_pipe(contents)?;
 
                 println!("Loading input: {}", in_file);
                 let in_json = load_event_file(in_file)?;
