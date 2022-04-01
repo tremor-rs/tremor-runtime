@@ -169,7 +169,7 @@ async fn connector_kafka_producer() -> Result<()> {
 
     // wait for the consumer to have the configured partitions assigned
     let start = Instant::now();
-    let timeout = Duration::from_secs(10);
+    let timeout = Duration::from_secs(20);
     loop {
         if let Some((_code, msg)) = consumer.client().fatal_error() {
             return Err(msg.into());
@@ -194,19 +194,21 @@ async fn connector_kafka_producer() -> Result<()> {
         );
         task::sleep(Duration::from_millis(500)).await;
         if start.elapsed() > timeout {
-            // check docker logs
-            use std::io::BufRead;
-            use std::io::BufReader;
-            let logs = container.logs();
-            let mut reader = BufReader::new(logs.stderr);
-            let mut line = String::new();
-            while let Ok(len) = reader.read_line(&mut line) {
-                if len == 0 {
-                    break;
-                } else {
+            let c_id = container.id().to_string();
+            task::spawn(async move {
+                // check docker logs
+                use std::io::BufRead;
+                use std::io::BufReader;
+
+                let docker = DockerCli::default();
+                let logs = docker.logs(c_id.as_str());
+
+                let mut reader = BufReader::new(logs.stderr);
+                let mut line = String::new();
+                if let Ok(_len) = reader.read_line(&mut line) {
                     error!("DOCKER LOGS: {line}");
                 }
-            }
+            });
 
             return Err(format!(
                 "Consumer didn't get all partitions assigned: {:?}.",
