@@ -37,7 +37,7 @@ use tremor_pipeline::{CbAction, EventId};
 use tremor_value::literal;
 
 const IMAGE: &str = "docker.vectorized.io/vectorized/redpanda";
-const VERSION: &str = "v21.11.10";
+const VERSION: &str = "v21.11.11";
 
 #[async_std::test]
 #[serial(kafka)]
@@ -148,6 +148,10 @@ async fn connector_kafka_producer() -> Result<()> {
     harness.start().await?;
     harness.wait_for_connected().await?;
 
+    // TODO: it seems to work reliably which hints at a timeout inside redpanda
+    // TODO: verify
+    task::sleep(Duration::from_secs(5)).await;
+
     // CB Open is sent upon being connected
     let cf_event = in_pipe.get_contraflow().await?;
     assert_eq!(CbAction::Open, cf_event.cb);
@@ -205,8 +209,13 @@ async fn connector_kafka_producer() -> Result<()> {
 
                 let mut reader = BufReader::new(logs.stderr);
                 let mut line = String::new();
-                if let Ok(_len) = reader.read_line(&mut line) {
-                    error!("DOCKER LOGS: {line}");
+                while let Ok(len) = reader.read_line(&mut line) {
+                    if len == 0 {
+                        break;
+                    } else {
+                        error!("DOCKER LOGS: {line}");
+                    }
+                    line.clear();
                 }
             });
 
