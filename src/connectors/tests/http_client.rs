@@ -19,7 +19,6 @@ use crate::{
 };
 use async_std::task::{spawn, JoinHandle};
 use http_types::Method;
-use log::error;
 use rustls::NoClientAuth;
 use tide;
 use tide_rustls::TlsListener;
@@ -74,41 +73,33 @@ impl TestHttpServer {
     async fn new(raw_url: String) -> Result<Self> {
         let mut instance = TestHttpServer { acceptor: None };
         instance.acceptor = Some(spawn(async move {
-            // dbg!("Fake http server started");
             let url: Url<HttpDefaults> = Url::parse(&raw_url)?;
             if "https" == url.scheme() {
-                dbg!("starting server on", &raw_url);
                 let cert_file = "./tests/localhost.cert";
                 let key_file = "./tests/localhost.key";
                 setup_for_tls(); // Setups up TLS certs for localhost testing as a side-effect
 
-                if let (Some(tcp_host), Some(tcp_port)) = (url.host_str(), url.port()) {
-                    dbg!(&url);
-                    let mut endpoint = tide::Server::new();
-                    endpoint.at("/").all(fake_server_dispatch);
-                    endpoint.at("/*").all(fake_server_dispatch);
-                    endpoint
-                        .listen(
-                            TlsListener::build()
-                                .config(rustls::ServerConfig::new(NoClientAuth::new()))
-                                .addrs(&format!("{}:{}", tcp_host, tcp_port))
-                                .cert(cert_file)
-                                .key(key_file),
-                        )
-                        .await?;
-                } else {
-                    error!("Unable to extract host:port/endopint information from url");
+                let mut endpoint = tide::Server::new();
+                endpoint.at("/").all(fake_server_dispatch);
+                endpoint.at("/*").all(fake_server_dispatch);
+                if let Err(e) = endpoint
+                    .listen(
+                        TlsListener::build()
+                            .config(rustls::ServerConfig::new(NoClientAuth::new()))
+                            .addrs(url.url().socket_addrs(|| None)?[0])
+                            .cert(cert_file)
+                            .key(key_file),
+                    )
+                    .await
+                {
+                    error!("Error listening on {url}: {e}");
                 }
             } else {
-                if let (Some(tcp_host), Some(tcp_port)) = (url.host_str(), url.port()) {
-                    let mut endpoint = tide::Server::new();
-                    endpoint.at("/").all(fake_server_dispatch);
-                    endpoint.at("/*").all(fake_server_dispatch);
-                    endpoint
-                        .listen(&format!("{}:{}", tcp_host, tcp_port))
-                        .await?;
-                } else {
-                    error!("Unable to extract host:port/endopint information from url");
+                let mut endpoint = tide::Server::new();
+                endpoint.at("/").all(fake_server_dispatch);
+                endpoint.at("/*").all(fake_server_dispatch);
+                if let Err(e) = endpoint.listen(url.url().clone()).await {
+                    error!("Error listening on {url}: {e}");
                 }
             };
             Ok(())
@@ -117,8 +108,9 @@ impl TestHttpServer {
     }
 
     async fn stop(&mut self) -> Result<()> {
-        if let Some(_acceptor) = self.acceptor.take() {
+        if let Some(acceptor) = self.acceptor.take() {
             // dbg!("Fake http server stopped");
+            acceptor.cancel().await;
         }
         Ok(())
     }
@@ -132,18 +124,18 @@ async fn rtt(
     meta: Value<'static>,
 ) -> Result<ValueAndMeta<'static>> {
     let _ = env_logger::try_init();
-
+    let url = format!("{}://{}", scheme, target);
     let defn = literal!({
       "id": "my_http_client",
       "type": "http_client",
       "config": {
-        "url": format!("{}://{}", scheme, target),
+        "url": url.clone(),
         "method": "get",
       },
       "codec": codec.to_string(),
     });
 
-    let mut fake = TestHttpServer::new(format!("{}://{}", scheme, target)).await?;
+    let mut fake = TestHttpServer::new(url.clone()).await?;
 
     let harness = ConnectorHarness::new("http_client", &defn).await?;
     let out_pipeline = harness
@@ -407,12 +399,12 @@ async fn http_client_request_auth_basic() -> Result<()> {
         &target,
         "string",
         literal!({
-            "method": "patch", 
-            "headers": { 
+            "method": "patch",
+            "headers": {
                 "content-type": [ "application/json"]
-            }, 
-            "auth": { 
-                "basic": { 
+            },
+            "auth": {
+                "basic": {
                     "username": "snot", "password": "badger" }}}),
     )
     .await?;

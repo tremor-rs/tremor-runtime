@@ -34,8 +34,8 @@ const URL_SCHEME: &str = "tremor-tcp-client";
 #[serde(deny_unknown_fields)]
 pub struct Config {
     url: Url<super::TcpDefaults>,
-    /// IP_TTL field in terms of in seconds or network hops
-    ttl: Option<u32>,
+    // IP_TTL for ipv4 and hop limit for ipv6
+    //ttl: Option<u32>,
     #[serde(default = "default_no_delay")]
     no_delay: bool,
     #[serde(default = "default_buf_size")]
@@ -221,9 +221,11 @@ impl Sink for TcpClientSink {
         ))
         .await?;
         let local_addr = stream.local_addr()?;
-        if let Some(ttl) = self.config.ttl {
-            stream.set_ttl(ttl)?;
-        }
+        // this is known to fail on macOS for IPv6.
+        // See: https://github.com/rust-lang/rust/issues/95541
+        //if let Some(ttl) = self.config.ttl {
+        //    stream.set_ttl(ttl)?;
+        //}
         stream.set_nodelay(self.config.no_delay)?;
 
         let origin_uri = EventOriginUri {

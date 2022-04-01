@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::super::ConnectorHarness;
-use crate::errors::Result;
+use crate::{connectors::tests::free_port, errors::Result};
 use async_std::task;
 use beef::Cow;
 use futures::StreamExt;
@@ -45,6 +45,7 @@ const VERSION: &str = "v21.11.10";
 async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
     let _ = env_logger::try_init();
     let docker = DockerCli::default();
+    let kafka_port = free_port::find_free_tcp_port().await?;
     let args = vec![
         "redpanda",
         "start",
@@ -57,7 +58,7 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
         "--node-id=0",
         "--check=false",
         "--kafka-addr=0.0.0.0:9092",
-        "--advertise-kafka-addr=127.0.0.1:9092",
+        &format!("--advertise-kafka-addr=127.0.0.1:{kafka_port}"),
     ]
     .into_iter()
     .map(ToString::to_string)
@@ -70,7 +71,11 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
         });
     let container = docker.run_with_args(
         image,
-        RunArgs::default().with_mapped_port((9092_u16, 9092_u16)),
+        RunArgs::default()
+            .with_mapped_port((kafka_port, 9092_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 9664_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 8081_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 8082_u16)),
     );
 
     let container_id = container.id().to_string();
@@ -325,6 +330,7 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
 async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
     let _ = env_logger::try_init();
     let docker = DockerCli::default();
+    let kafka_port = free_port::find_free_tcp_port().await?;
     let args = vec![
         "redpanda",
         "start",
@@ -337,7 +343,7 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
         "--node-id=0",
         "--check=false",
         "--kafka-addr=0.0.0.0:9092",
-        "--advertise-kafka-addr=127.0.0.1:9092",
+        &format!("--advertise-kafka-addr=127.0.0.1:{kafka_port}"),
     ]
     .into_iter()
     .map(ToString::to_string)
@@ -350,7 +356,11 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
         });
     let container = docker.run_with_args(
         image,
-        RunArgs::default().with_mapped_port((9092_u16, 9092_u16)),
+        RunArgs::default()
+            .with_mapped_port((kafka_port, 9092_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 9664_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 8081_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 8082_u16)),
     );
 
     let container_id = container.id().to_string();
@@ -586,6 +596,7 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
 async fn connector_kafka_consumer_non_transactional() -> Result<()> {
     let _ = env_logger::try_init();
     let docker = DockerCli::default();
+    let kafka_port = free_port::find_free_tcp_port().await?;
     let args = vec![
         "redpanda",
         "start",
@@ -598,7 +609,7 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
         "--node-id=0",
         "--check=false",
         "--kafka-addr=0.0.0.0:9092",
-        "--advertise-kafka-addr=127.0.0.1:9092",
+        &format!("--advertise-kafka-addr=127.0.0.1:{kafka_port}"),
     ]
     .into_iter()
     .map(ToString::to_string)
@@ -611,7 +622,11 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
         });
     let container = docker.run_with_args(
         image,
-        RunArgs::default().with_mapped_port((9092_u16, 9092_u16)),
+        RunArgs::default()
+            .with_mapped_port((kafka_port, 9092_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 9664_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 8081_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 8082_u16)),
     );
 
     let container_id = container.id().to_string();
@@ -846,6 +861,7 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
 #[async_std::test]
 #[serial(kafka)]
 async fn connector_kafka_consumer_unreachable() -> Result<()> {
+    let kafka_port = free_port::find_free_tcp_port().await?;
     let _ = env_logger::try_init();
     let connector_config = literal!({
         "reconnect": {
@@ -860,7 +876,7 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
         ],
         "config": {
             "brokers": [
-                "127.0.0.1:9092"
+                format!("127.0.0.1:{kafka_port}")
             ],
             "group_id": "all_brokers_down",
             "topics": [
@@ -884,6 +900,7 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
 #[serial(kafka)]
 async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     let _ = env_logger::try_init();
+    let kafka_port = free_port::find_free_tcp_port().await?;
 
     let docker = DockerCli::default();
     let args = vec![
@@ -898,7 +915,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
         "--node-id=0",
         "--check=false",
         "--kafka-addr=0.0.0.0:9092",
-        "--advertise-kafka-addr=127.0.0.1:9092",
+        &format!("--advertise-kafka-addr=127.0.0.1:{kafka_port}"),
     ]
     .into_iter()
     .map(ToString::to_string)
@@ -911,7 +928,11 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
         });
     let container = docker.run_with_args(
         image,
-        RunArgs::default().with_mapped_port((9092_u16, 9092_u16)),
+        RunArgs::default()
+            .with_mapped_port((kafka_port, 9092_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 9664_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 8081_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 8082_u16)),
     );
 
     let container_id = container.id().to_string();
