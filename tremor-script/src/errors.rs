@@ -32,6 +32,29 @@ use lalrpop_util::ParseError as LalrpopError;
 use std::num;
 use std::ops::{Range as RangeExclusive, RangeInclusive};
 
+#[derive(Debug)]
+//// An error with a associated arena index
+pub struct ErrorWithIndex(pub arena::Index, pub Error);
+
+impl std::fmt::Display for ErrorWithIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.1.fmt(f)
+    }
+}
+
+impl std::error::Error for ErrorWithIndex {}
+
+impl From<ErrorWithIndex> for Error {
+    fn from(e: ErrorWithIndex) -> Self {
+        e.1
+    }
+}
+impl From<Error> for ErrorWithIndex {
+    fn from(e: Error) -> Self {
+        ErrorWithIndex(arena::Index::INVALID, e)
+    }
+}
+
 #[cfg(test)]
 impl PartialEq for Error {
     fn eq(&self, _other: &Error) -> bool {

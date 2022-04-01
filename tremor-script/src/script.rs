@@ -14,7 +14,7 @@
 
 pub use crate::interpreter::AggrType;
 use crate::{
-    arena::Arena,
+    arena::{self, Arena},
     ast::{
         docs::Docs,
         helper::{Warning, Warnings},
@@ -23,7 +23,7 @@ use crate::{
         Helper,
     },
     ctx::EventContext,
-    errors::Result,
+    errors::{ErrorWithIndex, Result},
     highlighter::Highlighter,
     lexer::{self, Lexer},
     parser::g as grammar,
@@ -66,6 +66,17 @@ pub struct Script {
 }
 
 impl Script {
+    /// Removes a deploy from the arena, freeing the memory and marking it valid for reause
+    /// this function generally should not ever be used. It is a special case for the language
+    /// server where we know that we really only parse the script to check for errors and
+    /// warnings.
+    /// That's also why it's behind a feature falg
+    #[cfg(feature = "arena-delete")]
+    pub unsafe fn consume_and_free(self) -> Result<()> {
+        let Script { aid, script, .. } = self;
+        drop(script);
+        Arena::delte_index_this_is_really_unsafe_dont_use_it(aid)
+    }
     /// Get script warnings
     pub fn warnings(&self) -> impl Iterator<Item = &Warning> {
         self.warnings.iter()
@@ -75,14 +86,32 @@ impl Script {
     ///
     /// # Errors
     /// if the script can not be parsed
-    pub fn parse<S>(script: &S, reg: &Registry) -> Result<Self>
+    pub fn parse<S>(src: &S, reg: &Registry) -> Result<Self>
     where
         S: ToString + ?Sized,
     {
-        let mut warnings = Warnings::new();
-        let (aid, script) = Arena::insert(script)?;
+        let (aid, src) = Arena::insert(src)?;
+        Self::parse_(aid, src, reg)
+    }
 
-        let tokens = Lexer::new(script, aid).collect::<Result<Vec<_>>>()?;
+    /// Parses a string and turns it into a script with the supplied parameters/arguments
+    ///
+    /// # Errors
+    /// if the script can not be parsed
+    pub fn parse_with_aid<S>(src: &S, reg: &Registry) -> std::result::Result<Self, ErrorWithIndex>
+    where
+        S: ToString + ?Sized,
+    {
+        let (aid, src) = Arena::insert(src)?;
+        Self::parse_(aid, src, reg).map_err(|e| ErrorWithIndex(aid, e))
+    }
+
+    /// Parses a string and turns it into a script with the supplied parameters/arguments
+    ///
+    /// # Errors
+    /// if the script can not be parsed
+    pub(crate) fn parse_(aid: arena::Index, src: &'static str, reg: &Registry) -> Result<Self> {
+        let tokens = Lexer::new(src, aid).collect::<Result<Vec<_>>>()?;
         let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
 
         let script_raw = grammar::ScriptParser::new().parse(filtered_tokens)?;
@@ -91,13 +120,12 @@ impl Script {
         // helper.consts.args = args.clone_static();
         let mut script = script_raw.up_script(&mut helper)?;
         ConstFolder::new(&helper).walk_script(&mut script)?;
-        std::mem::swap(&mut warnings, &mut helper.warnings);
         let script = script;
 
         Ok(Self {
             script,
             aid,
-            warnings,
+            warnings: helper.warnings,
         })
     }
 
