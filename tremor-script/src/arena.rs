@@ -113,7 +113,6 @@ impl Arena {
             eprintln!("[ARENA] Reclaimed arena index {}", idx);
             idx
         } else {
-            // dbg!(&self.sources);
             let idx = self.sources.len();
             self.sources.push(ArenaEntry {
                 src: Some(Pin::new(src.to_string())),
