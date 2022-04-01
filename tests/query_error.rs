@@ -13,9 +13,9 @@
 // limitations under the License.
 use pretty_assertions::assert_eq;
 use regex::Regex;
+use serial_test::serial;
 use std::io::prelude::*;
 use std::path::Path;
-use std::sync::Mutex;
 use tremor_common::{file, ids::OperatorIdGen};
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
@@ -30,15 +30,12 @@ fn to_pipe(query: &str) -> Result<ExecutableGraph> {
     let q = Query::parse(query, &*FN_REGISTRY.read()?, &aggr_reg)?;
     Ok(q.to_pipe(&mut idgen)?)
 }
-lazy_static::lazy_static! {
-    static ref UNIQUE: Mutex<()> = Mutex::new(());
-}
-
 macro_rules! test_cases {
 
     ($($file:ident),* ,) => {
         $(
             #[test]
+            #[serial(query_error)]
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
@@ -53,12 +50,10 @@ macro_rules! test_cases {
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
 
-                let l = UNIQUE.lock();
                 Manager::clear_path()?;
                 Manager::add_path(&query_dir)?;
                 Manager::add_path(&"tremor-script/lib")?;
                 let s = to_pipe( &contents);
-                drop (l);
                 if Path::new(err_re_file).exists() {
                     println!("Loading error: {}", err_re_file);
                     let mut file = file::open(err_re_file)?;
