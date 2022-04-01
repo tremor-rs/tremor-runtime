@@ -52,6 +52,7 @@ where
         drop(deploy);
         Arena::delte_index_this_is_really_unsafe_dont_use_it(aid)
     }
+
     /// Retrieve deployment unit
     /// # Errors
     /// If the underlying structures do not resolve to a correctly deployable unit
