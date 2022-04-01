@@ -10,7 +10,6 @@ flow
     codec = "json",
     config = {
       "url": "wss://0.0.0.0:65535",
-      "ttl": 64,
       "no_delay": false,
       "tls": {
         "cafile": "./before/localhost.cert",

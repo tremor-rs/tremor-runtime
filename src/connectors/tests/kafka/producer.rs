@@ -13,20 +13,20 @@
 // limitations under the License.
 
 use super::super::ConnectorHarness;
-use crate::{errors::Result, Event};
+use crate::{connectors::tests::free_port, errors::Result, Event};
 use async_std::task;
 use futures::StreamExt;
 use rdkafka::{
     admin::{AdminClient, AdminOptions, NewTopic, TopicReplication},
     config::FromClientConfig,
-    consumer::{BaseConsumer, Consumer},
+    consumer::{BaseConsumer, CommitMode, Consumer},
     message::Headers,
     ClientConfig, Message,
 };
 use serial_test::serial;
 use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook_async_std::Signals;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use testcontainers::{
     clients::Cli as DockerCli,
     images::generic::{GenericImage, Stream as WaitForStream, WaitFor},
@@ -44,6 +44,7 @@ const VERSION: &str = "v21.11.10";
 async fn connector_kafka_producer() -> Result<()> {
     let _ = env_logger::try_init();
     let docker = DockerCli::default();
+    let kafka_port = free_port::find_free_tcp_port().await?;
     let args = vec![
         "redpanda",
         "start",
@@ -56,7 +57,7 @@ async fn connector_kafka_producer() -> Result<()> {
         "--node-id=0",
         "--check=false",
         "--kafka-addr=0.0.0.0:9092",
-        "--advertise-kafka-addr=127.0.0.1:9092",
+        &format!("--advertise-kafka-addr=127.0.0.1:{kafka_port}"),
     ]
     .into_iter()
     .map(ToString::to_string)
@@ -69,7 +70,11 @@ async fn connector_kafka_producer() -> Result<()> {
         });
     let container = docker.run_with_args(
         image,
-        RunArgs::default().with_mapped_port((9092_u16, 9092_u16)),
+        RunArgs::default()
+            .with_mapped_port((kafka_port, 9092_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 9664_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 8081_u16))
+            .with_mapped_port((free_port::find_free_tcp_port().await?, 8082_u16)),
     );
 
     let container_id = container.id().to_string();
@@ -84,10 +89,12 @@ async fn connector_kafka_producer() -> Result<()> {
         }
     });
 
-    let port = container.get_host_port(9092).unwrap_or(9092);
+    let port = container.get_host_port(9092).unwrap_or(19092);
     let mut admin_config = ClientConfig::new();
     let broker = format!("127.0.0.1:{}", port);
     let topic = "tremor_test";
+    let num_partitions = 3;
+    let num_replicas = 1;
     admin_config
         .set("client.id", "test-admin")
         .set("bootstrap.servers", &broker);
@@ -95,7 +102,11 @@ async fn connector_kafka_producer() -> Result<()> {
     let options = AdminOptions::default();
     let res = admin_client
         .create_topics(
-            vec![&NewTopic::new(topic, 3, TopicReplication::Fixed(1))],
+            vec![&NewTopic::new(
+                topic,
+                num_partitions,
+                TopicReplication::Fixed(num_replicas),
+            )],
             &options,
         )
         .await?;
@@ -135,6 +146,7 @@ async fn connector_kafka_producer() -> Result<()> {
     let harness = ConnectorHarness::new("kafka_producer", &connector_config).await?;
     let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
     harness.start().await?;
+    harness.wait_for_connected().await?;
 
     // CB Open is sent upon being connected
     let cf_event = in_pipe.get_contraflow().await?;
@@ -143,19 +155,66 @@ async fn connector_kafka_producer() -> Result<()> {
     let consumer: BaseConsumer<_> = ClientConfig::new()
         .set("bootstrap.servers", &broker)
         .set("group.id", "group")
-        .set("client.id", "client")
-        .set("socket.timeout.ms", "2000")
+        //.set("client.id", "my-client")
+        //.set("socket.timeout.ms", "2000")
         .set("session.timeout.ms", "6000")
-        .set("enable.auto.commit", "true")
-        .set("auto.commit.interval.ms", "100")
-        .set("enable.auto.offset.store", "true")
+        .set("auto.offset.reset", "earliest")
+        .set("enable.auto.commit", "false")
+        //.set("auto.commit.interval.ms", "100")
+        //.set("enable.auto.offset.store", "false")
+        //.set("debug", "broker,consumer,cgrp")
         .create()
         .expect("Consumer creation error");
     consumer.subscribe(&[topic]).unwrap();
 
-    // TODO: it seems to work reliably which hints at a timeout inside redpanda
-    // TODO: verify
-    task::sleep(Duration::from_secs(5)).await;
+    // wait for the consumer to have the configured partitions assigned
+    let start = Instant::now();
+    let timeout = Duration::from_secs(10);
+    loop {
+        if let Some((_code, msg)) = consumer.client().fatal_error() {
+            return Err(msg.into());
+        }
+        match consumer.assignment() {
+            Err(e) => {
+                return Err(e.into());
+            }
+            Ok(assignment) => {
+                if assignment.elements_for_topic(topic).len() == num_partitions as usize {
+                    info!("Consumer assigned: {assignment:?}");
+                    break;
+                } else {
+                    info!("Consumer not yet assigned all desired partitions: {assignment:?}");
+                }
+            }
+        }
+        // we gotta poll to drive progress for the client
+        info!(
+            "Waiting for consumer to get its assignment. State: {:?}",
+            consumer.poll(Duration::ZERO)
+        );
+        task::sleep(Duration::from_millis(500)).await;
+        if start.elapsed() > timeout {
+            // check docker logs
+            use std::io::BufRead;
+            use std::io::BufReader;
+            let logs = container.logs();
+            let mut reader = BufReader::new(logs.stderr);
+            let mut line = String::new();
+            while let Ok(len) = reader.read_line(&mut line) {
+                if len == 0 {
+                    break;
+                } else {
+                    error!("DOCKER LOGS: {line}");
+                }
+            }
+
+            return Err(format!(
+                "Consumer didn't get all partitions assigned: {:?}.",
+                consumer.assignment()
+            )
+            .into());
+        }
+    }
 
     let data = literal!({
         "snot": "badger"
@@ -168,10 +227,11 @@ async fn connector_kafka_producer() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(e1, IN).await?;
-    match consumer.poll(Duration::from_secs(2)) {
+    match consumer.poll(Duration::from_secs(5)) {
         Some(Ok(msg)) => {
             assert_eq!(msg.key(), Some("snot".as_bytes()));
             assert_eq!(msg.payload(), Some("{\"snot\":\"badger\"}\n".as_bytes()));
+            consumer.commit_message(&msg, CommitMode::Sync).unwrap();
         }
         Some(Err(e)) => {
             return Err(e.into());
@@ -200,7 +260,7 @@ async fn connector_kafka_producer() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(e2, IN).await?;
-    match consumer.poll(Duration::from_secs(2)) {
+    match consumer.poll(Duration::from_secs(5)) {
         Some(Ok(msg)) => {
             assert_eq!(Some("badger".as_bytes()), msg.key());
             assert_eq!(Some("[1,2,3]\n".as_bytes()), msg.payload());
@@ -209,6 +269,7 @@ async fn connector_kafka_producer() -> Result<()> {
             let headers = msg.headers().unwrap();
             assert_eq!(1, headers.count());
             assert_eq!(Some(("foo", "baz".as_bytes())), headers.get(0));
+            consumer.commit_message(&msg, CommitMode::Sync).unwrap();
         }
         Some(Err(e)) => {
             return Err(e.into());
@@ -248,8 +309,19 @@ async fn connector_kafka_producer() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(batched_event, IN).await?;
-    let mut batchman_msg = consumer.poll(Duration::from_secs(2)).unwrap().unwrap();
-    let mut snot_msg = consumer.poll(Duration::from_secs(2)).unwrap().unwrap();
+    let borrowed_batchman_msg = consumer.poll(Duration::from_secs(2)).unwrap().unwrap();
+    consumer
+        .commit_message(&borrowed_batchman_msg, CommitMode::Sync)
+        .unwrap();
+    let mut batchman_msg = borrowed_batchman_msg.detach();
+    drop(borrowed_batchman_msg);
+
+    let borrowed_snot_msg = consumer.poll(Duration::from_secs(2)).unwrap().unwrap();
+    consumer
+        .commit_message(&borrowed_snot_msg, CommitMode::Sync)
+        .unwrap();
+    let mut snot_msg = borrowed_snot_msg.detach();
+    drop(borrowed_snot_msg);
     if batchman_msg.key().eq(&Some("snot".as_bytes())) {
         core::mem::swap(&mut snot_msg, &mut batchman_msg);
     }
@@ -262,14 +334,13 @@ async fn connector_kafka_producer() -> Result<()> {
         batchman_msg.payload()
     );
     assert!(batchman_msg.headers().is_none());
+
     assert_eq!(Some("snot".as_bytes()), snot_msg.key());
     assert_eq!(
         Some("{\"field2\":\"just a string\"}\n".as_bytes()),
         snot_msg.payload()
     );
     assert!(snot_msg.headers().is_none());
-    drop(snot_msg);
-    drop(batchman_msg);
 
     consumer.unsubscribe();
     drop(consumer);

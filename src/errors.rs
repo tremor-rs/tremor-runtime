@@ -163,7 +163,7 @@ error_chain! {
         MsgPackEncoderError(rmp_serde::encode::Error);
         ParseIntError(std::num::ParseIntError);
         ParseFloatError(std::num::ParseFloatError);
-        Postgres(postgres::Error);
+        //Postgres(postgres::Error);
         RegexError(regex::Error);
         ReqwestError(reqwest::Error);
         RustlsError(rustls::TLSError);

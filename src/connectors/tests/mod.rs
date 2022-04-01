@@ -454,7 +454,7 @@ mod free_port {
                     return Ok(port);
                 } else {
                     candidate = self.port;
-                    self.port = self.port.wrapping_add(1);
+                    self.port = self.port.wrapping_add(1).min(*Self::RANGE.end());
                 }
             }
         }

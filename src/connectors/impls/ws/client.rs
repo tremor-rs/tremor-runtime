@@ -31,8 +31,8 @@ const URL_SCHEME: &str = "tremor-ws-client";
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     url: Url<super::WsDefaults>,
-    #[serde(default = "default_ttl")]
-    ttl: Option<u32>,
+    //#[serde(default = "default_ttl")]
+    //ttl: Option<u32>,
     #[serde(default = "default_no_delay")]
     no_delay: bool,
     #[serde(with = "either::serde_untagged_optional", default = "Default::default")]
@@ -43,9 +43,9 @@ fn default_no_delay() -> bool {
     true
 }
 
-fn default_ttl() -> Option<u32> {
-    None
-}
+//fn default_ttl() -> Option<u32> {
+//    None
+//}
 
 impl ConfigImpl for Config {}
 
@@ -53,9 +53,11 @@ impl ConfigImpl for Config {}
 pub(crate) struct Builder {}
 
 fn condition_tcp_stream(config: &Config, stream: &TcpStream) -> Result<(SocketAddr, SocketAddr)> {
-    if let Some(ttl) = config.ttl {
-        stream.set_ttl(ttl)?;
-    }
+    // this is known to fail on macOS for IPv6.
+    // See: https://github.com/rust-lang/rust/issues/95541
+    //if let Some(ttl) = config.ttl {
+    //    stream.set_ttl(ttl)?;
+    //}
     stream.set_nodelay(config.no_delay)?;
     Ok((stream.local_addr()?, stream.peer_addr()?))
 }
