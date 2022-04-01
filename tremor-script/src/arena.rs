@@ -93,6 +93,7 @@ impl Arena {
         }
     }
 
+    #[allow(clippy::let_and_return)]
     fn insert_<S>(&mut self, src: &S) -> Index
     where
         S: ToString + ?Sized,
@@ -101,8 +102,7 @@ impl Arena {
             .sources
             .iter_mut()
             .enumerate()
-            .filter(|e| e.1.src.is_none())
-            .next()
+            .find(|e| e.1.src.is_none())
         {
             e.src = Some(Pin::new(src.to_string()));
             let idx = Index {
