@@ -18,7 +18,7 @@ use tremor_script::{deploy::Deploy, errors::*, highlighter::Dumb, module::Manage
 fn parse<'script>(deploy: &str) -> tremor_script::Result<Deploy> {
     let aggr_reg = tremor_script::aggr_registry();
     let reg = tremor_script::registry::registry();
-    Deploy::parse(deploy, &reg, &aggr_reg)
+    Deploy::parse(deploy, &reg, &aggr_reg).into()
 }
 // Since we need to run one test at a time as we do test against module path
 // we have to lineralize them :(
