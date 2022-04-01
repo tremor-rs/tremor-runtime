@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use async_std::prelude::FutureExt;
+use serial_test::serial;
 use std::io::prelude::*;
 use std::time::Duration;
 use tremor_common::file;
@@ -34,9 +35,11 @@ macro_rules! test_cases {
             use super::*;
             $(
                 #[async_std::test]
+                #[serial(flow)]
                 async fn $file() -> Result<()> {
                     let deploy_dir = concat!("tests/flows/", stringify!($file), "/").to_string();
                     let deploy_file = concat!("tests/flows/", stringify!($file), "/flow.troy");
+                    Manager::clear_path()?;
                     Manager::add_path(&"tremor-script/lib")?;
                     Manager::add_path(&deploy_dir)?;
 
