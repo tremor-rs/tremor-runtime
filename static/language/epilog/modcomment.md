@@ -1,6 +1,6 @@
 ### Example
 
-Module level comments are used throughput the tremor standard library
+Module level comments are used throughout the tremor standard library
 and used as part of our document generation process.
 
 Here is a modified snippet from the standard library to illustrate
