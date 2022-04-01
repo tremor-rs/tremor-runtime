@@ -11,7 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use std::{io::prelude::*, sync::Mutex};
+use serial_test::serial;
+use std::io::prelude::*;
 use tremor_common::file;
 use tremor_script::{deploy::Deploy, errors::*, highlighter::Dumb, module::Manager};
 
@@ -19,11 +20,6 @@ fn parse<'script>(deploy: &str) -> tremor_script::Result<Deploy> {
     let aggr_reg = tremor_script::aggr_registry();
     let reg = tremor_script::registry::registry();
     Deploy::parse(deploy, &reg, &aggr_reg).into()
-}
-// Since we need to run one test at a time as we do test against module path
-// we have to lineralize them :(
-lazy_static::lazy_static! {
-    static ref UNIQUE: Mutex<()> = Mutex::new(());
 }
 
 macro_rules! test_cases {
@@ -34,16 +30,15 @@ macro_rules! test_cases {
             use pretty_assertions::assert_eq;
         $(
             #[test]
+            #[serial(flow_error)]
             fn $file() -> Result<()> {
 
                 let deploy_dir = concat!("tests/flow_errors/", stringify!($file), "/").to_string();
                 let deploy_file = concat!("tests/flow_errors/", stringify!($file), "/flow.troy");
                 let err_file = concat!("tests/flow_errors/", stringify!($file), "/error.txt");
-                let l = UNIQUE.lock();
                 Manager::clear_path()?;
                 Manager::add_path(&deploy_dir)?;
                 Manager::add_path(&"tremor-script/lib")?;
-
 
                 println!("Loading deployment: {}", deploy_file);
                 let mut file = file::open(deploy_file)?;
@@ -69,7 +64,6 @@ macro_rules! test_cases {
                         assert!(false);
                     }
                 };
-                drop(l);
                 Ok(())
             }
         )*
