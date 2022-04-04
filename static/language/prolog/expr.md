@@ -7,7 +7,7 @@ complexity in the scripting language.
 Within the scripting DSLs grammar the different forms and
 variations of expression are significant.
 
-Hoewver, in the higher level we limit exposure to a subset of
+However, in the higher level we limit exposure to a subset of
 these forms. This is done for convenience, and for consistency
 of usage, and ease of learning the language.
 
