@@ -98,7 +98,7 @@ where
                     }
                     Message::Ping(_) | Message::Pong(_) | Message::Frame(_) => {
                         // ignore those, but don't let the source wait
-                        return Ok(SourceReply::Empty(0));
+                        return self.read(stream).await;
                     }
                 };
                 let mut meta = self.meta.clone();

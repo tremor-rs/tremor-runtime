@@ -21,7 +21,7 @@ use crate::connectors::impls::kafka::{is_failed_connect_error, KAFKA_CONNECT_TIM
 use crate::connectors::prelude::*;
 use crate::connectors::utils::metrics::make_metrics_payload;
 use async_broadcast::{broadcast, Receiver as BroadcastReceiver, Sender as BroadcastSender};
-use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
+use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::{FutureExt, StreamExt};
 use async_std::task::{self, JoinHandle};
 use halfbrown::HashMap;
@@ -492,21 +492,12 @@ impl Source for KafkaConsumerSource {
         }
     }
 
-    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
-        match self.source_rx.try_recv() {
-            Ok((reply, custom_pull_id)) => {
-                if let Some(custom_pull_id) = custom_pull_id {
-                    *pull_id = custom_pull_id;
-                }
-                Ok(reply)
-            }
-            Err(TryRecvError::Empty) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
-            Err(TryRecvError::Closed) => {
-                error!("{} Consumer unavailable. Initiating Reconnect...", &ctx);
-                ctx.notifier().connection_lost().await?;
-                return Err("Consumer unavailable.".into());
-            }
+    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+        let (reply, custom_pull_id) = self.source_rx.recv().await?;
+        if let Some(custom_pull_id) = custom_pull_id {
+            *pull_id = custom_pull_id;
         }
+        Ok(reply)
     }
 
     async fn ack(&mut self, stream_id: u64, pull_id: u64, ctx: &SourceContext) -> Result<()> {

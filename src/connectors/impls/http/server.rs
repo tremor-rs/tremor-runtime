@@ -21,7 +21,7 @@ use crate::connectors::{
 use crate::errors::{Kind as ErrorKind, Result};
 use async_std::channel::unbounded;
 use async_std::{
-    channel::{bounded, Receiver, Sender, TryRecvError},
+    channel::{bounded, Receiver, Sender},
     task::JoinHandle,
 };
 use dashmap::DashMap;
@@ -252,65 +252,52 @@ impl Source for HttpServerSource {
     }
 
     async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
-        match self.request_rx.try_recv() {
-            Ok(RawRequestData {
+        let RawRequestData {
+            data,
+            request_meta,
+            content_type,
+            response_channel,
+        } = self.request_rx.recv().await?;
+
+        // assign request id and prepare meta
+        let request_id = RequestId(*pull_id);
+        debug!("{ctx} Received HTTP request with request id {request_id}");
+        let meta = ctx.meta(literal!({
+            "request": request_meta,
+            "request_id": *pull_id
+        }));
+        // store request context so we can respond to this request
+        if self.inflight.insert(request_id, response_channel).is_some() {
+            error!("{ctx} Request id collision: {request_id}");
+        };
+        Ok(if data.is_empty() {
+            // NOTE GET, HEAD ...
+            SourceReply::Structured {
+                origin_uri: self.origin_uri.clone(),
+                payload: EventPayload::from(ValueAndMeta::from_parts(Value::const_null(), meta)),
+                stream: DEFAULT_STREAM_ID,
+                port: None,
+            }
+        } else {
+            // codec overwrite, depending on requests content-type
+            // only set the overwrite if it is different than the configured codec
+            let codec_overwrite = if let Some(content_type) = content_type {
+                let maybe_codec = self.codec_map.get_codec(content_type.as_str());
+                maybe_codec
+                    .filter(|c| c.name() != self.configured_codec.as_str())
+                    .map(codec::Codec::boxed_clone)
+            } else {
+                None
+            };
+            SourceReply::Data {
+                origin_uri: self.origin_uri.clone(),
                 data,
-                request_meta,
-                content_type,
-                response_channel,
-            }) => {
-                // assign request id and prepare meta
-                let request_id = RequestId(*pull_id);
-                debug!("{ctx} Received HTTP request with request id {request_id}");
-                let meta = ctx.meta(literal!({
-                    "request": request_meta,
-                    "request_id": *pull_id
-                }));
-                // store request context so we can respond to this request
-                if self.inflight.insert(request_id, response_channel).is_some() {
-                    error!("{ctx} Request id collision: {request_id}");
-                };
-                Ok(if data.is_empty() {
-                    // NOTE GET, HEAD ...
-                    SourceReply::Structured {
-                        origin_uri: self.origin_uri.clone(),
-                        payload: EventPayload::from(ValueAndMeta::from_parts(
-                            Value::const_null(),
-                            meta,
-                        )),
-                        stream: DEFAULT_STREAM_ID,
-                        port: None,
-                    }
-                } else {
-                    // codec overwrite, depending on requests content-type
-                    // only set the overwrite if it is different than the configured codec
-                    let codec_overwrite = if let Some(content_type) = content_type {
-                        let maybe_codec = self.codec_map.get_codec(content_type.as_str());
-                        maybe_codec
-                            .filter(|c| c.name() != self.configured_codec.as_str())
-                            .map(codec::Codec::boxed_clone)
-                    } else {
-                        None
-                    };
-                    SourceReply::Data {
-                        origin_uri: self.origin_uri.clone(),
-                        data,
-                        meta: Some(meta),
-                        stream: None, // a http request is a discrete unit and not part of any stream
-                        port: None,
-                        codec_overwrite,
-                    }
-                })
+                meta: Some(meta),
+                stream: None, // a http request is a discrete unit and not part of any stream
+                port: None,
+                codec_overwrite,
             }
-            Err(TryRecvError::Closed) => {
-                ctx.swallow_err(
-                    ctx.notifier().connection_lost().await,
-                    "Error notifying the runtime of a lost connection.",
-                );
-                Err(TryRecvError::Closed.into())
-            }
-            Err(TryRecvError::Empty) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
-        }
+        })
     }
 
     fn is_transactional(&self) -> bool {

@@ -15,7 +15,6 @@
 ///! The UDP server will close the udp spcket on stop
 use crate::connectors::prelude::*;
 use async_std::net::UdpSocket;
-use futures::future::poll_immediate;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -113,8 +112,8 @@ impl Source for UdpServerSource {
             .listener
             .as_ref()
             .ok_or_else(|| Error::from(ErrorKind::NoSocket))?;
-        match poll_immediate(socket.recv(&mut self.buffer)).await {
-            Some(Ok(bytes_read)) => {
+        match socket.recv(&mut self.buffer).await {
+            Ok(bytes_read) => {
                 if bytes_read == 0 {
                     Ok(SourceReply::EndStream {
                         origin_uri: self.origin_uri.clone(),
@@ -133,7 +132,7 @@ impl Source for UdpServerSource {
                     })
                 }
             }
-            Some(Err(e)) => {
+            Err(e) => {
                 error!(
                     "{} Error receiving from socket: {}. Initiating reconnect...",
                     ctx, &e
@@ -142,7 +141,6 @@ impl Source for UdpServerSource {
                 ctx.notifier().connection_lost().await?;
                 return Err(e.into());
             }
-            None => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
         }
     }
 

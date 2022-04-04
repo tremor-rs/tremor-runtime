@@ -24,7 +24,7 @@ use crate::{
     errors::Kind as ErrorKind,
 };
 use async_std::{
-    channel::{bounded, Receiver, Sender, TryRecvError},
+    channel::{bounded, Receiver, Sender},
     net::TcpListener,
     prelude::*,
     task::JoinHandle,
@@ -275,14 +275,7 @@ impl Source for TcpServerSource {
     }
 
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        match self.connection_rx.try_recv() {
-            Ok(reply) => Ok(reply),
-            Err(TryRecvError::Empty) => {
-                // TODO: configure pull interval in connector config?
-                Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
-            }
-            Err(e) => Err(e.into()),
-        }
+        self.connection_rx.recv().await.map_err(Error::from)
     }
 
     async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {

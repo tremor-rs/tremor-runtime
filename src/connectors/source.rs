@@ -21,11 +21,11 @@ pub use channel_source::{ChannelSource, ChannelSourceRuntime};
 
 use async_std::channel::unbounded;
 use async_std::task;
+use futures::{future::Either, pin_mut};
 use simd_json::Mutable;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::Display;
-use std::time::{Duration, Instant};
 use tremor_common::time::nanotime;
 use tremor_script::{ast::DeployEndpoint, prelude::BaseExpr, EventPayload, ValueAndMeta};
 
@@ -58,11 +58,6 @@ use tremor_value::{literal, Value};
 use value_trait::Builder;
 
 use super::{CodecReq, Connectivity};
-
-/// The default poll interval in milliseconds for `try_recv` on channels in connectors
-pub const DEFAULT_POLL_INTERVAL: u64 = 10;
-/// A duration for the default poll interval
-pub const DEFAULT_POLL_DURATION: Duration = Duration::from_millis(10);
 
 #[derive(Debug)]
 /// Messages a Source can receive
@@ -142,8 +137,8 @@ pub enum SourceReply {
     },
     /// Stream Failed, resources related to that stream should be cleaned up
     StreamFail(u64),
-    /// no new data/event, wait for the given ms
-    Empty(u64),
+    /// This connector will never provide data again
+    Finished,
 }
 
 /// sender for source reply
@@ -444,6 +439,9 @@ struct Streams {
 }
 
 impl Streams {
+    fn is_empty(&self) -> bool {
+        self.states.is_empty()
+    }
     /// constructor
     fn new(
         uid: u64,
@@ -576,9 +574,6 @@ where
     // but also an explicitly paused source might receive a Cb open and continue sending data :scream:
     state: SourceState,
     connectivity: Connectivity,
-    // if set we can use .elapsed() to check agains `pull_wait` if we are done waiting
-    pull_wait_start: Option<Instant>,
-    pull_wait: Duration,
     is_transactional: bool,
     is_asynchronous: bool,
     connector_channel: Option<Sender<Msg>>,
@@ -625,8 +620,6 @@ where
             pipelines_err: Vec::with_capacity(1),
             state: SourceState::Initialized,
             connectivity: Connectivity::Disconnected, // we always start as disconnected until `.connect()` connects us
-            pull_wait_start: None,
-            pull_wait: DEFAULT_POLL_DURATION,
             is_transactional,
             is_asynchronous,
             connector_channel: None,
@@ -634,18 +627,6 @@ where
             pull_counter: 0,
             cb_open_received: false,
         }
-    }
-
-    /// we wait for control plane messages iff
-    ///
-    /// - we are paused or initialized
-    /// - we have some control plane messages (here we don't need to wait)
-    /// - if we have no pipelines connected
-    fn needs_control_plane_msg(&self) -> bool {
-        matches!(self.state, SourceState::Paused | SourceState::Initialized)
-            || self.connectivity == Connectivity::Disconnected
-            || !self.rx.is_empty()
-            || self.pipelines_out.is_empty()
     }
 
     /// Handle a control plane message
@@ -921,18 +902,6 @@ where
 
     /// should this manager pull data from its source?
     fn should_pull_data(&mut self) -> bool {
-        // this check implements the waiting that is induced by a source returning `SourceReply::Empty(wait_ms)`.
-        // We stop pulling data until the wait time has elapsed, but we don't sleep this entire time.
-        let needs_to_wait = match self.pull_wait_start {
-            Some(pull_wait_start) if pull_wait_start.elapsed() > self.pull_wait => {
-                self.pull_wait_start = None;
-                false
-            }
-            Some(_) => true,
-
-            None => false,
-        };
-
         // asynchronous sources need to be drained from their asynchronous task which consumes from
         // the external resource, we pull data from it until we receive a `SourceReply::Empty`.
         // synchronous sources (polling the external resource directly in `Source::pull_data`) should not be called anymore
@@ -941,8 +910,7 @@ where
             || (self.state == SourceState::Draining && self.is_asynchronous);
 
         // combine all the conditions
-        !needs_to_wait
-            && state_should_pull
+        state_should_pull
             && !self.pipelines_out.is_empty() // we have pipelines connected
             && self.connectivity == Connectivity::Connected // we are connected to our thingy
             && self.cb_open_received // we did receive at least 1 `CbAction::Open` from 1 of those connected pipelines
@@ -994,19 +962,20 @@ where
             } => {
                 self.handle_end_stream(stream_id, pull_id, origin_uri, meta)
                     .await;
+                if self.state == SourceState::Draining && self.streams.is_empty() {
+                    self.on_fully_drained().await?;
+                }
             }
             SourceReply::StreamFail(stream_id) => {
                 // clean out stream state
                 self.streams.end_stream(stream_id);
-            }
-            SourceReply::Empty(wait_ms) => {
-                if self.state == SourceState::Draining {
+                if self.state == SourceState::Draining && self.streams.is_empty() {
                     self.on_fully_drained().await?;
-                } else {
-                    // set the timer for the given ms
-                    self.pull_wait_start = Some(Instant::now());
-                    self.pull_wait = Duration::from_millis(wait_ms);
                 }
+            }
+            SourceReply::Finished => {
+                info!("{} Finished", self.ctx);
+                self.state = SourceState::Drained;
             }
         }
         Ok(())
@@ -1198,25 +1167,10 @@ where
     /// returns `Ok(Control::Terminate)` if this source should be terminated
     #[allow(clippy::too_many_lines)]
     async fn control_plane(&mut self) -> Control {
-        loop {
-            if !self.needs_control_plane_msg() {
-                // This yeild is needed since otherwise we could creeate a tight loop that never
-                // yields for another task on the executor.
-                //
-                // The loop would be:
-                // run -> control_plane -> should_pull_data == false && pull_wait_start == None -> run ...
-                //
-                // This becomes a problem if, for example, we starve the executors and do not let
-                // any the 'Open' message so we never get to `should_pull_data` but also never
-                // get another control plane message.
-                task::yield_now().await;
-                return Control::Continue;
-            }
-            if let Ok(msg) = self.rx.recv().await {
-                if self.handle_control_plane_msg(msg).await == Control::Terminate {
-                    return Control::Terminate;
-                }
-            }
+        if let Ok(msg) = self.rx.recv().await {
+            self.handle_control_plane_msg(msg).await
+        } else {
+            Control::Continue
         }
     }
     /// the source task
@@ -1229,22 +1183,38 @@ where
         // we expect 1 source transport unit (stu) per pull, so this counter is equivalent to a stu counter
         // it is not unique per stream only, but per source
         loop {
-            if self.control_plane().await == Control::Terminate {
-                // source has been stopped, lets stop running here
-                debug!("{} Terminating source task...", self.ctx);
-                return Ok(());
+            while !self.should_pull_data() {
+                if self.control_plane().await == Control::Terminate {
+                    debug!("{} Terminating source task...", self.ctx);
+                    return Ok(());
+                }
             }
 
-            if self.should_pull_data() {
-                let mut pull_id = self.pull_counter;
-                let data = self.source.pull_data(&mut pull_id, &self.ctx).await;
-                self.handle_source_reply(data, pull_id).await?;
-                self.pull_counter += 1;
+            let mut pull_id = self.pull_counter;
+            let r = {
+                let f1 = self.rx.recv();
+                let f2 = self.source.pull_data(&mut pull_id, &self.ctx);
+                pin_mut!(f1);
+                pin_mut!(f2);
+                match futures::future::select(f1, f2).await {
+                    Either::Left((msg, _)) => Either::Left(msg?),
+                    Either::Right((data, _)) => Either::Right(data),
+                }
             };
-            if self.pull_wait_start.is_some() {
-                // sleep for a quick 10ms (maximum) in order to stay responsive
-                task::sleep(DEFAULT_POLL_DURATION.min(self.pull_wait)).await;
-            }
+
+            let ctrl = match r {
+                Either::Left(msg) => self.handle_control_plane_msg(msg).await,
+                Either::Right(data) => {
+                    self.handle_source_reply(data, pull_id).await?;
+                    self.pull_counter += 1;
+                    Control::Continue
+                }
+            };
+
+            if ctrl == Control::Terminate {
+                debug!("{} Terminating source task...", self.ctx);
+                return Ok(());
+            };
         }
     }
 }

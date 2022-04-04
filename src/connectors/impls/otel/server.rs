@@ -17,7 +17,7 @@ use super::{
     logs, metrics, trace,
 };
 use crate::connectors::prelude::*;
-use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
+use async_std::channel::{bounded, Receiver, Sender};
 use async_std::task::JoinHandle;
 use tremor_otelapis::all::{self, OpenTelemetryEvents};
 const CONNECTOR_TYPE: &str = "otel_server";
@@ -149,9 +149,6 @@ impl Connector for Server {
     }
 }
 
-/// Time to await an answer before handing control back to the source manager
-const SOURCE_RECV_TIMEOUT: u64 = 50;
-
 struct OtelSource {
     origin_uri: EventOriginUri,
     config: Config,
@@ -160,42 +157,34 @@ struct OtelSource {
 
 #[async_trait::async_trait()]
 impl Source for OtelSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
-        let r = match self.rx.try_recv() {
-            Ok(OpenTelemetryEvents::Metrics(metrics, remote)) if self.config.metrics => {
-                Some((metrics::resource_metrics_to_json(metrics), remote))
+    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+        let (data, remote) = match self.rx.recv().await? {
+            OpenTelemetryEvents::Metrics(metrics, remote) if self.config.metrics => {
+                (metrics::resource_metrics_to_json(metrics), remote)
             }
-            Ok(OpenTelemetryEvents::Logs(logs, remote)) if self.config.logs => {
-                Some((logs::resource_logs_to_json(logs)?, remote))
+            OpenTelemetryEvents::Logs(logs, remote) if self.config.logs => {
+                (logs::resource_logs_to_json(logs)?, remote)
             }
-            Ok(OpenTelemetryEvents::Trace(traces, remote)) if self.config.trace => {
-                Some((trace::resource_spans_to_json(traces), remote))
+            OpenTelemetryEvents::Trace(traces, remote) if self.config.trace => {
+                (trace::resource_spans_to_json(traces), remote)
             }
-            Ok(_) => {
+            _ => {
                 warn!("{ctx} Source received event when support is disabled. Dropping.");
-                None
+                return self.pull_data(pull_id, ctx).await;
             }
-            Err(TryRecvError::Closed) => {
-                ctx.notifier().connection_lost().await?;
-                None
-            }
-            _ => None,
         };
-        if let Some((data, remote)) = r {
-            let mut origin_uri = self.origin_uri.clone();
-            if let Some(remote) = remote {
-                origin_uri.host = remote.ip().to_string();
-                origin_uri.port = Some(remote.port());
-            }
-            Ok(SourceReply::Structured {
-                origin_uri,
-                payload: data.into(),
-                stream: DEFAULT_STREAM_ID,
-                port: None,
-            })
-        } else {
-            Ok(SourceReply::Empty(SOURCE_RECV_TIMEOUT))
+
+        let mut origin_uri = self.origin_uri.clone();
+        if let Some(remote) = remote {
+            origin_uri.host = remote.ip().to_string();
+            origin_uri.port = Some(remote.port());
         }
+        Ok(SourceReply::Structured {
+            origin_uri,
+            payload: data.into(),
+            stream: DEFAULT_STREAM_ID,
+            port: None,
+        })
     }
 
     fn is_transactional(&self) -> bool {

@@ -20,9 +20,9 @@ use tremor_common::time::nanotime;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     /// Cron entries
-    pub entries: Option<YamlValue>,
+    pub(crate) entries: Option<YamlValue>,
 }
 
 impl ConfigImpl for Config {}
@@ -69,7 +69,7 @@ impl ConnectorBuilder for Builder {
 }
 
 #[derive(Clone, Debug)]
-pub struct Crononome {
+pub(crate) struct Crononome {
     entries: Vec<CronEntryInt>,
 }
 
@@ -118,11 +118,8 @@ impl Source for CrononomeSource {
         Ok(true)
     }
     async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
-        if !ctx.quiescence_beacon().continue_reading().await {
-            return Ok(SourceReply::Empty(100));
-        }
-        if let Some(trigger) = self.cq.next() {
-            let mut origin_uri = self.origin_uri.clone();
+        let mut origin_uri = self.origin_uri.clone();
+        if let Some(trigger) = self.cq.wait_for_next().await {
             origin_uri.path.push(trigger.0.clone());
 
             let mut tr: Value<'static> = Value::object_with_capacity(2);
@@ -146,7 +143,7 @@ impl Source for CrononomeSource {
                 port: None,
             })
         } else {
-            Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
+            Ok(SourceReply::Finished)
         }
     }
 

@@ -13,10 +13,10 @@
 // limitations under the License.
 
 #![cfg(not(tarpaulin_include))]
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use crate::connectors::prelude::*;
-use async_std::sync::Mutex;
+use async_std::{sync::Mutex, task};
 
 use simd_json_derive::{Deserialize, Serialize};
 
@@ -88,17 +88,20 @@ impl qwal::Entry for Payload {
 #[async_trait::async_trait]
 impl Source for WalSource {
     async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        if let Some((id, event)) = self.wal.lock().await.pop::<Payload>().await? {
-            // the wal is creating its own ids, we take over here
-            *pull_id = id;
-            Ok(SourceReply::Structured {
-                origin_uri: self.origin_uri.clone(),
-                payload: event.data,
-                stream: DEFAULT_STREAM_ID,
-                port: None,
-            })
-        } else {
-            Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
+        // This is a busy loop until we get data to avoid hogging the cpu
+        // TODO: improve this by adding  notifyer on write
+        loop {
+            if let Some((id, event)) = self.wal.lock().await.pop::<Payload>().await? {
+                // the wal is creating its own ids, we take over here
+                *pull_id = id;
+                return Ok(SourceReply::Structured {
+                    origin_uri: self.origin_uri.clone(),
+                    payload: event.data,
+                    stream: DEFAULT_STREAM_ID,
+                    port: None,
+                });
+            }
+            task::sleep(Duration::from_millis(10)).await
         }
     }
 
