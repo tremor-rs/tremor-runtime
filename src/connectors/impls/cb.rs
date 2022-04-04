@@ -14,6 +14,8 @@
 
 #![cfg(not(tarpaulin_include))] // This is for benchmarking and testing
 
+use std::time::Duration;
+
 use crate::connectors::prelude::*;
 use async_std::io::prelude::BufReadExt;
 use async_std::stream::StreamExt;
@@ -26,6 +28,7 @@ pub struct Config {
     /// path to file to load data from
     path: Option<String>,
     // timeout in millis
+    // FIXME: consider making this nanoseconds so timeout is the same in all connectors
     #[serde(default = "default_timeout")]
     timeout: u64,
 
@@ -246,7 +249,6 @@ impl Source for CbSource {
                 codec_overwrite: None,
             })
         } else {
-            let wait = 100_u64;
             if self.finished {
                 if self.config.timeout == 0 {
                     // timeout reached
@@ -269,9 +271,13 @@ impl Source for CbSource {
                     // ALLOW: this is the supposed to exit
                     std::process::exit(status);
                 } else {
-                    self.config.timeout = self.config.timeout.saturating_sub(wait);
+                    // FIXME: do some proper waiting here we can't just -100 every call
+                    // See chrononome
+                    async_std::task::sleep(Duration::from_millis(100_u64)).await;
+                    self.config.timeout = self.config.timeout.saturating_sub(100_u64);
                 }
-                Ok(SourceReply::Empty(wait))
+
+                Ok(SourceReply::Finished)
             } else {
                 self.finished = true;
                 Ok(SourceReply::EndStream {

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
+use async_std::channel::{bounded, Receiver, Sender};
 use halfbrown::HashMap;
 use tremor_value::literal;
 
@@ -146,9 +146,6 @@ impl Connector for Client {
     }
 }
 
-/// Time to await an answer before handing control back to the source manager
-const SOURCE_RECV_INTERVAL: u64 = 50;
-
 struct HttpRequestSource {
     #[allow(dead_code)]
     http_meta: HttpRequestMeta,
@@ -157,15 +154,8 @@ struct HttpRequestSource {
 
 #[async_trait::async_trait()]
 impl Source for HttpRequestSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
-        match self.rx.try_recv() {
-            Ok(receiver) => Ok(receiver),
-            Err(TryRecvError::Empty) => Ok(SourceReply::Empty(SOURCE_RECV_INTERVAL)),
-            Err(TryRecvError::Closed) => {
-                ctx.notifier().connection_lost().await?;
-                Err("HTTP Request Source channel is closed, we have to reconnect.".into())
-            }
-        }
+    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+        Ok(self.rx.recv().await?)
     }
 
     fn is_transactional(&self) -> bool {

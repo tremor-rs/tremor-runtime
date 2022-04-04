@@ -65,7 +65,7 @@ struct NullSource {}
 #[async_trait::async_trait]
 impl Source for NullSource {
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
+        Ok(SourceReply::Finished)
     }
 
     fn is_transactional(&self) -> bool {

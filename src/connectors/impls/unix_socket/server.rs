@@ -35,7 +35,7 @@ use async_std::os::unix::net::UnixListener;
 use async_std::path::PathBuf;
 use async_std::task::JoinHandle;
 use async_std::{
-    channel::{bounded, Receiver, Sender, TryRecvError},
+    channel::{bounded, Receiver, Sender},
     prelude::FutureExt,
 };
 
@@ -219,11 +219,7 @@ impl Source for UnixSocketSource {
         Ok(true)
     }
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        match self.connection_rx.try_recv() {
-            Ok(reply) => Ok(reply),
-            Err(TryRecvError::Empty) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
-            Err(e) => Err(e.into()),
-        }
+        Ok(self.connection_rx.recv().await?)
     }
 
     async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {

@@ -14,11 +14,10 @@
 
 use crate::connectors::source::{
     Source, SourceContext, SourceReply, SourceReplySender, StreamDone, StreamReader,
-    DEFAULT_POLL_INTERVAL,
 };
 use crate::connectors::Context;
 use crate::errors::Result;
-use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
+use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::*;
 use async_std::task;
 use std::time::Duration;
@@ -99,6 +98,12 @@ impl ChannelSourceRuntime {
                     break;
                 };
             }
+            // FIXME: add callback to reader for clean closing of stream or integrate it
+            // in on_done
+            ctx.swallow_err(
+                tx.send(SourceReply::StreamFail(stream)).await,
+                "Failed to fail stream",
+            );
             if reader.on_done(stream).await == StreamDone::ConnectorClosed {
                 ctx.swallow_err(
                     ctx.notifier().connection_lost().await,
@@ -112,14 +117,7 @@ impl ChannelSourceRuntime {
 #[async_trait::async_trait()]
 impl Source for ChannelSource {
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        match self.rx.try_recv() {
-            Ok(reply) => Ok(reply),
-            Err(TryRecvError::Empty) => {
-                // TODO: configure pull interval in connector config?
-                Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
-            }
-            Err(e) => Err(e.into()),
-        }
+        Ok(self.rx.recv().await?)
     }
 
     /// this source is not handling acks/fails

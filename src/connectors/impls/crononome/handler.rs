@@ -13,31 +13,32 @@
 // limitations under the License.
 
 use crate::connectors::prelude::*;
+use async_std::task;
 use chrono::{DateTime, Utc};
 use cron::Schedule;
 use serde_yaml::Value as YamlValue;
-use std::clone::Clone;
 use std::cmp::Reverse;
 use std::cmp::{Eq, Ord, Ordering, PartialEq, PartialOrd};
 use std::collections::BinaryHeap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::str::FromStr;
+use std::{clone::Clone, time::Duration};
 use tremor_script::prelude::*;
 
 #[derive(Deserialize, Clone)]
-pub struct CronEntry {
-    pub name: String,
-    pub expr: String,
-    pub payload: Option<YamlValue>,
+pub(crate) struct CronEntry {
+    pub(crate) name: String,
+    pub(crate) expr: String,
+    pub(crate) payload: Option<YamlValue>,
 }
 
 #[derive(Clone)]
-pub struct CronEntryInt {
-    pub name: String,
-    pub expr: String,
-    pub sched: Schedule,
-    pub payload: Option<Value<'static>>,
+pub(crate) struct CronEntryInt {
+    pub(crate) name: String,
+    pub(crate) expr: String,
+    pub(crate) sched: Schedule,
+    pub(crate) payload: Option<Value<'static>>,
 }
 
 impl TryFrom<CronEntry> for CronEntryInt {
@@ -141,32 +142,42 @@ struct TemporalPriorityQueue<I> {
 }
 
 impl<I> TemporalPriorityQueue<I> {
-    pub fn default() -> Self {
+    pub(crate) fn default() -> Self {
         Self {
             q: BinaryHeap::new(),
         }
     }
 
-    pub fn enqueue(&mut self, at: TemporalItem<I>) {
+    pub(crate) fn enqueue(&mut self, at: TemporalItem<I>) {
         self.q.push(Reverse(at));
     }
 
-    pub fn pop(&mut self) -> Option<TemporalItem<I>> {
-        if let Some(Reverse(x)) = self.q.peek() {
-            let now = Utc::now().timestamp();
-            let event = x.at.timestamp();
-            if event <= now {
-                self.q.pop().map(|Reverse(x)| x)
-            } else {
-                None
-            }
+    #[cfg(test)]
+    pub(crate) fn pop(&mut self) -> Option<TemporalItem<I>> {
+        let Reverse(x) = self.q.peek()?;
+        let now = Utc::now().timestamp();
+        let event = x.at.timestamp();
+        if event <= now {
+            self.q.pop().map(|Reverse(x)| x)
         } else {
             None
         }
     }
+
+    pub(crate) async fn wait_for_pop(&mut self) -> Option<TemporalItem<I>> {
+        let Reverse(x) = self.q.peek()?;
+        let now = Utc::now().timestamp();
+        let event = x.at.timestamp();
+        task::sleep(Duration::from_secs(
+            (event as u64).saturating_sub(now as u64),
+        ))
+        .await;
+        self.q.pop().map(|Reverse(x)| x)
+    }
+
     #[cfg(not(feature = "tarpaulin-exclude"))]
     #[cfg(test)]
-    pub fn drain(&mut self) -> Vec<TemporalItem<I>> {
+    pub(crate) fn drain(&mut self) -> Vec<TemporalItem<I>> {
         let now = Utc::now().timestamp();
         let mut sched: Vec<TemporalItem<I>> = vec![];
         // for next in self.q.iter() {
@@ -196,18 +207,18 @@ impl<I> TemporalPriorityQueue<I> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ChronomicQueue {
+pub(crate) struct ChronomicQueue {
     tpq: TemporalPriorityQueue<CronEntryInt>,
 }
 
 impl ChronomicQueue {
-    pub fn default() -> Self {
+    pub(crate) fn default() -> Self {
         Self {
             tpq: TemporalPriorityQueue::default(),
         }
     }
 
-    pub fn enqueue(&mut self, entry: &CronEntryInt) {
+    pub(crate) fn enqueue(&mut self, entry: &CronEntryInt) {
         if let Some(at) = entry.sched.upcoming(chrono::Utc).next() {
             self.tpq.enqueue(TemporalItem {
                 at,
@@ -218,7 +229,7 @@ impl ChronomicQueue {
 
     #[cfg(not(feature = "tarpaulin-exclude"))]
     #[cfg(test)]
-    pub fn drain(&mut self) -> Vec<(String, Option<Value<'static>>)> {
+    pub(crate) fn drain(&mut self) -> Vec<(String, Option<Value<'static>>)> {
         let due = self.tpq.drain();
         let mut trigger: Vec<(String, Option<Value<'static>>)> = vec![];
         for ti in &due {
@@ -228,8 +239,16 @@ impl ChronomicQueue {
         }
         trigger
     }
-    pub fn next(&mut self) -> Option<(String, Option<Value<'static>>)> {
+    #[cfg(test)]
+    pub(crate) fn next(&mut self) -> Option<(String, Option<Value<'static>>)> {
         self.tpq.pop().map(|ti| {
+            self.enqueue(&ti.what);
+            (ti.what.name, ti.what.payload)
+        })
+    }
+
+    pub(crate) async fn wait_for_next(&mut self) -> Option<(String, Option<Value<'static>>)> {
+        self.tpq.wait_for_pop().await.map(|ti| {
             self.enqueue(&ti.what);
             (ti.what.name, ti.what.payload)
         })

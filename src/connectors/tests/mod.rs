@@ -208,19 +208,9 @@ impl ConnectorHarness {
     ///
     /// If communication with the connector fails or we time out without reaching connected state.
     pub(crate) async fn wait_for_connected(&self) -> Result<()> {
-        // FIXME delete timeouts
-        // let timeout = timeout.unwrap_or(TIMEOUT);
-        // let start = std::time::Instant::now();
         while self.status().await?.connectivity != Connectivity::Connected {
             // TODO create my own future here that succeeds on poll when status is connected
             async_std::task::sleep(Duration::from_millis(100)).await;
-            // if start.elapsed() >= timeout {
-            //     return Err(format!(
-            //         "Connector {} didn't reach connected within {:?}",
-            //         self.connector_id, timeout
-            //     )
-            //     .into());
-            // }
         }
         Ok(())
     }
@@ -231,19 +221,9 @@ impl ConnectorHarness {
     ///
     /// If communication with the connector fails or we time out without reaching the desired state
     pub(crate) async fn wait_for_state(&self, state: State) -> Result<()> {
-        // FIXME delete timeouts
-        // let timeout = timeout.unwrap_or(TIMEOUT);
-        // let start = std::time::Instant::now();
         while self.status().await?.status != state {
             // TODO create my own future here that succeeds on poll when status is connected
             async_std::task::sleep(Duration::from_millis(100)).await;
-            // if start.elapsed() >= timeout {
-            //     return Err(format!(
-            //         "Connector {} didn't reach state {} within {:?}",
-            //         self.connector_id, state, timeout
-            //     )
-            //     .into());
-            // }
         }
         Ok(())
     }

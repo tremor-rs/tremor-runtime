@@ -36,30 +36,32 @@ async fn server_event_routing() -> Result<()> {
         "buf_size": 4096
       }
     });
-
+    dbg!();
     let harness = ConnectorHarness::new("tcp_server", &defn).await?;
+    dbg!();
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of tcp_server connector");
-
+    dbg!();
     harness.start().await?;
+    dbg!();
     harness.wait_for_connected().await?;
-
+    dbg!();
     // connect 2 client sockets
     let mut socket1 = TcpStream::connect(&server_addr).await?;
     let mut socket2 = TcpStream::connect(&server_addr).await?;
-
+    dbg!();
     socket1.write_all("snot\n".as_bytes()).await?;
     let event = out_pipeline.get_event().await?;
     let (_data, meta) = event.data.parts();
-
+    dbg!();
     let tcp_server_meta = meta.get("tcp_server");
     assert_eq!(Some(false), tcp_server_meta.get_bool("tls"));
 
     let peer_obj = tcp_server_meta.get_object("peer").unwrap();
     assert!(peer_obj.contains_key("host"));
     assert!(peer_obj.contains_key("port"));
-
+    dbg!();
     // lets send an event and route it via metadata to socket 1
     let meta = literal!({
         "tcp_server": {
@@ -69,13 +71,14 @@ async fn server_event_routing() -> Result<()> {
             }
         }
     });
+    dbg!();
     let event1 = Event {
         id: EventId::default(),
         data: (Value::String("badger".into()), meta).into(),
         ..Event::default()
     };
     harness.send_to_sink(event1, IN).await?;
-
+    dbg!();
     let mut buf = vec![0_u8; 8192];
     let bytes_read = socket1.read(&mut buf).await?;
     let data = &buf[0..bytes_read];

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 // Copyright 2021, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +14,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::connectors::prelude::*;
+use async_std::task;
 use tremor_common::time::nanotime;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -104,25 +107,23 @@ impl Source for MetronomeSource {
     }
     async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         let now = nanotime();
-        if self.next < now {
-            self.next = now + self.interval_ns;
-            *pull_id = self.id;
-            self.id += 1;
-            let data = literal!({
-                "onramp": "metronome",
-                "ingest_ns": now,
-                "id": *pull_id
-            });
-            Ok(SourceReply::Structured {
-                origin_uri: self.origin_uri.clone(),
-                payload: data.into(),
-                stream: DEFAULT_STREAM_ID,
-                port: None,
-            })
-        } else {
-            let wait_ms = (self.next - now) / 1_000_000;
-            Ok(SourceReply::Empty(wait_ms))
+        if now > self.next {
+            task::sleep(Duration::from_nanos(now - self.next)).await
         }
+        self.next = now + self.interval_ns;
+        *pull_id = self.id;
+        self.id += 1;
+        let data = literal!({
+            "onramp": "metronome",
+            "ingest_ns": now,
+            "id": *pull_id
+        });
+        Ok(SourceReply::Structured {
+            origin_uri: self.origin_uri.clone(),
+            payload: data.into(),
+            stream: DEFAULT_STREAM_ID,
+            port: None,
+        })
     }
 
     fn is_transactional(&self) -> bool {

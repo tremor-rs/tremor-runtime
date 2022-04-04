@@ -20,7 +20,7 @@ pub(crate) use crate::connectors::sink::{
 
 pub(crate) use crate::connectors::source::{
     ChannelSource, ChannelSourceRuntime, Source, SourceAddr, SourceContext, SourceManagerBuilder,
-    SourceReply, StreamReader, DEFAULT_POLL_INTERVAL,
+    SourceReply, StreamReader,
 };
 pub(crate) use crate::connectors::utils::{
     reconnect::Attempt,
