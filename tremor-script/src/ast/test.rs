@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use matches::assert_matches;
+
 use super::*;
 use crate::{CustomFn, NodeMeta};
 
@@ -145,4 +147,236 @@ fn str_lit_as_str() {
     assert_eq!(StrLitElement::Lit("string".into()).as_str(), Some("string"));
     assert_eq!(StrLitElement::Expr(v("string")).as_str(), Some("string"));
     assert_eq!(StrLitElement::Expr(p()).as_str(), None);
+}
+
+#[test]
+fn replace_last_shadow_use() {
+    let path = Path::Event(EventPath {
+        mid: NodeMeta::dummy(),
+        segments: vec![],
+    });
+    let expr = Expr::Assign {
+        mid: NodeMeta::dummy(),
+        path,
+        expr: Box::new(Expr::Imut(ImutExpr::Local {
+            idx: 42,
+            mid: NodeMeta::dummy(),
+        })),
+    };
+    let pc = PredicateClause {
+        mid: NodeMeta::dummy(),
+        pattern: Pattern::Default,
+        guard: None,
+        exprs: vec![],
+        last_expr: expr.clone(),
+    };
+
+    // Simple
+    let mut g = ClauseGroup::Simple {
+        precondition: None,
+        patterns: vec![pc.clone()],
+    };
+    g.replace_last_shadow_use(42);
+    if let ClauseGroup::Simple { patterns, .. } = g {
+        assert_matches!(patterns[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
+    } else {
+        unreachable!()
+    };
+
+    // Search Tree
+    let mut tree = BTreeMap::new();
+    tree.insert(Value::from(42u32), (vec![], expr.clone()));
+    let mut g = ClauseGroup::SearchTree {
+        precondition: None,
+        tree,
+        rest: vec![pc.clone()],
+    };
+    g.replace_last_shadow_use(42);
+    if let ClauseGroup::SearchTree { rest, tree, .. } = g {
+        let last = &tree.values().next().unwrap().1;
+        assert_matches!(last, Expr::AssignMoveLocal { idx: 42, .. });
+        assert_matches!(rest[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
+    } else {
+        unreachable!()
+    };
+
+    // Combined
+    let g1 = ClauseGroup::Simple {
+        precondition: None,
+        patterns: vec![pc.clone()],
+    };
+    let g2 = ClauseGroup::Simple {
+        precondition: None,
+        patterns: vec![pc.clone()],
+    };
+    let mut g = ClauseGroup::Combined {
+        precondition: None,
+        groups: vec![g1, g2],
+    };
+    g.replace_last_shadow_use(42);
+    if let ClauseGroup::Combined { groups, .. } = g {
+        if let ClauseGroup::Simple { patterns, .. } = &groups[0] {
+            assert_matches!(patterns[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
+        } else {
+            unreachable!()
+        };
+        if let ClauseGroup::Simple { patterns, .. } = &groups[1] {
+            assert_matches!(patterns[0].last_expr, Expr::AssignMoveLocal { idx: 42, .. });
+        } else {
+            unreachable!()
+        };
+    } else {
+        unreachable!()
+    }
+
+    // Single
+    let mut g = ClauseGroup::Single {
+        pattern: pc.clone(),
+        precondition: None,
+    };
+    g.replace_last_shadow_use(42);
+    if let ClauseGroup::Single { pattern, .. } = g {
+        assert_matches!(pattern.last_expr, Expr::AssignMoveLocal { idx: 42, .. });
+    } else {
+        unreachable!()
+    };
+}
+
+#[test]
+fn pp_is_exclusive() {
+    let eq = PredicatePattern::Bin {
+        lhs: "k1".into(),
+        key: KnownKey::from("k1"),
+        rhs: ImutExpr::literal(NodeMeta::dummy(), Value::from("cake")),
+        kind: BinOpKind::Eq,
+    };
+    let eq2 = PredicatePattern::Bin {
+        lhs: "k2".into(),
+        key: KnownKey::from("k2"),
+        rhs: ImutExpr::literal(NodeMeta::dummy(), Value::from("cake")),
+        kind: BinOpKind::Eq,
+    };
+    assert!(!eq.is_exclusive_to(&eq), "is not exlusive to itself");
+    assert!(
+        !eq.is_exclusive_to(&eq2),
+        "is not exclusive to a different key"
+    );
+    assert!(
+        eq.is_exclusive_to(&PredicatePattern::Bin {
+            lhs: "k1".into(),
+            key: KnownKey::from("k1"),
+            rhs: ImutExpr::literal(NodeMeta::dummy(), Value::from("cookie")),
+            kind: BinOpKind::Eq,
+        }),
+        "is exclusive to the same key and a different value"
+    );
+
+    let abs = PredicatePattern::FieldAbsent {
+        lhs: "k1".into(),
+        key: KnownKey::from("k1"),
+    };
+    let abs2 = PredicatePattern::FieldAbsent {
+        lhs: "k2".into(),
+        key: KnownKey::from("k2"),
+    };
+    assert!(
+        !abs.is_exclusive_to(&abs2),
+        "absent is not exclusive on different fields"
+    );
+    assert!(eq.is_exclusive_to(&abs), "eq is exclusive to absent");
+    assert!(abs.is_exclusive_to(&eq), "absent is exclusive to eq");
+    assert!(
+        !eq.is_exclusive_to(&abs2),
+        "eq is not exclusive to absend on a different key"
+    );
+    assert!(
+        !abs2.is_exclusive_to(&eq),
+        "absent is not exclusive to eq on a different key"
+    );
+
+    let pres = PredicatePattern::FieldPresent {
+        lhs: "k1".into(),
+        key: KnownKey::from("k1"),
+    };
+    let pres2 = PredicatePattern::FieldPresent {
+        lhs: "k2".into(),
+        key: KnownKey::from("k2"),
+    };
+    assert!(
+        !pres.is_exclusive_to(&pres2),
+        "present is not exclusive on different fields"
+    );
+    assert!(
+        pres.is_exclusive_to(&abs),
+        "present and absent are exclusive"
+    );
+    assert!(
+        abs.is_exclusive_to(&pres),
+        "present and absent are exclusive"
+    );
+    assert!(
+        !pres.is_exclusive_to(&eq),
+        "present and eq are not exclusive"
+    );
+    assert!(
+        !pres.is_exclusive_to(&eq2),
+        "present and eq are not exclusive on different keys"
+    );
+    let teq = PredicatePattern::TildeEq {
+        lhs: "k1".into(),
+        assign: "k".into(),
+        key: "k1".into(),
+        test: Box::new(TestExpr {
+            mid: NodeMeta::dummy(),
+            id: "suffix".into(),
+            test: "ake".into(),
+            extractor: Extractor::Suffix("ake".into()),
+        }),
+    };
+    let teq2 = PredicatePattern::TildeEq {
+        lhs: "k2".into(),
+        assign: "k".into(),
+        key: "k2".into(),
+        test: Box::new(TestExpr {
+            mid: NodeMeta::dummy(),
+            id: "suffix".into(),
+            test: "ookie".into(),
+            extractor: Extractor::Suffix("ake".into()),
+        }),
+    };
+    let teq3 = PredicatePattern::TildeEq {
+        lhs: "k1".into(),
+        assign: "k".into(),
+        key: "k1".into(),
+        test: Box::new(TestExpr {
+            mid: NodeMeta::dummy(),
+            id: "suffix".into(),
+            test: "ookie".into(),
+            extractor: Extractor::Suffix("ookie".into()),
+        }),
+    };
+    assert!(
+        !teq.is_exclusive_to(&teq2),
+        "~= is not exclusive on different keys"
+    );
+    assert!(
+        !teq2.is_exclusive_to(&teq),
+        "~= is not exclusive on different keys"
+    );
+    assert!(
+        teq.is_exclusive_to(&teq3),
+        "is not exclusive on if the tests are exclusive"
+    );
+    assert!(
+        teq3.is_exclusive_to(&teq),
+        "is not exclusive on if the tests are exclusive"
+    );
+    assert!(
+        !teq.is_exclusive_to(&eq),
+        "~= is not exclusive to eq if the patterns are not exclusive"
+    );
+    assert!(
+        !eq.is_exclusive_to(&teq),
+        "~= is not exclusive to eq if the patterns are not exclusive"
+    );
 }

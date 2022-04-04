@@ -766,12 +766,10 @@ impl<'script> StringLit<'script> {
         }
     }
     pub(crate) fn into_str(mut self) -> Option<Cow<'script, str>> {
-        if self.as_str().is_some() {
-            if let Some(StrLitElement::Lit(lit)) = self.elements.pop() {
-                Some(lit)
-            } else {
-                None
-            }
+        // We use this as a guard to ensure that we only have a single element
+        self.as_str()?;
+        if let Some(StrLitElement::Lit(lit)) = self.elements.pop() {
+            Some(lit)
         } else {
             None
         }
@@ -1552,25 +1550,19 @@ impl<'script> Pattern<'script> {
         matches!(self, Pattern::Assign(_))
     }
     fn is_exclusive_to(&self, other: &Self) -> bool {
+        use Pattern::{Assign, Expr, Record, Tuple};
         match (self, other) {
             // Two literals that are different are distinct
-            (Pattern::Expr(ImutExpr::Literal(l1)), Pattern::Expr(ImutExpr::Literal(l2))) => {
-                !l1.ast_eq(l2)
-            }
+            (Expr(ImutExpr::Literal(l1)), Expr(ImutExpr::Literal(l2))) => !l1.ast_eq(l2),
             // For record patterns we compare directly
-            (Pattern::Record(r1), Pattern::Record(r2)) => {
-                r1.is_exclusive_to(r2) || r2.is_exclusive_to(r1)
-            }
+            (Record(r1), Record(r2)) => r1.is_exclusive_to(r2) || r2.is_exclusive_to(r1),
             // for assignments we compare internal value
-            (Pattern::Assign(AssignPattern { pattern, .. }), p2) => pattern.is_exclusive_to(p2),
-            (p1, Pattern::Assign(AssignPattern { pattern, .. })) => p1.is_exclusive_to(pattern),
+            (Assign(AssignPattern { pattern, .. }), p2) => pattern.is_exclusive_to(p2),
+            (p1, Assign(AssignPattern { pattern, .. })) => p1.is_exclusive_to(pattern),
             // else we're just not accepting equality
-            (
-                Pattern::Tuple(TuplePattern { exprs: exprs1, .. }),
-                Pattern::Tuple(TuplePattern { exprs: exprs2, .. }),
-            ) => exprs1
+            (Tuple(TuplePattern { exprs: e1, .. }), Tuple(TuplePattern { exprs: e2, .. })) => e1
                 .iter()
-                .zip(exprs2.iter())
+                .zip(e2.iter())
                 .any(|(e1, e2)| e1.is_exclusive_to(e2) || e2.is_exclusive_to(e1)),
             _ => false,
         }
@@ -1672,10 +1664,19 @@ impl<'script> PredicatePattern<'script> {
             (
                 PredicatePattern::Bin { lhs: lhs1, .. },
                 PredicatePattern::FieldAbsent { lhs: lhs2, .. },
+            )
+            | (
+                PredicatePattern::FieldAbsent { lhs: lhs2, .. },
+                PredicatePattern::Bin { lhs: lhs1, .. },
             ) if lhs1 == lhs2 => true,
+
             (
                 PredicatePattern::FieldPresent { lhs: lhs1, .. },
                 PredicatePattern::FieldAbsent { lhs: lhs2, .. },
+            )
+            | (
+                PredicatePattern::FieldAbsent { lhs: lhs2, .. },
+                PredicatePattern::FieldPresent { lhs: lhs1, .. },
             ) if lhs1 == lhs2 => true,
             (
                 PredicatePattern::Bin {
@@ -1687,8 +1688,8 @@ impl<'script> PredicatePattern<'script> {
                 PredicatePattern::TildeEq {
                     lhs: lhs2, test, ..
                 },
-            ) if lhs1 == lhs2 => test.extractor.is_exclusive_to(value),
-            (
+            )
+            | (
                 PredicatePattern::TildeEq {
                     lhs: lhs2, test, ..
                 },

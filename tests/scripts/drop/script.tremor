@@ -1,0 +1,4 @@
+match event % 2 of
+  case 0 => emit => "out"
+  case 1 => drop
+end
