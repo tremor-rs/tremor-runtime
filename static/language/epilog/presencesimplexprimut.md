@@ -1,9 +1,9 @@
 
 ```tremor
-present a
+present $.request.method
 ```
 
 ```tremor
-absent a
+absent state.cache
 ```
 
