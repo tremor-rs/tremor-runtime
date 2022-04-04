@@ -152,6 +152,7 @@ test_cases!(
     empty_array_pattern,
     const_in_const_lookup,
     // INSERT
+    drop,
     const_fn_tremor,
     const_string_interpolation,
     const_in_const,
