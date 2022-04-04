@@ -1645,6 +1645,7 @@ pub enum PredicatePattern<'script> {
 }
 
 impl<'script> PredicatePattern<'script> {
+    #[cfg(not(tarpaulin_include))] // This is just one huge false negative, it's frustrating :(
     fn is_exclusive_to(&self, other: &Self) -> bool {
         match (self, other) {
             (
