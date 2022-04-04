@@ -210,19 +210,12 @@ impl Source for Blaster {
     #[allow(clippy::cast_possible_truncation)]
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         if self.finished {
-            return Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL));
+            return Ok(SourceReply::Finished);
         }
         if !self.did_sleep {
             // TODO better sleep perhaps
             if let Some(interval) = self.interval_ns {
-                let interval = interval.as_nanos();
-                let ns = (interval % 1_000_000) as u64;
-                let ms = (interval / 1_000_000) as u64;
-                async_std::task::sleep(Duration::from_nanos(ns)).await;
-                if ms > 0 {
-                    self.did_sleep = true;
-                    return Ok(SourceReply::Empty(ms));
-                }
+                async_std::task::sleep(interval).await;
             }
         }
         self.did_sleep = false;

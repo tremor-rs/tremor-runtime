@@ -13,7 +13,7 @@
 // limitations under the License.
 use crate::connectors::prelude::*;
 use crate::utils::hostname;
-use async_broadcast::{broadcast, Receiver, TryRecvError};
+use async_broadcast::{broadcast, Receiver};
 use async_std::io::{stderr, stdin, stdout, ReadExt, Stderr, Stdout};
 use beef::Cow;
 use futures::AsyncWriteExt;
@@ -97,18 +97,18 @@ impl Source for StdStreamSource {
         } else {
             self.stdin.insert(STDIN.clone())
         };
-        match stdin.try_recv() {
-            Ok(data) => Ok(SourceReply::Data {
-                origin_uri: self.origin_uri.clone(),
-                data,
-                meta: None,
-                stream: Some(DEFAULT_STREAM_ID),
-                port: None,
-                codec_overwrite: None,
-            }),
-            Err(TryRecvError::Closed) => Err(TryRecvError::Closed.into()),
-            Err(TryRecvError::Empty | TryRecvError::Overflowed(_)) => Ok(SourceReply::Empty(10)),
-        }
+        let data = stdin
+            .recv()
+            .await
+            .map_err(|e| Error::from(format!("recv error: {e}")))?;
+        Ok(SourceReply::Data {
+            origin_uri: self.origin_uri.clone(),
+            data,
+            meta: None,
+            stream: Some(DEFAULT_STREAM_ID),
+            port: None,
+            codec_overwrite: None,
+        })
     }
 
     fn is_transactional(&self) -> bool {

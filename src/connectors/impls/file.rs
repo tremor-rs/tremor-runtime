@@ -241,7 +241,11 @@ impl Source for FileSource {
     }
     async fn pull_data(&mut self, _pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
         let reply = if self.eof {
-            SourceReply::Empty(DEFAULT_POLL_INTERVAL)
+            SourceReply::EndStream {
+                origin_uri: self.origin_uri.clone(),
+                stream: DEFAULT_STREAM_ID,
+                meta: Some(self.meta.clone()),
+            }
         } else {
             let reader = self
                 .reader

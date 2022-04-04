@@ -19,7 +19,7 @@ mod utils;
 
 use crate::connectors::{prelude::*, spawn_task};
 use async_std::{
-    channel::{bounded, Receiver, Sender, TryRecvError},
+    channel::{bounded, Receiver, Sender},
     task::JoinHandle,
 };
 use handler::Handler;
@@ -190,16 +190,16 @@ struct DiscordSource {
 impl Source for DiscordSource {
     #[allow(clippy::option_if_let_else)]
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        match self.rx.try_recv() {
-            Ok(data) => Ok(SourceReply::Structured {
+        self.rx
+            .recv()
+            .await
+            .map(|data| SourceReply::Structured {
                 origin_uri: self.origin_uri.clone(),
                 payload: (data, Value::object()).into(),
                 stream: DEFAULT_STREAM_ID,
                 port: None,
-            }),
-            Err(TryRecvError::Closed) => Err(TryRecvError::Closed.into()),
-            Err(TryRecvError::Empty) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
-        }
+            })
+            .map_err(Error::from)
     }
 
     fn is_transactional(&self) -> bool {
