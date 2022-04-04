@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use std::{io, pin::Pin, sync::RwLock};
+use std::{io, mem, pin::Pin, sync::RwLock};
 lazy_static::lazy_static! {
     static ref ARENA: RwLock<Arena> = {
         #[cfg(feature = "arena-delete")]
@@ -136,9 +136,8 @@ impl Arena {
     }
 
     unsafe fn get_static(&self, id: Index) -> Option<&'static str> {
-        self.get_(id)
-            // ALLOW: The reason we can do that is because the Arena is additive only, we never remove from it
-            .map(|s| unsafe { std::mem::transmute::<&str, &'static str>(s) })
+        // ALLOW: The reason we can do that is because the Arena is additive only, we never remove from it
+        self.get_(id).map(|s| mem::transmute::<_, &'static str>(s))
     }
 
     /// Fetches the source as a static string
