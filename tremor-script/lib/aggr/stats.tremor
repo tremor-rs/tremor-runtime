@@ -72,9 +72,9 @@ fn mean(number) with null end;
 ## * size: Fixed, 100 Kilo Bytes (note: this strongly depends on configuration, and can be estimated
 ##   more correctly with [this formula](https://github.com/HdrHistogram/HdrHistogram#footprint-estimation))
 ##
-## ```tremor
-## aggr::stats::hdr(event.value, ["0.5","0.75","0.9","0.99","0.999"])
-##  ```
+## > ```tremor
+## > aggr::stats::hdr(event.value, ["0.5","0.75","0.9","0.99","0.999"])
+## >  ```
 ## Returns a `record` (all values are integers)
 ##
 fn hdr(number, array) with null end;
@@ -86,9 +86,9 @@ fn hdr(number, array) with null end;
 ##
 ## size: Fixed, 10 Kilo Bytes (estimate based on [this paper](https://arxiv.org/pdf/1908.10693.pdf))
 ## 
-## ```tremor
-## aggr::stats::hdr(event.value, ["0.5","0.75","0.9","0.99","0.999"])
-##  ```
+## > ```tremor
+## > aggr::stats::hdr(event.value, ["0.5","0.75","0.9","0.99","0.999"])
+## >  ```
 ##
 ## Returns a `record` (all values are floats)
 
