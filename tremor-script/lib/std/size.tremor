@@ -2,54 +2,59 @@
 
 ## Returns the number of bytes in a given number of kibibytes
 ##
-## ```tremor
-## size::kiB(10)
-## ```
+## > ```tremor
+## > size::kiB(10)
+## > ```
+##
 fn kiB(size) with
     size * 1024
 end;
 
 ## Returns the number of bytes in a given number of mebibytes
 ##
-## ```tremor
-## size::MiB(10)
-## ```
+## > ```tremor
+## > size::MiB(10)
+## > ```
 fn MiB(size) with
   kiB(1024*size)
 end;
 
 ## Returns the number of bytes in a given number of gibibytes
 ##
-## ```tremor
-## size::GiB(10)
-## ```
+## > ```tremor
+## > size::GiB(10)
+## > ```
+##
 fn GiB(size) with
   MiB(1024*size)
 end;
 
 ## Returns the number of bytes in a given number of tebibytes
 ##
-## ```tremor
-## size::TiB(10)
-## ```
+## > ```tremor
+## > size::TiB(10)
+## > ```
+##
 fn TiB(size) with
   GiB(1024*size)
 end;
 
 ## Returns the number of bytes in a given number of pebibytes
 ##
-## ```tremor
-## size::PiB(10)
-## ```
+## > ```tremor
+## > size::PiB(10)
+## > ```
+##
 fn PiB(size) with
   TiB(1024*size)
 end;
 
 ## Returns the number of bytes in a given number of exbibytes
 ##
-## ```tremor
-## size::EiB(10)
-## ```
+## > ```tremor
+## > size::EiB(10)
+## > ```
+##
 fn EiB(size) with
   PiB(1024*size)
 end;
