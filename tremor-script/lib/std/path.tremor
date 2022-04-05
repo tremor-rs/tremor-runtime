@@ -16,28 +16,25 @@ use std::type;
 ##
 ## Examples
 ##
-## ```tremor
-## use std::path;
+## > ```tremor
+## > use std::path;
+## >
+## > {"snot": "badger"} == path::try_default({"snot": "badger"}, [], "test")
+## > "flook" == path::try_default([{"snot": "badger"}, ["fleek", "flook"]], [1, 1], "test")
+## > "badger" == path::try_default([{"snot": "badger"}, ["fleek", "flook"]], [0, "snot"], "test")
+## > "fleek" == path::try_default([{"snot": "badger"}, ["fleek", "flook"]], [1, 0], "test")
+## > "test" == path::try_default([{"snot": "badger"}, ["fleek", "flook"]], [1, 2], "test")
+## >
+## > # Statements of the general form
+## >  match event of
+## >    case %{ absent host } => let event.host = system::hostname()
+## >    default => event.host
+## >  end;
+## >
+## > # Can now be written more tersely as:
+## > # If host is absent, default to the system hostname
+## > let host = try_default(event, ["host"], system::hostname())
+## > ```
 ##
-## {"snot": "badger"} == path::try_default({"snot": "badger"}, [], "test")
-##
-## "flook" == path::try_default([{"snot": "badger"}, ["fleek", "flook"]], [1, 1], "test")
-##
-## "badger" == path::try_default([{"snot": "badger"}, ["fleek", "flook"]], [0, "snot"], "test")
-##
-## "fleek" == path::try_default([{"snot": "badger"}, ["fleek", "flook"]], [1, 0], "test")
-##
-## "test" == path::try_default([{"snot": "badger"}, ["fleek", "flook"]], [1, 2], "test")
-##
-## # Statements of the general form
-##  match event of
-##    case %{ absent host } => let event.host = system::hostname()
-##    default => event.host
-##  end;
-##
-## Can now be written more tersely as:
-## # If host is absent, default to the system hostname
-## let host = try_default(event, ["host"], system::hostname())
-## ```
 ## Returns a tremor value
 intrinsic fn try_default(base, segments, otherwise) as path::try_default;
