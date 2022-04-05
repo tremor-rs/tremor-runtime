@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::codec;
+use crate::codec::{self, Codec};
 use crate::connectors::spawn_task;
 use crate::connectors::{
     prelude::*,
@@ -288,7 +288,7 @@ impl Source for HttpServerSource {
                         let maybe_codec = self.codec_map.get_codec(content_type.as_str());
                         maybe_codec
                             .filter(|c| c.name() != self.configured_codec.as_str())
-                            .map(|c| c.boxed_clone())
+                            .map(codec::Codec::boxed_clone)
                     } else {
                         None
                     };
@@ -314,8 +314,8 @@ impl Source for HttpServerSource {
     }
 
     fn is_transactional(&self) -> bool {
-        //FIXME: add ack/fail handling when not using custom_responses
-        true
+        //TODO: add ack/fail handling when not using custom_responses
+        false
     }
 
     fn asynchronous(&self) -> bool {
@@ -351,6 +351,7 @@ impl HttpServerSink {
 
 #[async_trait::async_trait()]
 impl Sink for HttpServerSink {
+    #[allow(clippy::too_many_lines)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -372,11 +373,11 @@ impl Sink for HttpServerSink {
         let mut response_map = HashMap::new();
         let mut chunked = None;
         let mut content_type = None;
-        let mut codec_overwrite = None;
+        let mut codec_overwrite: Option<&dyn Codec> = None;
         // try to extract the request_id from the first batch item,
         // otherwise fall back to min-max from event_id
         for (value, meta) in event.value_meta_iter() {
-            // FIXME: set codec and content-type upon first iteration
+            // set codec and content-type upon first iteration
             let http_meta = ctx.extract_meta(meta);
             let response_meta = http_meta.get("response");
             let headers_meta = response_meta.get("headers");
@@ -418,11 +419,11 @@ impl Sink for HttpServerSink {
                     .filter(|codec| codec.name() != self.configured_codec.as_str());
                 let codec_content_type = codec_overwrite
                     .and_then(|codec| codec.mime_types().first().map(ToString::to_string))
-                    .or(self.codec_mime_type.clone());
+                    .or_else(|| self.codec_mime_type.clone());
                 content_type = Some(
                     header_content_type
                         .or(codec_content_type)
-                        .unwrap_or(BYTE_STREAM.to_string()),
+                        .unwrap_or_else(|| BYTE_STREAM.to_string()),
                 );
             }
 
@@ -449,7 +450,7 @@ impl Sink for HttpServerSink {
                                     value,
                                     ingest_ns,
                                     rid.0,
-                                    &codec_overwrite,
+                                    codec_overwrite,
                                 ),
                                 Self::ERROR_MSG_EXTRACT_VALUE,
                             )?;
@@ -471,14 +472,14 @@ impl Sink for HttpServerSink {
                                 value,
                                 ingest_ns,
                                 rid.0,
-                                &codec_overwrite,
+                                codec_overwrite,
                             ),
                             Self::ERROR_MSG_EXTRACT_VALUE,
                         )?;
                         ctx.bail_err(
                             o.get_mut().append(data).await,
                             Self::ERROR_MSG_APPEND_RESPONSE,
-                        )?
+                        )?;
                     }
                 }
             } else {
@@ -509,7 +510,7 @@ impl Sink for HttpServerSink {
                                             value,
                                             ingest_ns,
                                             rid.0,
-                                            &codec_overwrite,
+                                            codec_overwrite,
                                         ),
                                         Self::ERROR_MSG_EXTRACT_VALUE,
                                     )?;
@@ -529,14 +530,14 @@ impl Sink for HttpServerSink {
                                         value,
                                         ingest_ns,
                                         rid.0,
-                                        &codec_overwrite,
+                                        codec_overwrite,
                                     ),
                                     Self::ERROR_MSG_EXTRACT_VALUE,
                                 )?;
                                 ctx.bail_err(
                                     o.get_mut().append(data).await,
                                     Self::ERROR_MSG_APPEND_RESPONSE,
-                                )?
+                                )?;
                             }
                         }
                     }
@@ -564,7 +565,7 @@ impl Sink for HttpServerSink {
                                                 value,
                                                 ingest_ns,
                                                 rid.0,
-                                                &codec_overwrite,
+                                                codec_overwrite,
                                             ),
                                             Self::ERROR_MSG_EXTRACT_VALUE,
                                         )?;
@@ -584,14 +585,14 @@ impl Sink for HttpServerSink {
                                             value,
                                             ingest_ns,
                                             rid.0,
-                                            &codec_overwrite,
+                                            codec_overwrite,
                                         ),
                                         Self::ERROR_MSG_EXTRACT_VALUE,
                                     )?;
                                     ctx.bail_err(
                                         o.get_mut().append(data).await,
                                         Self::ERROR_MSG_APPEND_RESPONSE,
-                                    )?
+                                    )?;
                                 }
                             }
                         }
@@ -865,111 +866,3 @@ async fn _handle_request(req: &mut tide::Request<HttpServerState>) -> tide::Resu
 
     Ok(response_rx.recv().await?)
 }
-/*
-fn make_response(
-    ingest_ns: u64,
-    default_codec: &dyn Codec,
-    codec_map: &MimeCodecMap,
-    post_processors: &mut Postprocessors,
-    event: &ValueAndMeta,
-) -> Result<tide::Response> {
-    let (response_data, meta) = event.parts();
-
-    let request_meta = meta.get("request");
-    let response_meta = meta.get("response");
-
-    let status = if let Some(response_meta) = response_meta {
-        // Use user provided status - or default to 200
-        response_meta.get_u16("status").unwrap_or(200)
-    } else {
-        // Otherwise - Default status based on request method
-        if let Some(ref request_meta) = request_meta {
-            let method = request_meta.get_str("method").unwrap_or("error");
-            match method {
-                "GET" | "PUT" | "PATCH" => 200,
-                "DELETE" => 204,
-                "POST" => 201,
-                _otherwise => 503,
-            }
-        } else {
-            503 // Flag a 503 - malformed pipeline
-        }
-    };
-
-    let mut builder = tide::Response::builder(status);
-
-    // extract headers
-    let mut header_content_type: Option<&str> = None;
-    if let Some(headers) = response_meta.get_object("headers") {
-        for (name, values) in headers {
-            if let Some(header_values) = values.as_array() {
-                if name.eq_ignore_ascii_case("content-type") {
-                    // pick first value in case of multiple content-type headers
-                    header_content_type = header_values.first().and_then(Value::as_str);
-                }
-                let mut v = Vec::with_capacity(header_values.len());
-                for value in header_values {
-                    if let Some(header_value) = value.as_str() {
-                        v.push(HeaderValue::from_str(header_value)?);
-                    }
-                }
-                builder = builder.header(name.as_ref(), v.as_slice());
-            } else if let Some(header_value) = values.as_str() {
-                if name.eq_ignore_ascii_case("content-type") {
-                    header_content_type = Some(header_value);
-                }
-                builder = builder.header(name.as_ref(), header_value);
-            }
-        }
-    }
-
-    let maybe_content_type = match header_content_type {
-        None => None,
-        Some(ct) => Some(Mime::from_str(ct)?),
-    };
-
-    if let Some((mime, dynamic_codec)) = maybe_content_type.and_then(|mime| {
-        codec_map
-            .map
-            .get(mime.essence())
-            .map(|c| (mime, c.as_ref()))
-    }) {
-        let processed = postprocess(
-            post_processors.as_mut_slice(),
-            ingest_ns,
-            dynamic_codec.encode(response_data)?,
-            "FIXME",
-        )?;
-
-        // TODO: see if we can use a reader instead of creating a new vector
-        let v: Vec<u8> = processed.into_iter().flatten().collect();
-        let mut body = tide::Body::from_bytes(v);
-
-        body.set_mime(mime);
-        builder = builder.body(body);
-    } else {
-        // fallback to default codec
-        let processed = postprocess(
-            post_processors.as_mut_slice(),
-            ingest_ns,
-            default_codec.encode(response_data)?,
-            "FIXME",
-        )?;
-        // TODO: see if we can use a reader instead of creating a new vector
-        let v: Vec<u8> = processed.into_iter().flatten().collect();
-        let mut body = tide::Body::from_bytes(v);
-
-        // set mime type for default codec
-        // TODO: cache mime type for default codec
-        if let Some(mime) = default_codec
-            .mime_types()
-            .drain(..)
-            .find_map(|mstr| Mime::from_str(mstr).ok())
-        {
-            body.set_mime(mime);
-        }
-        builder = builder.body(body);
-    }
-    Ok(builder.build())
-}
-*/

@@ -80,7 +80,7 @@ mod test {
     }
 }
 
-/// A Thingy that implements AsyncBufRead, so it can be turned into a tide Body
+/// A Thingy that implements `AsyncBufRead`, so it can be turned into a tide Body
 /// and it can be asynchronously fed with chunks from a channel, so we don't need to buffer all the chunks in memory
 pub(crate) struct StreamingBodyReader {
     current: Cursor<Vec<u8>>,
@@ -94,9 +94,11 @@ trait HasCurrentCursor {
         self.current().position() >= self.current().get_ref().len() as u64
     }
 
+    #[allow(clippy::cast_possible_truncation)]
     fn current_slice(&self) -> &[u8] {
         let cur_ref = self.current().get_ref();
         let len = self.current().position().min(cur_ref.len() as u64);
+        // ALLOW: position is always set from usize
         &cur_ref[(len as usize)..]
     }
 }
@@ -167,7 +169,7 @@ impl async_std::io::BufRead for StreamingBodyReader {
     fn consume(self: std::pin::Pin<&mut Self>, amt: usize) {
         let this = self.get_mut();
         let current_pos = this.current.position();
-        this.current.set_position(current_pos + (amt as u64))
+        this.current.set_position(current_pos + (amt as u64));
     }
 }
 
@@ -214,11 +216,9 @@ impl async_std::io::Read for FixedBodyReader {
         buf: &mut [u8],
     ) -> std::task::Poll<std::io::Result<usize>> {
         let this = self.get_mut();
-        if this.current_empty() {
-            if !this.data.is_empty() {
-                let c = this.data.remove(0);
-                this.current = Cursor::new(c);
-            }
+        if this.current_empty() && !this.data.is_empty() {
+            let c = this.data.remove(0);
+            this.current = Cursor::new(c);
         }
         Poll::Ready(this.current.read(buf))
     }
@@ -230,11 +230,9 @@ impl async_std::io::BufRead for FixedBodyReader {
         _cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<&[u8]>> {
         let this = self.get_mut();
-        if this.current_empty() {
-            if !this.data.is_empty() {
-                let c = this.data.remove(0);
-                this.current = Cursor::new(c);
-            }
+        if this.current_empty() && !this.data.is_empty() {
+            let c = this.data.remove(0);
+            this.current = Cursor::new(c);
         }
         Poll::Ready(Ok(this.current_slice()))
     }
@@ -242,7 +240,7 @@ impl async_std::io::BufRead for FixedBodyReader {
     fn consume(self: std::pin::Pin<&mut Self>, amt: usize) {
         let this = self.get_mut();
         let current_pos = this.current.position();
-        this.current.set_position(current_pos + (amt as u64))
+        this.current.set_position(current_pos + (amt as u64));
     }
 }
 
@@ -252,6 +250,7 @@ mod tests {
     use crate::errors::Result;
     use async_std::channel::unbounded;
     use async_std::io::prelude::BufReadExt;
+    use futures::AsyncReadExt;
 
     #[async_std::test]
     async fn streaming_body_reader() -> Result<()> {
@@ -293,5 +292,34 @@ mod tests {
         Ok(())
     }
 
-    // FIXME: more tests for streaming and fixed reader
+    #[async_std::test]
+    async fn fixed_body_reader() -> Result<()> {
+        let mut reader = FixedBodyReader::new(vec![b"snot".to_vec(), b"badger".to_vec()]);
+        assert_eq!(10, reader.len());
+        let mut buf = vec![0; 100];
+        let bytes_read = reader.read(&mut buf).await?;
+        assert_eq!(4, bytes_read);
+        assert_eq!(b"snot", &buf[..bytes_read]);
+
+        let bytes_read = reader.read(&mut buf).await?;
+        assert_eq!(6, bytes_read);
+        assert_eq!(b"badger", &buf[..bytes_read]);
+
+        assert_eq!(0, reader.read(&mut buf).await?);
+
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn fixed_body_reader_empty() -> Result<()> {
+        let mut reader = FixedBodyReader::new(vec![]);
+
+        let mut buf = vec![0; 100];
+        assert_eq!(0, reader.read(&mut buf).await?);
+
+        let mut reader = FixedBodyReader::new(vec![b"".to_vec()]);
+        assert_eq!(0, reader.read(&mut buf).await?);
+
+        Ok(())
+    }
 }

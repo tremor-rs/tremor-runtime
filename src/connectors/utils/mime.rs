@@ -121,8 +121,8 @@ impl MimeCodecMap {
     }
 
     /// get codec from given Content-Type essence (e.g. "application/json")
-    pub fn get_codec(&mut self, content_type: &str) -> Option<&Box<dyn Codec>> {
-        self.map.get(content_type)
+    pub fn get_codec(&mut self, content_type: &str) -> Option<&dyn Codec> {
+        self.map.get(content_type).map(AsRef::as_ref)
     }
 }
 

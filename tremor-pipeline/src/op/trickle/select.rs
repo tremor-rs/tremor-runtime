@@ -280,7 +280,6 @@ impl Operator for Select {
 
                 // see if we know the group already, we use the `entry` here so we don't
                 // need to add / remove from the groups unenessessarily
-                dbg!(&group_str, ctx.cardinality);
                 match groups.entry(group_str) {
                     Entry::Occupied(mut o) => {
                         // If we found a group execute it, and remove it if it is not longer
