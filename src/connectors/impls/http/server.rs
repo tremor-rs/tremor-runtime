@@ -261,7 +261,7 @@ impl Source for HttpServerSource {
             }) => {
                 // assign request id and prepare meta
                 let request_id = RequestId(*pull_id);
-                debug!("{ctx} Sending out HTTP request {request_id}");
+                debug!("{ctx} Received HTTP request with request id {request_id}");
                 let meta = ctx.meta(literal!({
                     "request": request_meta,
                     "request_id": *pull_id

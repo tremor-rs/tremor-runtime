@@ -13,29 +13,62 @@
 // limitations under the License.
 
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
+use halfbrown::HashMap;
 use tremor_value::literal;
 
-use super::meta::{Config, HttpRequestMeta, HttpResponseMeta, ResponseEventCont};
+use super::auth::Auth;
+use super::meta::{HttpRequestMeta, HttpResponseMeta, ResponseEventCont};
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
+use crate::connectors::utils::mime::MimeCodecMap;
 use crate::postprocessor::{self, Postprocessors};
 use crate::preprocessor::{self, Preprocessors};
 
 const CONNECTOR_TYPE: &str = "http_client";
 
-/// The HTTP client connector - for HTTP-based API interactions
-pub struct Client {
-    max_concurrency: usize,
-    response_tx: Sender<SourceReply>,
-    response_rx: Receiver<SourceReply>,
-    connector_config: ConnectorConfig,
+#[derive(Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct Config {
+    /// Target URL
+    #[serde(default = "Default::default")]
+    pub(crate) url: Url,
+    /// Authorization method
+    #[serde(default = "default_auth")]
+    pub(crate) auth: Auth,
+    /// Concurrency capacity limits ( in flight requests )
+    #[serde(default = "default_concurrency")]
+    pub(crate) concurrency: usize,
+    /// Default HTTP headers
+    #[serde(default = "Default::default")]
+    pub(crate) headers: HashMap<String, Vec<String>>,
+    /// Default HTTP method
+    #[serde(default = "default_method")]
+    pub(crate) method: String,
+    /// MIME mapping to/from tremor codecs
+    #[serde(default = "default_mime_codec_map")]
+    pub(crate) codec_map: MimeCodecMap,
 }
 
-impl std::fmt::Debug for Client {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "HttpClient")
-    }
+const DEFAULT_CONCURRENCY: usize = 4;
+
+fn default_concurrency() -> usize {
+    DEFAULT_CONCURRENCY
 }
+
+fn default_method() -> String {
+    "post".to_string()
+}
+
+fn default_auth() -> Auth {
+    Auth::None
+}
+
+fn default_mime_codec_map() -> MimeCodecMap {
+    MimeCodecMap::with_builtin()
+}
+
+// for new
+impl ConfigImpl for Config {}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -63,6 +96,20 @@ impl ConnectorBuilder for Builder {
         } else {
             Err(ErrorKind::MissingConfiguration(String::from("HttpClient")).into())
         }
+    }
+}
+
+/// The HTTP client connector - for HTTP-based API interactions
+pub struct Client {
+    max_concurrency: usize,
+    response_tx: Sender<SourceReply>,
+    response_rx: Receiver<SourceReply>,
+    connector_config: ConnectorConfig,
+}
+
+impl std::fmt::Debug for Client {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "HttpClient")
     }
 }
 
@@ -224,10 +271,14 @@ impl Sink for HttpRequestSink {
         let guard = self.concurrency_cap.inc_for(&event).await?;
 
         if let Some(client) = self.clients.next() {
+            let ctx = ctx.clone();
             let response_tx = self.response_tx.clone();
             let origin_uri = self.origin_uri.clone();
 
-            let (request, request_meta) = self.http_meta.process(&event, ctx.alias())?;
+            let (request, request_meta) = ctx.bail_err(
+                self.http_meta.process(&event, ctx.alias()),
+                "Error turning the given event into an HTTP request",
+            )?;
 
             let mut codec = self.http_meta.codec.boxed_clone();
             // TODO: move processor loading outside of event handling
@@ -245,7 +296,7 @@ impl Sink for HttpRequestSink {
             let client = client.client;
 
             async_std::task::Builder::new()
-                .name(format!("Rest Connector #{}", guard.num()))
+                .name(format!("http_client Connector #{}", guard.num()))
                 .spawn::<_, Result<()>>(async move {
                     match HttpResponseMeta::invoke(
                         &mut codec,
@@ -287,7 +338,7 @@ impl Sink for HttpRequestSink {
                         }
                         Err(e) => {
                             error!(
-                                "Unhandled / unexpected condition responding to http_server event: {e}"
+                                "{ctx} Unhandled / unexpected condition responding to http_server event: {e}"
                             );
                         }
                     };
@@ -295,7 +346,7 @@ impl Sink for HttpRequestSink {
                     Ok(())
                 })?;
         } else {
-            error!("{} No http client available.", &ctx);
+            error!("{ctx} No http client available.");
             return Ok(SinkReply::FAIL);
         }
 
@@ -500,6 +551,28 @@ mod tests {
             "Badger",
             http_meta.headers.get("snot").unwrap()[0].to_string()
         );
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::str::FromStr;
+
+    use super::*;
+    use crate::connectors::prelude::ConfigImpl;
+    use crate::errors::Result;
+    use http_types::Method;
+    use tremor_value::literal;
+
+    #[test]
+    fn deserialize_method() -> Result<()> {
+        let v = literal!({
+          "url": "http://localhost:8080/",
+          "method": "PATCH"
+        });
+        let config = Config::new(&v)?;
+        assert_eq!(Method::Patch, Method::from_str(&config.method)?);
         Ok(())
     }
 }

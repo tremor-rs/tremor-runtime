@@ -27,7 +27,6 @@ flow
   create connector http_server from http_server;
 
   create pipeline echo from pipelines::passthrough;
-  create pipeline record from integration::out_and_exit;
 
   # Echo http server: <http:req> -> server -> server_side -> <http:resp>
   connect /connector/http_server to /pipeline/echo;
@@ -80,14 +79,17 @@ flow
   create connector exit from connectors::exit;
 
   create pipeline replay from pipelines::passthrough;
+  create pipeline debug from pipelines::passthrough;
   
 
   # Replay recorded events over http to server
   connect /connector/data_in to /pipeline/replay;
   connect /pipeline/replay to /connector/http_client;
-  connect /connector/http_client to /pipeline/collect;
+  connect /connector/http_client/out to /pipeline/collect;
+  connect /connector/http_client/err to /pipeline/debug;
 
   connect /pipeline/collect to /connector/data_out;
+  connect /pipeline/debug to /connector/stdio;
   # Terminate at end via `exit` event
   connect /pipeline/collect/exit to /connector/exit;
 end;
