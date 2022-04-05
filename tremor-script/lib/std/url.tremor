@@ -6,7 +6,7 @@
 ## > use std::url;
 ## >
 ## > "beep%3Asnot%2Ffoobar" == url::encode("beep:snot/foobar")
-## ```
+## > ```
 ##
 ## Returns a `string`
 intrinsic fn encode(str) as url::encode;

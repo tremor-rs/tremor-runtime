@@ -20,13 +20,13 @@ use std::string;
 ##
 ## Returns a record when the representation is well-formed of the form:
 ##
-## ```tremor
-## {
-##    "kind": "string"|"binary"|"array", # Depends on input
-##    "valid": true|false,               # True if well-formed and valid
-##    "value": "<span_id>"               # Representation depends on `kind`
-## }
-## ```
+## > ```tremor
+## > {
+## >    "kind": "string"|"binary"|"array", # Depends on input
+## >    "valid": true|false,               # True if well-formed and valid
+## >    "value": "<span_id>"               # Representation depends on `kind`
+## > }
+## > ```
 ##
 ## Returns an empty record `{}` when the representation not well-formed
 ##
