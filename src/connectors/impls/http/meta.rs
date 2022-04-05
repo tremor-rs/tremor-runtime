@@ -14,7 +14,10 @@
 
 use super::auth::Auth;
 use crate::codec::{self, Codec};
-use crate::connectors::impls::http::utils::{SurfRequest, SurfRequestBuilder, SurfResponse};
+use crate::connectors::impls::http::{
+    client::Config,
+    utils::{SurfRequest, SurfResponse},
+};
 use crate::connectors::prelude::*;
 use crate::connectors::utils::mime::MimeCodecMap;
 use crate::postprocessor::{postprocess, Postprocessor, Postprocessors};
@@ -37,49 +40,6 @@ use value_trait::{Builder, Mutable, ValueAccess};
 // TODO Deterministic method of setting content-type
 // TODO PBT's harness for full request/response client/server request/response lifecycle to test http conformance
 
-#[derive(Deserialize, Debug)]
-#[serde(deny_unknown_fields)]
-pub struct Config {
-    /// Target URL
-    #[serde(default = "Default::default")]
-    pub(crate) url: Url,
-    /// Authorization method
-    #[serde(default = "default_auth")]
-    pub(crate) auth: Auth,
-    /// Concurrency capacity limits ( in flight requests )
-    #[serde(default = "default_concurrency")]
-    pub(crate) concurrency: usize,
-    /// Default HTTP headers
-    #[serde(default = "Default::default")]
-    pub(crate) headers: HashMap<String, Vec<String>>,
-    /// Default HTTP method
-    #[serde(default = "default_method")]
-    pub(crate) method: String,
-    /// MIME mapping to/from tremor codecs
-    #[serde(default = "default_mime_codec_map")]
-    pub(crate) codec_map: MimeCodecMap,
-}
-
-const DEFAULT_CONCURRENCY: usize = 4;
-
-fn default_concurrency() -> usize {
-    DEFAULT_CONCURRENCY
-}
-
-fn default_method() -> String {
-    "post".to_string()
-}
-
-fn default_auth() -> Auth {
-    Auth::None
-}
-
-fn default_mime_codec_map() -> MimeCodecMap {
-    MimeCodecMap::with_builtin()
-}
-
-// for new
-impl ConfigImpl for Config {}
 pub(crate) struct HttpResponseMeta {}
 
 pub(crate) enum ResponseEventCont {
@@ -183,13 +143,6 @@ impl HttpResponseMeta {
         // Inject response metadata
         meta.insert("response", response_meta)?;
 
-        // let codec = response
-        //     .content_type()
-        //     .and_then(|mime| codec_map.get_mut(mime.essence()))
-        //     .map_or(self.codec, |c| -> &mut dyn Codec { c.as_mut() });
-
-        //        let codec = self.codec.as_mut();
-
         let event = Self::body_to_event(
             codec,
             preprocessors,
@@ -263,7 +216,7 @@ impl HttpRequestMeta {
         if "content-type".eq_ignore_ascii_case(name) {
             if let Some(active_codec) = active_codec {
                 return Some(active_codec);
-            } else if let Some(v) = values.first() {
+            } else if let Some(v) = values.last() {
                 // NOTE - we do not currently handle attributes like `charset=UTF-8` correctly
                 if let Ok(as_mime) = Mime::from_str(&v.to_string()) {
                     let essence = as_mime.essence();
@@ -515,28 +468,35 @@ impl HttpRequestMeta {
             _ => None,
         };
 
-        let mut request_builder = SurfRequestBuilder::new(meta.method, meta.endpoint.url().clone());
+        let mut request = SurfRequest::new(meta.method, meta.endpoint.url().clone());
 
         // Build headers from meta - effectively overwrite config headers in case of conflict
         for (k, v) in &meta.headers {
             if "content-type".eq_ignore_ascii_case(k) {
-                'inner: for hv in v {
+                if let Some(hv) = v.last() {
                     if let Ok(mime) = Mime::from_str(hv.as_str()) {
-                        request_builder = request_builder.content_type(mime);
-                        break 'inner;
+                        request.set_content_type(mime);
                     }
                 }
             }
             let k: &str = k.as_str();
-            request_builder = request_builder.header(k, v.as_slice());
+            request.append_header(k, v.as_slice());
+        }
+        // set content-type from codec if none was provided
+        if request.content_type().is_none() {
+            if let Some(mime) = meta.codec.mime_types().first().copied() {
+                if let Ok(mime) = Mime::from_str(mime) {
+                    request.set_content_type(mime);
+                }
+            }
         }
 
         // Overwrite Host header
         // otherwise we might run into trouble when overwriting the endpoint.
         if let Some(host) = host {
-            request_builder = request_builder.header("Host", host);
+            request.set_header("Host", host);
         }
-        request_builder = request_builder.body_bytes(body);
-        request_builder.build()
+        request.body_bytes(body);
+        request
     }
 }

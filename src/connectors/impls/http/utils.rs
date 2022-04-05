@@ -61,25 +61,6 @@ impl<'de> Deserialize<'de> for SerdeMethod {
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use crate::connectors::prelude::ConfigImpl;
-    use crate::errors::Result;
-    use tremor_value::literal;
-
-    #[test]
-    fn deserialize_method() -> Result<()> {
-        let v = literal!({
-          "url": "http://localhost:8080/",
-          "method": "PATCH"
-        });
-        let config = super::super::meta::Config::new(&v)?;
-        assert_eq!(Method::Patch, Method::from_str(&config.method)?);
-        Ok(())
-    }
-}
-
 /// A Thingy that implements `AsyncBufRead`, so it can be turned into a tide Body
 /// and it can be asynchronously fed with chunks from a channel, so we don't need to buffer all the chunks in memory
 pub(crate) struct StreamingBodyReader {
