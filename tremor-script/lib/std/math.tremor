@@ -55,3 +55,4 @@ intrinsic fn max(n1, n2) as math::max;
 ##
 ## Returns a `number` (`integer` or `float`)
 intrinsic fn min(n1, n2) as math::min;
+
