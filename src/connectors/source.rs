@@ -17,7 +17,6 @@
 /// A simple source that is fed with `SourceReply` via a channel.
 pub mod channel_source;
 
-use abi_stable::std_types::RString;
 pub use channel_source::{ChannelSource, ChannelSourceRuntime};
 
 use async_std::channel::unbounded;
@@ -201,11 +200,11 @@ pub(crate) trait Source: Send {
     /// The intended result of this function is to re-establish a connection. It might reuse a working connection.
     ///
     /// Return `Ok(true)` if the connection could be successfully established.
-    fn connect(
-        &mut self,
-        _ctx: &SourceContext,
-        _attempt: &Attempt,
-    ) -> BorrowingFfiFuture<'_, RResult<bool>> {
+    fn connect<'a>(
+        &'a mut self,
+        _ctx: &'a SourceContext,
+        _attempt: &'a Attempt,
+    ) -> BorrowingFfiFuture<'a, RResult<bool>> {
         future::ready(ROk(true)).into_ffi()
     }
 
@@ -242,14 +241,24 @@ pub(crate) trait Source: Send {
     // guaranteed delivery callbacks
     /// an event has been acknowledged and can be considered delivered
     /// multiple acks for the same set of ids are always possible
-    async fn ack(&mut self, _stream_id: u64, _pull_id: u64, _ctx: &SourceContext) -> Result<()> {
-        Ok(())
+    fn ack(
+        &mut self,
+        _stream_id: u64,
+        _pull_id: u64,
+        _ctx: &SourceContext,
+    ) -> BorrowingFfiFuture<'_, RResult<()>> {
+        future::ready(ROk(())).into_ffi()
     }
     /// an event has failed along its way and can be considered failed
     /// multiple fails for the same set of ids are always possible
     #[cfg(not(tarpaulin_include))] // trait placeholder function
-    async fn fail(&mut self, _stream_id: u64, _pull_id: u64, _ctx: &SourceContext) -> Result<()> {
-        Ok(())
+    fn fail(
+        &mut self,
+        _stream_id: u64,
+        _pull_id: u64,
+        _ctx: &SourceContext,
+    ) -> BorrowingFfiFuture<'_, RResult<()>> {
+        future::ready(ROk(())).into_ffi()
     }
 
     // connectivity stuff
@@ -276,8 +285,7 @@ pub(crate) trait Source: Send {
 /// Source part of a connector.
 ///
 /// Just like `Connector`, this wraps the FFI dynamic source with `abi_stable`
-/// types so that it's easier to use with `std`. This may be removed in the
-/// future for performance reasons.
+/// types so that it's easier to use with `std`.
 pub struct Source(pub BoxedRawSource);
 impl Source {
     #[inline]
@@ -317,7 +325,7 @@ impl Source {
     }
 
     #[inline]
-    pub async fn on_start(&mut self, ctx: &mut SourceContext) -> Result<()> {
+    pub async fn on_start(&mut self, ctx: &SourceContext) -> Result<()> {
         self.0.on_start(ctx).await.map_err(Into::into).into()
     }
 
@@ -332,48 +340,69 @@ impl Source {
 
     /// Wrapper for [`BoxedRawSource::on_pause`]
     #[inline]
-    pub async fn on_pause(&mut self, ctx: &mut SourceContext) {
-        self.0.on_pause(ctx)
+    pub async fn on_pause(&mut self, ctx: &SourceContext) -> Result<()> {
+        self.0.on_pause(ctx).await.map_err(Into::into).into()
     }
     #[inline]
-    pub async fn on_resume(&mut self, ctx: &mut SourceContext) {
-        self.0.on_resume(ctx)
+    pub async fn on_resume(&mut self, ctx: &SourceContext) -> Result<()> {
+        self.0.on_resume(ctx).await.map_err(Into::into).into()
     }
     #[inline]
-    pub async fn on_stop(&mut self, ctx: &mut SourceContext) {
-        self.0.on_stop(ctx)
-    }
-
-    #[inline]
-    pub async fn on_cb_close(&mut self, ctx: &mut SourceContext) {
-        self.0.on_cb_close(ctx)
-    }
-    #[inline]
-    pub async fn on_cb_open(&mut self, ctx: &mut SourceContext) {
-        self.0.on_cb_open(ctx)
+    pub async fn on_stop(&mut self, ctx: &SourceContext) -> Result<()> {
+        self.0.on_stop(ctx).await.map_err(Into::into).into()
     }
 
     #[inline]
-    pub async fn ack(&mut self, stream_id: u64, pull_id: u64) {
-        self.0.ack(stream_id, pull_id)
+    pub async fn on_cb_close(&mut self, ctx: &SourceContext) -> Result<()> {
+        self.0.on_cb_close(ctx).await.map_err(Into::into).into()
     }
     #[inline]
-    pub async fn fail(&mut self, stream_id: u64, pull_id: u64) {
-        self.0.fail(stream_id, pull_id)
+    pub async fn on_cb_open(&mut self, ctx: &SourceContext) -> Result<()> {
+        self.0.on_cb_open(ctx).await.map_err(Into::into).into()
     }
 
     #[inline]
-    pub async fn on_connection_lost(&mut self, ctx: &mut SourceContext) {
-        self.0.on_connection_lost(ctx)
+    pub async fn ack(&mut self, stream_id: u64, pull_id: u64, ctx: &SourceContext) -> Result<()> {
+        self.0
+            .ack(stream_id, pull_id, ctx)
+            .await
+            .map_err(Into::into)
+            .into()
     }
     #[inline]
-    pub async fn on_connection_established(&mut self, ctx: &mut SourceContext) {
-        self.0.on_connection_established(ctx)
+    pub async fn fail(&mut self, stream_id: u64, pull_id: u64, ctx: &SourceContext) -> Result<()> {
+        self.0
+            .fail(stream_id, pull_id, ctx)
+            .await
+            .map_err(Into::into)
+            .into()
+    }
+
+    #[inline]
+    pub async fn on_connection_lost(&mut self, ctx: &SourceContext) -> Result<()> {
+        self.0
+            .on_connection_lost(ctx)
+            .await
+            .map_err(Into::into)
+            .into()
+    }
+    #[inline]
+    pub async fn on_connection_established(&mut self, ctx: &SourceContext) -> Result<()> {
+        self.0
+            .on_connection_established(ctx)
+            .await
+            .map_err(Into::into)
+            .into()
     }
 
     #[inline]
     pub fn is_transactional(&self) -> bool {
         self.0.is_transactional()
+    }
+
+    #[inline]
+    pub fn asynchronous(&self) -> bool {
+        self.0.asynchronous()
     }
 }
 
@@ -467,10 +496,7 @@ impl SourceManagerBuilder {
     /// spawn a Manager with the given source implementation
     /// # Errors
     /// if the source can not be spawned into a own process
-    pub(crate) fn spawn<S>(self, source: S, ctx: SourceContext) -> Result<SourceAddr>
-    where
-        S: Source + Send + 'static,
-    {
+    pub fn spawn(self, source: Source, ctx: SourceContext) -> Result<SourceAddr> {
         // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
         // there is soundness to this.
         // The unbounded channel ensures that on counterflow we never have to block, or in other
@@ -509,7 +535,7 @@ impl SourceManagerBuilder {
 ///
 /// # Errors
 /// - on invalid connector configuration
-pub(crate) fn builder(
+pub fn builder(
     connector_uid: u64,
     config: &ConnectorConfig,
     connector_default_codec: CodecReq,
@@ -535,7 +561,7 @@ pub(crate) fn builder(
         CodecReq::Optional(opt) => config
             .codec
             .clone()
-            .unwrap_or_else(|| CodecConfig::from(opt)),
+            .unwrap_or_else(|| CodecConfig::from(opt.as_str())),
     };
     let streams = Streams::new(connector_uid, codec_config, preprocessor_configs)?;
 

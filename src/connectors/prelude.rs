@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+
 pub(crate) use crate::connectors::sink::{
     AsyncSinkReply, ChannelSink, ChannelSinkRuntime, ContraflowData, EventSerializer,
     SingleStreamSink, SingleStreamSinkRuntime, Sink, SinkAck, SinkAddr, SinkContext,
@@ -51,3 +52,22 @@ pub(crate) fn default_buf_size() -> usize {
 
 /// Encapsulates connector configuration
 pub(crate) use crate::connectors::ConnectorConfig;
+
+/// For the PDK
+pub(crate) use crate::connectors::{sink::Sink, source::Source, Connector};
+pub use crate::{
+    connectors::{
+        quiescence::BoxedQuiescenceBeacon,
+        sink::{
+            BoxedContraflowSender, BoxedEventSerializer, BoxedRawSink, ContraflowSenderOpaque,
+            EventSerializerOpaque, MutEventSerializer, RawSink,
+        },
+        source::{BoxedRawSource, RawSource},
+        utils::reconnect::BoxedConnectionLostNotifier,
+        BoxedRawConnector, RawConnector,
+    },
+    pdk::{
+        connectors::{ConnectorMod, ConnectorMod_Ref},
+        RResult,
+    },
+};

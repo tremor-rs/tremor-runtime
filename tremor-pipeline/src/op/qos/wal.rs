@@ -21,6 +21,11 @@ use std::mem;
 use std::ops::{Add, AddAssign};
 use tremor_script::prelude::*;
 
+use abi_stable::{
+    rvec,
+    std_types::{ROption::RNone, RString},
+};
+
 #[derive(Clone, Copy, Default, PartialEq)]
 struct Idx([u8; 8]);
 #[cfg(not(tarpaulin_include))]

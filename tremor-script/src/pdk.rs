@@ -56,6 +56,9 @@ impl<'event> From<PdkValueAndMeta<'event>> for ValueAndMeta<'event> {
 #[derive(Debug, Clone, StableAbi)]
 pub struct PdkEventPayload {
     /// The vector of raw input values
+    ///
+    // Note that there is no conversion for the original raw field because it's
+    // a self-referential type, and modifying its data would be unsound.
     raw: RVec<RArc<Pin<RVec<u8>>>>,
     data: PdkValueAndMeta<'static>,
 }
@@ -64,17 +67,8 @@ pub struct PdkEventPayload {
 /// FFI boundary.
 impl From<EventPayload> for PdkEventPayload {
     fn from(original: EventPayload) -> Self {
-        let raw = original
-            .raw
-            .into_iter()
-            .map(|x| {
-                // FIXME: this conversion could probably be simpler
-                let x: RArc<Pin<RVec<u8>>> = RArc::new(Pin::new((**x).into()));
-                x
-            })
-            .collect();
         PdkEventPayload {
-            raw,
+            raw: original.raw,
             data: original.data.into(),
         }
     }
@@ -85,8 +79,6 @@ impl From<EventPayload> for PdkEventPayload {
 impl From<PdkEventPayload> for EventPayload {
     fn from(original: PdkEventPayload) -> Self {
         EventPayload {
-            // Note that there is no conversion for the raw field because it's a
-            // self-referential type, and modifying its data would be unsound.
             raw: original.raw,
             data: original.data.into(),
         }

@@ -29,6 +29,22 @@ use std::{
 use tremor_common::{file, time::nanotime};
 use xz2::read::XzDecoder;
 
+use crate::{errors::Error, pdk::RError, ttry};
+use abi_stable::{
+    prefix_type::PrefixTypeTrait,
+    rstr, rvec, sabi_extern_fn,
+    std_types::{
+        ROption::{self, RNone, RSome},
+        RResult::{RErr, ROk},
+        RStr, RString, RVec,
+    },
+    type_level::downcasting::TD_Opaque,
+};
+use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt};
+use std::future;
+use tremor_pipeline::pdk::PdkEvent;
+use tremor_value::pdk::PdkValue;
+
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -69,31 +85,49 @@ fn default_significant_figures() -> u8 {
 
 impl ConfigImpl for Config {}
 
-#[derive(Debug, Default)]
-pub(crate) struct Builder {}
+/// Note that since it's a built-in plugin, `#[export_root_module]` can't be
+/// used or it would conflict with other plugins.
+pub fn instantiate_root_module() -> ConnectorMod_Ref {
+    ConnectorMod {
+        connector_type,
+        from_config,
+    }
+    .leak_into_prefix()
+}
 
-#[async_trait::async_trait]
-impl ConnectorBuilder for Builder {
-    async fn from_config(&self, _id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(config) = &config.config {
-            let config: Config = Config::new(config)?;
-            let mut source_data_file = file::open(&config.source)?;
+#[sabi_extern_fn]
+fn connector_type() -> ConnectorType {
+    "bench".into()
+}
+
+#[sabi_extern_fn]
+pub fn from_config(
+    alias: RString,
+    config: ConnectorConfig,
+) -> FfiFuture<RResult<BoxedRawConnector>> {
+    async move {
+        if let RSome(config) = config.config {
+            let config: Config = ttry!(Config::new(&config.into()));
+            let mut source_data_file = ttry!(file::open(&config.source));
             let mut data = vec![];
             let ext = file::extension(&config.source);
             if ext == Some("xz") {
-                XzDecoder::new(source_data_file).read_to_end(&mut data)?;
+                ttry!(XzDecoder::new(source_data_file)
+                    .read_to_end(&mut data)
+                    .map_err(RError::new));
             } else {
-                source_data_file.read_to_end(&mut data)?;
+                ttry!(source_data_file.read_to_end(&mut data).map_err(RError::new));
             };
             let origin_uri = EventOriginUri {
-                scheme: "tremor-blaster".to_string(),
-                host: hostname(),
-                port: None,
-                path: vec![config.source.clone()],
+                scheme: RString::from("tremor-blaster"),
+                host: RString::from(hostname()),
+                port: RNone,
+                path: rvec![RString::from(config.source.clone())],
             };
             let elements: Vec<Vec<u8>> = if let Some(chunk_size) = config.chunk_size {
                 // split into sized chunks
-                data.chunks(chunk_size)
+                ttry!(data
+                    .chunks(chunk_size)
                     .map(|e| -> Result<Vec<u8>> {
                         if config.base64 {
                             Ok(base64::decode(e)?)
@@ -101,10 +135,10 @@ impl ConnectorBuilder for Builder {
                             Ok(e.to_vec())
                         }
                     })
-                    .collect::<Result<_>>()?
+                    .collect::<Result<_>>())
             } else {
                 // split into lines
-                BufReader::new(data.as_slice())
+                ttry!(BufReader::new(data.as_slice())
                     .lines()
                     .map(|e| -> Result<Vec<u8>> {
                         if config.base64 {
@@ -113,25 +147,25 @@ impl ConnectorBuilder for Builder {
                             Ok(e?.as_bytes().to_vec())
                         }
                     })
-                    .collect::<Result<_>>()?
+                    .collect::<Result<_>>())
             };
-            Ok(Box::new(Bench {
-                config,
-                acc: Acc {
-                    elements,
-                    count: 0,
-                    iterations: 0,
+            ROk(BoxedRawConnector::from_value(
+                Bench {
+                    config,
+                    acc: Acc {
+                        elements,
+                        count: 0,
+                        iterations: 0,
+                    },
+                    origin_uri,
                 },
-                origin_uri,
-            }))
+                TD_Opaque,
+            ))
         } else {
-            Err("Missing config for blaster onramp".into())
+            RErr(Error::from("Missing config for blaster onramp").into())
         }
     }
-
-    fn connector_type(&self) -> ConnectorType {
-        "bench".into()
-    }
+    .into_ffi()
 }
 
 #[derive(Clone, Default)]
@@ -161,13 +195,12 @@ pub struct Bench {
     origin_uri: EventOriginUri,
 }
 
-#[async_trait::async_trait]
-impl Connector for Bench {
-    async fn create_source(
+impl RawConnector for Bench {
+    fn create_source(
         &mut self,
-        source_context: SourceContext,
-        builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+        _ctx: SourceContext,
+        _qsize: usize,
+    ) -> BorrowingFfiFuture<'_, RResult<ROption<BoxedRawSource>>> {
         let s = Blaster {
             acc: self.acc.clone(),
             origin_uri: self.origin_uri.clone(),
@@ -177,21 +210,27 @@ impl Connector for Bench {
             finished: false,
             did_sleep: false,
         };
-        builder.spawn(s, source_context).map(Some)
+        // We don't need to be able to downcast the connector back to the original
+        // type, so we just pass it as an opaque type.
+        let s = BoxedRawSource::from_value(s, TD_Opaque);
+        future::ready(ROk(RSome(s))).into_ffi()
     }
 
-    async fn create_sink(
+    fn create_sink(
         &mut self,
-        sink_context: SinkContext,
-        builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
-        builder
-            .spawn(Blackhole::from_config(&self.config), sink_context)
-            .map(Some)
+        _ctx: SinkContext,
+        _qsize: usize,
+        reply_tx: BoxedContraflowSender,
+    ) -> BorrowingFfiFuture<'_, RResult<ROption<BoxedRawSink>>> {
+        let s = Blackhole::from_config(&self.config);
+        // We don't need to be able to downcast the connector back to the original
+        // type, so we just pass it as an opaque type.
+        let s = BoxedRawSink::from_value(s, TD_Opaque);
+        future::ready(ROk(RSome(s))).into_ffi()
     }
 
     fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Optional("json")
+        CodecReq::Optional(rstr!("json"))
     }
 }
 
@@ -205,44 +244,47 @@ struct Blaster {
     did_sleep: bool,
 }
 
-#[async_trait::async_trait]
-impl Source for Blaster {
-    #[allow(clippy::cast_possible_truncation)]
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        if self.finished {
-            return Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL));
-        }
-        if !self.did_sleep {
-            // TODO better sleep perhaps
-            if let Some(interval) = self.interval_ns {
-                let interval = interval.as_nanos();
-                let ns = (interval % 1_000_000) as u64;
-                let ms = (interval / 1_000_000) as u64;
-                async_std::task::sleep(Duration::from_nanos(ns)).await;
-                if ms > 0 {
-                    self.did_sleep = true;
-                    return Ok(SourceReply::Empty(ms));
+impl RawSource for Blaster {
+    fn pull_data<'a>(
+        &'a mut self,
+        _pull_id: &'a mut u64,
+        _ctx: &'a SourceContext,
+    ) -> BorrowingFfiFuture<'a, RResult<SourceReply>> {
+        async move {
+            if self.finished {
+                return ROk(SourceReply::Empty(DEFAULT_POLL_INTERVAL));
+            }
+            if !self.did_sleep {
+                // TODO better sleep perhaps
+                if let Some(interval) = self.interval_ns {
+                    let interval = interval.as_nanos();
+                    let ns = (interval % 1_000_000) as u64;
+                    let ms = (interval / 1_000_000) as u64;
+                    async_std::task::sleep(Duration::from_nanos(ns)).await;
+                    if ms > 0 {
+                        self.did_sleep = true;
+                        return ROk(SourceReply::Empty(ms));
+                    }
                 }
             }
-        }
-        self.did_sleep = false;
-        if Some(self.acc.iterations) == self.iterations {
-            self.finished = true;
-            return Ok(SourceReply::EndStream {
-                origin_uri: self.origin_uri.clone(),
-                stream: DEFAULT_STREAM_ID,
-                meta: None,
-            });
-        };
+            self.did_sleep = false;
+            if Some(self.acc.iterations) == self.iterations {
+                self.finished = true;
+                return ROk(SourceReply::EndStream {
+                    origin_uri: self.origin_uri.clone(),
+                    stream: DEFAULT_STREAM_ID,
+                    meta: RNone,
+                });
+            };
 
-        Ok(SourceReply::Data {
-            origin_uri: self.origin_uri.clone(),
-            data: self.acc.next(),
-            meta: None,
-            stream: Some(DEFAULT_STREAM_ID),
-            port: None,
-            codec_overwrite: None,
-        })
+            ROk(SourceReply::Data {
+                origin_uri: self.origin_uri.clone(),
+                data: self.acc.next().into(),
+                meta: RNone,
+                stream: RSome(DEFAULT_STREAM_ID),
+                port: RNone,
+                codec_overwrite: RNone,
+            })
     }
 
     fn is_transactional(&self) -> bool {
@@ -290,26 +332,25 @@ impl Blackhole {
     }
 }
 
-#[async_trait::async_trait]
-impl Sink for Blackhole {
+impl RawSink for Blackhole {
     fn auto_ack(&self) -> bool {
         true
     }
-    async fn on_event(
-        &mut self,
-        _input: &str,
-        event: tremor_pipeline::Event,
-        _ctx: &SinkContext,
-        event_serializer: &mut EventSerializer,
+    fn on_event<'a>(
+        &'a mut self,
+        _input: RStr<'a>,
+        event: PdkEvent,
+        ctx: &'a SinkContext,
+        event_serializer: &'a mut MutEventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
         let now_ns = nanotime();
         if self.has_stop_limit && now_ns > self.stop_after {
             if self.structured {
                 let v = self.to_value(2);
-                v.write(&mut stdout())?;
+                ttry!(v.write(&mut stdout()));
             } else {
-                self.write_text(stdout(), 5, 2)?;
+                ttry!(self.write_text(stdout(), 5, 2));
             }
             // ALLOW: This is on purpose, we use blackhole for benchmarking, so we want it to terminate the process when done
             process::exit(0);
@@ -318,16 +359,36 @@ impl Sink for Blackhole {
             if now_ns > self.warmup {
                 let delta_ns = now_ns - event.ingest_ns;
                 if let Ok(bufs) = event_serializer.serialize(value, event.ingest_ns) {
-                    self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
+                    self.bytes += bufs.iter().map(RVec::len).sum::<usize>();
                 } else {
-                    error!("failed to encode");
-                };
-                self.count += 1;
-                self.buf.clear();
-                self.delivered.record(delta_ns)?;
+                    ttry!(self.write_text(stdout(), 5, 2));
+                }
+                // ALLOW: This is on purpose, we use blackhole for benchmarking, so we want it to terminate the process when done
+                process::exit(0);
+            };
+            // Restoring the event back to a non-pdk one for access to its full
+            // functionality
+            let event = Event::from(event);
+            for value in event.value_iter() {
+                if now_ns > self.warmup {
+                    let delta_ns = now_ns - event.ingest_ns;
+                    // FIXME: use the buffer
+                    // TODO: try to find a way around cloning the value reference to turn it into a PdkValue
+                    if let ROk(bufs) =
+                        event_serializer.serialize(&value.clone().into(), event.ingest_ns)
+                    {
+                        self.bytes += bufs.iter().map(RVec::len).sum::<usize>();
+                    } else {
+                        error!("failed to encode");
+                    };
+                    self.count += 1;
+                    self.buf.clear();
+                    ttry!(self.delivered.record(delta_ns).map_err(RError::new));
+                }
             }
+            ROk(SinkReply::default())
         }
-        Ok(SinkReply::default())
+        .into_ffi()
     }
 }
 

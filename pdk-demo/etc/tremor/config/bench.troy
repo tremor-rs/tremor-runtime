@@ -1,0 +1,31 @@
+define flow demo
+flow
+  define connector bench from bench
+  args
+    codec = "json"
+  with
+    config = {
+      "source": "../demo/data/data.json.xz",
+      "stop_after_secs": 100,
+      "significant_figures": 2,
+      "warmup_secs": 10,
+    }
+  end;
+
+  define pipeline main
+  into out
+  pipeline
+    select event from in into out;
+  end;
+
+  create pipeline main;
+  create connector bench;
+
+  #         | what we measure |
+  # bench ->        main       -> bench
+
+  connect /connector/bench to /pipeline/main;
+  connect /pipeline/main to /connector/bench;
+end;
+
+deploy flow demo_01 from demo;

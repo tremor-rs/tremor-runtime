@@ -50,6 +50,14 @@ impl From<url::ParseError> for Error {
     }
 }
 
+/// For more ergonomic error-handling in PDK contexts
+/// TODO: use `tremor_pdk::RError` when it exists
+impl From<Error> for abi_stable::std_types::SendRBoxError {
+    fn from(e: Error) -> Self {
+        Self::new(e)
+    }
+}
+
 impl Display for Error {
     fn fmt(&self, w: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {

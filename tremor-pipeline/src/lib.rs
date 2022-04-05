@@ -48,6 +48,12 @@ use tremor_script::{
     prelude::*,
 };
 
+use abi_stable::{
+    rstr,
+    std_types::{RCow, RCowStr, RHashMap, ROption, RVec, Tuple2},
+    StableAbi,
+};
+
 /// Pipeline Errors
 pub mod errors;
 mod event;
@@ -140,7 +146,11 @@ lazy_static! {
 
 /// Stringified numeric key
 /// from <https://github.com/serde-rs/json-benchmark/blob/master/src/prim_str.rs>
-#[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Debug)]
+// FIXME: this didn't use to derive `Hash` because it was used for a `BTreeMap`.
+// Since it's now necessary for a `HashMap` as well (see the pdk module), `Hash`
+// must be implemented now.
+#[repr(C)]
+#[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Debug, Hash, StableAbi)]
 pub struct PrimStr<T>(T)
 where
     T: Copy + Ord + Display + FromStr;

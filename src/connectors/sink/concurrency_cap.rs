@@ -29,7 +29,8 @@ pub(crate) struct ConcurrencyCap {
 }
 
 impl ConcurrencyCap {
-    pub(crate) fn new(max: usize, reply_tx: Sender<AsyncSinkReply>) -> Self {
+    /// constructor
+    pub fn new(max: usize, reply_tx: Sender<AsyncSinkReply>) -> Self {
         Self {
             cap: max,
             reply_tx,
@@ -44,7 +45,7 @@ impl ConcurrencyCap {
 
     /// increment the counter and return a guard for safely counting down
     /// wrapped inside an enum to check whether we exceeded the maximum or not
-    pub(crate) async fn inc_for(&self, event: &Event) -> Result<CounterGuard> {
+    pub async fn inc_for(&self, event: &Event) -> Result<CounterGuard> {
         let num = self.counter.fetch_add(1, Ordering::AcqRel);
         let guard = CounterGuard(num, self.clone(), ContraflowData::from(event));
         if num == self.cap {
@@ -74,7 +75,8 @@ impl ConcurrencyCap {
 pub(crate) struct CounterGuard(usize, ConcurrencyCap, ContraflowData);
 
 impl CounterGuard {
-    pub(crate) fn num(&self) -> usize {
+    /// slot number
+    pub fn num(&self) -> usize {
         self.0
     }
 }

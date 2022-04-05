@@ -1,6 +1,6 @@
 .DS_Store
 /target*
-*/target*
+**/target*
 **/*.rs.bk
 /window/target*
 /property_testing/target

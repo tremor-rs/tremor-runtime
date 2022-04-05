@@ -17,6 +17,14 @@ use std::default;
 use std::fmt;
 use url::Url;
 
+use abi_stable::{
+    std_types::{
+        ROption::{self, RNone, RSome},
+        RString, RVec,
+    },
+    StableAbi,
+};
+
 /// Event origin URI
 #[derive(
     Debug, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize, simd_json_derive::Deserialize,

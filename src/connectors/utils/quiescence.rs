@@ -16,6 +16,9 @@ use event_listener::Event;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
+use abi_stable::std_types::RBox;
+use async_ffi::{BorrowingFfiFuture, FutureExt};
+
 #[derive(Debug)]
 struct Inner {
     state: AtomicU32,
@@ -42,6 +45,38 @@ impl Default for Inner {
 #[allow(clippy::module_name_repetitions)]
 pub struct QuiescenceBeacon(Arc<Inner>);
 
+/// `QuiescenceBeacon` is used for the plugin system, so it must be `#[repr(C)]`
+/// in order to interact with it. However, since it uses complex types
+/// internally, it's easier to just make it available as an opaque type instead,
+/// with the help of `sabi_trait`.
+#[abi_stable::sabi_trait]
+pub trait QuiescenceBeaconOpaque: fmt::Debug + Clone + Send + Sync {
+    /// returns `true` if consumers should continue reading
+    /// If the connector is paused, it awaits until it is resumed.
+    ///
+    /// Use this function in asynchronous tasks consuming from external resources to check
+    /// whether it should still read from the external resource. This will also pause external consumption if the
+    /// connector is paused.
+    fn continue_reading(&self) -> BorrowingFfiFuture<'_, bool>;
+
+    /// Returns `true` if consumers should continue writing.
+    /// If the connector is paused, it awaits until it is resumed.
+    fn continue_writing(&self) -> BorrowingFfiFuture<'_, bool>;
+
+    /// notify consumers of this beacon that reading should be stopped
+    fn stop_reading(&mut self);
+
+    /// pause both reading and writing
+    fn pause(&mut self);
+
+    /// Resume both reading and writing.
+    ///
+    /// Has no effect if not currently paused.
+    fn resume(&mut self);
+
+    /// notify consumers of this beacon that reading and writing should be stopped
+    fn full_stop(&mut self);
+}
 impl QuiescenceBeacon {
     // we have max 2 listeners at a time, checking this beacon
     // the sink and the source of the connector
@@ -126,12 +161,14 @@ impl QuiescenceBeacon {
         self.0.resume_event.notify(Self::MAX_LISTENERS); // we might have been paused, so notify here
     }
 }
+/// Alias for the FFI-safe beacon, boxed
+pub type BoxedQuiescenceBeacon = QuiescenceBeaconOpaque_TO<'static, RBox<()>>;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::errors::Result;
-    use async_std::prelude::*;
+    use async_std::prelude::FutureExt as AsyncFutureExt;
     use std::time::Duration;
 
     #[async_std::test]

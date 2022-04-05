@@ -43,6 +43,8 @@ use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, prelude::*, Value};
 use tungstenite::protocol::{frame::coding::CloseCode, CloseFrame};
 
+use tremor_runtime::pdk::RError;
+
 /// A minimal websocket test client harness
 struct TestClient<S> {
     client: S,
@@ -98,10 +100,10 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
     async fn expect(&mut self) -> Result<ExpectMessage> {
         loop {
             match self.client.next().await {
-                Some(Ok(Message::Text(data))) => return Ok(ExpectMessage::Text(data)),
-                Some(Ok(Message::Binary(data))) => return Ok(ExpectMessage::Binary(data)),
-                Some(Ok(other)) => return Ok(ExpectMessage::Unexpected(other)),
-                Some(Err(e)) => return Err(e.into()),
+                Some(Ok(Message::Text(data))) => return Ok(ExpectMessage::Text(data).into()),
+                Some(Ok(Message::Binary(data))) => return Ok(ExpectMessage::Binary(data).into()),
+                Some(Ok(other)) => return Ok(ExpectMessage::Unexpected(other).into()),
+                Some(Err(e)) => return Err(RError::new(e).into()),
                 None => return Err("EOF".into()), // stream end
             }
         }
@@ -115,7 +117,8 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
                 code: CloseCode::Normal,
                 reason: "Test client closing.".into(),
             }))
-            .await?;
+            .await
+            .map_err(RError::new)?;
         info!("Test client closed.");
         Ok(())
     }
@@ -163,7 +166,7 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
             Ok(Message::Text(data)) => Ok(ExpectMessage::Text(data)),
             Ok(Message::Binary(data)) => Ok(ExpectMessage::Binary(data)),
             Ok(other) => Ok(ExpectMessage::Unexpected(other)),
-            Err(e) => Err(e.into()),
+            Err(e) => Err(RError::new(e).into()),
         }
     }
 
@@ -172,13 +175,14 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
     }
 
     async fn close(&mut self) -> Result<()> {
-        info!("Closing WS test client...");
-        self.client.close(Some(CloseFrame {
-            code: CloseCode::Normal,
-            reason: "WS Test client closing.".into(),
-        }))?;
-        // finish closing handshake
-        self.client.write_pending()?;
+        info!("Closing TLS test client...");
+        self.client
+            .close(Some(CloseFrame {
+                code: CloseCode::Normal,
+                reason: "WS Test client closing.".into(),
+            }))
+            .map_err(RError::new)?;
+        let _ = self.client.write_pending();
         info!("WS test client closed.");
         Ok(())
     }

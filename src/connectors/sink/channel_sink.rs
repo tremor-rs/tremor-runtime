@@ -139,7 +139,7 @@ where
     pub(crate) fn new_with_meta(
         qsize: usize,
         resolver: F,
-        reply_tx: Sender<AsyncSinkReply>,
+        reply_tx: BoxedContraflowSender,
     ) -> Self {
         let (tx, rx) = bounded(qsize);
         ChannelSink::new(resolver, reply_tx, tx, rx)
@@ -157,7 +157,7 @@ where
     /// This costs a clone.
     pub(crate) fn new(
         resolver: F,
-        reply_tx: Sender<AsyncSinkReply>,
+        reply_tx: BoxedContraflowSender,
         tx: Sender<ChannelSinkMsg<T>>,
         rx: Receiver<ChannelSinkMsg<T>>,
     ) -> Self {
@@ -379,7 +379,7 @@ where
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
         start: u64,
-    ) -> Result<SinkReply> {
+    ) -> BorrowingFfiFuture<'a, RResult<SinkReply>> {
         // clean up
         // make sure channels for the given event are added to avoid stupid errors
         // due to channels not yet handled

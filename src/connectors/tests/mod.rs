@@ -83,7 +83,7 @@ impl ConnectorHarness {
         let mut known_connectors = HashMap::new();
 
         for builder in builtin_connector_types() {
-            known_connectors.insert(builder.connector_type(), builder);
+            known_connectors.insert(builder.connector_type()(), builder);
         }
 
         let connector_type = connector_type.to_string();

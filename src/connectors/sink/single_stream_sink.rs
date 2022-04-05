@@ -268,9 +268,7 @@ where
             {
                 // handle first couple of items (if batched)
                 for (value, meta) in value_meta_iter {
-                    let data = ttry!(serializer
-                        .serialize(&value.clone().into(), ingest_ns)
-                        .into());
+                    let data = rtry!(serializer.serialize(&value.clone().into(), ingest_ns));
                     let meta = if B::NEEDS_META {
                         Some(meta.clone_static())
                     } else {
@@ -283,14 +281,12 @@ where
                         start,
                     };
                     if self.tx.send(sink_data).await.is_err() {
-                        error!("[Sink::{}] Error sending to closed stream: 0", &ctx.url);
+                        error!("{} Error sending to closed stream: 0", &ctx);
                         return ROk(SinkReply::FAIL);
                     }
                 }
                 // handle last item
-                let data = ttry!(serializer
-                    .serialize(&last_value.clone().into(), ingest_ns)
-                    .into());
+                let data = rtry!(serializer.serialize(&last_value.clone().into(), ingest_ns));
                 let meta = if B::NEEDS_META {
                     Some(last_meta.clone_static())
                 } else {
@@ -303,7 +299,7 @@ where
                     start,
                 };
                 if self.tx.send(sink_data).await.is_err() {
-                    error!("[Sink::{}] Error sending to closed stream: 0", &ctx.url);
+                    error!("{} Error sending to closed stream: 0", &ctx);
                     ROk(SinkReply::FAIL)
                 } else {
                     ROk(SinkReply::NONE)

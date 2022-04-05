@@ -3,7 +3,6 @@ use crate::{
     pdk::RResult,
     config::Connector as ConnectorConfig,
 };
-use tremor_common::url::TremorUrl;
 use tremor_value::pdk::PdkValue;
 
 use std::fmt;

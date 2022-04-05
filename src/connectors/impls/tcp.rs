@@ -23,6 +23,11 @@ use futures::{
     AsyncReadExt, AsyncWriteExt,
 };
 
+use abi_stable::std_types::{
+    ROption::{RNone, RSome},
+    RVec,
+};
+
 pub(crate) struct TcpDefaults;
 impl Defaults for TcpDefaults {
     const SCHEME: &'static str = "tcp";

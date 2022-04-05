@@ -34,6 +34,8 @@ extern crate serde as serde_ext;
 mod error;
 mod known_key;
 mod macros;
+/// For the compatibility layer with the Plugin Development Kit
+pub mod pdk;
 /// Prelude module
 pub mod prelude;
 mod serde;

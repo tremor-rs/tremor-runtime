@@ -7,6 +7,7 @@ name = "tremor-pipeline"
 version = "0.11.4"
 
 [dependencies]
+abi_stable = { version = "0.10.3", default_features = false, features = ["rust_latest_stable"] }
 async-broadcast = "0.4"
 async-std = { version = "1.10.0", features = ["attributes"] }
 beef = { version = "0.5", features = ["impl_serde"] }

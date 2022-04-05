@@ -13,15 +13,16 @@
 // limitations under the License.
 
 use crate::connectors::source::{
-    Source, SourceContext, SourceReply, SourceReplySender, StreamDone, StreamReader,
-    DEFAULT_POLL_INTERVAL,
+    SourceContext, SourceReply, SourceReplySender, StreamDone, StreamReader, DEFAULT_POLL_INTERVAL,
 };
 use crate::connectors::Context;
+use crate::errors::{Error, Result};
 use crate::pdk::RResult;
-use async_ffi::BorrowingFfiFuture;
+use abi_stable::std_types::{RErr, ROk};
+use async_ffi::{BorrowingFfiFuture, FutureExt};
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
 use async_std::task;
-use async_std::{future, prelude::*};
+use async_std::{future, prelude::FutureExt as AsyncFutureExt};
 use std::time::Duration;
 
 use super::RawSource;
@@ -104,7 +105,7 @@ impl ChannelSourceRuntime {
             }
             if reader.on_done(stream).await == StreamDone::ConnectorClosed {
                 ctx.swallow_err(
-                    ctx.notifier().connection_lost().await,
+                    ctx.notifier().connection_lost().await.map_err(Into::into).into(),
                     "Failed to notify connector",
                 );
             }
@@ -116,8 +117,8 @@ impl ChannelSourceRuntime {
 impl RawSource for ChannelSource {
     fn pull_data<'a>(
         &'a mut self,
-        pull_id: &'a mut u64,
-        ctx: &'a SourceContext,
+        _pull_id: &'a mut u64,
+        _ctx: &'a SourceContext,
     ) -> BorrowingFfiFuture<'a, RResult<SourceReply>> {
         future::ready(match self.rx.try_recv() {
             Ok(reply) => ROk(reply),
@@ -125,7 +126,7 @@ impl RawSource for ChannelSource {
                 // TODO: configure pull interval in connector config?
                 ROk(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
             }
-            Err(e) => RErr(e.into()),
+            Err(e) => RErr(Error::from(e).into()),
         })
         .into_ffi()
     }

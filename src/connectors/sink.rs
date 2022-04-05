@@ -209,11 +209,11 @@ pub(crate) trait Sink: Send {
     /// The intended result of this function is to re-establish a connection. It might reuse a working connection.
     ///
     /// Return `ROk(true)` if the connection could be successfully established.
-    fn connect(
-        &mut self,
-        _ctx: &SinkContext,
-        _attempt: &Attempt,
-    ) -> BorrowingFfiFuture<'_, RResult<bool>> {
+    fn connect<'a>(
+        &'a mut self,
+        _ctx: &'a SinkContext,
+        _attempt: &'a Attempt,
+    ) -> BorrowingFfiFuture<'a, RResult<bool>> {
         future::ready(ROk(true)).into_ffi()
     }
 
@@ -258,18 +258,19 @@ pub(crate) trait Sink: Send {
 ///
 /// Just like `Connector`, this wraps the FFI dynamic sink with `abi_stable`
 /// types so that it's easier to use with `std`.
-pub(crate) struct Sink(pub BoxedRawSink);
+pub struct Sink(pub BoxedRawSink);
 impl Sink {
     /// Wrapper for [`BoxedRawSink::on_event`]
     #[inline]
     pub async fn on_event(
         &mut self,
-        input: RStr<'_>,
+        input: &str,
         event: Event,
         ctx: &SinkContext,
-        serializer: MutEventSerializer<'_>,
+        serializer: &mut EventSerializer,
         start: u64,
     ) -> Result<SinkReply> {
+        let mut serializer = MutEventSerializer::from_ptr(serializer, TD_Opaque);
         self.0
             .on_event(input.into(), event.into(), ctx, &mut serializer, start)
             .await
@@ -281,8 +282,9 @@ impl Sink {
         &mut self,
         signal: Event,
         ctx: &SinkContext,
-        serializer: MutEventSerializer<'_>,
+        serializer: &mut EventSerializer,
     ) -> Result<SinkReply> {
+        let mut serializer = MutEventSerializer::from_ptr(serializer, TD_Opaque);
         self.0
             .on_signal(signal.into(), ctx, &mut serializer)
             .await
@@ -472,7 +474,7 @@ pub(crate) struct SinkAddr {
 }
 
 /// Builder for the sink manager
-pub(crate) struct SinkManagerBuilder {
+pub struct SinkManagerBuilder {
     qsize: usize,
     serializer: EventSerializer,
     reply_channel: (Sender<AsyncSinkReply>, Receiver<AsyncSinkReply>),
@@ -510,6 +512,25 @@ impl SinkManagerBuilder {
         Ok(SinkAddr { addr: sink_tx })
     }
 }
+
+#[abi_stable::sabi_trait]
+pub trait ContraflowSenderOpaque: Send {
+    /// Send a contraflow message to the runtime
+    fn send(&self, reply: AsyncSinkReply) -> BorrowingFfiFuture<'_, RResult<()>>;
+}
+impl ContraflowSenderOpaque for Sender<AsyncSinkReply> {
+    fn send(&self, reply: AsyncSinkReply) -> BorrowingFfiFuture<'_, RResult<()>> {
+        async move {
+            self.send(reply)
+                .await
+                .map_err(|e| RError::new(Error::from(e)))
+                .into()
+        }
+        .into_ffi()
+    }
+}
+/// Alias for the FFI-safe contraflow sender, boxed
+pub type BoxedContraflowSender = ContraflowSenderOpaque_TO<'static, RBox<()>>;
 
 /// create a builder for a `SinkManager`.
 /// with the generic information available in the connector

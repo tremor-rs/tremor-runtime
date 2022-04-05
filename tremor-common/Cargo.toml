@@ -9,6 +9,7 @@ readme = "README.md"
 version = "0.11.4"
 
 [dependencies]
+abi_stable = { version = "0.10.3", default_features = false, features = ["rust_latest_stable"] }
 async-std = "1"
 rand = { version = "0.8", features = ["small_rng"] }
 beef = { version = "0.5", features = ["impl_serde"] }

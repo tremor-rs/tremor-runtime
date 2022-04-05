@@ -18,10 +18,50 @@ use beef::Cow;
 use tremor_pipeline::{MetricsMsg, METRICS_CHANNEL};
 use tremor_script::utils::hostname;
 
+use crate::pdk::RError;
+use crate::ttry;
+use abi_stable::{
+    prefix_type::PrefixTypeTrait,
+    rvec, sabi_extern_fn,
+    std_types::{
+        ROption::{self, RNone, RSome},
+        RResult::{RErr, ROk},
+        RStr, RString,
+    },
+    type_level::downcasting::TD_Opaque,
+};
+use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt};
+use std::future;
+use tremor_pipeline::pdk::PdkEvent;
+use tremor_value::pdk::PdkValue;
+
 const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
 const TAGS: Cow<'static, str> = Cow::const_str("tags");
 const FIELDS: Cow<'static, str> = Cow::const_str("fields");
 const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
+
+/// Note that since it's a built-in plugin, `#[export_root_module]` can't be
+/// used or it would conflict with other plugins.
+pub fn instantiate_root_module() -> ConnectorMod_Ref {
+    ConnectorMod {
+        connector_type,
+        from_config,
+    }
+    .leak_into_prefix()
+}
+
+#[sabi_extern_fn]
+fn connector_type() -> ConnectorType {
+    "metrics".into()
+}
+#[sabi_extern_fn]
+pub fn from_config(
+    _alias: RString,
+    _raw_config: ROption<PdkValue<'static>>,
+) -> FfiFuture<RResult<BoxedRawConnector>> {
+    let connector = BoxedRawConnector::from_value(MetricsConnector::new(), TD_Opaque);
+    future::ready(ROk(connector)).into_ffi()
+}
 
 /// This is a system connector to collect and forward metrics.
 /// System metrics are fed to this connector and can be received by binding this connector's `out` port to a pipeline to handle metrics events.
@@ -46,48 +86,38 @@ impl MetricsConnector {
     }
 }
 
-/// builder for the metrics connector
-
-#[derive(Debug, Default)]
-pub(crate) struct Builder {}
-#[async_trait::async_trait]
-impl ConnectorBuilder for Builder {
-    fn connector_type(&self) -> ConnectorType {
-        "metrics".into()
-    }
-    async fn from_config(
-        &self,
-        _id: &str,
-        _config: &ConnectorConfig,
-    ) -> Result<Box<dyn Connector>> {
-        Ok(Box::new(MetricsConnector::new()))
-    }
-}
-
-#[async_trait::async_trait()]
-impl Connector for MetricsConnector {
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(!self.tx.is_closed())
+impl RawConnector for MetricsConnector {
+    fn connect<'a>(
+        &'a mut self,
+        _ctx: &'a ConnectorContext,
+        _attempt: &'a Attempt,
+    ) -> BorrowingFfiFuture<'a, RResult<bool>> {
+        future::ready(ROk(!self.tx.is_closed())).into_ffi()
     }
 
-    async fn create_source(
+    fn create_source(
         &mut self,
-        source_context: SourceContext,
-        builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+        _ctx: SourceContext,
+        _qsize: usize,
+    ) -> BorrowingFfiFuture<'_, RResult<ROption<BoxedRawSource>>> {
         let source = MetricsSource::new(self.rx.clone());
-        let addr = builder.spawn(source, source_context)?;
-        Ok(Some(addr))
+        // We don't need to be able to downcast the connector back to the original
+        // type, so we just pass it as an opaque type.
+        let source = BoxedRawSource::from_value(source, TD_Opaque);
+        future::ready(ROk(RSome(source))).into_ffi()
     }
 
-    async fn create_sink(
+    fn create_sink(
         &mut self,
-        sink_context: SinkContext,
-        builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
+        _ctx: SinkContext,
+        _qsize: usize,
+        _reply_tx: BoxedContraflowSender,
+    ) -> BorrowingFfiFuture<'_, RResult<ROption<BoxedRawSink>>> {
         let sink = MetricsSink::new(self.tx.clone());
-        let addr = builder.spawn(sink, sink_context)?;
-        Ok(Some(addr))
+        // We don't need to be able to downcast the connector back to the original
+        // type, so we just pass it as an opaque type.
+        let sink = BoxedRawSink::from_value(sink, TD_Opaque);
+        future::ready(ROk(RSome(sink))).into_ffi()
     }
     fn codec_requirements(&self) -> CodecReq {
         CodecReq::Structured
@@ -104,28 +134,33 @@ impl MetricsSource {
         Self {
             rx,
             origin_uri: EventOriginUri {
-                scheme: "tremor-metrics".to_string(),
-                host: hostname(),
-                port: None,
-                path: vec![],
+                scheme: RString::from("tremor-metrics"),
+                host: RString::from(hostname()),
+                port: RNone,
+                path: rvec![],
             },
         }
     }
 }
 
-#[async_trait::async_trait()]
-impl Source for MetricsSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+impl RawSource for MetricsSource {
+    fn pull_data<'a>(
+        &'a mut self,
+        _pull_id: &'a mut u64,
+        _ctx: &'a SourceContext,
+    ) -> BorrowingFfiFuture<'a, RResult<SourceReply>> {
         match self.rx.try_recv() {
-            Ok(msg) => Ok(SourceReply::Structured {
-                payload: msg.payload,
+            Ok(msg) => ROk(SourceReply::Structured {
+                payload: msg.payload.into(),
                 origin_uri: msg.origin_uri.unwrap_or_else(|| self.origin_uri.clone()),
                 stream: DEFAULT_STREAM_ID,
-                port: None,
+                port: RNone,
             }),
-            Err(TryRecvError::Closed) => Err(TryRecvError::Closed.into()),
-            Err(TryRecvError::Empty | TryRecvError::Overflowed(_)) => Ok(SourceReply::Empty(10)),
-        }
+            Err(TryRecvError::Closed) => RErr(RError::new(Error::from(TryRecvError::Closed))),
+            Err(TryRecvError::Empty | TryRecvError::Overflowed(_)) => ROk(SourceReply::Empty(10)),
+        };
+
+        future::ready(reply).into_ffi()
     }
 
     fn is_transactional(&self) -> bool {
@@ -174,44 +209,49 @@ pub(crate) fn verify_metrics_value(value: &Value<'_>) -> Result<()> {
 }
 
 /// passing events through to the source channel
-#[async_trait::async_trait()]
-impl Sink for MetricsSink {
+impl RawSink for MetricsSink {
     fn auto_ack(&self) -> bool {
         true
     }
 
     /// entrypoint for custom metrics events
-    async fn on_event(
-        &mut self,
-        _input: &str,
-        event: tremor_pipeline::Event,
-        _ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
+    fn on_event<'a>(
+        &'a mut self,
+        _input: RStr<'a>,
+        event: PdkEvent,
+        _ctx: &'a SinkContext,
+        _serializer: &'a mut MutEventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
-        // verify event format
-        for (value, _meta) in event.value_meta_iter() {
-            // if it fails here an error event is sent to the ERR port of this connector
-            verify_metrics_value(value)?;
-        }
+    ) -> BorrowingFfiFuture<'a, RResult<SinkReply>> {
+        // Conversion to use the full functionality of `Event`
+        let event = Event::from(event);
 
-        let Event {
-            origin_uri, data, ..
-        } = event;
-
-        let metrics_msg = MetricsMsg::new(data, origin_uri);
-        let ack_or_fail = match self.tx.try_broadcast(metrics_msg) {
-            Err(TrySendError::Closed(_)) => {
-                // channel is closed
-                SinkReply {
-                    ack: SinkAck::Fail,
-                    cb: CbAction::Close,
-                }
+        async move {
+            // verify event format
+            for (value, _meta) in event.value_meta_iter() {
+                // if it fails here an error event is sent to the ERR port of this connector
+                ttry!(verify_metrics_value(value));
             }
-            Err(TrySendError::Full(_)) => SinkReply::FAIL,
-            _ => SinkReply::ACK,
-        };
 
-        Ok(ack_or_fail)
+            let Event {
+                origin_uri, data, ..
+            } = event;
+
+            let metrics_msg = MetricsMsg::new(data, origin_uri);
+            let ack_or_fail = match self.tx.try_broadcast(metrics_msg) {
+                Err(TrySendError::Closed(_)) => {
+                    // channel is closed
+                    SinkReply {
+                        ack: SinkAck::Fail,
+                        cb: CbAction::Close,
+                    }
+                }
+                Err(TrySendError::Full(_)) => SinkReply::FAIL,
+                _ => SinkReply::ACK,
+            };
+
+            ROk(ack_or_fail)
+        }
+        .into_ffi()
     }
 }

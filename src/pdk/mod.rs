@@ -13,11 +13,20 @@ pub type RError = abi_stable::std_types::SendRBoxError;
 /// The result type used for the PDK, from `abi_stable`
 pub type RResult<T> = abi_stable::std_types::RResult<T, RError>;
 
-/// This is a workaround until `?` can be used with functions that return
-/// `RResult`: https://github.com/rust-lang/rust/issues/84277
+/// Default `TREMOR_PLUGIN_PATH`. Similarly to `TREMOR_PATH`, it contains the
+/// following values by default:
 ///
-/// NOTE: this might be less 'magic' by matching to `RResult` instead of
-/// `Result`, but it also saves us a very common `.into()`.
+/// * `/usr/share/tremor/plugins`: in packages this directory contains the
+///   built-in plugins
+/// * `/usr/local/share/tremor/plugins`: place for custom plugins
+pub const DEFAULT_PLUGIN_PATH: &str = "/usr/local/share/tremor/plugins:/usr/share/tremor/plugins";
+
+/// This can be used alongside [`abi_stable::rtry`] for error handling. Its
+/// difference is that it does an implicit conversion to `RResult`, which is
+/// useful sometimes to reduce boilerplate.
+///
+/// These macros are a workaround until `?` can be used with functions that
+/// return `RResult`: https://github.com/rust-lang/rust/issues/84277.
 #[macro_export]
 macro_rules! ttry {
     ($e:expr) => {
@@ -50,8 +59,8 @@ pub fn find_recursively(base_dir: &str) -> Vec<ConnectorMod_Ref> {
                 .unwrap_or(false)
         })
         // Try to load the plugins and if successful, add them to the result.
-        // Not being able to load a plugin shouldn't be fatal, errors will just
-        // be printed to the logs.
+        // Not being able to load a plugin shouldn't be fatal because it's very
+        // likely in some situations. Errors will just be printed to the logs.
         .filter_map(|file| match ConnectorMod_Ref::load_from_file(file.path()) {
             Ok(plugin) => Some(plugin),
             Err(e) => {
@@ -60,4 +69,20 @@ pub fn find_recursively(base_dir: &str) -> Vec<ConnectorMod_Ref> {
             }
         })
         .collect()
+}
+
+pub mod utils {
+    use abi_stable::std_types::RCow;
+
+    // FIXME: clean up after creation of `tremor-pdk`, this is repeated in other
+    // crates.
+    pub fn conv_cow_str(cow: RCow<str>) -> beef::Cow<str> {
+        let cow: std::borrow::Cow<str> = cow.into();
+        cow.into()
+    }
+
+    pub fn conv_cow_str_inv(cow: beef::Cow<str>) -> RCow<str> {
+        let cow: std::borrow::Cow<str> = cow.into();
+        cow.into()
+    }
 }
