@@ -24,7 +24,7 @@ impl Codec for Binary {
     }
 
     #[cfg(not(tarpaulin_include))]
-    fn mime_types(&self) -> Vec<&str> {
+    fn mime_types(&self) -> Vec<&'static str> {
         vec!["application/octet-stream"]
     }
 

@@ -74,10 +74,11 @@ impl StreamReader for UnixSocketReader {
 
         Ok(SourceReply::Data {
             origin_uri: self.origin_uri.clone(),
-            stream,
+            stream: Some(stream),
             meta: Some(self.meta.clone()),
             data,
             port: None,
+            codec_overwrite: None,
         })
     }
 

@@ -106,9 +106,15 @@ pub enum SourceReply {
         /// metadata associated with this data
         meta: Option<Value<'static>>,
         /// stream id of the data
-        stream: u64,
+        /// if no stream is provided, this data is treated as a discrete unit,
+        /// not part of any stream. preprocessors will be finalized after this etc.
+        /// The event_id will have the `DEFAULT_STREAM_ID` set as stream_id.
+        stream: Option<u64>,
         /// Port to send to, defaults to `out`
         port: Option<Cow<'static, str>>,
+        /// Overwrite the codec being used for deserializing this data.
+        /// Should only be used when setting `stream` to `None`
+        codec_overwrite: Option<Box<dyn Codec>>,
     },
     /// an already structured event payload
     Structured {
@@ -448,6 +454,7 @@ impl Streams {
             uid,
             DEFAULT_STREAM_ID,
             &codec_config,
+            None,
             preprocessor_configs.as_slice(),
         )?;
         let mut states = BTreeMap::new();
@@ -479,6 +486,7 @@ impl Streams {
                     self.uid,
                     stream_id,
                     &self.codec_config,
+                    None,
                     &self.preprocessor_configs,
                 )?;
                 e.insert(state)
@@ -486,14 +494,32 @@ impl Streams {
         })
     }
 
+    fn create_anonymous_stream(
+        &self,
+        codec_overwrite: Option<Box<dyn Codec>>,
+    ) -> Result<StreamState> {
+        Self::build_stream(
+            self.uid,
+            DEFAULT_STREAM_ID,
+            &self.codec_config,
+            codec_overwrite,
+            &self.preprocessor_configs,
+        )
+    }
+
     /// build a stream
     fn build_stream(
         connector_uid: u64,
         stream_id: u64,
         codec_config: &CodecConfig,
+        codec_overwrite: Option<Box<dyn Codec>>,
         preprocessor_configs: &[PreprocessorConfig],
     ) -> Result<StreamState> {
-        let codec = codec::resolve(codec_config)?;
+        let codec = if let Some(codec_overwrite) = codec_overwrite {
+            codec_overwrite
+        } else {
+            codec::resolve(codec_config)?
+        };
         let preprocessors = make_preprocessors(preprocessor_configs)?;
         let idgen = EventIdGenerator::with_stream(connector_uid, stream_id);
         Ok(StreamState {
@@ -623,7 +649,7 @@ where
     }
 
     /// Handle a control plane message
-    async fn handle_control_plane_msg(&mut self, msg: SourceMsg) -> Result<Control> {
+    async fn handle_control_plane_msg(&mut self, msg: SourceMsg) -> Control {
         use SourceState::{Initialized, Paused, Running, Stopped};
         let state = self.state;
         match msg {
@@ -632,12 +658,12 @@ where
                 info!("{} Starting...", self.ctx);
                 self.state = Running;
                 self.ctx
-                    .log_err(self.source.on_start(&self.ctx).await, "on_start failed");
+                    .swallow_err(self.source.on_start(&self.ctx).await, "on_start failed");
 
                 if let Err(e) = self.send_signal(Event::signal_start(self.ctx.uid)).await {
                     error!("{} Error sending start signal: {e}", self.ctx);
                 }
-                Ok(Control::Continue)
+                Control::Continue
             }
 
             SourceMsg::Connect(sender, attempt) => {
@@ -650,14 +676,15 @@ where
                     Connectivity::Disconnected
                 };
                 let res = sender.send(connect_result).await;
-                self.ctx.log_err(res, "Error sending source connect result");
-                Ok(Control::Continue)
+                self.ctx
+                    .swallow_err(res, "Error sending source connect result");
+                Control::Continue
             }
             SourceMsg::Resume if self.state == Paused => {
                 self.state = Running;
                 let res = self.source.on_resume(&self.ctx).await;
-                self.ctx.log_err(res, "on_resume failed");
-                Ok(Control::Continue)
+                self.ctx.swallow_err(res, "on_resume failed");
+                Control::Continue
             }
 
             SourceMsg::Pause if self.state == Running => {
@@ -665,61 +692,67 @@ where
                 info!("{} Paused.", self.ctx);
                 self.state = Paused;
                 let res = self.source.on_pause(&self.ctx).await;
-                self.ctx.log_err(res, "on_pause failed");
-                Ok(Control::Continue)
+                self.ctx.swallow_err(res, "on_pause failed");
+                Control::Continue
             }
             SourceMsg::Stop(sender) => {
                 info!("{} Stopping...", self.ctx);
                 self.state = Stopped;
                 let res = sender.send(self.source.on_stop(&self.ctx).await).await;
-                self.ctx.log_err(res, "Error sending Stop reply");
-                Ok(Control::Terminate)
+                self.ctx.swallow_err(res, "Error sending Stop reply");
+                Control::Terminate
             }
             SourceMsg::Drain(drained_sender) => self.handle_drain(drained_sender).await,
             SourceMsg::ConnectionLost => {
                 self.connectivity = Connectivity::Disconnected;
                 let res = self.source.on_connection_lost(&self.ctx).await;
-                self.ctx.log_err(res, "on_connection_lost failed");
-                Ok(Control::Continue)
+                self.ctx.swallow_err(res, "on_connection_lost failed");
+                Control::Continue
             }
             SourceMsg::ConnectionEstablished => {
                 self.connectivity = Connectivity::Connected;
                 let res = self.source.on_connection_established(&self.ctx).await;
-                self.ctx.log_err(res, "on_connection_established failed");
-                Ok(Control::Continue)
+                self.ctx
+                    .swallow_err(res, "on_connection_established failed");
+                Control::Continue
             }
             SourceMsg::Cb(cb, id) => self.handle_cb(cb, id).await,
             m @ (SourceMsg::Start | SourceMsg::Resume | SourceMsg::Pause) => {
                 info!("{} Ignoring {m:?} msg in {state} state", self.ctx);
-                Ok(Control::Continue)
+                Control::Continue
             }
         }
     }
 
-    async fn handle_drain(&mut self, drained_sender: Sender<Msg>) -> Result<Control> {
-        let ctx = &self.ctx;
+    async fn handle_drain(&mut self, drained_sender: Sender<Msg>) -> Control {
         let state = self.state;
         match self.state {
-            SourceState::Drained => ctx.log_err(
+            SourceState::Drained => self.ctx.swallow_err(
                 drained_sender.send(Msg::SourceDrained).await,
                 "Error sending SourceDrained message",
             ),
             SourceState::Draining => {
-                info!("{ctx} Ignoring incoming Drain message in {state} state",);
+                info!(
+                    "{} Ignoring incoming Drain message in {state} state",
+                    self.ctx
+                );
             }
             _ => {
                 // if we are not connected to any pipeline, we cannot take part in the draining protocol like this
                 // we are drained
-                info!("{ctx} Draining...");
+                info!("{} Draining...", self.ctx);
                 if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
                     let res = drained_sender.send(Msg::SourceDrained).await;
-                    ctx.log_err(res, "sending SourceDrained message failed");
+                    self.ctx
+                        .swallow_err(res, "sending SourceDrained message failed");
                     self.state = SourceState::Drained;
                 } else {
                     self.connector_channel = Some(drained_sender);
                     if !self.is_asynchronous || self.connectivity == Connectivity::Disconnected {
                         // non-asynchronous sources or disconnected sources are considered immediately drained
-                        self.on_fully_drained().await?;
+                        let res = self.on_fully_drained().await;
+                        self.ctx
+                            .swallow_err(res, "Error on handling fully-drained state");
                     } else {
                         // At this point the connector has advised all reading from external connections to stop via the `QuiescenceBeacon`
                         // We change the source state to `Draining` and wait for `SourceReply::Empty` as we drain out everything that might be in flight
@@ -729,42 +762,42 @@ where
                 }
             }
         };
-        Ok(Control::Continue)
+        Control::Continue
     }
 
-    async fn handle_cb(&mut self, cb: CbAction, id: EventId) -> Result<Control> {
+    async fn handle_cb(&mut self, cb: CbAction, id: EventId) -> Control {
         let ctx = &self.ctx;
         match cb {
             CbAction::Fail => {
                 if let Some((stream_id, id)) = id.get_min_by_source(self.ctx.uid) {
-                    ctx.log_err(self.source.fail(stream_id, id, ctx).await, "fail failed");
+                    ctx.swallow_err(self.source.fail(stream_id, id, ctx).await, "fail failed");
                 }
-                Ok(Control::Continue)
+                Control::Continue
             }
             CbAction::Ack => {
                 if let Some((stream_id, id)) = id.get_max_by_source(self.ctx.uid) {
-                    ctx.log_err(self.source.ack(stream_id, id, ctx).await, "ack failed");
+                    ctx.swallow_err(self.source.ack(stream_id, id, ctx).await, "ack failed");
                 }
-                Ok(Control::Continue)
+                Control::Continue
             }
             CbAction::Close => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
                 info!("{ctx} Circuit Breaker: Close.");
                 let res = self.source.on_cb_close(ctx).await;
-                ctx.log_err(res, "on_cb_close failed");
+                ctx.swallow_err(res, "on_cb_close failed");
                 self.state = SourceState::Paused;
-                Ok(Control::Continue)
+                Control::Continue
             }
             CbAction::Open => {
                 info!("{ctx} Circuit Breaker: Open.");
                 self.cb_open_received = true;
-                ctx.log_err(self.source.on_cb_open(ctx).await, "on_cb_open failed");
+                ctx.swallow_err(self.source.on_cb_open(ctx).await, "on_cb_open failed");
                 // avoid a race condition where the necessary start routine wasnt executed
                 // because a `CbAction::Open` was there first, and thus the `Start` msg was ignored
                 if self.state != SourceState::Initialized {
                     self.state = SourceState::Running;
                 }
-                Ok(Control::Continue)
+                Control::Continue
             }
             CbAction::Drained(uid) => {
                 debug!("{ctx} Drained contraflow message for {uid}");
@@ -778,13 +811,16 @@ where
                         if let Some(connector_channel) = self.connector_channel.as_ref() {
                             debug!("{ctx} Drain completed, sending data now!");
                             let res = connector_channel.send(Msg::SourceDrained).await;
-                            ctx.log_err(res, "Error sending SourceDrained message to Connector");
+                            ctx.swallow_err(
+                                res,
+                                "Error sending SourceDrained message to Connector",
+                            );
                         }
                     }
                 }
-                Ok(Control::Continue)
+                Control::Continue
             }
-            CbAction::None => Ok(Control::Continue),
+            CbAction::None => Control::Continue,
         }
     }
 
@@ -792,18 +828,18 @@ where
         &mut self,
         port: Cow<'static, str>,
         mut pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
-    ) -> Result<Control> {
+    ) -> Control {
         let pipes = if port.eq_ignore_ascii_case(OUT.as_ref()) {
             &mut self.pipelines_out
         } else if port.eq_ignore_ascii_case(ERR.as_ref()) {
             &mut self.pipelines_err
         } else {
             error!("{} Tried to connect to invalid port: {}", &self.ctx, &port);
-            return Ok(Control::Continue);
+            return Control::Continue;
         };
         // We can not move this to the system flow since we need to know about transactionality
         for (pipeline_url, p) in &pipelines {
-            self.ctx.log_err(
+            self.ctx.swallow_err(
                 p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
                     endpoint: DeployEndpoint::new(&self.ctx.alias, &port, pipeline_url.meta()),
                     target: InputTarget::Source(self.addr.clone()),
@@ -814,7 +850,7 @@ where
             );
         }
         pipes.append(&mut pipelines);
-        Ok(Control::Continue)
+        Control::Continue
     }
 
     /// send a signal to all connected pipelines
@@ -919,7 +955,6 @@ where
             Ok(d) => d,
             Err(e) => {
                 error!("{} Error pulling data: {}", &self.ctx, e);
-                // TODO: increment error metric
                 return Ok(());
             }
         };
@@ -930,9 +965,18 @@ where
                 meta,
                 stream,
                 port,
+                codec_overwrite,
             } => {
-                self.handle_data(stream, pull_id, origin_uri, port, data, meta)
-                    .await?;
+                self.handle_data(
+                    stream,
+                    pull_id,
+                    origin_uri,
+                    port,
+                    data,
+                    meta,
+                    codec_overwrite,
+                )
+                .await?;
             }
             SourceReply::Structured {
                 origin_uri,
@@ -983,7 +1027,7 @@ where
                 &mut stream_state,
                 &mut ingest_ns,
                 pull_id,
-                origin_uri,
+                &origin_uri,
                 None,
                 &meta.unwrap_or_else(Value::object),
                 self.is_transactional,
@@ -999,7 +1043,7 @@ where
             } else {
                 let error = self.route_events(results).await;
                 if error {
-                    self.ctx.log_err(
+                    self.ctx.swallow_err(
                         self.source.fail(stream_id, pull_id, &self.ctx).await,
                         "fail upon error sending events from endstream source reply failed",
                     );
@@ -1028,7 +1072,7 @@ where
         );
         let error = self.route_events(vec![(port.unwrap_or(OUT), event)]).await;
         if error {
-            self.ctx.log_err(
+            self.ctx.swallow_err(
                 self.source.fail(stream, pull_id, &self.ctx).await,
                 "fail upon error sending events from structured data source reply failed",
             );
@@ -1038,37 +1082,87 @@ where
 
     async fn handle_data(
         &mut self,
-        stream: u64,
+        stream: Option<u64>,
         pull_id: u64,
         origin_uri: EventOriginUri,
         port: Option<Cow<'static, str>>,
         data: Vec<u8>,
         meta: Option<Value<'static>>,
+        codec_overwrite: Option<Box<dyn Codec>>,
     ) -> Result<()> {
         let mut ingest_ns = nanotime();
-        let stream_state = self.streams.get_or_create_stream(stream, &self.ctx)?;
-        let results = build_events(
-            &self.ctx.alias,
-            stream_state,
-            &mut ingest_ns,
-            pull_id,
-            origin_uri,
-            port.as_ref(),
-            data,
-            &meta.unwrap_or_else(Value::object),
-            self.is_transactional,
-        );
-        if results.is_empty() {
-            if let Err(e) = self.source.on_no_events(pull_id, stream, &self.ctx).await {
-                error!("{} Error on no events callback: {e}", self.ctx);
+        if let Some(stream) = stream {
+            let stream_state = self.streams.get_or_create_stream(stream, &self.ctx)?;
+            let results = build_events(
+                &self.ctx.alias,
+                stream_state,
+                &mut ingest_ns,
+                pull_id,
+                &origin_uri,
+                port.as_ref(),
+                data,
+                &meta.unwrap_or_else(Value::object),
+                self.is_transactional,
+            );
+            if results.is_empty() {
+                if let Err(e) = self.source.on_no_events(pull_id, stream, &self.ctx).await {
+                    error!("{} Error on no events callback: {e}", self.ctx);
+                }
+            } else {
+                let error = self.route_events(results).await;
+                if error {
+                    self.ctx.swallow_err(
+                        self.source.fail(stream, pull_id, &self.ctx).await,
+                        "fail upon error sending events from data source reply failed",
+                    );
+                }
             }
         } else {
-            let error = self.route_events(results).await;
-            if error {
-                self.ctx.log_err(
-                    self.source.fail(stream, pull_id, &self.ctx).await,
-                    "fail upon error sending events from data source reply failed",
-                );
+            // no stream
+            let mut stream_state = self.streams.create_anonymous_stream(codec_overwrite)?;
+            let meta = meta.unwrap_or_else(Value::object);
+            let mut results = build_events(
+                &self.ctx.alias,
+                &mut stream_state,
+                &mut ingest_ns,
+                pull_id,
+                &origin_uri,
+                port.as_ref(),
+                data,
+                &meta,
+                self.is_transactional,
+            );
+            // finish up the stream immediately
+            let mut last_events = build_last_events(
+                &self.ctx.alias,
+                &mut stream_state,
+                &mut ingest_ns,
+                pull_id,
+                &origin_uri,
+                None,
+                &meta,
+                self.is_transactional,
+            );
+            results.append(&mut last_events);
+
+            if results.is_empty() {
+                if let Err(e) = self
+                    .source
+                    .on_no_events(pull_id, DEFAULT_STREAM_ID, &self.ctx)
+                    .await
+                {
+                    error!("{} Error on no events callback: {e}", self.ctx);
+                }
+            } else {
+                let error = self.route_events(results).await;
+                if error {
+                    self.ctx.swallow_err(
+                        self.source
+                            .fail(DEFAULT_STREAM_ID, pull_id, &self.ctx)
+                            .await,
+                        "fail upon error sending events from data source reply failed",
+                    );
+                }
             }
         }
         Ok(())
@@ -1102,7 +1196,7 @@ where
 
     /// returns `Ok(Control::Terminate)` if this source should be terminated
     #[allow(clippy::too_many_lines)]
-    async fn control_plane(&mut self) -> Result<Control> {
+    async fn control_plane(&mut self) -> Control {
         loop {
             if !self.needs_control_plane_msg() {
                 // This yeild is needed since otherwise we could creeate a tight loop that never
@@ -1115,11 +1209,11 @@ where
                 // any the 'Open' message so we never get to `should_pull_data` but also never
                 // get another control plane message.
                 task::yield_now().await;
-                return Ok(Control::Continue);
+                return Control::Continue;
             }
             if let Ok(msg) = self.rx.recv().await {
-                if self.handle_control_plane_msg(msg).await? == Control::Terminate {
-                    return Ok(Control::Terminate);
+                if self.handle_control_plane_msg(msg).await == Control::Terminate {
+                    return Control::Terminate;
                 }
             }
         }
@@ -1134,7 +1228,7 @@ where
         // we expect 1 source transport unit (stu) per pull, so this counter is equivalent to a stu counter
         // it is not unique per stream only, but per source
         loop {
-            if self.control_plane().await? == Control::Terminate {
+            if self.control_plane().await == Control::Terminate {
                 // source has been stopped, lets stop running here
                 debug!("{} Terminating source task...", self.ctx);
                 return Ok(());
@@ -1164,7 +1258,7 @@ fn build_events(
     stream_state: &mut StreamState,
     ingest_ns: &mut u64,
     pull_id: u64,
-    origin_uri: EventOriginUri,
+    origin_uri: &EventOriginUri,
     port: Option<&Cow<'static, str>>,
     data: Vec<u8>,
     meta: &Value<'static>,
@@ -1217,7 +1311,7 @@ fn build_events(
                 pull_id,
                 *ingest_ns,
                 err_payload,
-                origin_uri,
+                origin_uri.clone(),
                 is_transactional,
             );
             vec![(ERR, event)]
@@ -1233,7 +1327,7 @@ fn build_last_events(
     stream_state: &mut StreamState,
     ingest_ns: &mut u64,
     pull_id: u64,
-    origin_uri: EventOriginUri,
+    origin_uri: &EventOriginUri,
     port: Option<&Cow<'static, str>>,
     meta: &Value<'static>,
     is_transactional: bool,
@@ -1280,7 +1374,7 @@ fn build_last_events(
                 pull_id,
                 *ingest_ns,
                 err_payload,
-                origin_uri,
+                origin_uri.clone(),
                 is_transactional,
             );
             vec![(ERR, event)]

@@ -22,6 +22,10 @@ impl Codec for Csv {
         "csv"
     }
 
+    fn mime_types(&self) -> Vec<&'static str> {
+        vec!["text/csv"]
+    }
+
     fn decode<'input>(
         &mut self,
         data: &'input mut [u8],

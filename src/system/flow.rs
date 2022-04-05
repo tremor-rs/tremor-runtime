@@ -753,8 +753,9 @@ mod tests {
                     origin_uri: EventOriginUri::default(),
                     data: r#"{"snot":"badger"}"#.as_bytes().to_vec(),
                     meta: Some(Value::object()),
-                    stream: DEFAULT_STREAM_ID,
+                    stream: Some(DEFAULT_STREAM_ID),
                     port: None,
+                    codec_overwrite: None,
                 })
             }
             fn is_transactional(&self) -> bool {

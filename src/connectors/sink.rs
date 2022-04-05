@@ -32,7 +32,7 @@ use crate::connectors::{ConnectorType, Context, Msg, QuiescenceBeacon, StreamDon
 use crate::errors::Result;
 use crate::permge::PriorityMerge;
 use crate::pipeline;
-use crate::postprocessor::{make_postprocessors, postprocess, Postprocessors};
+use crate::postprocessor::{finish, make_postprocessors, postprocess, Postprocessors};
 use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task;
@@ -428,6 +428,7 @@ pub(crate) fn builder(
 /// Keeps track of codec/postprocessors for seach stream
 /// Attention: Take care to clear out data for streams that are not used
 pub(crate) struct EventSerializer {
+    alias: String,
     // default stream handling
     pub(crate) codec: Box<dyn Codec>,
     postprocessors: Postprocessors,
@@ -465,6 +466,7 @@ impl EventSerializer {
         let codec = codec::resolve(&codec_config)?;
         let postprocessors = make_postprocessors(postprocessor_configs.as_slice())?;
         Ok(Self {
+            alias: alias.to_string(),
             codec,
             postprocessors,
             codec_config,
@@ -502,26 +504,55 @@ impl EventSerializer {
         ingest_ns: u64,
         stream_id: u64,
     ) -> Result<Vec<Vec<u8>>> {
+        self.serialize_for_stream_with_codec(value, ingest_ns, stream_id, &mut None)
+    }
+
+    /// Serialize an event for a certain stream with the possibility to overwrite the configured codec
+    ///
+    /// # Errors
+    ///   * if serialization fails (codec or postprocessors)
+    pub(crate) fn serialize_for_stream_with_codec(
+        &mut self,
+        value: &Value,
+        ingest_ns: u64,
+        stream_id: u64,
+        codec_overwrite: &Option<&Box<dyn Codec>>,
+    ) -> Result<Vec<Vec<u8>>> {
         if stream_id == DEFAULT_STREAM_ID {
+            let codec = codec_overwrite.unwrap_or(&self.codec);
             postprocess(
                 &mut self.postprocessors,
                 ingest_ns,
-                self.codec.encode(value)?,
+                codec.encode(value)?,
+                &self.alias,
             )
         } else {
             match self.streams.entry(stream_id) {
                 Entry::Occupied(mut entry) => {
                     let (c, pps) = entry.get_mut();
-                    postprocess(pps, ingest_ns, c.encode(value)?)
+                    let codec = codec_overwrite.unwrap_or(c);
+                    postprocess(pps, ingest_ns, codec.encode(value)?, &self.alias)
                 }
                 Entry::Vacant(entry) => {
-                    let codec = codec::resolve(&self.codec_config)?;
+                    let codec = match codec_overwrite {
+                        Some(codec) => codec.boxed_clone(),
+                        None => codec::resolve(&self.codec_config)?,
+                    };
                     let pps = make_postprocessors(self.postprocessor_configs.as_slice())?;
                     // insert data for a new stream
                     let (c, pps2) = entry.insert((codec, pps));
-                    postprocess(pps2, ingest_ns, c.encode(value)?)
+                    postprocess(pps2, ingest_ns, c.encode(value)?, &self.alias)
                 }
             }
+        }
+    }
+
+    /// remove and flush out any pending data from the stream identified by the given `stream_id`
+    pub(crate) fn finish_stream(&mut self, stream_id: u64) -> Result<Vec<Vec<u8>>> {
+        if let Some((mut _codec, mut postprocessors)) = self.streams.remove(&stream_id) {
+            finish(&mut postprocessors, &self.alias)
+        } else {
+            Ok(vec![])
         }
     }
 }
@@ -613,7 +644,7 @@ where
                         }
                         SinkMsg::Start if self.state == Initialized => {
                             self.state = Running;
-                            self.ctx.log_err(
+                            self.ctx.swallow_err(
                                 self.sink.on_start(&self.ctx).await,
                                 "Error during on_start",
                             );
@@ -624,21 +655,21 @@ where
                             if let Ok(true) = connect_result {
                                 info!("{} Sink connected.", &self.ctx);
                             }
-                            self.ctx.log_err(
+                            self.ctx.swallow_err(
                                 sender.send(connect_result).await,
                                 "Error sending sink connect result",
                             );
                         }
                         SinkMsg::Resume if self.state == Paused => {
                             self.state = Running;
-                            self.ctx.log_err(
+                            self.ctx.swallow_err(
                                 self.sink.on_resume(&self.ctx).await,
                                 "Error during on_resume",
                             );
                         }
                         SinkMsg::Pause if self.state == Running => {
                             self.state = Paused;
-                            self.ctx.log_err(
+                            self.ctx.swallow_err(
                                 self.sink.on_pause(&self.ctx).await,
                                 "Error during on_pause",
                             );
@@ -646,7 +677,7 @@ where
                         SinkMsg::Stop(sender) => {
                             info!("{} Stopping...", &self.ctx);
                             self.state = Stopped;
-                            self.ctx.log_err(
+                            self.ctx.swallow_err(
                                 sender.send(self.sink.on_stop(&self.ctx).await).await,
                                 "Error sending Stop reply",
                             );
@@ -695,7 +726,7 @@ where
                         }
                         SinkMsg::ConnectionEstablished => {
                             debug!("{} Connection established", self.ctx);
-                            self.ctx.log_err(
+                            self.ctx.swallow_err(
                                 self.sink.on_connection_established(&self.ctx).await,
                                 "Error during on_connection_established",
                             );
@@ -706,7 +737,7 @@ where
                         SinkMsg::ConnectionLost => {
                             // clean out all pending stream data from EventSerializer - we assume all streams closed at this point
                             self.serializer.clear();
-                            self.ctx.log_err(
+                            self.ctx.swallow_err(
                                 self.sink.on_connection_lost(&self.ctx).await,
                                 "Error during on_connection_lost",
                             );

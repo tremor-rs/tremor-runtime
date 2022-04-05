@@ -87,7 +87,7 @@ impl ChannelSourceRuntime {
                     Ok(Ok(d)) => d,
                     Ok(Err(e)) => {
                         error!("{} Stream {} error: {}", &ctx, &stream, e);
-                        ctx.log_err(
+                        ctx.swallow_err(
                             tx.send(SourceReply::StreamFail(stream)).await,
                             "Error Sending StreamFail Message",
                         );
@@ -100,7 +100,7 @@ impl ChannelSourceRuntime {
                 };
             }
             if reader.on_done(stream).await == StreamDone::ConnectorClosed {
-                ctx.log_err(
+                ctx.swallow_err(
                     ctx.notifier().connection_lost().await,
                     "Failed to notify connector",
                 );

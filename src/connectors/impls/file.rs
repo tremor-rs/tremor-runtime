@@ -259,11 +259,12 @@ impl Source for FileSource {
             } else {
                 SourceReply::Data {
                     origin_uri: self.origin_uri.clone(),
-                    stream: DEFAULT_STREAM_ID,
+                    stream: Some(DEFAULT_STREAM_ID),
                     meta: Some(self.meta.clone()),
                     // ALLOW: with the read above we ensure that this access is valid, unless async_std is broken
                     data: self.buf[0..bytes_read].to_vec(),
                     port: Some(OUT),
+                    codec_overwrite: None,
                 }
             }
         };

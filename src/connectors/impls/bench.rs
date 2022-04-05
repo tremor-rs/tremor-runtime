@@ -239,8 +239,9 @@ impl Source for Blaster {
             origin_uri: self.origin_uri.clone(),
             data: self.acc.next(),
             meta: None,
-            stream: DEFAULT_STREAM_ID,
+            stream: Some(DEFAULT_STREAM_ID),
             port: None,
+            codec_overwrite: None,
         })
     }
 

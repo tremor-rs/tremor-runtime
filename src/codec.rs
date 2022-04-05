@@ -49,7 +49,7 @@ pub trait Codec: Send + Sync {
     ///
     /// The returned mime types should be unique to this codec
     #[cfg(not(tarpaulin_include))]
-    fn mime_types(&self) -> Vec<&str> {
+    fn mime_types(&self) -> Vec<&'static str> {
         vec![]
     }
 
