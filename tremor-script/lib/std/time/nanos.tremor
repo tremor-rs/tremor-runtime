@@ -23,71 +23,134 @@ const NANOS_PER_WEEK        = NANOS_PER_DAY * 7;
 
 
 ## convert the given weeks to nanoseconds
+##
+## > ```tremor
+## > use std::time::nanos;
+## > nanos::from_weeks(1) # 604800000000000
+## > ```
+##
+## Returns an integer
 fn from_weeks(weeks) with
   weeks * NANOS_PER_WEEK
 end;
 
-## convert the given hours to nanoseconds
+## convert the given days to nanoseconds
+##
+## > ```tremor
+## > use std::time::nanos;
+## > nanos::from_days(1) # 86400000000000
+## > ```
+##
+## Returns an integer
 fn from_days(days) with
   days * NANOS_PER_DAY
 end;
 
 ## convert the given hours to nanoseconds
+##
+## > ```tremor
+## > use std::time::nanos;
+## > nanos::from_hours(1) # 3600000000000
+## > ```
+##
+## Returns an integer
 fn from_hours(hours) with
   hours * NANOS_PER_HOUR
 end;
 
 ## convert the given minutes to nanoseconds
+##
+## > ```tremor
+## > use std::time::nanos;
+## > nanos::from_minutes(1) # 60000000000
+## > ```
+##
+## Returns an integer
 fn from_minutes(minutes) with
   minutes * NANOS_PER_MINUTE
 end;
 
 ## Convert the given seconds to nanoseconds
+##
+## > ```tremor
+## > use std::time::nanos;
+## > nanos::from_seconds(1) # 1000000000
+## > ```
+##
+## Returns an integer
 fn from_seconds(secs) with
   secs * NANOS_PER_SECOND
 end;
 
 ## Convert the given milliseconds to nanoseconds
+##
+## > ```tremor
+## > use std::time::nanos;
+## > nanos::from_millis(1) # 1000000
+## > ```
+##
+## Returns an integer
 fn from_millis(millis) with
   millis * NANOS_PER_MILLISECOND
 end;
 
 ## Convert the given microseconds to nanoseconds
+##
+## > ```tremor
+## > use std::time::nanos;
+## > nanos::from_micros(1) # 1000
+## > ```
+##
+## Returns an integer
 fn from_micros(micros) with
   micros * NANOS_PER_MICROSECOND
 end;
 
 ## Convert the given nanoseconds to weeks
+##
+## Returns an integer
 fn to_weeks(nanos) with
   nanos / NANOS_PER_WEEK
 end;
 
 ## Convert the given nanoseconds to days
+##
+## Returns an integer
 fn to_days(nanos) with
   nanos / NANOS_PER_DAY
 end;
 
 ## Convert the given nanoseconds to hours
+##
+## Returns an integer
 fn to_hours(nanos) with
   nanos / NANOS_PER_HOUR
 end;
 
 ## Convert the given nanoseconds to minutes
+##
+## Returns an integer
 fn to_minutes(nanos) with
   nanos / NANOS_PER_MINUTE
 end;
 
 ## Convert the given nanoseconds to seconds
+##
+## Returns an integer
 fn to_seconds(nanos) with
   nanos / NANOS_PER_SECOND
 end;
 
 ## Convert the given nanoseconds to milliseconds
+##
+## Returns an integer
 fn to_millis(nanos) with
   nanos / NANOS_PER_MILLISECOND
 end;
 
 ## Convert the given nanoseconds to microseconds
+##
+## Returns an integer
 fn to_micros(nanos) with
   nanos / NANOS_PER_MICROSECOND
 end;

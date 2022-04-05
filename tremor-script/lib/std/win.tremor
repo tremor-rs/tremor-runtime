@@ -5,6 +5,13 @@
 ## statement. When used without a group by it will
 ## return zero (0).
 ##
+## > ```trickle
+## > use std::win;
+## > 
+## > select { "group#{group[0]}": win::cardinality() }
+## > from in
+## > group by each([1, 2, 3, 4, 5]) into out;
+## > ```
 ##
 ## Returns a `integer`
 intrinsic fn cardinality(str) as win::cardinality;

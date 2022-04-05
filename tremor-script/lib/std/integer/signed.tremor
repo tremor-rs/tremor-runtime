@@ -1,4 +1,4 @@
-### Signed integer constatns
+### Signed integer constants
 
 ## Max signed value
 const max = 9223372036854775807;

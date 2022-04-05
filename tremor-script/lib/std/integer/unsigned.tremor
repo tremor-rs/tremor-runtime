@@ -1,4 +1,4 @@
-##! Unsigned integer constatns
+##! Unsigned integer constants
 
 ## Max signed value
 const max = 18446744073709551615;
