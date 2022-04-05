@@ -9,8 +9,12 @@ use tremor_value::pdk::PdkValue;
 use std::fmt;
 
 use abi_stable::{
-    declare_root_module_statics, library::RootModule, package_version_strings,
-    sabi_types::VersionStrings, std_types::ROption, StableAbi,
+    declare_root_module_statics,
+    library::RootModule,
+    package_version_strings,
+    sabi_types::VersionStrings,
+    std_types::{ROption, RString},
+    StableAbi,
 };
 use async_ffi::FfiFuture;
 
@@ -34,7 +38,7 @@ pub struct ConnectorMod {
     ///  * If the config is invalid for the connector
     #[sabi(last_prefix_field)]
     pub from_config: extern "C" fn(
-        id: TremorUrl,
+        alias: RString,
         config: ConnectorConfig,
     ) -> FfiFuture<RResult<BoxedRawConnector>>,
 }

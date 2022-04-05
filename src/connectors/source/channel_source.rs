@@ -17,11 +17,14 @@ use crate::connectors::source::{
     DEFAULT_POLL_INTERVAL,
 };
 use crate::connectors::Context;
-use crate::errors::Result;
+use crate::pdk::RResult;
+use async_ffi::BorrowingFfiFuture;
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
-use async_std::prelude::*;
 use async_std::task;
+use async_std::{future, prelude::*};
 use std::time::Duration;
+
+use super::RawSource;
 /// A source that receives `SourceReply` messages via a channel.
 /// It does not handle acks/fails.
 ///
@@ -110,16 +113,21 @@ impl ChannelSourceRuntime {
 }
 
 #[async_trait::async_trait()]
-impl Source for ChannelSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        match self.rx.try_recv() {
-            Ok(reply) => Ok(reply),
+impl RawSource for ChannelSource {
+    fn pull_data<'a>(
+        &'a mut self,
+        pull_id: &'a mut u64,
+        ctx: &'a SourceContext,
+    ) -> BorrowingFfiFuture<'a, RResult<SourceReply>> {
+        future::ready(match self.rx.try_recv() {
+            Ok(reply) => ROk(reply),
             Err(TryRecvError::Empty) => {
                 // TODO: configure pull interval in connector config?
-                Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
+                ROk(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
             }
-            Err(e) => Err(e.into()),
-        }
+            Err(e) => RErr(e.into()),
+        })
+        .into_ffi()
     }
 
     /// this source is not handling acks/fails

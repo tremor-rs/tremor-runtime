@@ -264,14 +264,14 @@ pub(crate) struct ConnectorResult<T: std::fmt::Debug> {
 impl ConnectorResult<()> {
     fn ok(ctx: &ConnectorContext) -> Self {
         Self {
-            alias: ctx.alias.clone(),
+            alias: ctx.alias.to_string(),
             res: Ok(()),
         }
     }
 
     fn err(ctx: &ConnectorContext, err_msg: &'static str) -> Self {
         Self {
-            alias: ctx.alias.clone(),
+            alias: ctx.alias.to_string(),
             res: Err(Error::from(err_msg)),
         }
     }
@@ -347,7 +347,7 @@ pub(crate) trait Context: Display + Clone {
 #[derive(Clone)]
 pub(crate) struct ConnectorContext {
     /// url of the connector
-    pub(crate) alias: String,
+    pub alias: RString,
     /// type of the connector
     connector_type: ConnectorType,
     /// The Quiescence Beacon
@@ -442,17 +442,9 @@ pub(crate) async fn spawn(
             .await
             .map_err(Error::from),
     )?;
+    let connector = Connector(connector);
 
-    Ok((
-        url.clone(),
-        connector_task(
-            alias.to_string(),
-            Connector(connector),
-            config,
-            connector_id_gen.next_id(),
-        )
-        .await?,
-    ))
+    Ok(connector_task(alias.to_string(), connector, config, connector_id_gen.next_id()).await?)
 }
 
 #[allow(clippy::too_many_lines)]
@@ -496,7 +488,7 @@ async fn connector_task(
         alias: alias.clone(),
         uid,
         connector_type: config.connector_type.clone(),
-        quiescence_beacon: quiescence_beacon.clone(),
+        quiescence_beacon: BoxedQuiescenceBeacon::from_value(quiescence_beacon.clone(), TD_Opaque),
         notifier: notifier.clone(),
     };
 
@@ -1136,7 +1128,163 @@ pub(crate) enum CodecReq {
     /// A codec must be provided for this connector
     Required,
     /// A codec can be provided for this connector otherwise the default is used
-    Optional(&'static str),
+    Optional(RStr<'static>),
+}
+
+/// Alias for the FFI-safe dynamic connector type
+pub type BoxedRawConnector = RawConnector_TO<'static, RBox<()>>;
+
+/// The higher level connector interface, which wraps the raw connector from the
+/// plugin. This should always be used for maximum usability and readability,
+/// instead of the underlying `BoxedRawConnector`.
+///
+/// Note that it may hurt performance in some parts of the connector interface,
+/// so some of the functionality may not be fully wrapped.
+pub(crate) struct Connector(pub BoxedRawConnector);
+impl Connector {
+    /// Wrapper for [`BoxedRawConnector::input_ports`]
+    #[inline]
+    pub fn input_ports(&self) -> Vec<Cow<'static, str>> {
+        self.0.input_ports().into_iter().map(conv_cow_str).collect()
+    }
+    /// Wrapper for [`BoxedRawConnector::output_ports`]
+    #[inline]
+    pub fn output_ports(&self) -> Vec<Cow<'static, str>> {
+        self.0
+            .output_ports()
+            .into_iter()
+            .map(conv_cow_str)
+            .collect()
+    }
+
+    /// Wrapper for [`BoxedRawConnector::is_valid_input_port`]
+    #[inline]
+    pub fn is_valid_input_port(&self, port: &str) -> bool {
+        self.0.is_valid_input_port(port.into())
+    }
+
+    /// Wrapper for [`BoxedRawConnector::is_valid_output_port`]
+    #[inline]
+    pub fn is_valid_output_port(&self, port: &str) -> bool {
+        self.0.is_valid_output_port(port.into())
+    }
+
+    /// Wrapper for [`BoxedRawConnector::is_structured`]
+    #[inline]
+    pub fn is_structured(&self) -> bool {
+        self.0.is_structured()
+    }
+
+    /// Wrapper for [`BoxedRawConnector::create_source`]
+    #[inline]
+    pub async fn create_source(
+        &mut self,
+        source_context: SourceContext,
+        builder: source::SourceManagerBuilder,
+    ) -> Result<Option<source::SourceAddr>> {
+        match self
+            .0
+            .create_source(source_context.clone(), builder.qsize())
+            .await
+        {
+            ROk(RSome(raw_source)) => {
+                let wrapper = Source(raw_source);
+                builder.spawn(wrapper, source_context).map(Some)
+            }
+            ROk(RNone) => Ok(None),
+            RErr(err) => Err(err.into()),
+        }
+    }
+
+    /// Wrapper for [`BoxedRawConnector::create_sink`]
+    #[inline]
+    pub async fn create_sink(
+        &mut self,
+        sink_context: SinkContext,
+        builder: sink::SinkManagerBuilder,
+    ) -> Result<Option<sink::SinkAddr>> {
+        // Note that we actually want to be able to downcast back to the
+        // original type here, so that it's easier to manage in the runtime.
+        let reply_tx = BoxedContraflowSender::from_value(builder.reply_tx(), TD_CanDowncast);
+        match self
+            .0
+            .create_sink(sink_context.clone(), builder.qsize(), reply_tx)
+            .await
+        {
+            ROk(RSome(raw_sink)) => {
+                let wrapper = Sink(raw_sink);
+                builder.spawn(wrapper, sink_context).map(Some)
+            }
+            ROk(RNone) => Ok(None),
+            RErr(err) => Err(err.into()),
+        }
+    }
+
+    /// Wrapper for [`BoxedRawConnector::connect`]
+    #[inline]
+    pub async fn connect(&mut self, ctx: &ConnectorContext, attempt: &Attempt) -> Result<bool> {
+        self.0
+            .connect(ctx, attempt)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    /// Wrapper for [`BoxedRawConnector::on_start`]
+    #[inline]
+    pub async fn on_start(&mut self, ctx: &ConnectorContext) -> Result<()> {
+        self.0
+            .on_start(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    /// Wrapper for [`BoxedRawConnector::on_pause`]
+    #[inline]
+    pub async fn on_pause(&mut self, ctx: &ConnectorContext) -> Result<()> {
+        self.0
+            .on_pause(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    /// Wrapper for [`BoxedRawConnector::on_resume`]
+    #[inline]
+    pub async fn on_resume(&mut self, ctx: &ConnectorContext) -> Result<()> {
+        self.0
+            .on_resume(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    /// Wrapper for [`BoxedRawConnector::on_drain`]
+    #[inline]
+    pub async fn on_drain(&mut self, ctx: &ConnectorContext) -> Result<()> {
+        self.0
+            .on_drain(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    /// Wrapper for [`BoxedRawConnector::on_stop`]
+    #[inline]
+    pub async fn on_stop(&mut self, ctx: &ConnectorContext) -> Result<()> {
+        self.0
+            .on_stop(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    /// Wrapper for [`BoxedRawConnector::codec_requirements`]
+    #[inline]
+    pub fn codec_requirements(&self) -> CodeqReq {
+        self.0.codec_requirements()
+    }
 }
 
 /// the type of a connector
@@ -1199,6 +1347,7 @@ pub(crate) trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
 pub fn builtin_connector_types() -> Vec<ConnectorMod_Ref> {
     // FIXME: implement basic connectors
     vec![
+        impls::file::instantiate_root_module(),
         impls::tcp::server::instantiate_root_module(),
     ]
 }
@@ -1221,11 +1370,11 @@ pub fn debug_connector_types() -> Vec<ConnectorMod_Ref> {
 #[cfg(not(tarpaulin_include))]
 pub(crate) async fn register_builtin_connector_types(world: &World, debug: bool) -> Result<()> {
     for builder in builtin_connector_types() {
-        world.register_builtin_connector_type(builder).await?;
+        world.register_connector_type(builder).await?;
     }
     if debug {
         for builder in debug_connector_types() {
-            world.register_builtin_connector_type(builder).await?;
+            world.register_connector_type(builder).await?;
         }
     }
 
@@ -1240,7 +1389,7 @@ pub(crate) async fn register_builtin_connector_types(world: &World, debug: bool)
         log::info!("Dynamically loading plugins in directory '{}'", path);
         for plugin in pdk::find_recursively(&path) {
             log::info!("Found and loaded plugin '{}'", plugin.connector_type()());
-            world.register_builtin_connector_type(plugin).await?;
+            world.register_connector_type(plugin).await?;
         }
     }
 

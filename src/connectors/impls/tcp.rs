@@ -113,7 +113,7 @@ where
             trace!("[Connector::{}] Stream {stream} EOF", &self.alias);
             return Ok(SourceReply::EndStream {
                 origin_uri: self.origin_uri.clone(),
-                meta: Some(self.meta.clone()),
+                meta: RSome(self.meta.clone().into()),
                 stream,
             });
         }

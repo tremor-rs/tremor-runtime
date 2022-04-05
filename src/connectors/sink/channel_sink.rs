@@ -33,6 +33,19 @@ use tremor_pipeline::{CbAction, Event, SignalKind};
 use tremor_value::Value;
 use value_trait::ValueAccess;
 
+use crate::errors::{Kind as ErrorKind, Result};
+use crate::pdk::RResult;
+use abi_stable::{
+    rtry,
+    std_types::{
+        ROption::{RNone, RSome},
+        RResult::ROk,
+        RStr,
+    },
+};
+use async_ffi::{BorrowingFfiFuture, FutureExt};
+use std::future;
+
 /// Behavioral trait for defining if a Channel Sink needs metadata or not
 pub(crate) trait SinkMetaBehaviour: Send + Sync {
     /// Does this channel sink need metadata

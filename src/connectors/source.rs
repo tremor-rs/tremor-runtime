@@ -17,6 +17,7 @@
 /// A simple source that is fed with `SourceReply` via a channel.
 pub mod channel_source;
 
+use abi_stable::std_types::RString;
 pub use channel_source::{ChannelSource, ChannelSourceRuntime};
 
 use async_std::channel::unbounded;
@@ -138,7 +139,7 @@ pub enum SourceReply {
         /// stream id
         stream: u64,
         /// optional metadata
-        meta: Option<Value<'static>>,
+        meta: ROption<PdkValue<'static>>,
     },
     /// Stream Failed, resources related to that stream should be cleaned up
     StreamFail(u64),
@@ -160,7 +161,11 @@ pub(crate) trait Source: Send {
     /// `pull_id` can be modified, but users need to beware that it needs to remain unique per event stream. The modified `pull_id`
     /// will be used in the `EventId` and will be passed backl into the `ack`/`fail` methods. This allows sources to encode
     /// information into the `pull_id` to keep track of internal state.
-    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply>;
+    fn pull_data<'a>(
+        &'a mut self,
+        pull_id: &'a mut u64,
+        ctx: &'a SourceContext,
+    ) -> BorrowingFfiFuture<'a, RResult<SourceReply>>;
     /// This callback is called when the data provided from
     /// pull_event did not create any events, this is needed for
     /// linked sources that require a 1:1 mapping between requests
@@ -276,9 +281,14 @@ pub(crate) trait Source: Send {
 pub struct Source(pub BoxedRawSource);
 impl Source {
     #[inline]
-    pub async fn pull_data(&mut self, pull_id: u64, ctx: &SourceContext) -> Result<SourceReply> {
+    pub async fn pull_data(
+        &mut self,
+        pull_id: &mut u64,
+        ctx: &SourceContext,
+    ) -> Result<SourceReply> {
         self.0
             .pull_data(pull_id, ctx)
+            .await
             .map_err(Into::into) // RBoxError -> Box<dyn Error>
             .into() // RResult -> Result
     }
@@ -291,6 +301,7 @@ impl Source {
     ) -> Result<()> {
         self.0
             .on_no_events(pull_id, stream, ctx)
+            .await
             .map_err(Into::into) // RBoxError -> Box<dyn Error>
             .into() // RResult -> Result
     }
@@ -306,8 +317,8 @@ impl Source {
     }
 
     #[inline]
-    pub async fn on_start(&mut self, ctx: &mut SourceContext) {
-        self.0.on_start(ctx)
+    pub async fn on_start(&mut self, ctx: &mut SourceContext) -> Result<()> {
+        self.0.on_start(ctx).await.map_err(Into::into).into()
     }
 
     /// Wrapper for [`BoxedRawSource::connect`]
@@ -386,7 +397,7 @@ pub(crate) struct SourceContext {
     /// connector uid
     pub uid: u64,
     /// connector alias
-    pub(crate) alias: String,
+    pub(crate) alias: RString,
 
     /// connector type
     pub(crate) connector_type: ConnectorType,
@@ -656,6 +667,13 @@ impl Display for SourceState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}")
     }
+}
+
+// FIXME: make prettier or avoid duplication in pdk mod? It's a bit out of place
+// for now.
+fn conv_cow_str(cow: RCow<str>) -> beef::Cow<str> {
+    let cow: std::borrow::Cow<str> = cow.into();
+    cow.into()
 }
 
 /// entity driving the source task
