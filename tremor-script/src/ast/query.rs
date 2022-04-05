@@ -29,6 +29,8 @@ use crate::{errors::err_generic, impl_expr};
 use raw::WindowName;
 use simd_json::{Builder, Mutable, ValueAccess};
 
+use tremor_value::value::from::cow_beef_to_sabi;
+
 /// A Tremor query
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Query<'script> {
@@ -441,7 +443,7 @@ impl<'script> CreationalWith<'script> {
     pub fn render(&self) -> Result<Value<'script>> {
         let mut res = Value::object();
         for (k, v) in &self.with.0 {
-            res.try_insert(k.id.clone(), v.try_as_lit()?.clone());
+            res.try_insert(cow_beef_to_sabi(k.id.clone()), v.try_as_lit()?.clone());
         }
         Ok(res)
     }
@@ -578,7 +580,7 @@ impl<'script> DefinitionalArgs<'script> {
                 .ok_or_else(|| err_generic(k, k, &"Required key not provided"))?
                 .try_as_lit()?
                 .clone();
-            res.try_insert(k.id.clone(), v);
+            res.try_insert(cow_beef_to_sabi(k.id.clone()), v);
         }
         Ok(res)
     }

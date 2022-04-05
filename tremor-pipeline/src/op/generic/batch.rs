@@ -16,6 +16,8 @@ use crate::{op::prelude::*, EventId, EventIdGenerator};
 use std::mem::swap;
 use tremor_script::prelude::*;
 
+use abi_stable::std_types::ROption::RSome;
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -49,7 +51,7 @@ pub fn empty() -> EventPayload {
 }
 
 op!(BatchFactory(uid, node) {
-if let Some(map) = &node.config {
+if let RSome(map) = &node.config {
     let config: Config = Config::new(map)?;
     let max_delay_ns = config.timeout;
     let mut idgen = EventIdGenerator::new(uid);

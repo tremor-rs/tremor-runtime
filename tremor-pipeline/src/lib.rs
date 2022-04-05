@@ -67,6 +67,12 @@ pub mod metrics;
 mod macros;
 pub(crate) mod op;
 
+const COUNT: RCowStr<'static> = RCow::Borrowed(rstr!("count"));
+const MEASUREMENT: RCowStr<'static> = RCow::Borrowed(rstr!("measurement"));
+const TAGS: RCowStr<'static> = RCow::Borrowed(rstr!("tags"));
+const FIELDS: RCowStr<'static> = RCow::Borrowed(rstr!("fields"));
+const TIMESTAMP: RCowStr<'static> = RCow::Borrowed(rstr!("timestamp"));
+
 /// Tools to turn tremor query into pipelines
 pub mod query;
 pub use crate::event::{Event, ValueIter, ValueMetaIter};
@@ -78,7 +84,7 @@ pub(crate) type ExecPortIndexMap =
     HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
 
 /// A configuration map
-pub type ConfigMap = Option<tremor_value::Value<'static>>;
+pub type ConfigMap = ROption<tremor_value::Value<'static>>;
 
 /// A lookup function to used to look up operators
 pub type NodeLookupFn = fn(
@@ -201,25 +207,40 @@ where
 }
 
 /// Operator metadata
-#[derive(
-    Clone, Debug, Default, PartialEq, simd_json_derive::Serialize, simd_json_derive::Deserialize,
-)]
+#[repr(C)]
+#[derive(Clone, Debug, Default, PartialEq, simd_json_derive::Serialize, StableAbi)]
 // TODO: optimization: - use two Vecs, one for operator ids, one for operator metadata (Values)
 //                     - make it possible to trace operators with and without metadata
 //                     - insert with bisect (numbers of operators tracked will be low single digit numbers most of the time)
-pub struct OpMeta(BTreeMap<PrimStr<u64>, OwnedValue>);
+// TODO: restore BTreeMap? This was switched to RHashMap for the PDK
+pub struct OpMeta(RHashMap<PrimStr<u64>, Value<'static>>);
 
+// TODO: avoid this custom implementation?
+impl<'input> simd_json_derive::Deserialize<'input> for OpMeta {
+    #[inline]
+    fn from_tape(tape: &mut simd_json_derive::Tape<'input>) -> simd_json::Result<Self> {
+        let x: RHashMap<PrimStr<u64>, Value<'input>> =
+            simd_json_derive::Deserialize::from_tape(tape)?;
+        let x: RHashMap<PrimStr<u64>, Value<'static>> = x
+            .into_iter()
+            .map(|Tuple2(k, v)| (k, v.into_static()))
+            .collect();
+        Ok(Self(x))
+    }
+}
+
+#[allow(warnings)]
 impl OpMeta {
     /// inserts a value
-    pub fn insert<V>(&mut self, key: u64, value: V) -> Option<OwnedValue>
+    pub fn insert<V>(&mut self, key: u64, value: V) -> Option<Value<'static>>
     where
-        OwnedValue: From<V>,
+        Value<'static>: From<V>,
     {
-        self.0.insert(PrimStr(key), OwnedValue::from(value))
+        self.0.insert(PrimStr(key), Value::from(value)).into()
     }
     /// reads a value
-    pub fn get(&mut self, key: u64) -> Option<&OwnedValue> {
-        self.0.get(&PrimStr(key))
+    pub fn get(&mut self, key: u64) -> Option<&Value<'static>> {
+        self.0.get(&PrimStr(key)).into()
     }
     /// checks existance of a key
     #[must_use]
@@ -229,7 +250,7 @@ impl OpMeta {
 
     /// Merges two op meta maps, overwriting values with `other` on duplicates
     pub fn merge(&mut self, mut other: Self) {
-        self.0.append(&mut other.0);
+        self.0.extend(&mut other.0.into_iter());
     }
 }
 

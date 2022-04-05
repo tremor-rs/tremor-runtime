@@ -22,14 +22,12 @@ tremor-value = { version = "0.3.2", path = "../../../tremor-value" }
 tremor-runtime = { version = "0.11.4", path = "../../../" }
 
 abi_stable = { version = "0.10", default-features = false }
-# FIXME: clean up after new release
-async-ffi = { version = "0.3", features = ["abi_stable"], git = "https://github.com/oxalica/async-ffi", branch = "master" }
+async-ffi = { version = "0.4", features = ["abi_stable"] }
 serde = { version = "1.0", features = ["derive"] }
 
 [patch.crates-io]
-# FIXME: update to crates.io when this is added to a new version:
-# https://github.com/rodrimati1992/abi_stable_crates/pull/70
-abi_stable = { git = "https://github.com/marioortizmanero/abi_stable_crates.git", branch = "rvec-append" }
+# FIXME: update to v0.11 when released
+abi_stable = { git = "https://github.com/marioortizmanero/abi_stable_crates.git", branch = "ok_or" }
 # FIXME: update to crates.io when this is added to a new version:
 # https://github.com/simd-lite/simd-json-derive/pull/9
 simd-json-derive = { git = "https://github.com/marioortizmanero/simd-json-derive.git", branch = "abi-stable" }

@@ -5,8 +5,7 @@ version = 3
 [[package]]
 name = "abi_stable"
 version = "0.10.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7725ddc1a1204829816071550fdffafe7e66498e7a99e5f703da71801101ccb9"
+source = "git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=ok_or#a45b5537270dd192cbce760a4be6697a0feec6d4"
 dependencies = [
  "abi_stable_derive",
  "abi_stable_shared",
@@ -25,8 +24,7 @@ dependencies = [
 [[package]]
 name = "abi_stable_derive"
 version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b9810ef8debee5544010d92dac0b88b32853cd5bd5ca3298243c99e931da0f0"
+source = "git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=ok_or#a45b5537270dd192cbce760a4be6697a0feec6d4"
 dependencies = [
  "abi_stable_shared",
  "as_derive_utils",
@@ -41,8 +39,7 @@ dependencies = [
 [[package]]
 name = "abi_stable_shared"
 version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ece9da89066e018d908b48755e17cdd08a46ce222f84b1f226e837f836f84a5f"
+source = "git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=ok_or#a45b5537270dd192cbce760a4be6697a0feec6d4"
 dependencies = [
  "core_extensions",
 ]
@@ -178,8 +175,7 @@ checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
 [[package]]
 name = "as_derive_utils"
 version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0a26fa495cefb8c86d9ce183b3f39ad11678e54fb3c20e6b7dbd87770811d9b"
+source = "git+https://github.com/marioortizmanero/abi_stable_crates.git?branch=ok_or#a45b5537270dd192cbce760a4be6697a0feec6d4"
 dependencies = [
  "core_extensions",
  "proc-macro2",
@@ -5962,6 +5958,7 @@ dependencies = [
 name = "tremor-cli"
 version = "0.11.4"
 dependencies = [
+ "abi_stable",
  "anyhow",
  "async-std",
  "clap 3.1.8",
@@ -7014,3 +7011,8 @@ dependencies = [
  "cc",
  "libc",
 ]
+
+[[patch.unused]]
+name = "simd-json-derive"
+version = "0.2.3-alpha.0"
+source = "git+https://github.com/marioortizmanero/simd-json-derive.git?branch=abi-stable#4519e1a591c610ea0b764280f4b99b258d845f1c"

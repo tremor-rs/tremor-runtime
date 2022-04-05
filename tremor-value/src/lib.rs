@@ -34,8 +34,6 @@ extern crate serde as serde_ext;
 mod error;
 mod known_key;
 mod macros;
-/// For the compatibility layer with the Plugin Development Kit
-pub mod pdk;
 /// Prelude module
 pub mod prelude;
 mod serde;
@@ -51,6 +49,8 @@ pub use value::{parse_to_value, parse_to_value_with_buffers, to_value, Object, V
 use simd_json::Node;
 use simd_json_derive::{Deserialize, Serialize, Tape};
 use value_trait::Writable;
+
+use abi_stable::std_types::RVec;
 
 impl<'value> Serialize for Value<'value> {
     fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>
@@ -80,7 +80,7 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
         // Rust doesn't optimize the normal loop away here
         // so we write our own avoiding the length
         // checks during push
-        let mut res = Vec::with_capacity(len);
+        let mut res = RVec::with_capacity(len);
         unsafe {
             res.set_len(len);
             for i in 0..len {
@@ -101,8 +101,10 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
         for _ in 0..len {
             // ALLOW: we know the values will be OK
             if let Node::String(key) = self.0.next().unwrap() {
-                // ALLOW: we know it will parse correctly
-                res.insert_nocheck(key.into(), self.parse().unwrap());
+                res.insert(key.into(), self.parse().unwrap());
+                // FIXME: restore optimization
+                // // ALLOW: we know it will parse correctly
+                // res.insert_nocheck(key.into(), self.parse().unwrap());
             } else {
                 // ALLOW: We check against this in tape
                 unreachable!();

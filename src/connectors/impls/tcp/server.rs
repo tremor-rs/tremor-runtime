@@ -71,38 +71,40 @@ pub struct TcpServer {
     sink_rx: Receiver<ChannelSinkMsg<ConnectionMeta>>,
 }
 
-#[derive(Debug, Default)]
-pub(crate) struct Builder {}
+#[sabi_extern_fn]
+pub fn connector_type() -> ConnectorType {
+    "tcp_server".into()
+}
 
-#[async_trait::async_trait]
-impl ConnectorBuilder for Builder {
-    fn connector_type(&self) -> ConnectorType {
-        "tcp_server".into()
-    }
-    async fn from_config(
-        &self,
-        id: &str,
-        raw_config: &ConnectorConfig,
-    ) -> crate::errors::Result<Box<dyn Connector>> {
-        if let Some(raw_config) = &raw_config.config {
-            let config = Config::new(raw_config)?;
+#[sabi_extern_fn]
+pub fn from_config<'a>(
+    id: RStr<'a>,
+    raw_config: &'a ConnectorConfig,
+) -> BorrowingFfiFuture<'a, RResult<BoxedRawConnector>> {
+    async move {
+        if let RSome(raw_config) = &raw_config.config {
+            let config = ttry!(Config::new(raw_config));
             if config.url.port().is_none() {
-                return Err("Missing port for TCP server".into());
+                return RErr(Error::from("Missing port for TCP server").into());
             }
+
             let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
-                Some(load_server_config(tls_config)?)
+                Some(ttry!(load_server_config(tls_config)))
             } else {
                 None
             };
             let (sink_tx, sink_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-            Ok(Box::new(TcpServer {
-                config,
-                tls_server_config,
-                sink_tx,
-                sink_rx,
-            }))
+            ROk(BoxedRawConnector::from_value(
+                TcpServer {
+                    config,
+                    tls_server_config,
+                    sink_tx,
+                    sink_rx,
+                },
+                TD_Opaque,
+            ))
         } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
+            RErr(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
     }
 }
@@ -143,7 +145,7 @@ impl Connector for TcpServer {
         // we use this constructor as we need the sink channel already when creating the source
         let sink = ChannelSink::from_channel_no_meta(
             resolve_connection_meta,
-            builder.reply_tx(),
+            reply_tx,
             self.sink_tx.clone(),
             self.sink_rx.clone(),
         );

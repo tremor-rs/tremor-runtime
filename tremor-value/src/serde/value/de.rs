@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::{Error, Object, Value};
-use beef::Cow;
 use serde::de::{EnumAccess, IntoDeserializer, VariantAccess};
 use serde_ext::de::{
     self, Deserialize, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor,
@@ -21,6 +20,8 @@ use serde_ext::de::{
 use serde_ext::forward_to_deserialize_any;
 use simd_json::StaticNode;
 use std::fmt;
+
+use abi_stable::std_types::{map::Iter, RBox, RCowStr, RVec, Tuple2};
 
 impl<'de> de::Deserializer<'de> for Value<'de> {
     type Error = Error;
@@ -42,13 +43,10 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
             #[cfg(feature = "128bit")]
             Self::Static(StaticNode::U128(n)) => visitor.visit_u128(n),
             Value::Static(StaticNode::F64(n)) => visitor.visit_f64(n),
-            Value::String(s) => {
-                if s.is_borrowed() {
-                    visitor.visit_borrowed_str(s.unwrap_borrowed())
-                } else {
-                    visitor.visit_string(s.into_owned())
-                }
-            }
+            Value::String(s) => match s {
+                RCowStr::Borrowed(s) => visitor.visit_borrowed_str(s.into()),
+                RCowStr::Owned(s) => visitor.visit_string(s.into()),
+            },
             Value::Array(a) => visitor.visit_seq(Array(a.iter())),
             Value::Object(o) => visitor.visit_map(ObjectAccess {
                 i: o.iter(),
@@ -103,8 +101,8 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
     {
         let (variant, value) = match self {
             Value::Object(value) => {
-                let mut iter = value.into_iter();
-                let (variant, value) = match iter.next() {
+                let mut iter = RBox::into_inner(value).into_iter();
+                let Tuple2(variant, value) = match iter.next() {
                     Some(v) => v,
                     None => {
                         return Err(Error::Serde(format!(
@@ -137,7 +135,7 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
 }
 
 struct EnumDeserializer<'de> {
-    variant: Cow<'de, str>,
+    variant: RCowStr<'de>,
     value: Option<Value<'de>>,
 }
 
@@ -244,7 +242,7 @@ impl<'de, 'value> SeqAccess<'de> for Array<'value, 'de> {
 }
 
 struct ObjectAccess<'de, 'value: 'de> {
-    i: halfbrown::Iter<'de, Cow<'value, str>, Value<'value>>,
+    i: Iter<'de, RCowStr<'value>, Value<'value>>,
     v: &'de Value<'value>,
 }
 
@@ -257,7 +255,7 @@ impl<'de, 'value> MapAccess<'de> for ObjectAccess<'value, 'de> {
     where
         K: DeserializeSeed<'de>,
     {
-        if let Some((k, v)) = self.i.next() {
+        if let Some(Tuple2(k, v)) = self.i.next() {
             self.v = v;
             seed.deserialize(Value::String(k.clone())).map(Some)
         } else {
@@ -514,7 +512,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     {
         let size = seq.size_hint().unwrap_or_default();
 
-        let mut v = Vec::with_capacity(size);
+        let mut v = RVec::with_capacity(size);
         while let Some(e) = seq.next_element()? {
             v.push(e);
         }

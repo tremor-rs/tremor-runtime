@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::codec::prelude::*;
-use beef::Cow;
+
+use abi_stable::{
+    rvec,
+    std_types::{RCowStr, RString},
+};
 
 #[derive(Clone)]
 pub struct Csv {}
@@ -41,9 +45,9 @@ impl Codec for Csv {
             None => return Ok(None),
         }?;
 
-        let mut fields = vec![];
+        let mut fields = rvec![];
         for field in record.iter() {
-            fields.push(Value::String(Cow::from(field.to_string())));
+            fields.push(Value::String(RCowStr::Owned(RString::from(field))));
         }
 
         Ok(Some(Value::Array(fields)))

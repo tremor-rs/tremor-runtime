@@ -155,7 +155,7 @@ where
     /// constructor of a `ChannelSink` that is sending the event metadata to the `StreamWriter`
     /// in case it needs it in the write.
     /// This costs a clone.
-    pub(crate) fn new(
+    pub fn new(
         resolver: F,
         reply_tx: BoxedContraflowSender,
         tx: Sender<ChannelSinkMsg<T>>,
@@ -372,97 +372,106 @@ where
     F: (Fn(&Value<'_>) -> Option<T>) + Send + Sync,
     B: SinkMetaBehaviour + Send + Sync,
 {
-    async fn on_event(
-        &mut self,
-        _input: &str,
+    /// FIXME: use reply_channel to only ack delivery once it is successfully sent via TCP
+    fn on_event<'a>(
+        &'a mut self,
+        _input: RStr<'a>,
         event: Event,
-        ctx: &SinkContext,
-        serializer: &mut EventSerializer,
+        ctx: &'a SinkContext,
+        serializer: &'a mut MutEventSerializer,
         start: u64,
     ) -> BorrowingFfiFuture<'a, RResult<SinkReply>> {
-        // clean up
-        // make sure channels for the given event are added to avoid stupid errors
-        // due to channels not yet handled
-        let empty = self.handle_channels(ctx, serializer, false);
-        if empty {
-            // no streams available :sob:
-            return Ok(SinkReply {
-                ack: SinkAck::Fail,
-                cb: CbAction::Close,
-            });
-        }
+        async move {
+            // clean up
+            // make sure channels for the given event are added to avoid stupid errors
+            // due to channels not yet handled
+            let empty = self.handle_channels(ctx, serializer, false);
+            if empty {
+                // no streams available :sob:
+                return Ok(SinkReply {
+                    ack: SinkAck::Fail,
+                    cb: CbAction::Close,
+                });
+            }
 
-        let ingest_ns = event.ingest_ns;
-        let stream_ids = event.id.get_streams(ctx.uid);
-        trace!("{ctx} on_event stream_ids: {stream_ids:?}");
+            let ingest_ns = event.ingest_ns;
+            let stream_ids = event.id.get_streams(ctx.uid);
+            trace!("{ctx} on_event stream_ids: {stream_ids:?}");
 
-        let contraflow_utils = if event.transactional {
-            Some((ContraflowData::from(&event), self.reply_tx.clone()))
-        } else {
-            None
-        };
+            let contraflow_utils = if event.transactional {
+                // FIXME: avoid downcasting?
+                let reply_tx = self
+                    .reply_tx
+                    .obj
+                    .downcast_as::<Sender<AsyncSinkReply>>()
+                    .unwrap()
+                    .clone();
+                Some((ContraflowData::from(&event), reply_tx))
+            } else {
+                None
+            };
 
-        let mut remove_streams = vec![];
-        let mut reply = SinkReply::default();
-        for (value, meta) in event.value_meta_iter() {
-            let mut errored = false;
-            let mut found = false;
-            // route based on stream id present in event metadata or in event id (trackign the event origin)
-            // resolve by checking meta for sink specific metadata
-            // fallback: get all tracked stream_ids for the current connector uid
-            let streams = self.resolve_stream_from_meta(meta, ctx).map_or_else(
-                || {
-                    Either::Right(
-                        stream_ids
-                            .iter()
-                            .filter_map(|sid| self.streams.get(sid).map(|sender| (sid, sender))),
-                    )
-                },
-                |stream| Either::Left(std::iter::once(stream)),
-            );
+            let mut remove_streams = vec![];
+            let mut reply = SinkReply::default();
+            for (value, meta) in event.value_meta_iter() {
+                let mut errored = false;
+                let mut found = false;
+                // route based on stream id present in event metadata or in event id (trackign the event origin)
+                // resolve by checking meta for sink specific metadata
+                // fallback: get all tracked stream_ids for the current connector uid
+                let streams =
+                    self.resolve_stream_from_meta(meta, ctx).map_or_else(
+                        || {
+                            Either::Right(stream_ids.iter().filter_map(|sid| {
+                                self.streams.get(sid).map(|sender| (sid, sender))
+                            }))
+                        },
+                        |stream| Either::Left(std::iter::once(stream)),
+                    );
 
-            for (stream_id, sender) in streams {
-                trace!("{ctx} Send to stream {stream_id}.");
-                let data = serializer.serialize_for_stream(value, ingest_ns, *stream_id)?;
-                let meta = if B::NEEDS_META {
-                    Some(meta.clone_static())
-                } else {
-                    None
-                };
-                let sink_data = SinkData {
-                    meta,
-                    data,
-                    contraflow: contraflow_utils.clone(),
-                    start,
-                };
-                found = true;
-                if sender.send(sink_data).await.is_err() {
-                    error!("{ctx} Error sending to closed stream {stream_id}.",);
-                    remove_streams.push(*stream_id);
-                    errored = true;
+                for (stream_id, sender) in streams {
+                    trace!("{ctx} Send to stream {stream_id}.");
+                    let data = rtry!(serializer.serialize_for_stream(value, ingest_ns, *stream_id));
+                    let meta = if B::NEEDS_META {
+                        Some(meta.clone_static())
+                    } else {
+                        None
+                    };
+                    let sink_data = SinkData {
+                        meta,
+                        data: data.into_iter().map(Vec::from).collect(),
+                        contraflow: contraflow_utils.clone(),
+                        start,
+                    };
+                    found = true;
+                    if sender.send(sink_data).await.is_err() {
+                        error!("{ctx} Error sending to closed stream {stream_id}.",);
+                        remove_streams.push(*stream_id);
+                        errored = true;
+                    }
+                }
+                if errored || !found {
+                    debug!("{ctx} No stream found for event: {}", &event.id);
+                    reply = SinkReply::FAIL;
                 }
             }
-            if errored || !found {
-                debug!("{ctx} No stream found for event: {}", &event.id);
-                reply = SinkReply::FAIL;
+            for stream_id in remove_streams {
+                trace!("{ctx} Removing stream {stream_id}");
+                self.remove_stream(stream_id);
+                serializer.drop_stream(stream_id);
+                // TODO: stream based CB
             }
+            ROk(reply) // empty vec in case of success
         }
-        for stream_id in remove_streams {
-            trace!("{ctx} Removing stream {stream_id}");
-            self.remove_stream(stream_id);
-            serializer.drop_stream(stream_id);
-            // TODO: stream based CB
-        }
-        Ok(reply) // empty vec in case of success
     }
 
-    async fn on_signal(
-        &mut self,
+    fn on_signal<'a>(
+        &'a mut self,
         signal: Event,
-        ctx: &SinkContext,
-        serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
-        if let Some(SignalKind::Tick) = signal.kind {
+        ctx: &'a SinkContext,
+        serializer: &'a mut MutEventSerializer,
+    ) -> BorrowingFfiFuture<'a, RResult<SinkReply>> {
+        if let RSome(SignalKind::Tick) = signal.kind {
             self.handle_channels(ctx, serializer, true);
         }
         Ok(SinkReply::default())

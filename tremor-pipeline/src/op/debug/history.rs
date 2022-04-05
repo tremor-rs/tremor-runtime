@@ -16,6 +16,8 @@ use crate::op::prelude::*;
 use crate::ConfigImpl;
 use tremor_script::prelude::*;
 
+use abi_stable::std_types::ROption::RSome;
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -28,7 +30,7 @@ pub struct Config {
 impl ConfigImpl for Config {}
 
 op!(EventHistoryFactory(_uid, node) {
-if let Some(map) = &node.config {
+if let RSome(map) = &node.config {
     let config: Config = Config::new(map)?;
     Ok(Box::new(History {
         config,

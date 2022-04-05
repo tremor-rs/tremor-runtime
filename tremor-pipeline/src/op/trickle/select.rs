@@ -37,6 +37,8 @@ use tremor_script::{
     Value, NO_AGGRS,
 };
 
+use abi_stable::std_types::ROption::RSome;
+
 #[derive(Debug)]
 pub struct Select {
     pub id: String,
@@ -128,7 +130,7 @@ pub(crate) fn execute_select_and_having(
             Event {
                 id: ctx.event_id.clone(),
                 ingest_ns: ctx.ingest_ns,
-                origin_uri: ctx.origin_uri.clone(),
+                origin_uri: ctx.origin_uri.clone().into(),
                 // TODO: this will ignore op_metas from all other events this one is based upon and might break operators requiring this
                 op_meta: ctx.op_meta.clone(),
                 is_batch: false,
@@ -203,6 +205,8 @@ impl Operator for Select {
             transactional,
             ..
         } = event;
+        // FIXME: avoid this?
+        let origin_uri = &Option::from(origin_uri.clone());
 
         let mut ctx = EventContext::new(ingest_ns, origin_uri.as_ref());
         ctx.cardinality = groups.len();
@@ -338,7 +342,7 @@ impl Operator for Select {
 
         // if it isn't a tick or we do not have any windows, or have no
         // recorded groups, we can just return
-        if signal.kind != Some(SignalKind::Tick) || windows.is_empty() || groups.is_empty() {
+        if signal.kind != RSome(SignalKind::Tick) || windows.is_empty() || groups.is_empty() {
             return Ok(EventAndInsights::default());
         }
 

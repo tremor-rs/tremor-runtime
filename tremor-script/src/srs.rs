@@ -40,17 +40,12 @@ use tremor_value::value::from::cow_beef_to_sabi;
 /// They **must** remain private. All interactions with them have to be guarded
 /// by the implementation logic to ensure they remain sane.
 ///
-#[derive(Clone, Default)]
+#[repr(C)]
+#[derive(Clone, Default, StableAbi)]
 pub struct EventPayload {
     /// The vector of raw input values.
-    ///
-    /// Note that this is a self-referential struct, and thus the data it points
-    /// to cannot be modified. This makes it impossible to convert
-    /// `EventPayload` to `PdkEventPayload`. The only solution is to make `raw`
-    /// use types from `abi_stable` even if it's not really `StableAbi` nor
-    /// `repr(C)` (the `ValueAndMeta` type can't be `repr(C)` for now).
-    pub(crate) raw: RVec<RArc<Pin<RVec<u8>>>>,
-    pub(crate) data: ValueAndMeta<'static>,
+    raw: RVec<RArc<Pin<RVec<u8>>>>,
+    data: ValueAndMeta<'static>,
 }
 
 #[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
@@ -316,8 +311,15 @@ impl<'input> simd_json_derive::Deserialize<'input> for EventPayload {
 */
 
 /// Combined struct for an event value and metadata
+#[repr(C)]
 #[derive(
-    Clone, Debug, PartialEq, Serialize, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Clone,
+    Debug,
+    PartialEq,
+    Serialize,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+    StableAbi,
 )]
 pub struct ValueAndMeta<'event> {
     v: Value<'event>,

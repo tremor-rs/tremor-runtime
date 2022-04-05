@@ -154,22 +154,22 @@ pub(crate) enum AsyncSinkReply {
 #[async_trait::async_trait]
 pub(crate) trait Sink: Send {
     /// called when receiving an event
-    async fn on_event(
-        &mut self,
-        input: &str,
+    fn on_event<'a>(
+        &'a mut self,
+        input: RStr<'a>,
         event: Event,
-        ctx: &SinkContext,
-        serializer: &mut EventSerializer,
+        ctx: &'a SinkContext,
+        serializer: &'a mut MutEventSerializer,
         start: u64,
     ) -> Result<SinkReply>;
     /// called when receiving a signal
-    async fn on_signal(
-        &mut self,
+    fn on_signal<'a>(
+        &'a mut self,
         _signal: Event,
-        _ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
-        Ok(SinkReply::default())
+        _ctx: &'a SinkContext,
+        _serializer: &'a mut MutEventSerializer,
+    ) -> BorrowingFfiFuture<'a, RResult<SinkReply>> {
+        future::ready(ROk(SinkReply::default())).into_ffi()
     }
 
     /// Pull metrics from the sink
@@ -192,8 +192,12 @@ pub(crate) trait Sink: Send {
     /// ```
     ///
     #[cfg(not(tarpaulin_include))] // trait placeholder function
-    async fn metrics(&mut self, _timestamp: u64, _ctx: &SinkContext) -> Vec<EventPayload> {
-        vec![]
+    fn metrics(
+        &mut self,
+        _timestamp: u64,
+        _ctx: &SinkContext,
+    ) -> BorrowingFfiFuture<'_, RVec<EventPayload>> {
+        future::ready(rvec![]).into_ffi()
     }
 
     // lifecycle stuff
@@ -258,9 +262,8 @@ pub(crate) trait Sink: Send {
 ///
 /// Just like `Connector`, this wraps the FFI dynamic sink with `abi_stable`
 /// types so that it's easier to use with `std`.
-pub struct Sink(pub BoxedRawSink);
+pub(crate) struct Sink(pub BoxedRawSink);
 impl Sink {
-    /// Wrapper for [`BoxedRawSink::on_event`]
     #[inline]
     pub async fn on_event(
         &mut self,
@@ -272,7 +275,7 @@ impl Sink {
     ) -> Result<SinkReply> {
         let mut serializer = MutEventSerializer::from_ptr(serializer, TD_Opaque);
         self.0
-            .on_event(input.into(), event.into(), ctx, &mut serializer, start)
+            .on_event(input.into(), event, ctx, &mut serializer, start)
             .await
             .map_err(Into::into) // RBoxError -> Box<dyn Error>
             .into() // RResult -> Result
@@ -286,48 +289,58 @@ impl Sink {
     ) -> Result<SinkReply> {
         let mut serializer = MutEventSerializer::from_ptr(serializer, TD_Opaque);
         self.0
-            .on_signal(signal.into(), ctx, &mut serializer)
+            .on_signal(signal, ctx, &mut serializer)
             .await
             .map_err(Into::into) // RBoxError -> Box<dyn Error>
             .into() // RResult -> Result
     }
 
     #[inline]
-    pub fn metrics(&mut self, timestamp: u64) -> Vec<EventPayload> {
-        self.0
-            .metrics(timestamp)
-            .into_iter()
-            .map(Into::into)
-            .collect()
+    pub async fn metrics(&mut self, timestamp: u64, ctx: &SinkContext) -> Vec<EventPayload> {
+        self.0.metrics(timestamp, ctx).await.into()
     }
 
     #[inline]
     pub async fn on_start(&mut self, ctx: &SinkContext) -> Result<()> {
-        self.0.on_start(ctx).await.map_err(Into::into).into()
+        self.0
+            .on_start(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
     }
 
-    /// Wrapper for [`BoxedRawSink::connect`]
     #[inline]
     pub async fn connect(&mut self, ctx: &SinkContext, attempt: &Attempt) -> Result<bool> {
         self.0
             .connect(ctx, attempt)
             .await
-            .map_err(Into::into)
-            .into()
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
     }
 
-    /// Wrapper for [`BoxedRawSink::on_pause`]
     #[inline]
     pub async fn on_pause(&mut self, ctx: &SinkContext) -> Result<()> {
-        self.0.on_pause(ctx).await.map_err(Into::into).into()
+        self.0
+            .on_pause(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
     }
     #[inline]
     pub async fn on_resume(&mut self, ctx: &SinkContext) -> Result<()> {
-        self.0.on_resume(ctx).await.map_err(Into::into).into()
+        self.0
+            .on_resume(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
     }
     #[inline]
     pub async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
-        self.0.on_stop(ctx).await.map_err(Into::into).into()
+        self.0
+            .on_stop(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
     }
 
     #[inline]
@@ -335,16 +348,16 @@ impl Sink {
         self.0
             .on_connection_lost(ctx)
             .await
-            .map_err(Into::into)
-            .into()
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
     }
     #[inline]
     pub async fn on_connection_established(&mut self, ctx: &SinkContext) -> Result<()> {
         self.0
             .on_connection_established(ctx)
             .await
-            .map_err(Into::into)
-            .into()
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
     }
 
     #[inline]
@@ -498,10 +511,7 @@ impl SinkManagerBuilder {
     }
 
     /// spawn your specific sink
-    pub(crate) fn spawn<S>(self, sink: S, ctx: SinkContext) -> Result<SinkAddr>
-    where
-        S: Sink + Send + 'static,
-    {
+    pub fn spawn(self, sink: BoxedRawSink, ctx: SinkContext) -> Result<SinkAddr> {
         let qsize = self.qsize;
         let name = format!("{}-sink", ctx.alias);
         let (sink_tx, sink_rx) = bounded(qsize);
@@ -520,13 +530,7 @@ pub trait ContraflowSenderOpaque: Send {
 }
 impl ContraflowSenderOpaque for Sender<AsyncSinkReply> {
     fn send(&self, reply: AsyncSinkReply) -> BorrowingFfiFuture<'_, RResult<()>> {
-        async move {
-            self.send(reply)
-                .await
-                .map_err(|e| RError::new(Error::from(e)))
-                .into()
-        }
-        .into_ffi()
+        async move { self.send(reply).await.map_err(RError::new).into() }.into_ffi()
     }
 }
 /// Alias for the FFI-safe contraflow sender, boxed
@@ -545,7 +549,7 @@ pub(crate) fn builder(
     // resolve codec and processors
     let postprocessor_configs = config.postprocessors.clone().unwrap_or_default();
     let serializer = EventSerializer::build(
-        config.codec.clone(),
+        config.codec.clone().into(),
         connector_codec_requirement,
         postprocessor_configs,
         &config.connector_type,
@@ -614,30 +618,8 @@ impl EventSerializer {
         })
     }
 
-    /// drop a stream
-    pub(crate) fn drop_stream(&mut self, stream_id: u64) {
-        self.streams.remove(&stream_id);
-    }
-
-    /// clear out all streams - this can lead to data loss
-    /// only use when you are sure, all the streams are gone
-    pub(crate) fn clear(&mut self) {
-        self.streams.clear();
-    }
-
-    /// serialize event for the default stream
-    ///
-    /// # Errors
-    ///   * if serialization failed (codec or postprocessors)
-    pub(crate) fn serialize(&mut self, value: &Value, ingest_ns: u64) -> Result<Vec<Vec<u8>>> {
-        self.serialize_for_stream(value, ingest_ns, DEFAULT_STREAM_ID)
-    }
-
-    /// serialize event for a certain stream
-    ///
-    /// # Errors
-    ///   * if serialization failed (codec or postprocessors)
-    pub(crate) fn serialize_for_stream(
+    // This is kept separate so that conversions are done only once later on
+    fn serialize_for_stream_inner(
         &mut self,
         value: &Value,
         ingest_ns: u64,
@@ -696,6 +678,66 @@ impl EventSerializer {
     }
 }
 
+/// Note that since `EventSerializer` is used for the plugin system, it
+/// must be `#[repr(C)]` in order to interact with it. However, since it uses
+/// complex types and it's easier to just make it available as an opaque type
+/// instead, with the help of `sabi_trait`.
+#[abi_stable::sabi_trait]
+pub trait EventSerializerOpaque: Send {
+    /// drop a stream
+    fn drop_stream(&mut self, stream_id: u64);
+
+    /// clear out all streams - this can lead to data loss
+    /// only use when you are sure, all the streams are gone
+    fn clear(&mut self);
+
+    /// serialize event for the default stream
+    ///
+    /// # Errors
+    ///   * if serialization failed (codec or postprocessors)
+    fn serialize(&mut self, value: &Value, ingest_ns: u64) -> RResult<RVec<RVec<u8>>>;
+
+    /// serialize event for a certain stream
+    ///
+    /// # Errors
+    ///   * if serialization failed (codec or postprocessors)
+    fn serialize_for_stream(
+        &mut self,
+        value: &Value,
+        ingest_ns: u64,
+        stream_id: u64,
+    ) -> RResult<RVec<RVec<u8>>>;
+}
+impl EventSerializerOpaque for EventSerializer {
+    fn drop_stream(&mut self, stream_id: u64) {
+        self.streams.remove(&stream_id);
+    }
+
+    fn clear(&mut self) {
+        self.streams.clear();
+    }
+
+    fn serialize(&mut self, value: &Value, ingest_ns: u64) -> RResult<RVec<RVec<u8>>> {
+        self.serialize_for_stream(value, ingest_ns, DEFAULT_STREAM_ID)
+    }
+
+    fn serialize_for_stream(
+        &mut self,
+        value: &Value,
+        ingest_ns: u64,
+        stream_id: u64,
+    ) -> RResult<RVec<RVec<u8>>> {
+        self.serialize_for_stream_inner(value, ingest_ns, stream_id)
+            .map(|v1| v1.into_iter().map(|v2| v2.into()).collect()) // RVec<RVec<T>> -> Vec<Vec<T>>
+            .map_err(|e| SendRBoxError::new(e)) // RBoxError -> Error
+            .into() // RResult -> Result
+    }
+}
+/// Alias for the type used in FFI, as a box
+pub type BoxedEventSerializer = EventSerializerOpaque_TO<'static, RBox<()>>;
+/// Alias for the type used in FFI, as a mutable reference
+pub type MutEventSerializer<'a> = EventSerializerOpaque_TO<'static, RMut<'a, ()>>;
+
 #[derive(Debug, PartialEq)]
 enum SinkState {
     Initialized,
@@ -735,11 +777,13 @@ where
     state: SinkState,
 }
 
-impl<S> SinkManager<S>
-where
-    S: Sink,
-{
-    fn new(sink: S, ctx: SinkContext, builder: SinkManagerBuilder, rx: Receiver<SinkMsg>) -> Self {
+impl SinkManager {
+    fn new(
+        sink: BoxedRawSink,
+        ctx: SinkContext,
+        builder: SinkManagerBuilder,
+        rx: Receiver<SinkMsg>,
+    ) -> Self {
         let SinkManagerBuilder {
             serializer,
             reply_channel,
@@ -747,7 +791,7 @@ where
             ..
         } = builder;
         Self {
-            sink,
+            sink: Sink(sink),
             ctx,
             rx,
             reply_rx: reply_channel.1,
@@ -936,7 +980,7 @@ where
                         SinkMsg::Signal { signal } => {
                             // special treatment
                             match signal.kind {
-                                Some(SignalKind::Drain(source_uid)) => {
+                                RSome(SignalKind::Drain(source_uid)) => {
                                     debug!("{} Drain signal received from {source_uid}", self.ctx);
                                     // account for all received drains per source
                                     self.drains_received.insert(source_uid);
@@ -956,7 +1000,7 @@ where
                                         .into_cb(CbAction::Drained(source_uid));
                                     send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
                                 }
-                                Some(SignalKind::Start(source_uid)) => {
+                                RSome(SignalKind::Start(source_uid)) => {
                                     debug!("{} Received Start signal from {source_uid}", self.ctx);
                                     self.starts_received.insert(source_uid);
                                 }

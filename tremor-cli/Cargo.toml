@@ -20,6 +20,8 @@ matches = "0.1"
 pretty_assertions = "1.2.0"
 
 [dependencies]
+# plugin system
+abi_stable = { version = "0.10", default_features = false, features = ["rust_latest_stable"] }
 anyhow = "1"
 async-std = { version = "1.11", features = ["unstable"] }
 clap = { version = "3", features = ["color", "derive"] }

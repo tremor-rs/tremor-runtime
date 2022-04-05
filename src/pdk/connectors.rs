@@ -1,9 +1,9 @@
 use crate::{
+    config::Connector as ConnectorConfig,
     connectors::{BoxedRawConnector, ConnectorType},
     pdk::RResult,
-    config::Connector as ConnectorConfig,
 };
-use tremor_value::pdk::PdkValue;
+use tremor_value::Value;
 
 use std::fmt;
 
@@ -12,10 +12,10 @@ use abi_stable::{
     library::RootModule,
     package_version_strings,
     sabi_types::VersionStrings,
-    std_types::{ROption, RString},
+    std_types::{ROption, RStr, RString},
     StableAbi,
 };
-use async_ffi::FfiFuture;
+use async_ffi::BorrowingFfiFuture;
 
 /// This type represents a connector plugin that has been loaded with
 /// `abi_stable`. It serves as a builder, making it possible to construct a
@@ -36,10 +36,11 @@ pub struct ConnectorMod {
     /// # Errors
     ///  * If the config is invalid for the connector
     #[sabi(last_prefix_field)]
-    pub from_config: extern "C" fn(
-        alias: RString,
-        config: ConnectorConfig,
-    ) -> FfiFuture<RResult<BoxedRawConnector>>,
+    pub from_config: for<'a> extern "C" fn(
+        alias: RStr<'a>,
+        config: &'a ConnectorConfig,
+    )
+        -> BorrowingFfiFuture<'a, RResult<BoxedRawConnector>>,
 }
 
 // Marking `MinMod` as the main module in this plugin. Note that `MinMod_Ref` is

@@ -118,7 +118,7 @@ where
             trace!("[Connector::{}] Stream {stream} EOF", &self.alias);
             return Ok(SourceReply::EndStream {
                 origin_uri: self.origin_uri.clone(),
-                meta: RSome(self.meta.clone().into()),
+                meta: RSome(self.meta.clone()),
                 stream,
             });
         }
@@ -126,8 +126,8 @@ where
 
         Ok(SourceReply::Data {
             origin_uri: self.origin_uri.clone(),
-            stream: Some(stream),
-            meta: Some(self.meta.clone()),
+            stream: RSome(stream),
+            meta: RSome(self.meta.clone()),
             // ALLOW: we know bytes_read is smaller than or equal buf_size
             data: self.buffer[0..bytes_read].to_vec(),
             port: None,

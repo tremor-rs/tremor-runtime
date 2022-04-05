@@ -20,6 +20,8 @@ use std::io::{Cursor, Write};
 use std::str;
 use tremor_value::{literal, Object, Value};
 
+use abi_stable::std_types::{RCowStr, Tuple2};
+
 const TYPE_I64: u8 = 0;
 const TYPE_F64: u8 = 1;
 const TYPE_STRING: u8 = 2;
@@ -59,7 +61,7 @@ impl BInflux {
                     .chain_err(|| ErrorKind::InvalidBInfluxData("too many tags".into()))?,
             )?;
 
-            for (k, v) in tags {
+            for Tuple2(k, v) in tags {
                 if let Some(v) = v.as_str() {
                     write_str(&mut res, k)?;
                     write_str(&mut res, v)?;
@@ -74,7 +76,7 @@ impl BInflux {
                 u16::try_from(fields.len())
                     .chain_err(|| ErrorKind::InvalidBInfluxData("too many fields".into()))?,
             )?;
-            for (k, v) in fields {
+            for Tuple2(k, v) in fields {
                 write_str(&mut res, k)?;
                 if let Some(v) = v.as_i64() {
                     res.write_u8(TYPE_I64)?;
@@ -106,7 +108,7 @@ impl BInflux {
     }
 
     pub fn decode(data: &[u8]) -> Result<Value> {
-        fn read_string<'event>(c: &mut Cursor<&'event [u8]>) -> Result<Cow<'event, str>> {
+        fn read_string<'event>(c: &mut Cursor<&'event [u8]>) -> Result<RCowStr<'event>> {
             let l = c.read_u16::<BigEndian>()? as usize;
             #[allow(clippy::cast_possible_truncation)]
             let p = c.position() as usize;

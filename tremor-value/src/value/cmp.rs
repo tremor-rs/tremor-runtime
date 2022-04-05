@@ -17,6 +17,8 @@ use simd_json::prelude::*;
 use simd_json::BorrowedValue;
 use simd_json::OwnedValue;
 
+use abi_stable::std_types::{RBox, Tuple2};
+
 #[allow(clippy::cast_sign_loss, clippy::default_trait_access)]
 impl<'value> PartialEq for Value<'value> {
     #[inline]
@@ -92,7 +94,10 @@ impl<'value> From<Value<'value>> for OwnedValue {
             Value::Static(s) => OwnedValue::from(s),
             Value::String(s) => OwnedValue::from(s.to_string()),
             Value::Array(a) => a.into_iter().collect(),
-            Value::Object(m) => m.into_iter().collect(),
+            Value::Object(m) => RBox::into_inner(m)
+                .into_iter()
+                .map(|Tuple2(key, value)| (key, value))
+                .collect(),
             Value::Bytes(b) => OwnedValue::from(base64::encode(b)),
         }
     }
@@ -106,7 +111,12 @@ impl<'value> From<Value<'value>> for BorrowedValue<'value> {
             Value::Static(s) => BorrowedValue::from(s),
             Value::String(s) => BorrowedValue::from(s.to_string()),
             Value::Array(a) => a.into_iter().collect(),
-            Value::Object(m) => m.into_iter().collect(),
+            // FIXME: simd_json::BorrowedValue doesn't have abi_stable support, so
+            // we have to convert the tuples.
+            Value::Object(m) => RBox::into_inner(m)
+                .into_iter()
+                .map(|Tuple2(key, value)| (key, value))
+                .collect(),
             Value::Bytes(b) => BorrowedValue::from(base64::encode(b)),
         }
     }

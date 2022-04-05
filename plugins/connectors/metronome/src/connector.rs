@@ -4,7 +4,7 @@ use tremor_common::time::nanotime;
 use tremor_pipeline::DEFAULT_STREAM_ID;
 use tremor_runtime::{connectors::prelude::*, pdk::RResult, ttry, utils::hostname};
 use tremor_script::{EventOriginUri, EventPayload};
-use tremor_value::{literal, pdk::PdkValue};
+use tremor_value::literal;
 
 use std::{
     future,
@@ -16,11 +16,11 @@ use abi_stable::{
     std_types::{
         ROption::{self, RNone, RSome},
         RResult::{RErr, ROk},
-        RString,
+        RStr, RString,
     },
     type_level::downcasting::TD_Opaque,
 };
-use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt};
+use async_ffi::{BorrowingFfiFuture, FutureExt};
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -105,13 +105,13 @@ impl RawSource for Metronome {
 
 /// Configures and exports the metronome as a connector trait object
 #[sabi_extern_fn]
-pub fn from_config(
-    _id: RString,
-    raw_config: ROption<PdkValue<'static>>,
-) -> FfiFuture<RResult<BoxedRawConnector>> {
+pub fn from_config<'a>(
+    _id: RStr<'a>,
+    config: &'a ConnectorConfig,
+) -> BorrowingFfiFuture<'a, RResult<BoxedRawConnector>> {
     async move {
-        if let RSome(raw_config) = raw_config {
-            let config = ttry!(Config::new(&raw_config.into()));
+        if let RSome(raw_config) = &config.config {
+            let config = ttry!(Config::new(raw_config));
 
             let origin_uri = EventOriginUri {
                 scheme: RString::from("tremor-metronome"),

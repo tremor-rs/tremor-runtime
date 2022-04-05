@@ -150,9 +150,9 @@ impl SingleStreamSinkRuntime {
                 };
             }
             let error = match writer.on_done(stream).await {
-                Err(e) => Some(e),
-                Ok(StreamDone::ConnectorClosed) => ctx.notifier.connection_lost().await.err(),
-                Ok(_) => None,
+                Err(e) => RSome(e),
+                Ok(StreamDone::ConnectorClosed) => ctx.notifier.connection_lost().await.err().map(Error::from),
+                Ok(_) => RNone,
             };
             if let Some(e) = error {
                 error!(
@@ -248,14 +248,11 @@ where
     fn on_event<'a>(
         &'a mut self,
         _input: RStr<'a>,
-        event: PdkEvent,
+        event: Event,
         ctx: &'a SinkContext,
         serializer: &'a mut MutEventSerializer,
         start: u64,
     ) -> BorrowingFfiFuture<'a, RResult<SinkReply>> {
-        // Conversion to use the full functionality of `Event`
-        let event = Event::from(event);
-
         async move {
             let ingest_ns = event.ingest_ns;
             let contraflow = if event.transactional {
@@ -268,7 +265,7 @@ where
             {
                 // handle first couple of items (if batched)
                 for (value, meta) in value_meta_iter {
-                    let data = rtry!(serializer.serialize(&value.clone().into(), ingest_ns));
+                    let data = rtry!(serializer.serialize(value, ingest_ns));
                     let meta = if B::NEEDS_META {
                         Some(meta.clone_static())
                     } else {
@@ -286,7 +283,7 @@ where
                     }
                 }
                 // handle last item
-                let data = rtry!(serializer.serialize(&last_value.clone().into(), ingest_ns));
+                let data = rtry!(serializer.serialize(last_value, ingest_ns));
                 let meta = if B::NEEDS_META {
                     Some(last_meta.clone_static())
                 } else {

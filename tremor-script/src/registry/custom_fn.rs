@@ -21,10 +21,13 @@ use crate::{
     NO_AGGRS,
 };
 use beef::Cow;
+
+use abi_stable::{rstr, std_types::RCow};
+
 //use std::mem;
 const RECUR_STR: &str = "recur";
 pub(crate) const RECUR_PTR: Option<*const u8> = Some(RECUR_STR.as_ptr());
-pub(crate) const RECUR: Value<'static> = Value::String(Cow::const_str(RECUR_STR));
+pub(crate) const RECUR: Value<'static> = Value::String(RCow::Borrowed(rstr!(RECUR_STR)));
 pub(crate) const RECUR_REF: &Value<'static> = &RECUR;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

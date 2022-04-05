@@ -12,7 +12,7 @@ version = "0.3.2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-abi_stable = { version = "0.10.3", default_features = false, features = ["rust_latest_stable"] }
+abi_stable = { version = "0.10", default_features = false, features = ["rust_latest_stable"] }
 base64 = "0.13"
 beef = "0.5"
 halfbrown = { version = "0.1", features = ["fxhash"] }

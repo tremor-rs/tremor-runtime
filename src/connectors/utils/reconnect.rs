@@ -241,11 +241,7 @@ impl ConnectionLostNotifierOpaque for ConnectionLostNotifier {
             self.0
                 .send(Msg::ConnectionLost)
                 .await
-                .map_err(|e| {
-                    // First converting to our own error type, and then to abi_stable's
-                    let e: crate::errors::Error = e.into();
-                    RError::new(e)
-                })
+                .map_err(RError::new)
                 .into()
         }
         .into_ffi()

@@ -18,6 +18,8 @@ use crate::{prelude::*, tremor_fn};
 
 use std::ops::RangeInclusive;
 
+use abi_stable::std_types::RVec;
+
 #[derive(Clone, Debug, Default)]
 struct First(Option<Value<'static>>);
 impl TremorAggrFn for First {
@@ -147,12 +149,12 @@ impl TremorAggrFn for CollectNested {
         Ok(())
     }
     fn emit<'event>(&mut self) -> FResult<Value<'event>> {
-        Ok(Value::Array(self.0.clone()))
+        Ok(Value::Array(self.0.clone().into()))
     }
     fn emit_and_init<'event>(&mut self) -> FResult<Value<'event>> {
         let mut r = Vec::with_capacity(self.0.len());
         std::mem::swap(&mut r, &mut self.0);
-        Ok(Value::from(r))
+        Ok(Value::from(RVec::from(r)))
     }
     fn init(&mut self) {
         self.0 = Vec::with_capacity(self.0.len());

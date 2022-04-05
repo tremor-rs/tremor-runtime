@@ -17,6 +17,8 @@ use crate::prelude::*;
 use crate::Value;
 use std::{io::prelude::*, path::Path};
 
+use abi_stable::std_types::Tuple2;
+
 /// Fetches a hostname with `tremor-host.local` being the default
 #[must_use]
 pub fn hostname() -> String {
@@ -61,8 +63,10 @@ fn sorted_serialize_<'v, W: Write>(j: &Value<'v>, w: &mut W) -> Result<()> {
             write!(w, "]")?;
         }
         Value::Object(o) => {
-            let mut v: Vec<(String, Value<'v>)> =
-                o.iter().map(|(k, v)| (k.to_string(), v.clone())).collect();
+            let mut v: Vec<(String, Value<'v>)> = o
+                .iter()
+                .map(|Tuple2(k, v)| (k.to_string(), v.clone()))
+                .collect();
 
             v.sort_by_key(|(k, _)| k.to_string());
             let mut iter = v.into_iter();

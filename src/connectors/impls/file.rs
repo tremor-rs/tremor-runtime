@@ -23,7 +23,10 @@ use async_std::{
 use futures::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tremor_common::asy::file;
 
-use crate::{pdk::utils::conv_cow_str_inv, ttry};
+use crate::{
+    pdk::{utils::conv_cow_str_inv, RError},
+    ttry,
+};
 use abi_stable::{
     prefix_type::PrefixTypeTrait,
     rtry, rvec, sabi_extern_fn,
@@ -36,8 +39,6 @@ use abi_stable::{
 };
 use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt};
 use std::future;
-use tremor_pipeline::pdk::PdkEvent;
-use tremor_value::pdk::PdkValue;
 
 const URL_SCHEME: &str = "tremor-file";
 
@@ -309,13 +310,13 @@ impl RawSource for FileSource {
                     SourceReply::EndStream {
                         origin_uri: self.origin_uri.clone(),
                         stream: DEFAULT_STREAM_ID,
-                        meta: RSome(self.meta.clone().into()),
+                        meta: RSome(self.meta.clone()),
                     }
                 } else {
                     SourceReply::Data {
                         origin_uri: self.origin_uri.clone(),
                         stream: DEFAULT_STREAM_ID,
-                        meta: RSome(self.meta.clone().into()),
+                        meta: RSome(self.meta.clone()),
                         // ALLOW: with the read above we ensure that this access is valid, unless async_std is broken
                         data: RVec::from(&self.buf[0..bytes_read]),
                         port: RSome(conv_cow_str_inv(OUT)),
@@ -394,34 +395,32 @@ impl RawSink for FileSink {
     fn on_event<'a>(
         &'a mut self,
         _input: RStr<'a>,
-        event: PdkEvent,
+        event: Event,
         ctx: &'a SinkContext,
         serializer: &'a mut MutEventSerializer,
         _start: u64,
     ) -> BorrowingFfiFuture<'a, RResult<SinkReply>> {
         async move {
-            let event: Event = event.into();
             let file = ttry!(self
                 .file
                 .as_mut()
                 .ok_or_else(|| Error::from("No file available.")));
             let ingest_ns = event.ingest_ns;
             for value in event.value_iter() {
-                // TODO: try to find a way around cloning the value reference to turn it into a PdkValue
-                let data = rtry!(serializer.serialize(&value.clone().into(), ingest_ns));
+                let data = rtry!(serializer.serialize(value, ingest_ns));
                 for chunk in data {
                     if let Err(e) = file.write_all(chunk.as_slice()).await {
                         error!("{} Error writing to file: {}", &ctx, &e);
                         self.file = None;
                         rtry!(ctx.notifier().notify().await);
-                        return RErr(Error::from(e).into());
+                        return RErr(RError::new(e));
                     }
                 }
                 if let Err(e) = file.flush().await {
                     error!("{} Error flushing file: {}", &ctx, &e);
                     self.file = None;
                     rtry!(ctx.notifier().connection_lost().await);
-                    return RErr(Error::from(e).into());
+                    return RErr(RError::new(e));
                 }
             }
             if let Err(e) = file.flush().await {

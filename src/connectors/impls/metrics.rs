@@ -22,8 +22,9 @@ use crate::pdk::RError;
 use crate::ttry;
 use abi_stable::{
     prefix_type::PrefixTypeTrait,
-    rvec, sabi_extern_fn,
+    rstr, rvec, sabi_extern_fn,
     std_types::{
+        RCow, RCowStr,
         ROption::{self, RNone, RSome},
         RResult::{RErr, ROk},
         RStr, RString,
@@ -32,13 +33,11 @@ use abi_stable::{
 };
 use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt};
 use std::future;
-use tremor_pipeline::pdk::PdkEvent;
-use tremor_value::pdk::PdkValue;
 
-const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
-const TAGS: Cow<'static, str> = Cow::const_str("tags");
-const FIELDS: Cow<'static, str> = Cow::const_str("fields");
-const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
+const MEASUREMENT: RCowStr<'static> = RCow::Borrowed(rstr!("measurement"));
+const TAGS: RCowStr<'static> = RCow::Borrowed(rstr!("tags"));
+const FIELDS: RCowStr<'static> = RCow::Borrowed(rstr!("fields"));
+const TIMESTAMP: RCowStr<'static> = RCow::Borrowed(rstr!("timestamp"));
 
 /// Note that since it's a built-in plugin, `#[export_root_module]` can't be
 /// used or it would conflict with other plugins.
@@ -55,10 +54,10 @@ fn connector_type() -> ConnectorType {
     "metrics".into()
 }
 #[sabi_extern_fn]
-pub fn from_config(
-    _alias: RString,
-    _raw_config: ROption<PdkValue<'static>>,
-) -> FfiFuture<RResult<BoxedRawConnector>> {
+pub fn from_config<'a>(
+    _alias: RStr<'a>,
+    _raw_config: &'a ConnectorConfig,
+) -> BorrowingFfiFuture<'a, RResult<BoxedRawConnector>> {
     let connector = BoxedRawConnector::from_value(MetricsConnector::new(), TD_Opaque);
     future::ready(ROk(connector)).into_ffi()
 }
@@ -151,7 +150,7 @@ impl RawSource for MetricsSource {
     ) -> BorrowingFfiFuture<'a, RResult<SourceReply>> {
         match self.rx.try_recv() {
             Ok(msg) => ROk(SourceReply::Structured {
-                payload: msg.payload.into(),
+                payload: msg.payload,
                 origin_uri: msg.origin_uri.unwrap_or_else(|| self.origin_uri.clone()),
                 stream: DEFAULT_STREAM_ID,
                 port: RNone,
@@ -218,14 +217,11 @@ impl RawSink for MetricsSink {
     fn on_event<'a>(
         &'a mut self,
         _input: RStr<'a>,
-        event: PdkEvent,
+        event: Event,
         _ctx: &'a SinkContext,
         _serializer: &'a mut MutEventSerializer,
         _start: u64,
     ) -> BorrowingFfiFuture<'a, RResult<SinkReply>> {
-        // Conversion to use the full functionality of `Event`
-        let event = Event::from(event);
-
         async move {
             // verify event format
             for (value, _meta) in event.value_meta_iter() {
@@ -237,7 +233,7 @@ impl RawSink for MetricsSink {
                 origin_uri, data, ..
             } = event;
 
-            let metrics_msg = MetricsMsg::new(data, origin_uri);
+            let metrics_msg = MetricsMsg::new(data, origin_uri.into());
             let ack_or_fail = match self.tx.try_broadcast(metrics_msg) {
                 Err(TrySendError::Closed(_)) => {
                     // channel is closed

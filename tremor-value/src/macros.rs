@@ -21,7 +21,7 @@
 #[doc(hidden)]
 macro_rules! literal_internal_vec {
 ($($content:tt)*) => {
-    vec![$($content)*]
+    ::abi_stable::rvec![$($content)*]
 };
 }
 
@@ -343,6 +343,8 @@ macro_rules! literal_internal {
 mod tests {
     use crate::Value;
 
+    use abi_stable::rvec;
+
     #[test]
     fn value_macro() {
         let v = literal!({ "snot": "badger"});
@@ -356,6 +358,6 @@ mod tests {
         let v: Value = literal!([1]);
         assert_eq!(Value::from(vec![1_u64]), v);
         let v: Value = literal!([]);
-        assert_eq!(Value::Array(vec![]), v);
+        assert_eq!(Value::Array(rvec![]), v);
     }
 }

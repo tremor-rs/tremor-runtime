@@ -17,7 +17,7 @@ use crate::connectors::source::{
 };
 use crate::connectors::Context;
 use crate::errors::{Error, Result};
-use crate::pdk::RResult;
+use crate::pdk::{RError, RResult};
 use abi_stable::std_types::{RErr, ROk};
 use async_ffi::{BorrowingFfiFuture, FutureExt};
 use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
@@ -126,7 +126,7 @@ impl RawSource for ChannelSource {
                 // TODO: configure pull interval in connector config?
                 ROk(SourceReply::Empty(DEFAULT_POLL_INTERVAL))
             }
-            Err(e) => RErr(Error::from(e).into()),
+            Err(e) => RErr(RError::new(e)),
         })
         .into_ffi()
     }

@@ -182,7 +182,7 @@ pub struct Wal {
 }
 
 op!(WalFactory(_uid, node) {
-    let map = node.config.as_ref().ok_or_else(|| ErrorKind::MissingOpConfig(node.id.clone()))?;
+    let map = Result::from(node.config.as_ref().ok_or_else(|| ErrorKind::MissingOpConfig(node.id.clone()).into()))?;
     let config: Config = Config::new(map)?;
 
     if config.max_elements.or(config.max_bytes).is_none() {
@@ -400,12 +400,12 @@ impl Operator for Wal {
         let insights = if self.full && !now_full {
             warn!("WAL not full any more. {} elements.", self.cnt);
             let mut e = Event::cb_restore(signal.ingest_ns);
-            e.origin_uri = self.origin_uri.clone();
+            e.origin_uri = self.origin_uri.clone().into();
             vec![e]
         } else if !self.full && now_full {
             warn!("WAL full. {} elements.", self.cnt);
             let mut e = Event::cb_trigger(signal.ingest_ns);
-            e.origin_uri = self.origin_uri.clone();
+            e.origin_uri = self.origin_uri.clone().into();
             vec![e]
         } else {
             vec![]

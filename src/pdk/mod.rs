@@ -72,16 +72,16 @@ pub fn find_recursively(base_dir: &str) -> Vec<ConnectorMod_Ref> {
 }
 
 pub mod utils {
-    use abi_stable::std_types::RCow;
+    use abi_stable::std_types::RCowStr;
 
     // FIXME: clean up after creation of `tremor-pdk`, this is repeated in other
     // crates.
-    pub fn conv_cow_str(cow: RCow<str>) -> beef::Cow<str> {
+    pub fn conv_cow_str(cow: RCowStr) -> beef::Cow<str> {
         let cow: std::borrow::Cow<str> = cow.into();
         cow.into()
     }
 
-    pub fn conv_cow_str_inv(cow: beef::Cow<str>) -> RCow<str> {
+    pub fn conv_cow_str_inv(cow: beef::Cow<str>) -> RCowStr {
         let cow: std::borrow::Cow<str> = cow.into();
         cow.into()
     }

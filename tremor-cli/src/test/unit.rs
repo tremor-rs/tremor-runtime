@@ -33,6 +33,8 @@ use tremor_script::{
 };
 use tremor_script::{ctx::EventContext, NO_CONSTS};
 
+use abi_stable::std_types::RVec;
+
 use super::TestConfig;
 const EXEC_OPTS: ExecOpts = ExecOpts {
     result_needed: true,
@@ -150,7 +152,7 @@ fn eval_suite_tests(
                 let mut info = dh.to_string();
                 let success = if let Some(success) = value.as_bool() {
                     success
-                } else if let Some([expected, got]) = value.as_array().map(Vec::as_slice) {
+                } else if let Some([expected, got]) = value.as_array().map(RVec::as_slice) {
                     info.push_str(&format!("{} != {}", expected, got));
                     false
                 } else {
@@ -174,7 +176,7 @@ fn eval_suite_tests(
 
                     let mut th: TermHighlighter = TermHighlighter::default();
                     th.highlight_range_with_indent("       ", extent)?;
-                    if let Some([expected, got]) = value.as_array().map(Vec::as_slice) {
+                    if let Some([expected, got]) = value.as_array().map(RVec::as_slice) {
                         println!("             | {} != {}", expected, got);
                     }
                     th.finalize()?;

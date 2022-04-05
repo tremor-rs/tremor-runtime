@@ -16,11 +16,13 @@ use beef::Cow;
 use halfbrown::HashMap;
 use tremor_value::{literal, Value};
 
-const COUNT: Cow<'static, str> = Cow::const_str("count");
-const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
-const TAGS: Cow<'static, str> = Cow::const_str("tags");
-const FIELDS: Cow<'static, str> = Cow::const_str("fields");
-const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
+use abi_stable::{rstr, std_types::RCowStr};
+
+const COUNT: RCowStr<'static> = RCowStr::Borrowed(rstr!("count"));
+const MEASUREMENT: RCowStr<'static> = RCowStr::Borrowed(rstr!("measurement"));
+const TAGS: RCowStr<'static> = RCowStr::Borrowed(rstr!("tags"));
+const FIELDS: RCowStr<'static> = RCowStr::Borrowed(rstr!("fields"));
+const TIMESTAMP: RCowStr<'static> = RCowStr::Borrowed(rstr!("timestamp"));
 
 /// Generate an influx-compatible metrics value based on a count
 #[must_use]

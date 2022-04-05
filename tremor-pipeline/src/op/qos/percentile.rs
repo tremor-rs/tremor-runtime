@@ -30,6 +30,8 @@ use crate::op::prelude::*;
 use beef::Cow;
 use tremor_script::prelude::*;
 
+use abi_stable::std_types::ROption::RSome;
+
 const OVERFLOW: Cow<'static, str> = Cow::const_str("overflow");
 
 #[derive(Debug, Clone, Deserialize)]
@@ -74,7 +76,7 @@ fn d_step_down() -> f64 {
 }
 
 op!(PercentileFactory(_uid, node) {
-    if let Some(map) = &node.config {
+    if let RSome(map) = &node.config {
         let config: Config = Config::new(map)?;
         Ok(Box::new(Percentile::from(config)))
     } else {

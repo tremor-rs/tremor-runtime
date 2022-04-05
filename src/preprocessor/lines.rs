@@ -20,6 +20,8 @@ use crate::errors::{Kind as ErrorKind, Result};
 use memchr::memchr_iter;
 use tremor_pipeline::{ConfigImpl, ConfigMap};
 
+use abi_stable::std_types::RSome;
+
 const DEFAULT_SEPARATOR: u8 = b'\n';
 const INITIAL_LINES_PER_CHUNK: usize = 64;
 
@@ -61,7 +63,7 @@ impl Default for Lines {
 
 impl Lines {
     pub fn from_config(config: &ConfigMap) -> Result<Self> {
-        if let Some(raw_config) = config {
+        if let RSome(raw_config) = config {
             let config = Config::new(raw_config)?;
             let separator = {
                 if config.separator.len() != 1 {

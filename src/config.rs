@@ -21,10 +21,20 @@ use tremor_script::{
 };
 use tremor_value::prelude::*;
 
+use abi_stable::{
+    std_types::{
+        ROption::{self, RNone},
+        RString, RVec, Tuple2,
+    },
+    StableAbi,
+};
+
 pub(crate) type Id = String;
+pub(crate) type IdSabi = RString;
 
 /// Reconnect strategies for controlling if and how to reconnect
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[repr(C)]
+#[derive(Clone, Debug, Serialize, Deserialize, StableAbi)]
 #[serde(rename_all = "lowercase", deny_unknown_fields)]
 pub enum Reconnect {
     /// No reconnection
@@ -37,7 +47,7 @@ pub enum Reconnect {
         #[serde(default = "default_growth_rate")]
         growth_rate: f64,
         /// maximum number of retries to execute
-        max_retries: Option<u64>,
+        max_retries: ROption<u64>,
         /// Randomize the growth rate
         #[serde(default = "default_randomized")]
         randomized: bool,
@@ -80,11 +90,12 @@ impl Default for PauseBehaviour {
 */
 
 /// Codec name and configuration
-#[derive(Clone, Debug, Default)]
+#[repr(C)]
+#[derive(Clone, Debug, Default, StableAbi)]
 #[allow(clippy::module_name_repetitions)]
 pub struct NameWithConfig {
-    pub(crate) name: String,
-    pub(crate) config: Option<Value<'static>>,
+    pub(crate) name: RString,
+    pub(crate) config: ROption<Value<'static>>,
 }
 
 impl NameWithConfig {
@@ -93,8 +104,8 @@ impl NameWithConfig {
             Ok(Self::from(name))
         } else if let Some(name) = value.get_str("name") {
             Ok(Self {
-                name: name.to_string(),
-                config: value.get("config").map(Value::clone_static),
+                name: name.to_string().into(),
+                config: value.get("config").map(Value::clone_static).into(),
             })
         } else {
             Err(format!("Invalid codec: {}", value).into())
@@ -105,16 +116,16 @@ impl NameWithConfig {
 impl From<&str> for NameWithConfig {
     fn from(name: &str) -> Self {
         Self {
-            name: name.to_string(),
-            config: None,
+            name: name.to_string().into(),
+            config: RNone,
         }
     }
 }
 impl From<&String> for NameWithConfig {
     fn from(name: &String) -> Self {
         Self {
-            name: name.clone(),
-            config: None,
+            name: name.clone().into(),
+            config: RNone,
         }
     }
 }
@@ -128,29 +139,30 @@ pub(crate) type Postprocessor = NameWithConfig;
 
 /// Connector configuration - only the parts applicable to all connectors
 /// Specific parts are catched in the `config` map.
-#[derive(Clone, Debug, Default)]
+#[repr(C)]
+#[derive(Clone, Debug, Default, StableAbi)]
 pub struct Connector {
     /// Connector type
     pub connector_type: ConnectorType,
 
     /// Codec in force for connector
-    pub codec: Option<Codec>,
+    pub codec: ROption<Codec>,
 
     /// Configuration map
     pub config: tremor_pipeline::ConfigMap,
 
     // TODO: interceptors or configurable processors
     /// Preprocessor chain configuration
-    pub preprocessors: Option<Vec<Preprocessor>>,
+    pub preprocessors: ROption<RVec<Preprocessor>>,
 
     // TODO: interceptors or configurable processors
     /// Postprocessor chain configuration
-    pub postprocessors: Option<Vec<Postprocessor>>,
+    pub postprocessors: ROption<RVec<Postprocessor>>,
 
     pub(crate) reconnect: Reconnect,
 
     //pub(crate) on_pause: PauseBehaviour,
-    pub(crate) metrics_interval_s: Option<u64>,
+    pub(crate) metrics_interval_s: ROption<u64>,
 }
 
 impl Connector {
@@ -195,7 +207,7 @@ impl Connector {
 
         Ok(Connector {
             connector_type,
-            config,
+            config: config.into(),
             preprocessors: connector_config
                 .get_array("preprocessors")
                 .map(|o| {
@@ -203,7 +215,8 @@ impl Connector {
                         .map(Preprocessor::from_value)
                         .collect::<Result<_>>()
                 })
-                .transpose()?,
+                .transpose()?
+                .into(),
             postprocessors: connector_config
                 .get_array("postprocessors")
                 .map(|o| {
@@ -211,7 +224,8 @@ impl Connector {
                         .map(Preprocessor::from_value)
                         .collect::<Result<_>>()
                 })
-                .transpose()?,
+                .transpose()?
+                .into(),
             reconnect: connector_config
                 .get("reconnect")
                 .cloned()
@@ -222,7 +236,8 @@ impl Connector {
             codec: connector_config
                 .get("codec")
                 .map(Codec::from_value)
-                .transpose()?,
+                .transpose()?
+                .into(),
         })
     }
 }

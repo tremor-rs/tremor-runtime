@@ -60,7 +60,7 @@ impl NodeConfig {
         NodeConfig {
             id: id.to_string(),
             kind: NodeKind::Operator,
-            config,
+            config: config.into(),
             ..NodeConfig::default()
         }
     }
