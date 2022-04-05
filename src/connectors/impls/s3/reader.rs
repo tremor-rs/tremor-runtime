@@ -274,8 +274,9 @@ impl S3Instance {
             origin_uri: self.origin_uri.clone(),
             data,
             meta: None,
-            stream,
+            stream: Some(stream),
             port: None,
+            codec_overwrite: None,
         }
     }
     async fn fetch_object_stream(

@@ -124,11 +124,12 @@ impl Source for UdpServerSource {
                 } else {
                     Ok(SourceReply::Data {
                         origin_uri: self.origin_uri.clone(),
-                        stream: DEFAULT_STREAM_ID,
+                        stream: Some(DEFAULT_STREAM_ID),
                         meta: None,
                         // ALLOW: we know bytes_read is smaller than or equal buf_size
                         data: self.buffer[0..bytes_read].to_vec(),
                         port: None,
+                        codec_overwrite: None,
                     })
                 }
             }

@@ -15,7 +15,6 @@
 //! TLS utilities
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use crate::errors::{Error, Kind as ErrorKind, Result};
 use async_tls::TlsConnector;
@@ -118,20 +117,23 @@ pub(crate) fn load_server_config(config: &TLSServerConfig) -> Result<ServerConfi
 /// if we have a cafile configured, we only load it, and no other ca certificates
 /// if there is no cafile configured, we load the default webpki-roots from Mozilla
 pub(crate) async fn tls_client_connector(config: &TLSClientConfig) -> Result<TlsConnector> {
-    Ok(if let Some(cafile) = config.cafile.as_ref() {
-        let mut config = ClientConfig::new();
+    let tls_config = tls_client_config(config).await?;
+    Ok(TlsConnector::from(tls_config))
+}
+
+pub(crate) async fn tls_client_config(tremor_config: &TLSClientConfig) -> Result<ClientConfig> {
+    let mut tls_config = ClientConfig::new();
+    if let Some(cafile) = tremor_config.cafile.as_ref() {
         let file = async_std::fs::read(cafile).await?;
         let mut pem = Cursor::new(file);
-        config.root_store.add_pem_file(&mut pem).map_err(|_e| {
+        tls_config.root_store.add_pem_file(&mut pem).map_err(|_e| {
             Error::from(ErrorKind::TLSError(format!(
                 "Invalid certificate in {}",
                 cafile.display()
             )))
         })?;
-        TlsConnector::from(Arc::new(config))
     } else {
-        let mut config = ClientConfig::new();
-        config.root_store = SYSTEM_ROOT_CERTS.clone();
-        TlsConnector::from(Arc::new(config))
-    })
+        tls_config.root_store = SYSTEM_ROOT_CERTS.clone();
+    }
+    Ok(tls_config)
 }

@@ -473,7 +473,11 @@ impl HttpRequestMeta {
         }
     }
 
-    pub(crate) fn process(&mut self, event: &Event) -> Result<(SurfRequest, Value<'static>)> {
+    pub(crate) fn process(
+        &mut self,
+        event: &Event,
+        alias: &str,
+    ) -> Result<(SurfRequest, Value<'static>)> {
         let mut body: Vec<u8> = vec![];
         let mut active_meta = BatchItemMeta {
             endpoint: self.endpoint.clone(),
@@ -491,7 +495,7 @@ impl HttpRequestMeta {
         }
         for (chunk_data, _) in event.value_meta_iter() {
             let encoded = active_meta.codec.encode(chunk_data)?;
-            let processed = postprocess(&mut self.postprocessors, event.ingest_ns, encoded)?;
+            let processed = postprocess(&mut self.postprocessors, event.ingest_ns, encoded, alias)?;
             for mut chunk in processed {
                 body.append(&mut chunk);
             }

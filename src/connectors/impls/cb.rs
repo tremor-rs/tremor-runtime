@@ -240,9 +240,10 @@ impl Source for CbSource {
             Ok(SourceReply::Data {
                 data: line?.into_bytes(),
                 meta: None,
-                stream: DEFAULT_STREAM_ID,
+                stream: Some(DEFAULT_STREAM_ID),
                 port: None,
                 origin_uri: self.origin_uri.clone(),
+                codec_overwrite: None,
             })
         } else {
             let wait = 100_u64;

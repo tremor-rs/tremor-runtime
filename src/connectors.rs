@@ -55,7 +55,7 @@ use tremor_pipeline::METRICS_CHANNEL;
 use tremor_script::ast::DeployEndpoint;
 use tremor_value::Value;
 use utils::reconnect::{Attempt, ConnectionLostNotifier, ReconnectRuntime};
-use value_trait::{Builder, Mutable};
+use value_trait::{Builder, Mutable, ValueAccess};
 
 /// quiescence stuff
 pub(crate) use utils::{metrics, reconnect};
@@ -261,7 +261,7 @@ pub(crate) trait Context: Display + Clone {
 
     /// only log an error and swallow the result
     #[inline]
-    fn log_err<T, E, M>(&self, expr: std::result::Result<T, E>, msg: &M)
+    fn swallow_err<T, E, M>(&self, expr: std::result::Result<T, E>, msg: &M)
     where
         E: std::error::Error,
         M: Display + ?Sized,
@@ -269,6 +269,23 @@ pub(crate) trait Context: Display + Clone {
         if let Err(e) = expr {
             error!("{self} {msg}: {e}");
         }
+    }
+
+    /// log an error and return the result
+    #[inline]
+    fn bail_err<T, E, M>(
+        &self,
+        expr: std::result::Result<T, E>,
+        msg: &M,
+    ) -> std::result::Result<T, E>
+    where
+        E: std::error::Error,
+        M: Display + ?Sized,
+    {
+        if let Err(e) = &expr {
+            error!("{self} {msg}: {e}");
+        }
+        expr
     }
 
     /// enclose the given meta in the right connector namespace
@@ -279,6 +296,18 @@ pub(crate) trait Context: Display + Clone {
         let mut map = Value::object_with_capacity(1);
         map.try_insert(self.connector_type().to_string(), inner);
         map
+    }
+
+    /// extract the connector specific metadata
+    fn extract_meta<'ct, 'event>(
+        &'ct self,
+        event_meta: &'ct Value<'event>,
+    ) -> Option<&'ct Value<'event>>
+    where
+        'ct: 'event,
+    {
+        let t: &str = self.connector_type().into();
+        event_meta.get(&Cow::borrowed(t))
     }
 }
 
@@ -642,7 +671,7 @@ async fn connector_task(
                                 .send_source(SourceMsg::ConnectionEstablished)
                                 .await?;
                             if let Some(start_sender) = start_sender.take() {
-                                ctx.log_err(
+                                ctx.swallow_err(
                                     start_sender.send(ConnectorResult::ok(&ctx)).await,
                                     "Error sending start response.",
                                 );
@@ -664,7 +693,7 @@ async fn connector_task(
                         // if we weren't able to connect and gave up retrying, we are failed. That's life.
                         connector_state = State::Failed;
                         if let Some(start_sender) = start_sender.take() {
-                            ctx.log_err(
+                            ctx.swallow_err(
                                 start_sender
                                     .send(ConnectorResult::err(&ctx, "Connect failed."))
                                     .await,
@@ -699,7 +728,7 @@ async fn connector_task(
                     if connector_state == State::Running && connectivity == Connectivity::Connected
                     {
                         // sending an answer if we are connected
-                        ctx.log_err(
+                        ctx.swallow_err(
                             sender.send(ConnectorResult::ok(&ctx)).await,
                             "Error sending Start result",
                         );
@@ -713,7 +742,7 @@ async fn connector_task(
                     //       issue a warning/error message
                     //       e.g. UDP, TCP, Rest
                     //
-                    ctx.log_err(connector.on_pause(&ctx).await, "Error during on_pause");
+                    ctx.swallow_err(connector.on_pause(&ctx).await, "Error during on_pause");
                     connector_state = State::Paused;
                     quiescence_beacon.pause();
 
@@ -727,7 +756,7 @@ async fn connector_task(
                 }
                 Msg::Resume if connector_state == State::Paused => {
                     info!("{ctx} Resuming...");
-                    ctx.log_err(connector.on_resume(&ctx).await, "Error during on_resume");
+                    ctx.swallow_err(connector.on_resume(&ctx).await, "Error during on_resume");
                     connector_state = State::Running;
                     quiescence_beacon.resume();
 
@@ -753,7 +782,7 @@ async fn connector_task(
                     // notify connector that it should stop reading - so no more new events arrive at its source part
                     quiescence_beacon.stop_reading();
                     // let connector stop emitting anything to its source part - if possible here
-                    ctx.log_err(connector.on_drain(&ctx).await, "Error during on_drain");
+                    ctx.swallow_err(connector.on_drain(&ctx).await, "Error during on_drain");
                     connector_state = State::Draining;
 
                     // notify source to drain the source channel and then send the drain signal
@@ -823,19 +852,19 @@ async fn connector_task(
                 }
                 Msg::Stop(sender) => {
                     info!("{ctx} Stopping...");
-                    ctx.log_err(connector.on_stop(&ctx).await, "Error during on_stop");
+                    ctx.swallow_err(connector.on_stop(&ctx).await, "Error during on_stop");
                     connector_state = State::Stopped;
                     quiescence_beacon.full_stop();
                     let (stop_tx, stop_rx) = bounded(2);
                     let mut expect = usize::from(connector_addr.has_source())
                         + usize::from(connector_addr.has_sink());
-                    ctx.log_err(
+                    ctx.swallow_err(
                         connector_addr
                             .send_source(SourceMsg::Stop(stop_tx.clone()))
                             .await,
                         "Error sending Stop msg to Source",
                     );
-                    ctx.log_err(
+                    ctx.swallow_err(
                         connector_addr.send_sink(SinkMsg::Stop(stop_tx)).await,
                         "Error sending Stop msg to Sink",
                     );
@@ -1073,6 +1102,12 @@ pub(crate) struct ConnectorType(String);
 impl From<ConnectorType> for String {
     fn from(ct: ConnectorType) -> Self {
         ct.0
+    }
+}
+
+impl<'t> From<&'t ConnectorType> for &'t str {
+    fn from(ct: &'t ConnectorType) -> Self {
+        ct.0.as_str()
     }
 }
 

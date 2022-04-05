@@ -100,11 +100,11 @@ impl Source for StdStreamSource {
         match stdin.try_recv() {
             Ok(data) => Ok(SourceReply::Data {
                 origin_uri: self.origin_uri.clone(),
-                // ALLOW: len cannot be > INPUT_SIZE_BYTES
                 data,
                 meta: None,
-                stream: DEFAULT_STREAM_ID,
+                stream: Some(DEFAULT_STREAM_ID),
                 port: None,
+                codec_overwrite: None,
             }),
             Err(TryRecvError::Closed) => Err(TryRecvError::Closed.into()),
             Err(TryRecvError::Empty | TryRecvError::Overflowed(_)) => Ok(SourceReply::Empty(10)),

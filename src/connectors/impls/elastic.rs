@@ -314,7 +314,7 @@ impl Sink for ElasticSink {
                     match r {
                         Err(e) => {
                             debug!("{task_ctx} Error sending Elasticsearch Bulk Request: {e}");
-                            task_ctx.log_err(
+                            task_ctx.swallow_err(
                                 handle_error(
                                     e,
                                     event,
@@ -328,7 +328,7 @@ impl Sink for ElasticSink {
                             );
                         }
                         Ok(v) => {
-                            task_ctx.log_err(
+                            task_ctx.swallow_err(
                                 handle_response(
                                     v,
                                     event,

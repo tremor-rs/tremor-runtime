@@ -81,11 +81,7 @@ serde_yaml = "0.8"
 simd-json = { version = "0.4", features = ["known-key"] }
 simd-json-derive = "0.2"
 snap = "1"
-surf = { version = "=2.3.2", default-features = false, features = [
-  "h1-client-rustls",  # this will stop us from doing http2 :(
-  "encoding",          # this was a default feature, so we keep it
-  "middleware-logger", # default feature, so we keep it
-] }
+
 syslog_loose = "0.16"
 tremor-common = { path = "tremor-common" }
 tremor-influx = { path = "tremor-influx" }
@@ -114,6 +110,22 @@ xz2 = "0.1"
 #lapin = { version = "2.1.0", default-features = false, features = [
 #  "rustls",
 #  "rustls-native-certs",
+#] }
+
+# http_client
+surf = { version = "=2.3.2", default-features = false, features = [
+  "h1-client-rustls",  # this will stop us from doing http2 :(
+  "encoding",          # this was a default feature, so we keep it
+  "middleware-logger", # default feature, so we keep it
+] }
+# We use our fork until: https://github.com/http-rs/http-client/pull/100 is merged
+http-client = { git = "https://github.com/tremor-rs/http-client", rev = "059b23e", features = [
+  "h1_client",
+  "rustls",
+] }
+#http-client = { version = "6.5", default-features = false, features = [
+#  "h1_client",
+#  "rustls",
 #] }
 
 # elasticsearch
