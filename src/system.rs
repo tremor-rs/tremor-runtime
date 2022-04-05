@@ -26,6 +26,8 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_script::{ast, highlighter::Highlighter};
 
+use crate::pdk::connectors::ConnectorMod_Ref;
+
 /// Configuration for the runtime
 pub struct WorldConfig {
     /// default size for queues
@@ -186,4 +188,3 @@ impl World {
         }
         Ok(res?)
     }
-}

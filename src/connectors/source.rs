@@ -196,8 +196,12 @@ pub(crate) trait Source: Send {
     /// The intended result of this function is to re-establish a connection. It might reuse a working connection.
     ///
     /// Return `Ok(true)` if the connection could be successfully established.
-    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(true)
+    fn connect(
+        &mut self,
+        _ctx: &SourceContext,
+        _attempt: &Attempt,
+    ) -> BorrowingFfiFuture<'_, RResult<bool>> {
+        future::ready(ROk(true)).into_ffi()
     }
 
     /// called when the source is explicitly paused as result of a user/operator interaction
@@ -264,6 +268,103 @@ pub(crate) trait Source: Send {
     /// and quiescence correctly.
     fn asynchronous(&self) -> bool;
 }
+/// Source part of a connector.
+///
+/// Just like `Connector`, this wraps the FFI dynamic source with `abi_stable`
+/// types so that it's easier to use with `std`. This may be removed in the
+/// future for performance reasons.
+pub struct Source(pub BoxedRawSource);
+impl Source {
+    #[inline]
+    pub async fn pull_data(&mut self, pull_id: u64, ctx: &SourceContext) -> Result<SourceReply> {
+        self.0
+            .pull_data(pull_id, ctx)
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+    #[inline]
+    pub async fn on_no_events(
+        &mut self,
+        pull_id: u64,
+        stream: u64,
+        ctx: &SourceContext,
+    ) -> Result<()> {
+        self.0
+            .on_no_events(pull_id, stream, ctx)
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    /// Pulls custom metrics from the source
+    #[inline]
+    pub fn metrics(&mut self, timestamp: u64) -> Vec<EventPayload> {
+        self.0
+            .metrics(timestamp)
+            .into_iter()
+            .map(Into::into)
+            .collect()
+    }
+
+    #[inline]
+    pub async fn on_start(&mut self, ctx: &mut SourceContext) {
+        self.0.on_start(ctx)
+    }
+
+    /// Wrapper for [`BoxedRawSource::connect`]
+    pub async fn connect(&mut self, ctx: &SourceContext, attempt: &Attempt) -> Result<bool> {
+        self.0
+            .connect(ctx, attempt)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    /// Wrapper for [`BoxedRawSource::on_pause`]
+    #[inline]
+    pub async fn on_pause(&mut self, ctx: &mut SourceContext) {
+        self.0.on_pause(ctx)
+    }
+    #[inline]
+    pub async fn on_resume(&mut self, ctx: &mut SourceContext) {
+        self.0.on_resume(ctx)
+    }
+    #[inline]
+    pub async fn on_stop(&mut self, ctx: &mut SourceContext) {
+        self.0.on_stop(ctx)
+    }
+
+    #[inline]
+    pub async fn on_cb_close(&mut self, ctx: &mut SourceContext) {
+        self.0.on_cb_close(ctx)
+    }
+    #[inline]
+    pub async fn on_cb_open(&mut self, ctx: &mut SourceContext) {
+        self.0.on_cb_open(ctx)
+    }
+
+    #[inline]
+    pub async fn ack(&mut self, stream_id: u64, pull_id: u64) {
+        self.0.ack(stream_id, pull_id)
+    }
+    #[inline]
+    pub async fn fail(&mut self, stream_id: u64, pull_id: u64) {
+        self.0.fail(stream_id, pull_id)
+    }
+
+    #[inline]
+    pub async fn on_connection_lost(&mut self, ctx: &mut SourceContext) {
+        self.0.on_connection_lost(ctx)
+    }
+    #[inline]
+    pub async fn on_connection_established(&mut self, ctx: &mut SourceContext) {
+        self.0.on_connection_established(ctx)
+    }
+
+    #[inline]
+    pub fn is_transactional(&self) -> bool {
+        self.0.is_transactional()
+    }
+}
 
 ///
 #[async_trait::async_trait]
@@ -290,10 +391,10 @@ pub(crate) struct SourceContext {
     /// connector type
     pub(crate) connector_type: ConnectorType,
     /// The Quiescence Beacon
-    pub(crate) quiescence_beacon: QuiescenceBeacon,
+    pub(crate) quiescence_beacon: BoxedQuiescenceBeacon,
 
     /// tool to notify the connector when the connection is lost
-    pub(crate) notifier: ConnectionLostNotifier,
+    pub(crate) notifier: BoxedConnectionLostNotifier,
 }
 
 impl Display for SourceContext {
@@ -307,11 +408,11 @@ impl Context for SourceContext {
         &self.alias
     }
 
-    fn quiescence_beacon(&self) -> &QuiescenceBeacon {
+    fn quiescence_beacon(&self) -> &BoxedQuiescenceBeacon {
         &self.quiescence_beacon
     }
 
-    fn notifier(&self) -> &ConnectionLostNotifier {
+    fn notifier(&self) -> &BoxedConnectionLostNotifier {
         &self.notifier
     }
 

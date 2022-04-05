@@ -109,7 +109,7 @@ where
     /// Construct a new instance that redacts metadata with prepared `rx` and `tx`
     pub(crate) fn from_channel_no_meta(
         resolver: F,
-        reply_tx: Sender<AsyncSinkReply>,
+        reply_tx: BoxedContraflowSender,
         tx: Sender<ChannelSinkMsg<T>>,
         rx: Receiver<ChannelSinkMsg<T>>,
     ) -> Self {
@@ -321,9 +321,14 @@ where
                 }
             }
             let error = match writer.on_done(stream).await {
-                Err(e) => Some(e),
-                Ok(StreamDone::ConnectorClosed) => ctx.notifier().connection_lost().await.err(),
-                Ok(_) => None,
+                Err(e) => RSome(e),
+                Ok(StreamDone::ConnectorClosed) => ctx
+                    .notifier()
+                    .connection_lost()
+                    .await
+                    .err()
+                    .map(|e| ErrorKind::PluginError(e).into()),
+                Ok(_) => RNone,
             };
             if let Some(e) = error {
                 error!("{ctx} Error shutting down write half of stream {stream}: {e}");

@@ -25,6 +25,7 @@ pub mod trickle;
 use self::prelude::OUT;
 use super::{Event, NodeConfig};
 use crate::errors::Result;
+use abi_stable::std_types::RString;
 use beef::Cow;
 use halfbrown::HashMap;
 use regex::Regex;

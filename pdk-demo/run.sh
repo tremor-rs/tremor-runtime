@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # This script sets up the demo for tremor with PDK configured.
 
-export TREMOR_PLUGINS_PATH="plugins"
+export TREMOR_PLUGIN_PATH="etc/tremor/plugins"
 export TREMOR_PATH="etc/tremor/config:$TREMOR_PATH"
-export RUST_LOG=info
+export RUST_LOG=debug
 
-../target/debug/tremor server run -f etc/tremor/config/config.yaml etc/tremor/config/main.trickle
+../target/debug/tremor server run -f etc/tremor/config/config.troy

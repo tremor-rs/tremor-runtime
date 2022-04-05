@@ -27,6 +27,10 @@ use std::convert::identity;
 use std::fmt::Display;
 use std::time::Duration;
 
+use crate::pdk::{RError, RResult};
+use abi_stable::{std_types::RBox, StableAbi};
+use async_ffi::{BorrowingFfiFuture, FutureExt as AsyncFfiFutureExt};
+
 #[derive(Debug, PartialEq, Clone)]
 enum ShouldRetry {
     Yes,
@@ -203,6 +207,14 @@ impl ConnectionLostNotifier {
     pub(crate) fn new(tx: Sender<Msg>) -> Self {
         Self(tx)
     }
+}
+
+/// Note that since `ConnectionLostNotifier` is used for the plugin system, it
+/// must be `#[repr(C)]` in order to interact with it. However, since it uses a
+/// complex type such as a channel, it's easier to just make it available as an
+/// opaque type instead, with the help of `sabi_trait`.
+#[abi_stable::sabi_trait]
+pub trait ConnectionLostNotifierOpaque: Clone + Send + Sync {
     /// notify the runtime that this connector lost its connection
     pub(crate) async fn connection_lost(&self) -> Result<()> {
         self.0.send(Msg::ConnectionLost).await?;
@@ -211,13 +223,13 @@ impl ConnectionLostNotifier {
 }
 
 impl ReconnectRuntime {
-    pub(crate) fn notifier(&self) -> ConnectionLostNotifier {
+    pub(crate) fn notifier(&self) -> BoxedConnectionLostNotifier {
         self.notifier.clone()
     }
     /// constructor
     pub(crate) fn new(
         connector_addr: &Addr,
-        notifier: ConnectionLostNotifier,
+        notifier: BoxedConnectionLostNotifier,
         config: &Reconnect,
     ) -> Self {
         Self::inner(
@@ -230,7 +242,7 @@ impl ReconnectRuntime {
     fn inner(
         addr: Addr,
         alias: String,
-        notifier: ConnectionLostNotifier,
+        notifier: BoxedConnectionLostNotifier,
         config: &Reconnect,
     ) -> Self {
         let strategy: Box<dyn ReconnectStrategy> = match config {
@@ -252,7 +264,7 @@ impl ReconnectRuntime {
             interval_ms: None,
             strategy,
             addr,
-            notifier,
+            notifier: BoxedConnectionLostNotifier::from_value(notifier, TD_Opaque),
             retry_task: None,
             alias,
         }
