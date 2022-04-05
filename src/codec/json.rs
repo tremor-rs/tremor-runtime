@@ -69,7 +69,7 @@ impl<S: Sorting> Codec for Json<S> {
     }
 
     #[cfg(not(tarpaulin_include))]
-    fn mime_types(&self) -> Vec<&str> {
+    fn mime_types(&self) -> Vec<&'static str> {
         vec!["application/json"]
         // TODO: application/json-seq for one json doc per line?
     }

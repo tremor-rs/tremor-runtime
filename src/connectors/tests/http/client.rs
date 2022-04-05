@@ -12,9 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{free_port::find_free_tcp_port, setup_for_tls, ConnectorHarness};
 use crate::{
-    connectors::{prelude::Url, utils::url::HttpDefaults},
+    connectors::{
+        prelude::Url,
+        tests::{free_port::find_free_tcp_port, setup_for_tls, ConnectorHarness},
+        utils::url::HttpDefaults,
+    },
     errors::Result,
 };
 use async_std::task::{spawn, JoinHandle};
@@ -23,8 +26,7 @@ use rustls::NoClientAuth;
 use tide;
 use tide_rustls::TlsListener;
 use tremor_common::ports::IN;
-use tremor_pipeline::Event;
-use tremor_pipeline::EventId;
+use tremor_pipeline::{Event, EventId};
 use tremor_script::{literal, Value, ValueAndMeta};
 use value_trait::ValueAccess;
 

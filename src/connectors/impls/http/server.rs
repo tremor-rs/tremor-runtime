@@ -12,25 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::codec::Codec;
-use crate::connectors::prelude::*;
-use crate::connectors::utils::{mime::MimeCodecMap, tls::TLSServerConfig};
-use crate::postprocessor::postprocess;
-use crate::postprocessor::Postprocessors;
-use crate::{codec, connectors::spawn_task};
-use async_std::channel::{bounded, Receiver, Sender, TryRecvError};
-use async_std::task::JoinHandle;
+use crate::codec;
+use crate::connectors::spawn_task;
+use crate::connectors::{
+    prelude::*,
+    utils::{mime::MimeCodecMap, tls::TLSServerConfig},
+};
+use crate::errors::{Kind as ErrorKind, Result};
+use async_std::channel::unbounded;
+use async_std::{
+    channel::{bounded, Receiver, Sender, TryRecvError},
+    task::JoinHandle,
+};
 use dashmap::DashMap;
-use http_types::headers::HeaderValue;
-use http_types::Mime;
+use halfbrown::{Entry, HashMap};
+use http_types::headers::{self, HeaderValue};
+use http_types::{mime::BYTE_STREAM, Mime, StatusCode};
 use simd_json::ValueAccess;
 use std::{str::FromStr, sync::Arc};
+use tide::{
+    listener::{Listener, ToListener},
+    Response,
+};
 use tide_rustls::TlsListener;
-use tremor_common::time::nanotime;
-use uuid::adapter::Urn;
-use uuid::Uuid;
 
-const URN_HEADER: &str = "x-tremor-http-urn";
+use super::utils::{FixedBodyReader, StreamingBodyReader};
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -40,46 +46,13 @@ pub(crate) struct Config {
     url: Url,
     /// TLS configuration, if required
     tls: Option<TLSServerConfig>,
-    /// MIME mapping to/from tremor codecs
-    #[serde(default = "default_mime_codec_map")]
-    codec_map: MimeCodecMap,
-}
-
-fn default_mime_codec_map() -> MimeCodecMap {
-    MimeCodecMap::with_builtin()
+    /// custom codecs mapping from mime_type to custom codec name
+    /// e.g. for handling `application/json` with the `binary` codec, if desired
+    #[serde(default)]
+    custom_codecs: HashMap<String, String>,
 }
 
 impl ConfigImpl for Config {}
-
-struct HttpServerState {
-    idgen: EventIdGenerator,
-    tx: Sender<RendezvousRequest>,
-    uid: u64,
-    codec: Box<dyn Codec>,
-    codec_map: MimeCodecMap,
-}
-
-impl Clone for HttpServerState {
-    fn clone(&self) -> Self {
-        Self {
-            idgen: self.idgen,
-            tx: self.tx.clone(),
-            uid: self.uid,
-            codec: self.codec.boxed_clone(),
-            codec_map: self.codec_map.clone(),
-        }
-    }
-}
-
-#[allow(clippy::module_name_repetitions)]
-pub(crate) struct HttpServer {
-    config: Config,
-    origin_uri: EventOriginUri,
-    tls_server_config: Option<TLSServerConfig>,
-    inflight: Arc<DashMap<String, Sender<RendezvousResponse>>>,
-    codec: Box<dyn Codec>,
-    codec_map: MimeCodecMap,
-}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -92,69 +65,73 @@ impl ConnectorBuilder for Builder {
 
     async fn from_config(
         &self,
-        _id: &str,
+        id: &str,
         raw_config: &ConnectorConfig,
-    ) -> crate::errors::Result<Box<dyn Connector>> {
+    ) -> Result<Box<dyn Connector>> {
         if let Some(config) = &raw_config.config {
             let config = Config::new(config)?;
             let tls_server_config = config.tls.clone();
+
+            if tls_server_config.is_some() && config.url.scheme() != "https" {
+                return Err(ErrorKind::InvalidConfiguration(
+                    id.to_string(),
+                    "Using SSL certificates requires setting up a https endpoint".into(),
+                )
+                .into());
+            }
             let origin_uri = EventOriginUri {
                 scheme: "http-server".to_string(),
                 host: "localhost".to_string(),
                 port: None,
                 path: vec![],
             };
-            let codec = raw_config
+            // extract expected content types from configured codec
+            let configured_codec = raw_config
                 .codec
                 .as_ref()
-                .map_or_else(|| codec::resolve(&"json".into()), codec::resolve)?;
-            let codec_map = config.codec_map.clone();
+                .map_or_else(|| HttpServer::DEFAULT_CODEC.to_string(), |c| c.name.clone());
+            let codec_mime_type = codec::resolve(&configured_codec.as_str().into())?
+                .mime_types()
+                .into_iter()
+                .next()
+                .map(ToString::to_string);
             let inflight = Arc::default();
+            let codec_map = MimeCodecMap::with_overwrites(&config.custom_codecs)?;
 
             Ok(Box::new(HttpServer {
                 config,
                 origin_uri,
                 tls_server_config,
                 inflight,
-                codec,
+                configured_codec,
+                codec_mime_type,
                 codec_map,
             }))
         } else {
-            Err(crate::errors::ErrorKind::MissingConfiguration(String::from("HttpServer")).into())
+            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
     }
 }
 
-struct RendezvousResponse(ValueAndMeta<'static>);
-struct RendezvousRequest {
-    data: Vec<u8>,
-    meta: Value<'static>,
-    urn: Urn,
-    response_channel: Sender<RendezvousResponse>,
-}
-
-struct HttpServerSource {
-    url: Url,
+#[allow(clippy::module_name_repetitions)]
+pub(crate) struct HttpServer {
+    config: Config,
     origin_uri: EventOriginUri,
-    inflight: Arc<DashMap<String, Sender<RendezvousResponse>>>,
-    request_rx: Receiver<RendezvousRequest>,
-    request_tx: Sender<RendezvousRequest>,
-    accept_task: Option<JoinHandle<()>>,
     tls_server_config: Option<TLSServerConfig>,
-    codec: Box<dyn Codec>,
+    inflight: Arc<DashMap<RequestId, Sender<Response>>>,
+    configured_codec: String,
+    codec_mime_type: Option<String>,
     codec_map: MimeCodecMap,
 }
 
-struct HttpServerSink {
-    #[allow(dead_code)]
-    origin_uri: EventOriginUri,
-    inflight: Arc<DashMap<String, Sender<RendezvousResponse>>>,
+impl HttpServer {
+    const DEFAULT_CODEC: &'static str = "json";
 }
 
 #[async_trait::async_trait()]
 impl Connector for HttpServer {
     fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Optional("json")
+        CodecReq::Optional(Self::DEFAULT_CODEC)
     }
 
     async fn create_source(
@@ -162,16 +139,16 @@ impl Connector for HttpServer {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let (request_tx, request_rx) = bounded(128);
+        let (request_tx, request_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
         let source = HttpServerSource {
             url: self.config.url.clone(),
             inflight: self.inflight.clone(),
             request_tx,
             request_rx,
             origin_uri: self.origin_uri.clone(),
-            accept_task: None,
+            server_task: None,
             tls_server_config: self.tls_server_config.clone(),
-            codec: self.codec.boxed_clone(),
+            configured_codec: self.configured_codec.clone(),
             codec_map: self.codec_map.clone(),
         };
         builder.spawn(source, source_context).map(Some)
@@ -182,28 +159,655 @@ impl Connector for HttpServer {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = HttpServerSink {
-            inflight: self.inflight.clone(),
-            origin_uri: self.origin_uri.clone(),
-        };
+        let sink = HttpServerSink::new(
+            self.inflight.clone(),
+            self.codec_map.clone(),
+            self.configured_codec.clone(),
+            self.codec_mime_type.clone(),
+        );
         builder.spawn(sink, sink_context).map(Some)
     }
 }
 
-async fn handle_request(req: tide::Request<HttpServerState>) -> tide::Result<tide::Response> {
+struct HttpServerSource {
+    url: Url,
+    origin_uri: EventOriginUri,
+    inflight: Arc<DashMap<RequestId, Sender<Response>>>,
+    request_rx: Receiver<RawRequestData>,
+    request_tx: Sender<RawRequestData>,
+    server_task: Option<JoinHandle<()>>,
+    tls_server_config: Option<TLSServerConfig>,
+    configured_codec: String,
+    codec_map: MimeCodecMap,
+}
+
+#[async_trait::async_trait()]
+impl Source for HttpServerSource {
+    async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
+        if let Some(accept_task) = self.server_task.take() {
+            // stop acceptin' new connections
+            accept_task.cancel().await;
+        }
+        Ok(())
+    }
+
+    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+        let host = self.url.host_or_local();
+        let port = self.url.port().unwrap_or_else(|| {
+            if self.url.scheme() == "https" {
+                443
+            } else {
+                80
+            }
+        });
+        let hostport = format!("{}:{}", host, port);
+
+        // cancel last accept task if necessary, this will drop the previous listener
+        if let Some(server_task) = self.server_task.take() {
+            server_task.cancel().await;
+        }
+        // TODO: clear out the inflight map. Q: How to drain the map without losing responses?
+        // Answer all pending requests with a 503 status?
+
+        let tx = self.request_tx.clone();
+
+        let ctx = ctx.clone();
+        let tls_server_config = self.tls_server_config.clone();
+
+        // Server task - this is the main receive loop for http server instances
+        self.server_task = Some(spawn_task(ctx.clone(), async move {
+            if let Some(tls_server_config) = tls_server_config {
+                let mut endpoint = tide::Server::with_state(HttpServerState::new(tx, ctx.clone()));
+                endpoint.at("/").all(handle_request);
+                endpoint.at("/*").all(handle_request);
+
+                let mut listener = TlsListener::build()
+                    .addrs(&hostport)
+                    .cert(&tls_server_config.cert)
+                    .key(&tls_server_config.key)
+                    .finish()?;
+                listener.bind(endpoint).await?;
+                if let Some(info) = listener.info().into_iter().next() {
+                    info!(
+                        "{ctx} Listening for HTTPS requests on {}",
+                        info.connection()
+                    );
+                }
+                listener.accept().await?;
+            } else {
+                let mut endpoint = tide::Server::with_state(HttpServerState::new(tx, ctx.clone()));
+                endpoint.at("/").all(handle_request);
+                endpoint.at("/*").all(handle_request);
+                let mut listener = (&hostport).to_listener()?;
+                listener.bind(endpoint).await?;
+                if let Some(info) = listener.info().into_iter().next() {
+                    info!("{ctx} Listening for HTTP requests on {}", info.connection());
+                }
+                listener.accept().await?;
+            };
+            Ok(())
+        }));
+
+        Ok(true)
+    }
+
+    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+        match self.request_rx.try_recv() {
+            Ok(RawRequestData {
+                data,
+                request_meta,
+                content_type,
+                response_channel,
+            }) => {
+                // assign request id and prepare meta
+                let request_id = RequestId(*pull_id);
+                debug!("{ctx} Sending out HTTP request {request_id}");
+                let meta = ctx.meta(literal!({
+                    "request": request_meta,
+                    "request_id": *pull_id
+                }));
+                // store request context so we can respond to this request
+                if self.inflight.insert(request_id, response_channel).is_some() {
+                    error!("{ctx} Request id collision: {request_id}");
+                };
+                Ok(if data.is_empty() {
+                    // NOTE GET, HEAD ...
+                    SourceReply::Structured {
+                        origin_uri: self.origin_uri.clone(),
+                        payload: EventPayload::from(ValueAndMeta::from_parts(
+                            Value::const_null(),
+                            meta,
+                        )),
+                        stream: DEFAULT_STREAM_ID,
+                        port: None,
+                    }
+                } else {
+                    // codec overwrite, depending on requests content-type
+                    // only set the overwrite if it is different than the configured codec
+                    let codec_overwrite = if let Some(content_type) = content_type {
+                        let maybe_codec = self.codec_map.get_codec(content_type.as_str());
+                        maybe_codec
+                            .filter(|c| c.name() != self.configured_codec.as_str())
+                            .map(|c| c.boxed_clone())
+                    } else {
+                        None
+                    };
+                    SourceReply::Data {
+                        origin_uri: self.origin_uri.clone(),
+                        data,
+                        meta: Some(meta),
+                        stream: None, // a http request is a discrete unit and not part of any stream
+                        port: None,
+                        codec_overwrite,
+                    }
+                })
+            }
+            Err(TryRecvError::Closed) => {
+                ctx.swallow_err(
+                    ctx.notifier().connection_lost().await,
+                    "Error notifying the runtime of a lost connection.",
+                );
+                Err(TryRecvError::Closed.into())
+            }
+            Err(TryRecvError::Empty) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
+        }
+    }
+
+    fn is_transactional(&self) -> bool {
+        //FIXME: add ack/fail handling when not using custom_responses
+        true
+    }
+
+    fn asynchronous(&self) -> bool {
+        true
+    }
+}
+
+struct HttpServerSink {
+    inflight: Arc<DashMap<RequestId, Sender<Response>>>,
+    codec_map: MimeCodecMap,
+    configured_codec: String,
+    codec_mime_type: Option<String>,
+}
+
+impl HttpServerSink {
+    const ERROR_MSG_EXTRACT_VALUE: &'static str = "Error turning Event into HTTP response";
+    const ERROR_MSG_APPEND_RESPONSE: &'static str = "Error appending batched data to HTTP response";
+
+    fn new(
+        inflight: Arc<DashMap<RequestId, Sender<Response>>>,
+        codec_map: MimeCodecMap,
+        configured_codec: String,
+        codec_mime_type: Option<String>,
+    ) -> Self {
+        Self {
+            inflight,
+            codec_map,
+            configured_codec,
+            codec_mime_type,
+        }
+    }
+}
+
+#[async_trait::async_trait()]
+impl Sink for HttpServerSink {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        event: tremor_pipeline::Event,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+        _start: u64,
+    ) -> Result<SinkReply> {
+        let ingest_ns = event.ingest_ns;
+        let min_pull_id = event.id.get_min_by_stream(ctx.uid, DEFAULT_STREAM_ID);
+        let max_pull_id = event.id.get_max_by_stream(ctx.uid, DEFAULT_STREAM_ID);
+
+        // batch handling:
+        // - extract the request_id for each batch element
+        // - create a SinkResponse for each request_id
+        // - store: request_id -> (SinkResponse, Sender)
+        // - update SinkResponse for each element of the batch
+        // - send response immediately in case of chunked encoding
+        let mut response_map = HashMap::new();
+        let mut chunked = None;
+        let mut content_type = None;
+        let mut codec_overwrite = None;
+        // try to extract the request_id from the first batch item,
+        // otherwise fall back to min-max from event_id
+        for (value, meta) in event.value_meta_iter() {
+            // FIXME: set codec and content-type upon first iteration
+            let http_meta = ctx.extract_meta(meta);
+            let response_meta = http_meta.get("response");
+            let headers_meta = response_meta.get("headers");
+            // extract if we use chunked encoding
+
+            let chunked_header = headers_meta.get(headers::TRANSFER_ENCODING.as_str());
+
+            // extract content type and transfer-encoding from first batch element
+            if chunked.is_none() {
+                chunked = Some(
+                    chunked_header
+                        .as_array()
+                        .and_then(|te| te.last())
+                        .and_then(ValueAccess::as_str)
+                        .or_else(|| chunked_header.as_str())
+                        .map_or(false, |te| te == "chunked"),
+                );
+            }
+            // extract content-type and thus possible codec overwrite only from first element
+            // precedence:
+            //  1. from headers meta
+            //  2. from overwritten codec
+            //  3. from configured codec
+            //  4. fall back to application/octet-stream if codec doesn't provide a mime-type
+            if content_type.is_none() {
+                let content_type_header = headers_meta.get(headers::CONTENT_TYPE.as_str());
+                let header_content_type = content_type_header
+                    .as_array()
+                    .and_then(|ct| ct.last())
+                    .and_then(ValueAccess::as_str)
+                    .or_else(|| content_type_header.as_str())
+                    .map(ToString::to_string);
+
+                codec_overwrite = header_content_type
+                    .as_ref()
+                    .and_then(|mime_str| Mime::from_str(mime_str).ok())
+                    .and_then(|codec| self.codec_map.get_codec(codec.essence()))
+                    // only overwrite the codec if it is different from the configured one
+                    .filter(|codec| codec.name() != self.configured_codec.as_str());
+                let codec_content_type = codec_overwrite
+                    .and_then(|codec| codec.mime_types().first().map(ToString::to_string))
+                    .or(self.codec_mime_type.clone());
+                content_type = Some(
+                    header_content_type
+                        .or(codec_content_type)
+                        .unwrap_or(BYTE_STREAM.to_string()),
+                );
+            }
+
+            // first try to extract request_id from event batch element metadata
+            if let Some(rid) = http_meta.get_u64("request_id").map(RequestId) {
+                match response_map.entry(rid) {
+                    Entry::Vacant(k) => {
+                        if let Some((rid, sender)) = self.inflight.remove(&rid) {
+                            debug!("{ctx} Building response for request_id {rid}");
+                            let mut response = ctx.bail_err(
+                                SinkResponse::build(
+                                    rid,
+                                    chunked.unwrap_or_default(),
+                                    sender,
+                                    http_meta,
+                                    content_type.as_ref(),
+                                )
+                                .await,
+                                Self::ERROR_MSG_EXTRACT_VALUE,
+                            )?;
+
+                            let data = ctx.bail_err(
+                                serializer.serialize_for_stream_with_codec(
+                                    value,
+                                    ingest_ns,
+                                    rid.0,
+                                    &codec_overwrite,
+                                ),
+                                Self::ERROR_MSG_EXTRACT_VALUE,
+                            )?;
+                            ctx.bail_err(
+                                response.append(data).await,
+                                Self::ERROR_MSG_APPEND_RESPONSE,
+                            )?;
+                            k.insert(response);
+                        } else {
+                            warn!(
+                                "{ctx} No request context found for `request_id`: {rid}. Dropping response."
+                            );
+                            continue;
+                        }
+                    }
+                    Entry::Occupied(mut o) => {
+                        let data = ctx.bail_err(
+                            serializer.serialize_for_stream_with_codec(
+                                value,
+                                ingest_ns,
+                                rid.0,
+                                &codec_overwrite,
+                            ),
+                            Self::ERROR_MSG_EXTRACT_VALUE,
+                        )?;
+                        ctx.bail_err(
+                            o.get_mut().append(data).await,
+                            Self::ERROR_MSG_APPEND_RESPONSE,
+                        )?
+                    }
+                }
+            } else {
+                // fallback if no request_id is in the metadata, try extract it from tracked pull_id
+                match min_pull_id.zip(max_pull_id) {
+                    Some((min, max)) if min == max => {
+                        // single pull_id
+                        let rid = RequestId(min);
+
+                        match response_map.entry(rid) {
+                            Entry::Vacant(k) => {
+                                if let Some((rid, sender)) = self.inflight.remove(&rid) {
+                                    debug!("{ctx} Building response for request_id {rid}");
+                                    let mut response = ctx.bail_err(
+                                        SinkResponse::build(
+                                            rid,
+                                            chunked.unwrap_or_default(),
+                                            sender,
+                                            http_meta,
+                                            content_type.as_ref(),
+                                        )
+                                        .await,
+                                        Self::ERROR_MSG_EXTRACT_VALUE,
+                                    )?;
+
+                                    let data = ctx.bail_err(
+                                        serializer.serialize_for_stream_with_codec(
+                                            value,
+                                            ingest_ns,
+                                            rid.0,
+                                            &codec_overwrite,
+                                        ),
+                                        Self::ERROR_MSG_EXTRACT_VALUE,
+                                    )?;
+                                    ctx.bail_err(
+                                        response.append(data).await,
+                                        Self::ERROR_MSG_APPEND_RESPONSE,
+                                    )?;
+                                    k.insert(response);
+                                } else {
+                                    warn!("{ctx} No request context found for Request id: {rid}. Dropping response.");
+                                    continue;
+                                }
+                            }
+                            Entry::Occupied(mut o) => {
+                                let data = ctx.bail_err(
+                                    serializer.serialize_for_stream_with_codec(
+                                        value,
+                                        ingest_ns,
+                                        rid.0,
+                                        &codec_overwrite,
+                                    ),
+                                    Self::ERROR_MSG_EXTRACT_VALUE,
+                                )?;
+                                ctx.bail_err(
+                                    o.get_mut().append(data).await,
+                                    Self::ERROR_MSG_APPEND_RESPONSE,
+                                )?
+                            }
+                        }
+                    }
+                    Some((min, max)) => {
+                        // range of pull_ids, we need to multiplex to multiple requests
+                        for rid in (min..=max).map(RequestId) {
+                            match response_map.entry(rid) {
+                                Entry::Vacant(k) => {
+                                    if let Some((rid, sender)) = self.inflight.remove(&rid) {
+                                        debug!("{ctx} Building response for request_id {rid}");
+                                        let mut response = ctx.bail_err(
+                                            SinkResponse::build(
+                                                rid,
+                                                chunked.unwrap_or_default(),
+                                                sender,
+                                                http_meta,
+                                                content_type.as_ref(),
+                                            )
+                                            .await,
+                                            Self::ERROR_MSG_EXTRACT_VALUE,
+                                        )?;
+
+                                        let data = ctx.bail_err(
+                                            serializer.serialize_for_stream_with_codec(
+                                                value,
+                                                ingest_ns,
+                                                rid.0,
+                                                &codec_overwrite,
+                                            ),
+                                            Self::ERROR_MSG_EXTRACT_VALUE,
+                                        )?;
+                                        ctx.bail_err(
+                                            response.append(data).await,
+                                            Self::ERROR_MSG_APPEND_RESPONSE,
+                                        )?;
+                                        k.insert(response);
+                                    } else {
+                                        warn!("{ctx} No request context found for Request id: {rid}. Dropping response.");
+                                        continue;
+                                    }
+                                }
+                                Entry::Occupied(mut o) => {
+                                    let data = ctx.bail_err(
+                                        serializer.serialize_for_stream_with_codec(
+                                            value,
+                                            ingest_ns,
+                                            rid.0,
+                                            &codec_overwrite,
+                                        ),
+                                        Self::ERROR_MSG_EXTRACT_VALUE,
+                                    )?;
+                                    ctx.bail_err(
+                                        o.get_mut().append(data).await,
+                                        Self::ERROR_MSG_APPEND_RESPONSE,
+                                    )?
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        // unroutable
+                        warn!("{ctx} Unable to extract request_id from event. Dropping response.");
+                    }
+                }
+            }
+        }
+
+        if response_map.is_empty() {
+            error!("{ctx} No request context found for event.");
+            return Ok(SinkReply::FAIL);
+        }
+        for (rid, response) in response_map {
+            debug!("{ctx} Sending response for request_id {rid}");
+            ctx.swallow_err(
+                response.finalize(serializer).await,
+                &format!("Error sending response for request_id {rid}"),
+            );
+        }
+        Ok(SinkReply::NONE)
+    }
+
+    async fn on_signal(
+        &mut self,
+        _signal: Event,
+        _ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+    ) -> Result<SinkReply> {
+        // clean out closed channels
+        self.inflight.retain(|_key, sender| !sender.is_closed());
+        Ok(SinkReply::NONE)
+    }
+
+    fn auto_ack(&self) -> bool {
+        true
+    }
+}
+
+struct SinkResponse {
+    request_id: RequestId,
+    res: Option<Response>,
+    body_data: BodyData,
+    tx: Sender<Response>,
+}
+
+enum BodyData {
+    Data(Vec<Vec<u8>>),
+    Chunked(Sender<Vec<u8>>),
+}
+
+impl SinkResponse {
+    async fn build<'event>(
+        request_id: RequestId,
+        chunked: bool,
+        tx: Sender<Response>,
+        http_meta: Option<&Value<'event>>,
+        content_type: Option<&String>,
+    ) -> Result<Self> {
+        let mut res = tide::Response::new(StatusCode::Ok);
+
+        // build response headers and status etc.
+        let request_meta = http_meta.get("request");
+        let response_meta = http_meta.get("response");
+
+        let status = if let Some(response_meta) = response_meta {
+            // Use user provided status - or default to 200
+            if let Some(status) = response_meta.get_u16("status") {
+                StatusCode::try_from(status)?
+            } else {
+                StatusCode::Ok
+            }
+        } else {
+            // Otherwise - Default status based on request method
+            request_meta.map_or(StatusCode::Ok, |request_meta| {
+                let method = request_meta.get_str("method").unwrap_or("error");
+                match method {
+                    "DELETE" | "delete" => StatusCode::NoContent,
+                    "POST" | "post" => StatusCode::Created,
+                    _otherwise => StatusCode::Ok,
+                }
+            })
+        };
+        res.set_status(status);
+        // build headers
+        if let Some(headers) = response_meta.get_object("headers") {
+            for (name, values) in headers {
+                if let Some(header_values) = values.as_array() {
+                    let mut v = Vec::with_capacity(header_values.len());
+                    for value in header_values {
+                        if let Some(header_value) = value.as_str() {
+                            v.push(HeaderValue::from_str(header_value)?);
+                        }
+                    }
+                    res.append_header(name.as_ref(), v.as_slice());
+                } else if let Some(header_value) = values.as_str() {
+                    res.append_header(name.as_ref(), header_value);
+                }
+            }
+        }
+        // set content-type if not explicitly set in the response headers meta
+        // either from the configured or overwritten codec
+        if res.content_type().is_none() {
+            if let Some(ct) = content_type {
+                let mime = Mime::from_str(ct)?;
+                res.set_content_type(mime);
+            }
+        }
+        let (body_data, res) = if chunked {
+            let (chunk_tx, chunk_rx) = unbounded();
+            let chunked_reader = StreamingBodyReader::new(chunk_rx);
+            res.set_body(tide::Body::from_reader(chunked_reader, None));
+            // chunked encoding and content-length cannot go together
+            res.remove_header(headers::CONTENT_LENGTH);
+            // we can already send out the response and stream the rest of the chunks upon calling `append`
+            tx.send(res).await?;
+            (BodyData::Chunked(chunk_tx), None)
+        } else {
+            (BodyData::Data(Vec::with_capacity(4)), Some(res))
+        };
+        Ok(Self {
+            request_id,
+            res,
+            body_data,
+            tx,
+        })
+    }
+
+    async fn append(&mut self, mut chunks: Vec<Vec<u8>>) -> Result<()> {
+        match &mut self.body_data {
+            BodyData::Chunked(tx) => {
+                for chunk in chunks {
+                    tx.send(chunk).await?;
+                }
+            }
+            BodyData::Data(data) => data.append(&mut chunks),
+        }
+        Ok(())
+    }
+
+    /// Consume self and finalize and send the response.
+    /// In the chunked case we have already sent it before.
+    async fn finalize(mut self, serializer: &mut EventSerializer) -> Result<()> {
+        // finalize the stream
+        let rest = serializer.finish_stream(self.request_id.0)?;
+        if !rest.is_empty() {
+            self.append(rest).await?;
+        }
+        // send response if necessary
+        if let BodyData::Data(data) = self.body_data {
+            if let Some(mut response) = self.res.take() {
+                // set body
+                let reader = FixedBodyReader::new(data);
+                let len = reader.len();
+                response.set_body(tide::Body::from_reader(reader, Some(len)));
+                // send off the response
+                self.tx.send(response).await?;
+            }
+        } else {
+            // TODO: only close the stream if we know we have the last value for this request_id
+            // TODO: but how to find out?
+            // signal EOF to the `StreamingBodyReader`
+            self.tx.close();
+        }
+        Ok(())
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct RequestId(u64);
+
+impl std::fmt::Display for RequestId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Clone)]
+struct HttpServerState {
+    tx: Sender<RawRequestData>,
+    ctx: SourceContext,
+}
+
+impl HttpServerState {
+    fn new(tx: Sender<RawRequestData>, ctx: SourceContext) -> Self {
+        Self { tx, ctx }
+    }
+}
+
+struct RawRequestData {
+    data: Vec<u8>,
+    // metadata about the request, not the ready event meta, still needs to be wrapped
+    request_meta: Value<'static>,
+    content_type: Option<String>,
+    response_channel: Sender<Response>,
+}
+
+async fn handle_request(mut req: tide::Request<HttpServerState>) -> tide::Result<tide::Response> {
     // NOTE We wrap and crap as tide doesn't report donated route handler's errors
-    let result = _handle_request(req).await;
+    let result = _handle_request(&mut req).await;
     if let Err(e) = result {
-        error!("Error handling HTTP server request {}", e);
+        error!(
+            "{ctx} Error handling HTTP server request {e}",
+            ctx = req.state().ctx
+        );
         Err(e)
     } else {
         result
     }
 }
-async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Result<tide::Response> {
-    let ingest_ns = nanotime();
-
-    let mut headers = req
+async fn _handle_request(req: &mut tide::Request<HttpServerState>) -> tide::Result<tide::Response> {
+    let content_type = req.content_type().map(|mime| mime.essence().to_string());
+    let headers = req
         .header_names()
         .map(|name| {
             (
@@ -212,25 +816,19 @@ async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Resul
                 // https://tools.ietf.org/html/rfc7230#section-3.2.2
                 req.header(name)
                     .iter()
-                    .map(|value| {
+                    .flat_map(|value| {
                         let mut a: Vec<Value> = Vec::new();
                         for v in (*value).iter() {
                             a.push(v.as_str().to_string().into());
                         }
-                        Value::from(a)
+                        a.into_iter()
                     })
                     .collect::<Value>(),
             )
         })
         .collect::<Value>();
 
-    let linking_uuid = Uuid::new_v4().to_urn();
-
-    // This is how we link a request to a response, this might not go away, unless we can do that with event ids somehow?
-    headers.insert(URN_HEADER, Value::from(linking_uuid.to_string()))?;
-
-    let mut meta = Value::object_with_capacity(1);
-    let mut request_meta = Value::object_with_capacity(3);
+    let mut meta = Value::object_with_capacity(3);
     let mut url_meta = Value::object_with_capacity(7);
     let url = req.url();
     url_meta.insert("scheme", url.scheme().to_string())?;
@@ -248,38 +846,26 @@ async fn _handle_request(mut req: tide::Request<HttpServerState>) -> tide::Resul
     url.fragment()
         .and_then(|f| url_meta.insert("fragment", f.to_string()).ok());
 
-    request_meta.insert("method", req.method().to_string())?;
-    request_meta.insert("headers", headers)?;
-    request_meta.insert("url", url_meta)?;
-    meta.insert("request", request_meta)?;
+    meta.insert("method", req.method().to_string())?;
+    meta.insert("headers", headers)?;
+    meta.insert("url", url_meta)?;
     let data = req.body_bytes().await?;
 
     // Dispatch
-    let (response_channel, call_response) = bounded(1);
+    let (response_tx, response_rx) = bounded(1);
     req.state()
         .tx
-        .send(RendezvousRequest {
+        .send(RawRequestData {
             data,
-            meta,
-            urn: linking_uuid,
-            response_channel,
+            request_meta: meta,
+            content_type,
+            response_channel: response_tx,
         })
         .await?;
 
-    let event = call_response.recv().await?;
-
-    let codec: &(dyn Codec + 'static) = req.state().codec.as_ref();
-    let codec_map = &req.state().codec_map;
-    let mut processors = Vec::new();
-    if let Ok(response) = make_response(ingest_ns, codec, codec_map, &mut processors, &event.0) {
-        Ok(response)
-    } else {
-        Ok(tide::Response::builder(503)
-            .body(tide::Body::empty())
-            .build())
-    }
+    Ok(response_rx.recv().await?)
 }
-
+/*
 fn make_response(
     ingest_ns: u64,
     default_codec: &dyn Codec,
@@ -352,6 +938,7 @@ fn make_response(
             post_processors.as_mut_slice(),
             ingest_ns,
             dynamic_codec.encode(response_data)?,
+            "FIXME",
         )?;
 
         // TODO: see if we can use a reader instead of creating a new vector
@@ -366,6 +953,7 @@ fn make_response(
             post_processors.as_mut_slice(),
             ingest_ns,
             default_codec.encode(response_data)?,
+            "FIXME",
         )?;
         // TODO: see if we can use a reader instead of creating a new vector
         let v: Vec<u8> = processed.into_iter().flatten().collect();
@@ -384,196 +972,4 @@ fn make_response(
     }
     Ok(builder.build())
 }
-
-#[async_trait::async_trait()]
-impl Source for HttpServerSource {
-    async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
-        if let Some(accept_task) = self.accept_task.take() {
-            // stop acceptin' new connections
-            accept_task.cancel().await;
-        }
-        Ok(())
-    }
-
-    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
-        // TODO handle other sockets that are not host/port based
-        let host = self.url.host_or_local();
-        let port = self.url.port().unwrap_or_else(|| {
-            if self.url.scheme() == "https" {
-                443
-            } else {
-                80
-            }
-        });
-        let hostport = format!("{}:{}", host, port);
-
-        // cancel last accept task if necessary, this will drop the previous listener
-        if let Some(accept_task) = self.accept_task.take() {
-            accept_task.cancel().await;
-        }
-
-        let tx = self.request_tx.clone();
-        if self.tls_server_config.is_some() && self.url.scheme() != "https" {
-            return Err("Using SSL certificates requires setting up a https endpoint".into());
-        }
-
-        let ctx = ctx.clone();
-        let tls_server_config = self.tls_server_config.clone();
-        let codec = self.codec.boxed_clone();
-        let codec_map = self.codec_map.clone();
-
-        // Accept task - this is the main receive loop for http server instances
-        self.accept_task = Some(spawn_task(ctx.clone(), async move {
-            let idgen = EventIdGenerator::new(ctx.uid);
-            if let Some(tls_server_config) = tls_server_config {
-                let mut endpoint = tide::Server::with_state(HttpServerState {
-                    idgen,
-                    tx,
-                    uid: ctx.uid,
-                    codec,
-                    codec_map,
-                });
-                endpoint.at("/").all(handle_request);
-                endpoint.at("/*").all(handle_request);
-
-                endpoint
-                    .listen(
-                        TlsListener::build()
-                            .addrs(&hostport)
-                            .cert(&tls_server_config.cert)
-                            .key(&tls_server_config.key),
-                    )
-                    .await?;
-            } else {
-                let mut endpoint = tide::Server::with_state(HttpServerState {
-                    idgen,
-                    tx,
-                    uid: ctx.uid,
-                    codec,
-                    codec_map,
-                });
-                endpoint.at("/").all(handle_request);
-                endpoint.at("/*").all(handle_request);
-                endpoint.listen(&hostport).await?;
-            };
-            Ok(())
-        }));
-
-        Ok(true)
-    }
-
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        if !_ctx.quiescence_beacon().continue_reading().await {
-            return Ok(SourceReply::Empty(100));
-        }
-
-        match self.request_rx.try_recv() {
-            Ok(RendezvousRequest {
-                data,
-                meta,
-                urn,
-                response_channel,
-            }) => {
-                // At this point we lose association of urn and call-response tx channel for this event's
-                // rpc context. The sink will in fact receive the response ( pipeline originated ) so we need
-                // to rendezvous the response somehow - and we use the urn for this
-
-                if self
-                    .inflight
-                    .insert(urn.to_string(), response_channel)
-                    .is_some()
-                {
-                    error!("Request tracking urn collision: {}", urn);
-                };
-                Ok(if data.is_empty() {
-                    // NOTE GET, HEAD ...
-                    SourceReply::Structured {
-                        origin_uri: self.origin_uri.clone(),
-                        payload: EventPayload::from(ValueAndMeta::from_parts(
-                            Value::const_null(),
-                            meta,
-                        )),
-                        stream: DEFAULT_STREAM_ID,
-                        port: None,
-                    }
-                } else {
-                    SourceReply::Data {
-                        origin_uri: self.origin_uri.clone(),
-                        data,
-                        meta: Some(meta),
-                        stream: DEFAULT_STREAM_ID,
-                        port: None,
-                    }
-                })
-            }
-            Err(TryRecvError::Closed) => Err(TryRecvError::Closed.into()),
-            Err(TryRecvError::Empty) => Ok(SourceReply::Empty(DEFAULT_POLL_INTERVAL)),
-        }
-    }
-
-    fn is_transactional(&self) -> bool {
-        true
-    }
-
-    fn asynchronous(&self) -> bool {
-        true
-    }
-}
-
-#[async_trait::async_trait()]
-impl Sink for HttpServerSink {
-    #[allow(clippy::option_if_let_else)]
-    async fn on_event(
-        &mut self,
-        input: &str,
-        event: tremor_pipeline::Event,
-        ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
-        _start: u64,
-    ) -> Result<SinkReply> {
-        if input == "err" {
-            // There was an issue with the pipeline processing
-            for (v, m) in event.value_meta_iter() {
-                let request = m.get("request");
-                let headers = request.get("headers");
-                let urn = headers.get_str(URN_HEADER).ok_or("No Urn provided")?;
-                let tx = self.inflight.get(urn).ok_or("Unknown Urn")?;
-
-                let reqm = if let Some(reqm) = request {
-                    reqm.clone_static()
-                } else {
-                    literal!({})
-                };
-                let m: Value = literal!({
-                    "request": reqm,
-                    "response": {
-                        "status": 503,
-                    }
-                });
-                let vm = ValueAndMeta::from_parts(v.clone_static(), m.clone_static());
-                if let Err(_e) = tx.send(RendezvousResponse(vm)).await {
-                    error!("{ctx} Internal server error");
-                    ctx.notifier().connection_lost().await?;
-                }
-            }
-        } else {
-            for (v, m) in event.value_meta_iter() {
-                let request = m.get("request");
-                let headers = request.get("headers");
-                let urn = headers.get_str(URN_HEADER).ok_or("No Urn provided")?;
-                let tx = self.inflight.get(urn).ok_or("Unknown Urn")?;
-
-                let vm = ValueAndMeta::from_parts(v.clone_static(), m.clone_static());
-                if let Err(_e) = tx.send(RendezvousResponse(vm)).await {
-                    error!("{} Internal server error", &ctx);
-                    ctx.notifier().connection_lost().await?;
-                }
-            }
-        }
-        Ok(SinkReply::NONE)
-    }
-
-    fn auto_ack(&self) -> bool {
-        true
-    }
-}
+*/

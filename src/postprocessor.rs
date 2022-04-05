@@ -101,6 +101,7 @@ pub fn postprocess(
     postprocessors: &mut [Box<dyn Postprocessor>], // We are borrowing a dyn box as we don't want to pass ownership.
     ingres_ns: u64,
     data: Vec<u8>,
+    alias: &str,
 ) -> Result<Vec<Vec<u8>>> {
     let egress_ns = nanotime();
     let mut data = vec![data];
@@ -111,13 +112,53 @@ pub fn postprocess(
         for d in &data {
             let mut r = pp
                 .process(ingres_ns, egress_ns, d)
-                .map_err(|e| format!("Postprocessor error {}", e))?;
+                .map_err(|e| format!("[Connector::{alias}] Postprocessor error {e}"))?;
             data1.append(&mut r);
         }
         mem::swap(&mut data, &mut data1);
     }
 
     Ok(data)
+}
+
+/// Canonical way to finish postprocessors up
+///
+/// # Errors
+///
+/// * If a postprocessor failed
+pub fn finish(postprocessors: &mut [Box<dyn Postprocessor>], alias: &str) -> Result<Vec<Vec<u8>>> {
+    if let Some((head, tail)) = postprocessors.split_first_mut() {
+        let mut data = match head.finish(None) {
+            Ok(d) => d,
+            Err(e) => {
+                error!(
+                    "[Connector::{alias}] Postprocessor '{}' finish error: {e}",
+                    head.name()
+                );
+                return Err(e);
+            }
+        };
+        let mut data1 = Vec::new();
+        for pp in tail {
+            data1.clear();
+            for d in &data {
+                match pp.finish(Some(d)) {
+                    Ok(mut r) => data1.append(&mut r),
+                    Err(e) => {
+                        error!(
+                            "[Connector::{alias}] Postprocessor '{}' finish error: {e}",
+                            pp.name()
+                        );
+                        return Err(e);
+                    }
+                }
+            }
+            std::mem::swap(&mut data, &mut data1);
+        }
+        Ok(data)
+    } else {
+        Ok(vec![])
+    }
 }
 
 #[derive(Default)]

@@ -635,7 +635,7 @@ async fn consumer_task(
                 if let Some(tx) = connect_result_channel.take() {
                     if !tx.is_closed() {
                         source_ctx
-                            .log_err(tx.try_send(Ok(true)), "Error sending to connect channel");
+                            .swallow_err(tx.try_send(Ok(true)), "Error sending to connect channel");
                     }
                 }
                 // handle kafka msg
@@ -653,12 +653,13 @@ async fn consumer_task(
                     origin_uri,
                     data,
                     meta: Some(meta),
-                    stream: stream_id,
+                    stream: Some(stream_id),
                     port: Some(OUT),
+                    codec_overwrite: None,
                 };
                 if let Err(e) = source_tx.send((reply, Some(pull_id))).await {
                     error!("{source_ctx} Error sending kafka message to source: {e}");
-                    source_ctx.log_err(
+                    source_ctx.swallow_err(
                         source_ctx.notifier().connection_lost().await,
                         "Error notifying the runtime of a disfunctional source channel.",
                     );
@@ -681,14 +682,14 @@ async fn consumer_task(
                                 // in case the connect_result_channel has already been closed,
                                 // lets initiate a reconnect via the notifier
                                 // this might happen when we subscribe to multiple topics
-                                source_ctx.log_err(
+                                source_ctx.swallow_err(
                                     source_ctx.notifier().connection_lost().await,
                                     "Error notifying the runtime about a failing consumer.",
                                 );
                             }
                         } else {
                             // Initiate reconnect (if configured)
-                            source_ctx.log_err(
+                            source_ctx.swallow_err(
                                 source_ctx.notifier().connection_lost().await,
                                 "Error notifying the runtime about a failing consumer.",
                             );
@@ -710,10 +711,11 @@ async fn consumer_task(
                 );
                 if let Some(tx) = connect_result_channel.take() {
                     if !tx.is_closed() {
-                        source_ctx.log_err(tx.try_send(Err("Consumer done".into())), "Send failed");
+                        source_ctx
+                            .swallow_err(tx.try_send(Err("Consumer done".into())), "Send failed");
                     }
                 } else {
-                    source_ctx.log_err(
+                    source_ctx.swallow_err(
                         source_ctx.notifier().connection_lost().await,
                         "Error notifying the runtime of finished consumer.",
                     );

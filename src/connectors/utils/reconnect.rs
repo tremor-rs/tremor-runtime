@@ -295,15 +295,15 @@ impl ReconnectRuntime {
                 Ok((Connectivity::Connected, true))
             }
             (source, sink, conn) => {
-                ctx.log_err(
+                ctx.swallow_err(
                     source,
                     &format!("Error connecting the source part ({})", self.attempt),
                 );
-                ctx.log_err(
+                ctx.swallow_err(
                     sink,
                     &format!("Error connecting the sink part ({})", self.attempt),
                 );
-                ctx.log_err(
+                ctx.swallow_err(
                     conn,
                     &format!("Error connecting the connector ({})", self.attempt),
                 );

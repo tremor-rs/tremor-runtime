@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::codec::{self, binary, json, msgpack, string, yaml, Codec};
+use crate::codec::{self, binary, csv, json, msgpack, string, yaml, Codec};
 use crate::config::NameWithConfig;
 use crate::errors::Result;
 use halfbrown::HashMap;
@@ -23,9 +23,10 @@ use serde::{
 };
 use std::fmt;
 
-const MIME_TYPES: [&str; 8] = [
+const MIME_TYPES: [&str; 9] = [
     "application/json",
     "application/yaml",
+    "text/csv",
     "text/plain",
     "text/html",
     "application/msgpack",
@@ -55,6 +56,7 @@ pub fn by_mime_type(mime: &str) -> Result<Box<dyn Codec>> {
     match mime {
         "application/json" => Ok(Box::new(json::Json::<json::Unsorted>::default())),
         "application/yaml" => Ok(Box::new(yaml::Yaml {})),
+        "text/csv" => Ok(Box::new(csv::Csv {})),
         "text/plain" | "text/html" => Ok(Box::new(string::String {})),
         "application/msgpack" | "application/x-msgpack" | "application/vnd.msgpack" => {
             Ok(Box::new(msgpack::MsgPack {}))
@@ -103,10 +105,24 @@ impl MimeCodecMap {
         }
     }
 
+    pub fn with_overwrites(custom_codecs: &HashMap<String, String>) -> Result<Self> {
+        let mut base_map = builtin_codec_map();
+        for (mime, codec_name) in custom_codecs {
+            let codec = codec::resolve(&codec_name.into())?;
+            base_map.insert(mime.clone(), codec);
+        }
+        Ok(Self { map: base_map })
+    }
+
     pub fn default() -> Self {
         Self {
             map: builtin_codec_map(),
         }
+    }
+
+    /// get codec from given Content-Type essence (e.g. "application/json")
+    pub fn get_codec(&mut self, content_type: &str) -> Option<&Box<dyn Codec>> {
+        self.map.get(content_type)
     }
 }
 

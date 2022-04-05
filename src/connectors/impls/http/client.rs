@@ -227,7 +227,7 @@ impl Sink for HttpRequestSink {
             let response_tx = self.response_tx.clone();
             let origin_uri = self.origin_uri.clone();
 
-            let (request, request_meta) = self.http_meta.process(&event)?;
+            let (request, request_meta) = self.http_meta.process(&event, ctx.alias())?;
 
             let mut codec = self.http_meta.codec.boxed_clone();
             // TODO: move processor loading outside of event handling

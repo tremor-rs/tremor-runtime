@@ -107,10 +107,11 @@ where
                 };
                 Ok(SourceReply::Data {
                     origin_uri: self.origin_uri.clone(),
-                    stream,
+                    stream: Some(stream),
                     meta: Some(meta),
                     data,
                     port: None,
+                    codec_overwrite: None,
                 })
             }
             Some(Err(_)) | None => Ok(SourceReply::EndStream {
@@ -123,7 +124,7 @@ where
 
     async fn on_done(&mut self, stream: u64) -> StreamDone {
         // make the writer stop, otherwise the underlying socket will never be closed
-        self.ctx.log_err(
+        self.ctx.swallow_err(
             self.sink_runtime.unregister_stream_writer(stream).await,
             "Error unregistering stream",
         );
