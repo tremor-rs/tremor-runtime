@@ -504,7 +504,7 @@ impl EventSerializer {
         ingest_ns: u64,
         stream_id: u64,
     ) -> Result<Vec<Vec<u8>>> {
-        self.serialize_for_stream_with_codec(value, ingest_ns, stream_id, &mut None)
+        self.serialize_for_stream_with_codec(value, ingest_ns, stream_id, None)
     }
 
     /// Serialize an event for a certain stream with the possibility to overwrite the configured codec
@@ -516,10 +516,10 @@ impl EventSerializer {
         value: &Value,
         ingest_ns: u64,
         stream_id: u64,
-        codec_overwrite: &Option<&Box<dyn Codec>>,
+        codec_overwrite: Option<&dyn Codec>,
     ) -> Result<Vec<Vec<u8>>> {
         if stream_id == DEFAULT_STREAM_ID {
-            let codec = codec_overwrite.unwrap_or(&self.codec);
+            let codec = codec_overwrite.unwrap_or_else(|| self.codec.as_ref());
             postprocess(
                 &mut self.postprocessors,
                 ingest_ns,
@@ -530,7 +530,7 @@ impl EventSerializer {
             match self.streams.entry(stream_id) {
                 Entry::Occupied(mut entry) => {
                     let (c, pps) = entry.get_mut();
-                    let codec = codec_overwrite.unwrap_or(c);
+                    let codec = codec_overwrite.unwrap_or_else(|| c.as_ref());
                     postprocess(pps, ingest_ns, codec.encode(value)?, &self.alias)
                 }
                 Entry::Vacant(entry) => {

@@ -1080,6 +1080,7 @@ where
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn handle_data(
         &mut self,
         stream: Option<u64>,
