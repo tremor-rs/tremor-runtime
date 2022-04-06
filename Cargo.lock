@@ -6041,6 +6041,7 @@ dependencies = [
  "mapr",
  "matches",
  "memchr",
+ "num_cpus",
  "pin-project-lite 0.2.8",
  "port_scanner",
  "pretty_assertions",

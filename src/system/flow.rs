@@ -17,8 +17,8 @@ use crate::{
     errors::{Error, Kind as ErrorKind, Result},
     instance::State,
     log_error,
-    permge::PriorityMerge,
     pipeline::{self, InputTarget},
+    primerge::PriorityMerge,
 };
 use async_std::prelude::*;
 use async_std::{

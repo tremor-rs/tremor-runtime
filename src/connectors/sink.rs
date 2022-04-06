@@ -30,15 +30,14 @@ use crate::config::{
 use crate::connectors::utils::reconnect::{Attempt, ConnectionLostNotifier};
 use crate::connectors::{ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone};
 use crate::errors::Result;
-// use crate::permge::PriorityMerge;
 use crate::pipeline;
 use crate::postprocessor::{finish, make_postprocessors, postprocess, Postprocessors};
+use crate::primerge::PriorityMerge;
 use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task;
 use beef::Cow;
 pub(crate) use channel_sink::{ChannelSink, ChannelSinkRuntime};
-use futures::future::Either;
 pub(crate) use single_stream_sink::{SingleStreamSink, SingleStreamSinkRuntime};
 use std::borrow::Borrow;
 use std::collections::{btree_map::Entry, BTreeMap, HashSet};
@@ -342,12 +341,12 @@ pub(crate) enum SinkMsg {
 
 /// Wrapper around all possible sink messages
 /// handled in the Sink task
-// #[allow(clippy::large_enum_variant)] // TODO: should we box SinkMsg here?
-// #[derive(Debug)]
-// enum SinkMsgWrapper {
-//     FromSink(AsyncSinkReply),
-//     ToSink(SinkMsg),
-// }
+#[allow(clippy::large_enum_variant)] // TODO: should we box SinkMsg here?
+#[derive(Debug)]
+enum SinkMsgWrapper {
+    FromSink(AsyncSinkReply),
+    ToSink(SinkMsg),
+}
 
 /// address of a connector sink
 #[derive(Clone, Debug)]
@@ -388,9 +387,14 @@ impl SinkManagerBuilder {
         let qsize = self.qsize;
         let name = format!("{}-sink", ctx.alias);
         let (sink_tx, sink_rx) = bounded(qsize);
-        let manager = SinkManager::new(sink, ctx, self, sink_rx);
+        let manager = SinkManager::new(sink, ctx.clone(), self, sink_rx);
         // spawn manager task
-        task::Builder::new().name(name).spawn(manager.run())?;
+        dbg!();
+        ctx.swallow_err(
+            dbg!(task::Builder::new().name(name).spawn(manager.run())),
+            "oh no!",
+        );
+        dbg!();
 
         Ok(SinkAddr { addr: sink_tx })
     }
@@ -627,25 +631,15 @@ where
     }
     #[allow(clippy::too_many_lines)]
     async fn run(mut self) -> Result<()> {
+        dbg!();
         use SinkState::{Drained, Draining, Initialized, Paused, Running, Stopped};
-        // let from_sink = self.reply_rx.map(SinkMsgWrapper::FromSink);
-        // let to_sink = self.rx.map(SinkMsgWrapper::ToSink);
-        // let mut from_and_to_sink_channel = PriorityMerge::new(from_sink, to_sink);
-
-        let mut broken = false;
-        loop {
-            match futures::future::select(self.reply_rx.next(), self.rx.next()).await {
-                Either::Right((sink_msg, _)) => {
-                    let sink_msg = if let Some(sink_msg) = sink_msg {
-                        sink_msg
-                    } else {
-                        if broken {
-                            break;
-                        } else {
-                            broken = true;
-                            continue;
-                        }
-                    };
+        let from_sink = self.reply_rx.map(SinkMsgWrapper::FromSink);
+        let to_sink = self.rx.map(SinkMsgWrapper::ToSink);
+        let mut from_and_to_sink_channel = PriorityMerge::new(from_sink, to_sink);
+        dbg!();
+        while let Some(msg_wrapper) = from_and_to_sink_channel.next().await {
+            match dbg!(msg_wrapper) {
+                SinkMsgWrapper::ToSink(sink_msg) => {
                     match sink_msg {
                         SinkMsg::Link {
                             mut pipelines,
@@ -874,18 +868,8 @@ where
                         }
                     }
                 }
-                Either::Left((reply, _)) => {
+                SinkMsgWrapper::FromSink(reply) => {
                     // handle asynchronous sink replies
-                    let reply = if let Some(reply) = reply {
-                        reply
-                    } else {
-                        if broken {
-                            break;
-                        } else {
-                            broken = true;
-                            continue;
-                        }
-                    };
                     let cf = match reply {
                         AsyncSinkReply::Ack(data, duration) => Event::cb_ack_with_timing(
                             data.ingest_ns,
