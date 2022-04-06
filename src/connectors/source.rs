@@ -86,6 +86,8 @@ pub(crate) enum SourceMsg {
     Stop(Sender<Result<()>>),
     /// drain the source - bears a sender for sending out a SourceDrained status notification
     Drain(Sender<Msg>),
+    #[cfg(test)]
+    Ping(Sender<()>),
 }
 
 /// reply from `Source::on_event`
@@ -699,6 +701,12 @@ where
             SourceMsg::Cb(cb, id) => self.handle_cb(cb, id).await,
             m @ (SourceMsg::Start | SourceMsg::Resume | SourceMsg::Pause) => {
                 info!("{} Ignoring {m:?} msg in {state} state", self.ctx);
+                Control::Continue
+            }
+            #[cfg(test)]
+            SourceMsg::Ping(sender) => {
+                self.ctx
+                    .swallow_err(sender.send(()).await, "Error sending Pong");
                 Control::Continue
             }
         }

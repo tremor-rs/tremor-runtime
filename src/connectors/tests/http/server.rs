@@ -21,13 +21,14 @@ use crate::{
     },
     errors::Result,
 };
-use async_std::prelude::FutureExt;
+use async_std::{net::TcpStream, prelude::FutureExt};
 use http_client::{h1::H1Client, Body, Config as HttpClientConfig, HttpClient};
 use http_types::{
     headers::{self, HeaderValue},
     mime::BYTE_STREAM,
     Method, StatusCode, Url,
 };
+use std::net::Shutdown;
 use std::str::FromStr;
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
@@ -86,6 +87,19 @@ async fn http_server_test() -> Result<()> {
     let connector = ConnectorHarness::new("http_server", &defn).await?;
     connector.start().await?;
     connector.wait_for_connected().await?;
+
+    loop {
+        match TcpStream::connect(("localhost", port)).await {
+            Ok(stream) => {
+                stream.shutdown(Shutdown::Both)?;
+                break;
+            }
+            Err(e) => {
+                debug!("Not yet listening: {e}");
+                async_std::task::sleep(Duration::from_millis(100)).await;
+            }
+        }
+    }
 
     let req = surf::Request::builder(Method::Get, Url::parse(url.as_str())?)
         .body(Body::empty())
@@ -299,6 +313,19 @@ async fn https_server_test() -> Result<()> {
     let connector = ConnectorHarness::new("http_server", &defn).await?;
     connector.start().await?;
     connector.wait_for_connected().await?;
+
+    loop {
+        match TcpStream::connect(("localhost", port)).await {
+            Ok(stream) => {
+                stream.shutdown(Shutdown::Both)?;
+                break;
+            }
+            Err(e) => {
+                debug!("Not yet listening: {e}");
+                async_std::task::sleep(Duration::from_millis(100)).await;
+            }
+        }
+    }
 
     let out = connector
         .out()
