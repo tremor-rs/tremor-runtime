@@ -252,7 +252,7 @@ impl<T> ChannelSinkRuntime<T>
 where
     T: Hash + Eq + Send + 'static,
 {
-    const RECV_TIMEOUT: Duration = Duration::from_millis(100);
+    const RECV_TIMEOUT: Duration = Duration::from_millis(1000);
 
     pub(crate) fn new(tx: Sender<ChannelSinkMsg<T>>) -> Self {
         Self { tx }
