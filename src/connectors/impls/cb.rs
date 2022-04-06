@@ -248,44 +248,42 @@ impl Source for CbSource {
                 origin_uri: self.origin_uri.clone(),
                 codec_overwrite: None,
             })
-        } else {
-            if self.finished {
-                if self.config.timeout == 0 {
-                    // timeout reached
-                    let max_cb_received = self.received_cbs.max().unwrap_or_default();
-                    let cbs_missing = if self.config.expect_batched {
-                        max_cb_received < self.last_sent
-                    } else {
-                        self.received_cbs.count() < self.num_sent
-                    };
-                    let status = if cbs_missing {
-                        // report failures to stderr and exit with 1
-                        eprintln!("Expected CB events up to id {}.", self.last_sent);
-                        eprintln!("Got acks: {:?}", self.received_cbs.ack);
-                        eprintln!("Got fails: {:?}", self.received_cbs.fail);
-                        1
-                    } else {
-                        0
-                    };
-                    // TODO: do a proper graceful shutdown
-                    // ALLOW: this is the supposed to exit
-                    std::process::exit(status);
+        } else if self.finished {
+            if self.config.timeout == 0 {
+                // timeout reached
+                let max_cb_received = self.received_cbs.max().unwrap_or_default();
+                let cbs_missing = if self.config.expect_batched {
+                    max_cb_received < self.last_sent
                 } else {
-                    // FIXME: do some proper waiting here we can't just -100 every call
-                    // See chrononome
-                    async_std::task::sleep(Duration::from_millis(100_u64)).await;
-                    self.config.timeout = self.config.timeout.saturating_sub(100_u64);
-                }
-
-                Ok(SourceReply::Finished)
+                    self.received_cbs.count() < self.num_sent
+                };
+                let status = if cbs_missing {
+                    // report failures to stderr and exit with 1
+                    eprintln!("Expected CB events up to id {}.", self.last_sent);
+                    eprintln!("Got acks: {:?}", self.received_cbs.ack);
+                    eprintln!("Got fails: {:?}", self.received_cbs.fail);
+                    1
+                } else {
+                    0
+                };
+                // TODO: do a proper graceful shutdown
+                // ALLOW: this is the supposed to exit
+                std::process::exit(status);
             } else {
-                self.finished = true;
-                Ok(SourceReply::EndStream {
-                    stream: DEFAULT_STREAM_ID,
-                    origin_uri: self.origin_uri.clone(),
-                    meta: None,
-                })
+                // FIXME: do some proper waiting here we can't just -100 every call
+                // See chrononome
+                async_std::task::sleep(Duration::from_millis(100_u64)).await;
+                self.config.timeout = self.config.timeout.saturating_sub(100_u64);
             }
+
+            Ok(SourceReply::Finished)
+        } else {
+            self.finished = true;
+            Ok(SourceReply::EndStream {
+                stream: DEFAULT_STREAM_ID,
+                origin_uri: self.origin_uri.clone(),
+                meta: None,
+            })
         }
     }
 

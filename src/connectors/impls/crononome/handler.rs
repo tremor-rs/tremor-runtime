@@ -168,6 +168,7 @@ impl<I> TemporalPriorityQueue<I> {
         let Reverse(x) = self.q.peek()?;
         let now = Utc::now().timestamp();
         let event = x.at.timestamp();
+        #[allow(clippy::cast_sign_loss)]
         task::sleep(Duration::from_secs(
             (event as u64).saturating_sub(now as u64),
         ))
