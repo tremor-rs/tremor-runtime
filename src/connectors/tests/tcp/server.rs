@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::time::Duration;
+
 use crate::connectors::tests::{free_port, ConnectorHarness};
 use crate::errors::Result;
 use async_std::{io::WriteExt, net::TcpStream, prelude::*};
@@ -80,10 +82,17 @@ async fn server_event_routing() -> Result<()> {
     harness.send_to_sink(event1, IN).await?;
     dbg!();
     let mut buf = vec![0_u8; 8192];
-    let bytes_read = socket1.read(&mut buf).await?;
+    let bytes_read = socket1
+        .read(&mut buf)
+        .timeout(Duration::from_secs(2))
+        .await??;
+    dbg!();
     let data = &buf[0..bytes_read];
+    dbg!();
     assert_eq!("badger", &String::from_utf8_lossy(data));
+    dbg!();
     debug!("Received event 1 via socket1");
+    dbg!();
 
     // send something to socket 2
     socket2.write_all("carfuffle\n".as_bytes()).await?;
@@ -97,14 +106,25 @@ async fn server_event_routing() -> Result<()> {
         data: (Value::String("fleek".into()), Value::object()).into(),
         ..Event::default()
     };
+    dbg!();
+
     harness.send_to_sink(event2, IN).await?;
-    let bytes_read = socket2.read(&mut buf).await?;
+    let bytes_read = socket2
+        .read(&mut buf)
+        .timeout(Duration::from_secs(1))
+        .await
+        .unwrap()
+        .unwrap();
     let data = &buf[0..bytes_read];
     assert_eq!("fleek", &String::from_utf8_lossy(data));
     debug!("Received event 2 via socket1");
 
+    dbg!();
+
     //cleanup
     let (_out, err) = harness.stop().await?;
+    dbg!();
+
     assert!(err.is_empty());
     Ok(())
 }

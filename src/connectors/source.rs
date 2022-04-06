@@ -1197,8 +1197,14 @@ where
                 pin_mut!(f1);
                 pin_mut!(f2);
                 match futures::future::select(f1, f2).await {
-                    Either::Left((msg, _)) => Either::Left(msg?),
-                    Either::Right((data, _)) => Either::Right(data),
+                    Either::Left((msg, o)) => {
+                        drop(o);
+                        Either::Left(msg?)
+                    }
+                    Either::Right((data, o)) => {
+                        drop(o);
+                        Either::Right(data)
+                    }
                 }
             };
 

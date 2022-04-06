@@ -275,7 +275,7 @@ impl Source for TcpServerSource {
     }
 
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        self.connection_rx.recv().await.map_err(Error::from)
+        Ok(dbg!(self.connection_rx.recv().await?))
     }
 
     async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {
