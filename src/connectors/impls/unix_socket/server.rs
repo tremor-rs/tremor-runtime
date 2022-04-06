@@ -202,13 +202,15 @@ impl Source for UnixSocketSource {
                             origin_uri.clone(),
                             meta,
                         );
+                        sink_runtime
+                            .register_stream_writer(
+                                stream_id,
+                                Some(connection_meta),
+                                &ctx,
+                                UnixSocketWriter::new(stream),
+                            )
+                            .await;
                         runtime.register_stream_reader(stream_id, &ctx, reader);
-                        sink_runtime.register_stream_writer(
-                            stream_id,
-                            Some(connection_meta),
-                            &ctx,
-                            UnixSocketWriter::new(stream),
-                        );
                     }
                     Ok(Err(e)) => return Err(e.into()),
                     Err(_) => continue,

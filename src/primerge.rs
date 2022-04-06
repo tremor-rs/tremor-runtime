@@ -59,13 +59,13 @@ where
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.project();
-        dbg!(match this.high.poll_next(cx) {
+        match this.high.poll_next(cx) {
             Poll::Ready(None) => this.low.poll_next(cx),
             Poll::Ready(item) => Poll::Ready(item),
             Poll::Pending => match this.low.poll_next(cx) {
                 Poll::Ready(None) | Poll::Pending => Poll::Pending,
                 Poll::Ready(item) => Poll::Ready(item),
             },
-        })
+        }
     }
 }

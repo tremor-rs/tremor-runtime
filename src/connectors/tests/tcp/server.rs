@@ -24,7 +24,6 @@ use value_trait::Builder;
 
 #[async_std::test]
 async fn server_event_routing() -> Result<()> {
-    dbg!(num_cpus::get());
     let _ = env_logger::try_init();
 
     let free_port = free_port::find_free_tcp_port().await?;
@@ -39,33 +38,24 @@ async fn server_event_routing() -> Result<()> {
         "buf_size": 4096
       }
     });
-    dbg!();
     let harness = ConnectorHarness::new("tcp_server", &defn).await?;
-    dbg!();
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of tcp_server connector");
-    dbg!();
     harness.start().await?;
-    dbg!();
     harness.wait_for_connected().await?;
-    dbg!();
     // connect 2 client sockets
     let mut socket1 = TcpStream::connect(&server_addr).await?;
     let mut socket2 = TcpStream::connect(&server_addr).await?;
-    dbg!();
     socket1.write_all("snot\n".as_bytes()).await?;
     let event = out_pipeline.get_event().await?;
-    dbg!(&event);
     let (_data, meta) = event.data.parts();
-    dbg!();
     let tcp_server_meta = meta.get("tcp_server");
     assert_eq!(Some(false), tcp_server_meta.get_bool("tls"));
 
     let peer_obj = tcp_server_meta.get_object("peer").unwrap();
     assert!(peer_obj.contains_key("host"));
     assert!(peer_obj.contains_key("port"));
-    dbg!();
     // lets send an event and route it via metadata to socket 1
     let meta = literal!({
         "tcp_server": {
@@ -75,26 +65,20 @@ async fn server_event_routing() -> Result<()> {
             }
         }
     });
-    dbg!();
     let event1 = Event {
         id: EventId::default(),
         data: (Value::String("badger".into()), meta).into(),
         ..Event::default()
     };
     harness.send_to_sink(event1, IN).await?;
-    dbg!();
     let mut buf = vec![0_u8; 8192];
     let bytes_read = socket1
         .read(&mut buf)
         .timeout(Duration::from_secs(2))
         .await??;
-    dbg!();
     let data = &buf[0..bytes_read];
-    dbg!();
     assert_eq!("badger", &String::from_utf8_lossy(data));
-    dbg!();
     debug!("Received event 1 via socket1");
-    dbg!();
 
     // send something to socket 2
     socket2.write_all("carfuffle\n".as_bytes()).await?;
@@ -108,7 +92,6 @@ async fn server_event_routing() -> Result<()> {
         data: (Value::String("fleek".into()), Value::object()).into(),
         ..Event::default()
     };
-    dbg!();
 
     harness.send_to_sink(event2, IN).await?;
     let bytes_read = socket2
@@ -121,11 +104,8 @@ async fn server_event_routing() -> Result<()> {
     assert_eq!("fleek", &String::from_utf8_lossy(data));
     debug!("Received event 2 via socket1");
 
-    dbg!();
-
     //cleanup
     let (_out, err) = harness.stop().await?;
-    dbg!();
 
     assert!(err.is_empty());
     Ok(())
