@@ -254,6 +254,7 @@ integration-local = [
   "metronome-integration",
   "socket-integration",
   "tcp-integration",
+  "wal-integration",
 ]
 es-integration = []
 s3-integration = []
@@ -265,6 +266,7 @@ crononome-integration = []
 metronome-integration = []
 socket-integration = []
 tcp-integration = []
+wal-integration = []
 tarpaulin-exclude = []
 
 [patch.crates-io]
