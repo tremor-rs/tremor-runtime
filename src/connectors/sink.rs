@@ -35,7 +35,6 @@ use crate::postprocessor::{finish, make_postprocessors, postprocess, Postprocess
 use crate::primerge::PriorityMerge;
 use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
-use async_std::task;
 use beef::Cow;
 pub(crate) use channel_sink::{ChannelSink, ChannelSinkRuntime};
 pub(crate) use single_stream_sink::{SingleStreamSink, SingleStreamSinkRuntime};
@@ -385,15 +384,12 @@ impl SinkManagerBuilder {
         S: Sink + Send + 'static,
     {
         let qsize = self.qsize;
-        let name = format!("{}-sink", ctx.alias);
+        let _name = format!("{}-sink", ctx.alias);
         let (sink_tx, sink_rx) = bounded(qsize);
         let manager = SinkManager::new(sink, ctx.clone(), self, sink_rx);
         // spawn manager task
         dbg!();
-        ctx.swallow_err(
-            dbg!(task::Builder::new().name(name).spawn(manager.run())),
-            "oh no!",
-        );
+        async_global_executor::spawn(manager.run()).detach();
         dbg!();
 
         Ok(SinkAddr { addr: sink_tx })

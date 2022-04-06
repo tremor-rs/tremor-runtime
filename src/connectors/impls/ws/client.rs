@@ -194,7 +194,9 @@ impl Connector for WsClient {
             let meta = ctx.meta(WsClient::meta(peer_addr, true));
             let ws_writer = WsWriter::new_tls_client(writer);
 
-            sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer);
+            sink_runtime
+                .register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer)
+                .detach();
 
             let ws_reader =
                 WsReader::new(reader, sink_runtime.clone(), origin_uri, meta, ctx.clone());
@@ -213,7 +215,9 @@ impl Connector for WsClient {
             let meta = ctx.meta(WsClient::meta(peer_addr, false));
 
             let ws_writer = WsWriter::new_tungstenite_client(writer);
-            sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer);
+            sink_runtime
+                .register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer)
+                .detach();
 
             let ws_reader =
                 WsReader::new(reader, sink_runtime.clone(), origin_uri, meta, ctx.clone());

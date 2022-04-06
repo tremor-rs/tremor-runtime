@@ -21,7 +21,6 @@ use crate::{
 };
 use async_std::channel::{bounded, Sender};
 use async_std::prelude::*;
-use async_std::task::{self, JoinHandle};
 use hashbrown::{hash_map::Entry, HashMap};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
 use tremor_script::ast::DeployFlow;
@@ -137,7 +136,7 @@ impl FlowSupervisor {
                 expected_stops += 1;
             }
 
-            task::spawn::<_, Result<()>>(async move {
+            async_global_executor::spawn::<_, Result<()>>(async move {
                 while expected_stops > 0 {
                     log_error!(rx.recv().await?, "Error during Stopping: {e}");
                     expected_stops = expected_stops.saturating_sub(1);
@@ -169,7 +168,7 @@ impl FlowSupervisor {
                     alive_flows += 1;
                 }
             }
-            task::spawn::<_, Result<()>>(async move {
+            async_global_executor::spawn::<_, Result<()>>(async move {
                 let rx_futures = std::iter::repeat_with(|| rx.recv()).take(alive_flows);
                 for result in futures::future::join_all(rx_futures).await {
                     match result {
@@ -185,13 +184,14 @@ impl FlowSupervisor {
                 info!("Flows drained.");
                 sender.send(Ok(())).await?;
                 Ok(())
-            });
+            })
+            .detach();
         }
     }
 
-    pub fn start(mut self) -> (JoinHandle<Result<()>>, Channel) {
+    pub fn start(mut self) -> (async_global_executor::Task<Result<()>>, Channel) {
         let (tx, rx) = bounded(self.qsize);
-        let system_h = task::spawn(async move {
+        let system_h = async_global_executor::spawn(async move {
             while let Ok(msg) = rx.recv().await {
                 match msg {
                     Msg::RegisterConnectorType {

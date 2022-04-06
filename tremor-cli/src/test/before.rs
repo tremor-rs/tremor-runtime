@@ -218,7 +218,7 @@ impl BeforeController {
                     for (i, before_def) in before_defs.into_iter().enumerate() {
                         let cmdline = before_def.cmdline();
                         let mut process = before_def.spawn(root, &self.env, i).await?;
-                        async_std::task::spawn(async move {
+                        async_global_executor::spawn(async move {
                             let status = process.join().await?;
                             match status.code() {
                                 None => {
@@ -230,7 +230,7 @@ impl BeforeController {
                                 }
                             }
                             Ok::<(), Error>(())
-                        });
+                        }).detach();
                     }
                     Ok(())
                 }

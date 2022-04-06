@@ -20,7 +20,7 @@ use crate::{
 use async_std::{
     channel::{bounded, unbounded, Receiver, Sender},
     stream::StreamExt,
-    task::{self, JoinHandle},
+    task,
 };
 use beef::Cow;
 use std::{fmt, sync::atomic::Ordering, time::Duration};
@@ -172,20 +172,20 @@ pub(crate) fn spawn(
     let (cf_tx, cf_rx) = unbounded::<CfMsg>();
     let (mgmt_tx, mgmt_rx) = bounded::<MgmtMsg>(qsize);
 
-    let tick_handler = task::spawn(tick(tx.clone()));
+    let tick_handler = async_global_executor::spawn(tick(tx.clone()));
 
     let addr = Addr::new(tx, cf_tx, mgmt_tx, alias.to_string());
-    task::Builder::new()
-        .name(format!("pipeline-{}", alias))
-        .spawn(pipeline_task(
-            alias.to_string(),
-            pipeline,
-            addr.clone(),
-            rx,
-            cf_rx,
-            mgmt_rx,
-            tick_handler,
-        ))?;
+
+    async_global_executor::spawn(pipeline_task(
+        alias.to_string(),
+        pipeline,
+        addr.clone(),
+        rx,
+        cf_rx,
+        mgmt_rx,
+        tick_handler,
+    ))
+    .detach();
     Ok(addr)
 }
 
@@ -466,7 +466,7 @@ pub(crate) async fn pipeline_task(
     rx: Receiver<Box<Msg>>,
     cf_rx: Receiver<CfMsg>,
     mgmt_rx: Receiver<MgmtMsg>,
-    tick_handler: JoinHandle<()>,
+    tick_handler: async_global_executor::Task<()>,
 ) -> Result<()> {
     pipeline.id = alias.clone();
 
@@ -647,6 +647,7 @@ mod tests {
 
     use super::*;
     use crate::connectors::{prelude::SinkAddr, source::SourceAddr};
+    use async_std::task;
     use std::time::Instant;
     use tremor_common::ports::{IN, OUT};
     use tremor_pipeline::{EventId, OpMeta};

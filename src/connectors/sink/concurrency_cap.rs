@@ -73,15 +73,15 @@ impl ConcurrencyCap {
 /// ensures that we subtract 1 from the counter once this drops
 pub(crate) struct CounterGuard(usize, ConcurrencyCap, ContraflowData);
 
-impl CounterGuard {
-    pub(crate) fn num(&self) -> usize {
-        self.0
-    }
-}
+// impl CounterGuard {
+//     pub(crate) fn num(&self) -> usize {
+//         self.0
+//     }
+// }
 impl Drop for CounterGuard {
     fn drop(&mut self) {
         // TODO: move this out of drop here
-        if async_std::task::block_on(self.1.dec_with(&self.2)).is_err() {
+        if async_global_executor::block_on(self.1.dec_with(&self.2)).is_err() {
             // TODO: add a ctx log here
             error!("Error sending a CB Open.");
         }

@@ -11,18 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::connectors::prelude::*;
-use futures::stream::TryStreamExt;
-use std::error::Error as StdError;
-
-use async_std::channel::{self, Receiver, Sender};
-use async_std::task::{self, JoinHandle};
-
 use super::auth;
+use crate::connectors::prelude::*;
+use async_std::channel::{self, Receiver, Sender};
 use aws_sdk_s3 as s3;
+use futures::stream::TryStreamExt;
 use s3::model::Object;
 use s3::types::ByteStream;
 use s3::Client as S3Client;
+use std::error::Error as StdError;
 
 const MINCHUNKSIZE: i64 = 8 * 1024 * 1024; // 8 MBs
 
@@ -105,7 +102,7 @@ impl ConnectorBuilder for Builder {
 struct S3SourceConnector {
     config: S3SourceConfig,
     tx: Option<Sender<SourceReply>>,
-    handles: Vec<JoinHandle<Result<()>>>,
+    handles: Vec<async_global_executor::Task<Result<()>>>,
 }
 
 #[async_trait::async_trait]
@@ -156,7 +153,7 @@ impl Connector for S3SourceConnector {
         let (tx_key, rx_key) = channel::bounded(QSIZE.load(Ordering::Relaxed));
 
         // spawn object fetcher tasks
-        for i in 0..self.config.max_connections {
+        for _i in 0..self.config.max_connections {
             let client = client.clone();
             let rx = rx_key.clone();
             let bucket = self.config.bucket.clone();
@@ -181,18 +178,14 @@ impl Connector for S3SourceConnector {
                 part_size: self.config.multipart_chunksize,
                 origin_uri,
             };
-            let handle = task::Builder::new()
-                .name(format!("fetch_obj_task{}", i))
-                .spawn(async move { instance.start().await })?;
+            let handle = async_global_executor::spawn(async move { instance.start().await });
             self.handles.push(handle);
         }
 
         // spawn key fetcher task
         let bucket = self.config.bucket.clone();
         let prefix = self.config.prefix.clone();
-        task::Builder::new()
-            .name("fetch_key_task".to_owned())
-            .spawn(fetch_keys_task(client, bucket, prefix, tx_key))?;
+        async_global_executor::spawn(fetch_keys_task(client, bucket, prefix, tx_key)).detach();
 
         Ok(true)
     }

@@ -21,7 +21,6 @@ use crate::errors::{Error, Kind as ErrorKind, Result};
 use crate::{connectors, QSIZE};
 use async_std::channel::bounded;
 use async_std::prelude::*;
-use async_std::task::JoinHandle;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_script::{ast, highlighter::Highlighter};
@@ -146,7 +145,9 @@ impl World {
     ///
     /// # Errors
     ///  * if the world manager can't be started
-    pub async fn start(config: WorldConfig) -> Result<(Self, JoinHandle<Result<()>>)> {
+    pub async fn start(
+        config: WorldConfig,
+    ) -> Result<(Self, async_global_executor::Task<Result<()>>)> {
         let (system_h, system) = flow_supervisor::FlowSupervisor::new(config.qsize).start();
 
         let world = Self { system };

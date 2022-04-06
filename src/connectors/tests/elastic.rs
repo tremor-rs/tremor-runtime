@@ -46,7 +46,7 @@ async fn connector_elastic() -> Result<()> {
     let container_id = container.id().to_string();
     let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
     let signal_handle = signals.handle();
-    let signal_handler_task = async_std::task::spawn(async move {
+    let signal_handler_task = async_std::async_global_executor::spawn(async move {
         let signal_docker = clients::Cli::default();
         while let Some(_signal) = signals.next().await {
             signal_docker.stop(container_id.as_str());

@@ -125,7 +125,8 @@ impl ServerRun {
         // signal handling
         let signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
         let signal_handle = signals.handle();
-        let signal_handler_task = async_std::task::spawn(handle_signals(signals, world.clone()));
+        let signal_handler_task =
+            async_global_executor::spawn(handle_signals(signals, world.clone()));
 
         let mut troy_files = Vec::with_capacity(16);
         // We process trickle files first
@@ -149,7 +150,7 @@ impl ServerRun {
 
         let api_handle = if self.no_api {
             // dummy task never finishing
-            async_std::task::spawn(async move {
+            async_global_executor::spawn(async move {
                 future::pending::<()>().await;
                 Ok(())
             })

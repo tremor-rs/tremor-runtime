@@ -20,10 +20,7 @@ use crate::connectors::{
 };
 use crate::errors::{Kind as ErrorKind, Result};
 use async_std::channel::unbounded;
-use async_std::{
-    channel::{bounded, Receiver, Sender},
-    task::JoinHandle,
-};
+use async_std::channel::{bounded, Receiver, Sender};
 use dashmap::DashMap;
 use halfbrown::{Entry, HashMap};
 use http_types::headers::{self, HeaderValue};
@@ -175,7 +172,7 @@ struct HttpServerSource {
     inflight: Arc<DashMap<RequestId, Sender<Response>>>,
     request_rx: Receiver<RawRequestData>,
     request_tx: Sender<RawRequestData>,
-    server_task: Option<JoinHandle<()>>,
+    server_task: Option<async_global_executor::Task<()>>,
     tls_server_config: Option<TLSServerConfig>,
     configured_codec: String,
     codec_map: MimeCodecMap,

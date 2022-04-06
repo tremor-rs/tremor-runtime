@@ -81,7 +81,7 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
     let container_id = container.id().to_string();
     let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
     let signal_handle = signals.handle();
-    let signal_handler_task = async_std::task::spawn(async move {
+    let signal_handler_task = async_std::async_global_executor::spawn(async move {
         let signal_docker = DockerCli::default();
         while let Some(signal) = signals.next().await {
             signal_docker.stop(container_id.as_str());
@@ -366,7 +366,7 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
     let container_id = container.id().to_string();
     let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
     let signal_handle = signals.handle();
-    let signal_handler_task = async_std::task::spawn(async move {
+    let signal_handler_task = async_std::async_global_executor::spawn(async move {
         let signal_docker = DockerCli::default();
         while let Some(_signal) = signals.next().await {
             signal_docker.stop(container_id.as_str());
@@ -632,7 +632,7 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
     let container_id = container.id().to_string();
     let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
     let signal_handle = signals.handle();
-    let signal_handler_task = async_std::task::spawn(async move {
+    let signal_handler_task = async_std::async_global_executor::spawn(async move {
         let signal_docker = DockerCli::default();
         while let Some(_signal) = signals.next().await {
             signal_docker.stop(container_id.as_str());
@@ -938,7 +938,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     let container_id = container.id().to_string();
     let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
     let signal_handle = signals.handle();
-    let signal_handler_task = async_std::task::spawn(async move {
+    let signal_handler_task = async_std::async_global_executor::spawn(async move {
         let signal_docker = DockerCli::default();
         while let Some(_signal) = signals.next().await {
             signal_docker.stop(container_id.as_str());

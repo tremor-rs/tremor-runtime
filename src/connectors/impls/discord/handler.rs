@@ -14,10 +14,7 @@
 
 #![cfg(not(tarpaulin_include))] // We need a life discord api for this
 use super::utils::{to_reactions, DiscordMessage};
-use async_std::{
-    channel::{Receiver, Sender},
-    task,
-};
+use async_std::channel::{Receiver, Sender};
 use serenity::{
     model::{
         channel::{Channel, ChannelCategory, GuildChannel, Message, Reaction},
@@ -72,9 +69,10 @@ impl EventHandler for Handler {
             // tokio::spawn creates a new green thread that can run in parallel with the rest of
             // the application.
             let rx = self.rx.clone();
-            task::spawn(async move {
+            async_global_executor::spawn(async move {
                 reply_loop(rx, ctx).await;
-            });
+            })
+            .detach();
 
             // Now that the loop is running, we set the bool to true
             self.is_loop_running.swap(true, Ordering::Relaxed);

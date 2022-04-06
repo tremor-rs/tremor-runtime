@@ -18,10 +18,7 @@ mod handler;
 mod utils;
 
 use crate::connectors::{prelude::*, spawn_task};
-use async_std::{
-    channel::{bounded, Receiver, Sender},
-    task::JoinHandle,
-};
+use async_std::channel::{bounded, Receiver, Sender};
 use handler::Handler;
 use serenity::{client::bridge::gateway::GatewayIntents, Client};
 use std::sync::atomic::AtomicBool;
@@ -72,7 +69,7 @@ impl ConnectorBuilder for Builder {
 pub struct Discord {
     config: Config,
     origin_uri: EventOriginUri,
-    client_task: Option<JoinHandle<()>>,
+    client_task: Option<async_global_executor::Task<()>>,
     message_channel: (Sender<Value<'static>>, Receiver<Value<'static>>),
     reply_channel: (Sender<Value<'static>>, Receiver<Value<'static>>),
 }

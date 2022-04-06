@@ -16,18 +16,13 @@
 //!
 //! With some shenanigans removed, compared to `ChannelSink`.
 
-use crate::connectors::{sink::SinkReply, sink::SinkRuntime, ConnectorContext, StreamDone};
-use crate::errors::Result;
-use async_std::task::JoinHandle;
-use async_std::{
-    channel::{bounded, Receiver, Sender},
-    task,
-};
-use std::marker::PhantomData;
-use tremor_common::time::nanotime;
-
 use super::channel_sink::{SinkMeta, SinkMetaBehaviour, WithMeta};
 use super::{AsyncSinkReply, ContraflowData, EventSerializer, Sink, SinkContext, StreamWriter};
+use crate::connectors::{sink::SinkReply, sink::SinkRuntime, ConnectorContext, StreamDone};
+use crate::errors::Result;
+use async_std::channel::{bounded, Receiver, Sender};
+use std::marker::PhantomData;
+use tremor_common::time::nanotime;
 
 /// simple Sink implementation that is handling only a single stream
 pub(crate) struct SingleStreamSink<B>
@@ -99,14 +94,14 @@ impl SingleStreamSinkRuntime {
         stream: u64,
         ctx: &ConnectorContext,
         mut writer: W,
-    ) -> JoinHandle<Result<()>>
+    ) -> async_global_executor::Task<Result<()>>
     where
         W: StreamWriter + 'static,
     {
         let ctx = ctx.clone();
         let rx = self.rx.clone();
         let reply_tx = self.reply_tx.clone();
-        task::spawn(async move {
+        async_global_executor::spawn(async move {
             while let (
                 true,
                 Ok(SinkData {

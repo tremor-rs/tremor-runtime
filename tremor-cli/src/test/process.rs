@@ -128,7 +128,7 @@ pub(crate) async fn run_process(
 
     let signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
     let signal_handle = signals.handle();
-    let signal_handler_task = async_std::task::spawn(handle_signals(
+    let signal_handler_task = async_global_executor::spawn(handle_signals(
         signals,
         test_dir.to_path_buf(),
         env.clone(),

@@ -20,7 +20,6 @@ use async_std::{
     net::{TcpListener, TcpStream},
     path::Path,
     prelude::StreamExt,
-    task,
 };
 use async_tls::TlsConnector;
 use async_tungstenite::{
@@ -228,22 +227,24 @@ impl TestServer {
         let endpoint = self.endpoint.clone();
         let tx = self.tx.clone();
         let stopped = self.stopped.clone();
-        task::spawn(async move {
+        async_global_executor::spawn(async move {
             let acceptor = TcpListener::bind(&endpoint)
                 .await
                 .expect("Could not start test server");
             while let (Ok((stream, addr)), false) =
                 (acceptor.accept().await, stopped.load(Ordering::Acquire))
             {
-                task::spawn(TestServer::handle_connection(
+                async_global_executor::spawn(TestServer::handle_connection(
                     tx.clone(),
                     stream,
                     addr,
                     stopped.clone(),
-                ));
+                ))
+                .detach();
             }
             info!("Test Server stopped.");
-        });
+        })
+        .detach();
 
         Ok(())
     }

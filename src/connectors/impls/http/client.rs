@@ -285,62 +285,59 @@ impl Sink for HttpRequestSink {
 
             let client = client.client;
 
-            async_std::task::Builder::new()
-                .name(format!("http_client Connector #{}", guard.num()))
-                .spawn::<_, Result<()>>(async move {
-                    match HttpResponseMeta::invoke(
-                        &mut codec,
-                        &mut preprocessors,
-                        &mut postprocessors,
-                        request_meta.clone(),
-                        &origin_uri,
-                        client,
-                        request,
-                    )
-                    .await
-                    {
-                        Ok(ResponseEventCont::Valid(source_replies)) => {
-                            for sr in source_replies {
-                                response_tx.send(sr).await?;
-                            }
+            async_global_executor::spawn::<_, Result<()>>(async move {
+                match HttpResponseMeta::invoke(
+                    &mut codec,
+                    &mut preprocessors,
+                    &mut postprocessors,
+                    request_meta.clone(),
+                    &origin_uri,
+                    client,
+                    request,
+                )
+                .await
+                {
+                    Ok(ResponseEventCont::Valid(source_replies)) => {
+                        for sr in source_replies {
+                            response_tx.send(sr).await?;
                         }
-                        Ok(ResponseEventCont::CodecError) => {
-                            let meta = request_meta;
-                            response_tx
-                                .send(SourceReply::Structured {
-                                    origin_uri,
-                                    payload: EventPayload::try_new::<crate::Error, _>(
-                                        vec![],
-                                        |_mut_data| {
-                                            let value = literal!({ "status": 415}).clone_static();
-                                            Ok(ValueAndMeta::from_parts(
-                                                value,
-                                                literal!({
-                                                    "request": meta,
-                                                }),
-                                            ))
-                                        },
-                                    )?,
-                                    stream: DEFAULT_STREAM_ID,
-                                    port: None,
-                                })
-                                .await?;
-                        }
-                        Err(e) => {
-                            error!(
+                    }
+                    Ok(ResponseEventCont::CodecError) => {
+                        let meta = request_meta;
+                        response_tx
+                            .send(SourceReply::Structured {
+                                origin_uri,
+                                payload: EventPayload::try_new::<crate::Error, _>(
+                                    vec![],
+                                    |_mut_data| {
+                                        let value = literal!({ "status": 415}).clone_static();
+                                        Ok(ValueAndMeta::from_parts(
+                                            value,
+                                            literal!({
+                                                "request": meta,
+                                            }),
+                                        ))
+                                    },
+                                )?,
+                                stream: DEFAULT_STREAM_ID,
+                                port: None,
+                            })
+                            .await?;
+                    }
+                    Err(e) => {
+                        error!(
                                 "{ctx} Unhandled / unexpected condition responding to http_server event: {e}"
                             );
-                        }
-                    };
-                    drop(guard);
-                    Ok(())
-                })?;
+                    }
+                };
+                drop(guard);
+                Ok(())
+            }).detach();
+            Ok(SinkReply::NONE)
         } else {
             error!("{ctx} No http client available.");
-            return Ok(SinkReply::FAIL);
+            Ok(SinkReply::FAIL)
         }
-
-        Ok(SinkReply::NONE)
     }
 
     fn asynchronous(&self) -> bool {

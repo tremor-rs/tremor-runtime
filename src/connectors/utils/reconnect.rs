@@ -18,8 +18,10 @@ use crate::connectors::sink::SinkMsg;
 use crate::connectors::source::SourceMsg;
 use crate::connectors::{Addr, Connectivity, Connector, ConnectorContext, Context, Msg};
 use crate::errors::{Error, Result};
-use async_std::channel::{bounded, Sender};
-use async_std::task::{self, JoinHandle};
+use async_std::{
+    channel::{bounded, Sender},
+    task,
+};
 use futures::future::{join3, ready, FutureExt};
 use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
@@ -187,7 +189,7 @@ pub(crate) struct ReconnectRuntime {
     strategy: Box<dyn ReconnectStrategy>,
     addr: Addr,
     notifier: ConnectionLostNotifier,
-    retry_task: Option<JoinHandle<()>>,
+    retry_task: Option<async_global_executor::Task<()>>,
     alias: String,
 }
 
@@ -346,7 +348,7 @@ impl ReconnectRuntime {
                 let duration = Duration::from_millis(interval);
                 let sender = self.addr.sender.clone();
                 let alias = self.alias.clone();
-                self.retry_task = Some(task::spawn(async move {
+                self.retry_task = Some(async_global_executor::spawn(async move {
                     task::sleep(duration).await;
                     if sender.send(Msg::Reconnect).await.is_err() {
                         error!(

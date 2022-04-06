@@ -20,7 +20,6 @@ use crate::errors::Result;
 use crate::QSIZE;
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::FutureExt;
-use async_std::task::{self, JoinHandle};
 use bimap::BiMap;
 use either::Either;
 use hashbrown::HashMap;
@@ -264,7 +263,7 @@ where
         connection_meta: Option<T>,
         ctx: &C,
         mut writer: W,
-    ) -> JoinHandle<Result<()>>
+    ) -> async_global_executor::Task<Result<()>>
     where
         W: StreamWriter + 'static,
         C: Context + Send + Sync + 'static,
@@ -273,7 +272,7 @@ where
         let stream_sink_tx = self.tx.clone();
         let ctx = ctx.clone();
         let tx = self.tx.clone();
-        task::spawn(async move {
+        async_global_executor::spawn(async move {
             tx.send(ChannelSinkMsg::NewStream {
                 stream_id: stream,
                 meta: connection_meta,

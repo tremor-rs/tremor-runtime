@@ -15,7 +15,6 @@
 use super::{WsReader, WsWriter};
 use crate::connectors::utils::tls::{load_server_config, TLSServerConfig};
 use crate::connectors::{prelude::*, utils::ConnectionMeta};
-use async_std::task::JoinHandle;
 use async_std::{net::TcpListener, prelude::FutureExt};
 use async_tls::TlsAcceptor;
 use async_tungstenite::accept_async;
@@ -40,7 +39,7 @@ impl ConfigImpl for Config {}
 #[allow(clippy::module_name_repetitions)]
 pub(crate) struct WsServer {
     config: Config,
-    accept_task: Option<JoinHandle<()>>,
+    accept_task: Option<async_global_executor::Task<()>>,
     sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
     source_runtime: Option<ChannelSourceRuntime>,
     tls_server_config: Option<ServerConfig>,
@@ -212,12 +211,14 @@ impl Connector for WsServer {
                             let (ws_write, ws_read) = ws_stream.split();
 
                             let ws_writer = WsWriter::new_tls_server(ws_write);
-                            sink_runtime.register_stream_writer(
-                                stream_id,
-                                Some(connection_meta.clone()),
-                                &ctx,
-                                ws_writer,
-                            );
+                            sink_runtime
+                                .register_stream_writer(
+                                    stream_id,
+                                    Some(connection_meta.clone()),
+                                    &ctx,
+                                    ws_writer,
+                                )
+                                .detach();
 
                             let ws_reader = WsReader::new(
                                 ws_read,
@@ -243,12 +244,14 @@ impl Connector for WsServer {
 
                             let ws_writer = WsWriter::new(ws_write);
 
-                            sink_runtime.register_stream_writer(
-                                stream_id,
-                                Some(connection_meta.clone()),
-                                &ctx,
-                                ws_writer,
-                            );
+                            sink_runtime
+                                .register_stream_writer(
+                                    stream_id,
+                                    Some(connection_meta.clone()),
+                                    &ctx,
+                                    ws_writer,
+                                )
+                                .detach();
 
                             let ws_reader = WsReader::new(
                                 ws_read,

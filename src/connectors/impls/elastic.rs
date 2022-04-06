@@ -281,72 +281,66 @@ impl Sink for ElasticSink {
             origin_uri.host = client.cluster_name;
             let default_index = self.default_index.clone();
             let task_ctx = ctx.clone();
-            async_std::task::Builder::new()
-                .name(format!(
-                    "Elasticsearch Connector {}#{}",
-                    ctx.alias(),
-                    guard.num()
-                ))
-                .spawn::<_, Result<()>>(async move {
-                    let r: Result<Value> = (|| async {
-                        // build bulk request (we can't do that in a separate function)
-                        let mut ops = BulkOperations::new();
-                        // per request options - extract from event metadata (ignoring batched)
-                        let event_es_meta = ESMeta::new(event.data.suffix().meta());
+            async_global_executor::spawn::<_, Result<()>>(async move {
+                let r: Result<Value> = (|| async {
+                    // build bulk request (we can't do that in a separate function)
+                    let mut ops = BulkOperations::new();
+                    // per request options - extract from event metadata (ignoring batched)
+                    let event_es_meta = ESMeta::new(event.data.suffix().meta());
 
-                        for (data, meta) in event.value_meta_iter() {
-                            ESMeta::new(meta).insert_op(data, &mut ops)?;
-                        }
-
-                        let parts = event_es_meta.parts(default_index.as_deref());
-                        let bulk =
-                            event_es_meta.apply_to(client.client.bulk(parts).body(vec![ops]))?;
-                        // apply request scoped options
-
-                        let response = bulk
-                            .send()
-                            .await
-                            .and_then(Response::error_for_status_code)?;
-                        let value = response.json::<StaticValue>().await?;
-                        Ok(value.into_value())
-                    })()
-                    .await;
-                    match r {
-                        Err(e) => {
-                            debug!("{task_ctx} Error sending Elasticsearch Bulk Request: {e}");
-                            task_ctx.swallow_err(
-                                handle_error(
-                                    e,
-                                    event,
-                                    &origin_uri,
-                                    &response_tx,
-                                    &reply_tx,
-                                    include_payload,
-                                )
-                                .await,
-                                "Error handling ES error",
-                            );
-                        }
-                        Ok(v) => {
-                            task_ctx.swallow_err(
-                                handle_response(
-                                    v,
-                                    event,
-                                    &origin_uri,
-                                    response_tx,
-                                    reply_tx,
-                                    include_payload,
-                                    start,
-                                )
-                                .await,
-                                "Error handling ES response",
-                            );
-                        }
+                    for (data, meta) in event.value_meta_iter() {
+                        ESMeta::new(meta).insert_op(data, &mut ops)?;
                     }
-                    drop(guard);
 
-                    Ok(())
-                })?;
+                    let parts = event_es_meta.parts(default_index.as_deref());
+                    let bulk = event_es_meta.apply_to(client.client.bulk(parts).body(vec![ops]))?;
+                    // apply request scoped options
+
+                    let response = bulk
+                        .send()
+                        .await
+                        .and_then(Response::error_for_status_code)?;
+                    let value = response.json::<StaticValue>().await?;
+                    Ok(value.into_value())
+                })()
+                .await;
+                match r {
+                    Err(e) => {
+                        debug!("{task_ctx} Error sending Elasticsearch Bulk Request: {e}");
+                        task_ctx.swallow_err(
+                            handle_error(
+                                e,
+                                event,
+                                &origin_uri,
+                                &response_tx,
+                                &reply_tx,
+                                include_payload,
+                            )
+                            .await,
+                            "Error handling ES error",
+                        );
+                    }
+                    Ok(v) => {
+                        task_ctx.swallow_err(
+                            handle_response(
+                                v,
+                                event,
+                                &origin_uri,
+                                response_tx,
+                                reply_tx,
+                                include_payload,
+                                start,
+                            )
+                            .await,
+                            "Error handling ES response",
+                        );
+                    }
+                }
+                drop(guard);
+
+                Ok(())
+            })
+            .detach();
         } else {
             error!("{} No elasticsearch client available.", &ctx);
             handle_error(

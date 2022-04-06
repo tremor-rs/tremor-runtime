@@ -85,7 +85,7 @@ impl AfterController {
             if let Some(mut process) = after_process {
                 let after_out_file = root.join("after.out.log");
                 let after_err_file = root.join("after.err.log");
-                let after_process = async_std::task::spawn(async move {
+                let after_process = async_global_executor::spawn(async move {
                     if let Err(e) = process.tail(&after_out_file, &after_err_file).await {
                         eprintln!("failed to tail tremor process: {}", e);
                     }

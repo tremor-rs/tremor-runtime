@@ -17,17 +17,7 @@
 /// A simple source that is fed with `SourceReply` via a channel.
 pub mod channel_source;
 
-pub use channel_source::{ChannelSource, ChannelSourceRuntime};
-
-use async_std::channel::unbounded;
-use async_std::task;
-use simd_json::Mutable;
-use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
-use std::fmt::Display;
-use tremor_common::time::nanotime;
-use tremor_script::{ast::DeployEndpoint, prelude::BaseExpr, EventPayload, ValueAndMeta};
-
+use super::{CodecReq, Connectivity};
 use crate::connectors::{
     metrics::SourceReporter,
     utils::reconnect::{Attempt, ConnectionLostNotifier},
@@ -47,16 +37,22 @@ use crate::{
     },
     log_error,
 };
+use async_std::channel::unbounded;
 use async_std::channel::{Receiver, Sender};
 use beef::Cow;
+pub use channel_source::{ChannelSource, ChannelSourceRuntime};
+use simd_json::Mutable;
+use std::collections::btree_map::Entry;
+use std::collections::BTreeMap;
+use std::fmt::Display;
 use tremor_common::ports::{ERR, OUT};
+use tremor_common::time::nanotime;
 use tremor_pipeline::{
     CbAction, Event, EventId, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
 };
+use tremor_script::{ast::DeployEndpoint, prelude::BaseExpr, EventPayload, ValueAndMeta};
 use tremor_value::{literal, Value};
 use value_trait::Builder;
-
-use super::{CodecReq, Connectivity};
 
 #[derive(Debug)]
 /// Messages a Source can receive
@@ -374,12 +370,12 @@ impl SourceManagerBuilder {
         // the pipeline is waiting for the source to process contraflow and the source waits for
         // the pipeline to process forward flow.
 
-        let name = format!("{}-src", ctx.alias);
+        let _name = format!("{}-src", ctx.alias);
         let (source_tx, source_rx) = unbounded();
         let source_addr = SourceAddr { addr: source_tx };
         let manager = SourceManager::new(source, ctx, self, source_rx, source_addr.clone());
         // spawn manager task
-        task::Builder::new().name(name).spawn(manager.run())?;
+        async_global_executor::spawn(manager.run()).detach();
 
         Ok(source_addr)
     }
@@ -1223,6 +1219,7 @@ where
 
             let mut pull_id = self.pull_counter;
             let r = {
+                tokio::task::yield_now().await;
                 dbg!();
                 // TODO: we could specialize for sources that just use a queue for pull_data
                 //       and handle it the same as rx

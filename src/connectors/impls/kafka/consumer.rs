@@ -23,7 +23,6 @@ use crate::connectors::utils::metrics::make_metrics_payload;
 use async_broadcast::{broadcast, Receiver as BroadcastReceiver, Sender as BroadcastSender};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::{FutureExt, StreamExt};
-use async_std::task::{self, JoinHandle};
 use halfbrown::HashMap;
 use indexmap::IndexMap;
 use log::Level::Debug;
@@ -92,7 +91,7 @@ impl ConnectorBuilder for Builder {
                 path: vec![],
             };
 
-            let tid = task::current().id();
+            let tid = 42; //FIXME: task::current().id();
             let mut client_config = ClientConfig::new();
             let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, tid);
             client_config
@@ -195,10 +194,11 @@ impl ClientContext for TremorConsumerContext {
             if self.connect_tx.is_closed() {
                 // issue a reconnect upon fatal errors
                 let notifier = self.ctx.notifier().clone();
-                task::spawn(async move {
+                async_global_executor::spawn(async move {
                     notifier.connection_lost().await?;
                     Ok::<(), Error>(())
-                });
+                })
+                .detach();
             } else {
                 // we are in the connect phase - channel is still open, so notify the connect method of an error
                 if let Err(e) = self.connect_tx.try_send(Err(error.into())) {
@@ -379,7 +379,7 @@ struct KafkaConsumerSource {
     source_tx: Sender<(SourceReply, Option<u64>)>,
     source_rx: Receiver<(SourceReply, Option<u64>)>,
     consumer: Option<Arc<TremorConsumer>>,
-    consumer_task: Option<JoinHandle<()>>,
+    consumer_task: Option<async_global_executor::Task<()>>,
     metrics_rx: Option<BroadcastReceiver<EventPayload>>,
 }
 
@@ -465,7 +465,7 @@ impl Source for KafkaConsumerSource {
         let task_consumer = arc_consumer.clone();
         self.consumer = Some(arc_consumer);
 
-        let handle = task::spawn(consumer_task(
+        let handle = async_global_executor::spawn(consumer_task(
             task_consumer,
             self.topic_resolver.clone(),
             self.origin_uri.clone(),

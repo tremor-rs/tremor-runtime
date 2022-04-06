@@ -24,7 +24,6 @@ use crate::connectors::prelude::*;
 use async_broadcast::{broadcast, Receiver as BroadcastReceiver, Sender as BroadcastSender};
 use async_std::channel::{bounded, Sender};
 use async_std::prelude::FutureExt;
-use async_std::task;
 use beef::Cow;
 use halfbrown::HashMap;
 use rdkafka::config::{ClientConfig, FromClientConfigAndContext};
@@ -172,10 +171,11 @@ impl ClientContext for TremorProducerContext {
         } else if is_fatal(&error) {
             // issue a reconnect upon fatal errors
             let notifier = self.ctx.notifier().clone();
-            task::spawn(async move {
+            async_global_executor::spawn(async move {
                 notifier.connection_lost().await?;
                 Ok::<(), Error>(())
-            });
+            })
+            .detach();
         }
     }
 }
@@ -302,13 +302,15 @@ impl Sink for KafkaProducerSink {
             } else {
                 None
             };
-            task::spawn(wait_for_delivery(
+            // FIXME: look at all the .detach() and see if we can take ownership to guarantee deletion
+            async_global_executor::spawn(wait_for_delivery(
                 ctx.clone(),
                 cf_data,
                 start,
                 delivery_futures,
                 self.reply_tx.clone(),
-            ));
+            ))
+            .detach();
         }
         Ok(SinkReply::NONE)
     }

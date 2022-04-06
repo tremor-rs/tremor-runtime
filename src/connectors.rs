@@ -40,11 +40,8 @@ use crate::{
     errors::{Error, Kind as ErrorKind, Result},
     log_error,
 };
+use async_std::channel::{bounded, Sender};
 use async_std::task::{self};
-use async_std::{
-    channel::{bounded, Sender},
-    task::JoinHandle,
-};
 use beef::Cow;
 use futures::Future;
 use halfbrown::HashMap;
@@ -1224,12 +1221,12 @@ pub(crate) async fn register_builtin_connector_types(world: &World, debug: bool)
 /// Function to spawn an acceptor task in the runtime, this forbids returning Result so
 /// that `?` can't be used in those tasks and silent errors with acceptor tasks dying
 /// are eliminated.
-pub(crate) fn spawn_task<F, C>(ctx: C, t: F) -> JoinHandle<()>
+pub(crate) fn spawn_task<F, C>(ctx: C, t: F) -> async_global_executor::Task<()>
 where
     F: Future<Output = Result<()>> + Send + 'static,
     C: Context + Send + 'static,
 {
-    task::spawn(async move {
+    async_global_executor::spawn(async move {
         log_error!(t.await, "{ctx} Connector loop error: {e}");
         // notify connector task about disconnect
         // of the listening socket

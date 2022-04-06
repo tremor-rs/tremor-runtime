@@ -28,18 +28,16 @@
 //! ```
 //!
 //! We try to route the event to the connection with `stream_id` `123`.
+use super::{UnixSocketReader, UnixSocketWriter};
 use crate::connectors::prelude::*;
 use crate::connectors::sink::channel_sink::ChannelSinkMsg;
 use crate::errors::{Kind as ErrorKind, Result};
 use async_std::os::unix::net::UnixListener;
 use async_std::path::PathBuf;
-use async_std::task::JoinHandle;
 use async_std::{
     channel::{bounded, Receiver, Sender},
     prelude::FutureExt,
 };
-
-use super::{UnixSocketReader, UnixSocketWriter};
 
 const URL_SCHEME: &str = "tremor-unix-socket-server";
 
@@ -140,7 +138,7 @@ impl Connector for UnixSocketServer {
 
 struct UnixSocketSource {
     config: Config,
-    listener_task: Option<JoinHandle<()>>,
+    listener_task: Option<async_global_executor::Task<()>>,
     connection_rx: Receiver<SourceReply>,
     runtime: ChannelSourceRuntime,
     sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
@@ -203,12 +201,14 @@ impl Source for UnixSocketSource {
                             meta,
                         );
                         runtime.register_stream_reader(stream_id, &ctx, reader);
-                        sink_runtime.register_stream_writer(
-                            stream_id,
-                            Some(connection_meta),
-                            &ctx,
-                            UnixSocketWriter::new(stream),
-                        );
+                        sink_runtime
+                            .register_stream_writer(
+                                stream_id,
+                                Some(connection_meta),
+                                &ctx,
+                                UnixSocketWriter::new(stream),
+                            )
+                            .detach();
                     }
                     Ok(Err(e)) => return Err(e.into()),
                     Err(_) => continue,

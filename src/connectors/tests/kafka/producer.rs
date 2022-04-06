@@ -80,7 +80,7 @@ async fn connector_kafka_producer() -> Result<()> {
     let container_id = container.id().to_string();
     let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
     let signal_handle = signals.handle();
-    let signal_handler_task = async_std::task::spawn(async move {
+    let signal_handler_task = async_std::async_global_executor::spawn(async move {
         let signal_docker = DockerCli::default();
         while let Some(signal) = signals.next().await {
             signal_docker.stop(container_id.as_str());

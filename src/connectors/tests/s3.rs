@@ -75,7 +75,7 @@ impl SignalHandler {
     pub(crate) fn new(container_id: String) -> Result<Self> {
         let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
         let signal_handle = signals.handle();
-        let handle_task = async_std::task::spawn(async move {
+        let handle_task = async_std::async_global_executor::spawn(async move {
             let signal_docker = clients::Cli::default();
             while let Some(signal) = signals.next().await {
                 signal_docker.stop(container_id.as_str());

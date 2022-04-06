@@ -30,7 +30,7 @@ lazy_static! {
         // We user overflow so that non collected messages can be removed
         // is this what we want? for STDIO it should be good enough
         tx.set_overflow(true);
-        async_std::task::spawn(async move {
+        async_global_executor::spawn(async move {
             let mut stream = stdin();
             let mut buffer = [0_u8; INPUT_SIZE_BYTES];
             while let Ok(len) = stream.read(&mut buffer).await {
@@ -43,7 +43,7 @@ lazy_static! {
                     break;
                 }
             }
-        });
+        }).detach();
         rx
     };
 }

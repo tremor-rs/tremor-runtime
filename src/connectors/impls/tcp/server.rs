@@ -27,7 +27,6 @@ use async_std::{
     channel::{bounded, Receiver, Sender},
     net::TcpListener,
     prelude::*,
-    task::JoinHandle,
 };
 use async_tls::TlsAcceptor;
 use futures::io::AsyncReadExt;
@@ -144,7 +143,7 @@ impl Connector for TcpServer {
 struct TcpServerSource {
     config: Config,
     tls_server_config: Option<ServerConfig>,
-    accept_task: Option<JoinHandle<()>>,
+    accept_task: Option<async_global_executor::Task<()>>,
     connection_rx: Receiver<SourceReply>,
     runtime: ChannelSourceRuntime,
     sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
@@ -233,12 +232,14 @@ impl Source for TcpServerSource {
                             );
                             runtime.register_stream_reader(stream_id, &ctx, tls_reader);
 
-                            sink_runtime.register_stream_writer(
-                                stream_id,
-                                Some(connection_meta.clone()),
-                                &ctx,
-                                TcpWriter::tls_server(tls_write_sink, stream),
-                            );
+                            sink_runtime
+                                .register_stream_writer(
+                                    stream_id,
+                                    Some(connection_meta.clone()),
+                                    &ctx,
+                                    TcpWriter::tls_server(tls_write_sink, stream),
+                                )
+                                .detach();
                         } else {
                             let meta = ctx.meta(literal!({
                                 "tls": false,
@@ -256,12 +257,14 @@ impl Source for TcpServerSource {
                             );
                             runtime.register_stream_reader(stream_id, &ctx, tcp_reader);
 
-                            sink_runtime.register_stream_writer(
-                                stream_id,
-                                Some(connection_meta.clone()),
-                                &ctx,
-                                TcpWriter::new(stream),
-                            );
+                            sink_runtime
+                                .register_stream_writer(
+                                    stream_id,
+                                    Some(connection_meta.clone()),
+                                    &ctx,
+                                    TcpWriter::new(stream),
+                                )
+                                .detach();
                         }
                     }
                     Ok(Err(e)) => return Err(e.into()),

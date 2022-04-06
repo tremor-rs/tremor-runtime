@@ -19,7 +19,6 @@ use crate::connectors::Context;
 use crate::errors::Result;
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::*;
-use async_std::task;
 use std::time::Duration;
 /// A source that receives `SourceReply` messages via a channel.
 /// It does not handle acks/fails.
@@ -77,7 +76,7 @@ impl ChannelSourceRuntime {
     {
         let ctx = ctx.clone();
         let tx = self.sender.clone();
-        task::spawn(async move {
+        async_global_executor::spawn(async move {
             while ctx.quiescence_beacon().continue_reading().await {
                 let sc_data = reader.read(stream).timeout(Self::READ_TIMEOUT_MS).await;
 
@@ -110,7 +109,8 @@ impl ChannelSourceRuntime {
                     "Failed to notify connector",
                 );
             }
-        });
+        })
+        .detach();
     }
 }
 

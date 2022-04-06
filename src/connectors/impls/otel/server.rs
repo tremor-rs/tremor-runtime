@@ -144,7 +144,8 @@ impl Connector for Server {
         spawn_task(
             ctx.clone(),
             async move { Ok(all::make(endpoint, tx).await?) },
-        );
+        )
+        .detach();
         Ok(true)
     }
 }

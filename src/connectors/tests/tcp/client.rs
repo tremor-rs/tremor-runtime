@@ -25,7 +25,7 @@ use value_trait::{Builder, ValueAccess};
 
 #[async_std::test]
 async fn tls_client() -> Result<()> {
-    tcp_client_test(true).await
+    tcp_client_test(false).await
 }
 
 #[async_std::test]

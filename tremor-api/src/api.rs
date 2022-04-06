@@ -17,7 +17,7 @@
 use std::time::Duration;
 
 use crate::errors::Error;
-use async_std::{prelude::*, task::JoinHandle};
+use async_std::prelude::*;
 use http_types::{
     headers::{self, HeaderValue, ToHeaderValues},
     StatusCode,
@@ -171,7 +171,7 @@ async fn handle_api_request<
 
 /// server the tremor API in a separately spawned task
 #[must_use]
-pub fn serve(host: String, world: &World) -> JoinHandle<Result<()>> {
+pub fn serve(host: String, world: &World) -> async_global_executor::Task<Result<()>> {
     let mut v1_app = tide::Server::with_state(State {
         world: world.clone(),
     });
@@ -200,7 +200,7 @@ pub fn serve(host: String, world: &World) -> JoinHandle<Result<()>> {
     app.at("/v1").nest(v1_app);
 
     // spawn API listener
-    async_std::task::spawn(async move {
+    async_global_executor::spawn(async move {
         let res = app.listen(host).await;
         warn!("API stopped.");
         if let Err(e) = res {
