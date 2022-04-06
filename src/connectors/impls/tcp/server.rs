@@ -231,14 +231,17 @@ impl Source for TcpServerSource {
                                 origin_uri.clone(),
                                 meta,
                             );
-                            runtime.register_stream_reader(stream_id, &ctx, tls_reader);
 
-                            sink_runtime.register_stream_writer(
-                                stream_id,
-                                Some(connection_meta.clone()),
-                                &ctx,
-                                TcpWriter::tls_server(tls_write_sink, stream),
-                            );
+                            sink_runtime
+                                .register_stream_writer(
+                                    stream_id,
+                                    Some(connection_meta.clone()),
+                                    &ctx,
+                                    TcpWriter::tls_server(tls_write_sink, stream),
+                                )
+                                .await;
+
+                            runtime.register_stream_reader(stream_id, &ctx, tls_reader);
                         } else {
                             let meta = ctx.meta(literal!({
                                 "tls": false,
@@ -254,14 +257,17 @@ impl Source for TcpServerSource {
                                 origin_uri.clone(),
                                 meta,
                             );
-                            runtime.register_stream_reader(stream_id, &ctx, tcp_reader);
 
-                            sink_runtime.register_stream_writer(
-                                stream_id,
-                                Some(connection_meta.clone()),
-                                &ctx,
-                                TcpWriter::new(stream),
-                            );
+                            sink_runtime
+                                .register_stream_writer(
+                                    stream_id,
+                                    Some(connection_meta.clone()),
+                                    &ctx,
+                                    TcpWriter::new(stream),
+                                )
+                                .await;
+
+                            runtime.register_stream_reader(stream_id, &ctx, tcp_reader);
                         }
                     }
                     Ok(Err(e)) => return Err(e.into()),
@@ -275,7 +281,7 @@ impl Source for TcpServerSource {
     }
 
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(dbg!(self.connection_rx.recv().await?))
+        Ok(self.connection_rx.recv().await?)
     }
 
     async fn on_stop(&mut self, _ctx: &SourceContext) -> Result<()> {

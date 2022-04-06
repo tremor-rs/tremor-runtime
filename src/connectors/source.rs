@@ -1178,7 +1178,6 @@ where
     // TODO: data plane
     #[allow(clippy::too_many_lines)]
     async fn run(mut self) -> Result<()> {
-        dbg!();
         // this one serves as simple counter for our pulls from the source
         // we expect 1 source transport unit (stu) per pull, so this counter is equivalent to a stu counter
         // it is not unique per stream only, but per source
@@ -1223,25 +1222,19 @@ where
 
             let mut pull_id = self.pull_counter;
             let r = {
-                dbg!();
                 // TODO: we could specialize for sources that just use a queue for pull_data
                 //       and handle it the same as rx
                 let f2 = self.source.pull_data(&mut pull_id, &self.ctx);
-                let (f2, h) = futures::future::abortable(f2);
                 match futures::future::select(f1.take().unwrap_or_else(|| rx.recv()), f2).await {
                     Either::Left((msg, o)) => {
-                        h.abort();
                         drop(o);
-                        dbg!("drop");
-                        Either::Left(msg?)
+                        Either::Left(msg)
                     }
                     Either::Right((Ok(data), o)) => {
-                        dbg!();
                         f1 = Some(o);
                         Either::Right(data)
                     }
                     Either::Right((_, o)) => {
-                        dbg!();
                         f1 = Some(o);
                         continue;
                     }
