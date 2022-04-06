@@ -21,7 +21,6 @@ pub use channel_source::{ChannelSource, ChannelSourceRuntime};
 
 use async_std::channel::unbounded;
 use async_std::task;
-use futures::{future::Either, pin_mut};
 use simd_json::Mutable;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
@@ -1179,10 +1178,42 @@ where
     // TODO: data plane
     #[allow(clippy::too_many_lines)]
     async fn run(mut self) -> Result<()> {
+        dbg!();
         // this one serves as simple counter for our pulls from the source
         // we expect 1 source transport unit (stu) per pull, so this counter is equivalent to a stu counter
         // it is not unique per stream only, but per source
+        let rx = self.rx.clone();
+        // loop {
+        //     while !self.should_pull_data() {
+        //         if self.control_plane().await == Control::Terminate {
+        //             debug!("{} Terminating source task...", self.ctx);
+        //             return Ok(());
+        //         }
+        //     }
+
+        //     while let Ok(msg) = rx.try_recv() {
+        //         if self.handle_control_plane_msg(msg).await == Control::Terminate {
+        //             debug!("{} Terminating source task...", self.ctx);
+        //             return Ok(());
+        //         }
+        //     }
+
+        //     let mut pull_id = self.pull_counter;
+
+        //     if let Ok(data) = self
+        //         .source
+        //         .pull_data(&mut pull_id, &self.ctx)
+        //         .timeout(Duration::from_millis(100))
+        //         .await
+        //     {
+        //         self.handle_source_reply(data, pull_id).await?;
+        //         self.pull_counter += 1;
+        //     }
+        // }
+
+        let mut f1 = None;
         loop {
+            use futures::future::Either;
             while !self.should_pull_data() {
                 if self.control_plane().await == Control::Terminate {
                     debug!("{} Terminating source task...", self.ctx);
@@ -1192,18 +1223,27 @@ where
 
             let mut pull_id = self.pull_counter;
             let r = {
-                let f1 = self.rx.recv();
+                dbg!();
+                // TODO: we could specialize for sources that just use a queue for pull_data
+                //       and handle it the same as rx
                 let f2 = self.source.pull_data(&mut pull_id, &self.ctx);
-                pin_mut!(f1);
-                pin_mut!(f2);
-                match futures::future::select(f1, f2).await {
+                let (f2, h) = futures::future::abortable(f2);
+                match futures::future::select(f1.take().unwrap_or_else(|| rx.recv()), f2).await {
                     Either::Left((msg, o)) => {
+                        h.abort();
                         drop(o);
+                        dbg!("drop");
                         Either::Left(msg?)
                     }
-                    Either::Right((data, o)) => {
-                        drop(o);
+                    Either::Right((Ok(data), o)) => {
+                        dbg!();
+                        f1 = Some(o);
                         Either::Right(data)
+                    }
+                    Either::Right((_, o)) => {
+                        dbg!();
+                        f1 = Some(o);
+                        continue;
                     }
                 }
             };

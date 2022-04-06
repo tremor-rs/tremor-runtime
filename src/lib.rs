@@ -53,7 +53,7 @@ pub mod errors;
 /// Tremor function library
 pub mod functions;
 
-pub(crate) mod permge;
+pub(crate) mod primerge;
 
 /// pipelines
 pub mod pipeline;

@@ -24,6 +24,7 @@ use value_trait::Builder;
 
 #[async_std::test]
 async fn server_event_routing() -> Result<()> {
+    dbg!(num_cpus::get());
     let _ = env_logger::try_init();
 
     let free_port = free_port::find_free_tcp_port().await?;
@@ -55,6 +56,7 @@ async fn server_event_routing() -> Result<()> {
     dbg!();
     socket1.write_all("snot\n".as_bytes()).await?;
     let event = out_pipeline.get_event().await?;
+    dbg!(&event);
     let (_data, meta) = event.data.parts();
     dbg!();
     let tcp_server_meta = meta.get("tcp_server");
@@ -111,7 +113,7 @@ async fn server_event_routing() -> Result<()> {
     harness.send_to_sink(event2, IN).await?;
     let bytes_read = socket2
         .read(&mut buf)
-        .timeout(Duration::from_secs(1))
+        .timeout(Duration::from_secs(5))
         .await
         .unwrap()
         .unwrap();

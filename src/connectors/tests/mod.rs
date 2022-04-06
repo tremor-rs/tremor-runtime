@@ -45,9 +45,7 @@ use crate::{
     connectors::{self, builtin_connector_types, source::SourceMsg, Connectivity, StatusReport},
     errors::Result,
     instance::State,
-    pipeline,
-    system::{ShutdownMode, World, WorldConfig},
-    Event, QSIZE,
+    pipeline, Event, QSIZE,
 };
 use async_std::{
     channel::{bounded, Receiver},
@@ -67,7 +65,6 @@ use tremor_script::{ast::DeployEndpoint, lexer::Location, NodeMeta, Value};
 use super::sink::SinkMsg;
 
 pub(crate) struct ConnectorHarness {
-    world: World,
     addr: connectors::Addr,
     pipes: HashMap<Cow<'static, str>, TestPipeline>,
 }
@@ -88,7 +85,6 @@ impl ConnectorHarness {
 
         let connector_type = connector_type.to_string();
 
-        let (world, _) = World::start(WorldConfig::default()).await?;
         let id = format!("test_{connector_type}");
         let raw_config = config::Connector::from_config(connector_type.into(), defn)?;
         let connector_addr =
@@ -142,7 +138,6 @@ impl ConnectorHarness {
         }
 
         Ok(Self {
-            world,
             addr: connector_addr,
             pipes,
         })
@@ -179,7 +174,6 @@ impl ConnectorHarness {
         self.addr.stop(tx).await?;
         let cr = rx.recv().await?;
         cr.res?;
-        self.world.stop(ShutdownMode::Graceful).await?;
         //self.handle.cancel().await;
         let out_events = self
             .pipes

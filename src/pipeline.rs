@@ -15,7 +15,7 @@ use crate::{
     connectors::{self, sink::SinkMsg, source::SourceMsg},
     errors::Result,
     instance::State,
-    permge::PriorityMerge,
+    primerge::PriorityMerge,
 };
 use async_std::{
     channel::{bounded, unbounded, Receiver, Sender},
