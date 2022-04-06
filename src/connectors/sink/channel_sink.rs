@@ -286,7 +286,7 @@ where
                 // we timeout to not hang here but to check the beacon from time to time
                 stream_rx.recv().timeout(Self::RECV_TIMEOUT).await,
             ) {
-                match sinkdata {
+                match dbg!(sinkdata) {
                     Err(_) => {
                         // timeout, just continue
                         continue;
@@ -315,7 +315,7 @@ where
                         }
                     }
                     Ok(Err(e)) => {
-                        error!("{ctx} Error receiving data from ChannelSink: {e}");
+                        warn!("{ctx} Error receiving data from ChannelSink: {e}");
                         break;
                     }
                 }
@@ -362,10 +362,12 @@ where
         serializer: &mut EventSerializer,
         start: u64,
     ) -> Result<SinkReply> {
+        dbg!(&event);
         // clean up
         // make sure channels for the given event are added to avoid stupid errors
         // due to channels not yet handled
         let empty = self.handle_channels(ctx, serializer, false);
+        dbg!();
         if empty {
             // no streams available :sob:
             return Ok(SinkReply {
@@ -418,6 +420,7 @@ where
                     start,
                 };
                 found = true;
+                dbg!(&sink_data);
                 if sender.send(sink_data).await.is_err() {
                     error!("{ctx} Error sending to closed stream {stream_id}.",);
                     remove_streams.push(*stream_id);
