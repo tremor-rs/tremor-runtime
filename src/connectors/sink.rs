@@ -389,12 +389,10 @@ impl SinkManagerBuilder {
         let (sink_tx, sink_rx) = bounded(qsize);
         let manager = SinkManager::new(sink, ctx.clone(), self, sink_rx);
         // spawn manager task
-        dbg!();
         ctx.swallow_err(
-            dbg!(task::Builder::new().name(name).spawn(manager.run())),
+            task::Builder::new().name(name).spawn(manager.run()),
             "oh no!",
         );
-        dbg!();
 
         Ok(SinkAddr { addr: sink_tx })
     }
@@ -631,14 +629,12 @@ where
     }
     #[allow(clippy::too_many_lines)]
     async fn run(mut self) -> Result<()> {
-        dbg!();
         use SinkState::{Drained, Draining, Initialized, Paused, Running, Stopped};
         let from_sink = self.reply_rx.map(SinkMsgWrapper::FromSink);
         let to_sink = self.rx.map(SinkMsgWrapper::ToSink);
         let mut from_and_to_sink_channel = PriorityMerge::new(from_sink, to_sink);
-        dbg!();
         while let Some(msg_wrapper) = from_and_to_sink_channel.next().await {
-            match dbg!(msg_wrapper) {
+            match msg_wrapper {
                 SinkMsgWrapper::ToSink(sink_msg) => {
                     match sink_msg {
                         SinkMsg::Link {
@@ -754,23 +750,19 @@ where
                             send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
                         }
                         SinkMsg::Event { event, port } => {
-                            dbg!(&event, &port);
                             let cf_builder = ContraflowData::from(&event);
-                            dbg!();
 
                             self.metrics_reporter.increment_in();
                             if let Some(t) = self.metrics_reporter.periodic_flush(event.ingest_ns) {
                                 self.metrics_reporter
                                     .send_sink_metrics(self.sink.metrics(t, &self.ctx).await);
                             }
-                            dbg!();
                             // TODO: fix additional clones here for merge
                             //       (hg) - I don't think we can do this w/o a clone since we need
                             //              them here and in the on_event
                             self.merged_operator_meta.merge(event.op_meta.clone());
                             let transactional = event.transactional;
                             let start = nanotime();
-                            dbg!();
                             let res = self
                                 .sink
                                 .on_event(
@@ -782,7 +774,6 @@ where
                                 )
                                 .await;
                             let duration = nanotime() - start;
-                            dbg!(&res);
                             match res {
                                 Ok(replies) => {
                                     // TODO: send metric for duration
@@ -795,7 +786,6 @@ where
                                         transactional && self.sink.auto_ack(),
                                     )
                                     .await;
-                                    dbg!();
                                 }
                                 Err(_e) => {
                                     // sink error that is not signalled via SinkReply::Fail (not handled)
@@ -804,7 +794,6 @@ where
                                         let cf = cf_builder.into_fail();
                                         send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
                                     }
-                                    dbg!();
                                 }
                             };
                         }

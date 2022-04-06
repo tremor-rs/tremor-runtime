@@ -212,12 +212,14 @@ impl Connector for WsServer {
                             let (ws_write, ws_read) = ws_stream.split();
 
                             let ws_writer = WsWriter::new_tls_server(ws_write);
-                            sink_runtime.register_stream_writer(
-                                stream_id,
-                                Some(connection_meta.clone()),
-                                &ctx,
-                                ws_writer,
-                            );
+                            sink_runtime
+                                .register_stream_writer(
+                                    stream_id,
+                                    Some(connection_meta.clone()),
+                                    &ctx,
+                                    ws_writer,
+                                )
+                                .await;
 
                             let ws_reader = WsReader::new(
                                 ws_read,
@@ -243,12 +245,14 @@ impl Connector for WsServer {
 
                             let ws_writer = WsWriter::new(ws_write);
 
-                            sink_runtime.register_stream_writer(
-                                stream_id,
-                                Some(connection_meta.clone()),
-                                &ctx,
-                                ws_writer,
-                            );
+                            sink_runtime
+                                .register_stream_writer(
+                                    stream_id,
+                                    Some(connection_meta.clone()),
+                                    &ctx,
+                                    ws_writer,
+                                )
+                                .await;
 
                             let ws_reader = WsReader::new(
                                 ws_read,
