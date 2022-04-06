@@ -34,6 +34,8 @@ mod s3;
 mod tcp;
 #[cfg(feature = "socket-integration")]
 mod unix_socket;
+#[cfg(feature = "wal-integration")]
+mod wal;
 #[cfg(feature = "ws-integration")]
 mod ws;
 
@@ -255,6 +257,10 @@ impl ConnectorHarness {
     ))]
     pub(crate) async fn send_to_sink(&self, event: Event, port: Cow<'static, str>) -> Result<()> {
         self.addr.send_sink(SinkMsg::Event { event, port }).await
+    }
+
+    pub(crate) async fn send_to_source(&self, msg: SourceMsg) -> Result<()> {
+        self.addr.send_source(msg).await
     }
 
     // this is only used in integration tests,

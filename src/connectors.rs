@@ -95,7 +95,7 @@ impl Addr {
     ///   * if sending failed
     pub(crate) async fn send_sink(&self, msg: SinkMsg) -> Result<()> {
         if let Some(sink) = self.sink.as_ref() {
-            dbg!(sink.addr.send(dbg!(msg)).await)?;
+            sink.addr.send(msg).await?;
         }
         Ok(())
     }
@@ -744,14 +744,15 @@ async fn connector_task(
 
                     // TODO: in implementations that don't really support pausing
                     //       issue a warning/error message
-                    //       e.g. UDP, TCP, Rest
+                    //       e.g. UDP, TCP, HTTP
                     //
                     ctx.swallow_err(connector.on_pause(&ctx).await, "Error during on_pause");
-                    connector_state = State::Paused;
-                    quiescence_beacon.pause();
 
                     connector_addr.send_source(SourceMsg::Pause).await?;
                     connector_addr.send_sink(SinkMsg::Pause).await?;
+
+                    connector_state = State::Paused;
+                    quiescence_beacon.pause();
 
                     info!("{ctx} Paused.");
                 }

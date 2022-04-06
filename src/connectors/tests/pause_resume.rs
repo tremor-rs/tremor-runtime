@@ -15,8 +15,9 @@
 use std::time::Duration;
 
 use super::ConnectorHarness;
-use crate::{errors::Result, instance::State};
+use crate::{connectors::source::SourceMsg, errors::Result, instance::State};
 use async_std::{
+    channel::bounded,
     io::WriteExt,
     net::{TcpListener, TcpStream, UdpSocket},
 };
@@ -67,23 +68,30 @@ async fn udp_pause_resume() -> Result<()> {
     // pause connector
     harness.pause().await?;
     harness.wait_for_state(State::Paused).await?;
+    // ensure the source has applied the state change
+    let (tx, rx) = bounded(1);
+    harness.send_to_source(SourceMsg::Ping(tx)).await?;
+    rx.recv().await?;
 
     // send some more data
     let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
     socket.send(data2.as_bytes()).await?;
 
     // ensure nothing is received (pause is actually doing the right thing)
-    assert!(
-        out_pipeline
-            .expect_no_event_for(std::time::Duration::from_secs(1))
-            .await
-            .is_ok(),
-        "We don't get a event during pause"
-    );
+    let res = out_pipeline
+        .expect_no_event_for(std::time::Duration::from_secs(1))
+        .await;
+    assert!(res.is_ok(), "We got an event during pause: {res:?}");
 
     // resume connector
     harness.resume().await?;
     harness.wait_for_state(State::Running).await?;
+
+    // ensure the source has applied the state change
+    let (tx, rx) = bounded(1);
+    harness.send_to_source(SourceMsg::Ping(tx)).await?;
+    rx.recv().await?;
+
     // receive the data sent during pause
     // first line, continueing the stuff from last send
     assert_eq!(
@@ -158,6 +166,12 @@ async fn tcp_server_pause_resume() -> Result<()> {
     // pause connector
     harness.pause().await?;
     harness.wait_for_state(State::Paused).await?;
+
+    // ensure the source has applied the state change
+    let (tx, rx) = bounded(1);
+    harness.send_to_source(SourceMsg::Ping(tx)).await?;
+    rx.recv().await?;
+
     // send some more data
     let data2 = "Connectors\nsuck\nwho\nthe\nhell\ncame\nup\nwith\nthat\nshit\n";
     socket.write_all(data2.as_bytes()).await?;
@@ -170,6 +184,12 @@ async fn tcp_server_pause_resume() -> Result<()> {
     // resume connector
     harness.resume().await?;
     harness.wait_for_state(State::Running).await?;
+
+    // ensure the source has applied the state change
+    let (tx, rx) = bounded(1);
+    harness.send_to_source(SourceMsg::Ping(tx)).await?;
+    rx.recv().await?;
+
     // receive the data sent during pause
     assert_eq!(
         format!(

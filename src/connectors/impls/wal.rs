@@ -131,7 +131,7 @@ struct WalSink {
 #[async_trait::async_trait]
 impl Sink for WalSink {
     fn auto_ack(&self) -> bool {
-        false
+        true
     }
 
     async fn on_event(
@@ -143,7 +143,7 @@ impl Sink for WalSink {
         _start: u64,
     ) -> Result<SinkReply> {
         self.wal.lock().await.push(Payload(event)).await?;
-        Ok(SinkReply::ACK)
+        Ok(SinkReply::NONE)
     }
 }
 
