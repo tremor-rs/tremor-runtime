@@ -101,7 +101,7 @@ impl Source for WalSource {
                     port: None,
                 });
             }
-            task::sleep(Duration::from_millis(10)).await
+            task::sleep(Duration::from_millis(10)).await;
         }
     }
 

@@ -387,12 +387,9 @@ impl SinkManagerBuilder {
         let qsize = self.qsize;
         let name = format!("{}-sink", ctx.alias);
         let (sink_tx, sink_rx) = bounded(qsize);
-        let manager = SinkManager::new(sink, ctx.clone(), self, sink_rx);
+        let manager = SinkManager::new(sink, ctx, self, sink_rx);
         // spawn manager task
-        ctx.swallow_err(
-            task::Builder::new().name(name).spawn(manager.run()),
-            "oh no!",
-        );
+        task::Builder::new().name(name).spawn(manager.run())?;
 
         Ok(SinkAddr { addr: sink_tx })
     }

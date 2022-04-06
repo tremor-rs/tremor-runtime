@@ -1236,15 +1236,11 @@ where
                 match futures::future::select(f1.take().unwrap_or_else(|| rx.recv()), f2).await {
                     Either::Left((msg, o)) => {
                         drop(o);
-                        Either::Left(msg)
+                        Either::Left(msg?)
                     }
-                    Either::Right((Ok(data), o)) => {
+                    Either::Right((data, o)) => {
                         f1 = Some(o);
                         Either::Right(data)
-                    }
-                    Either::Right((_, o)) => {
-                        f1 = Some(o);
-                        continue;
                     }
                 }
             };
