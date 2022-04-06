@@ -95,7 +95,7 @@ impl Addr {
     ///   * if sending failed
     pub(crate) async fn send_sink(&self, msg: SinkMsg) -> Result<()> {
         if let Some(sink) = self.sink.as_ref() {
-            sink.addr.send(msg).await?;
+            dbg!(sink.addr.send(dbg!(msg)).await)?;
         }
         Ok(())
     }
