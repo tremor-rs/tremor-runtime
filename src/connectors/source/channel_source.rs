@@ -78,7 +78,13 @@ impl ChannelSourceRuntime {
         let ctx = ctx.clone();
         let tx = self.sender.clone();
         task::spawn(async move {
-            while ctx.quiescence_beacon().continue_reading().await {
+            loop {
+                if !ctx.quiescence_beacon().continue_reading().await {
+                    if let Some(sc_data) = reader.quiesce(stream).await {
+                        ctx.swallow_err(tx.send(sc_data).await, "Error Sending StreamFail Message");
+                        break;
+                    }
+                };
                 let sc_data = reader.read(stream).timeout(Self::READ_TIMEOUT_MS).await;
 
                 let sc_data = match sc_data {
@@ -93,17 +99,19 @@ impl ChannelSourceRuntime {
                         break;
                     }
                 };
-                let last = matches!(&sc_data, SourceReply::EndStream { .. });
+
+                let last = matches!(
+                    sc_data,
+                    SourceReply::EndStream { .. }
+                        | SourceReply::Finished
+                        | SourceReply::StreamFail(_)
+                );
+
                 if tx.send(sc_data).await.is_err() || last {
                     break;
                 };
             }
-            // FIXME: add callback to reader for clean closing of stream or integrate it
-            // in on_done
-            ctx.swallow_err(
-                tx.send(SourceReply::StreamFail(stream)).await,
-                "Failed to fail stream",
-            );
+
             if reader.on_done(stream).await == StreamDone::ConnectorClosed {
                 ctx.swallow_err(
                     ctx.notifier().connection_lost().await,

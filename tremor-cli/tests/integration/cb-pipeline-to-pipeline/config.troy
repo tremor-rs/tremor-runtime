@@ -2,12 +2,14 @@
 define flow main
 flow
   use troy::pipelines;
+  use std::time::nanos;
+  
   define connector cb_check from cb
   with
     codec = "json",
     config = {
       "path": "in.json",
-      "timeout": 1000
+      "timeout": nanos::from_seconds(1)
     }
   end;
 

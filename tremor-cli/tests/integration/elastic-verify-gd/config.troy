@@ -79,7 +79,7 @@ flow
   with
     config =  {
       "path": "in.json",
-      "timeout": 10000,
+      "timeout": nanos::from_seconds(1),
       "expect_batched": true,
 
     }
