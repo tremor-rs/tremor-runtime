@@ -274,7 +274,7 @@ impl ConnectorHarness {
             .await
     }
 
-    #[cfg(feature = "kafka-integration")]
+    #[cfg(any(feature = "kafka-integration", feature = "wal-integration"))]
     pub(crate) async fn send_contraflow(&self, cb: CbAction, id: EventId) -> Result<()> {
         self.addr.send_source(SourceMsg::Cb(cb, id)).await
     }
