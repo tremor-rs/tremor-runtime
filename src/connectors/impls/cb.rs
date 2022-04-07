@@ -27,11 +27,9 @@ use tremor_common::asy::file::open;
 pub struct Config {
     /// path to file to load data from
     path: Option<String>,
-    // timeout in millis
-    // FIXME: consider making this nanoseconds so timeout is the same in all connectors
+    // timeout in nanoseconds
     #[serde(default = "default_timeout")]
     timeout: u64,
-
     // only expect the latest event to be acked, the earliest to be failed
     #[serde(default = "default_expect_batched")]
     expect_batched: bool,
@@ -39,7 +37,7 @@ pub struct Config {
 
 /// 10 seconds
 fn default_timeout() -> u64 {
-    10_000
+    10_000_000_000
 }
 
 fn default_expect_batched() -> bool {
@@ -270,10 +268,10 @@ impl Source for CbSource {
                 // ALLOW: this is the supposed to exit
                 std::process::exit(status);
             } else {
-                // FIXME: do some proper waiting here we can't just -100 every call
+                // TODO: do some proper waiting here we can't just -100 every call
                 // See chrononome
-                async_std::task::sleep(Duration::from_millis(100_u64)).await;
-                self.config.timeout = self.config.timeout.saturating_sub(100_u64);
+                async_std::task::sleep(Duration::from_nanos(100_000_000)).await;
+                self.config.timeout = self.config.timeout.saturating_sub(100_000_000);
             }
 
             Ok(SourceReply::Finished)

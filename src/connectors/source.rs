@@ -267,6 +267,12 @@ pub(crate) trait StreamReader: Send {
     /// reads from the source reader
     async fn read(&mut self, stream: u64) -> Result<SourceReply>;
 
+    /// Informs the reader that is should quiesce, can optionally return
+    /// a source reply if the quiescence is already reached.
+    /// Alternatively the reader HAS TO return a SourceReply::StreamDone, StremFailed
+    /// or Finished in the next few messages or be shut down forcefully.
+    async fn quiesce(&mut self, stream: u64) -> Option<SourceReply>;
+
     /// called when the reader is finished or encountered an error
     #[cfg(not(tarpaulin_include))] // trait placeholder function
     async fn on_done(&mut self, _stream: u64) -> StreamDone {
