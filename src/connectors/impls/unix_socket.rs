@@ -52,6 +52,13 @@ impl UnixSocketReader {
 
 #[async_trait::async_trait()]
 impl StreamReader for UnixSocketReader {
+    async fn quiesce(&mut self, stream: u64) -> Option<SourceReply> {
+        Some(SourceReply::EndStream {
+            origin_uri: self.origin_uri.clone(),
+            stream,
+            meta: Some(self.meta.clone()),
+        })
+    }
     async fn read(&mut self, stream: u64) -> Result<SourceReply> {
         let bytes_read = self.stream.read(&mut self.buffer).await?;
         if bytes_read == 0 {
