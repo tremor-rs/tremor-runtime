@@ -74,11 +74,7 @@ pub(crate) struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
-    async fn config_to_connector(
-        &self,
-        _id: &str,
-        config: &ConnectorConfig,
-    ) -> Result<Box<dyn Connector>> {
+    async fn build(&self, _id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
         if let Some(config) = &config.config {
             let config: Config = Config::new(config)?;
             let mut source_data_file = file::open(&config.source)?;

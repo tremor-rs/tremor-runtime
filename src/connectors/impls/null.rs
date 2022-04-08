@@ -26,11 +26,7 @@ impl ConnectorBuilder for Builder {
         "null".into()
     }
 
-    async fn config_to_connector(
-        &self,
-        _alias: &str,
-        _config: &ConnectorConfig,
-    ) -> Result<Box<dyn Connector>> {
+    async fn build(&self, _alias: &str, _config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
         Ok(Box::new(Null {}))
     }
 }

@@ -806,7 +806,7 @@ mod tests {
             fn connector_type(&self) -> ConnectorType {
                 "fake".into()
             }
-            async fn config_to_connector(
+            async fn build(
                 &self,
                 _alias: &str,
                 _config: &ConnectorConfig,
