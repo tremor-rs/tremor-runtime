@@ -152,6 +152,7 @@ impl<I> TemporalPriorityQueue<I> {
         self.q.push(Reverse(at));
     }
 
+    #[cfg(not(feature = "tarpaulin-exclude"))]
     #[cfg(test)]
     pub(crate) fn pop(&mut self) -> Option<TemporalItem<I>> {
         let Reverse(x) = self.q.peek()?;
@@ -240,6 +241,7 @@ impl ChronomicQueue {
         }
         trigger
     }
+    #[cfg(not(feature = "tarpaulin-exclude"))]
     #[cfg(test)]
     pub(crate) fn next(&mut self) -> Option<(String, Option<Value<'static>>)> {
         self.tpq.pop().map(|ti| {
