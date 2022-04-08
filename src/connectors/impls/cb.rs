@@ -17,6 +17,7 @@
 use std::time::Duration;
 
 use crate::connectors::prelude::*;
+use crate::system::{ShutdownMode, World};
 use async_std::io::prelude::BufReadExt;
 use async_std::stream::StreamExt;
 use async_std::{fs::File, io};
@@ -46,50 +47,16 @@ fn default_expect_batched() -> bool {
 
 impl ConfigImpl for Config {}
 
-/// Testing connector for verifying correct CB Ack/Fail behaviour of the whole downstream pipeline/connectors
-/// and for triggering custom cb (circuit breaker open/close) or gd (guaranteed delivery ack/fail) contraflow events.
-///
-/// Source: takes events from a file and expects at least one (or exactly one) ack or fail for each event.
-/// Sink: expects a `"cb"` array or string in the event payload or metadata and reacts with the given event
-///       (possible values: "ack", "fail", "open", "close", "trigger", "restore")
-///
-/// ### Notes:
-///
-/// * In case the connected pipeline drops events no ack or fail is received with the current runtime.
-/// * In case the pipeline branches off, it copies the event and it reaches two offramps, we might receive more than 1 ack or fail for an event with the current runtime.
-pub struct Cb {
-    config: Config,
+#[derive(Debug)]
+pub(crate) struct Builder {
+    world: World,
 }
 
-#[async_trait::async_trait()]
-impl Connector for Cb {
-    fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Optional("json")
-    }
-
-    async fn create_source(
-        &mut self,
-        source_context: SourceContext,
-        builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
-        let source = CbSource::from_config(&self.config, source_context.alias()).await?;
-        let source_addr = builder.spawn(source, source_context)?;
-        Ok(Some(source_addr))
-    }
-
-    async fn create_sink(
-        &mut self,
-        sink_context: SinkContext,
-        builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
-        let sink = CbSink {};
-        let sink_addr = builder.spawn(sink, sink_context)?;
-        Ok(Some(sink_addr))
+impl Builder {
+    pub(crate) fn new(world: World) -> Self {
+        Self { world }
     }
 }
-
-#[derive(Default, Debug)]
-pub(crate) struct Builder {}
 
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
@@ -104,10 +71,57 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         if let Some(raw) = &config.config {
             let config = Config::new(raw)?;
-            Ok(Box::new(Cb { config }))
+            Ok(Box::new(Cb {
+                config,
+                world: self.world.clone(),
+            }))
         } else {
             Err(ErrorKind::MissingConfiguration(alias.to_string()).into())
         }
+    }
+}
+
+/// Testing connector for verifying correct CB Ack/Fail behaviour of the whole downstream pipeline/connectors
+/// and for triggering custom cb (circuit breaker open/close) or gd (guaranteed delivery ack/fail) contraflow events.
+///
+/// Source: takes events from a file and expects at least one (or exactly one) ack or fail for each event.
+/// Sink: expects a `"cb"` array or string in the event payload or metadata and reacts with the given event
+///       (possible values: "ack", "fail", "open", "close", "trigger", "restore")
+///
+/// ### Notes:
+///
+/// * In case the connected pipeline drops events no ack or fail is received with the current runtime.
+/// * In case the pipeline branches off, it copies the event and it reaches two offramps, we might receive more than 1 ack or fail for an event with the current runtime.
+pub struct Cb {
+    config: Config,
+    world: World,
+}
+
+#[async_trait::async_trait()]
+impl Connector for Cb {
+    fn codec_requirements(&self) -> CodecReq {
+        CodecReq::Optional("json")
+    }
+
+    async fn create_source(
+        &mut self,
+        source_context: SourceContext,
+        builder: SourceManagerBuilder,
+    ) -> Result<Option<SourceAddr>> {
+        let source =
+            CbSource::new(&self.config, source_context.alias(), self.world.clone()).await?;
+        let source_addr = builder.spawn(source, source_context)?;
+        Ok(Some(source_addr))
+    }
+
+    async fn create_sink(
+        &mut self,
+        sink_context: SinkContext,
+        builder: SinkManagerBuilder,
+    ) -> Result<Option<SinkAddr>> {
+        let sink = CbSink {};
+        let sink_addr = builder.spawn(sink, sink_context)?;
+        Ok(Some(sink_addr))
     }
 }
 
@@ -202,10 +216,11 @@ struct CbSource {
     finished: bool,
     config: Config,
     origin_uri: EventOriginUri,
+    world: World,
 }
 
 impl CbSource {
-    async fn from_config(config: &Config, alias: &str) -> Result<Self> {
+    async fn new(config: &Config, alias: &str, world: World) -> Result<Self> {
         if let Some(path) = config.path.as_ref() {
             let file = open(path).await?;
             Ok(Self {
@@ -220,6 +235,7 @@ impl CbSource {
                     host: hostname(),
                     ..EventOriginUri::default()
                 },
+                world,
             })
         } else {
             Err(ErrorKind::InvalidConfiguration(
@@ -247,32 +263,27 @@ impl Source for CbSource {
                 codec_overwrite: None,
             })
         } else if self.finished {
-            if self.config.timeout == 0 {
-                // timeout reached
-                let max_cb_received = self.received_cbs.max().unwrap_or_default();
-                let cbs_missing = if self.config.expect_batched {
-                    max_cb_received < self.last_sent
-                } else {
-                    self.received_cbs.count() < self.num_sent
-                };
-                let status = if cbs_missing {
-                    // report failures to stderr and exit with 1
-                    eprintln!("Expected CB events up to id {}.", self.last_sent);
-                    eprintln!("Got acks: {:?}", self.received_cbs.ack);
-                    eprintln!("Got fails: {:?}", self.received_cbs.fail);
-                    1
-                } else {
-                    0
-                };
-                // TODO: do a proper graceful shutdown
-                // ALLOW: this is the supposed to exit
-                std::process::exit(status);
-            } else {
-                // TODO: do some proper waiting here we can't just -100 every call
-                // See chrononome
-                async_std::task::sleep(Duration::from_nanos(100_000_000)).await;
-                self.config.timeout = self.config.timeout.saturating_sub(100_000_000);
+            let world = self.world.clone();
+
+            if self.config.timeout > 0 {
+                async_std::task::sleep(Duration::from_millis(self.config.timeout)).await;
             }
+            let max_cb_received = self.received_cbs.max().unwrap_or_default();
+            let cbs_missing = if self.config.expect_batched {
+                max_cb_received < self.last_sent
+            } else {
+                self.received_cbs.count() < self.num_sent
+            };
+            if cbs_missing {
+                // report failures to stderr and exit with 1
+                eprintln!("Expected CB events up to id {}.", self.last_sent);
+                eprintln!("Got acks: {:?}", self.received_cbs.ack);
+                eprintln!("Got fails: {:?}", self.received_cbs.fail);
+            }
+            async_std::task::spawn::<_, Result<()>>(async move {
+                world.stop(ShutdownMode::Graceful).await?;
+                Ok(())
+            });
 
             Ok(SourceReply::Finished)
         } else {

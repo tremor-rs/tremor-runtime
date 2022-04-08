@@ -30,7 +30,7 @@ use async_tungstenite::{
 };
 use futures::SinkExt;
 use rustls::ClientConfig;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use std::{
     net::SocketAddr,
     sync::{
@@ -56,7 +56,7 @@ enum ExpectMessage {
 }
 
 impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::TcpStream>>> {
-    async fn new_tls(url: String, port: u16) -> Self {
+    async fn new_tls(url: &str, port: u16) -> Result<Self> {
         let mut config = ClientConfig::new();
 
         let cafile = Path::new("./tests/localhost.cert");
@@ -65,22 +65,14 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
         let (certs, _) = config
             .root_store
             .add_pem_file(&mut pem)
-            .expect("Unable to create configuration object.");
+            .map_err(|_e| Error::from("Error adding pem file to root store"))?;
         assert_eq!(1, certs);
-        let tcp_stream = TcpStream::connect(&format!("localhost:{}", port))
-            .await
-            .unwrap();
+        let tcp_stream = TcpStream::connect(("localhost", port)).await?;
         let tls_connector = TlsConnector::from(Arc::new(config));
-        let tls_stream = tls_connector
-            .connect("localhost", tcp_stream)
-            .await
-            .expect("Expected to successfully connect using TLS.");
-        let maybe_connect = client_async(&url, tls_stream).await;
-        if let Ok((client, _http_response)) = maybe_connect {
-            Self { client }
-        } else {
-            panic!("Could not connect to server");
-        }
+        let tls_stream = tls_connector.connect("localhost", tcp_stream).await?;
+        let (client, _http_response) = client_async(url, tls_stream).await?;
+
+        Ok(Self { client })
     }
     async fn send(&mut self, data: &str) -> Result<()> {
         let status = self.client.send(Message::Text(data.to_string())).await;
@@ -122,15 +114,11 @@ impl TestClient<WebSocketStream<async_tls::client::TlsStream<async_std::net::Tcp
 }
 
 impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
-    fn new(url: String) -> Self {
+    fn new(url: &str) -> Result<Self> {
         use async_tungstenite::tungstenite::connect;
 
-        let maybe_connect = connect(Url::<WsDefaults>::parse(&url).unwrap().url());
-        if let Ok((client, _http_response)) = maybe_connect {
-            Self { client }
-        } else {
-            panic!("Could not connect to server");
-        }
+        let (client, _http_response) = connect(Url::<WsDefaults>::parse(url)?.url())?;
+        Ok(Self { client })
     }
 
     fn ping(&mut self) -> Result<()> {
@@ -293,11 +281,11 @@ async fn ws_server_text_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
     let free_port = find_free_tcp_port().await?;
-
+    let url = format!("ws://0.0.0.0:{free_port}");
     let defn = literal!({
       "codec": "json",
       "config": {
-        "url": format!("ws://0.0.0.0:{free_port}")
+        "url": url.clone()
       }
     });
 
@@ -309,10 +297,28 @@ async fn ws_server_text_routing() -> Result<()> {
     harness.start().await?;
     harness.wait_for_connected().await?;
 
+    let start = Instant::now();
+    let timeout = Duration::from_secs(30);
+    let mut c1 = loop {
+        match TestClient::new(url.as_str()) {
+            Err(e) => {
+                if start.elapsed() > timeout {
+                    return Err(format!(
+                        "Timeout waiting for the ws server to start listening: {e}."
+                    )
+                    .into());
+                }
+                async_std::task::sleep(Duration::from_secs(1)).await;
+            }
+            Ok(client) => {
+                break client;
+            }
+        }
+    };
+
     //
     // Send from ws client to server and check received event
     //
-    let mut c1 = TestClient::new(format!("ws://localhost:{free_port}/"));
     c1.send("\"Hello WebSocket Server\"")?;
 
     let event = out_pipeline.get_event().await?;
@@ -488,11 +494,31 @@ async fn wss_server_text_routing() -> Result<()> {
 
     harness.start().await?;
     harness.wait_for_connected().await?;
+
+    let start = Instant::now();
+    let timeout = Duration::from_secs(30);
+    let url = format!("wss://localhost:{free_port}/");
+
+    let mut c1 = loop {
+        match TestClient::new_tls(url.as_str(), free_port).await {
+            Err(e) => {
+                if start.elapsed() > timeout {
+                    return Err(format!(
+                        "Timeout waiting for the ws server to start listening: {e}."
+                    )
+                    .into());
+                }
+                async_std::task::sleep(Duration::from_secs(1)).await;
+            }
+            Ok(client) => {
+                break client;
+            }
+        }
+    };
+
     //
     // Send from ws client to server and check received event
     //
-    let mut c1 =
-        TestClient::new_tls(format!("wss://localhost:{}/", free_port), free_port as u16).await;
     c1.send("\"Hello WebSocket Server\"").await?;
 
     let event = out_pipeline.get_event().await?;
@@ -560,11 +586,31 @@ async fn wss_server_binary_routing() -> Result<()> {
 
     harness.start().await?;
     harness.wait_for_connected().await?;
+
+    let start = Instant::now();
+    let timeout = Duration::from_secs(30);
+    let url = format!("wss://localhost:{free_port}/");
+
+    let mut c1 = loop {
+        match TestClient::new_tls(url.as_str(), free_port).await {
+            Err(e) => {
+                if start.elapsed() > timeout {
+                    return Err(format!(
+                        "Timeout waiting for the ws server to start listening: {e}."
+                    )
+                    .into());
+                }
+                async_std::task::sleep(Duration::from_secs(1)).await;
+            }
+            Ok(client) => {
+                break client;
+            }
+        }
+    };
+
     //
     // Send from ws client to server and check received event
     //
-    let mut c1 =
-        TestClient::new_tls(format!("wss://localhost:{}/", free_port), free_port as u16).await;
     c1.send("\"Hello WebSocket Server\"").await?;
 
     let event = out_pipeline.get_event().await?;
@@ -609,11 +655,11 @@ async fn server_control_frames() -> Result<()> {
     let _ = env_logger::try_init();
 
     let free_port = find_free_tcp_port().await?;
-
+    let url = format!("ws://0.0.0.0:{free_port}");
     let defn = literal!({
       "codec": "json",
       "config": {
-        "url": format!("ws://0.0.0.0:{free_port}")
+        "url": url.clone()
       }
     });
 
@@ -625,7 +671,24 @@ async fn server_control_frames() -> Result<()> {
     harness.start().await?;
     harness.wait_for_connected().await?;
 
-    let mut c1 = TestClient::new(format!("ws://localhost:{free_port}/"));
+    let start = Instant::now();
+    let timeout = Duration::from_secs(30);
+    let mut c1 = loop {
+        match TestClient::new(url.as_str()) {
+            Err(e) => {
+                if start.elapsed() > timeout {
+                    return Err(format!(
+                        "Timeout waiting for the ws server to start listening: {e}."
+                    )
+                    .into());
+                }
+                async_std::task::sleep(Duration::from_secs(1)).await;
+            }
+            Ok(client) => {
+                break client;
+            }
+        }
+    };
 
     // check ping
     c1.ping()?;

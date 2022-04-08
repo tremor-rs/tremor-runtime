@@ -78,9 +78,9 @@ trait HasCurrentCursor {
     #[allow(clippy::cast_possible_truncation)]
     fn current_slice(&self) -> &[u8] {
         let cur_ref = self.current().get_ref();
-        let len = self.current().position().min(cur_ref.len() as u64);
+        let pos = self.current().position().min(cur_ref.len() as u64);
         // ALLOW: position is always set from usize
-        &cur_ref[(len as usize)..]
+        &cur_ref[(pos as usize)..]
     }
 }
 
@@ -134,23 +134,28 @@ impl async_std::io::BufRead for StreamingBodyReader {
         if this.current_empty() {
             match ready!(this.chunk_rx.recv().poll(cx)) {
                 Ok(chunk) => {
+                    debug!("received chunk of len: {}", chunk.len());
                     this.current = Cursor::new(chunk);
                     Poll::Ready(Ok(this.current_slice()))
                 }
                 Err(_e) => {
                     // channel closed, lets signal EOF
+                    debug!("eof");
                     Poll::Ready(Ok(&[]))
                 }
             }
         } else {
+            debug!("{}", this.current_slice().len());
             Poll::Ready(Ok(this.current_slice()))
         }
     }
 
     fn consume(self: std::pin::Pin<&mut Self>, amt: usize) {
+        debug!("consume amount {}", amt);
         let this = self.get_mut();
         let current_pos = this.current.position();
         this.current.set_position(current_pos + (amt as u64));
+        debug!("consume position: {}", this.current.position());
     }
 }
 
@@ -227,10 +232,13 @@ impl async_std::io::BufRead for FixedBodyReader {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
     use crate::errors::Result;
     use async_std::channel::unbounded;
     use async_std::io::prelude::BufReadExt;
+    use async_std::prelude::FutureExt;
     use futures::AsyncReadExt;
 
     #[async_std::test]
@@ -242,7 +250,9 @@ mod tests {
             let mut lines = vec![];
             let mut line = String::new();
             let mut bytes_read = reader.read_line(&mut line).await?;
+            dbg!(bytes_read);
             while bytes_read > 0 {
+                dbg!(bytes_read);
                 line.truncate(bytes_read);
                 lines.push(std::mem::take(&mut line));
                 bytes_read = reader.read_line(&mut line).await?;
@@ -252,7 +262,9 @@ mod tests {
         tx.send("ABC".as_bytes().to_vec()).await?;
         tx.send("\nDEF\nGHIIII".as_bytes().to_vec()).await?;
         tx.close();
-        let lines = handle.await?;
+        dbg!();
+        let lines = handle.timeout(Duration::from_secs(1)).await??;
+        dbg!();
         assert_eq!(3, lines.len());
         assert_eq!("ABC\n".to_string(), lines[0]);
         assert_eq!("DEF\n".to_string(), lines[1]);

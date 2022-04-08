@@ -107,10 +107,11 @@ impl Source for MetronomeSource {
     }
     async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         let now = nanotime();
-        if now > self.next {
-            task::sleep(Duration::from_nanos(now - self.next)).await;
+        // we need to wait here before we continue to fulfill the interval conditions
+        if now < self.next {
+            task::sleep(Duration::from_nanos(self.next - now)).await;
         }
-        self.next = now + self.interval_ns;
+        self.next += self.interval_ns;
         *pull_id = self.id;
         self.id += 1;
         let data = literal!({

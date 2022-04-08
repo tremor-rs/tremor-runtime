@@ -385,9 +385,11 @@ impl SourceManagerBuilder {
         let name = format!("{}-src", ctx.alias);
         let (source_tx, source_rx) = unbounded();
         let source_addr = SourceAddr { addr: source_tx };
-        let manager = SourceManager::new(source, ctx, self, source_rx, source_addr.clone());
+        let manager = SourceManager::new(source, ctx, self, source_addr.clone());
         // spawn manager task
-        task::Builder::new().name(name).spawn(manager.run())?;
+        task::Builder::new()
+            .name(name)
+            .spawn(manager.run(source_rx))?;
 
         Ok(source_addr)
     }
@@ -570,7 +572,6 @@ where
 {
     source: S,
     ctx: SourceContext,
-    rx: Receiver<SourceMsg>,
     addr: SourceAddr,
     pipelines_out: Vec<(DeployEndpoint, pipeline::Addr)>,
     pipelines_err: Vec<(DeployEndpoint, pipeline::Addr)>,
@@ -601,13 +602,7 @@ where
     S: Source,
 {
     /// constructor
-    fn new(
-        source: S,
-        ctx: SourceContext,
-        builder: SourceManagerBuilder,
-        rx: Receiver<SourceMsg>,
-        addr: SourceAddr,
-    ) -> Self {
+    fn new(source: S, ctx: SourceContext, builder: SourceManagerBuilder, addr: SourceAddr) -> Self {
         let SourceManagerBuilder {
             streams,
             source_metrics_reporter,
@@ -619,7 +614,6 @@ where
         Self {
             source,
             ctx,
-            rx,
             addr,
             streams,
             metrics_reporter: source_metrics_reporter,
@@ -705,14 +699,14 @@ where
                 Control::Continue
             }
             SourceMsg::Cb(cb, id) => self.handle_cb(cb, id).await,
-            m @ (SourceMsg::Start | SourceMsg::Resume | SourceMsg::Pause) => {
-                info!("{} Ignoring {m:?} msg in {state} state", self.ctx);
-                Control::Continue
-            }
             #[cfg(test)]
             SourceMsg::Ping(sender) => {
                 self.ctx
                     .swallow_err(sender.send(()).await, "Error sending Pong");
+                Control::Continue
+            }
+            m @ (SourceMsg::Start | SourceMsg::Resume | SourceMsg::Pause) => {
+                info!("{} Ignoring {m:?} msg in {state} state", self.ctx);
                 Control::Continue
             }
         }
@@ -721,10 +715,13 @@ where
     async fn handle_drain(&mut self, drained_sender: Sender<Msg>) -> Control {
         let state = self.state;
         match self.state {
-            SourceState::Drained => self.ctx.swallow_err(
-                drained_sender.send(Msg::SourceDrained).await,
-                "Error sending SourceDrained message",
-            ),
+            SourceState::Drained => {
+                debug!("{} Source Already drained.", self.ctx);
+                self.ctx.swallow_err(
+                    drained_sender.send(Msg::SourceDrained).await,
+                    "Error sending SourceDrained message",
+                );
+            }
             SourceState::Draining => {
                 info!(
                     "{} Ignoring incoming Drain message in {state} state",
@@ -736,21 +733,29 @@ where
                 // we are drained
                 info!("{} Draining...", self.ctx);
                 if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
+                    info!("{} Source Drained.", self.ctx);
+                    debug!("{} (not connected to any pipeline)", self.ctx);
                     let res = drained_sender.send(Msg::SourceDrained).await;
                     self.ctx
                         .swallow_err(res, "sending SourceDrained message failed");
+                    // no need to send a DRAIN signal here, as we are not connected to anything
                     self.state = SourceState::Drained;
                 } else {
                     self.connector_channel = Some(drained_sender);
                     if !self.is_asynchronous || self.connectivity == Connectivity::Disconnected {
+                        info!("{} Source Drained.", self.ctx);
+                        debug!(
+                            "{} (is_asynchronous={}, {:?})",
+                            self.ctx, self.is_asynchronous, self.connectivity
+                        );
                         // non-asynchronous sources or disconnected sources are considered immediately drained
                         let res = self.on_fully_drained().await;
                         self.ctx
                             .swallow_err(res, "Error on handling fully-drained state");
                     } else {
                         // At this point the connector has advised all reading from external connections to stop via the `QuiescenceBeacon`
-                        // We change the source state to `Draining` and wait for `SourceReply::Empty` as we drain out everything that might be in flight
-                        // when reached the `Empty` point, we emit the `Drain` signal and wait for the CB answer (one for each connected pipeline)
+                        // We change the source state to `Draining` and wait for all the streams to finish as we drain out everything that might be in flight
+                        // when reached the `Finished` point, we emit the `Drain` signal and wait for the CB answer (one for each connected pipeline)
                         self.state = SourceState::Draining;
                     }
                 }
@@ -977,6 +982,7 @@ where
                     .await;
                 if self.state == SourceState::Draining && self.streams.is_empty() {
                     self.on_fully_drained().await?;
+                    self.state = SourceState::Drained;
                 }
             }
             SourceReply::StreamFail(stream_id) => {
@@ -984,10 +990,12 @@ where
                 self.streams.end_stream(stream_id);
                 if self.state == SourceState::Draining && self.streams.is_empty() {
                     self.on_fully_drained().await?;
+                    self.state = SourceState::Drained;
                 }
             }
             SourceReply::Finished => {
                 info!("{} Finished", self.ctx);
+                self.on_fully_drained().await?;
                 self.state = SourceState::Drained;
             }
         }
@@ -1160,7 +1168,10 @@ where
         // this source has been fully drained
         self.state = SourceState::Drained;
         // send Drain signal
-        debug!("{} Sending DRAIN Signal.", &self.ctx);
+        debug!(
+            "{} Sending DRAIN Signal (from {}).",
+            &self.ctx, self.ctx.uid
+        );
         let signal = Event::signal_drain(self.ctx.uid);
         if let Err(e) = self.send_signal(signal).await {
             error!("{} Error sending DRAIN signal: {e}", &self.ctx);
@@ -1177,25 +1188,15 @@ where
         Ok(())
     }
 
-    /// returns `Ok(Control::Terminate)` if this source should be terminated
-    #[allow(clippy::too_many_lines)]
-    async fn control_plane(&mut self) -> Control {
-        if let Ok(msg) = self.rx.recv().await {
-            self.handle_control_plane_msg(msg).await
-        } else {
-            Control::Continue
-        }
-    }
     /// the source task
     ///
     /// handling control plane and data plane in a loop
     // TODO: data plane
     #[allow(clippy::too_many_lines)]
-    async fn run(mut self) -> Result<()> {
+    async fn run(mut self, rx: Receiver<SourceMsg>) -> Result<()> {
         // this one serves as simple counter for our pulls from the source
         // we expect 1 source transport unit (stu) per pull, so this counter is equivalent to a stu counter
         // it is not unique per stream only, but per source
-        let rx = self.rx.clone();
         // loop {
         //     while !self.should_pull_data() {
         //         if self.control_plane().await == Control::Terminate {
@@ -1228,9 +1229,16 @@ where
         loop {
             use futures::future::Either;
             while !self.should_pull_data() {
-                if self.control_plane().await == Control::Terminate {
-                    debug!("{} Terminating source task...", self.ctx);
-                    return Ok(());
+                match f1.take().unwrap_or_else(|| rx.recv()).await {
+                    Ok(msg) => {
+                        if self.handle_control_plane_msg(msg).await == Control::Terminate {
+                            debug!("{} Terminating source task...", self.ctx);
+                            return Ok(());
+                        }
+                    }
+                    Err(e) => {
+                        debug!("{} Control Plane channel closed: {e}", self.ctx);
+                    }
                 }
             }
 

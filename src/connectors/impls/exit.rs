@@ -22,13 +22,24 @@
 //! But options can be provided within a record with the following fields:
 //!
 //! * delay: milliseconds to wait before stopping the process
-use crate::connectors::{prelude::*, spawn_task};
+use crate::connectors::prelude::*;
 use crate::system::{ShutdownMode, World};
 use async_std::task;
 use std::time::Duration;
 
 use value_trait::ValueAccess;
 
+#[derive(Debug)]
+pub(crate) struct Builder {
+    world: World,
+}
+impl Builder {
+    pub(crate) fn new(world: &World) -> Self {
+        Self {
+            world: world.clone(),
+        }
+    }
+}
 #[derive(Clone)]
 pub struct Exit {
     world: World,
@@ -71,13 +82,10 @@ impl Sink for Exit {
         _start: u64,
     ) -> Result<SinkReply> {
         if self.done {
-            debug!("{} Already exited.", ctx);
+            debug!("{ctx} Already exited.");
         } else if let Some((value, _meta)) = event.value_meta_iter().next() {
             if let Some(delay) = value.get_u64(Self::DELAY) {
-                info!(
-                    "{} Sleeping for {}ns before triggering shutdown.",
-                    ctx, delay
-                );
+                info!("{ctx} Sleeping for {delay}ns before triggering shutdown.");
                 task::sleep(Duration::from_nanos(delay)).await;
             }
             let mode = if value.get_bool(Self::GRACEFUL).unwrap_or(true) {
@@ -85,26 +93,20 @@ impl Sink for Exit {
             } else {
                 ShutdownMode::Forceful
             };
-            // this should stop the whole server process
             let world = self.world.clone();
+            let stop_ctx = ctx.clone();
+
+            // this should stop the whole server process
             // we spawn this out into another task, so we don't block the sink loop handling control plane messages
-            spawn_task(ctx.clone(), async move { world.stop(mode).await });
+            async_std::task::spawn(async move {
+                info!("{stop_ctx} Exiting...");
+                stop_ctx.swallow_err(world.stop(mode).await, "Error stopping the world");
+            });
+
             self.done = true;
         }
 
-        Ok(SinkReply::default())
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct Builder {
-    world: World,
-}
-impl Builder {
-    pub(crate) fn new(world: &World) -> Self {
-        Self {
-            world: world.clone(),
-        }
+        Ok(SinkReply::NONE)
     }
 }
 
