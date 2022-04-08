@@ -41,11 +41,7 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "udp_client".into()
     }
-    async fn config_to_connector(
-        &self,
-        _id: &str,
-        raw_config: &ConnectorConfig,
-    ) -> Result<Box<dyn Connector>> {
+    async fn build(&self, _id: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
         if let Some(config) = &raw_config.config {
             let config: Config = Config::new(config)?;
             if config.url.port().is_none() {

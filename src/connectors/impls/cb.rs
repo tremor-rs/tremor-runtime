@@ -64,11 +64,7 @@ impl ConnectorBuilder for Builder {
         "cb".into()
     }
 
-    async fn config_to_connector(
-        &self,
-        alias: &str,
-        config: &ConnectorConfig,
-    ) -> Result<Box<dyn Connector>> {
+    async fn build(&self, alias: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
         if let Some(raw) = &config.config {
             let config = Config::new(raw)?;
             Ok(Box::new(Cb {

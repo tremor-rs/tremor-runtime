@@ -73,11 +73,7 @@ impl ConnectorBuilder for Builder {
         "kafka_producer".into()
     }
 
-    async fn config_to_connector(
-        &self,
-        alias: &str,
-        config: &ConnectorConfig,
-    ) -> Result<Box<dyn Connector>> {
+    async fn build(&self, alias: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
         let metrics_interval_s = config.metrics_interval_s;
         if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;

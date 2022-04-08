@@ -65,7 +65,7 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "tcp_server".into()
     }
-    async fn config_to_connector(
+    async fn build(
         &self,
         id: &str,
         raw_config: &ConnectorConfig,

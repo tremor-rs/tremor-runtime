@@ -66,11 +66,7 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "tcp_client".into()
     }
-    async fn config_to_connector(
-        &self,
-        id: &str,
-        config: &ConnectorConfig,
-    ) -> Result<Box<dyn Connector>> {
+    async fn build(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
         if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
             if config.url.port().is_none() {
