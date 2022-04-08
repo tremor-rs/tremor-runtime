@@ -14,7 +14,6 @@
 
 use super::ConnectorHarness;
 use crate::errors::Result;
-use async_std::task;
 use std::time::Duration;
 use tremor_value::prelude::*;
 
@@ -24,7 +23,7 @@ async fn connector_metronome_routing() -> Result<()> {
 
     let defn = literal!({
       "config": {
-        "interval": 10000000 // millis
+        "interval": Duration::from_secs(1).as_nanos() as u64
       }
     });
     let epoch = tremor_common::time::nanotime();
@@ -34,10 +33,11 @@ async fn connector_metronome_routing() -> Result<()> {
         .out()
         .expect("No pipeline connected to 'in' port of ws_server connector");
 
+    dbg!();
     harness.start().await?;
+    dbg!();
     harness.wait_for_connected().await?;
-
-    task::sleep(Duration::from_secs(1)).await;
+    dbg!();
 
     let event = out_pipeline.get_event().await?;
     let (data, _meta) = event.data.parts();
@@ -46,7 +46,9 @@ async fn connector_metronome_routing() -> Result<()> {
     assert!(at >= epoch);
 
     //cleanup
+    dbg!();
     let (_out, err) = harness.stop().await?;
+    dbg!();
     assert!(err.is_empty());
     Ok(())
 }
