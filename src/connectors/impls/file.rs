@@ -132,58 +132,6 @@ impl Connector for File {
         }
     }
 
-    /*
-    async fn connect(&mut self, ctx: &ConnectorContext, attempt: &Attempt) -> Result<bool> {
-        // SINK PART: open write file
-        if let Some(sink_runtime) = self.sink_runtime.as_ref() {
-            let mode = if attempt.is_first() || attempt.success() == 0 {
-                &self.config.mode
-            } else {
-                // if we have already opened the file successfully once
-                // we should not truncate it again or overwrite, but indeed append
-                // otherwise the reconnect logic will lead to unwanted effects
-                // e.g. if a simple write failed temporarily
-                &Mode::Append
-            };
-            let write_file =
-                file::open_with(&self.config.path, &mut mode.as_open_options()).await?;
-            let writer = FileWriter::new(write_file, ctx.alias.clone());
-            sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, writer);
-        }
-        // SOURCE PART: open file for reading
-        // open in read-only mode, without creating a new one - will fail if the file is not available
-        if let Some(source_runtime) = self.source_runtime.as_ref() {
-            let meta = ctx.meta(literal!({
-                "path": self.config.path.display().to_string()
-            }));
-            let read_file =
-                file::open_with(&self.config.path, &mut self.config.mode.as_open_options()).await?;
-            // TODO: instead of looking for an extension
-            // check the magic bytes at the beginning of the file to determine the compression applied
-            if let Some("xz") = self.config.path.extension().and_then(OsStr::to_str) {
-                let reader = FileReader::xz(
-                    read_file,
-                    self.config.chunk_size,
-                    ctx.alias.clone(),
-                    self.origin_uri.clone(),
-                    meta,
-                );
-                source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
-            } else {
-                let reader = FileReader::new(
-                    read_file,
-                    self.config.chunk_size,
-                    ctx.alias.clone(),
-                    self.origin_uri.clone(),
-                    meta,
-                );
-                source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);
-            };
-        }
-
-        Ok(true)
-    }*/
-
     fn codec_requirements(&self) -> CodecReq {
         CodecReq::Required
     }

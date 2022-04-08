@@ -1,3 +1,9 @@
+#
+# Testing system metrics
+#
+# Test Logic:
+# - have a pipeline and a sink and source connector report metrics every 3 seconds
+# - exit the flow when we collected a certain amount of metrics
 define flow main
 flow
   use integration;
@@ -47,28 +53,31 @@ flow
 
     define script process
     script
-      let event.ingest_ns = null;
+      #let event.ingest_ns = null;
       event
     end;
 
     create script process;
 
+    #select event from in into out;
     select event from in into process;
     select event from process/out into out;
     select event from process/err into err;
 
   end;
   create pipeline main;
+  
   define pipeline metrics
-  into out, err, `pipeline`, source, sink, done
+  into 
+    out, err, `pipeline`, source, sink, done
   pipeline
     define script process
     script
-      let event.timestamp = null; # for testing
+      #let event.timestamp = null; # for testing
 
       let state = match state of
         # exit when we have all metrics events
-        case %{ present source, present `pipeline`, present sink } when state.source >= 9 and state.`pipeline` >= 4 and state.sink >= 6 => emit {"exit": 0, "delay": 0} => "done"
+        case %{ present source, present `pipeline`, present sink } when state.source >= 9 and state.`pipeline` >= 4 and state.sink >= 6 => emit null => "done"
         # state is valid
         case %{} => state
         # initialize state
@@ -80,11 +89,11 @@ flow
       end;
 
       let port = match event of
-        case %{measurement == "events"} => "pipeline"
+        case %{tags ~= %{`pipeline` == "main"}} => "pipeline"
         # {"fields":{"count":1},"measurement":"connector_events","tags":{"connector":"in","port":"out"},"timestamp":null}
-        case %{tags ~= %{`connector` == "out"}} => "source"
+        case %{tags ~= %{`connector` == "in"}} => "source"
         # {"measurement":"connector_events","tags":{"connector":"in","port":"err"},"fields":{"count":0},"timestamp":1642415106128300784}
-        case %{tags ~= %{`connector` == "in"}} => "sink"
+        case %{tags ~= %{`connector` == "out"}} => "sink"
         default => "out"
       end;
       # count events per port

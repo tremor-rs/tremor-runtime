@@ -111,7 +111,6 @@ impl TestHttpServer {
 
     async fn stop(&mut self) -> Result<()> {
         if let Some(acceptor) = self.acceptor.take() {
-            // dbg!("Fake http server stopped");
             acceptor.cancel().await;
         }
         Ok(())
