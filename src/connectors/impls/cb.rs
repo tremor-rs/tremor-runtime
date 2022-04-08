@@ -262,7 +262,7 @@ impl Source for CbSource {
             let world = self.world.clone();
 
             if self.config.timeout > 0 {
-                async_std::task::sleep(Duration::from_millis(self.config.timeout)).await;
+                async_std::task::sleep(Duration::from_nanos(self.config.timeout)).await;
             }
             let max_cb_received = self.received_cbs.max().unwrap_or_default();
             let cbs_missing = if self.config.expect_batched {

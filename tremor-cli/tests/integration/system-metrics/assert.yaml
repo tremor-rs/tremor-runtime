@@ -1,11 +1,11 @@
 status: 0
 name: Output of tremor's system::metrics pipeline
 asserts:
-  - source: metrics_pipeline.log
-    equals_file: "expected_metrics_pipeline.json"
-  - source: metrics_source.log
-    equals_file: "expected_metrics_source.json"
-  - source: metrics_sink.log
-    equals_file: "expected_metrics_sink.json"
   - source: events.log
-    equals_file: expected.json
+    contains:
+      - |
+        {"id":10,"ingest_ns":null,"onramp":"metronome"}
+  - source: fg.out.log
+    contains:
+      - |
+        {"EXIT":"NOW"}
