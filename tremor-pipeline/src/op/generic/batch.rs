@@ -260,7 +260,7 @@ mod test {
                 "timeout": 1,
             })),
         );
-        let mut op = BatchFactory::new().from_node(42, &node_config)?;
+        let mut op = BatchFactory::new().node_to_operator(42, &node_config)?;
 
         let event1 = Event {
             id: (1, 1, 1).into(),

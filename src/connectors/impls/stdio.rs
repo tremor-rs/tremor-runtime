@@ -59,7 +59,7 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "stdio".into()
     }
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         _id: &str,
         _raw_config: &ConnectorConfig,

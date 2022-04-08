@@ -625,7 +625,7 @@ mod test {
             kind: NodeKind::Operator,
             op_type: id.into(),
             op: PassthroughFactory::new_boxed()
-                .from_node(uid, &config)
+                .node_to_operator(uid, &config)
                 .unwrap(),
             uid,
             config,

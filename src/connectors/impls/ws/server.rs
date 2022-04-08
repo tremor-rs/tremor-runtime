@@ -54,7 +54,7 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "ws_server".into()
     }
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         _id: &str,
         raw_config: &ConnectorConfig,

@@ -65,7 +65,7 @@ impl ConnectorBuilder for Builder {
         "unix_socket_server".into()
     }
 
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         alias: &str,
         config: &ConnectorConfig,

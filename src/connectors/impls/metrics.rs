@@ -55,7 +55,7 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "metrics".into()
     }
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         _id: &str,
         _config: &ConnectorConfig,

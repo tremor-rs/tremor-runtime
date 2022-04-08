@@ -53,7 +53,7 @@ impl ConnectorBuilder for Builder {
         ConnectorType::from(CONNECTOR_TYPE)
     }
 
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         id: &str,
         raw_config: &ConnectorConfig,

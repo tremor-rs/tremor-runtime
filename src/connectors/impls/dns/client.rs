@@ -33,7 +33,7 @@ impl ConnectorBuilder for Builder {
         "dns_client".into()
     }
 
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         _id: &str,
         _raw_config: &ConnectorConfig,

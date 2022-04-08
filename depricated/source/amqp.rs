@@ -79,7 +79,7 @@ impl onramp::Builder for Builder {
 }
 
 impl Int {
-    async fn from_config(onramp_id: TremorUrl, config: &Config) -> Result<Self> {
+    async fn config_to_connector(onramp_id: TremorUrl, config: &Config) -> Result<Self> {
         let amqp_url = match Url::parse(&config.amqp_addr) {
             Ok(amqp_url) => amqp_url,
             Err(e) => {
