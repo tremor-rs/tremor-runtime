@@ -133,28 +133,24 @@ impl async_std::io::BufRead for StreamingBodyReader {
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<std::io::Result<&[u8]>> {
         let this = self.get_mut();
-        if dbg!(this.current_empty()) {
+        if this.current_empty() {
             match ready!(Stream::poll_next(Pin::new(&mut this.chunk_rx), cx)) {
                 Some(chunk) => {
-                    dbg!(chunk.len());
                     this.current = Cursor::new(chunk);
                     Poll::Ready(Ok(this.current_slice()))
                 }
                 None => {
                     // channel closed, lets signal EOF
-                    dbg!("eof");
                     Poll::Ready(Ok(&[]))
                 }
             }
         } else {
             let slice = this.current_slice();
-            dbg!(slice.len());
             Poll::Ready(Ok(slice))
         }
     }
 
     fn consume(self: std::pin::Pin<&mut Self>, amt: usize) {
-        dbg!(amt);
         let this = self.get_mut();
         let current_pos = this.current.position();
         this.current.set_position(current_pos + (amt as u64));
@@ -251,11 +247,8 @@ mod tests {
         let handle = async_std::task::spawn::<_, Result<Vec<String>>>(async move {
             let mut lines = vec![];
             let mut line = String::new();
-            dbg!();
             let mut bytes_read = reader.read_line(&mut line).await?;
-            dbg!(bytes_read);
             while bytes_read > 0 {
-                dbg!(bytes_read);
                 line.truncate(bytes_read);
                 lines.push(std::mem::take(&mut line));
                 bytes_read = reader.read_line(&mut line).await?;
@@ -266,9 +259,7 @@ mod tests {
         tx.send("ABC".as_bytes().to_vec()).await?;
         tx.send("\nDEF\nGHIIII".as_bytes().to_vec()).await?;
         tx.close();
-        dbg!();
         let lines = handle.timeout(Duration::from_millis(100)).await??;
-        dbg!();
         assert_eq!(3, lines.len());
         assert_eq!("ABC\n".to_string(), lines[0]);
         assert_eq!("DEF\n".to_string(), lines[1]);
@@ -278,7 +269,6 @@ mod tests {
     }
 
     #[async_std::test]
-    #[ignore] // FIXME
     async fn streaming_body_reader_empty() -> Result<()> {
         let (tx, rx) = unbounded();
         let mut reader = StreamingBodyReader::new(rx);
