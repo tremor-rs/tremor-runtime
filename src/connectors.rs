@@ -566,7 +566,6 @@ async fn connector_task(
                         if let Some(sink) = connector_addr.sink.as_ref() {
                             sink.addr
                                 .send(SinkMsg::Link {
-                                    port,
                                     pipelines: pipelines_to_link,
                                 })
                                 .await
@@ -871,11 +870,10 @@ async fn connector_task(
                         "Error sending Stop msg to Sink",
                     );
                     while expect > 0 {
-                        log_error!(
+                        ctx.swallow_err(
                             stop_rx.recv().await,
-                            "{ctx} Error in stopping sink and source part: {e}"
+                            "Error stopping sink and source part",
                         );
-
                         expect -= 1;
                     }
                     log_error!(
@@ -1190,9 +1188,9 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
 /// debug connector types
 #[cfg(not(tarpaulin_include))]
 #[must_use]
-pub(crate) fn debug_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
+pub(crate) fn debug_connector_types(world: &World) -> Vec<Box<dyn ConnectorBuilder + 'static>> {
     vec![
-        Box::new(impls::cb::Builder::default()),
+        Box::new(impls::cb::Builder::new(world.clone())),
         Box::new(impls::bench::Builder::default()),
         Box::new(impls::null::Builder::default()),
     ]
@@ -1208,7 +1206,7 @@ pub(crate) async fn register_builtin_connector_types(world: &World, debug: bool)
         world.register_builtin_connector_type(builder).await?;
     }
     if debug {
-        for builder in debug_connector_types() {
+        for builder in debug_connector_types(world) {
             world.register_builtin_connector_type(builder).await?;
         }
     }

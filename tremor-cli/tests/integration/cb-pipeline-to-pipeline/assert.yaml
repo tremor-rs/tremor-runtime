@@ -1,5 +1,5 @@
-status: 0
 name: cb_pipeline_to_pipeline
+status: 0
 asserts:
   - source: fg.err.log
     contains:

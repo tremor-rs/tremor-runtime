@@ -315,8 +315,6 @@ pub(crate) enum SinkMsg {
     },
     /// link some pipelines to the give port
     Link {
-        /// the port
-        port: Cow<'static, str>,
         /// the pipelines
         pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
     },
@@ -634,13 +632,7 @@ where
             match msg_wrapper {
                 SinkMsgWrapper::ToSink(sink_msg) => {
                     match sink_msg {
-                        SinkMsg::Link {
-                            mut pipelines,
-                            port,
-                        } => {
-                            if port != "in" {
-                                error!("{} Trying to connect invalid port {port}", self.ctx);
-                            }
+                        SinkMsg::Link { mut pipelines } => {
                             self.pipelines.append(&mut pipelines);
                         }
                         SinkMsg::Start if self.state == Initialized => {
@@ -693,13 +685,11 @@ where
                         }
 
                         SinkMsg::Drain(sender) if self.state == Drained => {
-                            debug!(
-                                "{} Received Drain msg while already being drained.",
-                                self.ctx
+                            debug!("{} Sink already Drained.", self.ctx);
+                            self.ctx.swallow_err(
+                                sender.send(Msg::SinkDrained).await,
+                                "Error sending SinkDrained message",
                             );
-                            if sender.send(Msg::SinkDrained).await.is_err() {
-                                error!("{} Error sending SinkDrained message.", self.ctx);
-                            }
                         }
                         SinkMsg::Drain(sender) => {
                             // send message back if we already received Drain signal from all input pipelines
@@ -708,12 +698,13 @@ where
                             self.drain_channel = Some(sender);
                             if self.drains_received.is_superset(&self.starts_received) {
                                 // we are all drained
-                                debug!("{} Drained.", self.ctx);
+                                debug!("{} Sink Drained.", self.ctx);
                                 self.state = Drained;
                                 if let Some(sender) = self.drain_channel.take() {
-                                    if sender.send(Msg::SinkDrained).await.is_err() {
-                                        error!("{} Error sending SinkDrained message", self.ctx);
-                                    }
+                                    self.ctx.swallow_err(
+                                        sender.send(Msg::SinkDrained).await,
+                                        "Error sending SinkDrained message",
+                                    );
                                 }
                             } else {
                                 debug!(
@@ -806,9 +797,10 @@ where
                                         debug!("{} Sink Drained.", self.ctx);
                                         self.state = Drained;
                                         if let Some(sender) = self.drain_channel.take() {
-                                            if sender.send(Msg::SinkDrained).await.is_err() {
-                                                error!("{} Error sending SinkDrained", self.ctx);
-                                            }
+                                            self.ctx.swallow_err(
+                                                sender.send(Msg::SinkDrained).await,
+                                                "Error sending SinkDrained CF",
+                                            );
                                         }
                                     }
 

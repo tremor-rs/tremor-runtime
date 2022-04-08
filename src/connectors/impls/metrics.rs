@@ -133,8 +133,15 @@ impl Source for MetricsSource {
         false
     }
 
+    /// The metrics connector is actually `asynchronous` in that its data is produced outside the source task
+    /// (and outside of the control of the `pull_data` function).
+    ///
+    /// But we set it to `false` here, as in case of quiescence
+    /// we don't need to flush metrics data. Also the producing ends do not use the quiescence_beacon
+    /// which would tell them to stop sending. There could be multiple metrics connectors running at the same time
+    /// and one connector quiescing should not lead to metrics being stopped for each and every other connector.
     fn asynchronous(&self) -> bool {
-        true
+        false
     }
 }
 
