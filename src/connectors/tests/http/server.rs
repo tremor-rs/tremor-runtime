@@ -1,4 +1,8 @@
-use std::{path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    path::PathBuf,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 // Copyright 2022, The Tremor Team
 //
@@ -65,7 +69,7 @@ where
     });
     let response = surf::client()
         .send(req)
-        .timeout(Duration::from_secs(2))
+        .timeout(Duration::from_secs(5))
         .await??;
     if let Some(res) = handle.cancel().await {
         res?;
@@ -88,6 +92,8 @@ async fn http_server_test() -> Result<()> {
     connector.start().await?;
     connector.wait_for_connected().await?;
 
+    let start = Instant::now();
+    let timeout = Duration::from_secs(30);
     loop {
         match TcpStream::connect(("localhost", port)).await {
             Ok(stream) => {
@@ -97,6 +103,12 @@ async fn http_server_test() -> Result<()> {
             Err(e) => {
                 debug!("Not yet listening: {e}");
                 async_std::task::sleep(Duration::from_millis(100)).await;
+                if start.elapsed() > timeout {
+                    return Err(format!(
+                        "Timeout waiting for http_server to start listening on {url}"
+                    )
+                    .into());
+                }
             }
         }
     }
@@ -127,6 +139,7 @@ async fn http_server_test() -> Result<()> {
         false,
     )
     .await?;
+
     assert_eq!(StatusCode::Created, res.status());
     let body = res.body_json::<StaticValue>().await?.into_value();
     assert_eq!(
