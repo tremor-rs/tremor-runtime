@@ -18,7 +18,6 @@ use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventIdGenerator};
 use tremor_value::{literal, prelude::*, Value};
 
-#[ignore] // FIXME: still needs some work
 #[async_std::test]
 async fn wal() -> Result<()> {
     let _ = env_logger::try_init();
@@ -58,6 +57,7 @@ async fn wal() -> Result<()> {
     harness.send_to_sink(event, IN).await?;
     let event = out.get_event().await?;
     // event is now transactional
+    let ack_id = event.id.clone();
     assert!(event.transactional);
     assert_eq!(&Value::from(42_u64), event.data.suffix().value());
 
@@ -87,7 +87,7 @@ async fn wal() -> Result<()> {
     assert_eq!(&Value::from("snot"), event.data.suffix().value());
 
     harness
-        .send_contraflow(CbAction::Ack, first_id.clone())
+        .send_contraflow(CbAction::Ack, ack_id.clone())
         .await?;
     async_std::task::sleep(Duration::from_secs(2)).await;
 
