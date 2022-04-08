@@ -404,7 +404,7 @@ pub(crate) async fn spawn(
     let builder = known_connectors
         .get(&config.connector_type)
         .ok_or_else(|| ErrorKind::UnknownConnectorType(config.connector_type.to_string()))?;
-    let connector = builder.from_config(alias, &config).await?;
+    let connector = builder.config_to_connector(alias, &config).await?;
     let r = connector_task(
         alias.to_string(),
         connector,
@@ -1142,7 +1142,7 @@ pub(crate) trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
     ///
     /// # Errors
     ///  * If the config is invalid for the connector
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         alias: &str,
         config: &ConnectorConfig,

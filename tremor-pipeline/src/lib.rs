@@ -867,7 +867,7 @@ fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
 }
 
 fn operator(uid: u64, node: &NodeConfig) -> Result<Box<dyn Operator + 'static>> {
-    factory(node)?.from_node(uid, node)
+    factory(node)?.node_to_operator(uid, node)
 }
 
 #[derive(Debug, Default, Clone)]

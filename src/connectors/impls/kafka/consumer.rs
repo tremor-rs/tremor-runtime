@@ -75,7 +75,7 @@ impl ConnectorBuilder for Builder {
         "kafka_consumer".into()
     }
 
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         alias: &str,
         config: &ConnectorConfig,

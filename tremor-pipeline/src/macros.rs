@@ -24,7 +24,7 @@ macro_rules! op {
         #[derive(Default)]
         pub struct $factory {}
         impl crate::op::InitializableOperator for $factory {
-            fn from_node(
+            fn node_to_operator(
                 &self,
                 $uid: u64,
                 $node: &crate::NodeConfig,

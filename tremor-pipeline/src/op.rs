@@ -148,7 +148,7 @@ pub trait InitializableOperator {
     ///
     /// # Errors
     //// if no operator con be instanciated from the provided NodeConfig
-    fn from_node(&self, uid: u64, node: &NodeConfig) -> Result<Box<dyn Operator>>;
+    fn node_to_operator(&self, uid: u64, node: &NodeConfig) -> Result<Box<dyn Operator>>;
 }
 
 /// Trait for detecting errors in config and the key names are included in errors

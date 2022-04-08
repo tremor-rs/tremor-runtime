@@ -139,6 +139,8 @@ pub enum ConnectStmt {
 }
 
 impl ConnectStmt {
+    // we get the field called 'from'  as muttable
+    #[allow(clippy::wrong_self_convention)]
     pub(crate) fn from_mut(&mut self) -> &mut DeployEndpoint {
         match self {
             ConnectStmt::ConnectorToPipeline { from, .. }

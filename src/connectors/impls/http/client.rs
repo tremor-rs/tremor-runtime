@@ -79,7 +79,7 @@ impl ConnectorBuilder for Builder {
         CONNECTOR_TYPE.into()
     }
 
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         _id: &str,
         connector_config: &ConnectorConfig,
@@ -375,7 +375,7 @@ mod tests {
         )?;
 
         let builder = super::Builder::default();
-        builder.from_config("foo", &config).await?;
+        builder.config_to_connector("foo", &config).await?;
 
         Ok(())
     }

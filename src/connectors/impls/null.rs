@@ -26,7 +26,7 @@ impl ConnectorBuilder for Builder {
         "null".into()
     }
 
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         _alias: &str,
         _config: &ConnectorConfig,
