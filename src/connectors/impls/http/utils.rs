@@ -259,7 +259,7 @@ mod tests {
         tx.send("ABC".as_bytes().to_vec()).await?;
         tx.send("\nDEF\nGHIIII".as_bytes().to_vec()).await?;
         tx.close();
-        let lines = handle.timeout(Duration::from_millis(100)).await??;
+        let lines = handle.timeout(Duration::from_secs(1)).await??;
         assert_eq!(3, lines.len());
         assert_eq!("ABC\n".to_string(), lines[0]);
         assert_eq!("DEF\n".to_string(), lines[1]);
