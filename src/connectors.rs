@@ -400,14 +400,11 @@ pub(crate) async fn spawn(
     known_connectors: &Known,
     config: ConnectorConfig,
 ) -> Result<Addr> {
-    dbg!();
     // lookup and instantiate connector
     let builder = known_connectors
         .get(&config.connector_type)
         .ok_or_else(|| ErrorKind::UnknownConnectorType(config.connector_type.to_string()))?;
-    dbg!();
     let connector = builder.from_config(alias, &config).await?;
-    dbg!();
     let r = connector_task(
         alias.to_string(),
         connector,
@@ -416,7 +413,7 @@ pub(crate) async fn spawn(
     )
     .await?;
 
-    Ok(dbg!(r))
+    Ok(r)
 }
 
 #[allow(clippy::too_many_lines)]
