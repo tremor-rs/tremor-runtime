@@ -64,7 +64,7 @@ impl ConnectorBuilder for Builder {
         "cb".into()
     }
 
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         alias: &str,
         config: &ConnectorConfig,
