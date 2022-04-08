@@ -63,11 +63,7 @@ impl ConnectorBuilder for Builder {
         "http_server".into()
     }
 
-    async fn config_to_connector(
-        &self,
-        id: &str,
-        raw_config: &ConnectorConfig,
-    ) -> Result<Box<dyn Connector>> {
+    async fn build(&self, id: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
         if let Some(config) = &raw_config.config {
             let config = Config::new(config)?;
             let tls_server_config = config.tls.clone();

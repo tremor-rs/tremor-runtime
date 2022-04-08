@@ -59,11 +59,7 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "stdio".into()
     }
-    async fn config_to_connector(
-        &self,
-        _id: &str,
-        _raw_config: &ConnectorConfig,
-    ) -> Result<Box<dyn Connector>> {
+    async fn build(&self, _id: &str, _raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
         Ok(Box::new(StdStreamConnector {}))
     }
 }
