@@ -153,7 +153,7 @@ impl HttpResponseMeta {
         )
         .await;
 
-        Ok(event?)
+        event
     }
 }
 pub(crate) struct HttpRequestMeta {

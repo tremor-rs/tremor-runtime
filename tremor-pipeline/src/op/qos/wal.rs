@@ -671,7 +671,7 @@ mod test {
             // create the operator - first time
 
             let mut o1 = WalFactory::new()
-                .from_node(wal_uid, &NodeConfig::from_config(&"wal-test-1", c.clone()))?;
+                .node_to_operator(wal_uid, &NodeConfig::from_config(&"wal-test-1", c.clone()))?;
 
             // Restore the CB
             let mut i = Event::cb_restore(0);
@@ -689,8 +689,8 @@ mod test {
         {
             // create the operator - second time
             // simulating a tremor restart
-            let mut o2 =
-                WalFactory::new().from_node(wal_uid, &NodeConfig::from_config(&"wal-test-2", c))?;
+            let mut o2 = WalFactory::new()
+                .node_to_operator(wal_uid, &NodeConfig::from_config(&"wal-test-2", c))?;
 
             // Restore the CB
             let mut i = Event::cb_restore(1);
@@ -723,7 +723,7 @@ mod test {
             "read_count": 10
         }));
 
-        let r = WalFactory::new().from_node(1, &NodeConfig::from_config(&"wal-test-1", c));
+        let r = WalFactory::new().node_to_operator(1, &NodeConfig::from_config(&"wal-test-1", c));
         assert!(r.is_err());
         if let Err(Error(ErrorKind::BadOpConfig(s), _)) = r {
             assert_eq!(

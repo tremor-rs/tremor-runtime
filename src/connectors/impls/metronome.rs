@@ -35,7 +35,7 @@ impl ConnectorBuilder for Builder {
         "metronome".into()
     }
 
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         _id: &str,
         raw_config: &ConnectorConfig,

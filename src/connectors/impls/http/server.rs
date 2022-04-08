@@ -63,7 +63,7 @@ impl ConnectorBuilder for Builder {
         "http_server".into()
     }
 
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         id: &str,
         raw_config: &ConnectorConfig,

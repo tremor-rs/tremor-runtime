@@ -116,7 +116,7 @@ impl ConnectorBuilder for Builder {
         "exit".into()
     }
 
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         _id: &str,
         _config: &ConnectorConfig,

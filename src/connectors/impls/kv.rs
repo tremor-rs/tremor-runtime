@@ -175,7 +175,11 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "kv".into()
     }
-    async fn from_config(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+    async fn config_to_connector(
+        &self,
+        id: &str,
+        config: &ConnectorConfig,
+    ) -> Result<Box<dyn Connector>> {
         if let Some(config) = &config.config {
             let config: Config = Config::new(config)?;
             if !PathBuf::from(&config.dir).is_dir().await {

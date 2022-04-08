@@ -73,7 +73,7 @@ impl ConnectorBuilder for Builder {
         "kafka_producer".into()
     }
 
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         alias: &str,
         config: &ConnectorConfig,

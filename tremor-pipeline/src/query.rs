@@ -719,7 +719,7 @@ fn select(
     match select_type {
         SelectType::Passthrough => {
             let op = PassthroughFactory::new_boxed();
-            op.from_node(operator_uid, config)
+            op.node_to_operator(operator_uid, config)
         }
         SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(config.id.clone(), node))),
         SelectType::Normal => {

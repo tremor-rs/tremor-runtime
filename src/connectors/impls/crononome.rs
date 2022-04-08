@@ -36,7 +36,11 @@ impl ConnectorBuilder for Builder {
         "crononome".into()
     }
 
-    async fn from_config(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+    async fn config_to_connector(
+        &self,
+        id: &str,
+        config: &ConnectorConfig,
+    ) -> Result<Box<dyn Connector>> {
         if let Some(raw) = &config.config {
             let raw = Config::new(raw)?;
             let payload = if let Some(yaml_entries) = raw.entries {

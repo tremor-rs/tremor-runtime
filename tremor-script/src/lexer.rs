@@ -1253,7 +1253,7 @@ impl<'input> Lexer<'input> {
         total_start: Location,
         segment_start: &mut Location,
         end: &mut Location,
-        res: &mut Vec<TokenSpan<'input>>,
+        res: &mut [TokenSpan<'input>],
         content: &mut String,
         error: Error,
     ) -> ErrorKind {

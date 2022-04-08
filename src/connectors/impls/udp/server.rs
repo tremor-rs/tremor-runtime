@@ -40,7 +40,7 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "udp_server".into()
     }
-    async fn from_config(
+    async fn config_to_connector(
         &self,
         id: &str,
         raw_config: &ConnectorConfig,
