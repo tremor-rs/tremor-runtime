@@ -883,7 +883,11 @@ mod tests {
             event.data.suffix().value()
         );
 
-        let report = flow.report_status().await?;
+        let mut report = flow.report_status().await?;
+        while report.status == instance::State::Initializing {
+            task::sleep(Duration::from_millis(100)).await;
+            report = flow.report_status().await?;
+        }
         assert_eq!(instance::State::Running, report.status);
         assert_eq!(1, report.connectors.len());
 
