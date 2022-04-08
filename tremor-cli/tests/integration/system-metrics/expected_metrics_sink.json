@@ -1,6 +1,0 @@
-{"fields":{"count":1},"measurement":"connector_events","tags":{"connector":"out","port":"in"},"timestamp":null}
-{"fields":{"count":4},"measurement":"connector_events","tags":{"connector":"out","port":"in"},"timestamp":null}
-{"fields":{"count":7},"measurement":"connector_events","tags":{"connector":"out","port":"in"},"timestamp":null}
-{"fields":{"count":10},"measurement":"connector_events","tags":{"connector":"out","port":"in"},"timestamp":null}
-{"fields":{"count":13},"measurement":"connector_events","tags":{"connector":"out","port":"in"},"timestamp":null}
-{"fields":{"count":16},"measurement":"connector_events","tags":{"connector":"out","port":"in"},"timestamp":null}
