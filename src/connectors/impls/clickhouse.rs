@@ -30,6 +30,7 @@ impl ConnectorBuilder for Builder {
         alias: &str,
         raw_config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
+        // So something bad happens here and nobody know what or why.
         let config = raw_config
             .config
             .as_ref()
@@ -64,7 +65,11 @@ impl Connector for Clickhouse {
 
 impl Clickhouse {
     fn connection_url(&self) -> String {
-        let ClickhouseConfig { host, port, database } = &self.config;
+        let ClickhouseConfig {
+            host,
+            port,
+            database,
+        } = &self.config;
         let port = port.unwrap_or(ClickhouseConfig::DEFAULT_PORT);
 
         format!("tcp://{host}:{port}/{database}?compression=lz4")
@@ -114,7 +119,7 @@ impl Sink for ClickhouseSink {
         let mut client = self
             .pool
             .as_ref()
-            .ok_or_else(|| Error::from(ErrorKind::NoSocket))?
+            .ok_or_else(|| Error::from(ErrorKind::NoClickHouseClientAvailable))?
             .get_handle()
             .await?;
 

@@ -214,6 +214,11 @@ error_chain! {
             display("The value {} cannot be serialized to CSV. Expected an array.", value)
         }
 
+        NoClickHouseClientAvailable {
+            description("The ClickHouse adapter has no client available")
+            display("The ClickHouse adapter has no client available")
+        }
+
         // TODO: Old errors, verify if needed
         BadOpConfig(e: String) {
             description("Operator config has a bad syntax")
