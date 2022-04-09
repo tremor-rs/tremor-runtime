@@ -45,7 +45,7 @@ async fn udp_pause_resume() -> Result<()> {
       }
     });
 
-    let harness = ConnectorHarness::new("udp_server", &defn).await?;
+    let harness = ConnectorHarness::new(function_name!(), "udp_server", &defn).await?;
 
     let out_pipeline = harness
         .out()
@@ -143,7 +143,7 @@ async fn tcp_server_pause_resume() -> Result<()> {
           "buf_size": 4096
       }
     });
-    let harness = ConnectorHarness::new("tcp_server", &defn).await?;
+    let harness = ConnectorHarness::new(function_name!(), "tcp_server", &defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of tcp_server connector");

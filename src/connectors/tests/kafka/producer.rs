@@ -143,7 +143,8 @@ async fn connector_kafka_producer() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new("kafka_producer", &connector_config).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), "kafka_producer", &connector_config).await?;
     let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
     harness.start().await?;
     harness.wait_for_connected().await?;

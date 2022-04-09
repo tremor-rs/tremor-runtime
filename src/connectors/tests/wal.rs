@@ -31,7 +31,7 @@ async fn wal() -> Result<()> {
             "max_chunks": 100
         }
     });
-    let harness = ConnectorHarness::new("wal", &config).await?;
+    let harness = ConnectorHarness::new(function_name!(), "wal", &config).await?;
     harness.start().await?;
     harness.wait_for_connected().await?;
 
@@ -95,7 +95,7 @@ async fn wal() -> Result<()> {
     assert!(err.is_empty());
 
     // start harness again with same config, expect the second event to be re-emitted
-    let harness = ConnectorHarness::new("wal", &config).await?;
+    let harness = ConnectorHarness::new(function_name!(), "wal", &config).await?;
     harness.start().await?;
     harness.wait_for_connected().await?;
 

@@ -70,7 +70,7 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
             "tls": tls_config
         }
     });
-    let connector = ConnectorHarness::new("tcp_client", &config).await?;
+    let connector = ConnectorHarness::new(function_name!(), "tcp_client", &config).await?;
     let out = connector
         .out()
         .expect("No pipeline connected to tcp_client OUT port.");
