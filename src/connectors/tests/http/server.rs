@@ -88,7 +88,7 @@ async fn http_server_test() -> Result<()> {
             "url": url.clone()
         }
     });
-    let connector = ConnectorHarness::new("http_server", &defn).await?;
+    let connector = ConnectorHarness::new(function_name!(), "http_server", &defn).await?;
     connector.start().await?;
     connector.wait_for_connected().await?;
 
@@ -323,7 +323,7 @@ async fn https_server_test() -> Result<()> {
             }
         }
     });
-    let connector = ConnectorHarness::new("http_server", &defn).await?;
+    let connector = ConnectorHarness::new(function_name!(), "http_server", &defn).await?;
     connector.start().await?;
     connector.wait_for_connected().await?;
 

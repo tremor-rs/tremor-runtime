@@ -35,7 +35,7 @@ async fn file_connector() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new("file", &defn).await?;
+    let harness = ConnectorHarness::new(function_name!(), "file", &defn).await?;
     assert!(harness.start().await.is_err());
 
     let (out_events, err_events) = harness.stop().await?;

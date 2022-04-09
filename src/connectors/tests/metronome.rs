@@ -28,7 +28,7 @@ async fn connector_metronome_routing() -> Result<()> {
     });
     let epoch = tremor_common::time::nanotime();
 
-    let harness = ConnectorHarness::new("metronome", &defn).await?;
+    let harness = ConnectorHarness::new(function_name!(), "metronome", &defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'in' port of ws_server connector");
