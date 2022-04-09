@@ -34,7 +34,6 @@ macro_rules! function_name {
         }
         let mut name = type_name_of(f);
         name = name.strip_suffix("::f").unwrap();
-        dbg!(&name);
         while let Some(stripped) = name.strip_suffix("::{{closure}}") {
             name = stripped;
         }
