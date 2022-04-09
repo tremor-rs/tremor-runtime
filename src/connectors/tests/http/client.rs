@@ -138,7 +138,7 @@ async fn rtt(
 
     let mut fake = TestHttpServer::new(url.clone()).await?;
 
-    let harness = ConnectorHarness::new("http_client", &defn).await?;
+    let harness = ConnectorHarness::new(function_name!(), "http_client", &defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of connector");

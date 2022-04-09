@@ -147,7 +147,8 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), "kafka_consumer", &connector_config).await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
@@ -294,7 +295,7 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
-            "source": "test_kafka_consumer",
+            "source": "connector_kafka_consumer_transactional_retry",
             "stream_id": 8589934592_u64,
             "pull_id": 1u64
         }),
@@ -425,7 +426,8 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), "kafka_consumer", &connector_config).await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
@@ -560,7 +562,7 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
-            "source": "test_kafka_consumer",
+            "source": "connector_kafka_consumer_transactional_no_retry",
             "stream_id": 8589934592_u64,
             "pull_id": 1u64
         }),
@@ -691,7 +693,8 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), "kafka_consumer", &connector_config).await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
@@ -827,7 +830,7 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
-            "source": "test_kafka_consumer",
+            "source": "connector_kafka_consumer_non_transactional",
             "stream_id": 8589934592_u64,
             "pull_id": 1u64
         }),
@@ -887,7 +890,8 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), "kafka_consumer", &connector_config).await?;
     assert!(harness.start().await.is_err());
 
     let (out_events, err_events) = harness.stop().await?;
@@ -994,7 +998,8 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
             }
         }
     });
-    let harness = ConnectorHarness::new("kafka_consumer", &connector_config).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), "kafka_consumer", &connector_config).await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     harness.start().await?;
     harness.wait_for_connected().await?;

@@ -77,8 +77,9 @@ pub(crate) struct ConnectorHarness {
 }
 
 impl ConnectorHarness {
-    pub(crate) async fn new_with_ports<T: ToString>(
-        connector_type: T,
+    pub(crate) async fn new_with_ports(
+        id: &str,
+        connector_type: impl ToString,
         defn: &Value<'static>,
         input_ports: Vec<Cow<'static, str>>,
         output_ports: Vec<Cow<'static, str>>,
@@ -92,10 +93,9 @@ impl ConnectorHarness {
 
         let connector_type = connector_type.to_string();
 
-        let id = format!("test_{connector_type}");
         let raw_config = config::Connector::from_config(connector_type.into(), defn)?;
         let connector_addr =
-            connectors::spawn(&id, &mut connector_id_gen, &known_connectors, raw_config).await?;
+            connectors::spawn(id, &mut connector_id_gen, &known_connectors, raw_config).await?;
         let mut pipes = HashMap::new();
 
         let (link_tx, link_rx) = async_std::channel::unbounded();
@@ -149,8 +149,12 @@ impl ConnectorHarness {
             pipes,
         })
     }
-    pub(crate) async fn new<T: ToString>(connector_type: T, defn: &Value<'static>) -> Result<Self> {
-        Self::new_with_ports(connector_type, defn, vec![IN], vec![OUT, ERR]).await
+    pub(crate) async fn new(
+        id: &str,
+        connector_type: impl ToString,
+        defn: &Value<'static>,
+    ) -> Result<Self> {
+        Self::new_with_ports(id, connector_type, defn, vec![IN], vec![OUT, ERR]).await
     }
 
     pub(crate) async fn start(&self) -> Result<()> {
