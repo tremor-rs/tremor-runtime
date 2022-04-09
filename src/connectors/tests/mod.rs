@@ -16,6 +16,10 @@
 //! Connector testing framework
 //!
 //! ....
+
+// TODO: what is this feature? Do we know what it does?
+// #[cfg(feature = "es-integration")]
+mod clickhouse;
 #[cfg(feature = "crononome-integration")]
 mod crononome;
 #[cfg(feature = "es-integration")]
