@@ -33,7 +33,9 @@ macro_rules! function_name {
             std::any::type_name::<T>()
         }
         let mut name = type_name_of(f);
-        name = name.strip_suffix("::f").unwrap();
+        if let Some(stripped) = name.strip_suffix("::f") {
+            name = stripped;
+        };
         while let Some(stripped) = name.strip_suffix("::{{closure}}") {
             name = stripped;
         }
