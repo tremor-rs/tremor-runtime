@@ -838,7 +838,7 @@ fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
     use op::generic::{BatchFactory, CounterFactory};
     use op::grouper::BucketGrouperFactory;
     use op::identity::PassthroughFactory;
-    use op::qos::{BackpressureFactory, PercentileFactory, RoundRobinFactory, WalFactory};
+    use op::qos::{BackpressureFactory, PercentileFactory, RoundRobinFactory};
     let name_parts: Vec<&str> = node.op_type.split("::").collect();
     let factory = match name_parts.as_slice() {
         ["passthrough"] => PassthroughFactory::new_boxed(),
@@ -852,7 +852,6 @@ fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
         ["generic", "counter"] => CounterFactory::new_boxed(),
         ["qos", "backpressure"] => BackpressureFactory::new_boxed(),
         ["qos", "roundrobin"] => RoundRobinFactory::new_boxed(),
-        ["qos", "wal"] => WalFactory::new_boxed(),
         ["qos", "percentile"] => PercentileFactory::new_boxed(),
         #[cfg(feature = "bert")]
         ["bert", "sequence_classification"] => SequenceClassificationFactory::new_boxed(),

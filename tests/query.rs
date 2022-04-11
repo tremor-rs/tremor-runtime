@@ -143,5 +143,4 @@ test_cases!(
     guard_having,
     history,
     roundrobin,
-    wal,
 );
