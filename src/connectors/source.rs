@@ -641,12 +641,8 @@ where
                 self.state = Running;
                 self.ctx
                     .swallow_err(self.source.on_start(&self.ctx).await, "on_start failed");
-
-                self.ctx.swallow_err(
-                    self.send_signal(Event::signal_start(self.ctx.uid)).await,
-                    "Error sending start signal",
-                );
-
+                let res = self.send_signal(Event::signal_start(self.ctx.uid)).await;
+                self.ctx.swallow_err(res, "Error sending start signal");
                 Control::Continue
             }
 
@@ -1136,13 +1132,11 @@ where
             results.append(&mut last_events);
 
             if results.is_empty() {
-                if let Err(e) = self
+                let res = self
                     .source
                     .on_no_events(pull_id, DEFAULT_STREAM_ID, &self.ctx)
-                    .await
-                {
-                    error!("{} Error on no events callback: {e}", self.ctx);
-                }
+                    .await;
+                self.ctx.swallow_err(res, "Error on no events callback")
             } else {
                 let error = self.route_events(results).await;
                 if error {
@@ -1172,9 +1166,9 @@ where
             &self.ctx, self.ctx.uid
         );
         let signal = Event::signal_drain(self.ctx.uid);
-        if let Err(e) = self.send_signal(signal).await {
-            error!("{} Error sending DRAIN signal: {e}", &self.ctx);
-        }
+        let res = self.send_signal(signal).await;
+        self.ctx.swallow_err(res, "Error sending DRAIN signal");
+
         // if we get a disconnect in between we might never receive every drain CB
         // but we will stop everything forcefully after a certain timeout at some point anyways
         // TODO: account for all connector uids that sent some Cb to us upon startup or so, to get the real number to wait for
