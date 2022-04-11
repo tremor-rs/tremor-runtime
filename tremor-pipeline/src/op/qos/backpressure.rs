@@ -127,7 +127,7 @@ op!(BackpressureFactory(_uid, node) {
 impl Operator for Backpressure {
     fn on_event(
         &mut self,
-        uid: u64,
+        uid: OperatorId,
         _port: &str,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -158,7 +158,7 @@ impl Operator for Backpressure {
 
     fn on_signal(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -179,7 +179,7 @@ impl Operator for Backpressure {
         })
     }
 
-    fn on_contraflow(&mut self, uid: u64, insight: &mut Event) {
+    fn on_contraflow(&mut self, uid: OperatorId, insight: &mut Event) {
         // If the related event never touched this operator we don't take
         // action
         if !insight.op_meta.contains_key(uid) {
@@ -222,12 +222,15 @@ impl Operator for Backpressure {
 
 #[cfg(test)]
 mod test {
+    use tremor_common::ids::Id;
+
     use crate::SignalKind;
 
     use super::*;
 
     #[test]
     fn pass_wo_error() {
+        let operator_id = OperatorId::new(0);
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],
@@ -245,7 +248,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event1)
+            .on_event(operator_id, "in", &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -261,7 +264,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event2)
+            .on_event(operator_id, "in", &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -272,6 +275,7 @@ mod test {
 
     #[test]
     fn halt_on_error() {
+        let operator_id = OperatorId::new(0);
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],
@@ -289,7 +293,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event1)
+            .on_event(operator_id, "in", &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -304,7 +308,7 @@ mod test {
         m.insert("time".into(), 200.0.into());
 
         let mut op_meta = OpMeta::default();
-        op_meta.insert(0, OwnedValue::null());
+        op_meta.insert(operator_id, OwnedValue::null());
         let mut insight = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 1_000_000,
@@ -314,7 +318,7 @@ mod test {
         };
 
         // Verify that we now have a backoff of 1ms
-        op.on_contraflow(0, &mut insight);
+        op.on_contraflow(operator_id, &mut insight);
         assert_eq!(op.output.backoff, 1_000_000);
 
         // The first event was sent at exactly 1ms
@@ -327,7 +331,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event2)
+            .on_event(operator_id, "in", &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -342,7 +346,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event3)
+            .on_event(operator_id, "in", &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -358,7 +362,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event3)
+            .on_event(operator_id, "in", &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -368,6 +372,7 @@ mod test {
 
     #[test]
     fn halt_on_error_cb() -> Result<()> {
+        let operator_id = OperatorId::new(0);
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],
@@ -384,7 +389,7 @@ mod test {
             ingest_ns: 1_000_000,
             ..Event::default()
         };
-        let mut r = op.on_event(0, "in", &mut state, event1)?.events;
+        let mut r = op.on_event(operator_id, "in", &mut state, event1)?.events;
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("no results");
         assert_eq!("out", out);
@@ -397,7 +402,7 @@ mod test {
         m.insert("time".into(), 200.0.into());
 
         let mut op_meta = OpMeta::default();
-        op_meta.insert(0, OwnedValue::null());
+        op_meta.insert(operator_id, OwnedValue::null());
         let mut insight = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 1_000_000,
@@ -407,7 +412,7 @@ mod test {
         };
 
         // Verify that we now have a backoff of 1ms
-        op.on_contraflow(0, &mut insight);
+        op.on_contraflow(operator_id, &mut insight);
         assert_eq!(insight.cb, CbAction::Close);
         assert_eq!(op.output.backoff, 1_000_000);
 
@@ -418,7 +423,7 @@ mod test {
             ingest_ns: 2_000_000 - 1,
             ..Event::default()
         };
-        let mut r = op.on_event(0, "in", &mut state, event2)?.events;
+        let mut r = op.on_event(operator_id, "in", &mut state, event2)?.events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         // since we are in CB mode we will STILL pass an event even if we're closerd
@@ -431,7 +436,7 @@ mod test {
             ingest_ns: 2_000_000,
             ..Event::default()
         };
-        let mut r = op.on_event(0, "in", &mut state, event3)?.events;
+        let mut r = op.on_event(operator_id, "in", &mut state, event3)?.events;
         assert_eq!(r.len(), 1);
         let (out, event) = r.pop().expect("no results");
         assert_eq!("out", out);
@@ -444,7 +449,7 @@ mod test {
             ingest_ns: 2_000_000 + 1,
             ..Event::default()
         };
-        let mut r = op.on_event(0, "in", &mut state, event3)?.events;
+        let mut r = op.on_event(operator_id, "in", &mut state, event3)?.events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
         assert_eq!("out", out);
@@ -457,7 +462,7 @@ mod test {
             kind: Some(SignalKind::Tick),
             ..Event::default()
         };
-        let mut r = op.on_signal(0, &mut state, &mut signal)?;
+        let mut r = op.on_signal(operator_id, &mut state, &mut signal)?;
         let i = r.insights.pop().expect("No Insight received");
         // We receive an open signal
         assert_eq!(i.cb, CbAction::Open);
@@ -468,6 +473,7 @@ mod test {
 
     #[test]
     fn walk_backoff() {
+        let operator_id = OperatorId::new(0);
         let mut op: Backpressure = Config {
             timeout: 100.0,
             steps: vec![1, 10, 100],
@@ -478,7 +484,7 @@ mod test {
         let mut m = Object::new();
         m.insert("time".into(), 200.0.into());
         let mut op_meta = OpMeta::default();
-        op_meta.insert(0, OwnedValue::null());
+        op_meta.insert(operator_id, OwnedValue::null());
 
         let mut insight = Event {
             id: (1, 1, 1).into(),
@@ -493,7 +499,7 @@ mod test {
             "time": 99.0
         });
         let mut op_meta = OpMeta::default();
-        op_meta.insert(0, OwnedValue::null());
+        op_meta.insert(operator_id, OwnedValue::null());
 
         let mut insight_reset = Event {
             id: (1, 1, 1).into(),
@@ -506,20 +512,20 @@ mod test {
         // Assert initial state
         assert_eq!(op.output.backoff, 0);
         // move one step up
-        op.on_contraflow(0, &mut insight);
+        op.on_contraflow(operator_id, &mut insight);
         assert_eq!(op.output.backoff, 1_000_000);
         // move another step up
-        op.on_contraflow(0, &mut insight);
+        op.on_contraflow(operator_id, &mut insight);
         assert_eq!(op.output.backoff, 10_000_000);
         // move another another step up
-        op.on_contraflow(0, &mut insight);
+        op.on_contraflow(operator_id, &mut insight);
         assert_eq!(op.output.backoff, 100_000_000);
         // We are at the highest step everything
         // should stay  the same
-        op.on_contraflow(0, &mut insight);
+        op.on_contraflow(operator_id, &mut insight);
         assert_eq!(op.output.backoff, 100_000_000);
         // Now we should reset
-        op.on_contraflow(0, &mut insight_reset);
+        op.on_contraflow(operator_id, &mut insight_reset);
         assert_eq!(op.output.backoff, 0);
     }
 }

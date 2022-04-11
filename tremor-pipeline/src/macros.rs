@@ -26,7 +26,7 @@ macro_rules! op {
         impl crate::op::InitializableOperator for $factory {
             fn node_to_operator(
                 &self,
-                $uid: u64,
+                $uid: tremor_common::ids::OperatorId,
                 $node: &crate::NodeConfig,
             ) -> crate::errors::Result<Box<dyn crate::op::Operator>> {
                 $constructor

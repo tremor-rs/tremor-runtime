@@ -52,7 +52,7 @@ op!(BatchFactory(uid, node) {
 if let Some(map) = &node.config {
     let config: Config = Config::new(map)?;
     let max_delay_ns = config.timeout;
-    let mut idgen = EventIdGenerator::new(uid);
+    let mut idgen = EventIdGenerator::for_operator(uid);
     Ok(Box::new(Batch {
         data: empty(),
         len: 0,
@@ -74,7 +74,7 @@ impl Operator for Batch {
     /// with a new event id tracking all events within that batch
     fn on_event(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _port: &str,
         _state: &mut Value<'static>,
         event: Event,
@@ -145,7 +145,7 @@ impl Operator for Batch {
 
     fn on_signal(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -186,11 +186,13 @@ impl Operator for Batch {
 mod test {
     use super::*;
     use simd_json_derive::Serialize;
+    use tremor_common::ids::Id;
     use tremor_script::Value;
 
     #[test]
     fn size() {
-        let mut idgen = EventIdGenerator::new(0);
+        let operator_id = OperatorId::new(0);
+        let mut idgen = EventIdGenerator::for_operator(operator_id);
         let mut op = Batch {
             config: Config {
                 count: 2,
@@ -215,7 +217,7 @@ mod test {
         let mut state = Value::null();
 
         let r = op
-            .on_event(0, "in", &mut state, event1.clone())
+            .on_event(operator_id, "in", &mut state, event1.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
@@ -227,7 +229,7 @@ mod test {
         };
 
         let mut r = op
-            .on_event(0, "in", &mut state, event2.clone())
+            .on_event(operator_id, "in", &mut state, event2.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 1);
         let (out, event) = r.events.pop().expect("no results");
@@ -246,13 +248,14 @@ mod test {
         };
 
         let r = op
-            .on_event(0, "in", &mut state, event)
+            .on_event(operator_id, "in", &mut state, event)
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
     }
 
     #[test]
     fn time() -> Result<()> {
+        let operator_id = OperatorId::new(42);
         let node_config = NodeConfig::from_config(
             &"badger",
             Some(literal!({
@@ -260,7 +263,7 @@ mod test {
                 "timeout": 1,
             })),
         );
-        let mut op = BatchFactory::new().node_to_operator(42, &node_config)?;
+        let mut op = BatchFactory::new().node_to_operator(operator_id, &node_config)?;
 
         let event1 = Event {
             id: (1, 1, 1).into(),
@@ -274,7 +277,7 @@ mod test {
         let mut state = Value::null();
 
         let r = op
-            .on_event(0, "in", &mut state, event1.clone())
+            .on_event(operator_id, "in", &mut state, event1.clone())
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
@@ -287,7 +290,7 @@ mod test {
         };
 
         let mut r = op
-            .on_event(0, "in", &mut state, event2.clone())
+            .on_event(operator_id, "in", &mut state, event2.clone())
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -309,7 +312,7 @@ mod test {
         };
 
         let r = op
-            .on_event(0, "in", &mut state, event)
+            .on_event(operator_id, "in", &mut state, event)
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
 
@@ -321,7 +324,7 @@ mod test {
         };
 
         let r = op
-            .on_event(0, "in", &mut state, event)
+            .on_event(operator_id, "in", &mut state, event)
             .expect("could not run pipeline");
         assert_eq!(r.len(), 0);
         Ok(())
@@ -329,7 +332,8 @@ mod test {
 
     #[test]
     fn signal() {
-        let mut idgen = EventIdGenerator::new(0);
+        let operator_id = OperatorId::new(0);
+        let mut idgen = EventIdGenerator::for_operator(operator_id);
         let mut op = Batch {
             config: Config {
                 count: 100,
@@ -355,7 +359,7 @@ mod test {
         let mut state = Value::null();
 
         let r = op
-            .on_event(0, "in", &mut state, event1.clone())
+            .on_event(operator_id, "in", &mut state, event1.clone())
             .expect("failed to run peipeline");
         assert_eq!(r.len(), 0);
 
@@ -367,7 +371,7 @@ mod test {
         };
 
         let mut r = op
-            .on_signal(0, &mut state, &mut signal)
+            .on_signal(operator_id, &mut state, &mut signal)
             .expect("failed to run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -386,7 +390,7 @@ mod test {
         };
 
         let r = op
-            .on_event(0, "in", &mut state, event)
+            .on_event(operator_id, "in", &mut state, event)
             .expect("failed to run pipeline");
         assert_eq!(r.len(), 0);
 
@@ -398,14 +402,15 @@ mod test {
         };
 
         let r = op
-            .on_event(0, "in", &mut state, event)
+            .on_event(operator_id, "in", &mut state, event)
             .expect("failed to run piepeline");
         assert_eq!(r.len(), 0);
     }
 
     #[test]
     fn forbid_empty_batches() -> Result<()> {
-        let mut idgen = EventIdGenerator::new(0);
+        let operator_id = OperatorId::new(0);
+        let mut idgen = EventIdGenerator::for_operator(operator_id);
         let mut op = Batch {
             config: Config {
                 count: 2,
@@ -430,7 +435,7 @@ mod test {
         };
 
         let r = op
-            .on_signal(0, &mut state, &mut signal)
+            .on_signal(operator_id, &mut state, &mut signal)
             .expect("failed to run pipeline")
             .events;
         assert_eq!(r.len(), 0);
@@ -442,14 +447,14 @@ mod test {
             ..Event::default()
         };
         let r = op
-            .on_event(0, "in", &mut state, event1)
+            .on_event(operator_id, "in", &mut state, event1)
             .expect("failed to run peipeline");
         assert_eq!(r.len(), 0);
 
         signal.ingest_ns = 3_000_000;
         signal.id = (1, 1, 2).into();
         let r = op
-            .on_signal(0, &mut state, &mut signal)
+            .on_signal(operator_id, &mut state, &mut signal)
             .expect("failed to run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -457,7 +462,7 @@ mod test {
         signal.ingest_ns = 4_000_000;
         signal.id = (1, 1, 3).into();
         let r = op
-            .on_signal(0, &mut state, &mut signal)
+            .on_signal(operator_id, &mut state, &mut signal)
             .expect("failed to run pipeline")
             .events;
         assert_eq!(r.len(), 0);

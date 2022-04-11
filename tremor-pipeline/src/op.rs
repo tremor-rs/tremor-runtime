@@ -28,6 +28,7 @@ use crate::errors::Result;
 use beef::Cow;
 use halfbrown::HashMap;
 use regex::Regex;
+use tremor_common::ids::OperatorId;
 use tremor_script::Value;
 
 lazy_static::lazy_static! {
@@ -80,7 +81,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
     /// if the event can not be processed
     fn on_event(
         &mut self,
-        uid: u64,
+        uid: OperatorId,
         port: &str,
         state: &mut Value<'static>,
         event: Event,
@@ -99,7 +100,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
     /// if the singal can not be processed
     fn on_signal(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _state: &mut Value<'static>,
         _signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -118,7 +119,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
     ///
     /// # Errors
     /// if the insight can not be processed
-    fn on_contraflow(&mut self, _uid: u64, _insight: &mut Event) {
+    fn on_contraflow(&mut self, _uid: OperatorId, _insight: &mut Event) {
         // Make the trait signature nicer
     }
 
@@ -148,7 +149,7 @@ pub trait InitializableOperator {
     ///
     /// # Errors
     //// if no operator con be instanciated from the provided NodeConfig
-    fn node_to_operator(&self, uid: u64, node: &NodeConfig) -> Result<Box<dyn Operator>>;
+    fn node_to_operator(&self, uid: OperatorId, node: &NodeConfig) -> Result<Box<dyn Operator>>;
 }
 
 /// Trait for detecting errors in config and the key names are included in errors

@@ -43,6 +43,7 @@ use std::fmt;
 use std::fmt::Display;
 use std::iter::Iterator;
 use std::str::FromStr;
+use tremor_common::ids::{Id, OperatorId, SinkId, SourceId};
 use tremor_script::{
     ast::{self, Helper},
     prelude::*,
@@ -77,7 +78,7 @@ pub type ConfigMap = Option<tremor_value::Value<'static>>;
 /// A lookup function to used to look up operators
 pub type NodeLookupFn = fn(
     config: &NodeConfig,
-    uid: u64,
+    uid: OperatorId,
     node: Option<&ast::Stmt<'static>>,
     helper: &mut Helper<'static, '_>,
 ) -> Result<OperatorNode>;
@@ -197,23 +198,23 @@ where
 // TODO: optimization: - use two Vecs, one for operator ids, one for operator metadata (Values)
 //                     - make it possible to trace operators with and without metadata
 //                     - insert with bisect (numbers of operators tracked will be low single digit numbers most of the time)
-pub struct OpMeta(BTreeMap<PrimStr<u64>, OwnedValue>);
+pub struct OpMeta(BTreeMap<PrimStr<OperatorId>, OwnedValue>);
 
 impl OpMeta {
     /// inserts a value
-    pub fn insert<V>(&mut self, key: u64, value: V) -> Option<OwnedValue>
+    pub fn insert<V>(&mut self, key: OperatorId, value: V) -> Option<OwnedValue>
     where
         OwnedValue: From<V>,
     {
         self.0.insert(PrimStr(key), OwnedValue::from(value))
     }
     /// reads a value
-    pub fn get(&mut self, key: u64) -> Option<&OwnedValue> {
+    pub fn get(&mut self, key: OperatorId) -> Option<&OwnedValue> {
         self.0.get(&PrimStr(key))
     }
     /// checks existance of a key
     #[must_use]
-    pub fn contains_key(&self, key: u64) -> bool {
+    pub fn contains_key(&self, key: OperatorId) -> bool {
         self.0.contains_key(&PrimStr(key))
     }
 
@@ -280,8 +281,11 @@ pub enum CbAction {
     /// Fail backwards to a given ID
     /// All messages after and including this will be considered non delivered
     Fail,
+    /// Notify all upstream sources that this sink has started, notifying them of its existence.
+    /// Will be used for tracking for which sinks to wait during Drain.
+    SinkStart(SinkId),
     /// answer to a `SignalKind::Drain(uid)` signal from a connector with the same uid
-    Drained(u64),
+    Drained(SourceId, SinkId),
 }
 impl Default for CbAction {
     fn default() -> Self {
@@ -303,7 +307,7 @@ impl CbAction {
     /// This message should always be delivered and not filtered out
     #[must_use]
     pub fn always_deliver(self) -> bool {
-        self.is_cb() || matches!(self, CbAction::Drained(_))
+        self.is_cb() || matches!(self, CbAction::Drained(_, _))
     }
     /// This is a Circuit Breaker related message
     #[must_use]
@@ -329,6 +333,7 @@ impl CbAction {
     Debug, Clone, PartialEq, Default, simd_json_derive::Serialize, simd_json_derive::Deserialize,
 )]
 pub struct EventId {
+    /// can be a `SourceId` or an `OperatorId`
     source_id: u64,
     stream_id: u64,
     event_id: u64,
@@ -635,7 +640,7 @@ impl fmt::Display for EventId {
 /// for correct acknowledments at the sources.
 /// And this is the sole reason we are tracking anything in the first place.
 pub struct TrackedPullIds {
-    /// uid of the source this event originated from
+    /// uid of the source (can be a connector-source or a pipeline operator) this event originated from
     pub source_id: u64,
     /// uid of the stream within the source this event originated from
     pub stream_id: u64,
@@ -778,20 +783,26 @@ impl EventIdGenerator {
     }
 
     #[must_use]
-    /// create a new generator using the default stream id
-    pub fn new(source_id: u64) -> Self {
-        Self(source_id, DEFAULT_STREAM_ID, 0)
+    /// create a new generator for the `Source` identified by `source_id` using the default stream id
+    pub fn new(source_id: SourceId) -> Self {
+        Self(source_id.id(), DEFAULT_STREAM_ID, 0)
+    }
+
+    #[must_use]
+    /// create a new generator for the `Operator` identified by `operator_id` using the default stream id
+    pub fn for_operator(operator_id: OperatorId) -> Self {
+        Self(operator_id.id(), DEFAULT_STREAM_ID, 0)
     }
 
     #[must_use]
     /// create a new generator using the given source and stream id
-    pub fn with_stream(source_id: u64, stream_id: u64) -> Self {
-        Self(source_id, stream_id, 0)
+    pub fn new_with_stream(source_id: SourceId, stream_id: u64) -> Self {
+        Self(source_id.id(), stream_id, 0)
     }
 
     /// set the source id
-    pub fn set_source(&mut self, source_id: u64) {
-        self.0 = source_id;
+    pub fn set_source(&mut self, source_id: SourceId) {
+        self.0 = source_id.id();
     }
 
     /// set the stream id
@@ -811,8 +822,8 @@ impl EventIdGenerator {
 )]
 pub enum SignalKind {
     // Lifecycle
-    /// Start signal, containing the connector uid which just started
-    Start(u64),
+    /// Start signal, containing the source uid which just started
+    Start(SourceId),
     /// Shutdown Signal
     Shutdown,
     // Pause, TODO debug trace
@@ -826,7 +837,7 @@ pub enum SignalKind {
     /// This signal must be answered with a Drain contraflow event containing the same uid (u64)
     /// this way a contraflow event will not be interpreted by connectors for which it isn't meant
     /// reception of such Drain contraflow event notifies the signal sender that the intermittent pipeline is drained and can be safely disconnected
-    Drain(u64),
+    Drain(SourceId),
 }
 
 // We ignore this since it's a simple lookup table
@@ -865,7 +876,7 @@ fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
     Ok(factory)
 }
 
-fn operator(uid: u64, node: &NodeConfig) -> Result<Box<dyn Operator + 'static>> {
+fn operator(uid: OperatorId, node: &NodeConfig) -> Result<Box<dyn Operator + 'static>> {
     factory(node)?.node_to_operator(uid, node)
 }
 
@@ -909,21 +920,24 @@ mod test {
 
     #[test]
     fn op_meta_merge() {
+        let op_id1 = OperatorId::new(1);
+        let op_id2 = OperatorId::new(2);
+        let op_id3 = OperatorId::new(3);
         let mut m1 = OpMeta::default();
         let mut m2 = OpMeta::default();
-        m1.insert(1, 1);
-        m1.insert(2, 1);
-        m2.insert(1, 2);
-        m2.insert(3, 2);
+        m1.insert(op_id1, 1);
+        m1.insert(op_id2, 1);
+        m2.insert(op_id1, 2);
+        m2.insert(op_id3, 2);
         m1.merge(m2);
 
-        assert!(m1.contains_key(1));
-        assert!(m1.contains_key(2));
-        assert!(m1.contains_key(3));
+        assert!(m1.contains_key(op_id1));
+        assert!(m1.contains_key(op_id2));
+        assert!(m1.contains_key(op_id3));
 
-        assert_eq!(m1.get(1).unwrap(), &2);
-        assert_eq!(m1.get(2).unwrap(), &1);
-        assert_eq!(m1.get(3).unwrap(), &2);
+        assert_eq!(m1.get(op_id1).unwrap(), &2);
+        assert_eq!(m1.get(op_id2).unwrap(), &1);
+        assert_eq!(m1.get(op_id3).unwrap(), &2);
     }
 
     #[test]

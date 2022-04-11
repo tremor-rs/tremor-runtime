@@ -14,6 +14,7 @@
 
 use crate::{CbAction, EventId, OpMeta, SignalKind};
 use std::mem::swap;
+use tremor_common::ids::SourceId;
 use tremor_common::time::nanotime;
 use tremor_script::prelude::*;
 use tremor_script::{literal, EventOriginUri, EventPayload, Value};
@@ -55,19 +56,19 @@ impl Event {
         }
     }
 
-    /// create a drain signal event originating at the connector with the given `uid`
+    /// create a drain signal event originating at the connector with the given `source_id`
     #[must_use]
-    pub fn signal_drain(uid: u64) -> Self {
+    pub fn signal_drain(source_id: SourceId) -> Self {
         Self {
             ingest_ns: nanotime(),
-            kind: Some(SignalKind::Drain(uid)),
+            kind: Some(SignalKind::Drain(source_id)),
             ..Self::default()
         }
     }
 
-    /// create start signal for the given connector `uid`
+    /// create start signal for the given `SourceId`
     #[must_use]
-    pub fn signal_start(uid: u64) -> Self {
+    pub fn signal_start(uid: SourceId) -> Self {
         Self {
             ingest_ns: nanotime(),
             kind: Some(SignalKind::Start(uid)),
@@ -463,6 +464,7 @@ mod test {
     use super::*;
     use crate::Result;
     use simd_json::OwnedValue;
+    use tremor_common::ids::{Id, OperatorId};
     use tremor_script::{Object, ValueAndMeta};
 
     fn merge<'iref, 'head>(
@@ -611,15 +613,18 @@ mod test {
         assert_eq!(e.insight_fail().cb, CbAction::Fail);
 
         let mut clone = e.clone();
-        clone.op_meta.insert(1, OwnedValue::null());
+        let op_id = OperatorId::new(1);
+        clone.op_meta.insert(op_id, OwnedValue::null());
         let ack_with_timing = clone.insight_ack_with_timing(100);
         assert_eq!(ack_with_timing.cb, CbAction::Ack);
-        assert!(ack_with_timing.op_meta.contains_key(1));
+        assert!(ack_with_timing.op_meta.contains_key(op_id));
         let (_, m) = ack_with_timing.data.parts();
         assert_eq!(Some(100), m.get_u64("time"));
 
         let mut clone2 = e.clone();
-        clone2.op_meta.insert(42, OwnedValue::null());
+        clone2
+            .op_meta
+            .insert(OperatorId::new(42), OwnedValue::null());
     }
 
     #[test]
