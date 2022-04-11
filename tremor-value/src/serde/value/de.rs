@@ -104,14 +104,9 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
         let (variant, value) = match self {
             Value::Object(value) => {
                 let mut iter = value.into_iter();
-                let (variant, value) = match iter.next() {
-                    Some(v) => v,
-                    None => {
-                        return Err(Error::Serde(format!(
-                            "Missing enum type for variant in enum `{name}`"
-                        )));
-                    }
-                };
+                let (variant, value) = iter.next().ok_or_else(|| {
+                    Error::Serde(format!("Missing enum type for variant in enum `{name}`"))
+                })?;
                 // enums are encoded in json as maps with a single key:value pair
                 if let Some((extra, _)) = iter.next() {
                     return Err(Error::Serde(format!(
@@ -158,6 +153,7 @@ impl<'de> EnumAccess<'de> for EnumDeserializer<'de> {
 impl<'de> IntoDeserializer<'de, Error> for Value<'de> {
     type Deserializer = Self;
 
+    #[cfg(not(tarpaulin_include))]
     fn into_deserializer(self) -> Self::Deserializer {
         self
     }
@@ -288,6 +284,7 @@ struct ValueVisitor;
 impl<'de> Visitor<'de> for ValueVisitor {
     type Value = Value<'de>;
 
+    #[cfg(not(tarpaulin_include))]
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("an JSONesque value")
     }
@@ -305,12 +302,14 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     /****************** Option ******************/
+    #[cfg(not(tarpaulin_include))]
     #[cfg_attr(not(feature = "no-inline"), inline)]
     fn visit_none<E>(self) -> Result<Self::Value, E> {
         Ok(Value::Static(StaticNode::Null))
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
@@ -328,6 +327,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
 
     /****************** i64 ******************/
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_i8<E>(self, value: i8) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -336,6 +336,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_i16<E>(self, value: i16) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -344,6 +345,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_i32<E>(self, value: i32) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -352,6 +354,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -361,6 +364,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
 
     #[cfg(feature = "128bit")]
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_i128<E>(self, value: i128) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -371,6 +375,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     /****************** u64 ******************/
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_u8<E>(self, value: u8) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -379,6 +384,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_u16<E>(self, value: u16) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -387,6 +393,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_u32<E>(self, value: u32) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -395,6 +402,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -404,6 +412,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
 
     #[cfg(feature = "128bit")]
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_u128<E>(self, value: u128) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -414,6 +423,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     /****************** f64 ******************/
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_f32<E>(self, value: f32) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -422,6 +432,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -431,6 +442,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
 
     /****************** stringy stuff ******************/
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_char<E>(self, value: char) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -439,6 +451,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_borrowed_str<E>(self, value: &'de str) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -447,6 +460,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -455,6 +469,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -465,6 +480,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     /****************** byte stuff ******************/
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+    #[cfg(not(tarpaulin_include))]
     fn visit_borrowed_bytes<E>(self, value: &'de [u8]) -> Result<Self::Value, E>
     where
         E: de::Error,
