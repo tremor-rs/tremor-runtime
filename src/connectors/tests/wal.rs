@@ -37,14 +37,12 @@ async fn wal() -> Result<()> {
     let harness = ConnectorHarness::new(function_name!(), "wal", &config).await?;
     harness.start().await?;
     harness.wait_for_connected().await?;
+    harness.consume_initial_sink_contraflow().await?;
 
     let out = harness.out().expect("No pipeline connected to WAL out.");
     let in_pipe = harness
         .get_pipe(IN)
         .expect("No pipeline connected to WAL in.");
-
-    let cf = in_pipe.get_contraflow().await?;
-    assert_eq!(CbAction::Open, cf.cb);
 
     let source_id = SourceId::new(1);
     let mut id_gen = EventIdGenerator::new(source_id);
@@ -101,14 +99,9 @@ async fn wal() -> Result<()> {
     let harness = ConnectorHarness::new(function_name!(), "wal", &config).await?;
     harness.start().await?;
     harness.wait_for_connected().await?;
+    harness.consume_initial_sink_contraflow().await?;
 
     let out = harness.out().expect("No pipeline connected to WAL out.");
-    let in_pipe = harness
-        .get_pipe(IN)
-        .expect("No pipeline connected to WAL in.");
-
-    let cf = in_pipe.get_contraflow().await?;
-    assert_eq!(CbAction::Open, cf.cb);
 
     // now we get the next one
     let event = out.get_event().await?;

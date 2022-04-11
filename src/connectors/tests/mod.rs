@@ -168,6 +168,7 @@ impl ConnectorHarness {
         self.addr
             .send_source(SourceMsg::Cb(CbAction::Open, EventId::default()))
             .await?;
+
         Ok(())
     }
 
@@ -216,6 +217,26 @@ impl ConnectorHarness {
         while self.status().await?.connectivity != Connectivity::Connected {
             // TODO create my own future here that succeeds on poll when status is connected
             async_std::task::sleep(Duration::from_millis(100)).await;
+        }
+        Ok(())
+    }
+
+    /// everytime we boot up and start a sink connector
+    /// the runtime will emit a Cb Open and a Cb SinkStart message. We consume those here to clear out the pipe.
+    ///
+    /// # Errors
+    /// If we receive different bootup contraflow messages
+    pub(crate) async fn consume_initial_sink_contraflow(&self) -> Result<()> {
+        if let Some(in_pipe) = self.get_pipe(IN) {
+            for cf in [
+                in_pipe.get_contraflow().await?,
+                in_pipe.get_contraflow().await?,
+            ] {
+                assert!(
+                    matches!(cf.cb, CbAction::SinkStart(_) | CbAction::Open),
+                    "Expected SinkStart or Open Contraflow message, got: {cf:?}"
+                );
+            }
         }
         Ok(())
     }
