@@ -642,9 +642,11 @@ where
                 self.ctx
                     .swallow_err(self.source.on_start(&self.ctx).await, "on_start failed");
 
-                if let Err(e) = self.send_signal(Event::signal_start(self.ctx.uid)).await {
-                    error!("{} Error sending start signal: {e}", self.ctx);
-                }
+                self.ctx.swallow_err(
+                    self.send_signal(Event::signal_start(self.ctx.uid)).await,
+                    "Error sending start signal",
+                );
+
                 Control::Continue
             }
 
@@ -1023,13 +1025,11 @@ where
                 self.is_transactional,
             );
             if results.is_empty() {
-                if let Err(e) = self
+                let res = self
                     .source
                     .on_no_events(pull_id, stream_id, &self.ctx)
-                    .await
-                {
-                    error!("{} Error on no events callback: {e}", self.ctx);
-                }
+                    .await;
+                self.ctx.swallow_err(res, "Error on no events callback");
             } else {
                 let error = self.route_events(results).await;
                 if error {
@@ -1096,9 +1096,8 @@ where
                 self.is_transactional,
             );
             if results.is_empty() {
-                if let Err(e) = self.source.on_no_events(pull_id, stream, &self.ctx).await {
-                    error!("{} Error on no events callback: {e}", self.ctx);
-                }
+                let expr = self.source.on_no_events(pull_id, stream, &self.ctx).await;
+                self.ctx.swallow_err(expr, "Error on no events callback");
             } else {
                 let error = self.route_events(results).await;
                 if error {
