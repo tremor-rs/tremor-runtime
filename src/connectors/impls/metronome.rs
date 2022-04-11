@@ -105,7 +105,7 @@ impl Source for MetronomeSource {
         let now = nanotime();
         // we need to wait here before we continue to fulfill the interval conditions
         if now < self.next {
-            task::sleep(dbg!(Duration::from_nanos(self.next - now))).await;
+            task::sleep(Duration::from_nanos(self.next - now)).await;
         }
         self.next += self.interval_ns;
         *pull_id = self.id;
