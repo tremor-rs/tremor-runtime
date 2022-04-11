@@ -10,7 +10,6 @@ version = "0.11.4"
 async-broadcast = "0.4"
 async-std = { version = "1.10.0", features = ["attributes"] }
 beef = { version = "0.5", features = ["impl_serde"] }
-byteorder = "1"
 error-chain = "0.12"
 halfbrown = "0.1"
 indexmap = { version = "1", features = ["serde-1"] }
