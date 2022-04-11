@@ -35,6 +35,7 @@ use tide::{
     Response,
 };
 use tide_rustls::TlsListener;
+use tremor_common::ids::Id;
 
 use super::utils::{FixedBodyReader, StreamingBodyReader};
 
@@ -344,8 +345,8 @@ impl Sink for HttpServerSink {
         _start: u64,
     ) -> Result<SinkReply> {
         let ingest_ns = event.ingest_ns;
-        let min_pull_id = event.id.get_min_by_stream(ctx.uid, DEFAULT_STREAM_ID);
-        let max_pull_id = event.id.get_max_by_stream(ctx.uid, DEFAULT_STREAM_ID);
+        let min_pull_id = event.id.get_min_by_stream(ctx.uid.id(), DEFAULT_STREAM_ID);
+        let max_pull_id = event.id.get_max_by_stream(ctx.uid.id(), DEFAULT_STREAM_ID);
 
         // batch handling:
         // - extract the request_id for each batch element

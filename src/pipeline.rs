@@ -648,7 +648,10 @@ mod tests {
     use super::*;
     use crate::connectors::{prelude::SinkAddr, source::SourceAddr};
     use std::time::Instant;
-    use tremor_common::ports::{IN, OUT};
+    use tremor_common::{
+        ids::{Id, SourceId},
+        ports::{IN, OUT},
+    };
     use tremor_pipeline::{EventId, OpMeta};
     use tremor_script::{aggr_registry, lexer::Location, NodeMeta, FN_REGISTRY};
     use tremor_value::Value;
@@ -741,20 +744,24 @@ mod tests {
         }
 
         // send a signal
-        addr.send(Box::new(Msg::Signal(Event::signal_drain(42))))
-            .await?;
+        addr.send(Box::new(Msg::Signal(Event::signal_drain(SourceId::new(
+            42,
+        )))))
+        .await?;
 
         let start = Instant::now();
         let mut sink_msg = sink_rx.recv().await?;
-        while !matches!(
-            sink_msg,
+
+        while match sink_msg {
             SinkMsg::Signal {
-                signal: Event {
-                    kind: Some(SignalKind::Drain(42)),
-                    ..
-                }
-            }
-        ) {
+                signal:
+                    Event {
+                        kind: Some(SignalKind::Drain(id)),
+                        ..
+                    },
+            } if id.id() == 42 => false,
+            _ => true,
+        } {
             if start.elapsed() > Duration::from_secs(4) {
                 assert!(false, "Timed out waiting for drain signal on the sink");
             }

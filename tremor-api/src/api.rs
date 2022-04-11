@@ -223,7 +223,7 @@ mod tests {
         errors::Result as RuntimeResult,
         instance::State as InstanceState,
         system::{
-            flow::{ConnectorId, StatusReport},
+            flow::{ConnectorAlias, StatusReport},
             ShutdownMode, WorldConfig,
         },
     };
@@ -339,7 +339,7 @@ mod tests {
         assert_eq!("api_test".to_string(), body[0].alias);
         assert_eq!(InstanceState::Running, body[0].status);
         assert_eq!(1, body[0].connectors.len());
-        assert_eq!(ConnectorId::from("my_null"), body[0].connectors[0]);
+        assert_eq!(ConnectorAlias::from("my_null"), body[0].connectors[0]);
 
         // get flow
         let res = client.get("/v1/flows/i_do_not_exist").await?;
@@ -354,7 +354,7 @@ mod tests {
         assert_eq!("api_test".to_string(), body.alias);
         assert_eq!(InstanceState::Running, body.status);
         assert_eq!(1, body.connectors.len());
-        assert_eq!(ConnectorId::from("my_null"), body.connectors[0]);
+        assert_eq!(ConnectorAlias::from("my_null"), body.connectors[0]);
 
         // patch flow status
         let body = client
@@ -369,7 +369,7 @@ mod tests {
         assert_eq!("api_test".to_string(), body.alias);
         assert_eq!(InstanceState::Paused, body.status);
         assert_eq!(1, body.connectors.len());
-        assert_eq!(ConnectorId::from("my_null"), body.connectors[0]);
+        assert_eq!(ConnectorAlias::from("my_null"), body.connectors[0]);
 
         // invalid patch
         let mut res = client
@@ -394,7 +394,7 @@ mod tests {
         assert_eq!("api_test".to_string(), body.alias);
         assert_eq!(InstanceState::Running, body.status);
         assert_eq!(1, body.connectors.len());
-        assert_eq!(ConnectorId::from("my_null"), body.connectors[0]);
+        assert_eq!(ConnectorAlias::from("my_null"), body.connectors[0]);
 
         // list flow connectors
         let body = client

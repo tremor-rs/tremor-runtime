@@ -94,7 +94,7 @@ const OVERFLOW: Cow<'static, str> = Cow::const_str("overflow");
 impl Operator for RoundRobin {
     fn on_event(
         &mut self,
-        uid: u64,
+        uid: OperatorId,
         _port: &str,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -124,7 +124,7 @@ impl Operator for RoundRobin {
     }
     fn on_signal(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -145,7 +145,7 @@ impl Operator for RoundRobin {
         true
     }
 
-    fn on_contraflow(&mut self, uid: u64, insight: &mut Event) {
+    fn on_contraflow(&mut self, uid: OperatorId, insight: &mut Event) {
         let RoundRobin {
             ref mut outputs, ..
         } = *self;
@@ -180,10 +180,13 @@ impl Operator for RoundRobin {
 
 #[cfg(test)]
 mod test {
+    use tremor_common::ids::Id;
+
     use super::*;
 
     #[test]
     fn multi_output_block() {
+        let uid = OperatorId::new(0);
         let mut op: RoundRobin = Config {
             outputs: vec!["out".into(), "out2".into()],
         }
@@ -199,7 +202,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event1)
+            .on_event(uid, "in", &mut state, event1)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -214,7 +217,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event2)
+            .on_event(uid, "in", &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -223,7 +226,7 @@ mod test {
 
         // Mark output 0 as broken
         let mut op_meta = OpMeta::default();
-        op_meta.insert(0, 0);
+        op_meta.insert(uid, 0);
 
         let mut insight = Event {
             id: (1, 1, 1).into(),
@@ -234,7 +237,7 @@ mod test {
         };
 
         // Verify that we are broken on 0
-        op.on_contraflow(0, &mut insight);
+        op.on_contraflow(uid, &mut insight);
         assert_eq!(op.outputs[0].open, false);
         assert_eq!(op.outputs[1].open, true);
 
@@ -245,7 +248,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event2)
+            .on_event(uid, "in", &mut state, event2)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -259,7 +262,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event3)
+            .on_event(uid, "in", &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);
@@ -268,7 +271,7 @@ mod test {
 
         // Mark output 1 as restored
         let mut op_meta = OpMeta::default();
-        op_meta.insert(0, 0);
+        op_meta.insert(uid, 0);
 
         let mut insight = Event {
             id: (1, 1, 1).into(),
@@ -279,7 +282,7 @@ mod test {
         };
 
         // Verify that we now on disabled outputs
-        op.on_contraflow(0, &mut insight);
+        op.on_contraflow(uid, &mut insight);
         assert_eq!(op.outputs[0].open, true);
         assert_eq!(op.outputs[1].open, true);
 
@@ -290,7 +293,7 @@ mod test {
             ..Event::default()
         };
         let mut r = op
-            .on_event(0, "in", &mut state, event3)
+            .on_event(uid, "in", &mut state, event3)
             .expect("could not run pipeline")
             .events;
         assert_eq!(r.len(), 1);

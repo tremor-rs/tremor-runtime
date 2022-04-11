@@ -21,6 +21,7 @@ use crate::EventId;
 
 use super::*;
 
+use tremor_common::ids::Id;
 use tremor_script::ast::{self, Helper, Ident, Literal};
 use tremor_script::{ast::Consts, NodeMeta, Value};
 use tremor_script::{
@@ -95,7 +96,7 @@ fn test_event_tx(s: u64, transactional: bool, group: u64) -> Event {
     }
 }
 
-fn test_select(uid: u64, stmt: SelectStmt<'static>) -> Select {
+fn test_select(uid: OperatorId, stmt: SelectStmt<'static>) -> Select {
     let windows = vec![
         (
             "w15s".into(),
@@ -122,7 +123,7 @@ fn test_select(uid: u64, stmt: SelectStmt<'static>) -> Select {
 
 fn try_enqueue(op: &mut Select, event: Event) -> Result<Option<(Cow<'static, str>, Event)>> {
     let mut state = Value::null();
-    let mut action = op.on_event(0, "in", &mut state, event)?;
+    let mut action = op.on_event(OperatorId::default(), "in", &mut state, event)?;
     let first = action.events.pop();
     if action.events.is_empty() {
         Ok(first)
@@ -136,7 +137,7 @@ fn try_enqueue_two(
     event: Event,
 ) -> Result<Option<[(Cow<'static, str>, Event); 2]>> {
     let mut state = Value::null();
-    let mut action = op.on_event(0, "in", &mut state, event)?;
+    let mut action = op.on_event(OperatorId::default(), "in", &mut state, event)?;
     let r = action
         .events
         .pop()
@@ -162,7 +163,7 @@ fn parse_query(query: &str) -> Result<crate::op::trickle::select::Select> {
         })
         .next()
         .ok_or_else(|| Error::from("Invalid query"))?;
-    Ok(test_select(1, stmt))
+    Ok(test_select(OperatorId::new(1), stmt))
 }
 
 #[test]
@@ -233,7 +234,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
         .collect();
 
     let id = "select".to_string();
-    Ok(Select::from_stmt(42, id, windows, &stmt))
+    Ok(Select::from_stmt(OperatorId::new(42), id, windows, &stmt))
 }
 
 fn test_tick(ns: u64) -> Event {
@@ -258,7 +259,7 @@ fn select_single_win_with_script_on_signal() -> Result<()> {
         select aggr::stats::count() from in[window1] group by event.g into out having event > 0;
         "#,
     )?;
-    let uid = 42;
+    let uid = OperatorId::new(42);
     let mut state = Value::null();
     let mut tick1 = test_tick(1);
     let mut eis = select.on_signal(uid, &mut state, &mut tick1)?;
@@ -314,7 +315,7 @@ fn select_single_win_on_signal() -> Result<()> {
         select aggr::win::collect_flattened(event) from in[window1] group by event.g into out;
         "#,
     )?;
-    let uid = 42;
+    let uid = OperatorId::new(42);
     let mut state = Value::null();
     let mut tick1 = test_tick(1);
     let mut eis = select.on_signal(uid, &mut state, &mut tick1)?;
@@ -368,7 +369,7 @@ fn select_multiple_wins_on_signal() -> Result<()> {
         select aggr::win::collect_flattened(event) from in[window1, window2] group by event.cat into out;
         "#,
     )?;
-    let uid = 42;
+    let uid = OperatorId::new(42);
     let mut state = Value::null();
     let mut tick1 = test_tick(1);
     let mut eis = select.on_signal(uid, &mut state, &mut tick1)?;
@@ -429,16 +430,17 @@ fn test_transactional_single_window() -> Result<()> {
             select aggr::stats::count() from in[w2] into out;
         "#,
     )?;
+    let uid = OperatorId::new(0);
     let mut state = Value::null();
     let event1 = test_event_tx(0, false, 0);
     let id1 = event1.id.clone();
-    let res = op.on_event(0, "in", &mut state, event1)?;
+    let res = op.on_event(uid, "in", &mut state, event1)?;
 
     assert!(res.events.is_empty());
 
     let event2 = test_event_tx(1, true, 0);
     let id2 = event2.id.clone();
-    let mut res = op.on_event(0, "in", &mut state, event2)?;
+    let mut res = op.on_event(uid, "in", &mut state, event2)?;
     assert_eq!(1, res.events.len());
     let (_, event) = res.events.pop().unwrap();
     assert_eq!(true, event.transactional);
@@ -447,12 +449,12 @@ fn test_transactional_single_window() -> Result<()> {
 
     let event3 = test_event_tx(2, false, 0);
     let id3 = event3.id.clone();
-    let res = op.on_event(0, "in", &mut state, event3)?;
+    let res = op.on_event(uid, "in", &mut state, event3)?;
     assert!(res.events.is_empty());
 
     let event4 = test_event_tx(3, false, 0);
     let id4 = event4.id.clone();
-    let mut res = op.on_event(0, "in", &mut state, event4)?;
+    let mut res = op.on_event(uid, "in", &mut state, event4)?;
     assert_eq!(1, res.events.len());
     let (_, event) = res.events.pop().unwrap();
     assert_eq!(false, event.transactional);
@@ -477,20 +479,22 @@ fn test_transactional_multiple_windows() -> Result<()> {
             select aggr::win::collect_flattened(event) from in[w2_1, w2_2] group by set(event["group"]) into out;
         "#,
     )?;
+
+    let uid = OperatorId::new(0);
     let mut state = Value::null();
     let event0 = test_event_tx(0, true, 0);
     let id0 = event0.id.clone();
-    let res = op.on_event(0, "in", &mut state, event0)?;
+    let res = op.on_event(uid, "in", &mut state, event0)?;
     assert_eq!(0, res.len());
 
     let event1 = test_event_tx(1, false, 1);
     let id1 = event1.id.clone();
-    let res = op.on_event(0, "in", &mut state, event1)?;
+    let res = op.on_event(uid, "in", &mut state, event1)?;
     assert_eq!(0, res.len());
 
     let event2 = test_event_tx(2, false, 0);
     let id2 = event2.id.clone();
-    let mut res = op.on_event(0, "in", &mut state, event2)?;
+    let mut res = op.on_event(uid, "in", &mut state, event2)?;
     assert_eq!(1, res.len());
     let (_, event) = res.events.pop().unwrap();
     assert_eq!(true, event.transactional);
@@ -499,7 +503,7 @@ fn test_transactional_multiple_windows() -> Result<()> {
 
     let event3 = test_event_tx(3, false, 1);
     let id3 = event3.id.clone();
-    let mut res = op.on_event(0, "in", &mut state, event3)?;
+    let mut res = op.on_event(uid, "in", &mut state, event3)?;
     assert_eq!(1, res.len());
     let (_, event) = res.events.remove(0);
     assert_eq!(false, event.transactional);
@@ -508,12 +512,12 @@ fn test_transactional_multiple_windows() -> Result<()> {
 
     let event4 = test_event_tx(4, false, 0);
     let id4 = event4.id.clone();
-    let res = op.on_event(0, "in", &mut state, event4)?;
+    let res = op.on_event(uid, "in", &mut state, event4)?;
     assert_eq!(0, res.len());
 
     let event5 = test_event_tx(5, false, 0);
     let id5 = event5.id.clone();
-    let mut res = op.on_event(0, "in", &mut state, event5)?;
+    let mut res = op.on_event(uid, "in", &mut state, event5)?;
     assert_eq!(2, res.len());
 
     // first event from event5 and event6 - none of the source events are transactional
@@ -593,7 +597,7 @@ fn select_nowin_nogrp_nowhr_nohav() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(1, stmt);
+    let mut op = test_select(OperatorId::new(1), stmt);
     assert!(try_enqueue(&mut op, test_event(0))?.is_none());
     assert!(try_enqueue(&mut op, test_event(1))?.is_none());
     let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
@@ -615,7 +619,7 @@ fn select_nowin_nogrp_whrt_nohav() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(2, stmt);
+    let mut op = test_select(OperatorId::new(2), stmt);
 
     assert!(try_enqueue(&mut op, test_event(0))?.is_none());
 
@@ -637,7 +641,7 @@ fn select_nowin_nogrp_whrf_nohav() -> Result<()> {
     }));
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(3, stmt);
+    let mut op = test_select(OperatorId::new(3), stmt);
     let next = try_enqueue(&mut op, test_event(0))?;
     assert_eq!(None, next);
     Ok(())
@@ -654,7 +658,7 @@ fn select_nowin_nogrp_whrbad_nohav() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(4, stmt);
+    let mut op = test_select(OperatorId::new(4), stmt);
 
     assert!(try_enqueue(&mut op, test_event(0)).is_err());
 
@@ -676,7 +680,7 @@ fn select_nowin_nogrp_whrt_havt() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(5, stmt);
+    let mut op = test_select(OperatorId::new(5), stmt);
 
     let event = test_event(0);
     assert!(try_enqueue(&mut op, event)?.is_none());
@@ -703,7 +707,7 @@ fn select_nowin_nogrp_whrt_havf() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(6, stmt);
+    let mut op = test_select(OperatorId::new(6), stmt);
     let event = test_event(0);
 
     let next = try_enqueue(&mut op, event)?;
@@ -730,7 +734,7 @@ fn select_nowin_nogrp_whrt_havbad() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(7, stmt);
+    let mut op = test_select(OperatorId::new(7), stmt);
     let event = test_event(0);
 
     let next = try_enqueue(&mut op, event)?;

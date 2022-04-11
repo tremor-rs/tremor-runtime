@@ -36,7 +36,7 @@ use petgraph::{
 use rand::Rng;
 use std::collections::BTreeSet;
 use std::iter;
-use tremor_common::ids::OperatorIdGen;
+use tremor_common::ids::{OperatorId, OperatorIdGen};
 use tremor_script::{
     ast::{
         self,
@@ -710,7 +710,7 @@ fn into_name(prefix: &str, port: &str) -> String {
 }
 
 fn select(
-    operator_uid: u64,
+    operator_uid: OperatorId,
     config: &NodeConfig,
     node: &ast::SelectStmt<'static>,
     helper: &Helper<'static, '_>,
@@ -754,7 +754,7 @@ fn select(
 }
 
 fn operator(
-    operator_uid: u64,
+    operator_uid: OperatorId,
     node: &ast::OperatorDefinition<'static>,
     helper: &mut Helper,
 ) -> Result<Box<dyn Operator>> {
@@ -767,7 +767,7 @@ fn operator(
 
 pub(crate) fn supported_operators(
     config: &NodeConfig,
-    uid: u64,
+    uid: OperatorId,
     node: Option<&ast::Stmt<'static>>,
     helper: &mut Helper<'static, '_>,
 ) -> Result<OperatorNode> {
@@ -797,6 +797,8 @@ pub(crate) fn supported_operators(
 
 #[cfg(test)]
 mod test {
+    use tremor_common::ids::Id;
+
     use super::*;
     #[test]
     fn query() {
@@ -825,7 +827,7 @@ mod test {
         let first = idgen.next_id();
         let g = q.to_pipe(&mut idgen).unwrap();
         assert!(g.inputs.contains_key("in/test_in"));
-        assert_eq!(idgen.next_id(), first + g.graph.len() as u64 + 1);
+        assert_eq!(idgen.next_id().id(), first.id() + g.graph.len() as u64 + 1);
         let out = g.graph.get(4).unwrap();
         assert_eq!(out.id, "out/test_out");
         assert_eq!(out.kind, NodeKind::Output("test_out".into()));

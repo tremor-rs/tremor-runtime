@@ -48,7 +48,7 @@ pub struct History {
 impl Operator for History {
     fn on_event(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _port: &str,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -90,7 +90,7 @@ impl Operator for History {
     }
     fn on_signal(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -128,6 +128,8 @@ impl Operator for History {
 
 #[cfg(test)]
 mod test {
+    use tremor_common::ids::Id;
+
     use super::*;
     use crate::EventId;
 
@@ -140,6 +142,7 @@ mod test {
             },
             id: "badger".into(),
         };
+        let operator_id = OperatorId::new(0);
         let event = Event {
             id: EventId::from_id(0, 0, 1),
             ingest_ns: 1,
@@ -150,7 +153,7 @@ mod test {
         let mut state = Value::null();
 
         let (out, event) = op
-            .on_event(0, "in", &mut state, event)
+            .on_event(operator_id, "in", &mut state, event)
             .expect("Failed to run pipeline")
             .events
             .pop()
@@ -158,7 +161,7 @@ mod test {
         assert_eq!(out, "out");
 
         let (out, _event) = op
-            .on_event(0, "in", &mut state, event)
+            .on_event(operator_id, "in", &mut state, event)
             .expect("Failed to run pipeline")
             .events
             .pop()
@@ -173,8 +176,8 @@ mod test {
         };
         let mut state = Value::null();
 
-        let _ = op.on_signal(0, &mut state, &mut event);
-        let _ = op.on_signal(0, &mut state, &mut event);
+        let _ = op.on_signal(operator_id, &mut state, &mut event);
+        let _ = op.on_signal(operator_id, &mut state, &mut event);
 
         let history = event.data.suffix().meta().get(op.config.name.as_str());
 

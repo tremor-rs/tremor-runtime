@@ -21,11 +21,15 @@ pub use channel_source::{ChannelSource, ChannelSourceRuntime};
 
 use async_std::channel::unbounded;
 use async_std::task;
+use hashbrown::HashSet;
 use simd_json::Mutable;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::Display;
-use tremor_common::time::nanotime;
+use tremor_common::{
+    ids::{Id, SinkId, SourceId},
+    time::nanotime,
+};
 use tremor_script::{ast::DeployEndpoint, prelude::BaseExpr, EventPayload, ValueAndMeta};
 
 use crate::connectors::{
@@ -285,7 +289,7 @@ pub(crate) trait StreamReader: Send {
 #[derive(Clone)]
 pub(crate) struct SourceContext {
     /// connector uid
-    pub uid: u64,
+    pub uid: SourceId,
     /// connector alias
     pub(crate) alias: String,
 
@@ -402,7 +406,7 @@ impl SourceManagerBuilder {
 /// # Errors
 /// - on invalid connector configuration
 pub(crate) fn builder(
-    connector_uid: u64,
+    source_uid: SourceId,
     config: &ConnectorConfig,
     connector_default_codec: CodecReq,
     qsize: usize,
@@ -429,7 +433,7 @@ pub(crate) fn builder(
             .clone()
             .unwrap_or_else(|| CodecConfig::from(opt)),
     };
-    let streams = Streams::new(connector_uid, codec_config, preprocessor_configs)?;
+    let streams = Streams::new(source_uid, codec_config, preprocessor_configs)?;
 
     Ok(SourceManagerBuilder {
         qsize,
@@ -441,7 +445,7 @@ pub(crate) fn builder(
 /// maintaining stream state
 // TODO: there is optimization potential here for reusing codec and preprocessors after a stream got ended
 struct Streams {
-    uid: u64,
+    uid: SourceId,
     codec_config: CodecConfig,
     preprocessor_configs: Vec<PreprocessorConfig>,
     states: BTreeMap<u64, StreamState>,
@@ -453,7 +457,7 @@ impl Streams {
     }
     /// constructor
     fn new(
-        uid: u64,
+        uid: SourceId,
         codec_config: config::Codec,
         preprocessor_configs: Vec<PreprocessorConfig>,
     ) -> Result<Self> {
@@ -516,7 +520,7 @@ impl Streams {
 
     /// build a stream
     fn build_stream(
-        connector_uid: u64,
+        source_uid: SourceId,
         stream_id: u64,
         codec_config: &CodecConfig,
         codec_overwrite: Option<Box<dyn Codec>>,
@@ -528,7 +532,7 @@ impl Streams {
             codec::resolve(codec_config)?
         };
         let preprocessors = make_preprocessors(preprocessor_configs)?;
-        let idgen = EventIdGenerator::with_stream(connector_uid, stream_id);
+        let idgen = EventIdGenerator::new_with_stream(source_uid, stream_id);
         Ok(StreamState {
             stream_id,
             idgen,
@@ -585,7 +589,10 @@ where
     is_transactional: bool,
     is_asynchronous: bool,
     connector_channel: Option<Sender<Msg>>,
-    expected_drained: usize,
+    /// Gather all the sinks that reported being started.
+    /// This will give us some knowledge on the topology and most importantly
+    /// on how many `Drained` messages to wait. Assumes a static topology.
+    expected_drained: HashSet<SinkId>,
     pull_counter: u64,
     cb_open_received: bool,
 }
@@ -624,7 +631,7 @@ where
             is_transactional,
             is_asynchronous,
             connector_channel: None,
-            expected_drained: 0,
+            expected_drained: HashSet::new(),
             pull_counter: 0,
             cb_open_received: false,
         }
@@ -730,7 +737,7 @@ where
                 // if we are not connected to any pipeline, we cannot take part in the draining protocol like this
                 // we are drained
                 info!("{} Draining...", self.ctx);
-                if self.pipelines_out.is_empty() && self.pipelines_err.is_empty() {
+                if self.expected_drained.is_empty() {
                     info!("{} Source Drained.", self.ctx);
                     debug!("{} (not connected to any pipeline)", self.ctx);
                     let res = drained_sender.send(Msg::SourceDrained).await;
@@ -766,13 +773,13 @@ where
         let ctx = &self.ctx;
         match cb {
             CbAction::Fail => {
-                if let Some((stream_id, id)) = id.get_min_by_source(self.ctx.uid) {
+                if let Some((stream_id, id)) = id.get_min_by_source(self.ctx.uid.id()) {
                     ctx.swallow_err(self.source.fail(stream_id, id, ctx).await, "fail failed");
                 }
                 Control::Continue
             }
             CbAction::Ack => {
-                if let Some((stream_id, id)) = id.get_max_by_source(self.ctx.uid) {
+                if let Some((stream_id, id)) = id.get_max_by_source(self.ctx.uid.id()) {
                     ctx.swallow_err(self.source.ack(stream_id, id, ctx).await, "ack failed");
                 }
                 Control::Continue
@@ -796,14 +803,21 @@ where
                 }
                 Control::Continue
             }
-            CbAction::Drained(uid) => {
-                debug!("{ctx} Drained contraflow message for {uid}");
+            CbAction::SinkStart(uid) => {
+                debug!("{ctx} Received SinkStart contraflow message from {uid}");
+                self.expected_drained.insert(uid);
+                Control::Continue
+            }
+            CbAction::Drained(source_id, sink_id) => {
+                debug!(
+                    "{ctx} Drained contraflow message from sink {sink_id} for source {source_id}"
+                );
                 // only account for Drained CF which we caused
                 // as CF is sent back the DAG to all destinations
-                if uid == self.ctx.uid {
-                    self.expected_drained = self.expected_drained.saturating_sub(1);
-                    debug!("{ctx} Drained message is for us!");
-                    if self.expected_drained == 0 {
+                if source_id == self.ctx.uid {
+                    self.expected_drained.remove(&sink_id);
+                    debug!("{ctx} Drained message for us from {sink_id}");
+                    if self.expected_drained.is_empty() {
                         // we received 1 drain CB event per connected pipeline (hopefully)
                         if let Some(connector_channel) = self.connector_channel.as_ref() {
                             debug!("{ctx} Drain completed, sending data now!");
@@ -1173,10 +1187,10 @@ where
         // but we will stop everything forcefully after a certain timeout at some point anyways
         // TODO: account for all connector uids that sent some Cb to us upon startup or so, to get the real number to wait for
         // otherwise there are cases (branching etc. where quiescence also would be too quick)
-        self.expected_drained = self.pipelines_err.len() + self.pipelines_out.len();
         debug!(
             "{} We are waiting for {} Drained contraflow messages.",
-            &self.ctx, self.expected_drained
+            &self.ctx,
+            self.expected_drained.len()
         );
         Ok(())
     }

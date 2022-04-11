@@ -49,7 +49,7 @@ use beef::Cow;
 use futures::Future;
 use halfbrown::HashMap;
 use std::{fmt::Display, sync::atomic::Ordering, time::Duration};
-use tremor_common::ids::ConnectorIdGen;
+use tremor_common::ids::{ConnectorId, ConnectorIdGen, SourceId};
 use tremor_common::ports::{ERR, IN, OUT};
 use tremor_pipeline::METRICS_CHANNEL;
 use tremor_script::ast::DeployEndpoint;
@@ -422,7 +422,7 @@ async fn connector_task(
     alias: String,
     mut connector: Box<dyn Connector>,
     config: ConnectorConfig,
-    uid: u64,
+    uid: ConnectorId,
 ) -> Result<Addr> {
     let qsize = crate::QSIZE.load(Ordering::Relaxed);
     // channel for connector-level control plane communication
@@ -447,7 +447,7 @@ async fn connector_task(
         .into());
     }
     let source_builder = source::builder(
-        uid,
+        SourceId::from(uid),
         &config,
         codec_requirement,
         qsize,
@@ -455,7 +455,7 @@ async fn connector_task(
     )?;
     let source_ctx = SourceContext {
         alias: alias.clone(),
-        uid,
+        uid: uid.into(),
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
         notifier: notifier.clone(),
@@ -474,7 +474,7 @@ async fn connector_task(
         sink_metrics_reporter,
     )?;
     let sink_ctx = SinkContext {
-        uid,
+        uid: uid.into(),
         alias: alias.clone(),
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),

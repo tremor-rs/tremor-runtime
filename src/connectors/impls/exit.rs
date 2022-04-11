@@ -85,8 +85,9 @@ impl Sink for Exit {
             debug!("{ctx} Already exited.");
         } else if let Some((value, _meta)) = event.value_meta_iter().next() {
             if let Some(delay) = value.get_u64(Self::DELAY) {
-                info!("{ctx} Sleeping for {delay}ns before triggering shutdown.");
-                task::sleep(Duration::from_nanos(delay)).await;
+                let delay = Duration::from_nanos(delay);
+                info!("{ctx} Sleeping for {delay:?} before triggering shutdown.");
+                task::sleep(delay).await;
             }
             let mode = if value.get_bool(Self::GRACEFUL).unwrap_or(true) {
                 ShutdownMode::Graceful
