@@ -1136,7 +1136,7 @@ where
                     .source
                     .on_no_events(pull_id, DEFAULT_STREAM_ID, &self.ctx)
                     .await;
-                self.ctx.swallow_err(res, "Error on no events callback")
+                self.ctx.swallow_err(res, "Error on no events callback");
             } else {
                 let error = self.route_events(results).await;
                 if error {
