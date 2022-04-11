@@ -5913,6 +5913,8 @@ dependencies = [
  "async-std",
  "beef",
  "rand 0.8.5",
+ "simd-json",
+ "simd-json-derive",
  "url",
 ]
 

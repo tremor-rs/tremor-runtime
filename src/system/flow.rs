@@ -50,23 +50,23 @@ impl From<&str> for Id {
     }
 }
 
-/// unique identifier of a connector within a deployment
+/// unique instance alias/id of a connector within a deployment
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
-pub struct ConnectorId(String);
+pub struct ConnectorAlias(String);
 
-impl From<&DeployEndpoint> for ConnectorId {
+impl From<&DeployEndpoint> for ConnectorAlias {
     fn from(e: &DeployEndpoint) -> Self {
-        ConnectorId(e.alias().to_string())
+        ConnectorAlias(e.alias().to_string())
     }
 }
 
-impl From<&str> for ConnectorId {
+impl From<&str> for ConnectorAlias {
     fn from(e: &str) -> Self {
-        ConnectorId(e.to_string())
+        ConnectorAlias(e.to_string())
     }
 }
 
-impl Borrow<str> for ConnectorId {
+impl Borrow<str> for ConnectorAlias {
     fn borrow(&self) -> &str {
         &self.0
     }
@@ -115,7 +115,7 @@ pub(crate) enum Msg {
     /// The sender expects a Result, which makes it easier to signal errors on the message handling path to the sender
     Report(Sender<Result<StatusReport>>),
     /// Get the addr for a single connector
-    GetConnector(ConnectorId, Sender<Result<connectors::Addr>>),
+    GetConnector(ConnectorAlias, Sender<Result<connectors::Addr>>),
     /// Get the addresses for all connectors of this flow
     GetConnectors(Sender<Result<Vec<connectors::Addr>>>),
 }
@@ -136,7 +136,7 @@ pub struct StatusReport {
     /// the current state
     pub status: State,
     /// the crated connectors
-    pub connectors: Vec<ConnectorId>,
+    pub connectors: Vec<ConnectorAlias>,
 }
 
 impl Flow {
@@ -165,7 +165,7 @@ impl Flow {
     /// # Errors
     /// if the flow is not running anymore and can't be reached or if the connector is not part of the flow
     pub async fn get_connector(&self, connector_id: String) -> Result<connectors::Addr> {
-        let connector_id = ConnectorId(connector_id);
+        let connector_id = ConnectorAlias(connector_id);
         let (tx, rx) = bounded(1);
         self.addr.send(Msg::GetConnector(connector_id, tx)).await?;
         rx.recv().await?
@@ -216,7 +216,7 @@ impl Flow {
                     defn.params.ingest_creational_with(&create.with)?;
                     let connector = crate::Connector::from_defn(&defn)?;
                     connectors.insert(
-                        ConnectorId::from(alias),
+                        ConnectorAlias::from(alias),
                         connectors::spawn(alias, connector_id_gen, known_connectors, connector)
                             .await?,
                     );
@@ -270,7 +270,7 @@ fn key_list<K: ToString, V>(h: &HashMap<K, V>) -> String {
 }
 
 async fn link(
-    connectors: &HashMap<ConnectorId, connectors::Addr>,
+    connectors: &HashMap<ConnectorAlias, connectors::Addr>,
     pipelines: &HashMap<PipelineId, pipeline::Addr>,
     link: &ConnectStmt,
 ) -> Result<()> {
@@ -391,7 +391,7 @@ async fn link(
 async fn spawn_task(
     alias: String,
     pipelines: HashMap<PipelineId, pipeline::Addr>,
-    connectors: HashMap<ConnectorId, connectors::Addr>,
+    connectors: HashMap<ConnectorAlias, connectors::Addr>,
     links: &[ConnectStmt],
 ) -> Result<Addr> {
     #[derive(Debug)]
@@ -423,21 +423,21 @@ async fn spawn_task(
     // let registries = self.reg.clone();
 
     // extracting connectors and pipes from the links
-    let sink_connectors: HashSet<ConnectorId> = links
+    let sink_connectors: HashSet<ConnectorAlias> = links
         .iter()
         .filter_map(|c| {
             if let ConnectStmt::PipelineToConnector { to, .. } = c {
-                Some(ConnectorId::from(to))
+                Some(ConnectorAlias::from(to))
             } else {
                 None
             }
         })
         .collect();
-    let source_connectors: HashSet<ConnectorId> = links
+    let source_connectors: HashSet<ConnectorAlias> = links
         .iter()
         .filter_map(|c| {
             if let ConnectStmt::ConnectorToPipeline { from, .. } = c {
-                Some(ConnectorId::from(from))
+                Some(ConnectorAlias::from(from))
             } else {
                 None
             }

@@ -51,7 +51,7 @@ pub struct Select {
 
 impl Select {
     pub fn from_stmt(
-        operator_uid: u64,
+        operator_uid: OperatorId,
         id: String,
         windows: Vec<(String, window::Impl)>,
         select: &ast::SelectStmt<'static>,
@@ -63,7 +63,7 @@ impl Select {
                 window_impl,
             })
             .collect();
-        let event_id_gen = EventIdGenerator::new(operator_uid);
+        let event_id_gen = EventIdGenerator::for_operator(operator_uid);
         let SelectStmt { aggregates, .. } = select;
         let windows_itr = windows.iter();
         let dflt_group = Group {
@@ -179,7 +179,7 @@ impl Operator for Select {
     // so the state can never be changed.
     fn on_event(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _port: &str,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -321,7 +321,7 @@ impl Operator for Select {
 
     fn on_signal(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {

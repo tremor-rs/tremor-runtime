@@ -42,6 +42,7 @@ pub(crate) use single_stream_sink::{SingleStreamSink, SingleStreamSinkRuntime};
 use std::borrow::Borrow;
 use std::collections::{btree_map::Entry, BTreeMap, HashSet};
 use std::fmt::Display;
+use tremor_common::ids::{SinkId, SourceId};
 use tremor_common::time::nanotime;
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::{ast::DeployEndpoint, EventPayload};
@@ -261,7 +262,7 @@ pub(crate) trait SinkRuntime: Send + Sync {
 #[derive(Clone)]
 pub(crate) struct SinkContext {
     /// the connector unique identifier
-    pub(crate) uid: u64,
+    pub(crate) uid: SinkId,
     /// the connector url
     pub(crate) alias: String,
     /// the connector type
@@ -588,10 +589,10 @@ where
     merged_operator_meta: OpMeta,
     // pipelines connected to IN port
     pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
-    // set of connector ids we received start signals from
-    starts_received: HashSet<u64>,
+    // set of source ids we received start signals from
+    starts_received: HashSet<SourceId>,
     // set of connector ids we received drain signals from
-    drains_received: HashSet<u64>, // TODO: use a bitset for both?
+    drains_received: HashSet<SourceId>, // TODO: use a bitset for both?
     drain_channel: Option<Sender<Msg>>,
     state: SinkState,
 }
@@ -641,6 +642,13 @@ where
                                 self.sink.on_start(&self.ctx).await,
                                 "Error during on_start",
                             );
+                            let cf = Event {
+                                ingest_ns: nanotime(),
+                                cb: CbAction::SinkStart(self.ctx.uid),
+                                ..Event::default()
+                            };
+                            // send CB start to all pipes
+                            send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
                         }
                         SinkMsg::Connect(sender, attempt) => {
                             info!("{} Connecting...", &self.ctx);
@@ -806,7 +814,7 @@ where
 
                                     // send a cb Drained contraflow message back
                                     let cf = ContraflowData::from(&signal)
-                                        .into_cb(CbAction::Drained(source_uid));
+                                        .into_cb(CbAction::Drained(source_uid, self.ctx.uid));
                                     send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
                                 }
                                 Some(SignalKind::Start(source_uid)) => {

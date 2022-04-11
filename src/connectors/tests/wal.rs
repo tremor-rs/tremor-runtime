@@ -14,7 +14,10 @@
 use super::ConnectorHarness;
 use crate::errors::Result;
 use std::time::Duration;
-use tremor_common::ports::IN;
+use tremor_common::{
+    ids::{Id, SourceId},
+    ports::IN,
+};
 use tremor_pipeline::{CbAction, Event, EventIdGenerator};
 use tremor_value::{literal, prelude::*, Value};
 
@@ -43,7 +46,7 @@ async fn wal() -> Result<()> {
     let cf = in_pipe.get_contraflow().await?;
     assert_eq!(CbAction::Open, cf.cb);
 
-    let source_id = 1;
+    let source_id = SourceId::new(1);
     let mut id_gen = EventIdGenerator::new(source_id);
     let value = Value::from(42_u64);
     let meta = Value::object();

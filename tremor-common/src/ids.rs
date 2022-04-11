@@ -14,65 +14,290 @@
 
 // common id handling
 
-/// we namespace onramp, offramp and operator ids differently in order to avoid clashes
-const ONRAMP_ID_BASE: u64 = 0x10_00_00_00_00_00_00_00_u64;
-const OPERATOR_ID_BASE: u64 = 0x20_00_00_00_00_00_00_00_u64;
-const OFFRAMP_ID_BASE: u64 = 0x30_00_00_00_00_00_00_00_u64;
-const CONNECTOR_ID_BASE: u64 = 0x40_00_00_00_00_00_00_00_u64;
-const BINDING_ID_BASE: u64 = 0x50_00_00_00_00_00_00_00_u64;
+use std::{marker::PhantomData, ops::Deref};
 
-#[derive(Debug)]
-/// id generator
-pub struct IdGen<const BASE: u64>(u64);
+/// operator id
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Clone,
+    Copy,
+    Default,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+)]
+pub struct OperatorId(u64);
 
-impl<const BASE: u64> IdGen<BASE> {
-    #[must_use]
-    /// constructor
-    pub fn new() -> Self {
-        Self(BASE)
+impl Id for OperatorId {
+    fn new(id: u64) -> Self {
+        Self(id)
     }
-    /// return the next id for this generator
-    pub fn next_id(&mut self) -> u64 {
-        self.0 = self.0.checked_add(1).unwrap_or(BASE);
+
+    fn id(&self) -> u64 {
         self.0
     }
 }
 
-impl<const BASE: u64> Default for IdGen<BASE> {
+impl std::fmt::Display for OperatorId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::str::FromStr for OperatorId {
+    type Err = std::num::ParseIntError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let p: u64 = s.parse()?;
+        Ok(Self::new(p))
+    }
+}
+
+/// connector id
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Clone,
+    Copy,
+    Default,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+)]
+pub struct ConnectorId(u64);
+impl Id for ConnectorId {
+    fn new(id: u64) -> Self {
+        Self(id)
+    }
+
+    fn id(&self) -> u64 {
+        self.0
+    }
+}
+
+impl std::fmt::Display for ConnectorId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl Deref for ConnectorId {
+    type Target = u64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl AsRef<u64> for ConnectorId {
+    fn as_ref(&self) -> &u64 {
+        &self.0
+    }
+}
+
+/// Sink Identifier (reuses connector id of the containing connector)
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Clone,
+    Copy,
+    Default,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+)]
+pub struct SinkId(ConnectorId);
+impl From<ConnectorId> for SinkId {
+    fn from(cid: ConnectorId) -> Self {
+        Self(cid)
+    }
+}
+
+impl Id for SinkId {
+    fn new(id: u64) -> Self {
+        Self(ConnectorId::new(id))
+    }
+
+    fn id(&self) -> u64 {
+        self.0.id()
+    }
+}
+
+impl std::fmt::Display for SinkId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Sink({})", self.0)
+    }
+}
+
+/// Source Identifier (reuses connector id of the containing connector)
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Clone,
+    Copy,
+    Default,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+)]
+pub struct SourceId(ConnectorId);
+
+impl Id for SourceId {
+    fn new(id: u64) -> Self {
+        Self(ConnectorId::new(id))
+    }
+
+    fn id(&self) -> u64 {
+        self.0.id()
+    }
+}
+
+impl From<ConnectorId> for SourceId {
+    fn from(cid: ConnectorId) -> Self {
+        Self(cid)
+    }
+}
+impl std::fmt::Display for SourceId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Source({})", self.0)
+    }
+}
+
+/// flow id
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Clone,
+    Copy,
+    Default,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+)]
+pub struct FlowId(u64);
+impl Id for FlowId {
+    fn new(id: u64) -> Self {
+        Self(id)
+    }
+
+    fn id(&self) -> u64 {
+        self.0
+    }
+}
+impl std::fmt::Display for FlowId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// pipeline id
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Clone,
+    Copy,
+    Default,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+)]
+pub struct PipelineId(u64);
+impl Id for PipelineId {
+    fn new(id: u64) -> Self {
+        Self(id)
+    }
+
+    fn id(&self) -> u64 {
+        self.0
+    }
+}
+impl std::fmt::Display for PipelineId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// Identifier trait used everywhere within tremor
+pub trait Id {
+    /// constructor from a unique integer
+    fn new(id: u64) -> Self;
+
+    /// get the id value
+    fn id(&self) -> u64;
+}
+
+#[derive(Debug)]
+/// id generator
+pub struct IdGen<T: Id> {
+    current: u64,
+    _marker: PhantomData<T>,
+}
+
+impl<T: Id> IdGen<T> {
+    #[must_use]
+    /// constructor
+    pub fn new() -> Self {
+        Self {
+            current: 0,
+            _marker: PhantomData::default(),
+        }
+    }
+    /// return the next id for this generator
+    pub fn next_id(&mut self) -> T {
+        self.current = self.current.wrapping_add(1);
+        T::new(self.current)
+    }
+}
+
+impl<T: Id> Default for IdGen<T> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-/// onramp id generator - generates consecutive u64 values
-pub type OnrampIdGen = IdGen<ONRAMP_ID_BASE>;
-/// offramp id generator - generates consecutive u64 values
-pub type OfframpIdGen = IdGen<OFFRAMP_ID_BASE>;
 /// operator id generator - generates consecutive u64 values
 /// this one will be shared by all pipelines - so we ensure unique operator ids
-pub type OperatorIdGen = IdGen<OPERATOR_ID_BASE>;
+pub type OperatorIdGen = IdGen<OperatorId>;
 /// connector id generator - generates consecutive u64 values
-pub type ConnectorIdGen = IdGen<CONNECTOR_ID_BASE>;
-/// binding id generator
-pub type BindingIdGen = IdGen<BINDING_ID_BASE>;
+pub type ConnectorIdGen = IdGen<ConnectorId>;
+/// flow id generator
+pub type FlowIdGen = IdGen<FlowId>;
+/// pipeline id generator
+pub type PipelineIdGen = IdGen<PipelineId>;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const TEST_BASE: u64 = 42;
     #[test]
     fn id_gen() {
-        let mut idgen = IdGen::<TEST_BASE>::default();
-        let ids: Vec<u64> = std::iter::repeat_with(|| idgen.next_id())
+        let mut idgen = IdGen::<ConnectorId>::default();
+        let ids: Vec<ConnectorId> = std::iter::repeat_with(|| idgen.next_id())
             .take(100)
             .collect();
 
         for window in ids.windows(2) {
             match window {
                 &[l, h] => {
-                    assert!(l > TEST_BASE);
-                    assert!(h > TEST_BASE);
                     assert!(l < h); // strictly monotonically increasing
                 }
                 _ => assert!(false, "invalid window"),

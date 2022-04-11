@@ -25,7 +25,7 @@ pub struct Script {
 impl Operator for Script {
     fn on_event(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _port: &str,
         state: &mut Value<'static>,
         mut event: Event,

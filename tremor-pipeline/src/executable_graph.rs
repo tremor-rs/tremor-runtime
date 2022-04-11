@@ -25,7 +25,7 @@ use crate::{
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
 use halfbrown::HashMap;
-use tremor_common::stry;
+use tremor_common::{ids::OperatorId, stry};
 use tremor_script::{ast::Helper, ast::Stmt, Value};
 
 /// Configuration for a node
@@ -82,7 +82,7 @@ impl PartialEq for NodeConfig {
 impl NodeConfig {
     pub(crate) fn to_op(
         &self,
-        uid: u64,
+        uid: OperatorId,
         resolver: NodeLookupFn,
         helper: &mut Helper<'static, '_>,
     ) -> Result<OperatorNode> {
@@ -115,7 +115,7 @@ pub struct OperatorNode {
     /// The executable operator
     pub op: Box<dyn Operator>,
     /// Tremor unique identifyer
-    pub uid: u64,
+    pub uid: OperatorId,
     /// The original config
     pub config: NodeConfig,
 }
@@ -123,7 +123,7 @@ pub struct OperatorNode {
 impl Operator for OperatorNode {
     fn on_event(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         port: &str,
         state: &mut Value<'static>,
         event: Event,
@@ -136,7 +136,7 @@ impl Operator for OperatorNode {
     }
     fn on_signal(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -146,7 +146,7 @@ impl Operator for OperatorNode {
     fn handles_contraflow(&self) -> bool {
         self.op.handles_contraflow()
     }
-    fn on_contraflow(&mut self, _uid: u64, contraevent: &mut Event) {
+    fn on_contraflow(&mut self, _uid: OperatorId, contraevent: &mut Event) {
         self.op.on_contraflow(self.uid, contraevent);
     }
 
@@ -481,7 +481,7 @@ impl ExecutableGraph {
                     // ALLOW: We know the state was initiated
                     let state = unsafe { self.state.ops.get_unchecked_mut(idx) };
                     let EventAndInsights { events, insights } =
-                        stry!(node.on_event(0, &port, state, event));
+                        stry!(node.on_event(node.uid, &port, state, event));
 
                     for (out_port, _) in &events {
                         unsafe { self.metrics.get_unchecked_mut(idx) }.inc_output(out_port);
@@ -617,8 +617,9 @@ mod test {
         op::{identity::PassthroughFactory, prelude::OUT},
         GraphReturns, METRICS_CHANNEL,
     };
+    use tremor_common::ids::Id;
     use tremor_script::prelude::*;
-    fn pass(uid: u64, id: &'static str) -> OperatorNode {
+    fn pass(uid: OperatorId, id: &'static str) -> OperatorNode {
         let config = NodeConfig::from_config(&"passthrough", None);
         OperatorNode {
             id: id.into(),
@@ -633,16 +634,17 @@ mod test {
     }
     #[test]
     fn operator_node() {
-        let mut n = pass(0, "passthrough");
+        let op_id = OperatorId::new(0);
+        let mut n = pass(op_id, "passthrough");
         assert!(!n.handles_contraflow());
         assert!(!n.handles_signal());
         assert!(!n.handles_contraflow());
         let mut e = Event::default();
         let mut state = Value::null();
-        n.on_contraflow(0, &mut e);
+        n.on_contraflow(op_id, &mut e);
         assert_eq!(e, Event::default());
         assert_eq!(
-            n.on_signal(0, &mut state, &mut e).unwrap(),
+            n.on_signal(op_id, &mut state, &mut e).unwrap(),
             EventAndInsights::default()
         );
         assert_eq!(e, Event::default());
@@ -682,7 +684,7 @@ mod test {
     impl Operator for AllOperator {
         fn on_event(
             &mut self,
-            _uid: u64,
+            _uid: OperatorId,
             _port: &str,
             _state: &mut Value<'static>,
             event: Event,
@@ -695,7 +697,7 @@ mod test {
 
         fn on_signal(
             &mut self,
-            _uid: u64,
+            _uid: OperatorId,
             _state: &mut Value<'static>,
             _signal: &mut Event,
         ) -> Result<EventAndInsights> {
@@ -707,7 +709,7 @@ mod test {
             true
         }
 
-        fn on_contraflow(&mut self, _uid: u64, _insight: &mut Event) {}
+        fn on_contraflow(&mut self, _uid: OperatorId, _insight: &mut Event) {}
 
         fn metrics(
             &self,
@@ -728,7 +730,7 @@ mod test {
             kind: NodeKind::Operator,
             op_type: "test".into(),
             op: Box::new(AllOperator {}),
-            uid: 0,
+            uid: OperatorId::default(),
             config: NodeConfig::default(),
         }
     }
@@ -780,9 +782,9 @@ mod test {
 
     #[async_std::test]
     async fn eg_metrics() {
-        let mut in_n = pass(1, "in");
+        let mut in_n = pass(OperatorId::new(1), "in");
         in_n.kind = NodeKind::Input;
-        let mut out_n = pass(2, "out");
+        let mut out_n = pass(OperatorId::new(2), "out");
         out_n.kind = NodeKind::Output(OUT);
 
         // The graph is in -> 1 -> 2 -> out, we pre-stack the edges since we do not
@@ -873,18 +875,18 @@ mod test {
 
     #[async_std::test]
     async fn eg_optimize() {
-        let mut in_n = pass(0, "in");
+        let mut in_n = pass(OperatorId::new(0), "in");
         in_n.kind = NodeKind::Input;
-        let mut out_n = pass(1, "out");
+        let mut out_n = pass(OperatorId::new(1), "out");
         out_n.kind = NodeKind::Output(OUT);
         // The graph is in -> 1 -> 2 -> out, we pre-stack the edges since we do not
         // need to have order in here.
         let graph = vec![
-            in_n,            // 0
-            all_op("all-1"), // 1
-            pass(2, "nop"),  // 2
-            all_op("all-2"), // 3
-            out_n,           // 4
+            in_n,                            // 0
+            all_op("all-1"),                 // 1
+            pass(OperatorId::new(2), "nop"), // 2
+            all_op("all-2"),                 // 3
+            out_n,                           // 4
         ];
 
         let mut inputs = HashMap::new();

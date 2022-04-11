@@ -2,9 +2,10 @@ define flow main
 flow
   use integration;
   use std::time::nanos;
+
   define connector in from ws_server
   with
-    preprocessors = [{"name": "lines", "config":{"buffered": false}}],
+    #preprocessors = [{"name": "lines", "config":{"buffered": false}}],
     codec = "json",
     config = {
       "url": "127.0.0.1:4242",

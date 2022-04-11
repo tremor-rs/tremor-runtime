@@ -28,6 +28,7 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
+use tremor_common::ids::Id;
 use tremor_common::time::nanotime;
 use tremor_pipeline::{CbAction, Event, SignalKind};
 use tremor_value::Value;
@@ -378,7 +379,7 @@ where
         }
 
         let ingest_ns = event.ingest_ns;
-        let stream_ids = event.id.get_streams(ctx.uid);
+        let stream_ids = event.id.get_streams(ctx.uid.id());
         trace!("{ctx} on_event stream_ids: {stream_ids:?}");
 
         let contraflow_utils = if event.transactional {
