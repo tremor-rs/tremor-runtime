@@ -194,9 +194,7 @@ async fn connector_s3() -> Result<()> {
         .expect("No pipe connectored to port IN");
     harness.start().await?;
     harness.wait_for_connected().await?;
-
-    let cf_event = in_pipe.get_contraflow().await?;
-    assert_eq!(CbAction::Open, cf_event.cb);
+    harness.consume_initial_sink_contraflow().await?;
 
     let (unbatched_event, unbatched_value) = get_unbatched_event();
     send_to_sink(&harness, &unbatched_event, in_pipe).await?;

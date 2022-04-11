@@ -33,7 +33,7 @@ use testcontainers::{
     Docker, Image, RunArgs,
 };
 use tremor_common::ports::IN;
-use tremor_pipeline::{CbAction, EventId};
+use tremor_pipeline::EventId;
 use tremor_value::literal;
 
 const IMAGE: &str = "docker.vectorized.io/vectorized/redpanda";
@@ -148,14 +148,7 @@ async fn connector_kafka_producer() -> Result<()> {
     let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
     harness.start().await?;
     harness.wait_for_connected().await?;
-
-    // TODO: it seems to work reliably which hints at a timeout inside redpanda
-    // TODO: verify
-    //task::sleep(Duration::from_secs(5)).await;
-
-    // CB Open is sent upon being connected
-    let cf_event = in_pipe.get_contraflow().await?;
-    assert_eq!(CbAction::Open, cf_event.cb);
+    harness.consume_initial_sink_contraflow().await?;
 
     let consumer = ClientConfig::new()
         .set("bootstrap.servers", &broker)
