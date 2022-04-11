@@ -204,6 +204,7 @@ impl ReceivedCbs {
     }
 }
 
+#[derive(Debug)]
 struct CbSource {
     file: io::Lines<io::BufReader<File>>,
     num_sent: usize,
@@ -216,6 +217,17 @@ struct CbSource {
 }
 
 impl CbSource {
+    fn did_receive_all(&self) -> bool {
+        let all_received = if self.config.expect_batched {
+            self.received_cbs
+                .max()
+                .map(|m| m == self.last_sent)
+                .unwrap_or_default()
+        } else {
+            self.received_cbs.count() == self.num_sent
+        };
+        self.finished && all_received
+    }
     async fn new(config: &Config, alias: &str, world: World) -> Result<Self> {
         if let Some(path) = config.path.as_ref() {
             let file = open(path).await?;
@@ -261,16 +273,15 @@ impl Source for CbSource {
         } else if self.finished {
             let world = self.world.clone();
 
-            if self.config.timeout > 0 {
+            if self.config.timeout > 0 && !self.did_receive_all() {
                 async_std::task::sleep(Duration::from_nanos(self.config.timeout)).await;
             }
-            let max_cb_received = self.received_cbs.max().unwrap_or_default();
-            let cbs_missing = if self.config.expect_batched {
-                max_cb_received < self.last_sent
+
+            if self.did_receive_all() {
+                eprintln!("All required CB events received.");
+                eprintln!("Got acks: {:?}", self.received_cbs.ack);
+                eprintln!("Got fails: {:?}", self.received_cbs.fail);
             } else {
-                self.received_cbs.count() < self.num_sent
-            };
-            if cbs_missing {
                 // report failures to stderr and exit with 1
                 eprintln!("Expected CB events up to id {}.", self.last_sent);
                 eprintln!("Got acks: {:?}", self.received_cbs.ack);
@@ -303,34 +314,11 @@ impl Source for CbSource {
 
     async fn ack(&mut self, _stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
         self.received_cbs.ack.push(pull_id);
-        if self.finished && self.received_cbs.count() == self.num_sent
-            || (self.config.expect_batched
-                && self
-                    .received_cbs
-                    .max()
-                    .map(|m| m == self.last_sent)
-                    .unwrap_or_default())
-        {
-            eprintln!("All required CB events received.");
-            eprintln!("Got acks: {:?}", self.received_cbs.ack);
-            eprintln!("Got fails: {:?}", self.received_cbs.fail);
-        }
         Ok(())
     }
+
     async fn fail(&mut self, _stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
         self.received_cbs.fail.push(pull_id);
-        if self.finished && self.received_cbs.count() == self.num_sent
-            || (self.config.expect_batched
-                && self
-                    .received_cbs
-                    .max()
-                    .map(|m| m == self.last_sent)
-                    .unwrap_or_default())
-        {
-            eprintln!("All required CB events received.");
-            eprintln!("Got acks: {:?}", self.received_cbs.ack);
-            eprintln!("Got fails: {:?}", self.received_cbs.fail);
-        }
         Ok(())
     }
 
