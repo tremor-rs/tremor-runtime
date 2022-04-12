@@ -86,9 +86,9 @@ impl ConnectorBuilder for Builder {
             // - configure: debug: "all" for this onramp
             producer_config
                 .set("client.id", &format!("tremor-{}-{}", hostname(), alias))
-                .set("bootstrap.servers", config.brokers.join(","))
-                .set("message.timeout.ms", "5000")
-                .set("queue.buffering.max.ms", "0"); // set to 0 for sending each message out immediately without kafka client internal batching --> low latency, busy network
+                .set("bootstrap.servers", config.brokers.join(","));
+            // .set("message.timeout.ms", "5000")
+            // .set("queue.buffering.max.ms", "0"); // set to 0 for sending each message out immediately without kafka client internal batching --> low latency, busy network
             if let Some(metrics_interval_s) = metrics_interval_s {
                 // enable stats collection
                 producer_config.set(

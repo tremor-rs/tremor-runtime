@@ -94,12 +94,12 @@ impl ConnectorBuilder for Builder {
             client_config
                 .set("group.id", config.group_id.clone())
                 .set("client.id", &client_id)
-                .set("bootstrap.servers", &config.brokers.join(","))
-                .set("enable.partition.eof", "false")
-                .set("session.timeout.ms", "6000")
-                .set("enable.auto.commit", "true")
-                .set("auto.commit.interval.ms", "5000")
-                .set("enable.auto.offset.store", "true");
+                .set("bootstrap.servers", &config.brokers.join(","));
+            // .set("enable.partition.eof", "false")
+            // .set("session.timeout.ms", "6000")
+            // .set("enable.auto.commit", "true")
+            // .set("auto.commit.interval.ms", "5000")
+            // .set("enable.auto.offset.store", "true");
 
             if let Some(metrics_interval_s) = metrics_interval_s {
                 // enable stats collection
