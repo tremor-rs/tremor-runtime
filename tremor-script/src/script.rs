@@ -23,7 +23,7 @@ use crate::{
         Helper,
     },
     ctx::EventContext,
-    errors::{ErrorWithIndex, Result},
+    errors::Result,
     highlighter::Highlighter,
     lexer::{self, Lexer},
     parser::g as grammar,
@@ -92,18 +92,6 @@ impl Script {
     {
         let (aid, src) = Arena::insert(src)?;
         Self::parse_(aid, src, reg)
-    }
-
-    /// Parses a string and turns it into a script with the supplied parameters/arguments
-    ///
-    /// # Errors
-    /// if the script can not be parsed
-    pub fn parse_with_aid<S>(src: &S, reg: &Registry) -> std::result::Result<Self, ErrorWithIndex>
-    where
-        S: ToString + ?Sized,
-    {
-        let (aid, src) = Arena::insert(src)?;
-        Self::parse_(aid, src, reg).map_err(|e| ErrorWithIndex(aid, e))
     }
 
     /// Parses a string and turns it into a script with the supplied parameters/arguments
