@@ -89,8 +89,8 @@ impl ConnectorBuilder for Builder {
             };
 
             let tid = task::current().id();
-            let mut client_config = ClientConfig::new();
             let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, tid);
+            let mut client_config = ClientConfig::new();
             client_config
                 .set("group.id", config.group_id.clone())
                 .set("client.id", &client_id)

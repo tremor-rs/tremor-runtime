@@ -84,8 +84,10 @@ impl ConnectorBuilder for Builder {
             // ENABLE LIBRDKAFKA DEBUGGING:
             // - set librdkafka logger to debug in logger.yaml
             // - configure: debug: "all" for this onramp
+            let tid = task::current().id();
+            let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, tid);
             producer_config
-                .set("client.id", &format!("tremor-{}-{}", hostname(), alias))
+                .set("client.id", &client_id)
                 .set("bootstrap.servers", config.brokers.join(","));
             // .set("message.timeout.ms", "5000")
             // .set("queue.buffering.max.ms", "0"); // set to 0 for sending each message out immediately without kafka client internal batching --> low latency, busy network
