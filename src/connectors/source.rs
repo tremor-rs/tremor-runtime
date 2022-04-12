@@ -586,9 +586,12 @@ where
     /// Gather all the sinks that reported being started.
     /// This will give us some knowledge on the topology and most importantly
     /// on how many `Drained` messages to wait. Assumes a static topology.
-    expected_drained: HashSet<SinkId>,
+    started_sinks: HashSet<SinkId>,
+    num_started_sinks: u64,
+    /// is counted up for each call to `pull_data` in order to identify the pull call
+    /// an event is originating from. We can only ack or fail pulls.
     pull_counter: u64,
-    cb_open_received: bool,
+    cb_open_received: u64,
 }
 
 /// control flow enum
@@ -625,9 +628,10 @@ where
             is_transactional,
             is_asynchronous,
             connector_channel: None,
-            expected_drained: HashSet::new(),
+            started_sinks: HashSet::new(),
+            num_started_sinks: 0,
             pull_counter: 0,
-            cb_open_received: false,
+            cb_open_received: 0,
         }
     }
 
@@ -731,7 +735,7 @@ where
                 // if we are not connected to any pipeline, we cannot take part in the draining protocol like this
                 // we are drained
                 info!("{} Draining...", self.ctx);
-                if self.expected_drained.is_empty() {
+                if self.started_sinks.is_empty() {
                     info!("{} Source Drained.", self.ctx);
                     debug!("{} (not connected to any pipeline)", self.ctx);
                     let res = drained_sender.send(Msg::SourceDrained).await;
@@ -787,8 +791,8 @@ where
                 Control::Continue
             }
             CbAction::Open => {
-                info!("{ctx} Circuit Breaker: Open.");
-                self.cb_open_received = true;
+                debug!("{ctx} Circuit Breaker: Open.");
+                self.cb_open_received += 1;
                 ctx.swallow_err(self.source.on_cb_open(ctx).await, "on_cb_open failed");
                 // avoid a race condition where the necessary start routine wasnt executed
                 // because a `CbAction::Open` was there first, and thus the `Start` msg was ignored
@@ -799,7 +803,8 @@ where
             }
             CbAction::SinkStart(uid) => {
                 debug!("{ctx} Received SinkStart contraflow message from {uid}");
-                self.expected_drained.insert(uid);
+                self.started_sinks.insert(uid);
+                self.num_started_sinks = self.started_sinks.len();
                 Control::Continue
             }
             CbAction::Drained(source_id, sink_id) => {
@@ -809,9 +814,9 @@ where
                 // only account for Drained CF which we caused
                 // as CF is sent back the DAG to all destinations
                 if source_id == self.ctx.uid {
-                    self.expected_drained.remove(&sink_id);
+                    self.started_sinks.remove(&sink_id);
                     debug!("{ctx} Drained message for us from {sink_id}");
-                    if self.expected_drained.is_empty() {
+                    if self.started_sinks.is_empty() {
                         // we received 1 drain CB event per connected pipeline (hopefully)
                         if let Some(connector_channel) = self.connector_channel.as_ref() {
                             debug!("{ctx} Drain completed, sending data now!");
@@ -937,8 +942,8 @@ where
         state_should_pull
             && !self.pipelines_out.is_empty() // we have pipelines connected
             && self.connectivity == Connectivity::Connected // we are connected to our thingy
-            && self.cb_open_received // we did receive at least 1 `CbAction::Open` from 1 of those connected pipelines
-                                     // so we know the downstream side is ready to receive something
+            && self.cb_open_received >= self.num_started_sinks // we did receive a `CbAction::Open` from all connected sinks
+                                                               // so we know the downstream side is ready to receive something
     }
 
     /// handle data from the source
@@ -1184,7 +1189,7 @@ where
         debug!(
             "{} We are waiting for {} Drained contraflow messages.",
             &self.ctx,
-            self.expected_drained.len()
+            self.started_sinks.len()
         );
         Ok(())
     }
