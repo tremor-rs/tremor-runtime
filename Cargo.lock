@@ -5995,7 +5995,6 @@ dependencies = [
  "async-broadcast",
  "async-compat",
  "async-compression",
- "async-dup",
  "async-std",
  "async-std-resolver",
  "async-tls 0.11.0",
