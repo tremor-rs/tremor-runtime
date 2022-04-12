@@ -176,66 +176,6 @@ impl std::fmt::Display for SourceId {
     }
 }
 
-/// flow id
-#[derive(
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Clone,
-    Copy,
-    Default,
-    simd_json_derive::Serialize,
-    simd_json_derive::Deserialize,
-)]
-pub struct FlowId(u64);
-impl Id for FlowId {
-    fn new(id: u64) -> Self {
-        Self(id)
-    }
-
-    fn id(&self) -> u64 {
-        self.0
-    }
-}
-impl std::fmt::Display for FlowId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
-/// pipeline id
-#[derive(
-    Debug,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Hash,
-    Clone,
-    Copy,
-    Default,
-    simd_json_derive::Serialize,
-    simd_json_derive::Deserialize,
-)]
-pub struct PipelineId(u64);
-impl Id for PipelineId {
-    fn new(id: u64) -> Self {
-        Self(id)
-    }
-
-    fn id(&self) -> u64 {
-        self.0
-    }
-}
-impl std::fmt::Display for PipelineId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 /// Identifier trait used everywhere within tremor
 pub trait Id {
     /// constructor from a unique integer
@@ -279,10 +219,6 @@ impl<T: Id> Default for IdGen<T> {
 pub type OperatorIdGen = IdGen<OperatorId>;
 /// connector id generator - generates consecutive u64 values
 pub type ConnectorIdGen = IdGen<ConnectorId>;
-/// flow id generator
-pub type FlowIdGen = IdGen<FlowId>;
-/// pipeline id generator
-pub type PipelineIdGen = IdGen<PipelineId>;
 
 #[cfg(test)]
 mod tests {
