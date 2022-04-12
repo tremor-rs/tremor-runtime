@@ -25,7 +25,7 @@ jobs:
           PROPTEST_CASES: 2500
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
           RUST_BACKTRACE: 1
-        run: cargo llvm-cov --workspace --lcov --output-path lcov.info      
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.info --features integration
       - name: Upload to Coveralls
         uses: coverallsapp/github-action@master
         with:
