@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::lexer;
 use crate::{arena, errors::Result};
 use crate::{arena::Arena, highlighter::Highlighter};
 use crate::{ast::base_expr::Ranged, prelude::*};
@@ -19,7 +20,6 @@ use crate::{
     ast::{self, helper::Warning, visitors::ConstFolder, walkers::QueryWalker},
     lexer::Lexer,
 };
-use crate::{errors::ErrorWithIndex, lexer};
 use std::collections::BTreeSet;
 
 /// A tremor query
@@ -74,22 +74,6 @@ where
     {
         let (aid, src) = Arena::insert(src)?;
         Self::parse_(aid, src, reg, aggr_reg)
-    }
-
-    /// Parses a string into a query supporting query arguments
-    ///
-    /// # Errors
-    /// if the query can not be parsed
-    pub fn parse_with_aid<S>(
-        src: &S,
-        reg: &Registry,
-        aggr_reg: &AggrRegistry,
-    ) -> std::result::Result<Self, ErrorWithIndex>
-    where
-        S: ToString + ?Sized,
-    {
-        let (aid, src) = Arena::insert(src)?;
-        Self::parse_(aid, src, reg, aggr_reg).map_err(|e| ErrorWithIndex(aid, e))
     }
 
     /// Parses a string into a query supporting query arguments

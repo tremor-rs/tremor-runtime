@@ -15,7 +15,7 @@
 use crate::{
     arena::{self, Arena},
     ast::{self, helper::Warning, DeployStmt},
-    errors::{Error, ErrorWithIndex, Result},
+    errors::{Error, Result},
     highlighter::Highlighter,
     lexer::{self, Lexer},
     prelude::*,
@@ -111,22 +111,6 @@ where
     {
         let (aid, src) = Arena::insert(src)?;
         Self::parse_(aid, src, reg, aggr_reg)
-    }
-
-    /// Parses a string into a deployment
-    ///
-    /// # Errors
-    /// if the deployment can not be parsed
-    pub fn parse_with_aid<S>(
-        src: &S,
-        reg: &Registry,
-        aggr_reg: &AggrRegistry,
-    ) -> std::result::Result<Self, ErrorWithIndex>
-    where
-        S: ToString + ?Sized,
-    {
-        let (aid, src) = Arena::insert(src)?;
-        Self::parse_(aid, src, reg, aggr_reg).map_err(|e| ErrorWithIndex(aid, e))
     }
 
     /// Format an error given a script source.
