@@ -358,6 +358,7 @@ where
     F: (Fn(&Value<'_>) -> Option<T>) + Send + Sync,
     B: SinkMetaBehaviour + Send + Sync,
 {
+    /// Receives events and tries to route them to the correct connection/channel/stream
     async fn on_event(
         &mut self,
         _input: &str,

@@ -25,14 +25,13 @@ use crate::{
     },
     errors::Result,
 };
-use async_std::{net::TcpStream, prelude::FutureExt};
+use async_std::prelude::FutureExt;
 use http_client::{h1::H1Client, Body, Config as HttpClientConfig, HttpClient};
 use http_types::{
     headers::{self, HeaderValue},
     mime::BYTE_STREAM,
     Method, StatusCode, Url,
 };
-use std::net::Shutdown;
 use std::str::FromStr;
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
@@ -92,32 +91,15 @@ async fn http_server_test() -> Result<()> {
     connector.start().await?;
     connector.wait_for_connected().await?;
 
+    // retry until the http server is actually up
     let start = Instant::now();
     let timeout = Duration::from_secs(30);
-    loop {
-        match TcpStream::connect(("localhost", port)).await {
-            Ok(stream) => {
-                stream.shutdown(Shutdown::Both)?;
-                break;
-            }
-            Err(e) => {
-                debug!("Not yet listening: {e}");
-                async_std::task::sleep(Duration::from_millis(100)).await;
-                if start.elapsed() > timeout {
-                    return Err(format!(
-                        "Timeout waiting for http_server to start listening on {url}"
-                    )
-                    .into());
-                }
-            }
-        }
-    }
 
     let req = surf::Request::builder(Method::Get, Url::parse(url.as_str())?)
         .body(Body::empty())
         .build();
     let mut res = handle_req(
-        req,
+        req.clone(),
         |req_data| {
             let value = literal!({
                 "value": req_data.value().clone_static(),
@@ -138,7 +120,37 @@ async fn http_server_test() -> Result<()> {
         &connector,
         false,
     )
-    .await?;
+    .await;
+
+    while let Err(e) = res {
+        if start.elapsed() > timeout {
+            return Err(format!("HTTP Server not listening after {timeout:?}: {e}").into());
+        }
+        res = handle_req(
+            req.clone(),
+            |req_data| {
+                let value = literal!({
+                    "value": req_data.value().clone_static(),
+                    "meta": req_data.meta().get("http_server").get("request").map(|v| v.clone_static())
+                });
+                let meta = literal!({
+                    "http_server": {
+                        "response": {
+                            "status": 201,
+                            "headers": {
+                                "content-type": "application/json; charset=UTF-8"
+                            }
+                        }
+                    }
+                });
+                (value, meta).into()
+            },
+            &connector,
+            false,
+        )
+        .await;
+    }
+    let mut res = res?;
 
     assert_eq!(StatusCode::Created, res.status());
     let body = res.body_json::<StaticValue>().await?.into_value();
@@ -326,20 +338,6 @@ async fn https_server_test() -> Result<()> {
     let connector = ConnectorHarness::new(function_name!(), "http_server", &defn).await?;
     connector.start().await?;
     connector.wait_for_connected().await?;
-
-    loop {
-        match TcpStream::connect(("localhost", port)).await {
-            Ok(stream) => {
-                stream.shutdown(Shutdown::Both)?;
-                break;
-            }
-            Err(e) => {
-                debug!("Not yet listening: {e}");
-                async_std::task::sleep(Duration::from_millis(100)).await;
-            }
-        }
-    }
-
     let out = connector
         .out()
         .expect("No pipeline connected to out")
@@ -381,10 +379,22 @@ async fn https_server_test() -> Result<()> {
     })
     .await?;
     config = config.set_tls_config(Some(Arc::new(tls_config)));
+    config = config.set_timeout(Some(Duration::from_secs(20)));
     let client = H1Client::try_from(config).unwrap();
 
     let req = http_types::Request::new(Method::Delete, Url::parse(&url)?);
-    let mut response = client.send(req).timeout(Duration::from_secs(2)).await??;
+    let mut response = client.send(req.clone()).await;
+
+    let start = Instant::now();
+    let timeout = Duration::from_secs(30);
+    while let Err(e) = response {
+        async_std::task::sleep(Duration::from_millis(100)).await;
+        if start.elapsed() > timeout {
+            return Err(format!("Timeout waiting for HTTPS server to boot up: {e}").into());
+        }
+        response = client.send(req.clone()).await;
+    }
+    let mut response = response?;
     let body = response.body_string().await?;
     assert_eq!(
         format!(
