@@ -1,0 +1,2 @@
+#!/usr/bin/env sh
+cargo llvm-cov run -p tremor-cli --no-report -- $@
