@@ -6,7 +6,6 @@ flow
 
   define connector ws_client from ws_client
   with
-    postprocessors = ["lines"],
     codec = "json",
     config = {
       "url": "wss://0.0.0.0:65535",
@@ -27,7 +26,6 @@ flow
 
   define connector ws_server from ws_server
   with
-    preprocessors = ["lines"],
     codec = "json",
     config = {
       "url": "0.0.0.0:65535",

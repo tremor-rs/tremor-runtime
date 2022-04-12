@@ -41,7 +41,7 @@ fn default_separator() -> String {
 impl ConfigImpl for Config {}
 
 #[derive(Clone)]
-pub struct Lines {
+pub struct Split {
     separator: u8,
     max_length: Option<NonZeroUsize>, //set to 0 if no limit for length of the data fragments
     buffer: Vec<u8>,
@@ -49,13 +49,13 @@ pub struct Lines {
     lines_per_chunk: usize,
 }
 
-impl Default for Lines {
+impl Default for Split {
     fn default() -> Self {
         Self::new(DEFAULT_SEPARATOR, DEFAULT_BUF_SIZE, true)
     }
 }
 
-impl Lines {
+impl Split {
     pub fn from_config(config: &ConfigMap) -> Result<Self> {
         if let Some(raw_config) = config {
             let config = Config::new(raw_config)?;
@@ -155,9 +155,9 @@ impl Lines {
     }
 }
 
-impl Preprocessor for Lines {
+impl Preprocessor for Split {
     fn name(&self) -> &str {
-        "lines"
+        "split"
     }
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -257,7 +257,7 @@ mod test {
             "max_length": 12345,
             "buffered": false
         }));
-        let lines = Lines::from_config(&config)?;
+        let lines = Split::from_config(&config)?;
         assert!(!lines.is_buffered);
         assert_eq!(NonZeroUsize::new(12345), lines.max_length);
         assert_eq!(b'\n', lines.separator);
@@ -269,7 +269,7 @@ mod test {
         let config = Some(literal!({
         "separator": "abc"
         }));
-        let res = Lines::from_config(&config).err().unwrap();
+        let res = Split::from_config(&config).err().unwrap();
 
         assert_eq!("Invalid Configuration for lines preprocessor: Invalid 'separator': \"abc\", must be 1 byte.", res.to_string().as_str());
         Ok(())
@@ -277,7 +277,7 @@ mod test {
 
     #[test]
     fn test6() -> Result<()> {
-        let mut pp = Lines::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // Test simple split
@@ -322,7 +322,7 @@ mod test {
 
     #[test]
     fn test5() -> Result<()> {
-        let mut pp = Lines::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // Test simple split
@@ -358,7 +358,7 @@ mod test {
 
     #[test]
     fn test4() -> Result<()> {
-        let mut pp = Lines::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // Test simple split
@@ -392,7 +392,7 @@ mod test {
 
     #[test]
     fn test3() -> Result<()> {
-        let mut pp = Lines::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // Test simple split
@@ -418,7 +418,7 @@ mod test {
 
     #[test]
     fn test2() -> Result<()> {
-        let mut pp = Lines::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
 
         let mut i = 0_u64;
 
@@ -441,7 +441,7 @@ mod test {
 
     #[test]
     fn test1() -> Result<()> {
-        let mut pp = Lines::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
 
         let mut i = 0_u64;
 
@@ -457,7 +457,7 @@ mod test {
 
     #[test]
     fn test_non_default_separator() -> Result<()> {
-        let mut pp = Lines::new(b'\0', 10, true);
+        let mut pp = Split::new(b'\0', 10, true);
         let mut i = 0_u64;
 
         // Test simple split
@@ -472,7 +472,7 @@ mod test {
 
     #[test]
     fn test_empty_data() -> Result<()> {
-        let mut pp = Lines::default();
+        let mut pp = Split::default();
         let mut i = 0_u64;
         assert!(pp.process(&mut i, b"")?.is_empty());
         Ok(())
@@ -480,7 +480,7 @@ mod test {
 
     #[test]
     fn test_empty_data_after_buffer() -> Result<()> {
-        let mut pp = Lines::default();
+        let mut pp = Split::default();
         let mut i = 0_u64;
         assert!(pp.process(&mut i, b"a")?.is_empty());
         assert!(pp.process(&mut i, b"")?.is_empty());
@@ -489,7 +489,7 @@ mod test {
 
     #[test]
     fn test_split_split_split() -> Result<()> {
-        let mut pp = Lines::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // Test simple split
@@ -507,7 +507,7 @@ mod test {
 
     #[test]
     fn test_split_buffer_split() -> Result<()> {
-        let mut pp = Lines::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // both split and buffer
@@ -526,7 +526,7 @@ mod test {
 
     #[test]
     fn test_split_buffer_split_buffer() -> Result<()> {
-        let mut pp = Lines::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // both split and buffer
@@ -548,7 +548,7 @@ mod test {
 
     #[test]
     fn test_split_buffer_buffer_split() -> Result<()> {
-        let mut pp = Lines::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // both split and buffer
@@ -566,7 +566,7 @@ mod test {
 
     #[test]
     fn test_leftovers() -> Result<()> {
-        let mut pp = Lines::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
         let mut ingest_ns = 0_u64;
 
         let data = b"123\n456";
@@ -587,7 +587,7 @@ mod test {
 
     #[test]
     fn test_max_length_unbuffered() -> Result<()> {
-        let mut pp = Lines::new(DEFAULT_SEPARATOR, 0, false);
+        let mut pp = Split::new(DEFAULT_SEPARATOR, 0, false);
         let mut ingest_ns = 0_u64;
 
         let mut data = [b'A'; 10000];
@@ -607,7 +607,7 @@ mod test {
             "separator": "\n",
             "max_length": 12345
         }));
-        let mut pp = Lines::from_config(&config)?;
+        let mut pp = Split::from_config(&config)?;
         assert_eq!(NonZeroUsize::new(12345), pp.max_length);
         let mut ingest_ns = 0_u64;
 
@@ -631,7 +631,7 @@ mod test {
             "max_length": 0,
             "buffered": false
         }));
-        let mut pp = Lines::from_config(&config)?;
+        let mut pp = Split::from_config(&config)?;
         let mut data = [b'A'; 100];
         data[89] = b'|';
         let r = pp.process(&mut ingest_ns, &data)?;
@@ -654,7 +654,7 @@ mod test {
             "max_length": 0,
             "buffered": true
         }));
-        let mut pp = Lines::from_config(&config)?;
+        let mut pp = Split::from_config(&config)?;
         let mut data = [b'A'; 100];
         data[89] = b'|';
         let r = pp.process(&mut ingest_ns, &data)?;

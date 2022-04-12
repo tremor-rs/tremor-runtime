@@ -14,7 +14,7 @@
 
 mod gelf;
 pub(crate) use gelf::Gelf;
-pub(crate) mod lines;
+pub(crate) mod split;
 
 use crate::config::Preprocessor as PreprocessorConfig;
 use crate::errors::{Error, Result};
@@ -61,7 +61,7 @@ pub trait Preprocessor: Sync + Send {
 
 pub fn lookup_with_config(config: &PreprocessorConfig) -> Result<Box<dyn Preprocessor>> {
     match config.name.as_str() {
-        "lines" => Ok(Box::new(Lines::from_config(&config.config)?)),
+        "split" => Ok(Box::new(Split::from_config(&config.config)?)),
         "base64" => Ok(Box::new(Base64::default())),
         "gzip" => Ok(Box::new(Gzip::default())),
         "zlib" => Ok(Box::new(Zlib::default())),
@@ -173,7 +173,7 @@ pub fn finish(
     }
 }
 
-pub(crate) use lines::Lines;
+pub(crate) use split::Split;
 
 #[derive(Default, Debug, Clone)]
 pub(crate) struct FilterEmpty {}
@@ -455,7 +455,7 @@ impl Preprocessor for Zstd {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::postprocessor::{self as post, Postprocessor};
+    use crate::postprocessor::{self as post, Join, Postprocessor};
     use crate::preprocessor::{self as pre, Preprocessor};
     #[test]
     fn ingest_ts() -> Result<()> {
@@ -626,7 +626,7 @@ mod test {
     }
 
     const LOOKUP_TABLE: [&str; 15] = [
-        "lines",
+        "split",
         "base64",
         "gzip",
         "zlib",
@@ -695,6 +695,7 @@ mod test {
             assert!(pre.finish(None)?.is_empty());
         };
     }
+
     macro_rules! assert_simple_symmetric {
         ($internal:expr, $which:ident, $magic:expr) => {
             // Assert pre and post processors have a sensible default() ctor
@@ -721,62 +722,6 @@ mod test {
         };
     }
 
-    macro_rules! assert_symmetric {
-        ($inbound:expr, $outbound:expr, $which:ident) => {
-            // Assert pre and post processors have a sensible default() ctor
-            let mut pre = crate::preprocessor::$which::default();
-            let mut post = crate::postprocessor::$which::default();
-
-            // Fake ingest_ns and egress_ns
-            let mut ingest_ns = 0_u64;
-            let egress_ns = 1_u64;
-
-            let enc = $outbound.clone();
-            let r = post.process(ingest_ns, egress_ns, $inbound);
-            let ext = &r?[0];
-            let ext = ext.as_slice();
-            // Assert actual encoded form is as expected
-            assert_eq!(&enc, &ext);
-
-            let r = pre.process(&mut ingest_ns, &ext);
-            let out = &r?[0];
-            let out = out.as_slice();
-            // Assert actual decoded form is as expected
-            assert_eq!(&$inbound, &out);
-
-            // assert empty finish, no leftovers
-            assert!(pre.finish(None)?.is_empty())
-        };
-    }
-
-    macro_rules! assert_not_symmetric {
-        ($inbound:expr, $internal:expr, $outbound:expr, $which:ident) => {
-            // Assert pre and post processors have a sensible default() ctor
-            let mut pre = crate::preprocessor::$which::default();
-            let mut post = crate::postprocessor::$which::default();
-
-            // Fake ingest_ns and egress_ns
-            let mut ingest_ns = 0_u64;
-            let egress_ns = 1_u64;
-
-            let enc = $internal.clone();
-            let r = post.process(ingest_ns, egress_ns, $inbound);
-            let ext = &r?[0];
-            let ext = ext.as_slice();
-            // Assert actual encoded form is as expected
-            assert_eq!(&enc, &ext);
-
-            let r = pre.process(&mut ingest_ns, &ext);
-            let out = &r?[0];
-            let out = out.as_slice();
-            // Assert actual decoded form is as expected
-            assert_eq!(&$outbound, &out);
-
-            // assert empty finish, no leftovers
-            assert!(pre.finish(None)?.is_empty())
-        };
-    }
-
     fn decode_magic(data: &[u8]) -> &'static str {
         match data.get(0..6) {
             Some(&[0x1f, 0x8b, _, _, _, _]) => "gzip",
@@ -795,14 +740,34 @@ mod test {
         let int = "snot\nbadger".as_bytes();
         let enc = "snot\nbadger\n".as_bytes(); // First event ( event per line )
         let out = "snot".as_bytes();
-        assert_not_symmetric!(int, enc, out, Lines);
+
+        let mut post = Join::default();
+        let mut pre = Split::default();
+
+        let mut ingest_ns = 0_u64;
+        let egress_ns = 1_u64;
+
+        let r = post.process(ingest_ns, egress_ns, int);
+        let ext = &r?[0];
+        let ext = ext.as_slice();
+        // Assert actual encoded form is as expected
+        assert_eq!(enc, ext);
+
+        let r = pre.process(&mut ingest_ns, &ext);
+        let out2 = &r?[0];
+        let out2 = out2.as_slice();
+        // Assert actual decoded form is as expected
+        assert_eq!(out, out2);
+
+        // assert empty finish, no leftovers
+        assert!(pre.finish(None)?.is_empty());
         Ok(())
     }
 
     #[test]
     fn test_lines_buffered() -> Result<()> {
         let input = "snot\nbadger\nwombat\ncapybara\nquagga".as_bytes();
-        let mut pre = Lines::new(b'\n', 1000, true);
+        let mut pre = Split::new(b'\n', 1000, true);
         let mut ingest_ns = 0_u64;
         let mut res = pre.process(&mut ingest_ns, input)?;
         let splitted = input
@@ -819,7 +784,7 @@ mod test {
     macro_rules! assert_lines_no_buffer {
         ($inbound:expr, $outbound1:expr, $outbound2:expr, $case_number:expr, $separator:expr) => {
             let mut ingest_ns = 0_u64;
-            let r = crate::preprocessor::Lines::new($separator, 0, false)
+            let r = crate::preprocessor::Split::new($separator, 0, false)
                 .process(&mut ingest_ns, $inbound);
 
             let out = &r?;
@@ -882,7 +847,28 @@ mod test {
     fn test_base64() -> Result<()> {
         let int = "snot badger".as_bytes();
         let enc = "c25vdCBiYWRnZXI=".as_bytes();
-        assert_symmetric!(int, enc, Base64);
+
+        let mut pre = crate::preprocessor::Base64::default();
+        let mut post = crate::postprocessor::Base64::default();
+
+        // Fake ingest_ns and egress_ns
+        let mut ingest_ns = 0_u64;
+        let egress_ns = 1_u64;
+
+        let r = post.process(ingest_ns, egress_ns, int);
+        let ext = &r?[0];
+        let ext = ext.as_slice();
+        // Assert actual encoded form is as expected
+        assert_eq!(&enc, &ext);
+
+        let r = pre.process(&mut ingest_ns, &ext);
+        let out = &r?[0];
+        let out = out.as_slice();
+        // Assert actual decoded form is as expected
+        assert_eq!(&int, &out);
+
+        // assert empty finish, no leftovers
+        assert!(pre.finish(None)?.is_empty());
         Ok(())
     }
 

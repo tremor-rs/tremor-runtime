@@ -32,7 +32,7 @@ async fn server_event_routing() -> Result<()> {
 
     let defn = literal!({
       "codec": "string",
-      "preprocessors": ["lines"],
+      "preprocessors": ["split"],
       "config": {
         "url": format!("tcp://127.0.0.1:{free_port}"),
         "buf_size": 4096

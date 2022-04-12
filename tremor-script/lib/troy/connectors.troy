@@ -8,7 +8,7 @@ define connector metrics from metrics;
 ## A line seperated stdio based connector
 define connector console from stdio
 with
-  preprocessors = ["lines"],
-  postprocessors = ["lines"],
+  preprocessors = ["split"],
+  postprocessors = ["join"],
   codec = "string"
 end;

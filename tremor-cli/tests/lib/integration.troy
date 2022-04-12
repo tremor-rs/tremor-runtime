@@ -13,11 +13,11 @@ args
     file = "out.log"
 with 
     codec = "json-sorted",
+    postprocessors = ["join"],
     config = {
         "path": args.file,
         "mode": "truncate"
     },
-    postprocessors = ["lines"]
 end;
 
 define connector read_file from file
@@ -25,11 +25,11 @@ args
     file = "in.json"
 with 
     codec = "json-sorted",
+    preprocessors = ["split"],
     config = {
         "path": args.file,
         "mode": "read"
     },
-    preprocessors = ["lines"]
 end;
 
 define pipeline out_or_exit

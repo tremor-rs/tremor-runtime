@@ -31,7 +31,7 @@ async fn file_connector() -> Result<()> {
         .join("input.txt");
     let defn = literal!({
         "codec": "string",
-        "preprocessors": ["lines"],
+        "preprocessors": ["split"],
         "config": {
             "path": input_path.display().to_string(),
             "mode": "read"

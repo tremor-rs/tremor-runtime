@@ -15,9 +15,6 @@ flow
             }
         },
         codec = "json",
-        postprocessors = [
-            "lines"
-        ],
         config = {
             "brokers": [
                 "127.0.0.1:9092",
@@ -100,9 +97,6 @@ flow
                 }
             },
         codec = "json",
-        preprocessors = [
-            "lines"
-        ],
         config = {
                 "brokers": [
                     "127.0.0.1:9092"

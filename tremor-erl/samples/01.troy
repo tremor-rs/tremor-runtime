@@ -8,7 +8,7 @@ flow
     with
         metrics_interval_s = 1,
         codec = "string",
-        postprocessors = ["lines"],
+        postprocessors = ["join"],
         config = {
             "mode": "truncate",
             "path": "/tmp/tremor_eqc_outfile"
@@ -34,7 +34,7 @@ flow
     with
         metrics_interval_s = 5,
         codec = "string",
-        preprocessors = ["lines"],
+        preprocessors = ["split"],
         config = {
             "mode": "read",
             "path": "README.md"
@@ -45,7 +45,7 @@ flow
     define connector non_existent_file from file
     with
         codec = "string",
-        preprocessors = ["lines"],
+        preprocessors = ["split"],
         config = {
             "mode": "read",
             "path": "path/to/nowhere/i_do_no_exist.txt"

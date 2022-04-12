@@ -238,7 +238,7 @@ flow
     define connector influxdb from http_client
     with
         codec = "influx",
-        postprocessors = ["lines"],
+        postprocessors = ["join"],
         config = {
             "url": "http://influx:8086/api/v2/write?bucket=tremor&org=tremor&precision=ns",
             "method": "POST",

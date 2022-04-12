@@ -129,9 +129,6 @@ async fn connector_kafka_producer() -> Result<()> {
             }
         },
         "codec": "json-sorted",
-        "postprocessors": [
-            "lines"
-        ],
         "config": {
             "brokers": [
                 broker.clone()
