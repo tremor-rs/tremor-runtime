@@ -33,17 +33,26 @@ jobs:
       - uses: actions-rs/toolchain@v1
         with:
           profile: minimal
+          components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v1
-      - name: Run cargo-tarpaulin
-        uses: actions-rs/tarpaulin@v0.1
+      # - name: Run cargo-tarpaulin
+      #   uses: actions-rs/tarpaulin@v0.1
+      #   env:
+      #     PROPTEST_CASES: 2500
+      #     RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
+      #     RUST_BACKTRACE: 1
+      #   with:
+      #     version: "0.20.0"
+      #     args: " --locked --exclude-files target* tremor-cli **/errors.rs depricated --out Lcov --all --features tarpaulin-exclude integration -- --nocapture"
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate code coverage
         env:
           PROPTEST_CASES: 2500
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
           RUST_BACKTRACE: 1
-        with:
-          version: "0.20.0"
-          args: " --locked --exclude-files target* tremor-cli **/errors.rs depricated --out Lcov --all --features tarpaulin-exclude integration -- --nocapture"
-      - name: Coveralls
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.info      
+      - name: Upload to Coveralls
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
