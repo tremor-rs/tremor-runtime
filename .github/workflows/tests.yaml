@@ -11,23 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install deps [Linux]
-        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-      - uses: Swatinem/rust-cache@v1
-      - name: Run tests and validate lockfile
-        env:
-          PROPTEST_CASES: 2500
-          RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
-          RUST_LOG: debug
-          RUST_BACKTRACE: 1
-        run: cargo test --all --locked --features integration
-  code-coverage:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
       - uses: actions-rs/toolchain@v1
@@ -35,15 +18,6 @@ jobs:
           profile: minimal
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v1
-      # - name: Run cargo-tarpaulin
-      #   uses: actions-rs/tarpaulin@v0.1
-      #   env:
-      #     PROPTEST_CASES: 2500
-      #     RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
-      #     RUST_BACKTRACE: 1
-      #   with:
-      #     version: "0.20.0"
-      #     args: " --locked --exclude-files target* tremor-cli **/errors.rs depricated --out Lcov --all --features tarpaulin-exclude integration -- --nocapture"
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate code coverage
