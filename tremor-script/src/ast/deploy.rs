@@ -74,7 +74,7 @@ impl<'script> BaseRef for DeployStmt<'script> {
     }
 }
 
-#[cfg(not(tarpaulin_include))] // this is a simple passthrough
+// #[cfg_attr(coverage, no_coverage)] // this is a simple passthrough
 impl<'script> BaseExpr for DeployStmt<'script> {
     fn meta(&self) -> &NodeMeta {
         match self {

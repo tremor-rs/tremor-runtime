@@ -52,7 +52,7 @@ pub(crate) struct Server {
     rx: Receiver<OpenTelemetryEvents>,
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl std::fmt::Debug for Server {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "OtelServer")

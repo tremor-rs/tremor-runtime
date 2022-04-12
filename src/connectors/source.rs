@@ -175,7 +175,6 @@ pub(crate) trait Source: Send {
     }
 
     /// Pulls custom metrics from the source
-    #[cfg(not(tarpaulin_include))] // trait placeholder function
     fn metrics(&mut self, _timestamp: u64, _ctx: &SourceContext) -> Vec<EventPayload> {
         vec![]
     }
@@ -219,7 +218,6 @@ pub(crate) trait Source: Send {
     /// Expected reaction is to pause receiving messages, which is handled automatically by the runtime
     /// Source implementations might want to close connections or signal a pause to the upstream entity it connects to if not done in the connector (the default)
     // TODO: add info of Cb event origin (port, origin_uri)?
-    #[cfg(not(tarpaulin_include))] // trait placeholder function
     async fn on_cb_close(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
@@ -238,14 +236,12 @@ pub(crate) trait Source: Send {
     }
     /// an event has failed along its way and can be considered failed
     /// multiple fails for the same set of ids are always possible
-    #[cfg(not(tarpaulin_include))] // trait placeholder function
     async fn fail(&mut self, _stream_id: u64, _pull_id: u64, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
 
     // connectivity stuff
     /// called when connector lost connectivity
-    #[cfg(not(tarpaulin_include))] // trait placeholder function
     async fn on_connection_lost(&mut self, _ctx: &SourceContext) -> Result<()> {
         Ok(())
     }
@@ -278,7 +274,6 @@ pub(crate) trait StreamReader: Send {
     async fn quiesce(&mut self, stream: u64) -> Option<SourceReply>;
 
     /// called when the reader is finished or encountered an error
-    #[cfg(not(tarpaulin_include))] // trait placeholder function
     async fn on_done(&mut self, _stream: u64) -> StreamDone {
         StreamDone::StreamClosed
     }
@@ -561,7 +556,6 @@ enum SourceState {
     Stopped,
 }
 
-#[cfg(not(tarpaulin_include))]
 impl Display for SourceState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}")

@@ -188,7 +188,6 @@ impl<N> Codec for Syslog<N>
 where
     N: Now + 'static,
 {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "syslog"
     }
@@ -281,7 +280,6 @@ where
         Ok(result.join(" ").as_bytes().to_vec())
     }
 
-    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }

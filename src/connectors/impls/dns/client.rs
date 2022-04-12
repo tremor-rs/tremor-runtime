@@ -212,7 +212,6 @@ fn str_to_record_type(s: &str) -> Result<RecordType> {
     }
 }
 
-#[cfg(not(tarpaulin_include))] // simple mapping function
 fn rdata_to_value(r: &RData) -> Option<Value<'static>> {
     Some(match r {
         RData::A(v) => literal!({ "A": v.to_string() }),

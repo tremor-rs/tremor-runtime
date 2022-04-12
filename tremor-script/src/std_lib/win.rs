@@ -48,7 +48,7 @@ impl TremorAggrFn for First {
         }
         Ok(())
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -85,7 +85,7 @@ impl TremorAggrFn for Last {
         }
         Ok(())
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -123,7 +123,7 @@ impl TremorAggrFn for CollectFlattened {
         }
         Ok(())
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -166,7 +166,7 @@ impl TremorAggrFn for CollectNested {
         }
         Ok(())
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }

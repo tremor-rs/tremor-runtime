@@ -502,7 +502,7 @@ impl<'value> ValueTrait for Value<'value> {
     }
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl<'value> fmt::Display for Value<'value> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

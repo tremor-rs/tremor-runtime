@@ -58,7 +58,7 @@ pub trait Preprocessor: Sync + Send {
 /// # Errors
 ///
 ///   * Errors if the preprocessor is not known
-#[cfg(not(tarpaulin_include))]
+
 pub fn lookup_with_config(config: &PreprocessorConfig) -> Result<Box<dyn Preprocessor>> {
     match config.name.as_str() {
         "lines" => Ok(Box::new(Lines::from_config(&config.config)?)),
@@ -179,7 +179,6 @@ pub(crate) use lines::Lines;
 pub(crate) struct FilterEmpty {}
 
 impl Preprocessor for FilterEmpty {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "remove-empty"
     }
@@ -195,7 +194,6 @@ impl Preprocessor for FilterEmpty {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct ExtractIngestTs {}
 impl Preprocessor for ExtractIngestTs {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "ingest-ts"
     }
@@ -214,7 +212,6 @@ impl Preprocessor for ExtractIngestTs {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Base64 {}
 impl Preprocessor for Base64 {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "base64"
     }
@@ -227,7 +224,6 @@ impl Preprocessor for Base64 {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Gzip {}
 impl Preprocessor for Gzip {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "gzip"
     }
@@ -244,7 +240,6 @@ impl Preprocessor for Gzip {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Zlib {}
 impl Preprocessor for Zlib {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "zlib"
     }
@@ -261,7 +256,6 @@ impl Preprocessor for Zlib {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Xz2 {}
 impl Preprocessor for Xz2 {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "xz2"
     }
@@ -278,7 +272,6 @@ impl Preprocessor for Xz2 {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Snappy {}
 impl Preprocessor for Snappy {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "snappy"
     }
@@ -296,7 +289,6 @@ impl Preprocessor for Snappy {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Lz4 {}
 impl Preprocessor for Lz4 {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "lz4"
     }
@@ -313,7 +305,6 @@ impl Preprocessor for Lz4 {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Decompress {}
 impl Preprocessor for Decompress {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "decompress"
     }
@@ -371,7 +362,6 @@ pub(crate) struct LengthPrefix {
     buffer: BytesMut,
 }
 impl Preprocessor for LengthPrefix {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "length-prefix"
     }
@@ -408,7 +398,6 @@ pub(crate) struct TextualLength {
     buffer: BytesMut,
 }
 impl Preprocessor for TextualLength {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "textual-length-prefix"
     }
@@ -454,7 +443,6 @@ impl Preprocessor for TextualLength {
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Zstd {}
 impl Preprocessor for Zstd {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "ztd"
     }

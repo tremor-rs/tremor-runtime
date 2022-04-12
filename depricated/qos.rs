@@ -221,7 +221,7 @@ mod tests {
         }
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a test tool
+    // #[cfg_attr(coverage, no_coverage)] // this is a test tool
     impl CanaryProbe for FakeCanary {
         fn chirp(&self) -> bool {
             self.is_reachable
@@ -236,7 +236,7 @@ mod tests {
         fake: FakeCanary,
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a test tool
+    // #[cfg_attr(coverage, no_coverage)] // this is a test tool
     impl FailureDetector for FakeDetector {
         fn chirp(&self) -> bool {
             self.fake.is_reachable

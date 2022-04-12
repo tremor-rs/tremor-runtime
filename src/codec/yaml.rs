@@ -18,11 +18,10 @@ use super::prelude::*;
 pub struct Yaml {}
 
 impl Codec for Yaml {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "yaml"
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn mime_types(&self) -> Vec<&'static str> {
         vec!["application/yaml"]
     }
@@ -41,7 +40,6 @@ impl Codec for Yaml {
         Ok(serde_yaml::to_vec(data)?)
     }
 
-    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }

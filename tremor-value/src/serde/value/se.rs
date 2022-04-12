@@ -440,72 +440,60 @@ impl serde_ext::Serializer for MapKeySerializer {
         value.serialize(self)
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_bool(self, _value: bool) -> Result<Self::Ok> {
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_i8(self, _value: i8) -> Result<Self::Ok> {
         //Ok(value.to_string())
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_i16(self, _value: i16) -> Result<Self::Ok> {
         //Ok(value.to_string())
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_i32(self, _value: i32) -> Result<Self::Ok> {
         //Ok(value.to_string())
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_i64(self, _value: i64) -> Result<Self::Ok> {
         //Ok(value.to_string())
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_u8(self, _value: u8) -> Result<Self::Ok> {
         //Ok(value.to_string())
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_u16(self, _value: u16) -> Result<Self::Ok> {
         //Ok(value.to_string())
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_u32(self, _value: u32) -> Result<Self::Ok> {
         //Ok(value.to_string())
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_u64(self, _value: u64) -> Result<Self::Ok> {
         //Ok(value.to_string())
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_f32(self, _value: f32) -> Result<Self::Ok> {
         //Err(key_must_be_a_string())
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_f64(self, _value: f64) -> Result<Self::Ok> {
         //Err(key_must_be_a_string())
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_char(self, _value: char) -> Result<Self::Ok> {
         Err(key_must_be_a_string())
     }
@@ -515,22 +503,18 @@ impl serde_ext::Serializer for MapKeySerializer {
         Ok(value.to_owned())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_bytes(self, _value: &[u8]) -> Result<Self::Ok> {
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_unit(self) -> Result<Self::Ok> {
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok> {
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_newtype_variant<T: ?Sized>(
         self,
         _name: &'static str,
@@ -544,12 +528,10 @@ impl serde_ext::Serializer for MapKeySerializer {
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_none(self) -> Result<Self::Ok> {
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_some<T: ?Sized>(self, _value: &T) -> Result<Self::Ok>
     where
         T: Serialize,
@@ -557,17 +539,14 @@ impl serde_ext::Serializer for MapKeySerializer {
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple> {
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_tuple_struct(
         self,
         _name: &'static str,
@@ -576,7 +555,6 @@ impl serde_ext::Serializer for MapKeySerializer {
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_tuple_variant(
         self,
         _name: &'static str,
@@ -587,17 +565,14 @@ impl serde_ext::Serializer for MapKeySerializer {
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_struct(self, _name: &'static str, _len: usize) -> Result<Self::SerializeStruct> {
         Err(key_must_be_a_string())
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple error
     fn serialize_struct_variant(
         self,
         _name: &'static str,

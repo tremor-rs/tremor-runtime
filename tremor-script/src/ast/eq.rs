@@ -195,7 +195,7 @@ impl<'script> AstEq for ClausePreCondition<'script> {
     }
 }
 
-#[cfg(not(tarpaulin_include))] // Coverage creates too much false negatives here, this is covered in tests::clause_group
+// #[cfg_attr(coverage, no_coverage)] // Coverage creates too much false negatives here, this is covered in tests::clause_group
 impl<'script, Ex> AstEq for ClauseGroup<'script, Ex>
 where
     Ex: Expression + AstEq + 'script,
@@ -260,7 +260,7 @@ where
         }
     }
 }
-#[cfg(not(tarpaulin_include))] // Coverage creates too much false negatives here, this is covered in tests::default_case
+// #[cfg_attr(coverage, no_coverage)] // Coverage creates too much false negatives here, this is covered in tests::default_case
 impl<'script, Ex> AstEq for DefaultCase<Ex>
 where
     Ex: Expression + AstEq + 'script,
@@ -312,7 +312,7 @@ impl<'script> AstEq for Patch<'script> {
     }
 }
 
-#[cfg(not(tarpaulin_include))] // Coverage creates too much false negatives here, this is covered in tests::patch_operation
+// #[cfg_attr(coverage, no_coverage)] // Coverage creates too much false negatives here, this is covered in tests::patch_operation
 impl<'script> AstEq for PatchOperation<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -425,7 +425,7 @@ impl<'script> AstEq for Pattern<'script> {
     }
 }
 
-#[cfg(not(tarpaulin_include))] // Coverage creates too much false negatives here, this is covered in tests::predicate_pattern
+// #[cfg_attr(coverage, no_coverage)] // Coverage creates too much false negatives here, this is covered in tests::predicate_pattern
 impl<'script> AstEq for PredicatePattern<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
         use PredicatePattern::{ArrayPatternEq, Bin, RecordPatternEq, TildeEq};
@@ -548,7 +548,7 @@ impl<'script> AstEq<ImutExpr<'script>> for Path<'script> {
         }
     }
 }
-#[cfg(not(tarpaulin_include))] // Coverage creates too much false negatives here, this is covered in tests::segment
+// #[cfg_attr(coverage, no_coverage)] // Coverage creates too much false negatives here, this is covered in tests::segment
 impl<'script> AstEq for Segment<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -587,7 +587,7 @@ impl<'script> AstEq for MetadataPath<'script> {
         self.segments.ast_eq(&other.segments)
     }
 }
-#[cfg(not(tarpaulin_include))] // Coverage creates too much false negatives here, this is covered in tests::reserved_path
+// #[cfg_attr(coverage, no_coverage)] // Coverage creates too much false negatives here, this is covered in tests::reserved_path
 impl<'script> AstEq for ReservedPath<'script> {
     fn ast_eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -638,7 +638,6 @@ impl<'script> AstEq for CustomFn<'script> {
 }
 
 impl AstEq for TremorFnWrapper {
-    #[cfg(not(tarpaulin_include))]
     fn ast_eq(&self, other: &Self) -> bool {
         self == other
     }
