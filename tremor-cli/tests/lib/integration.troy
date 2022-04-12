@@ -1,4 +1,12 @@
-define connector exit from exit;
+use std::time::nanos;
+
+define connector exit from exit 
+with
+    config = {
+        "delay": nanos::from_millis(100),
+        "graceful": true
+    }
+end;
 
 define connector write_file from file
 args

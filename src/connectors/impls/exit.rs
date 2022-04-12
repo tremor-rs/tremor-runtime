@@ -26,8 +26,32 @@ use crate::connectors::prelude::*;
 use crate::system::{ShutdownMode, World};
 use async_std::task;
 use std::time::Duration;
-
 use value_trait::ValueAccess;
+
+#[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct Config {
+    #[serde(default)]
+    delay: Option<u64>,
+
+    #[serde(default = "default_graceful")]
+    graceful: bool,
+}
+
+fn default_graceful() -> bool {
+    true
+}
+
+impl ConfigImpl for Config {}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            delay: None,
+            graceful: default_graceful(),
+        }
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct Builder {
@@ -40,9 +64,29 @@ impl Builder {
         }
     }
 }
+
+#[async_trait::async_trait]
+impl ConnectorBuilder for Builder {
+    fn connector_type(&self) -> ConnectorType {
+        "exit".into()
+    }
+
+    async fn build(&self, _id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+        let config = match config.config.as_ref() {
+            Some(raw_config) => Config::new(raw_config)?,
+            None => Config::default(),
+        };
+        Ok(Box::new(Exit {
+            world: self.world.clone(),
+            config,
+            done: false,
+        }))
+    }
+}
 #[derive(Clone)]
 pub struct Exit {
     world: World,
+    config: Config,
     done: bool,
 }
 
@@ -84,12 +128,15 @@ impl Sink for Exit {
         if self.done {
             debug!("{ctx} Already exited.");
         } else if let Some((value, _meta)) = event.value_meta_iter().next() {
-            if let Some(delay) = value.get_u64(Self::DELAY) {
+            if let Some(delay) = value.get_u64(Self::DELAY).or(self.config.delay) {
                 let delay = Duration::from_nanos(delay);
                 info!("{ctx} Sleeping for {delay:?} before triggering shutdown.");
                 task::sleep(delay).await;
             }
-            let mode = if value.get_bool(Self::GRACEFUL).unwrap_or(true) {
+            let mode = if value
+                .get_bool(Self::GRACEFUL)
+                .unwrap_or(self.config.graceful)
+            {
                 ShutdownMode::Graceful
             } else {
                 ShutdownMode::Forceful
@@ -108,19 +155,5 @@ impl Sink for Exit {
         }
 
         Ok(SinkReply::NONE)
-    }
-}
-
-#[async_trait::async_trait]
-impl ConnectorBuilder for Builder {
-    fn connector_type(&self) -> ConnectorType {
-        "exit".into()
-    }
-
-    async fn build(&self, _id: &str, _config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        Ok(Box::new(Exit {
-            world: self.world.clone(),
-            done: false,
-        }))
     }
 }
