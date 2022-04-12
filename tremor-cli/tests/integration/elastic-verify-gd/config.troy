@@ -45,6 +45,7 @@ flow
     select event from process_batch_item/err into err;
     select event from process_whole_batch/err into err;
   end;
+
   define pipeline response_handling
   pipeline
     select {
@@ -75,11 +76,12 @@ flow
       "include_payload_in_response": true
     }
   end;
+
   define connector input from cb
   with
     config =  {
       "path": "in.json",
-      "timeout": nanos::from_seconds(1),
+      "timeout": nanos::from_seconds(5),
       "expect_batched": true,
 
     }
@@ -98,6 +100,7 @@ flow
 
   create pipeline main;
   create pipeline response_handling;
+
   connect /connector/input/out to /pipeline/main/in;
   connect /pipeline/main/out to /connector/elastic/in;
   connect /connector/elastic/out to /pipeline/response_handling/in;
