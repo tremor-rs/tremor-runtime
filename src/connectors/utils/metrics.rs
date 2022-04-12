@@ -122,7 +122,7 @@ impl SinkReporter {
 }
 
 // this is simple forwarding
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 pub(crate) fn send(tx: &MetricsSender, metric: EventPayload, alias: &str) {
     use tremor_pipeline::MetricsMsg;
 

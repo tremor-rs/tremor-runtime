@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg(not(tarpaulin_include))] // We need a life discord api for this
+// #![cfg_attr(coverage, no_coverage)] // We need a life discord api for this
 use serenity::{
     client::bridge::gateway::GatewayIntents,
     model::{

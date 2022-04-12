@@ -21,13 +21,11 @@ use gouth::Token;
 use reqwest::header::HeaderMap;
 use reqwest::Client;
 
-#[cfg(not(tarpaulin_include))]
 pub(crate) struct GcsClient {
     client: Client,
     token: gouth::Token,
 }
 
-#[cfg(not(tarpaulin_include))]
 impl GcsClient {
     // Create a wrapper around reqwest::client
     // which keeps the token with itself and inserts on each request.

@@ -17,7 +17,7 @@ use VisitRes::Walk;
 /// Visitor for traversing all Parts of a deploy within the given `Deploy`
 ///
 /// Implement your custom expr visiting logic by overwriting the methods.
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 pub trait Visitor<'script> {
     /// visit a `FlowDefinition`
     ///

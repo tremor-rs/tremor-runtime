@@ -33,7 +33,7 @@ pub(crate) enum SinkEnqueueError {
 }
 impl error::Error for SinkEnqueueError {}
 
-#[cfg(not(tarpaulin_include))]
+
 impl fmt::Display for SinkEnqueueError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
@@ -50,7 +50,7 @@ pub(crate) enum SinkDequeueError {
 }
 impl error::Error for SinkDequeueError {}
 
-#[cfg(not(tarpaulin_include))]
+
 impl fmt::Display for SinkDequeueError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)

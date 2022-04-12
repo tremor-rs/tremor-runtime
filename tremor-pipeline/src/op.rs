@@ -89,7 +89,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
 
     /// Defines if the operatoir shold be called on the singalflow, defaults
     /// to `false`. If set to `true`, `on_signal` should also be implemented.
-    #[cfg(not(tarpaulin_include))]
+
     fn handles_signal(&self) -> bool {
         false
     }
@@ -110,7 +110,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
 
     /// Defines if the operatoir shold be called on the contraflow, defaults
     /// to `false`. If set to `true`, `on_contraflow` should also be implemented.
-    #[cfg(not(tarpaulin_include))]
+
     fn handles_contraflow(&self) -> bool {
         false
     }
@@ -137,7 +137,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
     }
 
     /// An operator is skippable and doesn't need to be executed
-    #[cfg(not(tarpaulin_include))]
+
     fn skippable(&self) -> bool {
         false
     }

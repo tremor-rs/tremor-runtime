@@ -72,7 +72,7 @@ pub enum Stmt<'script> {
     SelectStmt(SelectStmt<'script>),
 }
 
-#[cfg(not(tarpaulin_include))] // this is a simple passthrough
+// #[cfg_attr(coverage, no_coverage)] // this is a simple passthrough
 impl<'script> BaseExpr for Stmt<'script> {
     fn meta(&self) -> &NodeMeta {
         match self {
@@ -107,7 +107,7 @@ pub struct SelectStmt<'script> {
     /// Number of locals
     pub locals: usize,
 }
-#[cfg(not(tarpaulin_include))] // this is a simple passthrough
+// #[cfg_attr(coverage, no_coverage)] // this is a simple passthrough
 impl<'script> BaseExpr for SelectStmt<'script> {
     fn meta(&self) -> &NodeMeta {
         self.stmt.meta()

@@ -40,7 +40,7 @@ pub struct EventPayload {
     data: ValueAndMeta<'static>,
 }
 
-#[cfg(not(tarpaulin_include))] // this is a simple Debug implementation
+// #[cfg_attr(coverage, no_coverage)] // this is a simple Debug implementation
 impl Debug for EventPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.data.fmt(f)

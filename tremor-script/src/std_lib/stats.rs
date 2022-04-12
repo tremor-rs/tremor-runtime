@@ -64,7 +64,7 @@ impl TremorAggrFn for Count {
         }
         Ok(())
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -104,7 +104,7 @@ impl TremorAggrFn for Sum {
         }
         Ok(())
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -150,7 +150,7 @@ impl TremorAggrFn for Mean {
         }
         Ok(())
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -194,7 +194,7 @@ impl TremorAggrFn for Min {
         }
         Ok(())
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -237,7 +237,7 @@ impl TremorAggrFn for Max {
         }
         Ok(())
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -298,7 +298,7 @@ impl TremorAggrFn for Var {
         }
         Ok(())
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -331,7 +331,7 @@ impl TremorAggrFn for Stdev {
         }
         Ok(())
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -519,7 +519,7 @@ impl TremorAggrFn for Dds {
         self.sketch = None;
         self.cache.clear();
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }
@@ -710,7 +710,7 @@ impl TremorAggrFn for Hdr {
         self.high_bound = 0;
         self.cache.clear();
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn boxed_clone(&self) -> Box<dyn TremorAggrFn> {
         Box::new(self.clone())
     }

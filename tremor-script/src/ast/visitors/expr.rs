@@ -19,7 +19,7 @@ use super::VisitRes::Walk;
 /// Visitor for traversing all `Exprs`s within the given `Exprs`
 ///
 /// Implement your custom expr visiting logic by overwriting the methods.
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 pub trait Visitor<'script> {
     /// visit a generic `Expr` (this is called before the concrete `visit_*` method)
     ///

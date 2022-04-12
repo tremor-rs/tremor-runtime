@@ -103,7 +103,7 @@ pub struct NodeMeta {
     name: Option<String>,
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl std::fmt::Debug for NodeMeta {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         if let Some(name) = &self.name {
@@ -720,7 +720,6 @@ impl<'script> ImutExpr<'script> {
 }
 
 impl<'script> Expression for ImutExpr<'script> {
-    #[cfg(not(tarpaulin_include))] // this has no function
     fn replace_last_shadow_use(&mut self, replace_idx: usize) {
         if let ImutExpr::Match(m) = self {
             // In each pattern we can replace the use in the last assign
@@ -809,7 +808,6 @@ impl<'script> StringLit<'script> {
                 // as we don't want to over engineer and write own format functions.
                 // any suggestions are welcome
                 #[cfg(feature = "erlang-float-testing")]
-                #[cfg(not(tarpaulin_include))]
                 crate::ast::StrLitElement::Expr(e) => {
                     let r = e.run(opts, env, event, state, meta, local)?;
                     if let Some(s) = r.as_str() {
@@ -1130,7 +1128,6 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
         *(self.precondition_mut()) = None;
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub(crate) fn precondition(&self) -> Option<&ClausePreCondition<'script>> {
         match self {
             ClauseGroup::Single { precondition, .. }
@@ -1140,7 +1137,6 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
         }
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub(crate) fn precondition_mut(&mut self) -> &mut Option<ClausePreCondition<'script>> {
         match self {
             ClauseGroup::Single { precondition, .. }
@@ -1645,7 +1641,6 @@ pub enum PredicatePattern<'script> {
 }
 
 impl<'script> PredicatePattern<'script> {
-    #[cfg(not(tarpaulin_include))] // This is just one huge false negative, it's frustrating :(
     fn is_exclusive_to(&self, other: &Self) -> bool {
         match (self, other) {
             (
@@ -1745,7 +1740,6 @@ impl<'script> PredicatePattern<'script> {
 
     /// Get key
     #[must_use]
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub(crate) fn key(&self) -> &KnownKey<'script> {
         use PredicatePattern::{
             ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
@@ -1762,7 +1756,6 @@ impl<'script> PredicatePattern<'script> {
         }
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn lhs(&self) -> &Cow<'script, str> {
         use PredicatePattern::{
             ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
@@ -1894,7 +1887,6 @@ impl<'script> Path<'script> {
 
     /// Get segments as slice
     #[must_use]
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub(crate) fn segments_mut(&mut self) -> &mut Segments<'script> {
         match self {
             Path::Local(path) => &mut path.segments,
@@ -2011,7 +2003,6 @@ pub enum ReservedPath<'script> {
 }
 
 impl<'script> ReservedPath<'script> {
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn segments(&self) -> &Segments<'script> {
         match self {
             ReservedPath::Args { segments, .. }
@@ -2019,7 +2010,6 @@ impl<'script> ReservedPath<'script> {
             | ReservedPath::Group { segments, .. } => segments,
         }
     }
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn segments_mut(&mut self) -> &mut Segments<'script> {
         match self {
             ReservedPath::Args { segments, .. }
@@ -2030,7 +2020,6 @@ impl<'script> ReservedPath<'script> {
 }
 
 impl<'script> BaseExpr for ReservedPath<'script> {
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn meta(&self) -> &NodeMeta {
         match self {
             ReservedPath::Args { mid, .. }

@@ -81,7 +81,7 @@ where
     }
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 #[async_std::main]
 async fn main() -> Result<()> {
     let cli = cli::Cli::parse();

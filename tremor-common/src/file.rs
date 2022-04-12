@@ -14,7 +14,7 @@
 
 // This file is OS dependant so testing the errors is near impossible to re-create on a reproducible
 // basis
-#![cfg(not(tarpaulin_include))]
+// #![cfg_attr(coverage, no_coverage)]
 
 use std::{ffi::OsStr, fs::File, path::Path, path::PathBuf};
 

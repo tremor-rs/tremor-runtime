@@ -21,7 +21,7 @@ use super::VisitRes::Walk;
 /// Visitor for traversing all `ImutExprInt`s within the given `ImutExprInt`
 ///
 /// Implement your custom expr visiting logic by overwriting the methods.
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 pub trait Visitor<'script> {
     /// visit a `Record`
     ///

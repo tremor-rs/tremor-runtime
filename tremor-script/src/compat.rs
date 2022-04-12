@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // This file is urely for testing w/ EQC
-#![cfg(not(tarpaulin_include))]
+// #![cfg_attr(coverage, no_coverage)]
 
 use crate::prelude::*;
 use crate::{

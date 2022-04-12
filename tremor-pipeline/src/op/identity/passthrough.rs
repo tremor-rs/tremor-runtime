@@ -32,7 +32,7 @@ impl Operator for Passthrough {
         Ok(event.into())
     }
     // this is just returning true
-    #[cfg(not(tarpaulin_include))]
+
     fn skippable(&self) -> bool {
         // ALLOW: This is Ok
         let _ = self;

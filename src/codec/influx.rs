@@ -44,7 +44,6 @@ use tremor_influx as influx;
 pub struct Influx {}
 
 impl Codec for Influx {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "influx"
     }

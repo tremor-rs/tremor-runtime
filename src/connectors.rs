@@ -1146,7 +1146,7 @@ pub(crate) trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
 }
 
 /// builtin connector types
-#[cfg(not(tarpaulin_include))]
+
 #[must_use]
 pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
     vec![
@@ -1182,7 +1182,7 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
 }
 
 /// debug connector types
-#[cfg(not(tarpaulin_include))]
+
 #[must_use]
 pub(crate) fn debug_connector_types(world: &World) -> Vec<Box<dyn ConnectorBuilder + 'static>> {
     vec![
@@ -1196,7 +1196,7 @@ pub(crate) fn debug_connector_types(world: &World) -> Vec<Box<dyn ConnectorBuild
 ///
 /// # Errors
 ///  * If a builtin connector couldn't be registered
-#[cfg(not(tarpaulin_include))]
+
 pub(crate) async fn register_builtin_connector_types(world: &World, debug: bool) -> Result<()> {
     for builder in builtin_connector_types() {
         world.register_builtin_connector_type(builder).await?;

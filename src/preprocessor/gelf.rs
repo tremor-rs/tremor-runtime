@@ -109,7 +109,6 @@ fn decode_gelf(bin: &[u8]) -> Result<GelfSegment> {
 }
 
 impl Preprocessor for Gelf {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "gelf"
     }
