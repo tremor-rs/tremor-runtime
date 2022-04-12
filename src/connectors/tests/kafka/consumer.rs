@@ -129,9 +129,6 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
             }
         },
         "codec": "json-sorted",
-        "preprocessors": [
-            "lines"
-        ],
         "config": {
             "brokers": [
                 broker.clone()
@@ -409,9 +406,6 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
             }
         },
         "codec": "json-sorted",
-        "preprocessors": [
-            "lines"
-        ],
         "config": {
             "brokers": [
                 broker.clone()
@@ -677,9 +671,6 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
             }
         },
         "codec": "json-sorted",
-        "preprocessors": [
-            "lines"
-        ],
         "config": {
             "brokers": [
                 broker.clone()
@@ -874,9 +865,6 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
             }
         },
         "codec": "json-sorted",
-        "preprocessors": [
-            "lines"
-        ],
         "config": {
             "brokers": [
                 format!("127.0.0.1:{kafka_port}")

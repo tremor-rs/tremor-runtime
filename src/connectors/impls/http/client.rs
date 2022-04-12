@@ -366,8 +366,6 @@ mod tests {
             "config": {
                 "url": "https://www.google.com"
             },
-            "preprocessors": [ "lines" ],
-            "postprocessors": [ "lines" ],
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
@@ -388,7 +386,6 @@ mod tests {
             "config": {
                 "url": "https://www.google.com"
             },
-            "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
@@ -408,7 +405,6 @@ mod tests {
                 "url": "https://www.google.com"
             },
             "codec": "msgpack",
-            "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
@@ -428,7 +424,6 @@ mod tests {
             "type": "rest_client",
             "config": {
             },
-            "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
@@ -443,7 +438,6 @@ mod tests {
             "config": {
                 "url": "https://tremor.rs/"
             },
-            "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
@@ -462,7 +456,6 @@ mod tests {
             "config": {
                 "url": "https://tremor.rs/benchmarks/"
             },
-            "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
@@ -483,7 +476,6 @@ mod tests {
                 "url": "https://tremor.rs/",
                 "method": "get"
             },
-            "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
@@ -504,7 +496,6 @@ mod tests {
             "config": {
                 "method": "pUt",
             },
-            "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),
@@ -526,7 +517,6 @@ mod tests {
                     "snot": [ "Badger" ],
                 }
             },
-            "preprocessors": [ "lines" ]
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
             ConnectorType("rest_client".into()),

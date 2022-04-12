@@ -62,8 +62,8 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
            }
         },
         "codec": "json-sorted",
-        "preprocessors": ["lines"],
-        "postprocessors": ["lines"],
+        "preprocessors": ["split"],
+        "postprocessors": ["join"],
         "config": {
             "url": server_addr,
             "no_delay": true,

@@ -58,7 +58,7 @@ pub trait Postprocessor: Send + Sync {
 
 pub fn lookup_with_config(config: &PostprocessorConfig) -> Result<Box<dyn Postprocessor>> {
     match config.name.as_str() {
-        "lines" => Ok(Box::new(Lines::default())),
+        "join" => Ok(Box::new(Join::default())),
         "base64" => Ok(Box::new(Base64::default())),
         "gzip" => Ok(Box::new(Gzip::default())),
         "zlib" => Ok(Box::new(Zlib::default())),
@@ -162,10 +162,10 @@ pub fn finish(postprocessors: &mut [Box<dyn Postprocessor>], alias: &str) -> Res
 }
 
 #[derive(Default)]
-pub(crate) struct Lines {}
-impl Postprocessor for Lines {
+pub(crate) struct Join {}
+impl Postprocessor for Join {
     fn name(&self) -> &str {
-        "lines"
+        "join"
     }
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -336,7 +336,7 @@ mod test {
     use super::*;
 
     const LOOKUP_TABLE: [&str; 12] = [
-        "lines",
+        "join",
         "base64",
         "gzip",
         "zlib",
@@ -362,7 +362,7 @@ mod test {
 
     #[test]
     fn line() -> Result<()> {
-        let mut line = Lines {};
+        let mut line = Join {};
         let data: [u8; 0] = [];
         assert_eq!(Ok(vec![vec![b'\n']]), line.process(0, 0, &data));
         assert_eq!(

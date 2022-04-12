@@ -154,10 +154,10 @@ pub(crate) struct Run {
     #[clap(short, long, default_value = "-")]
     pub(crate) outfile: String,
     /// Preprocessors to pass data through before decoding
-    #[clap(long, default_value = "lines")]
+    #[clap(long, default_value = "split")]
     pub(crate) preprocessor: String,
     /// Postprocessor to pass data through after encoding
-    #[clap(long, default_value = "lines")]
+    #[clap(long, default_value = "join")]
     pub(crate) postprocessor: String,
     /// Specifies the port that is printed to the output
 

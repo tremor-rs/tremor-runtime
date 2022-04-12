@@ -261,7 +261,6 @@ async fn ws_client_bad_config() -> Result<()> {
 
     let defn = literal!({
       "codec": "string",
-      "preprocessors": ["lines"],
       "config": {
           "snot": "ws://127.0.0.1:8080",
           "tls": {

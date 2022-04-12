@@ -16,7 +16,7 @@ flow
   define connector out from file
   with
     codec = "string",
-    postprocessors = ["lines"],
+    postprocessors = ["join"],
     config = {
       "path": "../gen.log",
       "mode": "truncate"
