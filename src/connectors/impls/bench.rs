@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![cfg(not(tarpaulin_include))] // This is for benchmarking and testing
+// #![cfg_attr(coverage, no_coverage)] // This is for benchmarking and testing
 
 use crate::connectors::prelude::*;
 use hdrhistogram::Histogram;

@@ -69,7 +69,6 @@ async fn handle_signals(signals: Signals, world: World) {
     }
 }
 impl ServerRun {
-    #[cfg(not(tarpaulin_include))]
     #[allow(clippy::too_many_lines)]
     async fn run_dun(&self) -> Result<i32> {
         use tremor_runtime::system::WorldConfig;
@@ -212,7 +211,6 @@ impl ServerRun {
 }
 
 impl ServerCommand {
-    #[cfg(not(tarpaulin_include))]
     pub(crate) async fn run(&self) {
         match self {
             ServerCommand::Run(cmd) => cmd.run().await,

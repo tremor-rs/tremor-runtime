@@ -42,7 +42,6 @@ pub fn value_count(
 
 /// Generate an influx-compatible metrics value based on a named value, which will be encoded into a field
 #[must_use]
-#[cfg(not(tarpaulin_include))] // just a simple literal construction
 pub fn value_named(
     metric_name: Cow<'static, str>,
     tags: HashMap<Cow<'static, str>, Value<'static>>,
@@ -62,7 +61,6 @@ pub fn value_named(
 
 /// Generate an influx-compatible metrics value based on a given set of fields
 #[must_use]
-#[cfg(not(tarpaulin_include))] // just a simple literal construction
 pub fn value(
     metric_name: Cow<'static, str>,
     tags: HashMap<Cow<'static, str>, Value<'static>>,

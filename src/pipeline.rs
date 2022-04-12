@@ -89,7 +89,6 @@ impl Addr {
     }
 }
 
-#[cfg(not(tarpaulin_include))]
 impl fmt::Debug for Addr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Pipeline({})", self.alias)
@@ -451,7 +450,6 @@ async fn handle_cf_msg(msg: CfMsg, pipeline: &mut ExecutableGraph, inputs: &Inpu
     Ok(())
 }
 
-#[cfg(not(tarpaulin_include))]
 fn maybe_send(r: Result<()>) {
     if let Err(e) = r {
         error!("Failed to send : {}", e);

@@ -164,7 +164,6 @@ impl BInflux {
 }
 
 impl Codec for BInflux {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "binflux"
     }

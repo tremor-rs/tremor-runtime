@@ -20,7 +20,7 @@
 //!
 //! See [Config](struct.Config.html) for details.
 
-#![cfg(not(tarpaulin_include))]
+// #![cfg_attr(coverage, no_coverage)]
 
 use crate::connectors::gcp::{
     auth::{self, GcsClient},

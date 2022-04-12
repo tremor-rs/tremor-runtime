@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // this is not enabled
-#![cfg(not(tarpaulin_include))]
+// #![cfg_attr(coverage, no_coverage)]
 
 use std::fmt;
 

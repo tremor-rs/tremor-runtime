@@ -408,7 +408,6 @@ pub enum Token<'input> {
 impl<'input> Token<'input> {
     /// Is the token ignorable except when syntax or error highlighting.
     /// Is the token insignificant when parsing ( a correct ... ) source.
-    #[cfg(not(tarpaulin_include))] // matches is not supported
     pub(crate) fn is_ignorable(&self) -> bool {
         matches!(
             *self,
@@ -417,7 +416,6 @@ impl<'input> Token<'input> {
     }
 
     /// Is the token a keyword, excluding keyword literals ( eg: true, nil )
-    #[cfg(not(tarpaulin_include))] // matches is not supported
     pub(crate) fn is_keyword(&self) -> bool {
         matches!(
             *self,
@@ -479,7 +477,6 @@ impl<'input> Token<'input> {
     }
 
     /// Is the token a literal, excluding list and record literals
-    #[cfg(not(tarpaulin_include))] // matches is not supported
     pub(crate) fn is_literal(&self) -> bool {
         matches!(
             *self,
@@ -492,7 +489,6 @@ impl<'input> Token<'input> {
     }
 
     // It's text-like or string-like notation such as String, char, regex ...
-    #[cfg(not(tarpaulin_include))] // matches is not supported
     pub(crate) fn is_string_like(&self) -> bool {
         matches!(
             *self,
@@ -506,7 +502,6 @@ impl<'input> Token<'input> {
     }
 
     /// Is the token a builtin delimiter symbol
-    #[cfg(not(tarpaulin_include))] // matches is not supported
     pub(crate) fn is_symbol(&self) -> bool {
         matches!(
             *self,
@@ -531,7 +526,6 @@ impl<'input> Token<'input> {
     }
 
     /// Is the token a builtin expression operator ( excludes forms such as 'match', 'let'
-    #[cfg(not(tarpaulin_include))] // matches is not supported
     pub(crate) fn is_operator(&self) -> bool {
         matches!(
             *self,
@@ -581,7 +575,7 @@ impl<'input> __ToTriple<'input> for Spanned<'input> {
 
 // Format a token for display
 //
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl<'input> fmt::Display for Token<'input> {
     #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

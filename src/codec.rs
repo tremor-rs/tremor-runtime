@@ -48,7 +48,7 @@ pub trait Codec: Send + Sync {
     /// e.g. application/json
     ///
     /// The returned mime types should be unique to this codec
-    #[cfg(not(tarpaulin_include))]
+
     fn mime_types(&self) -> Vec<&'static str> {
         vec![]
     }
@@ -73,7 +73,7 @@ pub trait Codec: Send + Sync {
     ///
     /// # Errors
     ///  * when we can't write encode to the given vector
-    #[cfg(not(tarpaulin_include))]
+
     fn encode_into(&self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
         let mut res = self.encode(data)?;
         std::mem::swap(&mut res, dst);

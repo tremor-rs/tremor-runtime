@@ -181,7 +181,6 @@ pub(crate) trait Sink: Send {
     /// }
     /// ```
     ///
-    #[cfg(not(tarpaulin_include))] // trait placeholder function
     async fn metrics(&mut self, _timestamp: u64, _ctx: &SinkContext) -> Vec<EventPayload> {
         vec![]
     }
@@ -234,7 +233,6 @@ pub(crate) trait Sink: Send {
 
     /// if true events are sent asynchronously, not necessarily when `on_event` returns.
     /// if false events can be considered delivered once `on_event` returns.
-    #[cfg(not(tarpaulin_include))] // trait placeholder function
     fn asynchronous(&self) -> bool {
         false
     }
@@ -248,7 +246,6 @@ pub(crate) trait StreamWriter: Send + Sync {
     /// handle the stream being done, by error or regular end of stream
     /// This controls the reaction of the runtime:
     /// Should the connector be considered disconnected now? Or is this just one stream amongst many?
-    #[cfg(not(tarpaulin_include))] // trait placeholder function
     async fn on_done(&mut self, _stream: u64) -> Result<StreamDone> {
         Ok(StreamDone::StreamClosed)
     }
@@ -568,7 +565,6 @@ enum SinkState {
     Stopped,
 }
 
-#[cfg(not(tarpaulin_include))]
 impl std::fmt::Display for SinkState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{self:?}")

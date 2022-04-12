@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // Don't cover this file it's only getters
-#![cfg(not(tarpaulin_include))]
+// #![cfg_attr(coverage, no_coverage)]
 use crate::{
     arena,
     ast::{

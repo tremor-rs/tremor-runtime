@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // This is terminal related for colorful printing
-#![cfg(not(tarpaulin_include))]
+// #![cfg_attr(coverage, no_coverage)]
 
 use crate::{
     arena::Arena,

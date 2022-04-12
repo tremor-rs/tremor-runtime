@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // this are macros
-#![cfg(not(tarpaulin_include))]
+// #![cfg_attr(coverage, no_coverage)]
 
 /// A macro that makes it simple to create a operator and the
 /// required factory usage is:

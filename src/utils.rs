@@ -14,7 +14,7 @@
 use crate::errors::{Error, Kind as ErrorKind};
 /// Fetches a hostname with `tremor-host.local` being the default
 #[must_use]
-#[cfg(not(tarpaulin_include))]
+
 pub fn hostname() -> String {
     hostname::get()
         .map_err(Error::from)

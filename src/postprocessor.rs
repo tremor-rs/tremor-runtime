@@ -55,7 +55,7 @@ pub trait Postprocessor: Send + Sync {
 /// # Errors
 ///
 ///   * Errors if the postprocessor is not known
-#[cfg(not(tarpaulin_include))]
+
 pub fn lookup_with_config(config: &PostprocessorConfig) -> Result<Box<dyn Postprocessor>> {
     match config.name.as_str() {
         "lines" => Ok(Box::new(Lines::default())),
@@ -164,7 +164,6 @@ pub fn finish(postprocessors: &mut [Box<dyn Postprocessor>], alias: &str) -> Res
 #[derive(Default)]
 pub(crate) struct Lines {}
 impl Postprocessor for Lines {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "lines"
     }
@@ -181,7 +180,6 @@ impl Postprocessor for Lines {
 #[derive(Default)]
 pub(crate) struct Base64 {}
 impl Postprocessor for Base64 {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "base64"
     }
@@ -194,7 +192,6 @@ impl Postprocessor for Base64 {
 #[derive(Default)]
 pub(crate) struct Gzip {}
 impl Postprocessor for Gzip {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "gzip"
     }
@@ -211,7 +208,6 @@ impl Postprocessor for Gzip {
 #[derive(Default)]
 pub(crate) struct Zlib {}
 impl Postprocessor for Zlib {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "zlib"
     }
@@ -227,7 +223,6 @@ impl Postprocessor for Zlib {
 #[derive(Default)]
 pub(crate) struct Xz2 {}
 impl Postprocessor for Xz2 {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "xz2"
     }
@@ -243,7 +238,6 @@ impl Postprocessor for Xz2 {
 #[derive(Default)]
 pub(crate) struct Snappy {}
 impl Postprocessor for Snappy {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "snappy"
     }
@@ -262,7 +256,6 @@ impl Postprocessor for Snappy {
 #[derive(Default)]
 pub(crate) struct Lz4 {}
 impl Postprocessor for Lz4 {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "lz4"
     }
@@ -278,7 +271,6 @@ impl Postprocessor for Lz4 {
 
 pub(crate) struct AttachIngresTs {}
 impl Postprocessor for AttachIngresTs {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "attach-ingress-ts"
     }
@@ -295,7 +287,6 @@ impl Postprocessor for AttachIngresTs {
 #[derive(Clone, Default)]
 pub(crate) struct LengthPrefix {}
 impl Postprocessor for LengthPrefix {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "length-prefix"
     }
@@ -311,7 +302,6 @@ impl Postprocessor for LengthPrefix {
 #[derive(Clone, Default)]
 pub(crate) struct TextualLength {}
 impl Postprocessor for TextualLength {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "textual-length-prefix"
     }
@@ -330,7 +320,6 @@ impl Postprocessor for TextualLength {
 #[derive(Clone, Default, Debug)]
 pub(crate) struct Zstd {}
 impl Postprocessor for Zstd {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "zstd"
     }

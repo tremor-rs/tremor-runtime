@@ -21,7 +21,7 @@
 //!
 //! This operator takes no configuration
 
-#![cfg(not(tarpaulin_include))]
+// #![cfg_attr(coverage, no_coverage)]
 
 use crate::sink::prelude::*;
 use async_std::io;

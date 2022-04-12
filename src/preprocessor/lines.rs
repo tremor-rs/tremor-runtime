@@ -160,7 +160,6 @@ impl Lines {
 }
 
 impl Preprocessor for Lines {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "lines"
     }

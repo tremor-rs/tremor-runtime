@@ -18,11 +18,10 @@ use super::prelude::*;
 pub(crate) struct Cbor {}
 
 impl Codec for Cbor {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "yaml"
     }
-    #[cfg(not(tarpaulin_include))]
+
     fn mime_types(&self) -> Vec<&str> {
         vec!["application/cbor"]
     }
@@ -45,7 +44,6 @@ impl Codec for Cbor {
         Ok(res)
     }
 
-    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }

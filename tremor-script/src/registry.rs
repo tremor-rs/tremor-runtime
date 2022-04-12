@@ -206,7 +206,7 @@ pub enum FunctionError {
     Error(Box<Error>),
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl PartialEq for FunctionError {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -249,7 +249,7 @@ impl PartialEq for FunctionError {
     }
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl From<Error> for FunctionError {
     fn from(error: Error) -> Self {
         Self::Error(Box::new(error))
@@ -329,13 +329,11 @@ impl TremorFnWrapper {
 
     /// Check if a given arity is valit for the function
     #[must_use]
-    #[cfg(not(tarpaulin_include))] // just a passthrough
     pub fn valid_arity(&self, n: usize) -> bool {
         self.fun.valid_arity(n)
     }
     /// Returns the functions arity
     #[must_use]
-    #[cfg(not(tarpaulin_include))] // just a passthrough
     pub fn arity(&self) -> RangeInclusive<usize> {
         self.fun.arity()
     }
@@ -356,13 +354,13 @@ impl Clone for TremorFnWrapper {
         }
     }
 }
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl fmt::Debug for TremorFnWrapper {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}::{}", self.module, self.name)
     }
 }
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl PartialEq for TremorFnWrapper {
     fn eq(&self, other: &Self) -> bool {
         self.module == other.module && self.name == other.name
@@ -652,7 +650,7 @@ macro_rules! tremor_fn_ {
     };
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl Default for Registry {
     fn default() -> Self {
         Self {
@@ -778,14 +776,14 @@ impl TremorAggrFnWrapper {
     }
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl fmt::Debug for TremorAggrFnWrapper {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "(aggr){}::{}", self.module, self.name)
     }
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl PartialEq for TremorAggrFnWrapper {
     fn eq(&self, other: &Self) -> bool {
         self.module == other.module && self.name == other.name
@@ -798,7 +796,7 @@ pub struct Aggr {
     functions: HashMap<String, HashMap<String, TremorAggrFnWrapper>>,
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl Default for Aggr {
     fn default() -> Self {
         Self {

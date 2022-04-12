@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // this are macros
-#![cfg(not(tarpaulin_include))]
+// #![cfg_attr(coverage, no_coverage)]
 
 macro_rules! instance {
     // crate::INSTANCE is never mutated after the initial setting

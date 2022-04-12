@@ -37,7 +37,8 @@ where
     // use the current binary if `tremor` is used as an executable
     // this can be overwritten by giving it a path
     if name == "tremor" {
-        env::current_exe()
+        env::var("TREMOR_BIN")
+            .map_or_else(|_| env::current_exe(), |p| Ok(PathBuf::from(p)))
             .map_err(|e| Error::from(format!("Unable to execute current tremor binary: {}", e)))
     } else {
         env::var_os("PATH")
