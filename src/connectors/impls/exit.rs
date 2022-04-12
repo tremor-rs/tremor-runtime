@@ -34,12 +34,8 @@ pub struct Config {
     #[serde(default)]
     delay: Option<u64>,
 
-    #[serde(default = "default_graceful")]
+    #[serde(default = "default_true")]
     graceful: bool,
-}
-
-fn default_graceful() -> bool {
-    true
 }
 
 impl ConfigImpl for Config {}
