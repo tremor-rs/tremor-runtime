@@ -174,6 +174,7 @@ impl Sink for UnixSocketSink {
             if let Err(e) = self.write(data).await {
                 error!("{ctx} Error sending data: {e}. Initiating Reconnect...");
                 self.stream = None;
+                ctx.notifier().connection_lost().await?;
                 return Err(e);
             }
         }

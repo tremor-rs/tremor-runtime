@@ -15,19 +15,17 @@
 use std::time::Duration;
 
 use crate::{
-    connectors::tests::{free_port, tcp::EchoServer, ConnectorHarness},
+    connectors::tests::{free_port, setup_for_tls, tcp::EchoServer, ConnectorHarness},
     errors::Result,
 };
-use tremor_common::{
-    ids::{Id, SinkId},
-    ports::IN,
-};
+use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, Value};
 use value_trait::{Builder, ValueAccess};
 
 #[async_std::test]
 async fn tls_client() -> Result<()> {
+    setup_for_tls();
     tcp_client_test(true).await
 }
 
@@ -82,11 +80,7 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
         .expect("No pipeline connected to tcp_client IN port");
     connector.start().await?;
     connector.wait_for_connected().await?;
-
-    let cf = in_pipe.get_contraflow().await?;
-    assert_eq!(CbAction::SinkStart(SinkId::new(1)), cf.cb);
-    let cf_event = in_pipe.get_contraflow().await?;
-    assert_eq!(CbAction::Open, cf_event.cb);
+    connector.consume_initial_sink_contraflow().await?;
 
     let id = EventId::from_id(1, 1, 1);
     let event = Event {

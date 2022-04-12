@@ -190,6 +190,15 @@ impl Source for UnixSocketSource {
                         let stream_id: u64 = stream_id_gen.next_stream_id();
                         let connection_meta = ConnectionMeta(stream_id);
 
+                        /*
+                            {
+                                "unix_socket_server": {
+                                    "peer": 123
+                                }
+                            }
+
+                            let $unix_socket_server = { "peer": 123 };
+                        */
                         let meta = ctx.meta(literal!({ "peer": stream_id }));
                         let reader = UnixSocketReader::new(
                             stream.clone(),

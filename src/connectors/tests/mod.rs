@@ -491,15 +491,18 @@ pub(crate) fn setup_for_tls() {
     // create TLS cert and key only once at the beginning of the test execution to avoid
     // multiple threads stepping on each others toes
     TLS_SETUP.call_once(|| {
+        warn!("Refreshing TLS Cert/Key...");
         let mut cmd = Command::new("./tests/refresh_tls_cert.sh")
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
             .expect("Unable to spawn ./tests/refresh_tls_cert.sh");
-        let out = cmd.wait().expect("Failed top refresh certs/keys");
+        let out = cmd.wait().expect("Failed to refresh certs/keys");
         match out.code() {
-            Some(0) => {}
-            _ => panic!("Error creating tls certificate for connector_ws test"),
+            Some(0) => {
+                warn!("Done refreshing TLS Cert/Key.");
+            }
+            _ => panic!("Error creating tls certificate and key"),
         }
     });
 }

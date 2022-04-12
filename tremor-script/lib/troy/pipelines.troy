@@ -1,4 +1,4 @@
 define pipeline passthrough
 pipeline
-  select event from in into out
+  select event from in into out;
 end

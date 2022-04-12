@@ -113,13 +113,18 @@ impl EchoServer {
                         let tcp = stream.clone();
                         debug!("[ECHO SERVER] New connection from {addr}");
                         let conn = if let Some(tls_acceptor) = tls_acceptor {
-                            let tls_stream = tls_acceptor.accept(stream).await?;
-                            task::spawn(Self::handle_conn(
-                                tls_stream,
-                                tcp,
-                                addr,
-                                server_run.clone(),
-                            ))
+                            match tls_acceptor.accept(stream).await {
+                                Ok(tls_stream) => task::spawn(Self::handle_conn(
+                                    tls_stream,
+                                    tcp,
+                                    addr,
+                                    server_run.clone(),
+                                )),
+                                Err(e) => {
+                                    error!("[ECHO SERVER] Error accepting TLS Connection: {e}");
+                                    continue;
+                                }
+                            }
                         } else {
                             task::spawn(Self::handle_conn(stream, tcp, addr, server_run.clone()))
                         };

@@ -29,7 +29,7 @@ use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value::StaticValue};
 use value_trait::{Mutable, Value, ValueAccess};
 
-const ELASTICSEARCH_VERSION: &str = "7.17.1";
+const ELASTICSEARCH_VERSION: &str = "7.17.2";
 
 #[async_std::test]
 async fn connector_elastic() -> Result<()> {
@@ -40,8 +40,9 @@ async fn connector_elastic() -> Result<()> {
         .with_env_var("discovery.type", "single-node")
         .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m");
 
-    // let port = super::free_port::find_free_tcp_port().await?;
-    let container = docker.run_with_args(image, RunArgs::default());
+    let port = super::free_port::find_free_tcp_port().await?;
+    let container =
+        docker.run_with_args(image, RunArgs::default().with_mapped_port((port, 9200_u16)));
     // signal handling - stop and rm the container, even if we quit the test in the middle of everything
     let container_id = container.id().to_string();
     let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
