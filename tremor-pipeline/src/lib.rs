@@ -307,7 +307,7 @@ impl CbAction {
     /// This message should always be delivered and not filtered out
     #[must_use]
     pub fn always_deliver(self) -> bool {
-        self.is_cb() || matches!(self, CbAction::Drained(_, _))
+        self.is_cb() || matches!(self, CbAction::Drained(_, _) | CbAction::SinkStart(_))
     }
     /// This is a Circuit Breaker related message
     #[must_use]

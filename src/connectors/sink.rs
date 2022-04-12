@@ -712,11 +712,13 @@ where
                                 }
                             } else {
                                 debug!(
-                                    "{} Not all drains received yet, waiting for drains from: {:?}",
+                                    "{} Not all drains received yet, waiting for drains from: {}",
                                     self.ctx,
                                     self.starts_received
                                         .difference(&self.drains_received)
-                                        .collect::<Vec<_>>()
+                                        .map(ToString::to_string)
+                                        .collect::<Vec<String>>()
+                                        .join(",")
                                 );
                             }
                         }
