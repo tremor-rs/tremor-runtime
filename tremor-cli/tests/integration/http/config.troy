@@ -38,6 +38,7 @@ end;
 
 define flow client
 flow
+  use std::time::nanos;
   use integration;
   use troy::pipelines;
   use troy::connectors;
@@ -67,7 +68,7 @@ flow
       size = 4
     end;
     select array::sort(aggr::win::collect_flattened(event)) from in[four] into out;
-    select event from in where event == "exit" into exit;
+    select { "delay": nanos::from_secs(1) } from in where event == "exit" into exit;
   end;
   create pipeline collect;
 
