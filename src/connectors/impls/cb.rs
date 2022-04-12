@@ -32,17 +32,13 @@ pub struct Config {
     #[serde(default = "default_timeout")]
     timeout: u64,
     // only expect the latest event to be acked, the earliest to be failed
-    #[serde(default = "default_expect_batched")]
+    #[serde(default = "default_false")]
     expect_batched: bool,
 }
 
 /// 10 seconds
 fn default_timeout() -> u64 {
     10_000_000_000
-}
-
-fn default_expect_batched() -> bool {
-    false
 }
 
 impl ConfigImpl for Config {}

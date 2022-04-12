@@ -51,3 +51,10 @@ pub(crate) fn default_buf_size() -> usize {
 
 /// Encapsulates connector configuration
 pub(crate) use crate::connectors::ConnectorConfig;
+
+pub(crate) fn default_true() -> bool {
+    true
+}
+pub(crate) fn default_false() -> bool {
+    false
+}
