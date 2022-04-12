@@ -31,21 +31,11 @@ const URL_SCHEME: &str = "tremor-ws-client";
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     url: Url<super::WsDefaults>,
-    //#[serde(default = "default_ttl")]
-    //ttl: Option<u32>,
-    #[serde(default = "default_no_delay")]
+    #[serde(default = "default_true")]
     no_delay: bool,
     #[serde(with = "either::serde_untagged_optional", default = "Default::default")]
     tls: Option<Either<TLSClientConfig, bool>>,
 }
-
-fn default_no_delay() -> bool {
-    true
-}
-
-//fn default_ttl() -> Option<u32> {
-//    None
-//}
 
 impl ConfigImpl for Config {}
 

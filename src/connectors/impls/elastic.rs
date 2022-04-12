@@ -43,7 +43,7 @@ pub struct Config {
     pub concurrency: usize,
 
     /// if true, ES success and error responses will contain the whole event payload they are based upon
-    #[serde(default = "Default::default")]
+    #[serde(default = "default_false")]
     pub include_payload_in_response: bool,
 }
 impl ConfigImpl for Config {}

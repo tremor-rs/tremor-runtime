@@ -36,16 +36,12 @@ pub struct Config {
     url: Url<super::TcpDefaults>,
     // IP_TTL for ipv4 and hop limit for ipv6
     //ttl: Option<u32>,
-    #[serde(default = "default_no_delay")]
+    #[serde(default = "default_true")]
     no_delay: bool,
     #[serde(default = "default_buf_size")]
     buf_size: usize,
     #[serde(with = "either::serde_untagged_optional", default = "Default::default")]
     tls: Option<Either<TLSClientConfig, bool>>,
-}
-
-fn default_no_delay() -> bool {
-    true
 }
 
 impl ConfigImpl for Config {}

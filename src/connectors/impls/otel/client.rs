@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{
-    common::{d_true, OtelDefaults},
-    logs, metrics, trace,
-};
+use super::{common::OtelDefaults, logs, metrics, trace};
 use crate::connectors::prelude::*;
 use tonic::transport::Channel as TonicChannel;
 use tonic::transport::Endpoint as TonicEndpoint;
@@ -34,13 +31,13 @@ pub(crate) struct Config {
     /// The hostname or IP address for the remote OpenTelemetry collector endpoint
     #[serde(default = "Default::default")]
     pub(crate) url: Url<OtelDefaults>,
-    #[serde(default = "d_true")]
+    #[serde(default = "default_true")]
     pub(crate) logs: bool,
     /// Enables the trace service
-    #[serde(default = "d_true")]
+    #[serde(default = "default_true")]
     pub(crate) trace: bool,
     /// Enables the metrics service
-    #[serde(default = "d_true")]
+    #[serde(default = "default_true")]
     pub(crate) metrics: bool,
 }
 

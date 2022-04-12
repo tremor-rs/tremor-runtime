@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::ConnectorType;
-use crate::Result;
+use crate::connectors::prelude::*;
 use simd_json::ValueType;
 use tremor_script::{
     ast::{self, Helper},
@@ -39,17 +38,13 @@ pub enum Reconnect {
         /// maximum number of retries to execute
         max_retries: Option<u64>,
         /// Randomize the growth rate
-        #[serde(default = "default_randomized")]
+        #[serde(default = "default_true")]
         randomized: bool,
     },
 }
 
 fn default_growth_rate() -> f64 {
     1.5
-}
-
-fn default_randomized() -> bool {
-    true
 }
 
 impl Default for Reconnect {

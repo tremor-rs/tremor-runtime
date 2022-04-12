@@ -57,7 +57,7 @@ pub struct Config {
     ///
     /// This might lead to events being sent multiple times.
     /// This should not be used when persistent errors are expected (e.g. if the message content is malformed and will lead to repeated errors)
-    #[serde(default = "Default::default")]
+    #[serde(default = "default_false")]
     pub retry_failed_events: bool,
 
     /// Optional rdkafka configuration

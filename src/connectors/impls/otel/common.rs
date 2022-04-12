@@ -31,9 +31,7 @@ impl url::Defaults for OtelDefaults {
     const HOST: &'static str = "localhost";
     const PORT: u16 = 4317;
 }
-pub(crate) fn d_true() -> bool {
-    true
-}
+
 pub(crate) const EMPTY: Vec<Value> = Vec::new();
 
 pub(crate) fn any_value_to_json(pb: AnyValue) -> Value<'static> {

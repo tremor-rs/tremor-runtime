@@ -42,13 +42,13 @@ pub struct Config {
     pub chunk_size: Option<usize>,
     /// Number of iterations through the whole source to stop after
     pub iters: Option<usize>,
-    #[serde(default = "Default::default")]
+    #[serde(default = "default_false")]
     pub base64: bool,
 
-    #[serde(default = "Default::default")]
+    #[serde(default = "default_false")]
     pub is_transactional: bool,
 
-    #[serde(default = "Default::default")]
+    #[serde(default = "default_false")]
     pub structured: bool,
 
     /// Number of seconds to collect data before the system is stopped.
