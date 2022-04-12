@@ -38,7 +38,6 @@ end;
 
 define flow client
 flow
-  use std::time::nanos;
   use integration;
   use troy::pipelines;
   use troy::connectors;
@@ -63,6 +62,7 @@ flow
   into out, exit
   pipeline
     use std::array;
+    use std::time::nanos;
     define window four from tumbling
     with
       size = 4
