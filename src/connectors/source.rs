@@ -804,7 +804,7 @@ where
             CbAction::SinkStart(uid) => {
                 debug!("{ctx} Received SinkStart contraflow message from {uid}");
                 self.started_sinks.insert(uid);
-                self.num_started_sinks = self.started_sinks.len();
+                self.num_started_sinks = self.started_sinks.len() as u64;
                 Control::Continue
             }
             CbAction::Drained(source_id, sink_id) => {
