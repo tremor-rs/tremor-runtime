@@ -181,7 +181,7 @@ async fn connector_kafka_producer() -> Result<()> {
     {
         Some(Ok(msg)) => {
             assert_eq!(msg.key(), Some("snot".as_bytes()));
-            assert_eq!(msg.payload(), Some("{\"snot\":\"badger\"}\n".as_bytes()));
+            assert_eq!(msg.payload(), Some("{\"snot\":\"badger\"}".as_bytes()));
             consumer.commit_message(&msg, CommitMode::Sync).unwrap();
         }
         Some(Err(e)) => {
@@ -218,7 +218,7 @@ async fn connector_kafka_producer() -> Result<()> {
     {
         Some(Ok(msg)) => {
             assert_eq!(Some("badger".as_bytes()), msg.key());
-            assert_eq!(Some("[1,2,3]\n".as_bytes()), msg.payload());
+            assert_eq!(Some("[1,2,3]".as_bytes()), msg.payload());
             assert_eq!(0_i32, msg.partition());
             assert_eq!(Some(123), msg.timestamp().to_millis());
             let headers = msg.headers().unwrap();
@@ -295,14 +295,14 @@ async fn connector_kafka_producer() -> Result<()> {
         batchman_msg.key()
     );
     assert_eq!(
-        Some("{\"field1\":0.1,\"field3\":[]}\n".as_bytes()),
+        Some("{\"field1\":0.1,\"field3\":[]}".as_bytes()),
         batchman_msg.payload()
     );
     assert!(batchman_msg.headers().is_none());
 
     assert_eq!(Some("snot".as_bytes()), snot_msg.key());
     assert_eq!(
-        Some("{\"field2\":\"just a string\"}\n".as_bytes()),
+        Some("{\"field2\":\"just a string\"}".as_bytes()),
         snot_msg.payload()
     );
     assert!(snot_msg.headers().is_none());
