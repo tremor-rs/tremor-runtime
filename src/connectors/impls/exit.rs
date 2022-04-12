@@ -44,7 +44,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             delay: None,
-            graceful: default_graceful(),
+            graceful: default_true(),
         }
     }
 }
