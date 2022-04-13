@@ -13,9 +13,7 @@ flow
     define connector clickhouse from clickhouse
     with
         config = {
-            "host": "localhost",
-            # Defaults to 9000 - the default clickhouse port
-            "port": 9000,
+            "url": "localhost",
             "database": "tremor_testing",
 
 
