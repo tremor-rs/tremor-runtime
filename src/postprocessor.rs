@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod compress;
 mod gelf;
-pub(crate) use gelf::Gelf;
 pub(crate) mod separate;
 
 use crate::config::Postprocessor as PostprocessorConfig;
 use crate::errors::Result;
 use byteorder::{BigEndian, WriteBytesExt};
+pub(crate) use gelf::Gelf;
 use std::default::Default;
 use tremor_common::time::nanotime;
 /// Set of Postprocessors
 pub type Postprocessors = Vec<Box<dyn Postprocessor>>;
-use std::io::Write;
-use std::mem;
-use std::str;
+pub(crate) use compress::Compress;
+use std::{io::Write, mem, str};
 
 trait PostprocessorState {}
 /// Postprocessor trait
@@ -59,18 +59,13 @@ pub trait Postprocessor: Send + Sync {
 
 pub fn lookup_with_config(config: &PostprocessorConfig) -> Result<Box<dyn Postprocessor>> {
     match config.name.as_str() {
+        "compress" => Ok(Box::new(Compress::from_config(config.config.as_ref())?)),
         "separate" => Ok(Box::new(separate::Separate::from_config(&config.config)?)),
         "base64" => Ok(Box::new(Base64::default())),
-        "gzip" => Ok(Box::new(Gzip::default())),
-        "zlib" => Ok(Box::new(Zlib::default())),
-        "xz2" => Ok(Box::new(Xz2::default())),
-        "snappy" => Ok(Box::new(Snappy::default())),
-        "lz4" => Ok(Box::new(Lz4::default())),
         "ingest-ns" => Ok(Box::new(AttachIngresTs {})),
         "length-prefixed" => Ok(Box::new(LengthPrefix::default())),
         "gelf-chunking" => Ok(Box::new(Gelf::default())),
         "textual-length-prefix" => Ok(Box::new(TextualLength::default())),
-        "zstd" => Ok(Box::new(Zstd::default())),
         name => Err(format!("Postprocessor '{}' not found.", name).into()),
     }
 }
@@ -174,86 +169,6 @@ impl Postprocessor for Base64 {
     }
 }
 
-#[derive(Default)]
-pub(crate) struct Gzip {}
-impl Postprocessor for Gzip {
-    fn name(&self) -> &str {
-        "gzip"
-    }
-
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        use libflate::gzip::Encoder;
-
-        let mut encoder = Encoder::new(Vec::new())?;
-        encoder.write_all(data)?;
-        Ok(vec![encoder.finish().into_result()?])
-    }
-}
-
-#[derive(Default)]
-pub(crate) struct Zlib {}
-impl Postprocessor for Zlib {
-    fn name(&self) -> &str {
-        "zlib"
-    }
-
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        use libflate::zlib::Encoder;
-        let mut encoder = Encoder::new(Vec::new())?;
-        encoder.write_all(data)?;
-        Ok(vec![encoder.finish().into_result()?])
-    }
-}
-
-#[derive(Default)]
-pub(crate) struct Xz2 {}
-impl Postprocessor for Xz2 {
-    fn name(&self) -> &str {
-        "xz2"
-    }
-
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        use xz2::write::XzEncoder as Encoder;
-        let mut encoder = Encoder::new(Vec::new(), 9);
-        encoder.write_all(data)?;
-        Ok(vec![encoder.finish()?])
-    }
-}
-
-#[derive(Default)]
-pub(crate) struct Snappy {}
-impl Postprocessor for Snappy {
-    fn name(&self) -> &str {
-        "snappy"
-    }
-
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        use snap::write::FrameEncoder;
-        let mut writer = FrameEncoder::new(vec![]);
-        writer.write_all(data)?;
-        let compressed = writer
-            .into_inner()
-            .map_err(|e| format!("Snappy compression postprocessor error: {}", e))?;
-        Ok(vec![compressed])
-    }
-}
-
-#[derive(Default)]
-pub(crate) struct Lz4 {}
-impl Postprocessor for Lz4 {
-    fn name(&self) -> &str {
-        "lz4"
-    }
-
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        use lz4::EncoderBuilder;
-        let buffer = Vec::<u8>::new();
-        let mut encoder = EncoderBuilder::new().level(4).build(buffer)?;
-        encoder.write_all(data)?;
-        Ok(vec![encoder.finish().0])
-    }
-}
-
 pub(crate) struct AttachIngresTs {}
 impl Postprocessor for AttachIngresTs {
     fn name(&self) -> &str {
@@ -302,46 +217,42 @@ impl Postprocessor for TextualLength {
     }
 }
 
-#[derive(Clone, Default, Debug)]
-pub(crate) struct Zstd {}
-impl Postprocessor for Zstd {
-    fn name(&self) -> &str {
-        "zstd"
-    }
-
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        // Value of 0 indicates default level for encode.
-        let compressed = zstd::encode_all(data, 0)?;
-        Ok(vec![compressed])
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::config::NameWithConfig;
+    use tremor_value::literal;
 
-    const LOOKUP_TABLE: [&str; 12] = [
+    const LOOKUP_TABLE: [&str; 6] = [
         "separate",
         "base64",
-        "gzip",
-        "zlib",
-        "xz2",
-        "snappy",
-        "lz4",
         "gelf-chunking",
         "ingest-ns",
         "length-prefixed",
         "textual-length-prefix",
-        "zstd",
     ];
+    const COMPRESSION: [&str; 6] = ["gzip", "zlib", "xz2", "snappy", "lz4", "zstd"];
 
     #[test]
-    fn test_lookup() -> Result<()> {
+    fn test_lookup() {
         for t in LOOKUP_TABLE.iter() {
+            dbg!(t);
             assert!(lookup(t).is_ok());
         }
         let t = "snot";
         assert!(lookup(&t).is_err());
+    }
+
+    #[test]
+    fn test_lookup_compression() -> Result<()> {
+        for c in COMPRESSION {
+            let config = literal!({"name": "compress", "config":{"algorithm": *c}});
+            let config = NameWithConfig::try_from(&config)?;
+            assert!(lookup_with_config(&config).is_ok());
+        }
+        let config = literal!({"name": "compress", "config":{"algorithm": "snot"}});
+        let config = NameWithConfig::try_from(&config)?;
+        assert!(lookup_with_config(&config).is_err());
         Ok(())
     }
 

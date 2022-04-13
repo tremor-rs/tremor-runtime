@@ -91,6 +91,7 @@
 - metronome interval is now in nanoseconds (as all other timings)
 - Most connectors require a specified codec now instead of using JSON as a default
 - `merge` no longer treats `null` in the spec as a delete option but rather as a normal value
+- Combine all compression and decompression pre/postprocessors.
 
 ## 0.11.4
 - Update to clap 3, this forced some breaking changes:

@@ -20,28 +20,18 @@ use rand::{self, RngCore};
 const FIVE_SEC: u64 = 5_000_000_000;
 
 #[derive(Clone)]
-pub struct Gelf {
+pub(crate) struct Gelf {
     buffer: HashMap<u64, GelfMsgs>,
     last_buffer: HashMap<u64, GelfMsgs>,
     last_swap: u64,
-    is_tcp: bool,
 }
 
 impl Gelf {
-    pub fn default() -> Self {
+    pub(crate) fn default() -> Self {
         Self {
             buffer: HashMap::new(),
             last_buffer: HashMap::new(),
             last_swap: 0,
-            is_tcp: false,
-        }
-    }
-    pub fn tcp() -> Self {
-        Self {
-            buffer: HashMap::new(),
-            last_buffer: HashMap::new(),
-            last_swap: 0,
-            is_tcp: true,
         }
     }
 }
@@ -116,17 +106,7 @@ impl Preprocessor for Gelf {
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         let msg = decode_gelf(data)?;
         if let Some(data) = self.enqueue(*ingest_ns, msg) {
-            // TODO: WHY :sob:
-            let len = if self.is_tcp {
-                data.len() - 1
-            } else {
-                data.len()
-            };
-            if let Some(d) = data.get(0..len) {
-                Ok(vec![d.to_vec()])
-            } else {
-                Ok(vec![])
-            }
+            Ok(vec![data])
         } else {
             Ok(vec![])
         }

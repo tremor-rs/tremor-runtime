@@ -82,8 +82,10 @@ pub struct NameWithConfig {
     pub(crate) config: Option<Value<'static>>,
 }
 
-impl NameWithConfig {
-    fn from_value(value: &Value) -> Result<Self> {
+impl<'v> TryFrom<&Value<'v>> for NameWithConfig {
+    type Error = crate::errors::Error;
+
+    fn try_from(value: &Value) -> Result<Self> {
         if let Some(name) = value.as_str() {
             Ok(Self::from(name))
         } else if let Some(name) = value.get_str("name") {
@@ -193,19 +195,11 @@ impl Connector {
             config,
             preprocessors: connector_config
                 .get_array("preprocessors")
-                .map(|o| {
-                    o.iter()
-                        .map(Preprocessor::from_value)
-                        .collect::<Result<_>>()
-                })
+                .map(|o| o.iter().map(Preprocessor::try_from).collect::<Result<_>>())
                 .transpose()?,
             postprocessors: connector_config
                 .get_array("postprocessors")
-                .map(|o| {
-                    o.iter()
-                        .map(Preprocessor::from_value)
-                        .collect::<Result<_>>()
-                })
+                .map(|o| o.iter().map(Preprocessor::try_from).collect::<Result<_>>())
                 .transpose()?,
             reconnect: connector_config
                 .get("reconnect")
@@ -216,7 +210,7 @@ impl Connector {
             metrics_interval_s: connector_config.get_u64("metrics_interval_s"),
             codec: connector_config
                 .get("codec")
-                .map(Codec::from_value)
+                .map(Codec::try_from)
                 .transpose()?,
         })
     }

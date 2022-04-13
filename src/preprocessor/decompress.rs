@@ -142,8 +142,7 @@ impl Preprocessor for Fingerprinted {
                 decoder.read_to_end(&mut decompressed)?;
                 decompressed
             }
-            // Some(b"sNaPpY") => {
-            Some(&[0xff, _, _, _, _, _]) => {
+            Some(b"sNaPpY" | &[0xff, _, _, _, _, _]) => {
                 use snap::read::FrameDecoder;
                 let mut rdr = FrameDecoder::new(data);
                 let decompressed_len = snap::raw::decompress_len(data)?;
@@ -198,115 +197,83 @@ mod test {
     use super::*;
     use crate::postprocessor::Postprocessor;
     use crate::preprocessor::Preprocessor;
+    use tremor_value::literal;
+    fn decode_magic(data: &[u8]) -> &'static str {
+        match data.get(0..6) {
+            Some(&[0x1f, 0x8b, _, _, _, _]) => "gzip",
+            Some(&[0x78, _, _, _, _, _]) => "zlib",
+            Some(&[0xfd, b'7', b'z', _, _, _]) => "xz2",
+            Some(b"sNaPpY") => "snappy",
+            Some(&[0xff, 0x6, 0x0, 0x0, _, _]) => "snappy",
+            Some(&[0x04, 0x22, 0x4d, 0x18, _, _]) => "lz4",
+            Some(&[0x28, 0xb5, 0x2f, 0xfd, _, _]) => "zstd",
+            _ => "fail/unknown",
+        }
+    } // Assert pre and post processors have a sensible default() ctor
 
-    macro_rules! assert_simple_symmetric {
-        ($internal:expr, $which:ident, $magic:expr) => {
-            fn decode_magic(data: &[u8]) -> &'static str {
-                match data.get(0..6) {
-                    Some(&[0x1f, 0x8b, _, _, _, _]) => "gzip",
-                    Some(&[0x78, _, _, _, _, _]) => "zlib",
-                    Some(&[0xfd, b'7', b'z', _, _, _]) => "xz2",
-                    Some(b"sNaPpY") => "snap",
-                    Some(&[0xff, 0x6, 0x0, 0x0, _, _]) => "snap",
-                    Some(&[0x04, 0x22, 0x4d, 0x18, _, _]) => "lz4",
-                    Some(&[0x28, 0xb5, 0x2f, 0xfd, _, _]) => "zstd",
-                    _ => "fail/unknown",
-                }
-            } // Assert pre and post processors have a sensible default() ctor
-            let mut pre = super::$which::default();
-            let mut post = crate::postprocessor::$which::default();
+    fn assert_simple_symmetric(internal: &[u8], algo: &str) -> Result<()> {
+        let config = literal!({ "algorithm": algo });
+        let mut pre = super::Decompress::from_config(Some(&config))?;
+        let mut post = crate::postprocessor::Compress::from_config(Some(&config))?;
 
-            // Fake ingest_ns and egress_ns
-            let mut ingest_ns = 0_u64;
-            let egress_ns = 1_u64;
+        // Fake ingest_ns and egress_ns
+        let mut ingest_ns = 0_u64;
+        let egress_ns = 1_u64;
 
-            let r = post.process(ingest_ns, egress_ns, $internal);
-            let ext = &r?[0];
-            let ext = ext.as_slice();
-            // Assert actual encoded form is as expected ( magic code only )
-            assert_eq!($magic, decode_magic(&ext));
+        let r = post.process(ingest_ns, egress_ns, internal);
+        let ext = &r?[0];
+        let ext = ext.as_slice();
+        // Assert actual encoded form is as expected ( magic code only )
+        assert_eq!(algo, decode_magic(&ext));
 
-            let r = pre.process(&mut ingest_ns, &ext);
-            let out = &r?[0];
-            let out = out.as_slice();
-            // Assert actual decoded form is as expected
-            assert_eq!(&$internal, &out);
-            // assert empty finish, no leftovers
-            assert!(pre.finish(None)?.is_empty())
-        };
-    }
-
-    macro_rules! assert_decompress {
-        ($internal:expr, $which:ident, $magic:expr) => {
-            // Assert pre and post processors have a sensible default() ctor
-            let mut pre = Decompress::from_config(None)?;
-            let mut outbound = crate::postprocessor::$which::default();
-
-            // Fake ingest_ns and egress_ns
-            let mut ingest_ns = 0_u64;
-            let egress_ns = 1_u64;
-
-            let r = outbound.process(ingest_ns, egress_ns, $internal);
-            let ext = &r?[0];
-            let ext = ext.as_slice();
-            // Assert actual encoded form is as expected ( magic code only )
-            assert_eq!($magic, decode_magic(&ext));
-
-            let r = pre.process(&mut ingest_ns, &ext);
-            let out = &r?[0];
-            let out = out.as_slice();
-            // Assert actual decoded form is as expected
-            assert_eq!(&$internal, &out);
-
-            // empty finish, no leftovers
-            assert!(pre.finish(None)?.is_empty());
-        };
+        let r = pre.process(&mut ingest_ns, &ext);
+        let out = &r?[0];
+        let out = out.as_slice();
+        // Assert actual decoded form is as expected
+        assert_eq!(&internal, &out);
+        // assert empty finish, no leftovers
+        assert!(pre.finish(None)?.is_empty());
+        Ok(())
     }
 
     #[test]
     fn test_gzip() -> Result<()> {
         let int = "snot".as_bytes();
-        assert_simple_symmetric!(int, Gzip, "gzip");
-        assert_decompress!(int, Gzip, "gzip");
+        assert_simple_symmetric(int, "gzip")?;
         Ok(())
     }
 
     #[test]
     fn test_zlib() -> Result<()> {
         let int = "snot".as_bytes();
-        assert_simple_symmetric!(int, Zlib, "zlib");
-        assert_decompress!(int, Zlib, "zlib");
+        assert_simple_symmetric(int, "zlib")?;
         Ok(())
     }
 
     #[test]
     fn test_snappy() -> Result<()> {
         let int = "snot".as_bytes();
-        assert_simple_symmetric!(int, Snappy, "snap");
-        assert_decompress!(int, Snappy, "snap");
+        assert_simple_symmetric(int, "snappy")?;
         Ok(())
     }
 
     #[test]
     fn test_xz2() -> Result<()> {
         let int = "snot".as_bytes();
-        assert_simple_symmetric!(int, Xz2, "xz2");
-        assert_decompress!(int, Xz2, "xz2");
+        assert_simple_symmetric(int, "xz2")?;
         Ok(())
     }
 
     #[test]
     fn test_lz4() -> Result<()> {
         let int = "snot".as_bytes();
-        assert_simple_symmetric!(int, Lz4, "lz4");
-        assert_decompress!(int, Lz4, "lz4");
+        assert_simple_symmetric(int, "lz4")?;
         Ok(())
     }
     #[test]
     fn test_zstd() -> Result<()> {
         let int = "snot".as_bytes();
-        assert_simple_symmetric!(int, Zstd, "zstd");
-        assert_decompress!(int, Zstd, "zstd");
+        assert_simple_symmetric(int, "zstd")?;
         Ok(())
     }
 }
