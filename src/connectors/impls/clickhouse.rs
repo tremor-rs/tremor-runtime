@@ -69,6 +69,7 @@ impl Clickhouse {
             host,
             port,
             database,
+            ..
         } = &self.config;
         let port = port.unwrap_or(ClickhouseConfig::DEFAULT_PORT);
 
@@ -81,6 +82,7 @@ struct ClickhouseConfig {
     host: String,
     port: Option<u16>,
     database: String,
+    columns: Vec<Column>,
 }
 
 impl ClickhouseConfig {
@@ -88,6 +90,24 @@ impl ClickhouseConfig {
 }
 
 impl ConfigImpl for ClickhouseConfig {}
+
+#[derive(Deserialize)]
+struct DatabaseColumns {
+    #[serde(flatten)]
+    columns: Vec<Column>,
+}
+
+#[derive(Deserialize)]
+struct Column {
+    name: String,
+    #[serde(rename = "type")]
+    type_: ClickHouseType,
+}
+
+#[derive(Deserialize)]
+enum ClickHouseType {
+    UInt8,
+}
 
 // Assumptions for now:
 //   - db_url is fetched in the `create_sink` method,
@@ -144,10 +164,6 @@ impl Sink for ClickhouseSink {
 
 fn get_column_data() -> Vec<(String, ClickHouseType)> {
     vec![("age".to_string(), ClickHouseType::UInt8)]
-}
-
-enum ClickHouseType {
-    UInt8,
 }
 
 fn add_uint8_column(block: Block, name: String, event: &Event) -> Block {
