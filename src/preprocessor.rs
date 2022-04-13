@@ -62,6 +62,7 @@ pub trait Preprocessor: Sync + Send {
 pub fn lookup_with_config(config: &PreprocessorConfig) -> Result<Box<dyn Preprocessor>> {
     match config.name.as_str() {
         "split" => Ok(Box::new(Split::from_config(&config.config)?)),
+        "lines" => Ok(Box::new(Split::default())),
         "base64" => Ok(Box::new(Base64::default())),
         "gzip" => Ok(Box::new(Gzip::default())),
         "zlib" => Ok(Box::new(Zlib::default())),
@@ -455,7 +456,7 @@ impl Preprocessor for Zstd {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::postprocessor::{self as post, Join, Postprocessor};
+    use crate::postprocessor::{self as post, join::Join, Postprocessor};
     use crate::preprocessor::{self as pre, Preprocessor};
     #[test]
     fn ingest_ts() -> Result<()> {
@@ -748,6 +749,7 @@ mod test {
         let egress_ns = 1_u64;
 
         let r = post.process(ingest_ns, egress_ns, int);
+        assert!(r.is_ok(), "Expected Ok(...), Got: {r:?}");
         let ext = &r?[0];
         let ext = ext.as_slice();
         // Assert actual encoded form is as expected

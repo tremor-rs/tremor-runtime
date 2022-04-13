@@ -14,6 +14,7 @@
 
 mod gelf;
 pub(crate) use gelf::Gelf;
+pub(crate) mod join;
 
 use crate::config::Postprocessor as PostprocessorConfig;
 use crate::errors::Result;
@@ -58,7 +59,8 @@ pub trait Postprocessor: Send + Sync {
 
 pub fn lookup_with_config(config: &PostprocessorConfig) -> Result<Box<dyn Postprocessor>> {
     match config.name.as_str() {
-        "join" => Ok(Box::new(Join::default())),
+        "join" => Ok(Box::new(join::Join::from_config(&config.config)?)),
+        "lines" => Ok(Box::new(join::Join::default())),
         "base64" => Ok(Box::new(Base64::default())),
         "gzip" => Ok(Box::new(Gzip::default())),
         "zlib" => Ok(Box::new(Zlib::default())),
@@ -158,22 +160,6 @@ pub fn finish(postprocessors: &mut [Box<dyn Postprocessor>], alias: &str) -> Res
         Ok(data)
     } else {
         Ok(vec![])
-    }
-}
-
-#[derive(Default)]
-pub(crate) struct Join {}
-impl Postprocessor for Join {
-    fn name(&self) -> &str {
-        "join"
-    }
-
-    fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        // padding capacity with 1 to account for the new line char we will be pushing
-        let mut framed: Vec<u8> = Vec::with_capacity(data.len() + 1);
-        framed.extend_from_slice(data);
-        framed.push(b'\n');
-        Ok(vec![framed])
     }
 }
 
@@ -357,19 +343,6 @@ mod test {
         }
         let t = "snot";
         assert!(lookup(&t).is_err());
-        Ok(())
-    }
-
-    #[test]
-    fn line() -> Result<()> {
-        let mut line = Join {};
-        let data: [u8; 0] = [];
-        assert_eq!(Ok(vec![vec![b'\n']]), line.process(0, 0, &data));
-        assert_eq!(
-            Ok(vec![vec![b'f', b'o', b'o', b'b', b'\n']]),
-            line.process(0, 0, b"foob")
-        );
-        assert!(line.finish(None)?.is_empty());
         Ok(())
     }
 
