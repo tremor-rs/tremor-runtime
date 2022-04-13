@@ -115,7 +115,7 @@ impl Preprocessor for Zstd {
 struct Fingerprinted {}
 impl Preprocessor for Fingerprinted {
     fn name(&self) -> &str {
-        "fingerprinted"
+        "autodetect"
     }
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
@@ -185,7 +185,7 @@ impl Decompress {
 }
 impl Preprocessor for Decompress {
     fn name(&self) -> &str {
-        "fingerprinted"
+        "decompress"
     }
     fn process(&mut self, ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         self.codec.process(ingest_ns, data)

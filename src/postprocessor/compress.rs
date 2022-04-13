@@ -132,7 +132,7 @@ impl Compress {
 }
 impl Postprocessor for Compress {
     fn name(&self) -> &str {
-        "fingerprinted"
+        "compress"
     }
     fn process(&mut self, ingres_ns: u64, egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         self.codec.process(ingres_ns, egress_ns, data)
