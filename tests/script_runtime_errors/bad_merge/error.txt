@@ -1,0 +1,5 @@
+Error: 
+    1 | patch event of
+    2 | merge => "snot"
+      | ^^^^^^^^^^^^^^^ Merge can only be performed on keys that either do not exist or are records but the key '<target>' has the type string
+    3 | end

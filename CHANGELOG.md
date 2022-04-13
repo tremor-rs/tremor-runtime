@@ -78,6 +78,7 @@
 - Unix offramp: Add the missing StartStream message
 - tremor-script: Add more details about Unicode in the documentation of the `string` module
 - Fix `hdr` and `dds` aggregation function losing events when aggregating > 8192 events
+- Ensure merge can only happen on objects
 
 ### Breaking Changes
 

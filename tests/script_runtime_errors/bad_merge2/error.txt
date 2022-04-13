@@ -1,0 +1,5 @@
+Error: 
+    1 | patch {"key": 42} of
+    2 |   merge "key" => 7
+      |   ^^^^^^^^^^^^^^^^ Merge can only be performed on keys that either do not exist or are records but the key 'key' has the type integer
+    3 | end
