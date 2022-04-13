@@ -22,14 +22,9 @@ flow
             "table": "people",
             "columns": [
                 {
-                    "name": "name",
-                    "type": "utf8"
+                    "name": "age",
+                    "type": "UInt8",
                 },
-                {
-                    "name": "birthday",
-                    "type": "datetime",
-                    "default": "1970-01-01"
-                }
             ]
         }
     end;
