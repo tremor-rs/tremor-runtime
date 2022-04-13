@@ -66,12 +66,12 @@
 - Fix test and suite names not being printed
 - Fix badly nested structure in unit tests
 - Fix bug in the unit testing framework that would ignore all tags
-- Fix illogical structure of suites that required a doubly nested record
+- Fix the illogical structure of suites that required a doubly nested record
 - Fix `-v` flag
 - Fix issue with double counting of unit test stats
 - Fix issue with wrong script snippets being shown for unit tests
 - Fix argument order in test cases
-- Fix gcs go-auth token refresh
+- Fix GCS go-auth token refresh
 - Fix `create script` syntax for aliased scripts with overridden `params`
 - Add benchmark names to benchmark tags
 - Kafka onramp: Remove failing metadata fetch in order to verify topic existance. Instead detect subscription errors and stop the onramp in that case.
