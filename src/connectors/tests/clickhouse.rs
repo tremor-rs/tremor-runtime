@@ -15,7 +15,10 @@
 // As we only have a sink implementation, we'll put everything here. Everything
 // will eventually follow a structure similar to the s3 connector.
 
-use crate::errors::{Error, Result};
+use crate::{
+    connectors::tests::free_port,
+    errors::{Error, Result},
+};
 
 use std::time::Duration;
 
@@ -45,9 +48,10 @@ async fn simple_insertion() -> Result<()> {
 
     // We want to access the container from the host, so we need to make the
     // corresponding port available.
+    let local = free_port::find_free_tcp_port().await?;
     let port_to_expose = Port {
-        local: SERVER_PORT,
         internal: SERVER_PORT,
+        local,
     };
     let container =
         docker.run_with_args(image, RunArgs::default().with_mapped_port(port_to_expose));
