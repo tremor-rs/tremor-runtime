@@ -76,6 +76,7 @@ async fn simple_insertion() -> Result<()> {
         "config": {
             "host": DB_HOST,
             "port": port,
+            "compression": "lz4",
             "database": "",
             "columns": [
                 {
