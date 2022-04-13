@@ -21,7 +21,7 @@ use memchr::memchr_iter;
 use tremor_pipeline::{ConfigImpl, ConfigMap};
 
 pub(crate) const DEFAULT_SEPARATOR: u8 = b'\n';
-const INITIAL_LINES_PER_CHUNK: usize = 64;
+const INITIAL_PARTS_PER_CHUNK: usize = 64;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -41,21 +41,21 @@ pub(crate) fn default_separator() -> String {
 impl ConfigImpl for Config {}
 
 #[derive(Clone)]
-pub struct Split {
+pub struct Separate {
     separator: u8,
     max_length: Option<NonZeroUsize>, //set to 0 if no limit for length of the data fragments
     buffer: Vec<u8>,
     is_buffered: bool, //indicates if buffering is needed.
-    lines_per_chunk: usize,
+    parts_per_chunk: usize,
 }
 
-impl Default for Split {
+impl Default for Separate {
     fn default() -> Self {
         Self::new(DEFAULT_SEPARATOR, DEFAULT_BUF_SIZE, true)
     }
 }
 
-impl Split {
+impl Separate {
     pub fn from_config(config: &ConfigMap) -> Result<Self> {
         if let Some(raw_config) = config {
             let config = Config::new(raw_config)?;
@@ -92,11 +92,11 @@ impl Split {
             // optimizing for performance here instead of memory usage
             buffer: Vec::with_capacity(bufsize),
             is_buffered,
-            lines_per_chunk: INITIAL_LINES_PER_CHUNK,
+            parts_per_chunk: INITIAL_PARTS_PER_CHUNK,
         }
     }
 
-    fn is_valid_line(&self, v: &[u8]) -> bool {
+    fn is_valid_chunk(&self, v: &[u8]) -> bool {
         !self.exceeds_max_length(v.len())
     }
 
@@ -114,7 +114,7 @@ impl Split {
             // useless now so clear the buffer
             self.buffer.clear();
             Err(format!(
-                "Discarded line fragment of length {} since total length of {} exceeds maximum allowed length of {}",
+                "Discarded fragment of length {} since total length of {} exceeds maximum allowed length of {}",
                 v.len(),
                 total_fragment_length,
                 self.max_length.map(NonZeroUsize::get).unwrap_or_default(),
@@ -123,7 +123,7 @@ impl Split {
             self.buffer.extend_from_slice(v);
             // TODO evaluate if the overhead of trace logging is worth it
             trace!(
-                "Saved line fragment of length {} to preprocessor buffer",
+                "Saved fragment of length {} to preprocessor buffer",
                 v.len(),
             );
             Ok(())
@@ -135,7 +135,7 @@ impl Split {
         if self.exceeds_max_length(total_fragment_length) {
             self.buffer.clear();
             Err(format!(
-                "Discarded line fragment of length {} since total length of {} exceeds maximum allowed line length of {}",
+                "Discarded fragment of length {} since total length of {} exceeds maximum allowed chunk size of {}",
                 v.len(),
                 total_fragment_length,
                 self.max_length.map(NonZeroUsize::get).unwrap_or_default(),
@@ -147,7 +147,7 @@ impl Split {
             std::mem::swap(&mut self.buffer, &mut result);
 
             trace!(
-                "Added line fragment of length {} from preprocessor buffer",
+                "Added fragment of length {} from preprocessor buffer",
                 self.buffer.len(),
             );
             Ok(result)
@@ -155,49 +155,52 @@ impl Split {
     }
 }
 
-impl Preprocessor for Split {
+impl Preprocessor for Separate {
     fn name(&self) -> &str {
-        "split"
+        "separate"
     }
 
     fn process(&mut self, _ingest_ns: &mut u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
-        // split incoming bytes by specifed line separator
+        // split incoming bytes by specifed separator
         let separator = self.separator;
-        let mut events = Vec::with_capacity(self.lines_per_chunk);
+        let mut events = Vec::with_capacity(self.parts_per_chunk);
 
         let mut last_idx = 0_usize;
         let mut split_points = memchr_iter(separator, data);
         if self.is_buffered {
-            if let Some(first_line_idx) = split_points.next() {
+            if let Some(first_fragment_idx) = split_points.next() {
                 // ALLOW
-                let first_line = data
-                    .get(last_idx..first_line_idx)
-                    .ok_or(ErrorKind::InvalidLines)?;
+                let first_fragment = data
+                    .get(last_idx..first_fragment_idx)
+                    .ok_or(ErrorKind::InvalidInputData("Out of bounds"))?;
                 if !self.buffer.is_empty() {
-                    events.push(self.complete_fragment(first_line)?);
+                    events.push(self.complete_fragment(first_fragment)?);
                 // invalid lines are ignored (and logged about here)
-                } else if self.is_valid_line(first_line) {
-                    events.push(first_line.to_vec());
+                } else if self.is_valid_chunk(first_fragment) {
+                    events.push(first_fragment.to_vec());
                 }
-                last_idx = first_line_idx + 1;
+                last_idx = first_fragment_idx + 1;
 
-                for line_idx in split_points.by_ref() {
-                    let line = data
-                        .get(last_idx..line_idx)
-                        .ok_or(ErrorKind::InvalidLines)?;
-                    if self.is_valid_line(line) {
-                        events.push(line.to_vec());
+                for fragment_idx in split_points.by_ref() {
+                    let fragment = data
+                        .get(last_idx..fragment_idx)
+                        .ok_or(ErrorKind::InvalidInputData("Out of bounds"))?;
+                    if self.is_valid_chunk(fragment) {
+                        events.push(fragment.to_vec());
                     }
-                    last_idx = line_idx + 1;
+                    last_idx = fragment_idx + 1;
                 }
                 if last_idx <= data.len() {
                     // this is the last line and since it did not end in a line boundary, it
                     // needs to be remembered for later (when more data arrives)
                     // invalid lines are ignored (and logged about here)
-                    self.save_fragment(data.get(last_idx..).ok_or(ErrorKind::InvalidLines)?)?;
+                    self.save_fragment(
+                        data.get(last_idx..)
+                            .ok_or(ErrorKind::InvalidInputData("Out of bounds"))?,
+                    )?;
                 }
             } else {
-                // if there's no other lines, or if data did not end in a line boundary
+                // if there's no other fragment, or if data did not end in a separator boundary
                 self.save_fragment(data)?;
             }
         } else {
@@ -205,7 +208,7 @@ impl Preprocessor for Split {
                 if !self.exceeds_max_length(split_point - last_idx) {
                     events.push(
                         data.get(last_idx..split_point)
-                            .ok_or(ErrorKind::InvalidLines)?
+                            .ok_or(ErrorKind::InvalidInputData("Out of bounds"))?
                             .to_vec(),
                     );
                 }
@@ -215,14 +218,14 @@ impl Preprocessor for Split {
             if last_idx <= data.len() {
                 events.push(
                     data.get(last_idx..)
-                        .ok_or(ErrorKind::InvalidLines)?
+                        .ok_or(ErrorKind::InvalidInputData("Out of bounds"))?
                         .to_vec(),
                 );
             }
         }
 
-        // update lines per chunk if necessary
-        self.lines_per_chunk = self.lines_per_chunk.max(events.len());
+        // update parts per chunk if necessary
+        self.parts_per_chunk = self.parts_per_chunk.max(events.len());
         Ok(events)
     }
 
@@ -257,10 +260,10 @@ mod test {
             "max_length": 12345,
             "buffered": false
         }));
-        let lines = Split::from_config(&config)?;
-        assert!(!lines.is_buffered);
-        assert_eq!(NonZeroUsize::new(12345), lines.max_length);
-        assert_eq!(b'\n', lines.separator);
+        let separate = Separate::from_config(&config)?;
+        assert!(!separate.is_buffered);
+        assert_eq!(NonZeroUsize::new(12345), separate.max_length);
+        assert_eq!(b'\n', separate.separator);
         Ok(())
     }
 
@@ -269,7 +272,7 @@ mod test {
         let config = Some(literal!({
         "separator": "abc"
         }));
-        let res = Split::from_config(&config).err().unwrap();
+        let res = Separate::from_config(&config).err().unwrap();
 
         assert_eq!("Invalid Configuration for split preprocessor: Invalid 'separator': \"abc\", must be 1 byte.", res.to_string().as_str());
         Ok(())
@@ -277,7 +280,7 @@ mod test {
 
     #[test]
     fn test6() -> Result<()> {
-        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // Test simple split
@@ -322,7 +325,7 @@ mod test {
 
     #[test]
     fn test5() -> Result<()> {
-        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // Test simple split
@@ -358,7 +361,7 @@ mod test {
 
     #[test]
     fn test4() -> Result<()> {
-        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // Test simple split
@@ -392,7 +395,7 @@ mod test {
 
     #[test]
     fn test3() -> Result<()> {
-        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // Test simple split
@@ -418,7 +421,7 @@ mod test {
 
     #[test]
     fn test2() -> Result<()> {
-        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
 
         let mut i = 0_u64;
 
@@ -441,7 +444,7 @@ mod test {
 
     #[test]
     fn test1() -> Result<()> {
-        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
 
         let mut i = 0_u64;
 
@@ -457,7 +460,7 @@ mod test {
 
     #[test]
     fn test_non_default_separator() -> Result<()> {
-        let mut pp = Split::new(b'\0', 10, true);
+        let mut pp = Separate::new(b'\0', 10, true);
         let mut i = 0_u64;
 
         // Test simple split
@@ -472,7 +475,7 @@ mod test {
 
     #[test]
     fn test_empty_data() -> Result<()> {
-        let mut pp = Split::default();
+        let mut pp = Separate::default();
         let mut i = 0_u64;
         assert!(pp.process(&mut i, b"")?.is_empty());
         Ok(())
@@ -480,7 +483,7 @@ mod test {
 
     #[test]
     fn test_empty_data_after_buffer() -> Result<()> {
-        let mut pp = Split::default();
+        let mut pp = Separate::default();
         let mut i = 0_u64;
         assert!(pp.process(&mut i, b"a")?.is_empty());
         assert!(pp.process(&mut i, b"")?.is_empty());
@@ -489,7 +492,7 @@ mod test {
 
     #[test]
     fn test_split_split_split() -> Result<()> {
-        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // Test simple split
@@ -507,7 +510,7 @@ mod test {
 
     #[test]
     fn test_split_buffer_split() -> Result<()> {
-        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // both split and buffer
@@ -526,7 +529,7 @@ mod test {
 
     #[test]
     fn test_split_buffer_split_buffer() -> Result<()> {
-        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // both split and buffer
@@ -548,7 +551,7 @@ mod test {
 
     #[test]
     fn test_split_buffer_buffer_split() -> Result<()> {
-        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut i = 0_u64;
 
         // both split and buffer
@@ -566,7 +569,7 @@ mod test {
 
     #[test]
     fn test_leftovers() -> Result<()> {
-        let mut pp = Split::new(DEFAULT_SEPARATOR, 10, true);
+        let mut pp = Separate::new(DEFAULT_SEPARATOR, 10, true);
         let mut ingest_ns = 0_u64;
 
         let data = b"123\n456";
@@ -587,7 +590,7 @@ mod test {
 
     #[test]
     fn test_max_length_unbuffered() -> Result<()> {
-        let mut pp = Split::new(DEFAULT_SEPARATOR, 0, false);
+        let mut pp = Separate::new(DEFAULT_SEPARATOR, 0, false);
         let mut ingest_ns = 0_u64;
 
         let mut data = [b'A'; 10000];
@@ -607,7 +610,7 @@ mod test {
             "separator": "\n",
             "max_length": 12345
         }));
-        let mut pp = Split::from_config(&config)?;
+        let mut pp = Separate::from_config(&config)?;
         assert_eq!(NonZeroUsize::new(12345), pp.max_length);
         let mut ingest_ns = 0_u64;
 
@@ -631,7 +634,7 @@ mod test {
             "max_length": 0,
             "buffered": false
         }));
-        let mut pp = Split::from_config(&config)?;
+        let mut pp = Separate::from_config(&config)?;
         let mut data = [b'A'; 100];
         data[89] = b'|';
         let r = pp.process(&mut ingest_ns, &data)?;
@@ -654,7 +657,7 @@ mod test {
             "max_length": 0,
             "buffered": true
         }));
-        let mut pp = Split::from_config(&config)?;
+        let mut pp = Separate::from_config(&config)?;
         let mut data = [b'A'; 100];
         data[89] = b'|';
         let r = pp.process(&mut ingest_ns, &data)?;

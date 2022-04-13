@@ -14,7 +14,7 @@
 
 mod gelf;
 pub(crate) use gelf::Gelf;
-pub(crate) mod join;
+pub(crate) mod separate;
 
 use crate::config::Postprocessor as PostprocessorConfig;
 use crate::errors::Result;
@@ -59,8 +59,7 @@ pub trait Postprocessor: Send + Sync {
 
 pub fn lookup_with_config(config: &PostprocessorConfig) -> Result<Box<dyn Postprocessor>> {
     match config.name.as_str() {
-        "join" => Ok(Box::new(join::Join::from_config(&config.config)?)),
-        "lines" => Ok(Box::new(join::Join::default())),
+        "separate" => Ok(Box::new(separate::Separate::from_config(&config.config)?)),
         "base64" => Ok(Box::new(Base64::default())),
         "gzip" => Ok(Box::new(Gzip::default())),
         "zlib" => Ok(Box::new(Zlib::default())),
@@ -322,7 +321,7 @@ mod test {
     use super::*;
 
     const LOOKUP_TABLE: [&str; 12] = [
-        "join",
+        "separate",
         "base64",
         "gzip",
         "zlib",

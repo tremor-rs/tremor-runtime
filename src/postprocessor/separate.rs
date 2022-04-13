@@ -17,7 +17,7 @@
 
 use super::Postprocessor;
 use crate::errors::{Kind as ErrorKind, Result};
-use crate::preprocessor::split::{default_separator, DEFAULT_SEPARATOR};
+use crate::preprocessor::separate::{default_separator, DEFAULT_SEPARATOR};
 use tremor_pipeline::{ConfigImpl, ConfigMap};
 
 #[derive(Clone, Debug, Deserialize)]
@@ -29,11 +29,11 @@ pub struct Config {
 
 impl ConfigImpl for Config {}
 
-pub(crate) struct Join {
+pub(crate) struct Separate {
     separator: u8,
 }
 
-impl Default for Join {
+impl Default for Separate {
     fn default() -> Self {
         Self {
             separator: DEFAULT_SEPARATOR,
@@ -41,13 +41,13 @@ impl Default for Join {
     }
 }
 
-impl Join {
+impl Separate {
     pub(super) fn from_config(config: &ConfigMap) -> Result<Self> {
         let separator = if let Some(raw_config) = config {
             let config = Config::new(raw_config)?;
             if config.separator.len() != 1 {
                 return Err(ErrorKind::InvalidConfiguration(
-                    String::from("join postprocessor"),
+                    String::from("separate postprocessor"),
                     format!(
                         "Invalid 'separator': \"{}\", must be 1 byte.",
                         config.separator
@@ -63,7 +63,7 @@ impl Join {
     }
 }
 
-impl Postprocessor for Join {
+impl Postprocessor for Separate {
     fn name(&self) -> &str {
         "join"
     }
@@ -83,31 +83,31 @@ mod tests {
     use tremor_value::literal;
 
     #[test]
-    fn join_postprocessor() -> Result<()> {
+    fn separate_postprocessor() -> Result<()> {
         let config = Some(literal!({
             "separator": "|"
         }));
-        let mut join = Join::from_config(&config)?;
+        let mut separate = Separate::from_config(&config)?;
         let data: [u8; 0] = [];
-        assert_eq!(Ok(vec![vec![b'|']]), join.process(0, 0, &data));
+        assert_eq!(Ok(vec![vec![b'|']]), separate.process(0, 0, &data));
         assert_eq!(
             Ok(vec![vec![b'f', b'o', b'o', b'b', b'|']]),
-            join.process(0, 0, b"foob")
+            separate.process(0, 0, b"foob")
         );
-        assert!(join.finish(None)?.is_empty());
+        assert!(separate.finish(None)?.is_empty());
         Ok(())
     }
 
     #[test]
-    fn join_postprocessor_default() -> Result<()> {
-        let mut join = Join::from_config(&None)?;
+    fn separate_postprocessor_default() -> Result<()> {
+        let mut separate = Separate::from_config(&None)?;
         let data: [u8; 0] = [];
-        assert_eq!(Ok(vec![vec![b'\n']]), join.process(0, 0, &data));
+        assert_eq!(Ok(vec![vec![b'\n']]), separate.process(0, 0, &data));
         assert_eq!(
             Ok(vec![vec![b'f', b'o', b'o', b'b', b'\n']]),
-            join.process(0, 0, b"foob")
+            separate.process(0, 0, b"foob")
         );
-        assert!(join.finish(None)?.is_empty());
+        assert!(separate.finish(None)?.is_empty());
         Ok(())
     }
 
@@ -116,9 +116,9 @@ mod tests {
         let config = Some(literal!({
             "separator": "abc"
         }));
-        let res = Join::from_config(&config).err().unwrap();
+        let res = Separate::from_config(&config).err().unwrap();
 
-        assert_eq!("Invalid Configuration for join postprocessor: Invalid 'separator': \"abc\", must be 1 byte.", res.to_string().as_str());
+        assert_eq!("Invalid Configuration for separate postprocessor: Invalid 'separator': \"abc\", must be 1 byte.", res.to_string().as_str());
         Ok(())
     }
 }

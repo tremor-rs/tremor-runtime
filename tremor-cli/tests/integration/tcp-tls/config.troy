@@ -6,8 +6,8 @@ flow
 
   define connector tcp_server from tcp_server
   with
-    preprocessors = ["split"],
-    postprocessors = ["join"],
+    preprocessors = ["separate"],
+    postprocessors = ["separate"],
     codec = "json",
     config = {
       "url": "0.0.0.0:65535",
@@ -49,8 +49,8 @@ flow
 
   define connector tcp_client from tcp_client
   with
-    preprocessors = ["split"],
-    postprocessors = ["join"],
+    preprocessors = ["separate"],
+    postprocessors = ["separate"],
     codec = "json",
     config = {
       "url": "127.0.0.1:65535",

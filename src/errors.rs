@@ -309,9 +309,9 @@ error_chain! {
             description("Connector not found")
                 display("Connector \"{}\" not found in Flow \"{}\"", alias, flow_id)
         }
-        InvalidLines {
-            description("Invalid Lines")
-                display("Invalid Lines")
+        InvalidInputData(msg: &'static str) {
+            description("Invalid Input data")
+                display("Invalid Input data: {}", msg)
         }
     }
 }

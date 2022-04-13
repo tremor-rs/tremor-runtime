@@ -32,8 +32,8 @@ async fn unix_socket() -> Result<()> {
 
     let server_defn = literal!({
       "codec": "string",
-      "preprocessors": ["split"],
-      "postprocessors": ["join"],
+      "preprocessors": ["separate"],
+      "postprocessors": ["separate"],
       "config": {
           "path": socket_path.display().to_string(),
           "permissions": "=777",
@@ -42,8 +42,8 @@ async fn unix_socket() -> Result<()> {
     });
     let client_defn = literal!({
       "codec": "string",
-      "preprocessors": ["split"],
-      "postprocessors": ["join"],
+      "preprocessors": ["separate"],
+      "postprocessors": ["separate"],
       "config": {
           "path": socket_path.display().to_string(),
           "buf_size": 4096
