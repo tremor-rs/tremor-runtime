@@ -77,10 +77,16 @@ async fn simple_insertion() -> Result<()> {
             "host": DB_HOST,
             "port": port,
             "database": "",
+            "columns": [
+                {
+                    "name": "age",
+                    "type": "UInt8",
+                }
+            ]
         },
     });
 
-    let harness = ConnectorHarness::new("clickhouse", &connector_config).await?;
+    let harness = ConnectorHarness::new(function_name!(), "clickhouse", &connector_config).await?;
 
     let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
 
