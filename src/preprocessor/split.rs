@@ -1,4 +1,4 @@
-// Copyright 2020-2021, The Tremor Team
+// Copyright 2022, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ use crate::errors::{Kind as ErrorKind, Result};
 use memchr::memchr_iter;
 use tremor_pipeline::{ConfigImpl, ConfigMap};
 
-const DEFAULT_SEPARATOR: u8 = b'\n';
+pub(crate) const DEFAULT_SEPARATOR: u8 = b'\n';
 const INITIAL_LINES_PER_CHUNK: usize = 64;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -34,8 +34,8 @@ pub struct Config {
     buffered: bool,
 }
 
-fn default_separator() -> String {
-    "\n".to_string()
+pub(crate) fn default_separator() -> String {
+    String::from_utf8_lossy(&[DEFAULT_SEPARATOR]).into_owned()
 }
 
 impl ConfigImpl for Config {}
@@ -62,7 +62,7 @@ impl Split {
             let separator = {
                 if config.separator.len() != 1 {
                     return Err(ErrorKind::InvalidConfiguration(
-                        String::from("lines preprocessor"),
+                        String::from("split preprocessor"),
                         format!(
                             "Invalid 'separator': \"{}\", must be 1 byte.",
                             config.separator
@@ -271,7 +271,7 @@ mod test {
         }));
         let res = Split::from_config(&config).err().unwrap();
 
-        assert_eq!("Invalid Configuration for lines preprocessor: Invalid 'separator': \"abc\", must be 1 byte.", res.to_string().as_str());
+        assert_eq!("Invalid Configuration for split preprocessor: Invalid 'separator': \"abc\", must be 1 byte.", res.to_string().as_str());
         Ok(())
     }
 
