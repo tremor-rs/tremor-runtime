@@ -8,7 +8,7 @@ flow
   define connector out_file from file
   with 
     codec = "json-sorted",
-    postprocessors = ["join"],
+    postprocessors = ["separate"],
     config = {
       "path": "out.log",
       "mode": "append"

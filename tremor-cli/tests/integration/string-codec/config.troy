@@ -5,7 +5,7 @@ flow
   define connector in from file
   with
     codec = "string",
-    preprocessors = ["split"],
+    preprocessors = ["separate"],
     config = {"path": "in.json", "mode": "read"}
   end;
 

@@ -31,7 +31,7 @@ async fn file_connector_xz() -> Result<()> {
         .join("input.xz");
     let defn = literal!({
         "codec": "string",
-        "preprocessors": ["split"],
+        "preprocessors": ["separate"],
         "config": {
             "path": input_path.display().to_string(),
             "mode": "read"

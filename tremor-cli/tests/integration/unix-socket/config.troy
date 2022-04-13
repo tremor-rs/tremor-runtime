@@ -6,8 +6,8 @@ flow
 
   define connector server from unix_socket_server
   with
-    preprocessors = ["split"],
-    postprocessors = ["join"],
+    preprocessors = ["separate"],
+    postprocessors = ["separate"],
     codec = "json",
     config = {
       "path": "/tmp/unix-socket.sock",
@@ -48,8 +48,8 @@ flow
 
   define connector client from unix_socket_client
   with
-    preprocessors = ["split"],
-    postprocessors = ["join"],
+    preprocessors = ["separate"],
+    postprocessors = ["separate"],
     codec = "json",
     config = {
       "path": "/tmp/unix-socket.sock",

@@ -21,7 +21,7 @@ flow
   with
     metrics_interval_s = 3,
     codec = "json-sorted",
-    postprocessors = ["join"],
+    postprocessors = ["separate"],
     config = {
       "path": "events.log",
       "mode": "write"

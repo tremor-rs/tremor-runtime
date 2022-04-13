@@ -38,7 +38,7 @@ async fn udp_pause_resume() -> Result<()> {
 
     let defn = literal!({
       "codec": "string",
-      "preprocessors": ["split"],
+      "preprocessors": ["separate"],
       "config": {
           "url": format!("udp://127.0.0.1:{free_port}"),
           "buf_size": 4096
@@ -137,7 +137,7 @@ async fn tcp_server_pause_resume() -> Result<()> {
 
     let defn = literal!({
       "codec": "string",
-      "preprocessors": ["split"],
+      "preprocessors": ["separate"],
       "config": {
           "url": format!("tcp://127.0.0.1:{free_port}"),
           "buf_size": 4096

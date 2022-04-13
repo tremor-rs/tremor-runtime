@@ -14,7 +14,7 @@
 
 mod gelf;
 pub(crate) use gelf::Gelf;
-pub(crate) mod split;
+pub(crate) mod separate;
 
 use crate::config::Preprocessor as PreprocessorConfig;
 use crate::errors::{Error, Result};
@@ -61,8 +61,7 @@ pub trait Preprocessor: Sync + Send {
 
 pub fn lookup_with_config(config: &PreprocessorConfig) -> Result<Box<dyn Preprocessor>> {
     match config.name.as_str() {
-        "split" => Ok(Box::new(Split::from_config(&config.config)?)),
-        "lines" => Ok(Box::new(Split::default())),
+        "separate" => Ok(Box::new(Separate::from_config(&config.config)?)),
         "base64" => Ok(Box::new(Base64::default())),
         "gzip" => Ok(Box::new(Gzip::default())),
         "zlib" => Ok(Box::new(Zlib::default())),
@@ -174,7 +173,7 @@ pub fn finish(
     }
 }
 
-pub(crate) use split::Split;
+pub(crate) use separate::Separate;
 
 #[derive(Default, Debug, Clone)]
 pub(crate) struct FilterEmpty {}
@@ -456,8 +455,8 @@ impl Preprocessor for Zstd {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::postprocessor::{self as post, join::Join, Postprocessor};
-    use crate::preprocessor::{self as pre, Preprocessor};
+    use crate::postprocessor::{self as post, separate::Separate as SeparatePost, Postprocessor};
+    use crate::preprocessor::{self as pre, separate::Separate, Preprocessor};
     #[test]
     fn ingest_ts() -> Result<()> {
         let mut pre_p = pre::ExtractIngestTs {};
@@ -627,7 +626,7 @@ mod test {
     }
 
     const LOOKUP_TABLE: [&str; 15] = [
-        "split",
+        "separate",
         "base64",
         "gzip",
         "zlib",
@@ -742,8 +741,8 @@ mod test {
         let enc = "snot\nbadger\n".as_bytes(); // First event ( event per line )
         let out = "snot".as_bytes();
 
-        let mut post = Join::default();
-        let mut pre = Split::default();
+        let mut post = SeparatePost::default();
+        let mut pre = Separate::default();
 
         let mut ingest_ns = 0_u64;
         let egress_ns = 1_u64;
@@ -767,9 +766,9 @@ mod test {
     }
 
     #[test]
-    fn test_lines_buffered() -> Result<()> {
+    fn test_separate_buffered() -> Result<()> {
         let input = "snot\nbadger\nwombat\ncapybara\nquagga".as_bytes();
-        let mut pre = Split::new(b'\n', 1000, true);
+        let mut pre = Separate::new(b'\n', 1000, true);
         let mut ingest_ns = 0_u64;
         let mut res = pre.process(&mut ingest_ns, input)?;
         let splitted = input
@@ -783,10 +782,10 @@ mod test {
         Ok(())
     }
 
-    macro_rules! assert_lines_no_buffer {
+    macro_rules! assert_separate_no_buffer {
         ($inbound:expr, $outbound1:expr, $outbound2:expr, $case_number:expr, $separator:expr) => {
             let mut ingest_ns = 0_u64;
-            let r = crate::preprocessor::Split::new($separator, 0, false)
+            let r = crate::preprocessor::Separate::new($separator, 0, false)
                 .process(&mut ingest_ns, $inbound);
 
             let out = &r?;
@@ -816,7 +815,7 @@ mod test {
     }
 
     #[test]
-    fn test_lines_no_buffer_no_maxlength() -> Result<()> {
+    fn test_separate_no_buffer_no_maxlength() -> Result<()> {
         let test_data: [(&'static [u8], &'static [u8], &'static [u8], &'static str); 4] = [
             (b"snot\nbadger", b"snot", b"badger", "0"),
             (b"snot\n", b"snot", b"", "1"),
@@ -824,7 +823,7 @@ mod test {
             (b"\n", b"", b"", "3"),
         ];
         for case in &test_data {
-            assert_lines_no_buffer!(case.0, case.1, case.2, case.3, b'\n');
+            assert_separate_no_buffer!(case.0, case.1, case.2, case.3, b'\n');
         }
 
         Ok(())
@@ -839,7 +838,7 @@ mod test {
             (b"\r", b"", b"", "3"),
         ];
         for case in &test_data {
-            assert_lines_no_buffer!(case.0, case.1, case.2, case.3, b'\r');
+            assert_separate_no_buffer!(case.0, case.1, case.2, case.3, b'\r');
         }
 
         Ok(())
