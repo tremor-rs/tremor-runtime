@@ -44,8 +44,8 @@ pub struct QuiescenceBeacon(Arc<Inner>);
 
 impl QuiescenceBeacon {
     // we have max 2 listeners at a time, checking this beacon
-    // the sink and the source of the connector
-    const MAX_LISTENERS: usize = 2;
+    // the connector itself, the sink and the source of the connector
+    const MAX_LISTENERS: usize = 3;
 
     /// returns `true` if consumers should continue reading
     /// If the connector is paused, it awaits until it is resumed.
@@ -132,47 +132,59 @@ mod tests {
     use super::*;
     use crate::errors::Result;
     use async_std::prelude::*;
-    use std::time::Duration;
+    use futures::pin_mut;
+    use std::{task::Poll, time::Duration};
 
     #[async_std::test]
     async fn quiescence_pause_resume() -> Result<()> {
-        let mut beacon = QuiescenceBeacon::default();
+        let beacon = QuiescenceBeacon::default();
+        let mut ctrl_beacon = beacon.clone();
         assert!(beacon.continue_reading().await);
         assert!(beacon.continue_writing().await);
 
-        beacon.pause();
+        ctrl_beacon.pause();
 
         let timeout_ms = Duration::from_millis(50);
+        let read_future = beacon.continue_reading();
+        let write_future = beacon.continue_writing();
+        pin_mut!(read_future);
+        pin_mut!(write_future);
         // no progress for reading while being paused
-        assert!(beacon.continue_reading().timeout(timeout_ms).await.is_err());
+        assert_eq!(futures::poll!(read_future.as_mut()), Poll::Pending);
         // no progress for writing while being paused
-        assert!(beacon.continue_writing().timeout(timeout_ms).await.is_err());
+        assert_eq!(futures::poll!(write_future.as_mut()), Poll::Pending);
 
-        beacon.resume();
-        assert!(beacon.continue_reading().timeout(timeout_ms).await?);
-        assert!(beacon.continue_writing().timeout(timeout_ms).await?);
+        ctrl_beacon.resume();
 
-        beacon.stop_reading();
+        // future created during pause will be picked up and completed after resume only
+        assert_eq!(futures::poll!(read_future.as_mut()), Poll::Ready(true));
+        assert_eq!(futures::poll!(write_future.as_mut()), Poll::Ready(true));
+
+        drop(read_future);
+        drop(write_future);
+
+        ctrl_beacon.stop_reading();
+
         // don't continue reading when stopped reading
         assert_eq!(false, beacon.continue_reading().timeout(timeout_ms).await?);
         // writing is fine
         assert!(beacon.continue_writing().timeout(timeout_ms).await?);
 
         // a resume after stopping reading has no effect
-        beacon.resume();
+        ctrl_beacon.resume();
         // don't continue reading when stopped reading
         assert!(!beacon.continue_reading().timeout(timeout_ms).await?);
         // writing is still fine
         assert!(beacon.continue_writing().timeout(timeout_ms).await?);
 
-        beacon.full_stop();
+        ctrl_beacon.full_stop();
         // no reading upon full stop
         assert!(!beacon.continue_reading().timeout(timeout_ms).await?);
         // no writing upon full stop
         assert!(!beacon.continue_writing().timeout(timeout_ms).await?);
 
         // a resume after a full stop has no effect
-        beacon.resume();
+        ctrl_beacon.resume();
         // no reading upon full stop
         assert!(!beacon.continue_reading().timeout(timeout_ms).await?);
         // no writing upon full stop
