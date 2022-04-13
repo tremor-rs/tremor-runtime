@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fmt::{self, Display, Formatter};
+
 use crate::connectors::prelude::*;
 
 use clickhouse_rs::{Block, Pool};
@@ -65,18 +67,22 @@ impl Clickhouse {
             host,
             port,
             database,
+            compression,
             ..
         } = &self.config;
         let port = port.unwrap_or(ClickhouseConfig::DEFAULT_PORT);
+        let compression = compression.unwrap_or_default();
 
-        format!("tcp://{host}:{port}/{database}?compression=lz4")
+        format!("tcp://{host}:{port}/{database}?compression={compression}")
     }
 }
 
 #[derive(Deserialize)]
 struct ClickhouseConfig {
     host: String,
+    // TODO: use #[serde(default)] for optional fields.
     port: Option<u16>,
+    compression: Option<Compression>,
     database: String,
     columns: Vec<Column>,
 }
@@ -86,6 +92,29 @@ impl ClickhouseConfig {
 }
 
 impl ConfigImpl for ClickhouseConfig {}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum Compression {
+    None,
+    Lz4,
+}
+
+impl Default for Compression {
+    fn default() -> Compression {
+        Compression::None
+    }
+}
+
+impl Display for Compression {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Compression::None => "none",
+            Compression::Lz4 => "lz4",
+        }
+        .fmt(f)
+    }
+}
 
 #[derive(Deserialize)]
 struct DatabaseColumns {
