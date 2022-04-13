@@ -125,10 +125,6 @@ enum ClickHouseType {
     UInt8,
 }
 
-// Assumptions for now:
-//   - db_url is fetched in the `create_sink` method,
-//   - the pool is created in the `connect` method,
-//   - the actual client is created in on-event
 pub(crate) struct ClickhouseSink {
     db_url: String,
     pool: Option<Pool>,
@@ -151,8 +147,6 @@ impl Sink for ClickhouseSink {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        debug!("on_event is getting called");
-        // TODO: is this the correct ErrorKind variant?
         let mut client = self
             .pool
             .as_ref()
@@ -170,7 +164,6 @@ impl Sink for ClickhouseSink {
             });
 
         client.insert("people", block.clone()).await?;
-        debug!("{:#?}", block);
 
         Ok(SinkReply::ACK)
     }

@@ -123,8 +123,6 @@ async fn simple_insertion() -> Result<()> {
     harness.send_to_sink(event, IN).await?;
     // TODO: check for some kind of ack or something i guess?
 
-    info!("SUCCESSFULLY INSERTED DATA");
-
     // Now that we have sent some events to the sink, let's check that
     // everything was properly inserted in the database.
 
@@ -146,9 +144,7 @@ async fn simple_insertion() -> Result<()> {
         .map(|row| row.get::<u8, _>("age").map_err(Error::from))
         .collect::<Result<Vec<_>>>()?;
 
-    info!("CHECKING EQUALITY");
     assert_eq!(ages, [42, 101]);
-    info!("IT WORKED SOMEHOW!");
 
     container.stop();
 
