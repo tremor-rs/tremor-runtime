@@ -702,7 +702,7 @@ where
     Outer: BaseExpr,
     Inner: BaseExpr,
 {
-    if let (Some(rep), Some(map)) = (replacement.as_object(), value.as_object_mut()) {
+    if let Some((rep, map)) = replacement.as_object().zip(value.as_object_mut()) {
         for (k, v) in rep {
             if let Some(k) = map.get_mut(k) {
                 stry!(merge_values(outer, inner, k, v));
@@ -714,6 +714,7 @@ where
     } else {
         // If one of the two isn't a map we can't merge so we simply
         // write the replacement into the target.
+        // We do this here since we check types on the entry point
         // NOTE: We got to clone here since we're duplicating values
         *value = replacement.clone();
     }
@@ -767,6 +768,7 @@ enum PreEvaluatedPatchOperation<'event, 'run> {
     },
     MergeRecord {
         mvalue: Value<'event>,
+        mid: &'run NodeMeta,
     },
     Default {
         cow: beef::Cow<'event, str>,
@@ -822,8 +824,9 @@ impl<'event, 'run> PreEvaluatedPatchOperation<'event, 'run> {
                 mvalue: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
                 mid,
             },
-            PatchOperation::MergeRecord { expr, .. } => PreEvaluatedPatchOperation::MergeRecord {
+            PatchOperation::MergeRecord { expr, mid } => PreEvaluatedPatchOperation::MergeRecord {
                 mvalue: stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
+                mid,
             },
             PatchOperation::Default { ident, expr, .. } => PreEvaluatedPatchOperation::Default {
                 cow: stry!(ident.run(opts, env, event, state, meta, local)),
@@ -916,7 +919,7 @@ fn patch_value<'run, 'event>(
             Merge {
                 cow, mvalue, mid, ..
             } => match obj.get_mut(&cow) {
-                Some(value @ Value::Object(_)) => {
+                Some(value) if value.is_object() && mvalue.is_object() => {
                     stry!(merge_values(patch_expr, expr, value, &mvalue));
                 }
                 Some(other) => {
@@ -929,8 +932,17 @@ fn patch_value<'run, 'event>(
                     obj.insert(cow, new_value);
                 }
             },
-            MergeRecord { mvalue, .. } => {
-                stry!(merge_values(patch_expr, expr, target, &mvalue));
+            MergeRecord { mvalue, mid, .. } => {
+                if mvalue.is_object() {
+                    stry!(merge_values(patch_expr, expr, target, &mvalue));
+                } else {
+                    return error_patch_merge_type_conflict(
+                        patch_expr,
+                        &*mid,
+                        "<target>".into(),
+                        &mvalue,
+                    );
+                }
             }
             Default { cow, expr, .. } => {
                 if !obj.contains_key(&cow) {

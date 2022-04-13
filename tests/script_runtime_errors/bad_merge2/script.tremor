@@ -1,0 +1,3 @@
+patch {"key": 42} of
+  merge "key" => 7
+end
