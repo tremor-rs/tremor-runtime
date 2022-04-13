@@ -92,6 +92,7 @@ async fn simple_insertion() -> Result<()> {
 
     harness.start().await?;
     harness.wait_for_connected().await?;
+    harness.consume_initial_sink_contraflow().await?;
 
     let batched_data = literal!([
         {
