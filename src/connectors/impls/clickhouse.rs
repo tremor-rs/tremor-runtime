@@ -14,7 +14,7 @@
 
 use std::fmt::{self, Display, Formatter};
 
-use crate::connectors::prelude::*;
+use crate::connectors::{prelude::*, utils::url::ClickHouseDefaults};
 
 use clickhouse_rs::{Block, Pool};
 
@@ -63,25 +63,16 @@ impl Connector for Clickhouse {
 
 impl Clickhouse {
     fn connection_url(&self) -> String {
-        let ClickhouseConfig {
-            host,
-            port,
-            database,
-            compression,
-            ..
-        } = &self.config;
-        let port = port.unwrap_or(ClickhouseConfig::DEFAULT_PORT);
-        let compression = compression.unwrap_or_default();
+        let url = self.config.url.as_str();
+        let compression = self.config.compression.unwrap_or_default();
 
-        format!("tcp://{host}:{port}/{database}?compression={compression}")
+        format!("{url}?compression={compression}")
     }
 }
 
 #[derive(Deserialize)]
 struct ClickhouseConfig {
-    host: String,
-    // TODO: use #[serde(default)] for optional fields.
-    port: Option<u16>,
+    url: Url<ClickHouseDefaults>,
     compression: Option<Compression>,
     database: String,
     columns: Vec<Column>,

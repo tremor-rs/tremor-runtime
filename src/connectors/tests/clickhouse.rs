@@ -74,8 +74,7 @@ async fn simple_insertion() -> Result<()> {
 
     let connector_config = literal!({
         "config": {
-            "host": DB_HOST,
-            "port": port,
+            "url": format!("{DB_HOST}:{port}"),
             "compression": "lz4",
             "database": "",
             "columns": [
