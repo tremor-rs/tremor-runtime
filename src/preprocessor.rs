@@ -65,7 +65,6 @@ pub fn lookup_with_config(config: &PreprocessorConfig) -> Result<Box<dyn Preproc
         )?)),
         "remove-empty" => Ok(Box::new(FilterEmpty::default())),
         "gelf-chunking" => Ok(Box::new(gelf::Gelf::default())),
-        "gelf-chunking-tcp" => Ok(Box::new(gelf::Gelf::tcp())),
         "ingest-ns" => Ok(Box::new(ExtractIngestTs {})),
         "length-prefixed" => Ok(Box::new(LengthPrefix::default())),
         "textual-length-prefix" => Ok(Box::new(TextualLength::default())),
@@ -471,13 +470,12 @@ mod test {
         Ok(())
     }
 
-    const LOOKUP_TABLE: [&str; 9] = [
+    const LOOKUP_TABLE: [&str; 8] = [
         "separate",
         "base64",
         "decompress",
         "remove-empty",
         "gelf-chunking",
-        "gelf-chunking-tcp",
         "ingest-ns",
         "length-prefixed",
         "textual-length-prefix",
