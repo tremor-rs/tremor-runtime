@@ -25,11 +25,7 @@ impl ConnectorBuilder for Builder {
         "clickhouse".into()
     }
 
-    async fn from_config(
-        &self,
-        alias: &str,
-        raw_config: &ConnectorConfig,
-    ) -> Result<Box<dyn Connector>> {
+    async fn build(&self, alias: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
         // So something bad happens here and nobody know what or why.
         let config = raw_config
             .config
@@ -135,6 +131,7 @@ impl Sink for ClickhouseSink {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
+        debug!("on_event is getting called");
         // TODO: is this the correct ErrorKind variant?
         let mut client = self
             .pool
@@ -152,7 +149,8 @@ impl Sink for ClickhouseSink {
                 ClickHouseType::UInt8 => add_uint8_column(block, name, &event),
             });
 
-        client.insert("people", block).await?;
+        client.insert("people", block.clone()).await?;
+        debug!("{:#?}", block);
 
         Ok(SinkReply::ACK)
     }
