@@ -43,13 +43,13 @@ jobs:
         uses: benc-uk/workflow-dispatch@v1
         with:
           workflow: Draft new release
-          repo: tremor/tremor-www
+          repo: tremor-rs/tremor-www
           token: ${{ secrets.PAT_TOKEN }}
           inputs: '{ "new-version": "${{ github.event.inputs.new-version }}"}'
       - name: Invoke workflow in tremor-language-server
         uses: benc-uk/workflow-dispatch@v1
         with:
           workflow: Draft new release
-          repo: tremor/tremor-language-server
+          repo: tremor-rs/tremor-language-server
           token: ${{ secrets.PAT_TOKEN }}
           inputs: '{ "new-version": "${{ github.event.inputs.new-version }}"}'
