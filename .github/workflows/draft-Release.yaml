@@ -38,7 +38,7 @@ jobs:
       - name: Create pull request
         run: gh pr create -B main --title "Release-v${{ github.event.inputs.new-version }}" --body "Yay release" --label "Release"
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
       - name: Invoke workflow in tremor-www
         uses: benc-uk/workflow-dispatch@v1
         with:
