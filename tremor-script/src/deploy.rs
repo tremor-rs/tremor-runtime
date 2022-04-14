@@ -103,6 +103,26 @@ where
 
     /// Parses a string into a deployment
     ///
+    /// this is used in the language server to delete lements on a
+    /// parsing error
+    ///
+    /// # Errors
+    /// if the deployment can not be parsed
+    #[cfg(feature = "arena-delete")]
+    pub fn parse_with_aid<S>(
+        src: &S,
+        reg: &Registry,
+        aggr_reg: &AggrRegistry,
+    ) -> std::result::Result<Self, crate::errors::ErrorWithIndex>
+    where
+        S: ToString + ?Sized,
+    {
+        let (aid, src) = Arena::insert(src)?;
+        Self::parse_(aid, src, reg, aggr_reg).map_err(|e| crate::errors::ErrorWithIndex(aid, e))
+    }
+
+    /// Parses a string into a deployment
+    ///
     /// # Errors
     /// if the deployment can not be parsed
     pub fn parse<S>(src: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
