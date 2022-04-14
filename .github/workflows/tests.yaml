@@ -25,9 +25,16 @@ jobs:
           PROPTEST_CASES: 2500
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
           RUST_BACKTRACE: 1
-        run: cargo llvm-cov --workspace --lcov --output-path lcov.info --features integration
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.txt --features integration
       - name: Upload to Coveralls
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: ./lcov.info
+          path-to-lcov: ./lcov.txt
+      - uses: codecov/codecov-action@v2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+          files: ./lcov.txt # optional
+          flags: unittests # optional
+          fail_ci_if_error: true # optional (default = false)
+          verbose: true # optional (default = false)      
