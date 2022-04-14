@@ -25,7 +25,7 @@ use async_std::{
 use async_tls::TlsConnector;
 use async_tungstenite::{
     accept_async, client_async,
-    tungstenite::{stream::MaybeTlsStream, Error as WsError, Message, WebSocket},
+    tungstenite::{stream::MaybeTlsStream, Message, WebSocket},
     WebSocketStream,
 };
 use futures::SinkExt;
@@ -121,16 +121,21 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
         Ok(Self { client })
     }
 
+    #[cfg(feature = "flaky-test")]
     fn ping(&mut self) -> Result<()> {
         self.client
             .write_message(Message::Ping(vec![1, 2, 3, 4]))
             .chain_err(|| "Failed to send ping to ws server")
     }
-
+    #[cfg(feature = "flaky-test")]
     fn pong(&mut self) -> Result<()> {
         self.client
             .write_message(Message::Pong(vec![5, 6, 7, 8]))
             .chain_err(|| "Failed to send pong to ws server")
+    }
+    #[cfg(feature = "flaky-test")]
+    fn recv(&mut self) -> Result<Message> {
+        self.client.read_message().map_err(Error::from)
     }
 
     fn send(&mut self, data: &str) -> Result<()> {
@@ -153,10 +158,6 @@ impl TestClient<WebSocket<MaybeTlsStream<std::net::TcpStream>>> {
             Ok(other) => Ok(ExpectMessage::Unexpected(other)),
             Err(e) => Err(e.into()),
         }
-    }
-
-    fn recv(&mut self) -> Result<Message> {
-        self.client.read_message().map_err(Error::from)
     }
 
     async fn close(&mut self) -> Result<()> {
@@ -649,6 +650,7 @@ async fn wss_server_binary_routing() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "flaky-test")]
 #[async_std::test]
 async fn server_control_frames() -> Result<()> {
     let _ = env_logger::try_init();
@@ -726,7 +728,7 @@ async fn server_control_frames() -> Result<()> {
     assert!(matches!(
         c1.recv(),
         Err(Error(
-            crate::errors::ErrorKind::WsError(WsError::ConnectionClosed),
+            crate::errors::ErrorKind::WsError(async_tungstenite::Error::ConnectionClosed),
             _
         ))
     ));

@@ -14,6 +14,7 @@
 [![License Checks]][actions-license-audit]
 [![Security Checks]][actions-security-audit]
 [![Coverage]][coveralls.io]
+[![codecov]][codecov report]
 [![Dependabot Status]][dependabot.com]
 [![CII Best Practices]][bestpractices]
 [![GitHub]](LICENSE)
@@ -40,6 +41,8 @@
 [drone.io]: https://cloud.drone.io/tremor-rs/tremor-runtime
 [gitpod]: https://gitpod.io/button/open-in-gitpod.svg
 [gitpod-hook]: https://gitpod.io/#https://github.com/tremor-rs/tremor-runtime
+[codecov]: https://codecov.io/gh/tremor-rs/tremor-runtime/branch/main/graph/badge.svg?token=d1bhuZGcOK
+[codecov report]: https://codecov.io/gh/tremor-rs/tremor-runtime
 
 ---
 
