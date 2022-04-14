@@ -84,6 +84,25 @@ impl Script {
 
     /// Parses a string and turns it into a script with the supplied parameters/arguments
     ///
+    /// this is used in the language server to delete lements on a
+    /// parsing error
+    ///
+    /// # Errors
+    /// if the script can not be parsed
+    #[cfg(feature = "arena-delete")]
+    pub fn parse_with_aid<S>(
+        src: &S,
+        reg: &Registry,
+    ) -> std::result::Result<Self, crate::errors::ErrorWithIndex>
+    where
+        S: ToString + ?Sized,
+    {
+        let (aid, src) = Arena::insert(src)?;
+        Self::parse_(aid, src, reg).map_err(|e| crate::errors::ErrorWithIndex(aid, e))
+    }
+
+    /// Parses a string and turns it into a script with the supplied parameters/arguments
+    ///
     /// # Errors
     /// if the script can not be parsed
     pub fn parse<S>(src: &S, reg: &Registry) -> Result<Self>
