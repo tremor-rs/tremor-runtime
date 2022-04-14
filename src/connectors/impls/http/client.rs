@@ -12,41 +12,54 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::Arc;
+use std::time::Duration;
+
 use async_std::channel::{bounded, Receiver, Sender};
+use either::Either;
 use halfbrown::HashMap;
-use tremor_value::literal;
+use http_client::h1::H1Client;
+use http_client::HttpClient;
+use http_types::Method;
 
 use super::auth::Auth;
-use super::meta::{HttpRequestMeta, HttpResponseMeta, ResponseEventCont};
+use super::meta::HttpRequestBuilder;
+use super::utils::RequestId;
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
 use crate::connectors::utils::mime::MimeCodecMap;
-use crate::postprocessor::{self, Postprocessors};
-use crate::preprocessor::{self, Preprocessors};
+use crate::connectors::utils::tls::{tls_client_config, TLSClientConfig};
 
 const CONNECTOR_TYPE: &str = "http_client";
+const DEFAULT_CODEC: &str = "json";
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// Target URL
     #[serde(default = "Default::default")]
-    pub(crate) url: Url,
+    pub(super) url: Url,
     /// Authorization method
     #[serde(default = "default_auth")]
-    pub(crate) auth: Auth,
+    pub(super) auth: Auth,
     /// Concurrency capacity limits ( in flight requests )
     #[serde(default = "default_concurrency")]
-    pub(crate) concurrency: usize,
+    pub(super) concurrency: usize,
     /// Default HTTP headers
     #[serde(default = "Default::default")]
-    pub(crate) headers: HashMap<String, Vec<String>>,
+    pub(super) headers: HashMap<String, Vec<String>>,
     /// Default HTTP method
     #[serde(default = "default_method")]
-    pub(crate) method: String,
+    pub(super) method: Method,
+    /// request timeout in nanoseconds
+    #[serde(default = "Default::default")]
+    timeout: Option<u64>,
+    /// optional tls client config
+    #[serde(with = "either::serde_untagged_optional", default = "Default::default")]
+    tls: Option<Either<TLSClientConfig, bool>>,
     /// MIME mapping to/from tremor codecs
-    #[serde(default = "default_mime_codec_map")]
-    pub(crate) codec_map: MimeCodecMap,
+    #[serde(default)]
+    custom_codecs: HashMap<String, String>,
 }
 
 const DEFAULT_CONCURRENCY: usize = 4;
@@ -55,16 +68,12 @@ fn default_concurrency() -> usize {
     DEFAULT_CONCURRENCY
 }
 
-fn default_method() -> String {
-    "post".to_string()
+fn default_method() -> Method {
+    Method::Post
 }
 
 fn default_auth() -> Auth {
     Auth::None
-}
-
-fn default_mime_codec_map() -> MimeCodecMap {
-    MimeCodecMap::with_builtin()
 }
 
 // for new
@@ -81,42 +90,61 @@ impl ConnectorBuilder for Builder {
 
     async fn build(
         &self,
-        _id: &str,
+        id: &str,
         connector_config: &ConnectorConfig,
     ) -> Result<Box<dyn Connector>> {
         if let Some(config) = &connector_config.config {
             let config = Config::new(config)?;
+
+            let tls_client_config = match config.tls.as_ref() {
+                Some(Either::Right(true)) => {
+                    // default config
+                    Some(tls_client_config(&TLSClientConfig::default()).await?)
+                }
+                Some(Either::Left(tls_config)) => Some(tls_client_config(tls_config).await?),
+                Some(Either::Right(false)) | None => None,
+            };
+            if config.url.scheme() == "https" && tls_client_config.is_none() {
+                return Err(ErrorKind::InvalidConfiguration(
+                    id.to_string(),
+                    format!("missing tls config for {id} with 'https' url. Set 'tls' to 'true' or provide a full config."),
+                ).into());
+            }
             let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+            let mime_codec_map = MimeCodecMap::with_overwrites(&config.custom_codecs)?;
+
+            let configured_codec = connector_config
+                .codec
+                .as_ref()
+                .map_or_else(|| DEFAULT_CODEC.to_string(), |c| c.name.clone());
             Ok(Box::new(Client {
-                max_concurrency: config.concurrency,
                 response_tx,
                 response_rx,
-                connector_config: connector_config.clone(),
+                config,
+                tls_client_config,
+                mime_codec_map,
+                configured_codec,
             }))
         } else {
-            Err(ErrorKind::MissingConfiguration(String::from("HttpClient")).into())
+            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
     }
 }
 
 /// The HTTP client connector - for HTTP-based API interactions
 pub struct Client {
-    max_concurrency: usize,
     response_tx: Sender<SourceReply>,
     response_rx: Receiver<SourceReply>,
-    connector_config: ConnectorConfig,
-}
-
-impl std::fmt::Debug for Client {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "HttpClient")
-    }
+    config: Config,
+    tls_client_config: Option<rustls::ClientConfig>,
+    mime_codec_map: MimeCodecMap,
+    configured_codec: String,
 }
 
 #[async_trait::async_trait]
 impl Connector for Client {
     fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Optional("json")
+        CodecReq::Optional(DEFAULT_CODEC)
     }
 
     async fn create_source(
@@ -126,7 +154,6 @@ impl Connector for Client {
     ) -> Result<Option<SourceAddr>> {
         let source = HttpRequestSource {
             rx: self.response_rx.clone(),
-            http_meta: HttpRequestMeta::from_config(&self.connector_config, "json")?,
         };
         builder.spawn(source, source_context).map(Some)
     }
@@ -139,16 +166,16 @@ impl Connector for Client {
         let sink = HttpRequestSink::new(
             self.response_tx.clone(),
             builder.reply_tx(),
-            self.max_concurrency,
-            HttpRequestMeta::from_config(&self.connector_config, "json")?,
+            self.config.clone(),
+            self.tls_client_config.clone(),
+            self.mime_codec_map.clone(),
+            self.configured_codec.clone(),
         );
         builder.spawn(sink, sink_context).map(Some)
     }
 }
 
 struct HttpRequestSource {
-    #[allow(dead_code)]
-    http_meta: HttpRequestMeta,
     rx: Receiver<SourceReply>,
 }
 
@@ -162,74 +189,74 @@ impl Source for HttpRequestSource {
         false
     }
 
+    /// there is no asynchronous task driving this and is being stopped by the quiescence process
     fn asynchronous(&self) -> bool {
-        true
+        false
     }
 }
 
-#[derive(Clone)]
-struct SurfClient {
-    client: surf::Client,
-}
-
-struct SurfClients {
-    clients: Vec<SurfClient>,
+struct H1Clients {
+    clients: Vec<Arc<H1Client>>,
     idx: usize,
 }
 
-impl SurfClients {
-    fn new(clients: Vec<SurfClient>) -> Self {
+impl H1Clients {
+    fn new(clients: Vec<Arc<H1Client>>) -> Self {
         Self { clients, idx: 0 }
     }
 
-    /// Return a freshly cloned client and its address.
-    ///
-    /// Sending a request tracks the transport-lifetime
-    /// so we need to clone it, so we can handle it in a separate task.
-    /// Cloning the client should be cheap
-    fn next(&mut self) -> Option<SurfClient> {
+    /// Returns a freshly clones h1 client inside an Arc
+    fn next(&mut self) -> Option<Arc<H1Client>> {
         let len = self.clients.len();
         if len > 0 {
             let idx = self.idx % len;
             self.idx += 1;
-            if let Some(client) = self.clients.get(idx) {
-                return Some(client.clone());
-            }
+            self.clients.get(idx).cloned()
+        } else {
+            None
         }
-        None
     }
 }
 
 struct HttpRequestSink {
-    clients: SurfClients,
+    request_counter: u64,
+    clients: H1Clients,
     response_tx: Sender<SourceReply>,
-    max_concurrency: usize,
+    config: Config,
+    tls_client_config: Option<rustls::ClientConfig>,
     // reply_tx: Sender<AsyncSinkReply>,
     concurrency_cap: ConcurrencyCap,
     origin_uri: EventOriginUri,
-    http_meta: HttpRequestMeta,
+    codec_map: MimeCodecMap,
+    configured_codec: String,
 }
 
 impl HttpRequestSink {
     fn new(
         response_tx: Sender<SourceReply>,
         reply_tx: Sender<AsyncSinkReply>,
-        max_in_flight_requests: usize,
-        http_meta: HttpRequestMeta,
+        config: Config,
+        tls_client_config: Option<rustls::ClientConfig>,
+        codec_map: MimeCodecMap,
+        configured_codec: String,
     ) -> Self {
+        let concurrency_cap = ConcurrencyCap::new(config.concurrency, reply_tx);
         Self {
-            clients: SurfClients::new(vec![]),
+            // ALLOW: we give it a constant 1
+            request_counter: 1,
+            clients: H1Clients::new(vec![]),
             response_tx,
-            max_concurrency: max_in_flight_requests,
-            // reply_tx: reply_tx.clone(),
-            concurrency_cap: ConcurrencyCap::new(max_in_flight_requests, reply_tx),
+            config,
+            tls_client_config,
+            concurrency_cap,
             origin_uri: EventOriginUri {
                 scheme: String::from("http_client"),
                 host: String::from("dummy"), // will be replaced in `on_event`
                 port: None,
                 path: vec![],
             },
-            http_meta,
+            codec_map,
+            configured_codec,
         }
     }
 }
@@ -237,14 +264,22 @@ impl HttpRequestSink {
 #[async_trait::async_trait()]
 impl Sink for HttpRequestSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let mut clients = Vec::with_capacity(self.max_concurrency);
+        let mut clients = Vec::with_capacity(self.config.concurrency);
 
-        for _i in 1..self.max_concurrency {
-            clients.push(SurfClient {
-                client: surf::client(),
-            });
+        let timeout = self.config.timeout.map(Duration::from_nanos);
+        let tls_config = self.tls_client_config.as_ref().cloned().map(Arc::new);
+        let client_config = http_client::Config::new()
+            .set_http_keep_alive(true) // TODO: make configurable, maybe some people don't want that
+            .set_tcp_no_delay(true)
+            .set_timeout(timeout)
+            .set_tls_config(tls_config);
+
+        for _i in 1..self.config.concurrency {
+            let client = H1Client::try_from(client_config.clone())
+                .map_err(|e| format!("Invalid HTTP Client config: {e}."))?;
+            clients.push(Arc::new(client));
         }
-        self.clients = SurfClients::new(clients);
+        self.clients = H1Clients::new(clients);
 
         Ok(true)
     }
@@ -254,7 +289,7 @@ impl Sink for HttpRequestSink {
         _input: &str,
         event: Event,
         ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
+        serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
         // constrain to max concurrency - propagate CB close on hitting limit
@@ -262,79 +297,74 @@ impl Sink for HttpRequestSink {
 
         if let Some(client) = self.clients.next() {
             let ctx = ctx.clone();
-            let response_tx = self.response_tx.clone();
-            let origin_uri = self.origin_uri.clone();
+            let _response_tx = self.response_tx.clone();
+            let _origin_uri = self.origin_uri.clone();
+            let ingest_ns = event.ingest_ns;
 
-            let (request, request_meta) = ctx.bail_err(
-                self.http_meta.process(&event, ctx.alias()),
-                "Error turning the given event into an HTTP request",
+            let event_meta = event.data.suffix().meta();
+            let _correlation_meta = event_meta.get("correlation").map(Value::clone_static); // :sob:
+
+            // assign a unique request id to this event
+            let request_id = RequestId::new(self.request_counter);
+            self.request_counter = self.request_counter.wrapping_add(1).max(1);
+            let http_meta = ctx.extract_meta(event_meta);
+            let mut builder = ctx.bail_err(
+                HttpRequestBuilder::new(
+                    request_id,
+                    http_meta,
+                    &self.codec_map,
+                    &self.config,
+                    &self.configured_codec,
+                ),
+                "Error turning event into an HTTP Request",
             )?;
 
-            let mut codec = self.http_meta.codec.boxed_clone();
-            // TODO: move processor loading outside of event handling
-            let mut preprocessors: Preprocessors =
-                Vec::with_capacity(self.http_meta.preprocessors.len());
-            for p in &self.http_meta.preprocessors {
-                preprocessors.push(preprocessor::lookup(p.name())?);
-            }
-            let mut postprocessors: Postprocessors =
-                Vec::with_capacity(self.http_meta.postprocessors.len());
-            for p in &self.http_meta.postprocessors {
-                postprocessors.push(postprocessor::lookup(p.name())?);
-            }
-
-            let client = client.client;
-
-            async_std::task::Builder::new()
-                .name(format!("http_client Connector #{}", guard.num()))
-                .spawn::<_, Result<()>>(async move {
-                    match HttpResponseMeta::invoke(
-                        &mut codec,
-                        &mut preprocessors,
-                        &mut postprocessors,
-                        request_meta.clone(),
-                        &origin_uri,
-                        client,
-                        request,
-                    )
-                    .await
-                    {
-                        Ok(ResponseEventCont::Valid(source_replies)) => {
-                            for sr in source_replies {
-                                response_tx.send(sr).await?;
-                            }
-                        }
-                        Ok(ResponseEventCont::CodecError) => {
-                            let meta = request_meta;
-                            response_tx
-                                .send(SourceReply::Structured {
-                                    origin_uri,
-                                    payload: EventPayload::try_new::<crate::Error, _>(
-                                        vec![],
-                                        |_mut_data| {
-                                            let value = literal!({ "status": 415}).clone_static();
-                                            Ok(ValueAndMeta::from_parts(
-                                                value,
-                                                literal!({
-                                                    "request": meta,
-                                                }),
-                                            ))
-                                        },
-                                    )?,
-                                    stream: DEFAULT_STREAM_ID,
-                                    port: None,
-                                })
-                                .await?;
-                        }
-                        Err(e) => {
-                            error!(
-                                "{ctx} Unhandled / unexpected condition responding to http_server event: {e}"
-                            );
-                        }
-                    };
+            if let Some(request) = builder.get_chunked_request() {
+                // if chunked we can send the response away already - spawn the task
+                // FIXME
+                // FIXME: extract into a function so we can reuse
+                async_std::task::spawn(async move {
+                    match client.send(request).await {
+                        Ok(_response) => {}
+                        Err(_e) => {}
+                    }
                     drop(guard);
-                    Ok(())
-                })?;
+                });
+
+                for value in event.value_iter() {
+                    ctx.bail_err(
+                        builder.append(value, ingest_ns, serializer).await,
+                        "Error serializing event into request body",
+                    )?;
+                }
+                ctx.bail_err(
+                    builder.finalize(serializer).await,
+                    "Error serializing final parts of the event into request body",
+                )?;
+            } else {
+                for value in event.value_iter() {
+                    ctx.bail_err(
+                        builder.append(value, ingest_ns, serializer).await,
+                        "Error serializing event into request body",
+                    )?;
+                }
+                let request = ctx.bail_err(
+                    builder.finalize(serializer).await,
+                    "Error serializing final parts of the event into request body",
+                )?;
+                // spawn the sending task
+                // FIXME
+                if let Some(request) = request {
+                    async_std::task::spawn(async move {
+                        match client.send(request).await {
+                            Ok(_response) => {}
+                            Err(_e) => {}
+                        }
+
+                        drop(guard);
+                    });
+                }
+            }
         } else {
             error!("{ctx} No http client available.");
             return Ok(SinkReply::FAIL);
@@ -352,6 +382,7 @@ impl Sink for HttpRequestSink {
     }
 }
 
+/* FIXME
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -391,11 +422,11 @@ mod tests {
             ConnectorType("rest_client".into()),
             &connector_config,
         )?;
-        let http_meta = HttpRequestMeta::from_config(&config, "json")?;
+        let http_meta = HttpRequestBuilder::from_config(&config, "json")?;
         assert_eq!("json", http_meta.codec.name());
-        let http_meta = HttpRequestMeta::from_config(&config, "string")?;
+        let http_meta = HttpRequestBuilder::from_config(&config, "string")?;
         assert_eq!("string", http_meta.codec.name());
-        let http_meta = HttpRequestMeta::from_config(&config, "snot");
+        let http_meta = HttpRequestBuilder::from_config(&config, "snot");
         assert!(http_meta.is_err());
 
         let connector_config = literal!({
@@ -410,7 +441,7 @@ mod tests {
             ConnectorType("rest_client".into()),
             &connector_config,
         )?;
-        let http_meta = HttpRequestMeta::from_config(&config, "snot")?;
+        let http_meta = HttpRequestBuilder::from_config(&config, "snot")?;
         assert_eq!("msgpack", http_meta.codec.name());
 
         Ok(())
@@ -429,7 +460,7 @@ mod tests {
             ConnectorType("rest_client".into()),
             &connector_config,
         )?;
-        let http_meta = HttpRequestMeta::from_config(&config, "json")?;
+        let http_meta = HttpRequestBuilder::from_config(&config, "json")?;
         assert_eq!("http://localhost/", http_meta.endpoint.to_string());
 
         let connector_config = literal!({
@@ -443,7 +474,7 @@ mod tests {
             ConnectorType("rest_client".into()),
             &connector_config,
         )?;
-        let http_meta = HttpRequestMeta::from_config(&config, "json")?;
+        let http_meta = HttpRequestBuilder::from_config(&config, "json")?;
         assert_eq!("https://tremor.rs/", http_meta.endpoint.to_string());
         Ok(())
     }
@@ -461,7 +492,7 @@ mod tests {
             ConnectorType("rest_client".into()),
             &connector_config,
         )?;
-        let http_meta = HttpRequestMeta::from_config(&config, "json")?;
+        let http_meta = HttpRequestBuilder::from_config(&config, "json")?;
         assert_eq!("json", http_meta.codec.name());
         assert_eq!(
             "https://tremor.rs/benchmarks/",
@@ -481,7 +512,7 @@ mod tests {
             ConnectorType("rest_client".into()),
             &connector_config,
         )?;
-        let http_meta = HttpRequestMeta::from_config(&config, "json")?;
+        let http_meta = HttpRequestBuilder::from_config(&config, "json")?;
         assert_eq!("json", http_meta.codec.name());
         assert_eq!("https://tremor.rs/", http_meta.endpoint.url().to_string());
         assert_eq!(Method::Get, http_meta.method);
@@ -501,7 +532,7 @@ mod tests {
             ConnectorType("rest_client".into()),
             &connector_config,
         )?;
-        let http_meta = HttpRequestMeta::from_config(&config, "json")?;
+        let http_meta = HttpRequestBuilder::from_config(&config, "json")?;
         assert_eq!("json", http_meta.codec.name());
         assert_eq!("http://localhost/", http_meta.endpoint.url().to_string());
         assert_eq!(Method::Put, http_meta.method);
@@ -522,7 +553,7 @@ mod tests {
             ConnectorType("rest_client".into()),
             &connector_config,
         )?;
-        let http_meta = HttpRequestMeta::from_config(&config, "json")?;
+        let http_meta = HttpRequestBuilder::from_config(&config, "json")?;
         assert_eq!("json", http_meta.codec.name());
         assert_eq!("https://tremor.rs/", http_meta.endpoint.url().to_string());
         assert_eq!(Method::Patch, http_meta.method);
@@ -556,3 +587,4 @@ mod test {
         Ok(())
     }
 }
+*/

@@ -12,26 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::auth::Auth;
-use crate::codec::{self, Codec};
-use crate::connectors::impls::http::{
-    client::Config,
-    utils::{SurfRequest, SurfResponse},
+use super::client;
+use super::utils::{FixedBodyReader, RequestId, StreamingBodyReader};
+use crate::connectors::{prelude::*, utils::mime::MimeCodecMap};
+use async_std::channel::{unbounded, Sender};
+use http_types::{
+    headers::{self, HeaderValue},
+    mime::BYTE_STREAM,
+    Method, Mime, Request,
 };
-use crate::connectors::prelude::*;
-use crate::connectors::utils::mime::MimeCodecMap;
-use crate::postprocessor::{postprocess, Postprocessor, Postprocessors};
-use crate::preprocessor::{preprocess, Preprocessor, Preprocessors};
-use beef::Cow;
-use halfbrown::HashMap;
-use http_types::headers::HeaderValue;
-use http_types::{Method, Mime};
 use std::str::FromStr;
-use tremor_common::time::nanotime;
-use tremor_pipeline::{Event, EventOriginUri, DEFAULT_STREAM_ID};
-use tremor_script::{EventPayload, ValueAndMeta};
-use tremor_value::{literal, structurize, Value};
-use value_trait::{Builder, Mutable, ValueAccess};
+use tremor_value::Value;
+use value_trait::ValueAccess;
 
 // NOTE Initial attempt at extracting request/response handling for reuse in other HTTP based connectors
 // TODO Extract headers into separate struct, separate out Config which is http client connector specific
@@ -40,6 +32,13 @@ use value_trait::{Builder, Mutable, ValueAccess};
 // TODO Deterministic method of setting content-type
 // TODO PBT's harness for full request/response client/server request/response lifecycle to test http conformance
 
+/// Body data enum for chunked or non-chunked data
+pub(crate) enum BodyData {
+    Data(Vec<Vec<u8>>),
+    Chunked(Sender<Vec<u8>>),
+}
+
+/*
 pub(crate) struct HttpResponseMeta {}
 
 pub(crate) enum ResponseEventCont {
@@ -156,17 +155,205 @@ impl HttpResponseMeta {
         event
     }
 }
-pub(crate) struct HttpRequestMeta {
-    pub(crate) codec_map: MimeCodecMap,
-    pub(crate) endpoint: Url,
-    pub(crate) method: Method,
-    //    pub(crate) auth: HttpAuth,
-    pub(crate) headers: HashMap<String, Vec<HeaderValue>>,
-    pub(crate) codec: Box<dyn Codec>,
-    pub(crate) preprocessors: Vec<Box<dyn Preprocessor>>,
-    pub(crate) postprocessors: Vec<Box<dyn Postprocessor>>,
+*/
+pub(crate) struct HttpRequestBuilder {
+    request_id: RequestId,
+    request: Option<Request>,
+    body_data: BodyData,
+    codec_overwrite: Option<String>,
 }
 
+impl HttpRequestBuilder {
+    pub(super) fn new(
+        request_id: RequestId,
+        meta: Option<&Value>,
+        codec_map: &MimeCodecMap,
+        config: &client::Config,
+        configured_codec: &String,
+    ) -> Result<Self> {
+        let request_meta = meta.get("request");
+        let method = if let Some(method_v) = request_meta.get("method") {
+            if let Some(method_str) = method_v.as_str() {
+                Method::from_str(method_str)?
+            } else {
+                return Err("Invalid HTTP Method".into());
+            }
+        } else {
+            config.method.clone()
+        };
+        let url = if let Some(url_v) = request_meta.get("url") {
+            if let Some(url_str) = url_v.as_str() {
+                Url::parse(url_str)?
+            } else {
+                return Err("Invalid HTTP URL".into());
+            }
+        } else {
+            config.url.clone()
+        };
+        let mut request = Request::new(method, url.url().clone());
+        let headers = request_meta.get("headers");
+        let chunked_header = headers.get(headers::TRANSFER_ENCODING.as_str());
+        let chunked = chunked_header
+            .as_array()
+            .and_then(|te| te.last())
+            .and_then(ValueAccess::as_str)
+            .or_else(|| chunked_header.as_str())
+            .map_or(false, |te| te == "chunked");
+
+        let content_type_header = headers.get(headers::CONTENT_TYPE.as_str());
+        let header_content_type = content_type_header
+            .as_array()
+            .and_then(|ct| ct.last())
+            .and_then(ValueAccess::as_str)
+            .or_else(|| content_type_header.as_str())
+            .map(ToString::to_string);
+        let codec_overwrite = header_content_type
+            .as_ref()
+            .and_then(|mime_str| Mime::from_str(mime_str).ok())
+            .and_then(|codec| codec_map.get_codec_name(codec.essence()))
+            // only overwrite the codec if it is different from the configured one
+            .filter(|codec| *codec != configured_codec)
+            .cloned();
+        let codec_content_type: Option<String> = codec_overwrite
+            .as_ref()
+            .and_then(|codec| codec_map.get_mime_type(codec.as_str()))
+            .or_else(|| codec_map.get_mime_type(configured_codec))
+            .cloned();
+
+        // extract content-type and thus possible codec overwrite only from first element
+        // precedence:
+        //  1. from headers meta
+        //  2. from overwritten codec
+        //  3. from configured codec
+        //  4. fall back to application/octet-stream if codec doesn't provide a mime-type
+        let content_type = Some(
+            header_content_type
+                .or(codec_content_type)
+                .unwrap_or_else(|| BYTE_STREAM.to_string()),
+        );
+        // first insert config headers
+        for (config_header_name, config_header_values) in &config.headers {
+            for header_value in config_header_values {
+                request.append_header(config_header_name.as_str(), header_value.as_str());
+            }
+        }
+        // build headers
+        if let Some(headers) = headers.as_object() {
+            for (name, values) in headers {
+                if let Some(header_values) = values.as_array() {
+                    let mut v = Vec::with_capacity(header_values.len());
+                    for value in header_values {
+                        if let Some(header_value) = value.as_str() {
+                            v.push(HeaderValue::from_str(header_value)?);
+                        }
+                    }
+                    request.append_header(name.as_ref(), v.as_slice());
+                } else if let Some(header_value) = values.as_str() {
+                    request.append_header(name.as_ref(), header_value);
+                }
+            }
+        }
+
+        // set the content type if it is not set yet
+        if request.content_type().is_none() {
+            if let Some(ct) = content_type {
+                let mime = Mime::from_str(ct.as_str())?;
+                request.set_content_type(mime);
+            }
+        }
+        // handle AUTH
+        if let Some(auth_header) = config.auth.header_value()? {
+            request.insert_header(headers::AUTHORIZATION, auth_header);
+        }
+
+        let body_data = if chunked {
+            let (chunk_tx, chunk_rx) = unbounded();
+            let chunked_reader = StreamingBodyReader::new(chunk_rx);
+            request.set_body(surf::Body::from_reader(chunked_reader, None));
+            // chunked encoding and content-length cannot go together
+            request.remove_header(headers::CONTENT_LENGTH);
+            BodyData::Chunked(chunk_tx)
+        } else {
+            BodyData::Data(Vec::with_capacity(4))
+        };
+
+        // extract headers
+        // determine content-type, override codec and chunked encoding
+        Ok(Self {
+            request_id,
+            request: Some(request),
+            body_data,
+            codec_overwrite,
+        })
+    }
+
+    pub(super) async fn append<'event>(
+        &mut self,
+        value: &'event Value<'event>,
+        ingest_ns: u64,
+        serializer: &mut EventSerializer,
+    ) -> Result<()> {
+        let chunks = serializer.serialize_for_stream_with_codec(
+            value,
+            ingest_ns,
+            self.request_id.get(),
+            self.codec_overwrite.as_ref(),
+        )?;
+        self.append_data(chunks).await
+    }
+
+    async fn append_data(&mut self, mut chunks: Vec<Vec<u8>>) -> Result<()> {
+        match &mut self.body_data {
+            BodyData::Chunked(tx) => {
+                for chunk in chunks {
+                    tx.send(chunk).await?;
+                }
+            }
+            BodyData::Data(data) => data.append(&mut chunks),
+        }
+        Ok(())
+    }
+
+    /// Consume self and finalize and send the response.
+    /// In the chunked case we have already sent it before.
+    pub(super) async fn finalize(
+        mut self,
+        serializer: &mut EventSerializer,
+    ) -> Result<Option<Request>> {
+        // finalize the stream
+        let rest = serializer.finish_stream(self.request_id.get())?;
+        if !rest.is_empty() {
+            self.append_data(rest).await?;
+        }
+        // send response if necessary
+        match self.body_data {
+            BodyData::Data(data) => {
+                // set body
+                let reader = FixedBodyReader::new(data);
+                let len = reader.len();
+                if let Some(req) = self.request.as_mut() {
+                    req.set_body(surf::Body::from_reader(reader, Some(len)));
+                }
+            }
+            BodyData::Chunked(tx) => {
+                // signal EOF to the reader
+                tx.close();
+            }
+        }
+        Ok(self.request.take())
+    }
+
+    /// Return the ready request if it is chunked
+    pub(super) fn get_chunked_request(&mut self) -> Option<Request> {
+        if matches!(self.body_data, BodyData::Chunked(_)) {
+            self.request.take()
+        } else {
+            None
+        }
+    }
+}
+
+/*
 #[derive(Debug)]
 pub(crate) struct BatchItemMeta {
     endpoint: Url,
@@ -200,35 +387,10 @@ impl BatchItemMeta {
         .into_static()
     }
 }
+*/
 
-type HeaderAndCodec<'outer> = (
-    HashMap<String, Vec<HeaderValue>>,
-    &'outer (dyn Codec + 'static),
-);
-
-impl HttpRequestMeta {
-    fn refresh_active_codec<'event>(
-        codec_map: &'event MimeCodecMap,
-        name: &str,
-        values: &[HeaderValue],
-        active_codec: Option<&'event (dyn Codec + 'static)>,
-    ) -> Option<&'event (dyn Codec + 'static)> {
-        if "content-type".eq_ignore_ascii_case(name) {
-            if let Some(active_codec) = active_codec {
-                return Some(active_codec);
-            } else if let Some(v) = values.last() {
-                // NOTE - we do not currently handle attributes like `charset=UTF-8` correctly
-                if let Ok(as_mime) = Mime::from_str(&v.to_string()) {
-                    let essence = as_mime.essence();
-                    return codec_map.map.get(essence).map(Box::as_ref);
-                }
-            }
-        };
-
-        // Fallthrough - use prior active
-        active_codec
-    }
-
+/*
+impl HttpRequestBuilder {
     fn meta_to_header_map<'outer, 'event>(
         from_meta: &Value,
         codec_map: &'outer MimeCodecMap,
@@ -300,89 +462,6 @@ impl HttpRequestMeta {
         }
     }
 
-    pub(crate) fn from_config(config: &ConnectorConfig, default_codec: &str) -> Result<Self> {
-        let preprocessors = if let Some(preprocessors) = &config.preprocessors {
-            crate::preprocessor::make_preprocessors(preprocessors)?
-        } else {
-            vec![]
-        };
-        let postprocessors = if let Some(postprocessors) = &config.postprocessors {
-            crate::postprocessor::make_postprocessors(postprocessors)?
-        } else {
-            vec![]
-        };
-
-        let user_specified: Config = if let Some(user_specified) = &config.config {
-            let config = user_specified.clone();
-            structurize(config)? // Overrides - user specified
-        } else {
-            structurize(literal!({}))? // Defaults - see Config struct
-        };
-
-        let codec = if let Some(codec) = &config.codec {
-            codec::resolve(codec)?
-        } else {
-            codec::resolve(&default_codec.into())?
-        };
-
-        let active_method = Method::from_str(&user_specified.method)?;
-
-        let active_auth = user_specified.auth;
-
-        let mut active_headers = HashMap::new();
-        for (k, v) in user_specified.headers {
-            // NOTE Not ideal as it doesn't capture conversion errors to HeaderValue
-            // at the earliest opportunity
-            let hv = v.into_iter().map(Value::from).collect();
-            if let Some(_duplicate) = active_headers.insert(k, hv) {
-                warn!("duplicate headers not allowed in config error");
-            }
-        }
-
-        if let Some(auth_header) = active_auth.header_value()? {
-            active_headers.insert("authorization".to_string(), Value::from(auth_header));
-        }
-
-        // Resolve user provided default HTTP headers
-        let (active_headers, _active_codec) = Self::to_header_map(
-            // TODO wire in
-            &active_headers, // NOTE We box the config variant, as metadata overrides will always be boxed, whereas config occurs once
-            &user_specified.codec_map,
-            codec.as_ref(),
-        )?;
-
-        Ok(Self::new(
-            user_specified.codec_map,
-            user_specified.url,
-            active_method,
-            active_headers,
-            codec,
-            preprocessors,
-            postprocessors,
-        ))
-    }
-
-    fn new(
-        codec_map: MimeCodecMap,
-        default_endpoint: Url,
-        default_method: Method,
-        default_headers: HashMap<String, Vec<HeaderValue>>,
-        codec: Box<dyn Codec>,
-        preprocessors: Vec<Box<dyn Preprocessor>>,
-        postprocessors: Vec<Box<dyn Postprocessor>>,
-    ) -> Self {
-        Self {
-            codec_map,
-            codec,
-            preprocessors,
-            postprocessors,
-            endpoint: default_endpoint,
-            headers: default_headers,
-            method: default_method,
-            //            auth: default_auth,
-        }
-    }
-
     fn per_batch_item_overrides(&mut self, meta: &Value) -> Result<BatchItemMeta> {
         if let Some(overrides) = meta.get("request") {
             let active_endpoint = overrides
@@ -432,20 +511,7 @@ impl HttpRequestMeta {
         alias: &str,
     ) -> Result<(SurfRequest, Value<'static>)> {
         let mut body: Vec<u8> = vec![];
-        let mut active_meta = BatchItemMeta {
-            endpoint: self.endpoint.clone(),
-            method: self.method,
-            //            auth: self.auth.clone(),
-            headers: self.headers.clone(),
-            codec: self.codec.boxed_clone(),
-            correlation: None,
-        };
-        for (_, chunk_meta) in event.value_meta_iter() {
-            if let Some(_exists) = chunk_meta.get("request") {
-                active_meta = self.per_batch_item_overrides(chunk_meta)?;
-                break; // NOTE Multiple overrides in a batch make no sense - skip
-            }
-        }
+
         for (chunk_data, _) in event.value_meta_iter() {
             let encoded = active_meta.codec.encode(chunk_data)?;
             let processed = postprocess(&mut self.postprocessors, event.ingest_ns, encoded, alias)?;
@@ -500,3 +566,4 @@ impl HttpRequestMeta {
         request
     }
 }
+*/

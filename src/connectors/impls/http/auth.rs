@@ -68,7 +68,7 @@ impl From<Option<&Value<'_>>> for Auth {
 }
 
 impl Auth {
-    /// Prepare a HTTP authentication header value given the authentication strategy
+    /// Prepare a HTTP autheorization header value given the auth strategy
     pub fn header_value(&self) -> Result<Option<String>> {
         match *self {
             Auth::Gcp => {

@@ -14,13 +14,8 @@
 
 use async_std::channel::Receiver;
 use futures::{ready, Stream};
-use http_types::Method;
-use serde::de::Visitor;
-use serde::{Deserialize, Deserializer};
-use std::fmt;
 use std::io::{Cursor, Read};
 use std::pin::Pin;
-use std::str::FromStr;
 use std::task::Poll;
 
 // We use surf for http clients
@@ -31,33 +26,21 @@ pub use surf::{
 // We use tide for http servers
 pub use tide::{Request as TideRequest, Response as TideResponse, Result as TideResult};
 
-struct MethodStrVisitor;
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) struct RequestId(u64);
 
-impl<'de> Visitor<'de> for MethodStrVisitor {
-    type Value = SerdeMethod;
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("an HTTP method string.")
+impl RequestId {
+    pub(crate) fn new(id: u64) -> Self {
+        Self(id)
     }
-
-    fn visit_str<E>(self, v: &str) -> core::result::Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        Method::from_str(v)
-            .map(SerdeMethod)
-            .map_err(|e| serde::de::Error::custom(e.to_string()))
+    pub(crate) fn get(&self) -> u64 {
+        self.0
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
-pub struct SerdeMethod(pub(crate) Method);
-
-impl<'de> Deserialize<'de> for SerdeMethod {
-    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        deserializer.deserialize_str(MethodStrVisitor)
+impl std::fmt::Display for RequestId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

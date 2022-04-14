@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::codec::{self, Codec};
 use crate::connectors::spawn_task;
 use crate::connectors::{
     prelude::*,
@@ -37,7 +36,8 @@ use tide::{
 use tide_rustls::TlsListener;
 use tremor_common::ids::Id;
 
-use super::utils::{FixedBodyReader, StreamingBodyReader};
+use super::meta::BodyData;
+use super::utils::{FixedBodyReader, RequestId, StreamingBodyReader};
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -87,11 +87,6 @@ impl ConnectorBuilder for Builder {
                 .codec
                 .as_ref()
                 .map_or_else(|| HttpServer::DEFAULT_CODEC.to_string(), |c| c.name.clone());
-            let codec_mime_type = codec::resolve(&configured_codec.as_str().into())?
-                .mime_types()
-                .into_iter()
-                .next()
-                .map(ToString::to_string);
             let inflight = Arc::default();
             let codec_map = MimeCodecMap::with_overwrites(&config.custom_codecs)?;
 
@@ -101,7 +96,6 @@ impl ConnectorBuilder for Builder {
                 tls_server_config,
                 inflight,
                 configured_codec,
-                codec_mime_type,
                 codec_map,
             }))
         } else {
@@ -117,7 +111,6 @@ pub(crate) struct HttpServer {
     tls_server_config: Option<TLSServerConfig>,
     inflight: Arc<DashMap<RequestId, Sender<Response>>>,
     configured_codec: String,
-    codec_mime_type: Option<String>,
     codec_map: MimeCodecMap,
 }
 
@@ -160,7 +153,6 @@ impl Connector for HttpServer {
             self.inflight.clone(),
             self.codec_map.clone(),
             self.configured_codec.clone(),
-            self.codec_mime_type.clone(),
         );
         builder.spawn(sink, sink_context).map(Some)
     }
@@ -257,7 +249,7 @@ impl Source for HttpServerSource {
         } = self.request_rx.recv().await?;
 
         // assign request id and prepare meta
-        let request_id = RequestId(*pull_id);
+        let request_id = RequestId::new(*pull_id);
         debug!("{ctx} Received HTTP request with request id {request_id}");
         let meta = ctx.meta(literal!({
             "request": request_meta,
@@ -279,10 +271,10 @@ impl Source for HttpServerSource {
             // codec overwrite, depending on requests content-type
             // only set the overwrite if it is different than the configured codec
             let codec_overwrite = if let Some(content_type) = content_type {
-                let maybe_codec = self.codec_map.get_codec(content_type.as_str());
+                let maybe_codec = self.codec_map.get_codec_name(content_type.as_str());
                 maybe_codec
-                    .filter(|c| c.name() != self.configured_codec.as_str())
-                    .map(codec::Codec::boxed_clone)
+                    .filter(|c| *c != &self.configured_codec)
+                    .cloned()
             } else {
                 None
             };
@@ -311,7 +303,6 @@ struct HttpServerSink {
     inflight: Arc<DashMap<RequestId, Sender<Response>>>,
     codec_map: MimeCodecMap,
     configured_codec: String,
-    codec_mime_type: Option<String>,
 }
 
 impl HttpServerSink {
@@ -322,13 +313,11 @@ impl HttpServerSink {
         inflight: Arc<DashMap<RequestId, Sender<Response>>>,
         codec_map: MimeCodecMap,
         configured_codec: String,
-        codec_mime_type: Option<String>,
     ) -> Self {
         Self {
             inflight,
             codec_map,
             configured_codec,
-            codec_mime_type,
         }
     }
 }
@@ -350,69 +339,17 @@ impl Sink for HttpServerSink {
 
         // batch handling:
         // - extract the request_id for each batch element
-        // - create a SinkResponse for each request_id
+        // - get or create a SinkResponse for each request_id (chose content type, chunked etc for each request id separately)
         // - store: request_id -> (SinkResponse, Sender)
         // - update SinkResponse for each element of the batch
         // - send response immediately in case of chunked encoding
         let mut response_map = HashMap::new();
-        let mut chunked = None;
-        let mut content_type = None;
-        let mut codec_overwrite: Option<&dyn Codec> = None;
-        // try to extract the request_id from the first batch item,
-        // otherwise fall back to min-max from event_id
         for (value, meta) in event.value_meta_iter() {
             // set codec and content-type upon first iteration
             let http_meta = ctx.extract_meta(meta);
-            let response_meta = http_meta.get("response");
-            let headers_meta = response_meta.get("headers");
-            // extract if we use chunked encoding
-
-            let chunked_header = headers_meta.get(headers::TRANSFER_ENCODING.as_str());
-
-            // extract content type and transfer-encoding from first batch element
-            if chunked.is_none() {
-                chunked = Some(
-                    chunked_header
-                        .as_array()
-                        .and_then(|te| te.last())
-                        .and_then(ValueAccess::as_str)
-                        .or_else(|| chunked_header.as_str())
-                        .map_or(false, |te| te == "chunked"),
-                );
-            }
-            // extract content-type and thus possible codec overwrite only from first element
-            // precedence:
-            //  1. from headers meta
-            //  2. from overwritten codec
-            //  3. from configured codec
-            //  4. fall back to application/octet-stream if codec doesn't provide a mime-type
-            if content_type.is_none() {
-                let content_type_header = headers_meta.get(headers::CONTENT_TYPE.as_str());
-                let header_content_type = content_type_header
-                    .as_array()
-                    .and_then(|ct| ct.last())
-                    .and_then(ValueAccess::as_str)
-                    .or_else(|| content_type_header.as_str())
-                    .map(ToString::to_string);
-
-                codec_overwrite = header_content_type
-                    .as_ref()
-                    .and_then(|mime_str| Mime::from_str(mime_str).ok())
-                    .and_then(|codec| self.codec_map.get_codec(codec.essence()))
-                    // only overwrite the codec if it is different from the configured one
-                    .filter(|codec| codec.name() != self.configured_codec.as_str());
-                let codec_content_type = codec_overwrite
-                    .and_then(|codec| codec.mime_types().first().map(ToString::to_string))
-                    .or_else(|| self.codec_mime_type.clone());
-                content_type = Some(
-                    header_content_type
-                        .or(codec_content_type)
-                        .unwrap_or_else(|| BYTE_STREAM.to_string()),
-                );
-            }
 
             // first try to extract request_id from event batch element metadata
-            if let Some(rid) = http_meta.get_u64("request_id").map(RequestId) {
+            if let Some(rid) = http_meta.get_u64("request_id").map(RequestId::new) {
                 match response_map.entry(rid) {
                     Entry::Vacant(k) => {
                         if let Some((rid, sender)) = self.inflight.remove(&rid) {
@@ -420,26 +357,17 @@ impl Sink for HttpServerSink {
                             let mut response = ctx.bail_err(
                                 SinkResponse::build(
                                     rid,
-                                    chunked.unwrap_or_default(),
                                     sender,
                                     http_meta,
-                                    content_type.as_ref(),
+                                    &self.codec_map,
+                                    &self.configured_codec,
                                 )
                                 .await,
                                 Self::ERROR_MSG_EXTRACT_VALUE,
                             )?;
 
-                            let data = ctx.bail_err(
-                                serializer.serialize_for_stream_with_codec(
-                                    value,
-                                    ingest_ns,
-                                    rid.0,
-                                    codec_overwrite,
-                                ),
-                                Self::ERROR_MSG_EXTRACT_VALUE,
-                            )?;
                             ctx.bail_err(
-                                response.append(data).await,
+                                response.append(value, ingest_ns, serializer).await,
                                 Self::ERROR_MSG_APPEND_RESPONSE,
                             )?;
                             k.insert(response);
@@ -451,17 +379,8 @@ impl Sink for HttpServerSink {
                         }
                     }
                     Entry::Occupied(mut o) => {
-                        let data = ctx.bail_err(
-                            serializer.serialize_for_stream_with_codec(
-                                value,
-                                ingest_ns,
-                                rid.0,
-                                codec_overwrite,
-                            ),
-                            Self::ERROR_MSG_EXTRACT_VALUE,
-                        )?;
                         ctx.bail_err(
-                            o.get_mut().append(data).await,
+                            o.get_mut().append(value, ingest_ns, serializer).await,
                             Self::ERROR_MSG_APPEND_RESPONSE,
                         )?;
                     }
@@ -471,7 +390,7 @@ impl Sink for HttpServerSink {
                 match min_pull_id.zip(max_pull_id) {
                     Some((min, max)) if min == max => {
                         // single pull_id
-                        let rid = RequestId(min);
+                        let rid = RequestId::new(min);
 
                         match response_map.entry(rid) {
                             Entry::Vacant(k) => {
@@ -480,26 +399,17 @@ impl Sink for HttpServerSink {
                                     let mut response = ctx.bail_err(
                                         SinkResponse::build(
                                             rid,
-                                            chunked.unwrap_or_default(),
                                             sender,
                                             http_meta,
-                                            content_type.as_ref(),
+                                            &self.codec_map,
+                                            &self.configured_codec,
                                         )
                                         .await,
                                         Self::ERROR_MSG_EXTRACT_VALUE,
                                     )?;
 
-                                    let data = ctx.bail_err(
-                                        serializer.serialize_for_stream_with_codec(
-                                            value,
-                                            ingest_ns,
-                                            rid.0,
-                                            codec_overwrite,
-                                        ),
-                                        Self::ERROR_MSG_EXTRACT_VALUE,
-                                    )?;
                                     ctx.bail_err(
-                                        response.append(data).await,
+                                        response.append(value, ingest_ns, serializer).await,
                                         Self::ERROR_MSG_APPEND_RESPONSE,
                                     )?;
                                     k.insert(response);
@@ -509,17 +419,8 @@ impl Sink for HttpServerSink {
                                 }
                             }
                             Entry::Occupied(mut o) => {
-                                let data = ctx.bail_err(
-                                    serializer.serialize_for_stream_with_codec(
-                                        value,
-                                        ingest_ns,
-                                        rid.0,
-                                        codec_overwrite,
-                                    ),
-                                    Self::ERROR_MSG_EXTRACT_VALUE,
-                                )?;
                                 ctx.bail_err(
-                                    o.get_mut().append(data).await,
+                                    o.get_mut().append(value, ingest_ns, serializer).await,
                                     Self::ERROR_MSG_APPEND_RESPONSE,
                                 )?;
                             }
@@ -527,7 +428,7 @@ impl Sink for HttpServerSink {
                     }
                     Some((min, max)) => {
                         // range of pull_ids, we need to multiplex to multiple requests
-                        for rid in (min..=max).map(RequestId) {
+                        for rid in (min..=max).map(RequestId::new) {
                             match response_map.entry(rid) {
                                 Entry::Vacant(k) => {
                                     if let Some((rid, sender)) = self.inflight.remove(&rid) {
@@ -535,26 +436,17 @@ impl Sink for HttpServerSink {
                                         let mut response = ctx.bail_err(
                                             SinkResponse::build(
                                                 rid,
-                                                chunked.unwrap_or_default(),
                                                 sender,
                                                 http_meta,
-                                                content_type.as_ref(),
+                                                &self.codec_map,
+                                                &self.configured_codec,
                                             )
                                             .await,
                                             Self::ERROR_MSG_EXTRACT_VALUE,
                                         )?;
 
-                                        let data = ctx.bail_err(
-                                            serializer.serialize_for_stream_with_codec(
-                                                value,
-                                                ingest_ns,
-                                                rid.0,
-                                                codec_overwrite,
-                                            ),
-                                            Self::ERROR_MSG_EXTRACT_VALUE,
-                                        )?;
                                         ctx.bail_err(
-                                            response.append(data).await,
+                                            response.append(value, ingest_ns, serializer).await,
                                             Self::ERROR_MSG_APPEND_RESPONSE,
                                         )?;
                                         k.insert(response);
@@ -564,17 +456,8 @@ impl Sink for HttpServerSink {
                                     }
                                 }
                                 Entry::Occupied(mut o) => {
-                                    let data = ctx.bail_err(
-                                        serializer.serialize_for_stream_with_codec(
-                                            value,
-                                            ingest_ns,
-                                            rid.0,
-                                            codec_overwrite,
-                                        ),
-                                        Self::ERROR_MSG_EXTRACT_VALUE,
-                                    )?;
                                     ctx.bail_err(
-                                        o.get_mut().append(data).await,
+                                        o.get_mut().append(value, ingest_ns, serializer).await,
                                         Self::ERROR_MSG_APPEND_RESPONSE,
                                     )?;
                                 }
@@ -624,20 +507,16 @@ struct SinkResponse {
     res: Option<Response>,
     body_data: BodyData,
     tx: Sender<Response>,
-}
-
-enum BodyData {
-    Data(Vec<Vec<u8>>),
-    Chunked(Sender<Vec<u8>>),
+    codec_overwrite: Option<String>,
 }
 
 impl SinkResponse {
     async fn build<'event>(
         request_id: RequestId,
-        chunked: bool,
         tx: Sender<Response>,
         http_meta: Option<&Value<'event>>,
-        content_type: Option<&String>,
+        codec_map: &MimeCodecMap,
+        configured_codec: &String,
     ) -> Result<Self> {
         let mut res = tide::Response::new(StatusCode::Ok);
 
@@ -664,8 +543,51 @@ impl SinkResponse {
             })
         };
         res.set_status(status);
+        let headers = response_meta.get("headers");
+
+        // extract if we use chunked encoding
+        let chunked_header = headers.get(headers::TRANSFER_ENCODING.as_str());
+
+        // extract content type and transfer-encoding from first batch element
+        let chunked = chunked_header
+            .as_array()
+            .and_then(|te| te.last())
+            .and_then(ValueAccess::as_str)
+            .or_else(|| chunked_header.as_str())
+            .map_or(false, |te| te == "chunked");
+
+        let content_type_header = headers.get(headers::CONTENT_TYPE.as_str());
+        let header_content_type = content_type_header
+            .as_array()
+            .and_then(|ct| ct.last())
+            .and_then(ValueAccess::as_str)
+            .or_else(|| content_type_header.as_str())
+            .map(ToString::to_string);
+        let codec_overwrite = header_content_type
+            .as_ref()
+            .and_then(|mime_str| Mime::from_str(mime_str).ok())
+            .and_then(|codec| codec_map.get_codec_name(codec.essence()))
+            // only overwrite the codec if it is different from the configured one
+            .filter(|codec| *codec != configured_codec)
+            .cloned();
+        let codec_content_type: Option<String> = codec_overwrite
+            .as_ref()
+            .and_then(|codec| codec_map.get_mime_type(codec.as_str()))
+            .or_else(|| codec_map.get_mime_type(&configured_codec))
+            .cloned();
+        // extract content-type and thus possible codec overwrite only from first element
+        // precedence:
+        //  1. from headers meta
+        //  2. from overwritten codec
+        //  3. from configured codec
+        //  4. fall back to application/octet-stream if codec doesn't provide a mime-type
+        let content_type = Some(
+            header_content_type
+                .or(codec_content_type)
+                .unwrap_or_else(|| BYTE_STREAM.to_string()),
+        );
         // build headers
-        if let Some(headers) = response_meta.get_object("headers") {
+        if let Some(headers) = headers.as_object() {
             for (name, values) in headers {
                 if let Some(header_values) = values.as_array() {
                     let mut v = Vec::with_capacity(header_values.len());
@@ -684,7 +606,7 @@ impl SinkResponse {
         // either from the configured or overwritten codec
         if res.content_type().is_none() {
             if let Some(ct) = content_type {
-                let mime = Mime::from_str(ct)?;
+                let mime = Mime::from_str(ct.as_str())?;
                 res.set_content_type(mime);
             }
         }
@@ -705,10 +627,26 @@ impl SinkResponse {
             res,
             body_data,
             tx,
+            codec_overwrite,
         })
     }
 
-    async fn append(&mut self, mut chunks: Vec<Vec<u8>>) -> Result<()> {
+    async fn append<'event>(
+        &mut self,
+        value: &'event Value<'event>,
+        ingest_ns: u64,
+        serializer: &mut EventSerializer,
+    ) -> Result<()> {
+        let chunks = serializer.serialize_for_stream_with_codec(
+            value,
+            ingest_ns,
+            self.request_id.get(),
+            self.codec_overwrite.as_ref(),
+        )?;
+        self.append_data(chunks).await
+    }
+
+    async fn append_data(&mut self, mut chunks: Vec<Vec<u8>>) -> Result<()> {
         match &mut self.body_data {
             BodyData::Chunked(tx) => {
                 for chunk in chunks {
@@ -724,36 +662,31 @@ impl SinkResponse {
     /// In the chunked case we have already sent it before.
     async fn finalize(mut self, serializer: &mut EventSerializer) -> Result<()> {
         // finalize the stream
-        let rest = serializer.finish_stream(self.request_id.0)?;
+        let rest = serializer.finish_stream(self.request_id.get())?;
         if !rest.is_empty() {
-            self.append(rest).await?;
+            self.append_data(rest).await?;
         }
         // send response if necessary
-        if let BodyData::Data(data) = self.body_data {
-            if let Some(mut response) = self.res.take() {
-                // set body
-                let reader = FixedBodyReader::new(data);
-                let len = reader.len();
-                response.set_body(tide::Body::from_reader(reader, Some(len)));
-                // send off the response
-                self.tx.send(response).await?;
+        match self.body_data {
+            BodyData::Data(data) => {
+                if let Some(mut response) = self.res.take() {
+                    // set body
+                    let reader = FixedBodyReader::new(data);
+                    let len = reader.len();
+                    response.set_body(tide::Body::from_reader(reader, Some(len)));
+                    // send off the response
+                    self.tx.send(response).await?;
+                }
             }
-        } else {
-            // TODO: only close the stream if we know we have the last value for this request_id
-            // TODO: but how to find out?
-            // signal EOF to the `StreamingBodyReader`
-            self.tx.close();
+            BodyData::Chunked(tx) => {
+                // signal EOF to the `StreamingBodyReader`
+                tx.close();
+                // the response has been sent already, nothing left to do here
+            }
         }
+        // close the channel. we are done here
+        self.tx.close();
         Ok(())
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct RequestId(u64);
-
-impl std::fmt::Display for RequestId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
     }
 }
 
