@@ -63,6 +63,27 @@ where
             aid,
         }
     }
+
+    /// Parses a string into a query supporting query arguments
+    ///
+    /// this is used in the language server to delete lements on a
+    /// parsing error
+    ///
+    /// # Errors
+    /// if the query can not be parsed
+    #[cfg(feature = "arena-delete")]
+    pub fn parse_with_aid<S>(
+        src: &S,
+        reg: &Registry,
+        aggr_reg: &AggrRegistry,
+    ) -> std::result::Result<Self, crate::errors::ErrorWithIndex>
+    where
+        S: ToString + ?Sized,
+    {
+        let (aid, src) = Arena::insert(src)?;
+        Self::parse_(aid, src, reg, aggr_reg).map_err(|e| crate::errors::ErrorWithIndex(aid, e))
+    }
+
     /// Parses a string into a query supporting query arguments
     ///
     /// # Errors
