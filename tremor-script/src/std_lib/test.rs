@@ -12,13 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::interpreter::val_eq;
 use crate::prelude::*;
 use crate::tremor_fn;
 use crate::{registry::Registry, TRUE};
 
 pub fn load(registry: &mut Registry) {
     registry.insert(tremor_fn! (test|assert(ctx, desc, expected, got) {
-        if expected == got {
+        if val_eq(expected, got) {
             Ok(TRUE)
         } else if ctx.panic_on_assert {
             Err(to_runtime_error(format!(r#"
@@ -30,4 +31,30 @@ Assertion for {} failed:
             Ok(Value::from(vec![(*expected).clone(), (*got).clone()]))
         }
     }));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::registry::FResult;
+
+    #[test]
+    fn test() -> FResult<()> {
+        let mut reg = Registry::default();
+        load(&mut reg);
+        let fun = reg.find("test", "assert")?;
+        let mut ctx = EventContext::new(0, None);
+        let one = Value::from(1_u64);
+        let two = Value::from(2_i64);
+        let res = fun.invoke(&ctx, &[&Value::from("DESC"), &one, &one]);
+        assert_eq!(Ok(Value::from(true)), res);
+
+        let res = fun.invoke(&ctx, &[&Value::from("DESC"), &one, &two]);
+        assert_eq!(Ok(Value::from(vec![one.clone(), two.clone()])), res);
+
+        ctx.panic_on_assert = true;
+        let res = fun.invoke(&ctx, &[&Value::from("DESC"), &one, &two]);
+        assert!(res.is_err());
+        Ok(())
+    }
 }

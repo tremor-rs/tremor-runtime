@@ -1,0 +1,11 @@
+{"foo":["bar","baz","baz","qux","quux","quuz","corge","grault","garply","waldo","fred","plugh","xyzzy","thud"]}
+{"snot":true,"badger":42}
+{"snot":true,"badger":43}
+{"snot":true,"badger":true}
+{"snot":true,"badger":0}
+{"snot":true,"badger":0.5}
+{"snot":true,"badger":"42.12"}
+{"snot":true,"badger":null}
+{"snot":true,"badger":{}}
+{"snot":true,"badger":[]}
+"exit"

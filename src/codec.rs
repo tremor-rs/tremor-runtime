@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
+use crate::{
+    config,
+    errors::{Kind as ErrorKind, Result},
+};
+use std::fmt::{Debug, Display};
 use tremor_script::Value;
 pub(crate) mod binary;
 pub(crate) mod binflux;
@@ -26,22 +30,11 @@ pub(crate) mod string;
 pub(crate) mod syslog;
 pub(crate) mod yaml;
 
-const MIME_TYPES: [&str; 8] = [
-    "application/json",
-    "application/yaml",
-    "text/plain",
-    "text/html",
-    "application/msgpack",
-    "application/x-msgpack",
-    "application/vnd.msgpack",
-    "application/octet-stream",
-];
-
 mod prelude {
     pub use super::Codec;
     pub use crate::errors::*;
     pub use tremor_script::prelude::*;
-    pub use tremor_script::{Object, Value};
+    pub use tremor_value::{Object, Value};
 }
 
 /// The codec trait, to encode and decode data
@@ -55,8 +48,8 @@ pub trait Codec: Send + Sync {
     /// e.g. application/json
     ///
     /// The returned mime types should be unique to this codec
-    #[cfg(not(tarpaulin_include))]
-    fn mime_types(&self) -> Vec<&str> {
+
+    fn mime_types(&self) -> Vec<&'static str> {
         vec![]
     }
 
@@ -80,7 +73,7 @@ pub trait Codec: Send + Sync {
     ///
     /// # Errors
     ///  * when we can't write encode to the given vector
-    #[cfg(not(tarpaulin_include))]
+
     fn encode_into(&self, data: &Value, dst: &mut Vec<u8>) -> Result<()> {
         let mut res = self.encode(data)?;
         std::mem::swap(&mut res, dst);
@@ -94,12 +87,24 @@ pub trait Codec: Send + Sync {
     fn boxed_clone(&self) -> Box<dyn Codec>;
 }
 
-/// Codec lookup function
+impl Display for dyn Codec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Codec: {}", self.name())
+    }
+}
+
+impl Debug for dyn Codec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Codec: {}", self.name())
+    }
+}
+
+/// resolve a codec from either a codec name of a full-blown config
 ///
 /// # Errors
 ///  * if the codec doesn't exist
-pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
-    match name {
+pub fn resolve(config: &config::Codec) -> Result<Box<dyn Codec>> {
+    match config.name.as_str() {
         "json" => Ok(Box::new(json::Json::<json::Unsorted>::default())),
         "json-sorted" => Ok(Box::new(json::Json::<json::Sorted>::default())),
         "msgpack" => Ok(Box::new(msgpack::MsgPack {})),
@@ -112,37 +117,7 @@ pub fn lookup(name: &str) -> Result<Box<dyn Codec>> {
         "binary" => Ok(Box::new(binary::Binary {})),
         "syslog" => Ok(Box::new(syslog::Syslog::utcnow())),
         "csv" => Ok(Box::new(csv::Csv {})),
-        _ => Err(format!("Codec '{}' not found.", name).into()),
-    }
-}
-
-/// Map from Mime types to codecs for all builtin codecs mappable to Mime types
-/// these are all safe mappings
-/// if you have a specific codec to be used for a more unspecific mime type
-/// like statsd for text/plain
-/// these must be specified in a source specific `codec_map`
-#[must_use]
-pub fn builtin_codec_map() -> halfbrown::HashMap<String, Box<dyn Codec>> {
-    MIME_TYPES
-        .iter()
-        .filter_map(|t| Some(((*t).to_string(), by_mime_type(t).ok()?)))
-        .collect()
-}
-
-/// lookup a codec by mime type
-///
-/// # Errors
-/// if no codec could be found for the given mime type
-pub fn by_mime_type(mime: &str) -> Result<Box<dyn Codec>> {
-    match mime {
-        "application/json" => Ok(Box::new(json::Json::<json::Unsorted>::default())),
-        "application/yaml" => Ok(Box::new(yaml::Yaml {})),
-        "text/plain" | "text/html" => Ok(Box::new(string::String {})),
-        "application/msgpack" | "application/x-msgpack" | "application/vnd.msgpack" => {
-            Ok(Box::new(msgpack::MsgPack {}))
-        }
-        "application/octet-stream" => Ok(Box::new(binary::Binary {})),
-        _ => Err(format!("No codec found for mime type '{}'", mime).into()),
+        s => Err(ErrorKind::CodecNotFound(s.into()).into()),
     }
 }
 
@@ -151,41 +126,19 @@ mod test {
 
     #[test]
     fn lookup() {
-        assert!(super::lookup("json").is_ok());
-        assert!(super::lookup("json-sorted").is_ok());
-        assert!(super::lookup("msgpack").is_ok());
-        assert!(super::lookup("influx").is_ok());
-        assert!(super::lookup("binflux").is_ok());
-        assert!(super::lookup("null").is_ok());
-        assert!(super::lookup("string").is_ok());
-        assert!(super::lookup("statsd").is_ok());
-        assert!(super::lookup("yaml").is_ok());
-        assert!(super::lookup("syslog").is_ok());
+        assert!(super::resolve(&"json".into()).is_ok());
+        assert!(super::resolve(&"json-sorted".into()).is_ok());
+        assert!(super::resolve(&"msgpack".into()).is_ok());
+        assert!(super::resolve(&"influx".into()).is_ok());
+        assert!(super::resolve(&"binflux".into()).is_ok());
+        assert!(super::resolve(&"null".into()).is_ok());
+        assert!(super::resolve(&"string".into()).is_ok());
+        assert!(super::resolve(&"statsd".into()).is_ok());
+        assert!(super::resolve(&"yaml".into()).is_ok());
+        assert!(super::resolve(&"syslog".into()).is_ok());
         assert_eq!(
-            super::lookup("snot").err().unwrap().to_string(),
-            "Codec 'snot' not found."
+            super::resolve(&"snot".into()).err().unwrap().to_string(),
+            "Codec \"snot\" not found."
         )
-    }
-
-    #[test]
-    fn builtin_codec_map() {
-        let map = super::builtin_codec_map();
-
-        for t in super::MIME_TYPES.iter() {
-            assert!(map.contains_key(*t));
-        }
-    }
-    #[test]
-    fn by_mime_type() {
-        for t in super::MIME_TYPES.iter() {
-            assert!(super::by_mime_type(t).is_ok());
-        }
-        assert_eq!(
-            super::by_mime_type("application/badger")
-                .err()
-                .unwrap()
-                .to_string(),
-            "No codec found for mime type 'application/badger'"
-        );
     }
 }

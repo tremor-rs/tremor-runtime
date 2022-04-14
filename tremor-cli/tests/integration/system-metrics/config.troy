@@ -1,0 +1,136 @@
+#
+# Testing system metrics
+#
+# Test Logic:
+# - have a pipeline and a sink and source connector report metrics every 3 seconds
+# - exit the flow when we collected metrics for a certain amount of events that passed through source, pipeline and sink
+define flow main
+flow
+  use integration;
+  use std::time::nanos;
+  use troy::connectors;
+
+  # connector definitions
+  define connector in from metronome
+  with
+    metrics_interval_s = 3,
+    config = { "interval": nanos::from_seconds(1) }
+  end;
+
+  define connector out from file
+  with
+    metrics_interval_s = 3,
+    codec = "json-sorted",
+    postprocessors = ["separate"],
+    config = {
+      "path": "events.log",
+      "mode": "write"
+    }
+  end;
+
+  # pipeline definitions
+  define pipeline main
+  args
+    metrics_interval_s = 3
+  pipeline
+    #!config metrics_interval_s = 3
+
+    define script process
+    script
+      let event.ingest_ns = null;
+      event
+    end;
+
+    create script process;
+
+    #select event from in into out;
+    select event from in into process;
+    select event from process/out into out;
+    select event from process/err into err;
+
+  end;
+  
+  define pipeline metrics
+  into 
+    out, err, exit
+  pipeline
+    define script process
+    script
+      let event.timestamp = null; # for testing
+
+      # initialize state
+      let state = match state of
+        # state is initialized
+        case %{
+          present source_out,
+          present pipeline_in,
+          present pipeline_out,
+          present sink_in
+        } => state
+        # initialize state
+        default => {
+          "source_out": 0,   # source port `out`
+          "pipeline_in": 0, # pipeline port `in`
+          "pipeline_out": 0, # pipeline port `out`
+          "sink_in": 0      # sink port `in`
+        }
+      end;
+      # update state counters
+      match event of 
+        case matched = %{ tags ~= %{`pipeline` == "main", port == "in" }, fields ~= %{ present count } } =>
+          let state.pipeline_in = matched.fields.count
+        case matched = %{ tags ~= %{ `pipeline` == "main", port == "out"}, fields ~= %{ present count } } =>
+          let state.pipeline_out = matched.fields.count
+        case matched = %{ tags ~= %{ `connector` == "in", port == "out" }, fields ~= %{ present count } } => 
+          let state.source_out = matched.fields.count
+        case matched = %{ tags ~= %{ `connector` == "out", port == "in" }, fields ~= %{ present count } } => 
+          let state.sink_in = matched.fields.count
+        default => null
+      end;
+
+      # exit if we have at least 10 events
+      match state of
+        case %{ source_out >= 10, pipeline_in >= 10, pipeline_in >= 10, sink_in >= 10} =>
+          emit {"EXIT": "NOW"} => "exit"
+        default =>
+          emit state => "out"
+      end
+    end;
+
+    create script process;
+
+    select event from in into process;
+    select event from process/out into out;
+    select event from process/exit into exit;
+    select event from process/err into err;
+
+  end;
+
+  # creating connectors
+  create connector in;
+  create connector out;
+
+  create connector exit from connectors::exit;
+  create connector metrics from connectors::metrics;
+  create connector stdio from connectors::console;
+
+  # creating pipelines
+  create pipeline main;
+  create pipeline metrics;
+
+  # connects
+  connect /connector/in to  /pipeline/main;
+  connect /pipeline/main/out to /connector/out;
+
+  connect /connector/metrics to /pipeline/metrics;
+  # catching other outputs, just in case
+  connect /pipeline/metrics/out to /connector/stdio/stdout;
+  connect /pipeline/metrics/err to /connector/stdio/stderr;
+
+  # exit when we have all events
+  connect /pipeline/metrics/exit to /connector/exit;
+  connect /pipeline/metrics/exit to /connector/stdio/stdout;
+
+end;
+
+deploy flow main;

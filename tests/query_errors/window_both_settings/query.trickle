@@ -1,4 +1,4 @@
-define tumbling window both_windows
+define window both_windows from tumbling
 with
   size = 1,
   interval = 1

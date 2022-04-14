@@ -56,9 +56,10 @@ demo: image
 	-docker-compose -f demo/demo.yaml up
 	-docker-compose -f demo/demo.yaml rm -fsv
 
-it:
-	cargo install --path tremor-cli
-	cd tremor-cli && TREMOR_PATH=../tremor-script/lib tremor test integration tests -i integration -e ws
+it-clean:
+	-find tremor-cli/tests -name '*.log' | xargs rm
+it: it-clean
+	cargo run -p tremor-cli -- test integration tremor-cli/tests
 
 bench: force
 	cargo build --release -p tremor-cli
@@ -69,15 +70,80 @@ force:
 
 ###############################################################################
 
-stdlib-doc:
-	-rm -rf docs
-	-mkdir docs
-	-TREMOR_PATH=./tremor-script/lib cargo run -p tremor-cli -- doc tremor-script/lib docs
+docs: library-doc lalrpop-doc
+	-cp tremor-script/docs/library/overview.md docs/library
 
-aggr-doc:
-	-rm -rf aggr-docs
-	-mkdir aggr-docs
-	-TREMOR_PATH=./tremor-script/docs cargo run -p tremor-cli -- doc tremor-script/docs aggr-docs
+library-doc:
+	-rm -rf docs
+	-mkdir -p docs/library/stdlib
+	-TREMOR_PATH=./tremor-script/lib cargo run -p tremor-cli -- doc tremor-script/lib docs/library
+
+lalrpop-docgen:
+	-git clone https://github.com/darach/lalrpop lalrpop-docgen
+	cd lalrpop-docgen && git checkout docgen
+
+lalrpop-doc: lalrpop-docgen
+	-mkdir docs/language
+	cd lalrpop-docgen && cargo build --all
+	lalrpop-docgen/target/debug/lalrpop-docgen \
+	  -rp "./" \
+	  -mp static/language/prolog/ \
+          -me static/language/epilog/ \
+          -gc "ModuleFile,Deploy,Query,Script" \
+          --out-dir docs/language \
+          tremor-script/src/grammar.lalrpop
+	if test -f docs/language/grammar.md; then  mv docs/language/grammar.md docs/language/EBNF.md; fi
+	if test -f docs/language/modulefile.md; then mv docs/language/modulefile.md docs/language/module_system.md; fi
+
+lint-lalrpop-doc: lalrpop-docgen
+	-mkdir docs/language
+	cd lalrpop-docgen && cargo build --all
+	lalrpop-docgen/target/debug/lalrpop-docgen \
+	  --lint \
+	  -rp "./" \
+	  -mp static/language/prolog \
+          -me static/language/epilog \
+          -gc "ModuleFile,Deploy,Query,Script" \
+          --out-dir docs/language \
+          tremor-script/src/grammar.lalrpop
+	if test -f docs/language/grammar.md; then  mv docs/language/grammar.md docs/language/EBNF.md; fi
+	if test -f docs/language/modulefile.md; then mv docs/language/modulefile.md docs/language/module_system.md; fi
+
+
+pdf-doc: lalrpop-doc
+	-mkdir docs/pdf
+	cd docs && \
+	echo pandoc --toc -f gfm  --verbose \
+	  -F /Users/dennis/.nvm/versions/node/v16.13.0/bin/mermaid-filter \
+	  --pdf-engine /usr/local/texlive/2021/bin/universal-darwin/xelatex \
+	  --variable mainfont="Helvetica" \
+	  --variable sansfont="Courier New" \
+	  --syntax-definition=../tremor.xml \
+	  --syntax-definition=../trickle.xml \
+	  --syntax-definition=../troy.xml \
+	  --syntax-definition=../ebnf.xml \ 
+	  -V papersize=a4 -V geometry=margin=2cm \
+	  --columns 80 --wrap auto \
+	  --highlight-style=tango --include-in-header ../chapter.tex \
+	  language.md language/full.md language/EBNF.md \
+	  -o pdf/tremor-langauge-reference.pdf
+	cd docs/library && \
+	pandoc --toc -f gfm \
+	  --pdf-engine xelatex  \
+	  --variable mainfont="Helvetica" \
+	  --variable sansfont="Courier New" \
+	  --highlight-style=haddock  \
+	  overview.md \
+	  std.md std/*.md std/time/*.md std/integer/*.md \
+	  tremor.md tremor/*.md \
+          cncf.md cncf/otel.md \
+	  cncf/otel/span_id.md cncf/otel/trace_id.md \
+	  cncf/otel/logs.md cncf/otel/logs/*.md \
+	  cncf/otel/metrics.md cncf/otel/metrics/*.md \
+	  cncf/otel/trace.md cncf/otel/trace/status.md cncf/otel/trace/status/*.md cncf/otel/trace/spankind.md \
+	  overview.md aggr.md aggr/stats.md aggr/win.md \
+	  -o ../pdf/tremor-library-reference.pdf
+	  
 
 chk_copyright:
 	@./.github/checks/copyright.sh

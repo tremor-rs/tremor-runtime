@@ -59,7 +59,6 @@ impl<S: Sorting> Default for Json<S> {
 }
 
 impl<S: Sorting> Codec for Json<S> {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         if S::SORTED {
             "sorted-json"
@@ -68,8 +67,7 @@ impl<S: Sorting> Codec for Json<S> {
         }
     }
 
-    #[cfg(not(tarpaulin_include))]
-    fn mime_types(&self) -> Vec<&str> {
+    fn mime_types(&self) -> Vec<&'static str> {
         vec!["application/json"]
         // TODO: application/json-seq for one json doc per line?
     }
@@ -90,7 +88,7 @@ impl<S: Sorting> Codec for Json<S> {
             &mut self.string_buffer,
         )
         .map(Some)
-        .map_err(|e| e.into())
+        .map_err(Error::from)
     }
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {
         if S::SORTED {
@@ -106,7 +104,6 @@ impl<S: Sorting> Codec for Json<S> {
         Ok(())
     }
 
-    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }

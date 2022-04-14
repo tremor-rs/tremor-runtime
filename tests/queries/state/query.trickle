@@ -1,5 +1,5 @@
 define script countable
-with
+args
   seed = 10,
   name = "s0",
 script
@@ -19,4 +19,5 @@ create script seq2 from countable with name = "s2", seed = 100 end;
 select event from in into seq1;
 select { "event": event.e, "s1": event.s1 } from seq1 into seq2;
 select { "event": event.e.`event`, "s1": event.e.s1, "s2": event.s2 } from seq2 into out;
-
+select event from seq1/err into out;
+select event from seq2/err into out;

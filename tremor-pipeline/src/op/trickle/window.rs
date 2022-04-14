@@ -18,19 +18,18 @@ use std::borrow::Cow as SCow;
 use tremor_common::stry;
 use tremor_script::{
     self,
-    ast::{AggrSlice, Aggregates, Consts, NodeMetas, RunConsts, Select, WindowDecl},
+    ast::{AggrSlice, Aggregates, Consts, RunConsts, Select, WindowDefinition},
     errors::Result,
     interpreter::{Env, LocalStack},
     prelude::*,
-    Value,
+    Value, NO_AGGRS,
 };
 
-use super::select::{execute_select_and_having, NO_AGGRS};
+use super::select::execute_select_and_having;
 
 pub(crate) struct SelectCtx<'run, 'script, 'local> {
     pub(crate) select: &'run Select<'script>,
     pub(crate) local_stack: &'run LocalStack<'local>,
-    pub(crate) node_meta: &'run NodeMetas,
     pub(crate) opts: ExecOpts,
     pub(crate) ctx: &'run EventContext<'run>,
     pub(crate) event_id: EventId,
@@ -124,14 +123,11 @@ impl GroupWindow {
             context: ctx.ctx,
             consts,
             aggrs: &NO_AGGRS,
-            meta: ctx.node_meta,
             recursion_limit: ctx.recursion_limit,
         };
 
         let (event_data, event_meta) = data.parts();
-        let SelectCtx {
-            opts, node_meta, ..
-        } = ctx;
+        let SelectCtx { opts, .. } = ctx;
         for aggr in &mut self.aggrs {
             let invocable = &mut aggr.invocable;
             // We need two arrays to handle the we know the lenght so
@@ -160,7 +156,7 @@ impl GroupWindow {
             stry!(invocable.accumulate(argv1.as_slice()).map_err(|e| {
                 // TODO nice error
                 let r: Option<&Registry> = None;
-                e.into_err(aggr, aggr, r, node_meta)
+                e.into_err(aggr, aggr, r)
             }));
         }
         Ok(())
@@ -176,7 +172,7 @@ impl GroupWindow {
         for (this, prev) in self.aggrs.iter_mut().zip(prev.iter()) {
             stry!(this.invocable.merge(&prev.invocable).map_err(|e| {
                 let r: Option<&Registry> = None;
-                e.into_err(prev, prev, r, ctx.node_meta)
+                e.into_err(prev, prev, r)
             }));
         }
         Ok(())
@@ -244,7 +240,6 @@ impl GroupWindow {
                     context: ctx.ctx,
                     consts,
                     aggrs: &self.aggrs,
-                    meta: ctx.node_meta,
                     recursion_limit: ctx.recursion_limit,
                 };
 
@@ -343,7 +338,6 @@ impl Group {
                 context: ctx.ctx,
                 consts: run,
                 aggrs: &NO_AGGRS,
-                meta: ctx.node_meta,
                 recursion_limit: ctx.recursion_limit,
             };
             if let Some(port_and_event) = stry!(execute_select_and_having(&ctx, &env, data)) {
@@ -377,17 +371,10 @@ pub trait Trait: std::fmt::Debug {
 #[derive(Debug)]
 pub struct Window {
     pub(crate) window_impl: Impl,
-    pub(crate) module: Vec<String>,
     pub(crate) name: String,
 }
 
 impl Window {
-    pub(crate) fn module_path(fqwn: &str) -> Vec<String> {
-        let mut segments: Vec<_> = fqwn.split("::").map(String::from).collect();
-        segments.pop(); // Remove the last element
-        segments
-    }
-
     pub(crate) fn ident_name(fqwn: &str) -> &str {
         fqwn.split("::").last().map_or(fqwn, |last| last)
     }
@@ -494,15 +481,19 @@ pub struct TumblingOnTime {
     pub(crate) max_groups: usize,
     /// How long a window lasts (how many ns we accumulate)
     pub(crate) interval: u64,
-    pub(crate) script: Option<WindowDecl<'static>>,
+    pub(crate) script: Option<WindowDefinition<'static>>,
 }
 impl TumblingOnTime {
     pub(crate) fn reset(&mut self) {
         self.next_window = None;
     }
 
-    pub fn from_stmt(interval: u64, max_groups: usize, script: Option<&WindowDecl>) -> Self {
-        let script = script.cloned().map(WindowDecl::into_static);
+    pub fn from_stmt(
+        interval: u64,
+        max_groups: usize,
+        script: Option<&WindowDefinition<'static>>,
+    ) -> Self {
+        let script = script.cloned();
         Self {
             next_window: None,
             max_groups,
@@ -580,7 +571,7 @@ pub struct TumblingOnNumber {
     max_groups: usize,
     size: u64,
     next_eviction: u64,
-    script: Option<WindowDecl<'static>>,
+    script: Option<WindowDefinition<'static>>,
 }
 
 impl TumblingOnNumber {
@@ -588,8 +579,12 @@ impl TumblingOnNumber {
         self.next_eviction = 0;
         self.count = 0;
     }
-    pub fn from_stmt(size: u64, max_groups: usize, script: Option<&WindowDecl>) -> Self {
-        let script = script.cloned().map(WindowDecl::into_static);
+    pub fn from_stmt(
+        size: u64,
+        max_groups: usize,
+        script: Option<&WindowDefinition<'static>>,
+    ) -> Self {
+        let script = script.cloned();
 
         Self {
             max_groups,

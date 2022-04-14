@@ -1,0 +1,7 @@
+status: 0
+name: unix socket connectors
+asserts:
+  - source: server_out.log
+    equals_file: expected_server.json
+  - source: client_out.log
+    equals_file: expected_client.json

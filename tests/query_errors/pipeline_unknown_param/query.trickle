@@ -1,0 +1,11 @@
+define pipeline passthrough_42
+args
+ param = 42
+pipeline
+  select event from in into out;
+end;
+
+create pipeline passthrough_42
+with
+ new_param = 43
+end;

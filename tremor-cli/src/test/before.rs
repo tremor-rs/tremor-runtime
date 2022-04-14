@@ -17,7 +17,7 @@ use time::Instant;
 use crate::errors::{Error, ErrorKind, Result};
 use crate::util::slurp_string;
 use crate::{job, job::TargetProcess};
-use async_std::{future, task};
+use async_std::future::timeout;
 use std::{
     collections::HashMap,
     fs,
@@ -29,8 +29,10 @@ use std::path::PathBuf;
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct Before {
-    run: String,
+    #[serde(default = "default_dir")]
+    dir: String,
     cmd: String,
+    #[serde(default = "Default::default")]
     args: Vec<String>,
     #[serde(default = "Default::default")]
     env: HashMap<String, String>,
@@ -42,59 +44,131 @@ pub(crate) struct Before {
     before_start_delay: u64,
 }
 
+fn default_dir() -> String {
+    String::from(".")
+}
+
 impl Before {
-    pub(crate) fn spawn(&self) -> Result<Option<TargetProcess>> {
+    pub(crate) async fn spawn(
+        &self,
+        base: &Path,
+        env: &HashMap<String, String>,
+        num: usize,
+    ) -> Result<TargetProcess> {
         let cmd = job::which(&self.cmd)?;
-        let process = job::TargetProcess::new_with_stderr(&cmd, &self.args, &self.env)?;
-        self.block_on()?;
-        Ok(Some(process))
+        // interpret `dir` as relative to `base`
+        let current_working_dir = base.join(&self.dir).canonicalize()?;
+        let mut env = env.clone();
+        for (k, v) in &self.env {
+            env.insert(k.clone(), v.clone());
+        }
+        let mut process =
+            job::TargetProcess::new_in_dir(&cmd, &self.args, &env, &current_working_dir)?;
+
+        let fg_out_file = base.join(format!("before.out.{num}.log"));
+        let fg_err_file = base.join(format!("before.err.{num}.log"));
+        process.stdio_tailer(&fg_out_file, &fg_err_file).await?;
+
+        debug!(
+            "Spawning before: {} in {}",
+            self.cmdline(),
+            current_working_dir.display()
+        );
+
+        self.wait_for(&mut process, base).await?;
+        debug!("Before process ready.");
+        Ok(process)
     }
 
-    pub(crate) fn block_on(&self) -> Result<()> {
+    fn cmdline(&self) -> String {
+        format!(
+            "{}{} {}",
+            self.env
+                .iter()
+                .map(|(k, v)| format!("{}={} ", k, v))
+                .collect::<Vec<_>>()
+                .join(""),
+            self.cmd,
+            self.args.join(" ")
+        )
+    }
+
+    pub(crate) async fn wait_for(
+        &self,
+        process: &mut job::TargetProcess,
+        base: &Path,
+    ) -> Result<()> {
         let start = Instant::now();
         if let Some(conditions) = &self.conditionals {
             loop {
                 let mut success = true;
 
                 if start.elapsed() > Duration::from_secs(self.until) {
-                    return Err("Upper bound exceeded error".into());
+                    return Err(format!(
+                        "Before command: {} did not fulfil conditions {:?} and timed out after {}s",
+                        self.cmdline(),
+                        self.conditionals,
+                        self.until
+                    )
+                    .into());
                 }
                 for (k, v) in conditions.iter() {
-                    if "port-open" == k.as_str() {
-                        for port in v {
-                            if let Ok(port) = port.parse::<u16>() {
-                                success &= port_scanner::scan_port(port);
+                    match k.as_str() {
+                        "port-open" => {
+                            for port in v {
+                                if let Ok(port) = port.parse::<u16>() {
+                                    success &= port_scanner::scan_port(port);
+                                }
                             }
                         }
-                    }
-                    if "wait-for-ms" == k.as_str() {
-                        success &= v
-                            .first()
-                            .and_then(|delay| delay.parse().ok())
-                            .map(|delay| start.elapsed() > Duration::from_millis(delay))
-                            .unwrap_or_default();
-                    }
-                    if "http-ok" == k.as_str() {
-                        for endpoint in v {
-                            let res = task::block_on(future::timeout(
-                                Duration::from_secs(self.until.min(5)),
-                                surf::get(endpoint).send(),
-                            ))?;
-                            success &= match res {
-                                Ok(res) => res.status().is_success(),
-                                Err(_) => false,
+                        "wait-for-ms" => {
+                            success &= v
+                                .first()
+                                .and_then(|delay| delay.parse().ok())
+                                .map(|delay| start.elapsed() > Duration::from_millis(delay))
+                                .unwrap_or_default();
+                        }
+                        "http-ok" => {
+                            for endpoint in v {
+                                let res = timeout(
+                                    Duration::from_secs(self.until.min(5)),
+                                    surf::get(endpoint).send(),
+                                )
+                                .await?;
+                                success &= match res {
+                                    Ok(res) => res.status().is_success(),
+                                    Err(_) => false,
+                                }
                             }
                         }
+                        "file-exists" => {
+                            let base_dir = base.join(&self.dir);
+                            for f in v {
+                                if let Ok(path) = base_dir.join(f).canonicalize() {
+                                    debug!("Checking for existence of {}", path.display());
+                                    success &= path.exists();
+                                }
+                            }
+                        }
+                        "status" => {
+                            let code = process.wait().await?.code().unwrap_or(99);
+                            success &= v
+                                .first()
+                                .and_then(|code| code.parse::<i32>().ok())
+                                .map(|expected_code| expected_code == code)
+                                .unwrap_or_default();
+                        }
+                        _ => (),
                     }
                 }
                 if success {
                     break;
                 }
                 // do not overload the system, try a little (100ms) tenderness
-                std::thread::sleep(Duration::from_millis(100));
+                async_std::task::sleep(Duration::from_millis(100)).await;
             }
         }
-        std::thread::sleep(Duration::from_secs(self.before_start_delay));
+        async_std::task::sleep(Duration::from_secs(self.before_start_delay)).await;
         Ok(())
     }
 }
@@ -107,12 +181,13 @@ fn default_min_await_secs() -> u64 {
     0 // Wait for at least 1 seconds before starting tests that depend on background process
 }
 
-pub(crate) fn load_before(path: &Path) -> Result<Before> {
-    let mut tags_data = slurp_string(path)?;
-    match simd_json::from_str(&mut tags_data) {
+// load all the before definitions from before.yaml files
+pub(crate) fn load_before_defs(path: &Path) -> Result<Vec<Before>> {
+    let tags_data = slurp_string(path)?;
+    match serde_yaml::from_str(&tags_data) {
         Ok(s) => Ok(s),
         Err(e) => Err(Error::from(format!(
-            "Invalid `before.json` in path `{}`: {}",
+            "Invalid `before.yaml` in path `{}`: {}",
             path.to_string_lossy(),
             e
         ))),
@@ -122,47 +197,58 @@ pub(crate) fn load_before(path: &Path) -> Result<Before> {
 #[derive(Debug)]
 pub(crate) struct BeforeController {
     base: PathBuf,
+    env: HashMap<String, String>,
 }
 
 impl BeforeController {
-    pub(crate) fn new(base: &Path) -> Self {
+    pub(crate) fn new(base: &Path, env: &HashMap<String, String>) -> Self {
         Self {
             base: base.to_path_buf(),
+            env: env.clone(),
         }
     }
 
-    pub(crate) fn spawn(&mut self) -> Result<Option<TargetProcess>> {
+    pub(crate) async fn spawn(&mut self) -> Result<()> {
         let root = &self.base;
-        let before_path = root.join("before.json");
+        let before_path = root.join("before.yaml");
         if before_path.exists() {
-            let before_json = load_before(&before_path);
-            match before_json {
-                Ok(before_json) => before_json.spawn(),
+            let before_defs = load_before_defs(&before_path);
+            match before_defs {
+                Ok(before_defs) => {
+                    for (i, before_def) in before_defs.into_iter().enumerate() {
+                        let cmdline = before_def.cmdline();
+                        let mut process = before_def.spawn(root, &self.env, i).await?;
+                        async_std::task::spawn(async move {
+                            let status = process.join().await?;
+                            match status.code() {
+                                None => {
+                                    eprintln!("Before process {cmdline} terminated by some signal");
+                                }
+                                Some(0) => (),
+                                Some(other) => {
+                                    eprintln!("Before process {cmdline} terminated with exit code {other}");
+                                }
+                            }
+                            Ok::<(), Error>(())
+                        });
+                    }
+                    Ok(())
+                }
                 Err(Error(ErrorKind::Common(tremor_common::Error::FileOpen(_, _)), _)) => {
-                    // no before json found, all good
-                    Ok(None)
+                    // no before yaml found, all good
+                    Ok(())
                 }
                 Err(e) => Err(e),
             }
         } else {
-            Ok(None)
+            Ok(())
         }
-    }
-
-    pub(crate) fn capture(&mut self, process: Option<TargetProcess>) -> Result<()> {
-        let root = self.base.clone();
-        let bg_out_file = root.join("bg.out.log");
-        let bg_err_file = root.join("bg.err.log");
-        if let Some(mut process) = process {
-            process.tail(&bg_out_file, &bg_err_file)?;
-        };
-        Ok(())
     }
 }
 
 pub(crate) fn update_evidence(root: &Path, evidence: &mut HashMap<String, String>) -> Result<()> {
-    let bg_out_file = root.join("bg.out.log");
-    let bg_err_file = root.join("bg.err.log");
+    let bg_out_file = root.join("before.out.log");
+    let bg_err_file = root.join("before.err.log");
 
     if let Ok(x) = fs::metadata(&bg_out_file) {
         if x.is_file() {

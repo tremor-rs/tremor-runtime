@@ -18,7 +18,7 @@ use crate::{
 };
 use crate::{env, errors::Result};
 use io::BufReader;
-use lexer::Tokenizer;
+use lexer::Lexer;
 use std::io::Write;
 use std::io::{self, Read};
 use termcolor::{Color, ColorSpec};
@@ -28,11 +28,11 @@ use tremor_script::lexer::{self, Token};
 use tremor_script::pos::{Span, Spanned};
 use tremor_script::query::Query;
 use tremor_script::script::Script;
+use tremor_script::{arena::Arena, deploy::Deploy};
 
 struct DbgData {
     opts: DbgOpts,
     kind: SourceKind,
-    src: String,
     raw: String,
 }
 
@@ -78,9 +78,9 @@ where
 {
     if !opts.no_banner {
         let mut banner = ColorSpec::new();
-        let mut banner = banner.set_fg(Some(Color::Green));
+        let banner = banner.set_fg(Some(Color::Green));
 
-        h.set_color(&mut banner)?;
+        h.set_color(banner)?;
         let spec = format!(
             "\n\n****************\n* {} - {}\n****************\n\n",
             section, detail
@@ -90,26 +90,6 @@ where
     Ok(())
 }
 
-fn preprocessed_tokens<'input>(
-    data: &DbgData,
-    input: &'input mut String,
-) -> Result<Vec<Spanned<'input>>> {
-    let mut include_stack = lexer::IncludeStack::default();
-    let cu = include_stack.push(&data.src)?;
-
-    let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
-        &tremor_script::path::load(),
-        &data.src,
-        input,
-        cu,
-        &mut include_stack,
-    )?
-    .into_iter()
-    .filter_map(std::result::Result::ok)
-    .collect();
-    Ok(lexemes)
-}
-
 impl DbgSrc {
     pub fn run_src<W>(&self, h: &mut W, opts: DbgOpts) -> Result<()>
     where
@@ -117,26 +97,11 @@ impl DbgSrc {
     {
         let data = load_data(&self.script, opts)?;
         banner(h, opts, "Source", "Source code listing")?;
+
         match &data.kind {
-            SourceKind::Tremor | SourceKind::Json => {
-                if self.preprocess {
-                    let mut raw_src = data.raw.clone();
-                    let lexemes = preprocessed_tokens(&data, &mut raw_src)?;
-                    h.highlight(None, &lexemes, "", !data.opts.raw, None)?;
-                } else {
-                    Script::highlight_script_with(&data.raw, h, !&data.opts.raw)?;
-                }
+            SourceKind::Troy | SourceKind::Trickle | SourceKind::Tremor | SourceKind::Json => {
+                h.highlight_str(&data.raw, "", !&data.opts.raw)?;
             }
-            SourceKind::Trickle => {
-                if self.preprocess {
-                    let mut raw_src = data.raw.clone();
-                    let lexemes = preprocessed_tokens(&data, &mut raw_src)?;
-                    h.highlight(None, &lexemes, "", !data.opts.raw, None)?;
-                } else {
-                    Query::highlight_script_with(&data.raw, h, !data.opts.raw)?;
-                }
-            }
-            SourceKind::Yaml => error!("Unsupported: yaml"),
             SourceKind::Unsupported(Some(t)) => error!("Unsupported: {}", t),
             SourceKind::Unsupported(None) => error!("Unsupported: no file type"),
         }
@@ -148,26 +113,17 @@ impl DbgSrc {
         W: Highlighter,
     {
         let data = load_data(&self.script, opts)?;
-        if self.preprocess {
-            banner(
-                h,
-                opts,
-                "Lexemes",
-                "Lexical token stream after preprocessing",
-            )?;
-            let mut raw_src = data.raw.clone();
-            let lexemes = preprocessed_tokens(&data, &mut raw_src)?;
-            dbg_tokens(h, lexemes)?;
-        } else {
-            banner(
-                h,
-                opts,
-                "Lexemes",
-                "Lexical token stream before preprocessing",
-            )?;
-            let lexemes: Vec<_> = Tokenizer::new(&data.raw).tokenize_until_err().collect();
-            dbg_tokens(h, lexemes)?;
-        }
+        let (aid, src) = Arena::insert(&data.raw)?;
+
+        banner(
+            h,
+            opts,
+            "Lexemes",
+            "Lexical token stream before preprocessing",
+        )?;
+        let lexemes: Vec<_> = Lexer::new(src, aid).tokenize_until_err().collect();
+        dbg_tokens(h, lexemes)?;
+
         h.reset()?;
         Ok(())
     }
@@ -179,21 +135,14 @@ where
 {
     let mut default = ColorSpec::new();
     let mut line = ColorSpec::new();
-    let mut line = line.set_fg(Some(Color::Blue));
+    let line = line.set_fg(Some(Color::Blue));
     let mut directive = ColorSpec::new();
-    let mut directive = directive.set_fg(Some(Color::White));
+    let directive = directive.set_fg(Some(Color::White));
 
     for l in lexemes {
-        let Spanned {
-            span:
-                Span {
-                    start,
-                    end,
-                    pp_start,
-                    pp_end,
-                },
-            value,
-        } = l;
+        let Spanned { span, value } = l;
+        let start = span.start();
+        let end = span.end();
         match &value {
                 // We ignore whitespace and newlines
                 Token::Whitespace(_)
@@ -202,27 +151,17 @@ where
                 | Token::DocComment(_)
                 | Token::ModComment(_) => (),
                 Token::ConfigDirective => {
-                    h.set_color(&mut line)?;
+                    h.set_color( line)?;
                     let line_spec = format!(
                         "{}:{} - {}:{}",
                         start.line(), start.column(), end.line(), end.column()
                     );
                     write!(h.get_writer(), "{:^16} \u{2219}    ", line_spec,)?;
-                    h.set_color(&mut directive)?;
+                    h.set_color( directive)?;
                     writeln!(h.get_writer(), " #!config ")?;
                 }
-                Token::LineDirective(_location, file) => {
-                    h.set_color(&mut line)?;
-                    let line_spec = format!(
-                        "{}:{} - {}:{}",
-                        start.line(), start.column(), end.line(), end.column()
-                    );
-                    write!(h.get_writer(), "{:^16} \u{2219}    ", line_spec,)?;
-                    h.set_color(&mut directive)?;
-                    writeln!(h.get_writer(), " #!line {}", file.to_string())?;
-                }
                 _other_token => {
-                    h.set_color(&mut line)?;
+                    h.set_color( line)?;
                     let line_spec = format!(
                         "{}:{} - {}:{}",
                         start.line(), start.column(), end.line(), end.column()
@@ -237,7 +176,7 @@ where
                     h.highlight(
                         None,
                         &[Spanned {
-                            span: Span { start, end, pp_start, pp_end },
+                            span: Span::new( start, end ),
                             value,
                         }],
                         "",
@@ -260,46 +199,51 @@ impl DbgAst {
 
         let env = env::setup()?;
         match data.kind {
-            SourceKind::Tremor | SourceKind::Json => {
-                match Script::parse(&env.module_path, &data.src, data.raw.clone(), &env.fun) {
-                    Ok(runnable) => {
-                        let ast = if self.exprs_only {
-                            simd_json::to_string_pretty(&runnable.script.suffix().exprs)?
-                        } else {
-                            simd_json::to_string_pretty(&runnable.script.suffix())?
-                        };
-                        println!();
-                        Script::highlight_script_with(&ast, h, !data.opts.raw)?;
-                    }
-                    Err(e) => {
-                        if let Err(e) = Script::format_error_from_script(&data.raw, h, &e) {
-                            eprintln!("Error: {}", e);
-                        };
-                    }
+            SourceKind::Tremor | SourceKind::Json => match Script::parse(&data.raw, &env.fun) {
+                Ok(runnable) => {
+                    let ast = if self.exprs_only {
+                        simd_json::to_string_pretty(&runnable.script.exprs)?
+                    } else {
+                        simd_json::to_string_pretty(&runnable.script)?
+                    };
+                    println!();
+                    h.highlight_str(&ast, "", !data.opts.raw)?;
                 }
-            }
+                Err(e) => {
+                    if let Err(e) = h.format_error(&e) {
+                        eprintln!("Error: {}", e);
+                    };
+                }
+            },
             SourceKind::Trickle => {
-                match Query::parse(
-                    &env.module_path,
-                    &data.src,
-                    &data.raw,
-                    vec![],
-                    &env.fun,
-                    &env.aggr,
-                ) {
+                match Query::parse(&data.raw, &env.fun, &env.aggr) {
                     Ok(runnable) => {
-                        let ast = simd_json::to_string_pretty(&runnable.query.suffix())?;
+                        let ast = simd_json::to_string_pretty(&runnable.query)?;
                         println!();
-                        Script::highlight_script_with(&ast, h, !data.opts.raw)?;
+                        h.highlight_str(&ast, "", !data.opts.raw)?;
                     }
                     Err(e) => {
-                        if let Err(e) = Script::format_error_from_script(&data.raw, h, &e) {
+                        if let Err(e) = h.format_error(&e) {
                             eprintln!("Error: {}", e);
                         };
                     }
                 };
             }
-            SourceKind::Unsupported(_) | SourceKind::Yaml => {
+            SourceKind::Troy => {
+                match Deploy::parse(&data.raw, &env.fun, &env.aggr) {
+                    Ok(runnable) => {
+                        let ast = simd_json::to_string_pretty(&runnable.deploy)?;
+                        println!();
+                        h.highlight_str(&ast, "", !data.opts.raw)?;
+                    }
+                    Err(e) => {
+                        if let Err(e) = h.format_error(&e) {
+                            eprintln!("Error: {}", e);
+                        };
+                    }
+                };
+            }
+            SourceKind::Unsupported(_) => {
                 eprintln!("Unsupported");
             }
         };
@@ -317,30 +261,36 @@ impl DbgDot {
     {
         let data = load_data(&self.script, opts)?;
 
-        if data.kind != SourceKind::Trickle {
-            return Err("Dot visualisation is only supported for trickle files.".into());
-        }
-        let env = env::setup()?;
-        match Query::parse(
-            &env.module_path,
-            &data.src,
-            &data.raw,
-            vec![],
-            &env.fun,
-            &env.aggr,
-        ) {
-            Ok(runnable) => {
-                let mut idgen = OperatorIdGen::new();
-                let g = tremor_pipeline::query::Query(runnable).to_pipe(&mut idgen)?;
+        if data.kind == SourceKind::Trickle {
+            let env = env::setup()?;
+            match Query::parse(&data.raw, &env.fun, &env.aggr) {
+                Ok(runnable) => {
+                    let mut idgen = OperatorIdGen::new();
+                    let g = tremor_pipeline::query::Query(runnable).to_pipe(&mut idgen)?;
 
-                println!("{}", g.dot);
-            }
-            Err(e) => {
-                if let Err(e) = Script::format_error_from_script(&data.raw, h, &e) {
-                    eprintln!("Error: {}", e);
-                };
-            }
-        };
+                    println!("{}", g.dot);
+                }
+                Err(e) => {
+                    if let Err(e) = h.format_error(&e) {
+                        eprintln!("Error: {}", e);
+                    };
+                }
+            };
+        } else if data.kind == SourceKind::Troy {
+            let env = env::setup()?;
+            match Deploy::parse(&data.raw, &env.fun, &env.aggr) {
+                Ok(runnable) => {
+                    println!("{}", runnable.dot());
+                }
+                Err(e) => {
+                    if let Err(e) = h.format_error(&e) {
+                        eprintln!("Error: {}", e);
+                    };
+                }
+            };
+        } else {
+            return Err("Dot visualisation is only supported for trickle/troy files.".into());
+        }
         Ok(())
     }
 }
@@ -356,20 +306,11 @@ fn load_data(src: &str, opts: DbgOpts) -> Result<DbgData> {
         "-" => SourceKind::Tremor,
         path => get_source_kind(path),
     };
-    let src = match src {
-        "-" => "<stdin>".to_string(),
-        path => path.to_string(),
-    };
     buffer.read_to_string(&mut raw)?;
 
     println!();
     raw.push('\n'); // Ensure last token is whitespace
-    let data = DbgData {
-        opts,
-        kind,
-        src,
-        raw,
-    };
+    let data = DbgData { opts, kind, raw };
 
     Ok(data)
 }

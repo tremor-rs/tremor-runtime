@@ -1,4 +1,4 @@
-FROM rust:1.56.1-bullseye as builder
+FROM rust:1.59-bullseye as builder
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -76,4 +76,4 @@ ENV TREMOR_PATH="/usr/local/share/tremor:/usr/share/tremor/lib"
 
 ENTRYPOINT ["/entrypoint.sh"]
 
-HEALTHCHECK --interval=30s --timeout=1s --start-period=5s --retries=3 CMD curl -f http://localhost:9898/version || exit 1
+HEALTHCHECK --interval=30s --timeout=1s --start-period=5s --retries=3 CMD curl -f http://localhost:9898/v1/status || exit 1

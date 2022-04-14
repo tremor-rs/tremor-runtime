@@ -25,7 +25,7 @@ use crate::registry::RECUR_PTR;
 use crate::{
     ast::{
         BaseExpr, ClauseGroup, ClausePreCondition, Comprehension, DefaultCase, EmitExpr, EventPath,
-        Expr, IfElse, ImutExprInt, Match, Path, Segment,
+        Expr, IfElse, ImutExpr, Match, Path, Segment,
     },
     errors::error_oops_err,
 };
@@ -35,6 +35,7 @@ use std::{
     borrow::{Borrow, Cow},
     iter,
 };
+
 #[derive(Debug)]
 /// Continuation context to control program flow
 pub enum Cont<'run, 'event>
@@ -174,7 +175,7 @@ impl<'script> Expr<'script> {
             };
         }
         match &expr.default {
-            DefaultCase::None => error_no_clause_hit(self, env.meta),
+            DefaultCase::None => error_no_clause_hit(self),
             DefaultCase::Null => Ok(Cont::Cont(Cow::Borrowed(&NULL))),
             DefaultCase::Many { exprs, last_expr } => {
                 Expr::execute_effectors(opts, env, event, state, meta, local, exprs, last_expr)
@@ -206,7 +207,7 @@ impl<'script> Expr<'script> {
             Expr::execute_effectors(opts, env, event, state, meta, local, e, l)
         } else {
             match &expr.else_clause {
-                DefaultCase::None => error_no_clause_hit(self, env.meta),
+                DefaultCase::None => error_no_clause_hit(self),
                 DefaultCase::Null => Ok(Cont::Cont(Cow::Borrowed(&NULL))),
                 DefaultCase::Many { exprs, last_expr } => {
                     Expr::execute_effectors(opts, env, event, state, meta, local, exprs, last_expr)
@@ -258,8 +259,8 @@ impl<'script> Expr<'script> {
         }
 
         'outer: for (k, v) in items {
-            stry!(set_local_shadow(self, local, env.meta, expr.key_id, k));
-            stry!(set_local_shadow(self, local, env.meta, expr.val_id, v));
+            stry!(set_local_shadow(self, local, expr.key_id, k));
+            stry!(set_local_shadow(self, local, expr.val_id, v));
 
             for e in cases {
                 if stry!(test_guard(
@@ -295,7 +296,7 @@ impl<'script> Expr<'script> {
         value: Value<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         if path.segments().is_empty() {
-            self.assign_direct(opts, env, event, state, meta, local, path, value)
+            self.assign_direct(opts, event, state, meta, local, path, value)
         } else {
             self.assign_nested(opts, env, event, state, meta, local, path, value)
         }
@@ -335,27 +336,17 @@ impl<'script> Expr<'script> {
         let segments: &'run [Segment<'event>] = path.segments();
 
         let mut current: &Value = match path {
-            Path::Const(p) => {
-                let name = env.meta.name_dflt(p.mid).to_string();
-                return error_assign_to_const(self, name, env.meta);
-            }
-            Path::Reserved(p) => {
-                let name = env.meta.name_dflt(p.mid()).to_string();
-                return error_assign_to_const(self, name, env.meta);
-            }
-            Path::Expr(_p) => {
-                return error_assign_to_const(self, "<expr>".to_string(), env.meta);
+            Path::Reserved(_) | Path::Expr(_) => {
+                return error_assign_to_const(self);
             }
 
             Path::Local(lpath) => {
-                stry!(local
-                    .get(lpath.idx, self, lpath.mid(), env.meta)
-                    .and_then(|o| {
-                        o.as_ref().ok_or_else(|| {
-                            let key = env.meta.name_dflt(lpath.mid).to_string();
-                            error_bad_key_err(self, lpath, path, key, vec![], env.meta)
-                        })
-                    }))
+                stry!(local.get(lpath.idx, self, lpath.meta()).and_then(|o| {
+                    o.as_ref().ok_or_else(|| {
+                        let key = lpath.mid.name_dflt().to_string();
+                        error_bad_key_err(self, lpath, path, key, vec![])
+                    })
+                }))
             }
             Path::Meta(_path) => meta,
             Path::Event(_path) => event,
@@ -377,7 +368,7 @@ impl<'script> Expr<'script> {
                             unsafe { mem::transmute::<&Value, &mut Value>(current) },
                             || Value::object_with_capacity(halfbrown::VEC_LIMIT_UPPER),
                         )
-                        .map_err(|_| err_need_obj(self, segment, current.value_type(), env.meta)));
+                        .map_err(|_| err_need_obj(self, segment, current.value_type())));
                 }
                 Segment::Element { expr, .. } => {
                     let id = stry!(expr.eval_to_string(opts, env, event, state, meta, local));
@@ -387,7 +378,6 @@ impl<'script> Expr<'script> {
                         self,
                         segment,
                         current.value_type(),
-                        env.meta
                     )));
 
                     current = match map.get_mut(&id) {
@@ -397,8 +387,8 @@ impl<'script> Expr<'script> {
                             .or_insert_with(|| Value::object_with_capacity(32)),
                     };
                 }
-                Segment::Idx { .. } | Segment::Range { .. } => {
-                    return error_assign_array(self, segment, env.meta)
+                Segment::Idx { .. } | Segment::Range { .. } | Segment::RangeExpr { .. } => {
+                    return error_assign_array(self, segment)
                 }
             }
         }
@@ -416,7 +406,6 @@ impl<'script> Expr<'script> {
     fn assign_direct<'run, 'event>(
         &'run self,
         _opts: ExecOpts,
-        env: &'run Env<'run, 'event>,
         event: &'run mut Value<'event>,
         state: &'run mut Value<'static>,
         _meta: &'run mut Value<'event>,
@@ -425,18 +414,12 @@ impl<'script> Expr<'script> {
         value: Value<'event>,
     ) -> Result<Cow<'run, Value<'event>>> {
         match path {
-            Path::Const(p) => {
-                error_assign_to_const(self, env.meta.name_dflt(p.mid).into(), env.meta)
-            }
-            Path::Reserved(p) => {
-                error_assign_to_const(self, env.meta.name_dflt(p.mid()).into(), env.meta)
-            }
-            Path::Expr(_) => error_assign_to_const(self, "<expr>".to_string(), env.meta),
+            Path::Reserved(_) | Path::Expr(_) => error_assign_to_const(self),
             Path::Local(lpath) => {
-                let o = stry!(local.get_mut(lpath.idx, self, lpath.mid(), env.meta));
+                let o = stry!(local.get_mut(lpath.idx, self, lpath.meta()));
                 Ok(Cow::Borrowed(o.insert(value)))
             }
-            Path::Meta(_path) => error_invalid_assign_target(self, env.meta),
+            Path::Meta(_path) => error_invalid_assign_target(self),
             Path::Event(_path) => {
                 *event = value;
                 Ok(Cow::Borrowed(event))
@@ -472,7 +455,7 @@ impl<'script> Expr<'script> {
         match self {
             Expr::Emit(expr) => match expr.borrow() {
                 EmitExpr {
-                    expr: ImutExprInt::Path(Path::Event(EventPath { segments, .. })),
+                    expr: ImutExpr::Path(Path::Event(EventPath { segments, .. })),
                     port,
                     ..
                 } if segments.is_empty() => port
@@ -510,7 +493,6 @@ impl<'script> Expr<'script> {
                         self,
                         0xdead_000b,
                         "Unknown local variable in Expr::AssignMoveLocal",
-                        env.meta,
                     ))
                     .and_then(|v| {
                         let mut opt: Option<Value> = None;
@@ -520,7 +502,6 @@ impl<'script> Expr<'script> {
                                 self,
                                 0xdead_000c,
                                 "Unknown local variable in Expr::AssignMoveLocal",
-                                env.meta,
                             )
                         })
                     }));

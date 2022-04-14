@@ -1,0 +1,3 @@
+Error: 
+    1 | deploy flow broken from snot::badger
+      |             ^^^^^^ Artefact `snot::badger` is not defined or not found, the following are defined:

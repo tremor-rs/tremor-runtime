@@ -1,0 +1,7 @@
+{
+    "dir": ".",
+    "cmd": "bash",
+    "args": [
+        "before/down.sh"
+    ]
+}

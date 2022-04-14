@@ -1,0 +1,14 @@
+define snot_badger connector fake
+with
+  snot = 42
+end;
+
+define flow ploy
+flow
+  create connector fake 
+  with
+    nope = "yes"
+  end;
+end;
+
+deploy flow ploy;

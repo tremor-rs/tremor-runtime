@@ -1,3 +1,0 @@
-Error: 
-    4 |   create stream snot;  
-      |   ^^^^^^^^^^^^^^^^^^ Can't declare the stream `snot` twice

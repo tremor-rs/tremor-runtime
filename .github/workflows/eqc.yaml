@@ -12,7 +12,6 @@ jobs:
       - uses: actions/checkout@v1.0.0
       - uses: actions-rs/toolchain@v1
         with:
-          override: true
           profile: minimal
       - uses: Swatinem/rust-cache@v1
       - uses: gleam-lang/setup-erlang@v1.1.2
@@ -20,14 +19,14 @@ jobs:
           otp-version: 23.1
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
-      - name: Install yaml2json
-        run: go get github.com/bronze1man/yaml2json
+      - name: install yq
+        run: wget https://github.com/mikefarah/yq/releases/download/v4.20.2/yq_linux_amd64 -O ~/yq && chmod +x ~/yq
       - name: install EQC
-        run: curl -O http://quviq-licencer.com/downloads/eqcR21.zip && unzip eqcR21.zip && cd Quviq* && sudo erl -noshell -eval 'eqc_install:install()' -eval 'init:stop()'
+        run: curl -O http://quviq-licencer.com/downloads/eqcR23.zip && unzip eqcR23.zip && cd Quviq* && sudo erl -noshell -eval 'eqc_install:install()' -eval 'init:stop()'
       - name: Activate EQC
-        run: erl -noshell -eval 'eqc:registration("${{secrets.EQC_LICENSE}}")' -eval "eqc:start()" -eval "init:stop()"
+        run: test -n "${{secrets.EQC_LICENSE}}" && erl -noshell -eval 'eqc:registration("${{secrets.EQC_LICENSE}}")' -eval "eqc:start()" -eval "init:stop()"
       - name: generate yaml
-        run: ~/go/bin/yaml2json < static/openapi.yaml > static/openapi.json
+        run: ~/yq -o=json static/openapi.yaml > static/openapi.json
       - name: Build
         run: cargo build --all
       - name: Run eqc tests
@@ -41,17 +40,16 @@ jobs:
       - uses: actions/checkout@v1.0.0
       - uses: actions-rs/toolchain@v1
         with:
-          override: true
           profile: minimal
       - uses: Swatinem/rust-cache@v1
       - uses: gleam-lang/setup-erlang@v1.1.2
         with:
-          otp-version: 22.3.4.9
+          otp-version: 23.1
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
       - name: install EQC
-        run: curl -O http://quviq-licencer.com/downloads/eqcR21.zip && unzip eqcR21.zip && cd Quviq* && sudo erl -noshell -eval 'eqc_install:install()' -eval 'init:stop()'
+        run: curl -O http://quviq-licencer.com/downloads/eqcR23.zip && unzip eqcR23.zip && cd Quviq* && sudo erl -noshell -eval 'eqc_install:install()' -eval 'init:stop()'
       - name: Activate EQC
         run: erl -noshell -eval 'eqc:registration("${{secrets.EQC_LICENSE}}")' -eval "eqc:start()" -eval "init:stop()"
       - name: Run
-        run: make -C tremor-script
+        run: make -C tremor-script run-eqc

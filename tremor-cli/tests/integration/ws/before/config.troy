@@ -1,0 +1,29 @@
+define flow main
+flow
+  use integration;
+  use std::time::nanos;
+
+  define connector in from ws_server
+  with
+    codec = "json",
+    config = {
+      "url": "127.0.0.1:4242",
+    }
+  end;
+
+  create connector in;
+  create connector out from integration::write_file
+  with
+    file = "../out.log"
+  end;
+  create connector exit from integration::exit;
+  create pipeline main from integration::out_or_exit
+  with
+    delay = nanos::from_seconds(1)
+  end;
+
+  connect /connector/in to /pipeline/main;
+  connect /pipeline/main to /connector/out;
+  connect /pipeline/main/exit to /connector/exit;
+end;
+deploy flow main;

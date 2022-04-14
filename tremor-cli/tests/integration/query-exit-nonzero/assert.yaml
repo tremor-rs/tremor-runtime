@@ -1,8 +1,0 @@
-status: 55
-name: Query exit with non zero status code
-asserts:
-  - source: events.log
-    equals_file: expected.json
-    contains:
-      - |
-        {"done":true}

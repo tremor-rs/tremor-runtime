@@ -34,8 +34,6 @@ extern crate serde_derive;
 extern crate log;
 #[macro_use]
 extern crate lazy_static;
-#[macro_use]
-extern crate rental;
 
 #[cfg(test)]
 #[macro_use]
@@ -46,7 +44,6 @@ extern crate test_case;
 
 #[macro_use]
 pub(crate) mod macros;
-pub(crate) mod async_sink;
 /// Tremor codecs
 pub mod codec;
 /// Tremor runtime configuration
@@ -55,226 +52,129 @@ pub mod config;
 pub mod errors;
 /// Tremor function library
 pub mod functions;
-pub(crate) mod lifecycle;
-/// Runtime metrics helper
-pub mod metrics;
-pub(crate) mod offramp;
-pub(crate) mod onramp;
-pub(crate) mod permge;
-pub(crate) mod pipeline;
+
+pub(crate) mod primerge;
+
+/// pipelines
+pub mod pipeline;
 /// Onramp Preprocessors
 pub mod postprocessor;
 /// Offramp Postprocessors
 pub mod preprocessor;
-pub(crate) mod ramp;
-/// Tremor registry
-pub mod registry;
-/// The tremor repository
-pub mod repository;
-pub(crate) mod sink;
-pub(crate) mod source;
+
+/// Tremor connector extensions
+pub mod connectors;
 /// Tremor runtime system
 pub mod system;
-/// Tremor URI
-pub mod url;
 /// Utility functions
 pub mod utils;
 /// Tremor runtime version tools
 pub mod version;
 
-/// Tremor connector extensions
-pub mod connectors;
+/// Instance management
+pub mod instance;
 
-use std::{io::BufReader, path::Path};
+/// Metrics instance name
+pub static mut INSTANCE: &str = "tremor";
+
+use std::sync::atomic::AtomicUsize;
 
 use crate::errors::{Error, Result};
 
-pub(crate) type OnRampVec = Vec<OnRamp>;
-pub(crate) type OffRampVec = Vec<OffRamp>;
-pub(crate) type BindingVec = config::BindingVec;
-pub(crate) type MappingMap = config::MappingMap;
-
-pub(crate) use crate::config::{Binding, OffRamp, OnRamp};
-use crate::repository::BindingArtefact;
-use crate::url::TremorUrl;
-pub(crate) use serde_yaml::Value as OpConfig;
+pub(crate) use crate::config::Connector;
 use system::World;
-pub(crate) use tremor_pipeline::Event;
-use tremor_pipeline::{query::Query, FN_REGISTRY};
-use tremor_script::highlighter::Term as TermHighlighter;
-use tremor_script::Script;
+pub use tremor_pipeline::Event;
+use tremor_script::{
+    deploy::Deploy, highlighter::Dumb as ToStringHighlighter, highlighter::Term as TermHighlighter,
+};
+use tremor_script::{highlighter::Highlighter, FN_REGISTRY};
 
-/// Default Q Size
-pub const QSIZE: usize = 128;
+/// Operator Config
+pub type OpConfig = tremor_value::Value<'static>;
 
-/// In incarnated config
-#[derive(Debug)]
-pub struct IncarnatedConfig {
-    /// Onramps
-    pub onramps: OnRampVec,
-    /// Offramps
-    pub offramps: OffRampVec,
-    /// Bindings
-    pub bindings: BindingVec,
-    /// Mappings
-    pub mappings: MappingMap,
+lazy_static! {
+    /// Default Q Size
+    pub static ref QSIZE: AtomicUsize = AtomicUsize::new(128);
 }
 
-/// Incarnates a configuration into it's runnable state
+/// Loads a Troy file
 ///
 /// # Errors
-///  * if the pipeline can not be incarnated
-pub fn incarnate(config: config::Config) -> Result<IncarnatedConfig> {
-    let onramps = incarnate_onramps(config.onramp.clone());
-    let offramps = incarnate_offramps(config.offramp.clone());
-    let bindings = incarnate_links(&config.binding);
-    Ok(IncarnatedConfig {
-        onramps,
-        offramps,
-        bindings,
-        mappings: config.mapping,
-    })
-}
-
-// TODO: what the heck do we need this for?
-fn incarnate_onramps(config: config::OnRampVec) -> OnRampVec {
-    config.into_iter().collect()
-}
-
-fn incarnate_offramps(config: config::OffRampVec) -> OffRampVec {
-    config.into_iter().collect()
-}
-
-fn incarnate_links(config: &[Binding]) -> BindingVec {
-    config.to_owned()
-}
-
-/// Loads a tremor query file
-/// # Errors
 /// Fails if the file can not be loaded
-pub async fn load_query_file(world: &World, file_name: &str) -> Result<usize> {
-    use std::ffi::OsStr;
+pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
     use std::io::Read;
-    info!("Loading configuration from {}", file_name);
-    let file_id = Path::new(file_name)
-        .file_stem()
-        .unwrap_or_else(|| OsStr::new(file_name))
-        .to_string_lossy();
+    info!("Loading troy from {}", file_name);
+
     let mut file = tremor_common::file::open(&file_name)?;
-    let mut raw = String::new();
+    let mut src = String::new();
 
-    file.read_to_string(&mut raw)
+    file.read_to_string(&mut src)
         .map_err(|e| Error::from(format!("Could not open file {} => {}", file_name, e)))?;
-
-    // TODO: Should ideally be const
     let aggr_reg = tremor_script::registry::aggr();
-    let module_path = tremor_script::path::load();
-    let query = Query::parse(
-        &module_path,
-        &raw,
-        file_name,
-        vec![],
-        &*FN_REGISTRY.lock()?,
-        &aggr_reg,
-    );
-    let query = match query {
-        Ok(query) => query,
+
+    let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg);
+    let deployable = match deployable {
+        Ok(deployable) => deployable,
         Err(e) => {
             let mut h = TermHighlighter::stderr();
-            if let Err(e) = Script::format_error_from_script(&raw, &mut h, &e) {
-                eprintln!("Error: {}", e);
-            };
+            log_error!(h.format_error(&e), "Error: {e}");
 
-            return Err(format!("failed to load trickle script: {}", file_name).into());
+            return Err(format!("failed to load troy file: {}", file_name).into());
         }
     };
-    let id = query.id().unwrap_or(&file_id);
 
-    let id = TremorUrl::parse(&format!("/pipeline/{}", id))?;
-    info!("Loading {} from file {}.", id, file_name);
-    world.repo.publish_pipeline(&id, false, query).await?;
-
-    Ok(1)
-}
-
-/// Loads a config yaml file
-/// # Errors
-/// Fails if the file can not be loaded
-pub async fn load_cfg_file(world: &World, file_name: &str) -> Result<usize> {
-    info!("Loading configuration from {}", file_name);
     let mut count = 0;
-    let file = tremor_common::file::open(file_name)?;
-    let buffered_reader = BufReader::new(file);
-    let config: config::Config = serde_yaml::from_reader(buffered_reader)?;
-    let config = crate::incarnate(config)?;
-
-    for o in config.offramps {
-        let id = TremorUrl::parse(&format!("/offramp/{}", o.id))?;
-        info!("Loading {} from file.", id);
-        world.repo.publish_offramp(&id, false, o).await?;
-        count += 1;
-    }
-
-    for o in config.onramps {
-        let id = TremorUrl::parse(&format!("/onramp/{}", o.id))?;
-        info!("Loading {} from file.", id);
-        world.repo.publish_onramp(&id, false, o).await?;
-        count += 1;
-    }
-    for binding in config.bindings {
-        let id = TremorUrl::parse(&format!("/binding/{}", binding.id))?;
-        info!("Loading {} from file.", id);
-        world
-            .repo
-            .publish_binding(
-                &id,
-                false,
-                BindingArtefact {
-                    binding,
-                    mapping: None,
-                },
-            )
-            .await?;
-        count += 1;
-    }
-    for (binding, mapping) in config.mappings {
-        world.link_binding(&binding, mapping).await?;
+    for flow in deployable.iter_flows() {
+        world.start_flow(flow).await?;
         count += 1;
     }
     Ok(count)
 }
 
+/// Logs but ignores an error
+#[macro_export(log_error)]
+#[doc(hidden)]
+macro_rules! log_error {
+    ($maybe_error:expr,  $($args:tt)+) => (
+        if let Err(e) = $maybe_error {
+            error!($($args)+, e = e);
+            true
+        } else {
+            false
+        }
+    )
+}
+
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
-    use crate::config;
-    use serde_yaml;
-    use std::io::BufReader;
-    use tremor_common::file as cfile;
+    use crate::system::{ShutdownMode, WorldConfig};
+    use std::io::Write;
+    use tempfile;
 
-    fn slurp(file: &str) -> config::Config {
-        let file = cfile::open(file).expect("could not open file");
-        let buffered_reader = BufReader::new(file);
-        serde_yaml::from_reader(buffered_reader).expect("Failed to read config.")
-    }
-
-    #[test]
-    fn load_simple_deploys() {
-        let config = slurp("tests/configs/deploy.simple.yaml");
-        println!("{:?}", config);
-        let runtime = incarnate(config).expect("Failed to incarnate config");
-        assert_eq!(1, runtime.onramps.len());
-        assert_eq!(1, runtime.offramps.len());
-        assert_eq!(0, runtime.bindings.len());
-    }
-
-    #[test]
-    fn load_passthrough_stream() {
-        let config = slurp("tests/configs/ut.passthrough.yaml");
-        println!("{:?}", &config);
-        let runtime = incarnate(config).expect("Failed to incarnate config");
-        assert_eq!(1, runtime.onramps.len());
-        assert_eq!(1, runtime.offramps.len());
-        assert_eq!(2, runtime.bindings[0].links.len());
+    #[async_std::test]
+    async fn test_load_troy_file() -> Result<()> {
+        let (world, handle) = World::start(WorldConfig::default()).await?;
+        let troy_file = tempfile::NamedTempFile::new()?;
+        troy_file.as_file().write_all(
+            r#"
+        define flow my_flow
+        flow
+            define pipeline foo
+            pipeline
+                select event from in into out;
+            end;
+        end;
+        "#
+            .as_bytes(),
+        )?;
+        troy_file.as_file().flush()?;
+        let path = troy_file.path().display().to_string();
+        let num_deploys = load_troy_file(&world, &path).await?;
+        assert_eq!(0, num_deploys);
+        world.stop(ShutdownMode::Graceful).await?;
+        handle.cancel().await;
+        troy_file.close()?;
+        Ok(())
     }
 }

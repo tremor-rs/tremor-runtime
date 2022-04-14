@@ -18,13 +18,11 @@ use super::prelude::*;
 pub struct Binary {}
 
 impl Codec for Binary {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "bytes"
     }
 
-    #[cfg(not(tarpaulin_include))]
-    fn mime_types(&self) -> Vec<&str> {
+    fn mime_types(&self) -> Vec<&'static str> {
         vec!["application/octet-stream"]
     }
 
@@ -47,7 +45,6 @@ impl Codec for Binary {
         }
     }
 
-    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }

@@ -1,0 +1,49 @@
+
+define flow main
+flow
+  use troy::connectors;
+  use troy::pipelines;
+  use integration;
+
+  define pipeline main
+  into out, exit
+  pipeline
+    define script runtime
+    script
+      let $class = "default";
+      let $rate = 100;
+      event
+    end;
+
+    define operator bucket from grouper::bucket;
+
+    create script runtime;
+    create operator bucket;
+
+    select event from in where event != "exit" into runtime;
+    select event from runtime into bucket;
+    select event from bucket into out;
+
+    select event from in where event == "exit" into exit;
+  end;
+
+  create connector input from integration::read_file;
+  create connector output from integration::write_file;
+  create connector exit from connectors::exit;
+  create connector stdio from connectors::console;
+  create pipeline main;
+  create pipeline passthrough from pipelines::passthrough;
+
+  connect /connector/input to /pipeline/main;
+  connect /pipeline/main to /connector/output;
+  connect /pipeline/main/exit to /connector/exit;
+
+  # logging onramp errors (eg: codec failures) to stderr as well
+  # we also log the same as part of tremor logging right now but if
+  # we choose to remove that, this will give us visibility for the same
+  # (not relying on this only right now, since the asserts for this test
+  # don't pass consistently with this only currently)
+  connect /connector/input/err to /pipeline/passthrough;
+  connect /pipeline/passthrough to /connector/stdio;
+end;
+deploy flow main;

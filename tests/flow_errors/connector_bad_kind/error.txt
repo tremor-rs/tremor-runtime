@@ -1,0 +1,6 @@
+Error: 
+    1 | define flow error
+    2 | flow
+    3 |   define connector empty from 1 + 2 + 3;
+      |                               ^ Found the token `1` but expected `<ident>`
+    4 | end;

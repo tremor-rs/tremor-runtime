@@ -24,7 +24,7 @@ op!(PassthroughFactory (_uid, _node) {
 impl Operator for Passthrough {
     fn on_event(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _port: &str,
         _state: &mut Value<'static>,
         event: Event,
@@ -32,7 +32,7 @@ impl Operator for Passthrough {
         Ok(event.into())
     }
     // this is just returning true
-    #[cfg(not(tarpaulin_include))]
+
     fn skippable(&self) -> bool {
         // ALLOW: This is Ok
         let _ = self;

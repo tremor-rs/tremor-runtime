@@ -1,3 +1,0 @@
-Error: 
-    9 | select event from passthrough/snot into out;
-      |                   ^^^^^^^^^^^ Query `passthrough` does not have port `snot`

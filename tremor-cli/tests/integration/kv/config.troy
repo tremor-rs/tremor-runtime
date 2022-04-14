@@ -1,0 +1,41 @@
+define flow main
+flow
+  use integration;
+  use pipelines;
+  use troy::connectors;
+
+  define connector kv from kv
+  with
+    config =  {"dir": "data"}
+  end;
+
+  create connector kv from kv;
+  create connector input from integration::read_file;
+  create connector output from integration::write_file;
+  create connector error_output from integration::write_file
+  with
+    file = "err.log"
+  end;
+  create connector exit from connectors::exit;
+  create connector stdio from connectors::console;
+
+  create pipeline in from pipelines::in;
+  create pipeline out from pipelines::out;
+  create pipeline err from pipelines::err;
+  
+  connect /connector/input/out to  /pipeline/in;
+  connect /pipeline/in/out to /connector/kv;
+  connect /pipeline/in/out to /connector/stdio;
+  connect /connector/kv/out to /pipeline/out;
+  connect /pipeline/out/out to /connector/stdio;
+  connect /pipeline/out/out to /connector/output;
+  connect /pipeline/out/exit to /connector/exit;
+
+  # error handling
+  connect /pipeline/in/err to /connector/error_output;
+  connect /connector/kv/err to /pipeline/err;
+  connect /pipeline/err/out to /connector/error_output;
+  connect /pipeline/out/err to /connector/error_output;
+
+end;
+deploy flow main;

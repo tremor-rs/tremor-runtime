@@ -1,0 +1,9 @@
+define flow test
+flow
+  define pipeline passthrough
+  config
+    snot = "badger"
+  pipeline
+    select args.snot from in into out;
+  end;
+end

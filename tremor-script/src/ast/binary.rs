@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use super::{
+    base_expr::Ranged,
     raw::{BytesDataType, Endian},
-    BaseExpr, NodeMetas,
 };
 use crate::errors::{error_generic, Result};
 use crate::prelude::*;
@@ -192,10 +192,9 @@ fn write_bits(
     clippy::cast_sign_loss,
     clippy::too_many_arguments
 )]
-pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn extend_bytes_from_value<'value, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
-    meta: &NodeMetas,
     data_type: BytesDataType,
     endianess: Endian,
     bits: u64,
@@ -205,7 +204,7 @@ pub(crate) fn extend_bytes_from_value<'value, O: BaseExpr, I: BaseExpr>(
     value: &Value<'value>,
 ) -> Result<()> {
     let err = |e: &str, v: &Value| -> Result<()> {
-        error_generic(outer, inner, &format!("{}: {}", e, v), meta)
+        error_generic(outer, inner, &format!("{}: {}", e, v))
     };
 
     match data_type {
@@ -247,9 +246,7 @@ mod test {
 
     fn eval_binary(src: &str) -> Vec<u8> {
         let reg: Registry = registry::registry();
-        // let aggr_reg: AggrRegistry = registry::aggr_registry();
-        let script = Script::parse(&crate::path::load(), "<eval>", src.to_string(), &reg)
-            .expect("failed to compile test script");
+        let script = Script::parse(src, &reg).expect("failed to compile test script");
 
         let mut event = Value::object();
         let mut meta = Value::object();

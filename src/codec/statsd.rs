@@ -19,7 +19,6 @@ use std::{slice::SliceIndex, str};
 pub struct StatsD {}
 
 impl Codec for StatsD {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "statsd"
     }
@@ -36,7 +35,6 @@ impl Codec for StatsD {
         encode(data)
     }
 
-    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }

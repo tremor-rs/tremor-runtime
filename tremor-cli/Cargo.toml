@@ -25,8 +25,8 @@ async-std = { version = "1.11", features = ["unstable"] }
 clap = { version = "3", features = ["color", "derive"] }
 clap_complete = "3"
 difference = "2"
-dirs-next = "2"
 env_logger = "0.9.0"
+futures = "0.3"
 halfbrown = "0.1"
 http-types = "2.12"
 # jemallocator = {version = "0.3", optional = false}
@@ -35,6 +35,8 @@ log4rs = "1.0.0"
 serde = "1"
 serde_derive = "1"
 serde_yaml = "0.8"
+signal-hook = "0.3"
+signal-hook-async-std = "0.2"
 simd-json = { version = "0.4", features = ["known-key"] }
 # we need to stick with 0.2.26 as it includes its own libc
 # which allows us to build on older systems like centos 7
@@ -48,12 +50,12 @@ surf = { version = "=2.3.2", default-features = false, features = [
     "h1-client-rustls",
     "middleware-logger",
 ] }
-tide = "0.16"
 tremor-api = { path = "../tremor-api" }
 tremor-common = { path = "../tremor-common" }
 tremor-pipeline = { path = "../tremor-pipeline" }
 tremor-runtime = { path = "../" }
 tremor-script = { path = "../tremor-script" }
+tremor-value = { path = "../tremor-value" }
 url = "2"
 # mimalloc-rs = { version = "0.1", default-features = true, optional = true }
 # allocator_api = "0.6.0"
@@ -63,6 +65,7 @@ port_scanner = "0.1"
 shell-words = "1.1"
 tch = { version = "*", optional = true }
 termcolor = "1.1"
+
 [[bin]]
 name = "tremor"
 path = "src/main.rs"

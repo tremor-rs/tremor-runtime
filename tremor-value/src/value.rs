@@ -15,7 +15,10 @@
 mod cmp;
 /// Conversions from other types to the value type
 pub mod from;
+
 mod serialize;
+/// a static value newtype workaround for rust quirks
+pub mod r#static;
 
 use crate::{Error, Result};
 use beef::Cow;
@@ -30,6 +33,7 @@ use std::{
 };
 
 pub use crate::serde::to_value;
+pub use r#static::StaticValue;
 
 /// Representation of a JSON object
 pub type Object<'value> = HashMap<Cow<'value, str>, Value<'value>>;
@@ -258,15 +262,6 @@ fn cmp_map(left: &Object, right: &Object) -> Ordering {
     Ordering::Equal
 }
 
-// impl<'value> Ord for Value<'value> {
-//     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-//         match (self, other) {
-//             (Value::Static(n1), Value::Static(n2)) => n1.cmp(n2),
-//             (Value::Static(_), _) => Ordering::Less,
-//         }
-//     }
-// }
-
 impl<'value> Value<'value> {
     /// Enforces static lifetime on a borrowed value, this will
     /// force all strings to become owned COW's, the same applies for
@@ -434,16 +429,6 @@ impl<'value> ValueAccess for Value<'value> {
         }
     }
 
-    // #[cfg(feature = "128bit")]
-    // #[inline]
-    // #[must_use]
-    // fn as_u128(&self) -> Option<u128> {
-    //     match self {
-    //         Self::Static(s) => s.as_u128(),
-    //         _ => None,
-    //     }
-    // }
-
     #[inline]
     #[must_use]
     fn as_f64(&self) -> Option<f64> {
@@ -517,7 +502,7 @@ impl<'value> ValueTrait for Value<'value> {
     }
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl<'value> fmt::Display for Value<'value> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -595,6 +580,7 @@ impl<'de> ValueDeserializer<'de> {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline(always))]
+    #[allow(clippy::uninit_vec)]
     fn parse_array(&mut self, len: usize) -> Value<'de> {
         // Rust doesn't optimize the normal loop away here
         // so we write our own avoiding the length
@@ -879,39 +865,6 @@ mod test {
         assert_eq!(v.pop(), Ok(Some(Value::from(0))));
         assert_eq!(v.pop(), Ok(None));
     }
-
-    // #[cfg(feature = "128bit")]
-    // #[test]
-    // fn conversions_i128() {
-    //     let v = Value::from(i128::max_value());
-    //     assert!(v.is_i128());
-    //     assert!(v.is_u128());
-    //     assert!(!v.is_i64());
-    //     assert!(!v.is_u64());
-    //     assert!(!v.is_i32());
-    //     assert!(!v.is_u32());
-    //     assert!(!v.is_i16());
-    //     assert!(!v.is_u16());
-    //     assert!(!v.is_i8());
-    //     assert!(!v.is_u8());
-    //     assert!(!v.is_f64());
-    //     assert!(!v.is_f32());
-    //     assert!(v.is_f64_castable());
-    //     let v = Value::from(i128::min_value());
-    //     assert!(v.is_i128());
-    //     assert!(!v.is_u128());
-    //     assert!(!v.is_i64());
-    //     assert!(!v.is_u64());
-    //     assert!(!v.is_i32());
-    //     assert!(!v.is_u32());
-    //     assert!(!v.is_i16());
-    //     assert!(!v.is_u16());
-    //     assert!(!v.is_i8());
-    //     assert!(!v.is_u8());
-    //     assert!(!v.is_f64());
-    //     assert!(!v.is_f32());
-    //     assert!(v.is_f64_castable());
-    // }
 
     #[test]
     fn conversions_i64() {
@@ -1394,11 +1347,8 @@ mod test {
             } else if v1 < v2 {
                prop_assert!(v2 > v1);
             } else if v1 == v2 {
-                dbg!(v1 == v2, v2 == v1);
                 prop_assert!(v2 == v1);
             } else {
-                dbg!(v1 == v2, v2 == v1);
-                dbg!(v1.cmp(&v2), v2.cmp(&v1));
                 prop_assert!(false)
             };
         }

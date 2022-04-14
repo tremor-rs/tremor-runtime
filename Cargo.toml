@@ -30,11 +30,11 @@ opt-level = 3
 
 [dependencies]
 anyhow = "1"
-async-channel = "1"
+async-broadcast = "0.4"
 async-compat = "0.2"
 async-compression = { version = "0.3", features = [
   "xz",
-  "futures-bufread",
+  "futures-io",
   "stream",
 ] }
 async-std = { version = "1.11.0", features = [
@@ -43,20 +43,20 @@ async-std = { version = "1.11.0", features = [
   "tokio03",
   "tokio1",
 ] }
-async-std-resolver = "0.21"
 async-trait = "0.1"
-async-tungstenite = { version = "0.16.1", features = ["async-std-runtime"] }
 base64 = "0.13"
 beef = { version = "0.5", features = ["impl_serde"] }
+bimap = "0.6"
 byteorder = "1"
 bytes = "1.1"
 chrono = "0.4"
 csv = "1.1"
+dashmap = "5.2"
 either = { version = "1.6", features = ["serde"] }
-elastic = "0.21.0-pre.5"
 error-chain = "0.12"
 file-mode = "0.1"
 futures = "0.3.21"
+event-listener = "2.5"
 glob = "0.3"
 halfbrown = "0.1"
 hashbrown = { version = "0.12", features = ["serde"] }
@@ -64,18 +64,15 @@ hex = "0.4"
 hostname = "0.3"
 http-types = "2.12"
 indexmap = { version = "1", features = ["serde-1"] }
-lapin = { version = "1.10.0", features = [
-  "rustls",
-  "rustls-native-certs",
-], default-features = false }
 lazy_static = "1"
-libflate = "1.1"
-log = "0.4"
+libflate = "1.2"
+log = { version = "0.4", features = ["kv_unstable"] }
+log4rs = "1.0"
 lz4 = "1.23.3"
+memchr = "2.4"
 pin-project-lite = "0.2"
 rand = "0.8.5"
-regex = "1.5"
-rental = "0.5"
+regex = "1.4"
 rmp-serde = "1.0"
 serde = "1"
 serde_derive = "1"
@@ -83,11 +80,7 @@ serde_yaml = "0.8"
 simd-json = { version = "0.4", features = ["known-key"] }
 simd-json-derive = "0.2"
 snap = "1"
-surf = { version = "=2.3.2", default-features = false, features = [
-  "encoding",
-  "h1-client-rustls",
-  "middleware-logger",
-] }
+
 syslog_loose = "0.16"
 tremor-common = { path = "tremor-common" }
 tremor-influx = { path = "tremor-influx" }
@@ -98,9 +91,6 @@ url = "2.2"
 value-trait = "0.2"
 zstd = "0.11"
 
-async-tls = "0.11"
-rustls = "0.19"
-
 mapr = "0.8"
 
 # blaster / blackhole
@@ -108,22 +98,67 @@ hdrhistogram = "7"
 xz2 = "0.1"
 
 # postgres
-postgres = { version = "0.19", features = [
-  "with-serde_json-1",
-  "with-chrono-0_4",
+#postgres = { version = "0.19", features = [
+#  "with-serde_json-1",
+#  "with-chrono-0_4",
+#] }
+#postgres-protocol = "0.6"
+#tokio-postgres = "0.7"
+
+# amqp
+#lapin = { version = "2.1.0", default-features = false, features = [
+#  "rustls",
+#  "rustls-native-certs",
+#] }
+
+# http_client
+surf = { version = "=2.3.2", default-features = false, features = [
+  "h1-client-rustls",  # this will stop us from doing http2 :(
+  "encoding",          # this was a default feature, so we keep it
+  "middleware-logger", # default feature, so we keep it
 ] }
-postgres-protocol = "0.6"
-tokio-postgres = "0.7"
+# We use our fork until: https://github.com/http-rs/http-client/pull/100 is merged
+http-client = { git = "https://github.com/tremor-rs/http-client", rev = "059b23e", features = [
+  "h1_client",
+  "rustls",
+] }
+#http-client = { version = "6.5", default-features = false, features = [
+#  "h1_client",
+#  "rustls",
+#] }
+
+# elasticsearch
+elasticsearch = { version = "=7.14.0-alpha.1", default-features = false, features = [
+  "rustls-tls",
+] }
+
+# ws
+async-tungstenite = { version = "0.17.2", features = [
+  "async-std-runtime",
+  "async-tls",
+] }
+tungstenite = { version = "0.17.2", features = ["rustls"] }
+
+# for tcp & ws
+async-tls = "0.11"
+rustls = "0.19"
+rustls-native-certs = "0.6"
+
+# dns
+async-std-resolver = "0.21"
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
-rdkafka = { version = "0.27", features = [
+# we stick with git until we have a release with https://github.com/fede1024/rust-rdkafka/pull/417
+#rdkafka = { version = "0.28", features = [
+rdkafka = { git = "https://github.com/fede1024/rust-rdkafka", rev = "7a2355f03c9aee8d4544e89bc4b0b0b6b96826e0", features = [
   "cmake-build",
   "libz-static",
 ], default-features = false }
-rdkafka-sys = { version = "4.1.0", features = [
+# rdkafka-sys = { version = "4.2.0", features = [
+rdkafka-sys = { git = "https://github.com/fede1024/rust-rdkafka", rev = "7a2355f03c9aee8d4544e89bc4b0b0b6b96826e0", features = [
   "cmake-build",
   "libz-static",
-] } # tracking the version rdkafka depends on
+], default-features = false } # tracking the version rdkafka depends on
 smol = "1.2.5"
 
 # crononome
@@ -133,13 +168,16 @@ cron = "0.10.0"
 grok = "1"
 
 # rest onramp
-tide = "0.16"
+tide = { version = "0.16", default-features = false, features = [
+  "h1-server",
+] } # no logger, no session, no cookies
+tide-rustls = "0.3"
 
 # sse-onramp
-surf-sse = { git = "https://github.com/dak-x/surf-sse", tag = "2.0", default-features = false }
+#surf-sse = { git = "https://github.com/dak-x/surf-sse", tag = "2.0", default-features = false }
 
 # nats
-async-nats = "0.10.1"
+#async-nats = "0.10.1"
 
 # discord
 serenity = { version = "0.10", default-features = false, features = [
@@ -159,10 +197,16 @@ tonic = { version = "0.5.2", default-features = false, features = [
   "transport",
   "tls",
 ] }
-tremor-otelapis = { version = "0.2.2" }
+tremor-otelapis = { version = "0.2.3" }
+
+# aws-s3
+aws-sdk-s3 = "0.9.0"
+aws-types = "0.9.0"
+aws-config = "0.9.0"
+aws-smithy-http = "0.39"
 
 # gcp
-googapis = { version = "0.5", default-features = false, features = [
+googapis = { version = "0.6", default-features = false, features = [
   "google-pubsub-v1",
 ] }
 gouth = { version = "0.2" }
@@ -172,25 +216,60 @@ reqwest = { version = "0.11.10", default-features = false, features = [
   "rustls-tls-native-roots",
 ] }
 
-[dependencies.tungstenite]
-default-features = false
-version = "0.17"
+# http
+uuid = { version = "0.8", features = ["v4"] }
+
+# wal
+qwal = { git = "https://github.com/tremor-rs/qwal" }
 
 [dev-dependencies]
+env_logger = "0.9.0"
 matches = "0.1"
 pretty_assertions = "1.2.0"
 proptest = "1.0"
 regex = "1"
+serial_test = "0.6"
+signal-hook = "0.3"
+signal-hook-async-std = "0.2"
 tempfile = { version = "3.2" }
 test-case = "2.0"
+testcontainers = "0.12"
+num_cpus = "*"
 
 
 [features]
-default = []
+default = ["integration-local"]
 
 # support for 128bit numbers in tremor-value
 128bit = ["tremor-value/128bit"]
 bert = ["tremor-pipeline/bert"]
+
+integration = ["integration-docker", "integration-local"]
+integration-docker = ["es-integration", "s3-integration", "kafka-integration"]
+integration-local = [
+  "ws-integration",
+  "http-integration",
+  "file-integration",
+  "crononome-integration",
+  "metronome-integration",
+  "socket-integration",
+  "tcp-integration",
+  "wal-integration",
+]
+es-integration = []
+s3-integration = []
+kafka-integration = []
+ws-integration = []
+http-integration = []
+file-integration = []
+crononome-integration = []
+metronome-integration = []
+socket-integration = []
+tcp-integration = []
+wal-integration = []
+tarpaulin-exclude = []
+# those are falky tests
+flaky-test = []
 
 [patch.crates-io]
 rust-bert = { git = 'https://github.com/mfelsche/rust-bert.git', rev = '1140989' }

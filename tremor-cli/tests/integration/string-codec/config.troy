@@ -1,0 +1,42 @@
+define flow main
+flow
+  use integration;
+
+  define connector in from file
+  with
+    codec = "string",
+    preprocessors = ["separate"],
+    config = {"path": "in.json", "mode": "read"}
+  end;
+
+  define pipeline main
+  into out, exit
+  pipeline
+    define script runtime
+    script
+      let in = {"message": event};
+      let event =  match in of
+        case r = %{ message ~= dissect|%{first} %{last}| } => r.message
+        default => drop
+      end;
+      event
+    end;
+
+    create script runtime;
+
+    select event from in where event != "exit" into runtime;
+    select event from in where event == "exit" into exit;
+    select event from runtime into out;
+  end;
+
+  create connector in;
+  create connector out from integration::write_file;
+  create connector exit from integration::exit;
+  create pipeline main;
+
+  connect /connector/in to /pipeline/main;
+  connect /pipeline/main to /connector/out;
+  connect /pipeline/main/exit to /connector/exit;
+end;
+
+deploy flow main;

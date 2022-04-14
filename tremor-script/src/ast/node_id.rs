@@ -1,3 +1,7 @@
+use std::fmt::Display;
+
+use super::raw::IdentRaw;
+
 // Copyright 2020-2021, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,26 +17,50 @@
 // limitations under the License.
 
 /// Identifies a node in the AST.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Hash, Eq, Default)]
 pub struct NodeId {
     /// The ID of the Node
-    id: String,
+    pub(crate) id: String,
     /// The module of the Node
-    module: Vec<String>,
+    pub(crate) module: Vec<String>,
+}
+
+impl<T: ToString> From<&T> for NodeId {
+    fn from(id: &T) -> Self {
+        Self {
+            id: id.to_string(),
+            module: vec![],
+        }
+    }
+}
+
+impl<'script> From<IdentRaw<'script>> for NodeId {
+    fn from(id: IdentRaw<'script>) -> Self {
+        Self {
+            id: id.id.to_string(),
+            module: vec![],
+        }
+    }
 }
 
 impl NodeId {
     /// Create a new `NodeId` from an ID and Module list.
-    pub fn new(id: String, module: Vec<String>) -> Self {
-        Self { id, module }
+    #[must_use]
+    pub fn new<T: ToString>(id: &T, module: &[String]) -> Self {
+        Self {
+            id: id.to_string(),
+            module: module.to_vec(),
+        }
     }
 
     /// The node's id.
+    #[must_use]
     pub fn id(&self) -> &str {
         self.id.as_str()
     }
 
     /// The node's module.
+    #[must_use]
     pub fn module(&self) -> &[String] {
         &self.module
     }
@@ -46,11 +74,7 @@ impl NodeId {
     /// the given module path.
     #[must_use]
     pub fn fqn(&self) -> String {
-        if self.module.is_empty() {
-            self.id.to_string()
-        } else {
-            format!("{}::{}", self.module.join("::"), self.id)
-        }
+        self.to_string()
     }
 
     /// Calculate the fully qualified name of some
@@ -66,11 +90,27 @@ impl NodeId {
     }
 }
 
+impl Display for NodeId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.module.is_empty() {
+            write!(f, "{}", self.id)
+        } else {
+            write!(f, "{}::{}", self.module.join("::"), self.id)
+        }
+    }
+}
+
+/// fully qualified reference to nodes
+pub trait BaseRef {
+    /// Generates the fully qualified name
+    fn fqn(&self) -> String;
+}
+
 #[doc(hidden)]
 #[macro_export]
 macro_rules! impl_fqn {
     ($struct:ident) => {
-        impl $struct<'_> {
+        impl crate::ast::node_id::BaseRef for $struct<'_> {
             fn fqn(&self) -> String {
                 self.node_id.fqn()
             }
@@ -84,14 +124,11 @@ mod test {
 
     #[test]
     fn fqn() {
-        let no_module = NodeId::new("foo".to_string(), vec![]);
+        let no_module = NodeId::new(&"foo", &[]);
         assert_eq!(no_module.fqn(), "foo");
         assert!(no_module.module().is_empty());
 
-        let with_module = NodeId::new(
-            "foo".to_string(),
-            vec!["bar".to_string(), "baz".to_string()],
-        );
+        let with_module = NodeId::new(&"foo", &["bar".to_string(), "baz".to_string()]);
         assert_eq!(with_module.fqn(), "bar::baz::foo");
         assert_eq!(with_module.module(), &["bar", "baz"]);
 

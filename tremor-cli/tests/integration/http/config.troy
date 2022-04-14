@@ -1,0 +1,99 @@
+define flow server
+flow
+  use integration;
+  use troy::pipelines;
+  use troy::connectors;
+
+  define connector http_server from http_server
+  with
+    codec = "json-sorted",
+    config = {
+      "url": "http://localhost:65535/",
+    }
+  end;
+
+  define pipeline instrument
+  pipeline
+    use std::array;
+    define window four from tumbling
+    with
+      size = 4
+    end;
+    select { "event": array::sort(aggr::win::collect_flattened(event)), "meta": array::sort(aggr::win::collect_flattened($)) } from in[four] into out;
+  end;
+
+  create pipeline instrument;
+  create connector stdio from connectors::console;
+  create connector http_server from http_server;
+
+  create pipeline echo from pipelines::passthrough;
+
+  # Echo http server: <http:req> -> server -> server_side -> <http:resp>
+  connect /connector/http_server to /pipeline/echo;
+  connect /pipeline/echo to /connector/http_server;
+
+  connect /connector/http_server to /pipeline/instrument;
+  connect /pipeline/instrument to /connector/stdio;
+end;
+
+define flow client
+flow
+  use integration;
+  use troy::pipelines;
+  use troy::connectors;
+
+  define connector http_client from http_client
+  with
+    codec = "json-sorted",
+    config = {
+      "url": "http://localhost:65535/",
+      "method": "post",
+    },
+    reconnect = {
+      "retry": {
+        "interval_ms": 100,
+        "growth_rate": 2,
+        "max_retries": 3,
+      }
+    }
+  end;
+
+  define pipeline collect
+  into out, exit
+  pipeline
+    use std::array;
+    use std::time::nanos;
+    define window four from tumbling
+    with
+      size = 4
+    end;
+    select array::sort(aggr::win::collect_flattened(event)) from in[four] into out;
+    select { "delay": nanos::from_seconds(1) } from in where event == "exit" into exit;
+  end;
+  create pipeline collect;
+
+  create connector data_in from integration::read_file;
+  create connector data_out from integration::write_file;
+  create connector exit from integration::exit;
+  create connector stdio from connectors::console;
+  create connector http_client from http_client;
+  create connector exit from connectors::exit;
+
+  create pipeline replay from pipelines::passthrough;
+  create pipeline debug from pipelines::passthrough;
+  
+
+  # Replay recorded events over http to server
+  connect /connector/data_in to /pipeline/replay;
+  connect /pipeline/replay to /connector/http_client;
+  connect /connector/http_client/out to /pipeline/collect;
+  connect /connector/http_client/err to /pipeline/debug;
+
+  connect /pipeline/collect to /connector/data_out;
+  connect /pipeline/debug to /connector/stdio;
+  # Terminate at end via `exit` event
+  connect /pipeline/collect/exit to /connector/exit;
+end;
+
+deploy flow server;
+deploy flow client;

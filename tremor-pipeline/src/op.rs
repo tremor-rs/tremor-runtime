@@ -28,6 +28,7 @@ use crate::errors::Result;
 use beef::Cow;
 use halfbrown::HashMap;
 use regex::Regex;
+use tremor_common::ids::OperatorId;
 use tremor_script::Value;
 
 lazy_static::lazy_static! {
@@ -72,7 +73,7 @@ impl EventAndInsights {
 
 /// The operator trait, this reflects the functionality of an operator in the
 /// pipeline graph
-pub trait Operator: std::fmt::Debug + Send {
+pub trait Operator: std::fmt::Debug + Send + Sync {
     /// Called on every Event. The event and input port are passed in,
     /// a vector of events is passed out.
     ///
@@ -80,7 +81,7 @@ pub trait Operator: std::fmt::Debug + Send {
     /// if the event can not be processed
     fn on_event(
         &mut self,
-        uid: u64,
+        uid: OperatorId,
         port: &str,
         state: &mut Value<'static>,
         event: Event,
@@ -88,7 +89,7 @@ pub trait Operator: std::fmt::Debug + Send {
 
     /// Defines if the operatoir shold be called on the singalflow, defaults
     /// to `false`. If set to `true`, `on_signal` should also be implemented.
-    #[cfg(not(tarpaulin_include))]
+
     fn handles_signal(&self) -> bool {
         false
     }
@@ -99,7 +100,7 @@ pub trait Operator: std::fmt::Debug + Send {
     /// if the singal can not be processed
     fn on_signal(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _state: &mut Value<'static>,
         _signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -109,7 +110,7 @@ pub trait Operator: std::fmt::Debug + Send {
 
     /// Defines if the operatoir shold be called on the contraflow, defaults
     /// to `false`. If set to `true`, `on_contraflow` should also be implemented.
-    #[cfg(not(tarpaulin_include))]
+
     fn handles_contraflow(&self) -> bool {
         false
     }
@@ -118,7 +119,7 @@ pub trait Operator: std::fmt::Debug + Send {
     ///
     /// # Errors
     /// if the insight can not be processed
-    fn on_contraflow(&mut self, _uid: u64, _insight: &mut Event) {
+    fn on_contraflow(&mut self, _uid: OperatorId, _insight: &mut Event) {
         // Make the trait signature nicer
     }
 
@@ -136,7 +137,7 @@ pub trait Operator: std::fmt::Debug + Send {
     }
 
     /// An operator is skippable and doesn't need to be executed
-    #[cfg(not(tarpaulin_include))]
+
     fn skippable(&self) -> bool {
         false
     }
@@ -148,51 +149,20 @@ pub trait InitializableOperator {
     ///
     /// # Errors
     //// if no operator con be instanciated from the provided NodeConfig
-    fn from_node(&self, uid: u64, node: &NodeConfig) -> Result<Box<dyn Operator>>;
+    fn node_to_operator(&self, uid: OperatorId, node: &NodeConfig) -> Result<Box<dyn Operator>>;
 }
 
 /// Trait for detecting errors in config and the key names are included in errors
 pub trait ConfigImpl {
-    /// deserialises the yaml into a struct and returns nice errors
+    /// deserialises the config into a struct and returns nice errors
     /// this doesn't need to be overwritten in most cases.
     ///
     /// # Errors
     /// if the Configuration is invalid
-    fn new(config: &serde_yaml::Value) -> Result<Self>
+    fn new(config: &tremor_value::Value) -> Result<Self>
     where
-        for<'de> Self: serde::de::Deserialize<'de>,
+        Self: serde::de::Deserialize<'static>,
     {
-        // simpler ways, but does not give us the kind of error info we want
-        //let validated_config: Config = serde_yaml::from_value(c.clone())?;
-        //let validated_config: Config = serde_yaml::from_str(&serde_yaml::to_string(c)?)?;
-
-        // serialize the YAML config and deserialize it again, so that we get extra info on
-        // YAML errors here (eg: name of the config key where the errror occured). can just
-        // use serde_yaml::from_value() here, but the error message there is limited.
-        serde_yaml::from_str(&serde_yaml::to_string(config)?).map_err(|e| {
-            // remove the potentially misleading "at line..." info, since it does not
-            // correspond to the numbers in the file now
-            LINE_REGEXP.replace(&e.to_string(), "").to_string().into()
-        })
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn error() {
-        #[derive(serde::Deserialize)]
-        struct C {
-            _s: String,
-        }
-        impl ConfigImpl for C {}
-
-        let y: serde_yaml::Value = serde_yaml::from_str("5").unwrap();
-
-        let e = C::new(&y).err().unwrap().to_string();
-
-        assert_eq!(e, "invalid type: integer `5`, expected struct C")
+        Ok(tremor_value::structurize(config.clone_static())?)
     }
 }

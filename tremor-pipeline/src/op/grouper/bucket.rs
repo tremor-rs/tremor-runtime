@@ -61,11 +61,9 @@
 //! }
 //! ```
 
+use crate::errors::{ErrorKind, Result};
+use crate::metrics::value_count;
 use crate::op::prelude::*;
-use crate::{
-    errors::{ErrorKind, Result},
-    influx_value,
-};
 use crate::{Event, Operator};
 use beef::Cow;
 use halfbrown::HashMap;
@@ -134,7 +132,7 @@ pub struct Grouper {
     pub buckets: HashMap<String, Bucket>,
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl std::fmt::Debug for Grouper {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(f, "Bucketgrouper")
@@ -144,7 +142,7 @@ impl std::fmt::Debug for Grouper {
 impl Operator for Grouper {
     fn on_event(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _port: &str,
         _state: &mut Value<'static>,
         event: Event,
@@ -210,10 +208,10 @@ impl Operator for Grouper {
                 tags.insert(CLASS, class.clone().into());
                 tags.insert(ACTION, PASS.into());
                 // Count good cases
-                res.push(influx_value(BUCKETING, tags.clone(), b.pass, timestamp));
+                res.push(value_count(BUCKETING, tags.clone(), b.pass, timestamp));
                 // Count bad cases
                 tags.insert(ACTION, OVERFLOW.into());
-                res.push(influx_value(BUCKETING, tags.clone(), b.overflow, timestamp));
+                res.push(value_count(BUCKETING, tags.clone(), b.overflow, timestamp));
             }
         }
         Ok(res)
@@ -223,10 +221,12 @@ impl Operator for Grouper {
 #[cfg(test)]
 mod test {
     use super::*;
+    use tremor_common::ids::Id;
     use tremor_script::Value;
 
     #[test]
     fn bucket() {
+        let operator_id = OperatorId::new(0);
         let mut op = Grouper {
             buckets: HashMap::new(),
 
@@ -242,7 +242,7 @@ mod test {
         let mut state = Value::null();
 
         let mut r = op
-            .on_event(0, "in", &mut state, event1.clone())
+            .on_event(operator_id, "in", &mut state, event1.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().unwrap();
@@ -259,7 +259,7 @@ mod test {
         };
 
         let mut r = op
-            .on_event(0, "in", &mut state, event2.clone())
+            .on_event(operator_id, "in", &mut state, event2.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().unwrap();
@@ -268,7 +268,7 @@ mod test {
         assert_eq!(e, event2);
 
         let mut r = op
-            .on_event(0, "in", &mut state, event2.clone())
+            .on_event(operator_id, "in", &mut state, event2.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().unwrap();
@@ -277,7 +277,7 @@ mod test {
         assert_eq!(e, event2);
 
         let mut r = op
-            .on_event(0, "in", &mut state, event2.clone())
+            .on_event(operator_id, "in", &mut state, event2.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().unwrap();
@@ -293,7 +293,7 @@ mod test {
         };
 
         let mut r = op
-            .on_event(0, "in", &mut state, event3.clone())
+            .on_event(operator_id, "in", &mut state, event3.clone())
             .expect("could not run pipeline");
 
         let (port, e) = r.events.pop().unwrap();

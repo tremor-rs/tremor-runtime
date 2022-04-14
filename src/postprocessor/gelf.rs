@@ -69,7 +69,6 @@ impl Gelf {
 }
 
 impl Postprocessor for Gelf {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "gelf"
     }
@@ -97,7 +96,7 @@ mod test {
             chunk_size: 20,
         };
 
-        let mut decoder = preprocessor::Gelf::default();
+        let mut decoder = preprocessor::gelf::Gelf::default();
 
         let encoded_data = encoder.process(ingest_ns, egest_ns, &input_data)?;
         assert_eq!(encoded_data.len(), 3);

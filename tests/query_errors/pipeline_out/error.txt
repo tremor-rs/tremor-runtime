@@ -1,0 +1,7 @@
+Error: 
+    4 | end;
+    5 | 
+    6 | create pipeline out;
+      | ^^^^^^^^^^^^^^^^^^^ Name `out` is already in use for another node, please use another name.
+    7 | select event from in into out;
+    8 | select event from out into out;

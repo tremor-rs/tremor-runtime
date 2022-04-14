@@ -1,0 +1,11 @@
+status: 0
+name: Output of tremor's system::metrics pipeline
+asserts:
+  - source: events.log
+    contains:
+      - |
+        {"id":10,"ingest_ns":null,"onramp":"metronome"}
+  - source: fg.out.log
+    contains:
+      - |
+        {"EXIT":"NOW"}

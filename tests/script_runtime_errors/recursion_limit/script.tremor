@@ -3,4 +3,4 @@ fn boom(x) with
   recur(x)
 end;
 
-boom(1)
+boom(event)

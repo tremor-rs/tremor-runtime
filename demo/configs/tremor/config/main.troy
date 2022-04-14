@@ -1,0 +1,277 @@
+define flow loadgen
+flow
+    use std::time::nanos;
+    use troy::connectors;
+
+    define pipeline loadgen
+    into out, info, err, error
+    pipeline
+        #!config metrics_interval_s = 5
+
+        define script route_load
+        script
+            match event of
+                case %{ short_message ~= glob|*info*|  } => emit => "info"
+                case %{ short_message ~= glob|*ERROR*| } => emit => "error"
+                default => drop
+            end
+        end;
+
+        define operator bp from qos::backpressure
+        with
+            timeout = 100
+        end;
+
+        create script route_load;
+        create operator bp;
+
+        select event from in into route_load;
+        # handle info messages
+        select event from route_load/info into bp;
+        select event from bp into info; 
+        
+        # handle error messages
+        select event from route_load/error into error;
+
+        # handle script errors
+        select event from route_load/err into err;
+    end;
+
+    define connector blaster from bench
+    with
+        metrics_interval_s = 5,
+        codec = "json",
+        config = {
+            "source": "/data/data.json.xz",
+            "interval": nanos::from_millis(4)
+        }
+    end;
+
+    define connector kafka_info from kafka_producer
+    with
+        metrics_interval_s = 5,
+        reconnect = {
+            "retry": {
+                "interval_ms": 1000,
+                "growth_rate": 2,
+                "max_retries": 10,
+                "randomized": true
+            }
+        },
+        codec = "json",
+        config = {
+            "brokers": ["kafka:9092"],
+            "topic": "info",
+        }
+    end;
+
+    define connector kafka_error from kafka_producer
+    with
+        metrics_interval_s = 5,
+        reconnect = {
+            "retry": {
+                "interval_ms": 1000,
+                "growth_rate": 2,
+                "max_retries": 10,
+                "randomized": true
+            }
+        },
+        codec = "json",
+        config = {
+            "brokers": ["kafka:9092"],
+            "topic": "error",
+        }
+    end;
+
+    create connector blaster;
+    create connector kafka_info;
+    create connector kafka_error;
+    create connector console from connectors::console;
+
+    create pipeline loadgen;
+
+    connect /connector/blaster to /pipeline/loadgen/in;
+    connect /pipeline/loadgen/info to /connector/kafka_info/in;
+    connect /pipeline/loadgen/error to /connector/kafka_error/in;
+    connect /pipeline/loadgen/err to /connector/console/in;
+end;
+
+define flow demo
+flow
+
+    use troy::connectors;
+
+    define pipeline demo
+    pipeline
+        #!config metrics_interval_s = 5
+
+        define script runtime
+        script
+            let $elastic = {"_index": "tremor", "_type": "log"};
+            # The first class we define is named `info`,
+            # it matches if `short_message`  contains the string `"info"`
+            # we configure it to have a rate of 10 events/s
+            match event of
+                case %{ short_message ~= glob|*info*| } => 
+                    let $class = "info"; 
+                    let $rate = 10;
+                    emit
+            # The second class we define is `error`, it matches
+            # if  `short_message` contains the string `"ERROR`
+            # we configure it to have a rate of 100 events/s 
+                case %{ short_message ~= glob|*ERROR*| } => 
+                    let $class = "error"; 
+                    let $rate = 100; 
+                    emit
+                default => drop
+            end;
+            # Since we use 'emit' in the previous rules we know that only events that didn't match another
+            # rule will arrive here. We're setting class and rate here to 'defaut' and
+            # 90 rates.
+            let $class = "default";
+            let $rate = 90;
+            emit
+        end;
+
+        define operator bucket from grouper::bucket;
+
+        define operator bp from qos::backpressure
+        with
+            timeout = 100
+        end;
+
+        define operator batch from generic::batch
+        with
+            count = 50
+        end;
+
+        create script runtime;
+        create operator bucket;
+        create operator bp;
+        create operator batch;
+
+        select event from in into runtime;
+        select event from runtime into bucket;
+        select event from runtime/err into err;
+        select event from bucket into bp;
+        select event from bp into batch;
+        select event from batch into out;
+    end;
+
+    define connector kafka_in from kafka_consumer
+    with
+        metrics_interval_s = 5,
+        reconnect = {
+            "retry": {
+                "interval_ms": 1000,
+                "growth_rate": 2,
+                "max_retries": 10,
+                "randomized": true
+            }
+        },
+        codec = "json",
+        config = {
+            "brokers": ["kafka:9092"],
+            "topics": ["info", "error"],
+            "group_id": "demo"
+        }
+    end;
+
+    define connector elastic from elastic
+    with
+        metrics_interval_s = 5,
+        reconnect = {
+            "retry": {
+                "interval_ms": 1000,
+                "growth_rate": 2,
+                "max_retries": 10,
+                "randomized": true
+            }
+        },
+        config = {
+            "nodes": ["http://elastic:9200"],
+            "concurrency": 8
+        }
+    end;
+
+    create connector kafka_in;
+    create connector elastic;
+    create connector console from connectors::console;
+
+    create pipeline demo;
+
+    connect /connector/kafka_in to /pipeline/demo;
+    connect /pipeline/demo to /connector/elastic;
+    connect /pipeline/demo/err to /connector/console;
+
+end;
+
+define flow metrics
+flow
+    use troy::connectors;
+    use troy::pipelines;
+
+    define pipeline enrich
+    pipeline
+        #!config metrics_interval_s = 5
+        define script runtime
+        script
+            use tremor::system;
+            let event.tags.host = system::hostname();
+            emit
+        end;
+
+        define operator batch from generic::batch
+        with
+            count = 50
+        end;
+
+        create script runtime;
+        create operator batch;
+
+        select event from in into runtime;
+        select event from runtime into batch;
+        select event from runtime/err into err;
+        select event from batch into out;
+    end;
+
+    define connector influxdb from http_client
+    with
+        codec = "influx",
+        postprocessors = ["separate"],
+        config = {
+            "url": "http://influx:8086/api/v2/write?bucket=tremor&org=tremor&precision=ns",
+            "method": "POST",
+            "headers": {
+                "Client": ["Tremor"],
+                "Authorization": ["Token snotbadger"],
+                "Content-Type": ["text/plain; charset=utf-8"],
+                "Accept": ["application/json"]
+            },
+            "codec_map": {
+                "application/json":"json"
+            }
+        },
+    end;
+
+    create connector metrics from connectors::metrics;
+    create connector console from connectors::console;
+    create connector influxdb from influxdb;
+
+    create pipeline enrich;
+    create pipeline passthrough from pipelines::passthrough;
+
+    connect /connector/metrics/out to /pipeline/enrich/in;
+    connect /pipeline/enrich/out to /connector/influxdb;
+    # for viewing the metrics on the console
+    # connect /pipeline/enrich/out to /connector/console;
+
+    # for viewing influx responses on the console
+    # connect /connector/influxdb to /pipeline/passthrough;
+    connect /connector/influxdb/err to /pipeline/passthrough;
+    connect /pipeline/passthrough to /connector/console;
+end;
+
+deploy flow loadgen;
+deploy flow demo;
+deploy flow metrics;

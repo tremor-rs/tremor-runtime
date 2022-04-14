@@ -1,6 +1,6 @@
-define query add
-query
+define pipeline add
+pipeline
   select event + 1 from in into out;
 end;
-create query add;
-create query add;
+create pipeline add;
+create pipeline add;

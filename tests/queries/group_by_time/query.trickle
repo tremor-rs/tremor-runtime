@@ -1,4 +1,4 @@
-define tumbling window `20ns`
+define window `20ns` from tumbling
 with
   # note: In the framework events are emitted at a nanoseond basis
   # the input data alternates between two groups so we should

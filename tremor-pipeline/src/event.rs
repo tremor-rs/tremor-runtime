@@ -14,8 +14,10 @@
 
 use crate::{CbAction, EventId, OpMeta, SignalKind};
 use std::mem::swap;
+use tremor_common::ids::SourceId;
+use tremor_common::time::nanotime;
 use tremor_script::prelude::*;
-use tremor_script::{EventOriginUri, EventPayload, Value};
+use tremor_script::{literal, EventOriginUri, EventPayload, Value};
 
 /// A tremor event
 #[derive(
@@ -44,15 +46,44 @@ pub struct Event {
 }
 
 impl Event {
+    /// create a tick signal event
+    #[must_use]
+    pub fn signal_tick() -> Self {
+        Self {
+            ingest_ns: nanotime(),
+            kind: Some(SignalKind::Tick),
+            ..Self::default()
+        }
+    }
+
+    /// create a drain signal event originating at the connector with the given `source_id`
+    #[must_use]
+    pub fn signal_drain(source_id: SourceId) -> Self {
+        Self {
+            ingest_ns: nanotime(),
+            kind: Some(SignalKind::Drain(source_id)),
+            ..Self::default()
+        }
+    }
+
+    /// create start signal for the given `SourceId`
+    #[must_use]
+    pub fn signal_start(uid: SourceId) -> Self {
+        Self {
+            ingest_ns: nanotime(),
+            kind: Some(SignalKind::Start(uid)),
+            ..Self::default()
+        }
+    }
+
     /// turns the event in an insight given it's success
     #[must_use]
-    pub fn insight(self, success: bool) -> Event {
+    pub fn insight(cb: CbAction, id: EventId, ingest_ns: u64, op_meta: OpMeta) -> Event {
         Event {
-            cb: success.into(),
-            ingest_ns: self.ingest_ns,
-            id: self.id,
-            op_meta: self.op_meta,
-            origin_uri: self.origin_uri,
+            id,
+            ingest_ns,
+            cb,
+            op_meta,
             ..Event::default()
         }
     }
@@ -69,80 +100,89 @@ impl Event {
 
     /// Creates either a ack or fail event
     #[must_use]
-    pub fn ack_or_fail(ack: bool, ingest_ns: u64, ids: EventId) -> Self {
+    pub fn ack_or_fail(ack: bool, ingest_ns: u64, ids: EventId, op_meta: OpMeta) -> Self {
         if ack {
-            Event::cb_ack(ingest_ns, ids)
+            Event::cb_ack(ingest_ns, ids, op_meta)
         } else {
-            Event::cb_fail(ingest_ns, ids)
+            Event::cb_fail(ingest_ns, ids, op_meta)
         }
     }
 
-    /// Creates a new ack insight from the event, consumes the `op_meta` and
-    /// `origin_uri` of the event
+    /// Creates a new ack insight from the event
     #[must_use]
-    pub fn insight_ack(&mut self) -> Event {
-        let mut e = Event::cb_ack(self.ingest_ns, self.id.clone());
-        swap(&mut e.op_meta, &mut self.op_meta);
-        swap(&mut e.origin_uri, &mut self.origin_uri);
-        e
+    pub fn insight_ack(&self) -> Event {
+        Event::cb_ack(self.ingest_ns, self.id.clone(), self.op_meta.clone())
     }
 
     /// produce a `CBAction::Ack` insight event with the given time (in ms) in the metadata
     #[must_use]
     pub fn insight_ack_with_timing(&mut self, processing_time: u64) -> Event {
         let mut e = self.insight_ack();
-        let mut meta = Object::with_capacity(1);
-        meta.insert("time".into(), Value::from(processing_time));
-        e.data = (Value::null(), Value::from(meta)).into();
+        e.data = (Value::null(), literal!({ "time": processing_time })).into();
         e
     }
 
-    /// Creates a new fail insight from the event, consumes the `op_meta` and `origin_uri` of the
+    /// Creates a new fail insight from the event, consumes the `op_meta` of the
     /// event
     #[must_use]
-    pub fn insight_fail(&mut self) -> Event {
-        let mut e = Event::cb_fail(self.ingest_ns, self.id.clone());
-        swap(&mut e.op_meta, &mut self.op_meta);
-        swap(&mut e.origin_uri, &mut self.origin_uri);
-        e
+    pub fn insight_fail(&self) -> Event {
+        Event::cb_fail(self.ingest_ns, self.id.clone(), self.op_meta.clone())
     }
 
-    /// Creates a restore insight from the event, consumes the `op_meta` and `origin_uri` of the
+    /// Creates a restore insight from the event, consumes the `op_meta` of the
     /// event
     #[must_use]
     pub fn insight_restore(&mut self) -> Event {
         let mut e = Event::cb_restore(self.ingest_ns);
         swap(&mut e.op_meta, &mut self.op_meta);
-        swap(&mut e.origin_uri, &mut self.origin_uri);
         e
     }
 
-    /// Creates a trigger insight from the event, consums the `op_meta` and `origin_uri` of the
+    /// Creates a trigger insight from the event, consums the `op_meta` of the
     /// event
     #[must_use]
     pub fn insight_trigger(&mut self) -> Event {
         let mut e = Event::cb_trigger(self.ingest_ns);
         swap(&mut e.op_meta, &mut self.op_meta);
-        swap(&mut e.origin_uri, &mut self.origin_uri);
         e
     }
 
-    /// allows to iterate over the values and metadatas
-    /// in an event, if it is batched this can be multiple
-    /// otherwise it's a singular event
-    #[must_use]
-    pub fn value_meta_iter(&self) -> ValueMetaIter {
-        ValueMetaIter {
-            event: self,
-            idx: 0,
-        }
-    }
     /// Creates a new event to restore a CB
     #[must_use]
     pub fn cb_restore(ingest_ns: u64) -> Self {
         Event {
             ingest_ns,
             cb: CbAction::Open,
+            ..Event::default()
+        }
+    }
+
+    /// Creates a new event to restore/open a CB
+    ///
+    /// For those CB events we don't need an explicit `EventId`.
+    /// Sources should react properly upon any CB message, no matter the `EventId`
+    /// operators can use the `op_meta` for checking if they are affected
+    #[must_use]
+    pub fn cb_open(ingest_ns: u64, op_meta: OpMeta) -> Self {
+        Self {
+            ingest_ns,
+            op_meta,
+            cb: CbAction::Open,
+            ..Event::default()
+        }
+    }
+
+    /// Creates a new event to trigger/close a CB
+    ///
+    /// For those CB events we don't need an explicit `EventId`.
+    /// Sources should react properly upon any CB message, no matter the `EventId`
+    /// operators can use the `op_meta` for checking if they are affected
+    #[must_use]
+    pub fn cb_close(ingest_ns: u64, op_meta: OpMeta) -> Self {
+        Self {
+            ingest_ns,
+            op_meta,
+            cb: CbAction::Close,
             ..Event::default()
         }
     }
@@ -157,50 +197,39 @@ impl Event {
         }
     }
 
-    /// Creates a new event to trigger a CB
+    /// Creates a new contraflow event delivery acknowledge message
     #[must_use]
-    pub fn cb_ack(ingest_ns: u64, id: EventId) -> Self {
+    pub fn cb_ack(ingest_ns: u64, id: EventId, op_meta: OpMeta) -> Self {
         Event {
             ingest_ns,
             id,
             cb: CbAction::Ack,
+            op_meta,
+            ..Event::default()
+        }
+    }
+
+    /// Creates a new contraflow event delivery acknowledge message with timing in the metadata
+    #[must_use]
+    pub fn cb_ack_with_timing(ingest_ns: u64, id: EventId, op_meta: OpMeta, duration: u64) -> Self {
+        Event {
+            ingest_ns,
+            id,
+            cb: CbAction::Ack,
+            op_meta,
+            data: (Value::null(), literal!({ "time": duration })).into(),
             ..Event::default()
         }
     }
 
     /// Creates a new event to trigger a CB
     #[must_use]
-    pub fn cb_fail(ingest_ns: u64, id: EventId) -> Self {
+    pub fn cb_fail(ingest_ns: u64, id: EventId, op_meta: OpMeta) -> Self {
         Event {
             ingest_ns,
             id,
             cb: CbAction::Fail,
-            ..Event::default()
-        }
-    }
-
-    /// Creates a CB fail insight from the given `event` (the cause of this fail)
-    #[must_use]
-    pub fn to_fail(&self) -> Self {
-        Event {
-            id: self.id.clone(),
-            ingest_ns: self.ingest_ns,
-            op_meta: self.op_meta.clone(),
-            origin_uri: self.origin_uri.clone(),
-            cb: CbAction::Fail,
-            ..Event::default()
-        }
-    }
-
-    /// Create a CB ack insight from the given `event` (the cause of this ack)
-    #[must_use]
-    pub fn to_ack(&self) -> Self {
-        Event {
-            id: self.id.clone(),
-            ingest_ns: self.ingest_ns,
-            op_meta: self.op_meta.clone(),
-            origin_uri: self.origin_uri.clone(),
-            cb: CbAction::Ack,
+            op_meta,
             ..Event::default()
         }
     }
@@ -261,12 +290,68 @@ impl Event {
     }
 }
 
+impl Event {
+    /// allows to iterate over the values and metadatas
+    /// in an event, if it is batched this can be multiple
+    /// otherwise it's a singular event
+    #[must_use]
+    pub fn value_meta_iter(&self) -> ValueMetaIter {
+        ValueMetaIter {
+            event: self,
+            idx: 0,
+        }
+    }
+}
 /// Iterator over the event value and metadata
 /// if the event is a batch this will allow iterating
 /// over all the batched events
 pub struct ValueMetaIter<'value> {
     event: &'value Event,
     idx: usize,
+}
+
+impl<'value> ValueMetaIter<'value> {
+    fn extract_batched_value_meta(
+        batched_value: &'value Value<'value>,
+    ) -> Option<(&'value Value<'value>, &'value Value<'value>)> {
+        batched_value
+            .get("data")
+            .and_then(|last_data| last_data.get("value").zip(last_data.get("meta")))
+    }
+
+    /// Split off the last value and meta in this iter and return all previous values and metas inside a slice.
+    /// Returns `None` if there are no values in this Event, which shouldn't happen, tbh.
+    ///
+    /// This is efficient because all the values are in a slice already.
+    pub fn split_last(
+        &mut self,
+    ) -> Option<(
+        (&'value Value<'value>, &'value Value<'value>),
+        impl Iterator<Item = (&'value Value<'value>, &'value Value<'value>)>,
+    )> {
+        if self.event.is_batch {
+            self.event
+                .data
+                .suffix()
+                .value()
+                .as_array()
+                .and_then(|vec| vec.split_last())
+                .and_then(|(last, rest)| {
+                    let last_option = Self::extract_batched_value_meta(last);
+                    let rest_option =
+                        Some(rest.iter().filter_map(Self::extract_batched_value_meta));
+                    last_option.zip(rest_option)
+                })
+        } else {
+            let v = self.event.data.suffix();
+            let vs: &[Value<'value>] = &[];
+            Some((
+                (v.value(), v.meta()),
+                // only use the extract method to end up with the same type as the if branch above
+                vs.iter().filter_map(Self::extract_batched_value_meta),
+            ))
+        }
+    }
 }
 
 // TODO: descend recursively into batched events in batched events ...
@@ -280,10 +365,7 @@ impl<'value> Iterator for ValueMetaIter<'value> {
                 .suffix()
                 .value()
                 .get_idx(self.idx)
-                .and_then(|e| {
-                    let data = e.get("data")?;
-                    Some((data.get("value")?, data.get("meta")?))
-                });
+                .and_then(Self::extract_batched_value_meta);
             self.idx += 1;
             r
         } else if self.idx == 0 {
@@ -315,6 +397,45 @@ pub struct ValueIter<'value> {
     idx: usize,
 }
 
+impl<'value> ValueIter<'value> {
+    fn extract_batched_value(
+        batched_value: &'value Value<'value>,
+    ) -> Option<&'value Value<'value>> {
+        batched_value
+            .get("data")
+            .and_then(|last_data| last_data.get("value"))
+    }
+    /// Split off the last value in this iter and return all previous values inside an iterator.
+    /// Returns `None` if there are no values in this Event, which shouldn't happen, tbh.
+    ///
+    /// This is useful if we don't want to clone stuff on the last value.
+    pub fn split_last(
+        &mut self,
+    ) -> Option<(
+        &'value Value<'value>,
+        impl Iterator<Item = &'value Value<'value>>,
+    )> {
+        if self.event.is_batch {
+            self.event
+                .data
+                .suffix()
+                .value()
+                .as_array()
+                .and_then(|vec| vec.split_last())
+                .and_then(|(last, rest)| {
+                    let last_option = Self::extract_batched_value(last);
+                    let rest_option = Some(rest.iter().filter_map(Self::extract_batched_value));
+                    last_option.zip(rest_option)
+                })
+        } else {
+            let v = self.event.data.suffix().value();
+            let vs: &[Value<'value>] = &[];
+            // only use the extract method to end up with the same type as the if branch above
+            Some((v, vs.iter().filter_map(Self::extract_batched_value)))
+        }
+    }
+}
+
 impl<'value> Iterator for ValueIter<'value> {
     type Item = &'value Value<'value>;
     fn next(&mut self) -> Option<Self::Item> {
@@ -325,11 +446,11 @@ impl<'value> Iterator for ValueIter<'value> {
                 .suffix()
                 .value()
                 .get_idx(self.idx)
-                .and_then(|e| e.get("data")?.get("value"));
+                .and_then(Self::extract_batched_value);
             self.idx += 1;
             r
         } else if self.idx == 0 {
-            let v = &self.event.data.suffix().value();
+            let v = self.event.data.suffix().value();
             self.idx += 1;
             Some(v)
         } else {
@@ -343,6 +464,7 @@ mod test {
     use super::*;
     use crate::Result;
     use simd_json::OwnedValue;
+    use tremor_common::ids::{Id, OperatorId};
     use tremor_script::{Object, ValueAndMeta};
 
     fn merge<'iref, 'head>(
@@ -351,24 +473,15 @@ mod test {
     ) -> Result<()> {
         if let Some(ref mut a) = this.value_mut().as_array_mut() {
             let mut e = Object::with_capacity(7);
-            // {"id":1,
-            // e.insert_nocheck("id".into(), id.into());
-            //  "data": {
-            //      "value": "snot", "meta":{}
-            //  },
             let mut data = Object::with_capacity(2);
             let (value, meta) = other.into_parts();
             data.insert_nocheck("value".into(), value);
             data.insert_nocheck("meta".into(), meta);
             e.insert_nocheck("data".into(), Value::from(data));
-            //  "ingest_ns":1,
             e.insert_nocheck("ingest_ns".into(), 1.into());
-            //  "kind":null,
             // kind is always null on events
             e.insert_nocheck("kind".into(), Value::null());
-            //  "is_batch":false
             e.insert_nocheck("is_batch".into(), false.into());
-            // }
             a.push(Value::from(e))
         };
         Ok(())
@@ -403,38 +516,115 @@ mod test {
     }
 
     #[test]
+    fn value_iters_split_last() {
+        let mut b = Event {
+            data: (Value::array(), 2).into(),
+            is_batch: true,
+            ..Event::default()
+        };
+
+        assert!(b.value_iter().split_last().is_none());
+        assert!(b.value_meta_iter().split_last().is_none());
+
+        let e1 = Event {
+            data: (1, 2).into(),
+            ..Event::default()
+        };
+        {
+            let splitted = e1.value_iter().split_last();
+            assert!(splitted.is_some());
+            let (last, mut rest) = splitted.unwrap();
+            assert_eq!(last, &1);
+            assert!(rest.next().is_none());
+
+            let splitted_meta = e1.value_meta_iter().split_last();
+            assert!(splitted_meta.is_some());
+            let ((last_value, last_meta), mut rest) = splitted_meta.unwrap();
+            assert_eq!(last_value, &1);
+            assert_eq!(last_meta, &2);
+            assert!(rest.next().is_none());
+        }
+        assert!(b.data.consume(e1.data, merge).is_ok());
+        {
+            let splitted = b.value_iter().split_last();
+            assert!(splitted.is_some());
+            let (last, mut rest) = splitted.unwrap();
+            assert_eq!(last, &1);
+            assert!(rest.next().is_none());
+
+            let splitted_meta = b.value_meta_iter().split_last();
+            assert!(splitted_meta.is_some());
+            let ((last_value, last_meta), mut rest) = splitted_meta.unwrap();
+            assert_eq!(last_value, &1);
+            assert_eq!(last_meta, &2);
+            assert!(rest.next().is_none());
+        }
+        let e2 = Event {
+            data: (3, 4).into(),
+            ..Event::default()
+        };
+        assert!(b.data.consume(e2.data, merge).is_ok());
+        {
+            let splitted = b.value_iter().split_last();
+            assert!(splitted.is_some());
+            let (last, mut rest) = splitted.unwrap();
+            assert_eq!(last, &3);
+            let first = rest.next();
+            assert!(first.is_some());
+            assert_eq!(first.unwrap(), &1);
+
+            let splitted_meta = b.value_meta_iter().split_last();
+            assert!(splitted_meta.is_some());
+            let ((last_value, last_meta), mut rest) = splitted_meta.unwrap();
+            assert_eq!(last_value, &3);
+            assert_eq!(last_meta, &4);
+            let first = rest.next();
+            assert!(first.is_some());
+            let (value, meta) = first.unwrap();
+            assert_eq!(value, &1);
+            assert_eq!(meta, &2);
+        }
+    }
+
+    #[test]
     fn cb() {
-        let mut e = Event::default();
-        assert_eq!(e.clone().insight(true).cb, CbAction::Ack);
-        assert_eq!(e.clone().insight(false).cb, CbAction::Fail);
+        let e = Event::default();
+        assert_eq!(CbAction::from(true), CbAction::Ack);
+        assert_eq!(CbAction::from(false), CbAction::Fail);
 
         assert_eq!(
-            Event::ack_or_fail(true, 0, EventId::default()).cb,
+            Event::ack_or_fail(true, 0, EventId::default(), OpMeta::default()).cb,
             CbAction::Ack
         );
-        assert_eq!(Event::cb_ack(0, EventId::default()).cb, CbAction::Ack);
+        assert_eq!(
+            Event::cb_ack(0, EventId::default(), OpMeta::default()).cb,
+            CbAction::Ack
+        );
         assert_eq!(e.insight_ack().cb, CbAction::Ack);
 
         assert_eq!(
-            Event::ack_or_fail(false, 0, EventId::default()).cb,
+            Event::ack_or_fail(false, 0, EventId::default(), OpMeta::default()).cb,
             CbAction::Fail
         );
-        assert_eq!(Event::cb_fail(0, EventId::default()).cb, CbAction::Fail);
+        assert_eq!(
+            Event::cb_fail(0, EventId::default(), OpMeta::default()).cb,
+            CbAction::Fail
+        );
         assert_eq!(e.insight_fail().cb, CbAction::Fail);
 
         let mut clone = e.clone();
-        clone.op_meta.insert(1, OwnedValue::null());
+        let op_id = OperatorId::new(1);
+        clone.op_meta.insert(op_id, OwnedValue::null());
         let ack_with_timing = clone.insight_ack_with_timing(100);
         assert_eq!(ack_with_timing.cb, CbAction::Ack);
-        assert!(ack_with_timing.op_meta.contains_key(1));
+        assert!(ack_with_timing.op_meta.contains_key(op_id));
         let (_, m) = ack_with_timing.data.parts();
         assert_eq!(Some(100), m.get_u64("time"));
 
         let mut clone2 = e.clone();
-        clone2.op_meta.insert(42, OwnedValue::null());
-        let clone_fail = clone2.to_fail();
-        assert_eq!(clone_fail.cb, CbAction::Fail);
-        assert!(clone_fail.op_meta.contains_key(42));
+        clone2
+            .op_meta
+            .insert(OperatorId::new(42), OwnedValue::null());
     }
 
     #[test]

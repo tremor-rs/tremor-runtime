@@ -13,13 +13,10 @@
 // limitations under the License.
 
 use crate::cli::TestMode;
-use crate::test::tag::Tags;
 
 #[derive(Deserialize, Debug, Default)]
 pub(crate) struct Meta {
-    pub(crate) about: Option<String>,
     #[serde(rename = "kind")]
     pub(crate) mode: TestMode,
-    pub(crate) tags: Option<Tags>,
     pub(crate) includes: String,
 }

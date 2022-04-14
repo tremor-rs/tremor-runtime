@@ -81,15 +81,10 @@ where
     }
 }
 
-#[cfg(not(tarpaulin_include))]
-fn main() -> Result<()> {
+// #[cfg_attr(coverage, no_coverage)]
+#[async_std::main]
+async fn main() -> Result<()> {
     let cli = cli::Cli::parse();
-    // let yaml = load_yaml!("./cli.yaml");
-    // let long_version = tremor_runtime::version::long_ver();
-    // let app = App::from(yaml);
-    // let app = app.color(clap::ColorChoice::Always);
-    // let app = app.version(long_version.as_str());
-    // let matches = app.clone().get_matches();
 
     tremor_runtime::functions::load()?;
     unsafe {
@@ -102,9 +97,9 @@ fn main() -> Result<()> {
         // This means we're going to LEAK this memory, however
         // it is fine since as we do actually need it for the
         // rest of the program execution.
-        tremor_runtime::metrics::INSTANCE = forget_s;
+        tremor_runtime::INSTANCE = forget_s;
     }
-    if let Err(e) = run(cli) {
+    if let Err(e) = run(cli).await {
         eprintln!("error: {}", e);
         // ALLOW: this is supposed to exit
         std::process::exit(1);
@@ -112,24 +107,17 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn run(cli: Cli) -> Result<()> {
+async fn run(cli: Cli) -> Result<()> {
     match cli.command {
         Command::Completions { shell } => completions::run_cmd(shell),
         Command::Server { command } => {
-            command.run();
+            command.run().await;
             Ok(())
         }
-        Command::Test(t) => t.run(cli.verbose > 0),
+        Command::Test(t) => t.run().await,
         Command::Dbg(d) => d.run(),
-        Command::Run(r) => r.run(),
+        Command::Run(r) => r.run().await,
         Command::Doc(d) => d.run(),
         Command::Api(_) => todo!(),
-        // Some(("api", Some(matches))) => task::block_on(api::run_cmd(
-        //     TremorApp {
-        //         format,
-        //         config: load_config()?,
-        //     },
-        //     matches,
-        // )),
     }
 }

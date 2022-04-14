@@ -1,0 +1,37 @@
+use std::time::nanos;
+define pipeline subq
+args
+ param1 = 1,
+ param2 = 42 + 5,
+ param3 = 5 + -(-(-3)),
+ param4 = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20],
+ param5 = nanos::from_seconds(60),
+ param6 = "snot",
+pipeline
+    define script foo
+    args
+      p1,
+      p2,
+      p3,
+    script
+      {
+      "p1": args.p1,
+      "p2": args.p2,
+      "p3": args.p3
+      }
+    end;
+    create script foo with
+      p1 = -args.param1 + args.param2 + args.param3 - args.param4[5],
+      p2 = args.param4[0:4],
+      p3 = args.param6 + "badger"
+    end;
+
+    select event from in into foo;
+    select event from foo into out;
+
+end;
+
+create pipeline subq;
+
+select event from in into subq;
+select event from subq into out;

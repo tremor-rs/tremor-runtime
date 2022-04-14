@@ -1,6 +1,0 @@
-[
-    "pipeline",
-    "passthrough",
-    "influx",
-    "bench_pipe_passthrough_csv"
-]

@@ -4,12 +4,17 @@
 
 <hr>
 
+[![Gitpod]][gitpod-hook]
+
+<hr>
+
 [![Build Status]][actions-tests]
 [![ARM Builds]][drone.io]
 [![Quality Checks]][actions-checks]
 [![License Checks]][actions-license-audit]
 [![Security Checks]][actions-security-audit]
 [![Coverage]][coveralls.io]
+[![codecov]][codecov report]
 [![Dependabot Status]][dependabot.com]
 [![CII Best Practices]][bestpractices]
 [![GitHub]](LICENSE)
@@ -34,6 +39,10 @@
 [discord-invite]: https://bit.ly/tremor-discord
 [arm builds]: https://cloud.drone.io/api/badges/tremor-rs/tremor-runtime/status.svg
 [drone.io]: https://cloud.drone.io/tremor-rs/tremor-runtime
+[gitpod]: https://gitpod.io/button/open-in-gitpod.svg
+[gitpod-hook]: https://gitpod.io/#https://github.com/tremor-rs/tremor-runtime
+[codecov]: https://codecov.io/gh/tremor-rs/tremor-runtime/branch/main/graph/badge.svg?token=d1bhuZGcOK
+[codecov report]: https://codecov.io/gh/tremor-rs/tremor-runtime
 
 ---
 
@@ -43,22 +52,12 @@ More about the [history](https://www.tremor.rs/docs/history) and [architecture](
 
 ## Audience
 
-Tremor is built for users that have a high message volume to deal with and want to build pipelines to process, route, or limit this event stream. While Tremor specializes in interacting with [Kafka](https://kafka.apache.org), other message systems should be easily pluggable.
-
-## Use Cases
-
-### Elastic Search data ingress and rate-limiting
-
-Tremor has been successfully used to replace logstash as a Kafka to Elastic Search ingress. In this scenario, it reduced the required compute resources by about 80% (YMMV) when decoding, classify, and rate-limiting the traffic. A secondary but perhaps more important effect was that tremors dynamic backpressure and rate-limiting allowed the ElasticSearch system to stay healthy and current despite overwhelming amounts of logs during spikes.
-
-### HTTP to Kafka bridge
-
-Kafka optimizes its connection lifetime for long-lived, persistent connections. The rather long connection negotiation phase is a result of that optimization. For languages that have a short runtime, this can be a disadvantage, such as PHP, or tools that only run for a short period, such as CLI tools. Tremor can be used to provide an HTTP(s) to Kafka bridge that allows putting events on a queue without the need for going through the Kafka connection setup instead, only relying on HTTP as its transport.
+Tremor is a real-time event processing engine built for users that have a high message volume to deal with and want to build pipelines to process, route, or limit this event stream. Tremor supports vast number of connectors to interact with: TCP, UDP, HTTP, Websockets, Kafka, Elasticsearch, S3 and many more.
 
 ### When to use Tremor
 
-- You are currently using software such as Logstash or Telegraf
-- You have a high volume of events to handle
+- You want to apply traffic-shaping to a high volume of incoming events
+- You want to distribute events based on their contents
 - You want to protect a downstream system from overload
 - You wish to perform ETL like tasks on data.
 
@@ -68,17 +67,20 @@ Note: Some of those restrictions are subject to change as tremor is a growing pr
 
 We currently do not recommend tremor where:
 
-- Your event structure is not mappable to a JSON-like data structures.
+- Your event structure is not mappable to a JSON-like data structure.
   - If in doubt, please reach out and create a ticket so we can assist and advice
   - In many cases ( textual formats ) a [preprocessor](https://www.tremor.rs/docs/artefacts/preprocessors/), [postprocessor](https://www.tremor.rs/docs/artefacts/postprocessors/) or [codec](https://www.tremor.rs/docs/artefacts/codecs/) is sufficient and these are relatively easy to contribute.
-- You need connectivity to a system, protocol or technology that is not currently supported directly or indirectly by the set existing set of [onramps](https://www.tremor.rs/docs/artefacts/onramps) and [offramps](https://www.tremor.rs/docs/artefacts/offramps/).
+- You need connectivity to a system, protocol or technology that is not currently supported directly or indirectly by the existing set of [connectors](https://www.tremor.rs/docs/artefacts/connectors).
   - If in doubt, please reach out and create a ticket so we can assist and advise.
+- You require complex and expensive operations on your event streams like joins of huge streams. Tremor is not built for huge analytical datasets, rather for tapping into infinite datastreams at their source (e.g. k8s events, syslog, kafka).
 
 We accept and encourage contributions no matter how small so if tremor is compelling for your use case or project, then please get in touch, reach out, raise a ticket and we're happy to collaborate and guide contributions and contributors.
 
-### Example use cases
+### Examples
 
-We provide usage examples of this in the `docs/workshop` folder. Those examples include a `docker-compose.yaml` for running them and can serve as a starting point for deploying tremor.
+See our [Demo](demo/README.md) for a complex Tremor setup that can easily be run locally by using docker compose.
+
+Checkout the [Recipes](https://www.tremor.rs/docs/recipes/README) on our website. Each comes with a docker compose file to run and play with without requiring lots of dependencies.
 
 ## Building
 

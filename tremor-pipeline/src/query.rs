@@ -18,90 +18,100 @@ use crate::{
     op::{
         self,
         identity::PassthroughFactory,
-        prelude::{ERR, IN, METRICS, OUT},
-        trickle::{
-            operator::TrickleOperator, script::Script, select::Select, simple_select::SimpleSelect,
-            window,
-        },
+        prelude::{IN, OUT},
+        trickle::{operator::TrickleOperator, select::Select, simple_select::SimpleSelect, window},
     },
-    ConfigGraph, Connection, NodeConfig, NodeKind, Operator, OperatorNode, PortIndexMap,
+    ConfigGraph, Connection, ExecPortIndexMap, ExecutableGraph, NodeConfig, NodeKind, NodeMetrics,
+    Operator, OperatorNode, State, METRICS_CHANNEL,
 };
 use beef::Cow;
 use halfbrown::HashMap;
 use indexmap::IndexMap;
-use petgraph::algo::is_cyclic_directed;
-use tremor_common::ids::OperatorIdGen;
+use petgraph::{
+    algo::is_cyclic_directed,
+    graph::NodeIndex,
+    EdgeDirection::{Incoming, Outgoing},
+    Graph,
+};
+use rand::Rng;
+use std::collections::BTreeSet;
+use std::iter;
+use tremor_common::ids::{OperatorId, OperatorIdGen};
 use tremor_script::{
     ast::{
-        self, BaseExpr, CompilationUnit, Ident, NodeMetas, SelectType, Stmt, SubqueryStmt,
-        WindowDecl, WindowKind,
+        self,
+        visitors::{ArgsRewriter, ConstFolder},
+        walkers::QueryWalker,
+        Helper, Ident, OperatorDefinition, PipelineCreate, PipelineDefinition, ScriptDefinition,
+        SelectType, Stmt, WindowDefinition, WindowKind,
     },
     errors::{
-        query_node_duplicate_name_err, query_node_reserved_name_err,
+        err_generic, not_defined_err, query_node_duplicate_name_err,
         query_stream_duplicate_name_err, query_stream_not_defined_err,
-        subquery_stmt_duplicate_name_err, subquery_unknown_port_err, CompilerError,
     },
     highlighter::{Dumb, Highlighter},
-    path::ModulePath,
     prelude::*,
-    srs, AggrRegistry, Registry, Value,
+    AggrRegistry, NodeMeta, Registry, Value,
 };
-
-const BUILTIN_NODES: [(Cow<'static, str>, NodeKind); 4] = [
-    (IN, NodeKind::Input),
-    (OUT, NodeKind::Output(OUT)),
-    (ERR, NodeKind::Output(ERR)),
-    (METRICS, NodeKind::Output(METRICS)),
-];
 
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct InputPort {
     pub id: Cow<'static, str>,
     pub port: Cow<'static, str>,
     pub had_port: bool,
-    pub location: tremor_script::pos::Range,
+    pub mid: Box<NodeMeta>,
+}
+impl BaseExpr for InputPort {
+    fn meta(&self) -> &NodeMeta {
+        &self.mid
+    }
 }
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 struct OutputPort {
     pub id: Cow<'static, str>,
     pub port: Cow<'static, str>,
     pub had_port: bool,
-    pub location: tremor_script::pos::Range,
+    pub mid: Box<NodeMeta>,
+}
+impl BaseExpr for OutputPort {
+    fn meta(&self) -> &NodeMeta {
+        &self.mid
+    }
 }
 
-fn resolve_input_port(port: &(Ident, Ident), meta: &NodeMetas) -> InputPort {
+fn resolve_input_port(port: &(Ident, Ident)) -> InputPort {
     InputPort {
-        id: common_cow(&port.0.id),
-        port: common_cow(&port.1.id),
+        id: common_cow(port.0.as_str()),
+        port: common_cow(port.1.as_str()),
         had_port: true,
-        location: port.0.extent(meta),
+        mid: Box::new(port.0.meta().clone()),
     }
 }
 
-fn resolve_output_port(port: &(Ident, Ident), meta: &NodeMetas) -> OutputPort {
+fn resolve_output_port(port: &(Ident, Ident)) -> OutputPort {
     OutputPort {
-        id: common_cow(&port.0.id),
-        port: common_cow(&port.1.id),
+        id: common_cow(port.0.as_str()),
+        port: common_cow(port.1.as_str()),
         had_port: true,
-        location: port.0.extent(meta),
+        mid: Box::new(port.0.meta().clone()),
     }
 }
 
-pub(crate) fn window_decl_to_impl(d: &WindowDecl) -> Result<window::Impl> {
+pub(crate) fn window_defn_to_impl(d: &WindowDefinition<'static>) -> Result<window::Impl> {
     use op::trickle::window::{TumblingOnNumber, TumblingOnTime};
     match &d.kind {
         WindowKind::Sliding => Err("Sliding windows are not yet implemented".into()),
         WindowKind::Tumbling => {
             let script = if d.script.is_some() { Some(d) } else { None };
-            let max_groups = d
-                .params
-                .get(WindowDecl::MAX_GROUPS)
+            let with = d.params.render()?;
+            let max_groups = with
+                .get(WindowDefinition::MAX_GROUPS)
                 .and_then(Value::as_usize)
                 .unwrap_or(window::Impl::DEFAULT_MAX_GROUPS);
 
             match (
-                d.params.get(WindowDecl::INTERVAL).and_then(Value::as_u64),
-                d.params.get(WindowDecl::SIZE).and_then(Value::as_u64),
+                with.get(WindowDefinition::INTERVAL).and_then(Value::as_u64),
+                with.get(WindowDefinition::SIZE).and_then(Value::as_u64),
             ) {
                 (Some(interval), None) => Ok(window::Impl::from(TumblingOnTime::from_stmt(
                     interval, max_groups, script,
@@ -126,37 +136,19 @@ pub struct Query(pub tremor_script::query::Query);
 impl Query {
     /// Fetches the ID of the query if it was provided
     pub fn id(&self) -> Option<&str> {
-        self.0
-            .query
-            .suffix()
-            .config
-            .get("id")
-            .and_then(ValueAccess::as_str)
+        self.0.query.config.get("id").and_then(ValueAccess::as_str)
     }
-    /// Source of the query
-    #[must_use]
-    pub fn source(&self) -> &str {
-        &self.0.source
-    }
+
     /// Parse a query
     ///
     /// # Errors
     /// if the trickle script can not be parsed
-    pub fn parse(
-        module_path: &ModulePath,
-        script: &str,
-        file_name: &str,
-        cus: Vec<CompilationUnit>,
-        reg: &Registry,
-        aggr_reg: &AggrRegistry,
-    ) -> std::result::Result<Self, CompilerError> {
+    pub fn parse<S>(script: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
+    where
+        S: ToString + ?Sized,
+    {
         Ok(Self(tremor_script::query::Query::parse(
-            module_path,
-            file_name,
-            script,
-            cus,
-            reg,
-            aggr_reg,
+            script, reg, aggr_reg,
         )?))
     }
 
@@ -165,114 +157,96 @@ impl Query {
     /// # Errors
     /// if the graph can not be turned into a pipeline
     #[allow(clippy::too_many_lines)]
-    pub fn to_pipe(&self, idgen: &mut OperatorIdGen) -> Result<crate::ExecutableGraph> {
-        use crate::{ExecutableGraph, NodeMetrics, State};
-        use std::iter;
-
-        let query = self.0.suffix();
-
+    pub fn to_pipe(&self, idgen: &mut OperatorIdGen) -> Result<ExecutableGraph> {
+        let aggr_reg = tremor_script::aggr_registry();
+        let reg = tremor_script::FN_REGISTRY.read()?;
+        let mut helper = Helper::new(&reg, &aggr_reg);
+        helper.scope = self.0.query.scope.clone();
         let mut pipe_graph = ConfigGraph::new();
-        let mut pipe_ops = HashMap::new();
-        let mut nodes: HashMap<Cow<'static, str>, _> = HashMap::new();
+        let mut nodes_by_name: HashMap<Cow<'static, str>, _> = HashMap::new();
         let mut links: IndexMap<OutputPort, Vec<InputPort>> = IndexMap::new();
-        let mut inputs = HashMap::new();
-        let mut outputs: Vec<petgraph::graph::NodeIndex> = Vec::new();
-        // Used to rewrite `subquery/port` to `internal_stream`
-        let mut subqueries: HashMap<String, SubqueryStmt> = HashMap::new();
-
-        let metric_interval = query
+        let metric_interval = self
+            .0
+            .query
             .config
             .get("metrics_interval_s")
             .and_then(Value::as_u64)
             .map(|i| i * 1_000_000_000);
 
-        let pipeline_id = query
+        let pipeline_id = self
+            .0
+            .query
             .config
             .get("id")
             .and_then(Value::as_str)
             .unwrap_or("<generated>");
 
-        for (name, node_kind) in &BUILTIN_NODES {
+        for name in &self.0.query.from {
+            let name = name.id.clone();
+            let kind = NodeKind::Input;
             let id = pipe_graph.add_node(NodeConfig {
                 id: name.to_string(),
-                kind: node_kind.clone(),
+                kind,
                 op_type: "passthrough".to_string(),
                 ..NodeConfig::default()
             });
-            nodes.insert(name.clone(), id);
-            let op = pipe_graph
-                .raw_nodes()
-                .get(id.index())
-                .ok_or_else(|| Error::from("Error finding freshly added node."))
-                .and_then(|node| {
-                    node.weight
-                        .to_op(idgen.next_id(), supported_operators, None, None, None)
-                })?;
-            pipe_ops.insert(id, op);
-            match node_kind {
-                NodeKind::Input => {
-                    inputs.insert(name.clone(), id);
-                }
-                NodeKind::Output(_) => outputs.push(id),
-                _ => {
-                    return Err(format!(
-                        "Builtin node {} has unsupported node kind: {:?}",
-                        name, node_kind
-                    )
-                    .into())
-                }
-            }
+            nodes_by_name.insert(name, id);
         }
 
-        let mut port_indexes: PortIndexMap = HashMap::new();
+        for name in &self.0.query.into {
+            let name = name.id.clone();
+            let kind = NodeKind::Output(name.clone());
+            let id = pipe_graph.add_node(NodeConfig {
+                id: name.to_string(),
+                kind,
+                op_type: "passthrough".to_string(),
+                ..NodeConfig::default()
+            });
+            nodes_by_name.insert(name, id);
+        }
+
         let mut select_num = 0;
 
-        let has_builtin_node_name = make_builtin_node_name_checker();
+        let mut included_graphs: HashMap<String, InlcudedGraph> = HashMap::new();
+        for stmt in &self.0.query.stmts {
+            match stmt {
+                // Ignore the definitions
+                Stmt::WindowDefinition(_)
+                | Stmt::ScriptDefinition(_)
+                | Stmt::OperatorDefinition(_)
+                | Stmt::PipelineDefinition(_) => {}
 
-        let stmts = self.0.extract_stmts();
-        for (i, stmt) in stmts.into_iter().enumerate() {
-            match stmt.suffix() {
-                Stmt::Select(ref select) => {
-                    // Rewrite subquery/port to their internal streams
-                    let mut select_rewrite = select.clone();
-                    for select_io in
-                        vec![&mut select_rewrite.stmt.from, &mut select_rewrite.stmt.into]
-                    {
-                        if let Some(subq_stmt) = subqueries.get(&select_io.0.to_string()) {
-                            if let Some(internal_stream) =
-                                subq_stmt.port_stream_map.get(&select_io.1.to_string())
-                            {
-                                select_io.0.id = internal_stream.clone().into();
-                            } else {
-                                let sio = select_io.clone();
-                                return Err(subquery_unknown_port_err(
-                                    &select_rewrite,
-                                    &sio.0,
-                                    sio.0.to_string(),
-                                    sio.1.to_string(),
-                                    &query.node_meta,
-                                )
-                                .into());
-                            }
-                        }
+                Stmt::SelectStmt(ref select) => {
+                    // Rewrite pipeline/port to their internal streams
+                    let mut select = select.clone();
+                    // Note we connecto from stmt.from to graph.into
+                    // and stmt.into to graph.from
+                    let (node, port) = &mut select.stmt.from;
+                    if let Some(g) = included_graphs.get(node.as_str()) {
+                        let name = into_name(&g.prefix, port.as_str());
+                        node.id = name.into();
                     }
-                    let select = select_rewrite;
+                    let (node, port) = &mut select.stmt.into;
+                    if let Some(g) = included_graphs.get(node.as_str()) {
+                        let name = from_name(&g.prefix, port.as_str());
+                        node.id = name.into();
+                    }
 
                     let s: &ast::Select<'_> = &select.stmt;
 
-                    if !nodes.contains_key(&s.from.0.id) {
+                    if !nodes_by_name.contains_key(&s.from.0.id) {
                         return Err(query_stream_not_defined_err(
                             s,
                             &s.from.0,
                             s.from.0.to_string(),
-                            &query.node_meta,
+                            s.from.1.to_string(),
                         )
                         .into());
                     }
-                    let e = select.stmt.extent(&select.node_meta);
+                    let e = select.stmt.extent();
                     let mut h = Dumb::new();
                     let label = h
-                        .highlight_str(self.source(), "", false, Some(e))
+                        .highlight_range(e)
                         .ok()
                         .map(|_| h.to_string().trim_end().to_string());
 
@@ -280,49 +254,34 @@ impl Query {
                         id: format!("select_{}", select_num).into(),
                         port: IN,
                         had_port: false,
-                        location: s.extent(&query.node_meta),
+                        mid: Box::new(s.meta().clone()),
                     };
                     let select_out = OutputPort {
                         id: format!("select_{}", select_num,).into(),
                         port: OUT,
                         had_port: false,
-                        location: s.extent(&query.node_meta),
+                        mid: Box::new(s.meta().clone()),
                     };
                     select_num += 1;
-                    let mut from = resolve_output_port(&s.from, &query.node_meta);
+                    let mut from = resolve_output_port(&s.from);
                     if from.id == "in" && from.port != "out" {
                         let name: Cow<'static, str> = format!("in/{}", from.port).into();
                         from.id = name.clone();
-                        if !nodes.contains_key(&name) {
+                        if !nodes_by_name.contains_key(&name) {
                             let id = pipe_graph.add_node(NodeConfig {
                                 id: name.to_string(),
                                 kind: NodeKind::Input,
                                 op_type: "passthrough".to_string(),
                                 ..NodeConfig::default()
                             });
-                            nodes.insert(name.clone(), id);
-                            let op = pipe_graph
-                                .raw_nodes()
-                                .get(id.index())
-                                .ok_or_else(|| Error::from("Error finding freshly added node."))
-                                .and_then(|node| {
-                                    node.weight.to_op(
-                                        idgen.next_id(),
-                                        supported_operators,
-                                        None,
-                                        None,
-                                        None,
-                                    )
-                                })?;
-                            pipe_ops.insert(id, op);
-                            inputs.insert(name, id);
+                            nodes_by_name.insert(name.clone(), id);
                         }
                     }
-                    let mut into = resolve_input_port(&s.into, &query.node_meta);
+                    let mut into = resolve_input_port(&s.into);
                     if into.id == "out" && into.port != "in" {
                         let name: Cow<'static, str> = format!("out/{}", into.port).into();
                         into.id = name.clone();
-                        if !nodes.contains_key(&name) {
+                        if !nodes_by_name.contains_key(&name) {
                             let id = pipe_graph.add_node(NodeConfig {
                                 id: name.to_string(),
                                 label: Some(name.to_string()),
@@ -330,23 +289,7 @@ impl Query {
                                 op_type: "passthrough".to_string(),
                                 ..NodeConfig::default()
                             });
-                            nodes.insert(name, id);
-                            let op = pipe_graph
-                                .raw_nodes()
-                                .get(id.index())
-                                .ok_or_else(|| Error::from("Error finding freshly added node."))
-                                .and_then(|node| {
-                                    node.weight.to_op(
-                                        idgen.next_id(),
-                                        supported_operators,
-                                        None,
-                                        None,
-                                        None,
-                                    )
-                                })?;
-
-                            pipe_ops.insert(id, op);
-                            outputs.push(id);
+                            nodes_by_name.insert(name, id);
                         }
                     }
 
@@ -358,233 +301,182 @@ impl Query {
                         label,
                         kind: NodeKind::Select,
                         op_type: "trickle::select".to_string(),
+                        stmt: Some(stmt.clone()),
                         ..NodeConfig::default()
                     };
                     let id = pipe_graph.add_node(node.clone());
 
-                    let mut ww = HashMap::with_capacity(query.windows.len());
-                    for (name, decl) in &query.windows {
-                        ww.insert(name.clone(), window_decl_to_impl(decl)?);
-                    }
-                    let op = node.to_op(
-                        idgen.next_id(),
-                        supported_operators,
-                        None,
-                        Some(&stmt),
-                        Some(ww),
-                    )?;
-                    pipe_ops.insert(id, op);
-                    nodes.insert(select_in.id.clone(), id);
-                    outputs.push(id);
+                    nodes_by_name.insert(select_in.id.clone(), id);
                 }
-                Stmt::Stream(s) => {
+                Stmt::StreamStmt(s) => {
                     let name = common_cow(&s.id);
                     let id = name.clone();
-                    if nodes.contains_key(&id) {
-                        return Err(query_stream_duplicate_name_err(
-                            s,
-                            s,
-                            s.id.to_string(),
-                            &query.node_meta,
-                        )
-                        .into());
+                    if nodes_by_name.contains_key(&id) {
+                        return Err(query_stream_duplicate_name_err(s, s, s.id.to_string()).into());
                     }
 
                     let node = NodeConfig {
                         id: id.to_string(),
                         kind: NodeKind::Operator,
                         op_type: "passthrough".to_string(),
+                        stmt: Some(stmt.clone()),
                         ..NodeConfig::default()
                     };
                     let id = pipe_graph.add_node(node.clone());
-                    nodes.insert(name.clone(), id);
-                    let op = node.to_op(
-                        idgen.next_id(),
-                        supported_operators,
-                        None,
-                        Some(&stmt),
-                        Some(HashMap::new()),
-                    )?;
-                    inputs.insert(name.clone(), id);
-                    pipe_ops.insert(id, op);
-                    outputs.push(id);
+                    nodes_by_name.insert(name.clone(), id);
                 }
-                Stmt::WindowDecl(_)
-                | Stmt::ScriptDecl(_)
-                | Stmt::OperatorDecl(_)
-                | Stmt::SubqueryDecl(_) => {}
-                Stmt::SubqueryStmt(s) => {
-                    if subqueries.contains_key(&s.id) {
-                        return Err(subquery_stmt_duplicate_name_err(
-                            s,
-                            s,
-                            s.id.to_string(),
-                            &query.node_meta,
-                        )
-                        .into());
+                Stmt::PipelineCreate(s) => {
+                    let name = s.alias.clone();
+                    if nodes_by_name.contains_key(name.as_str()) {
+                        return Err(query_node_duplicate_name_err(s, name).into());
                     }
-                    subqueries.insert(s.id.clone(), s.clone());
+                    // This is just a placeholder!
+                    nodes_by_name.insert(name.clone().into(), NodeIndex::default());
+
+                    if let Some(pd) = helper.get::<PipelineDefinition>(&s.target)? {
+                        let prefix = prefix_for(s);
+
+                        let query = Query(tremor_script::Query::from_query(
+                            pd.to_query(&s.params, &mut helper)?,
+                        ));
+
+                        let mut from_map = HashMap::new();
+                        for f in pd.from {
+                            let name = from_name(&prefix, f.as_str());
+                            let node = NodeConfig {
+                                id: name.clone(),
+                                kind: NodeKind::Operator,
+                                op_type: "passthrough".to_string(),
+                                stmt: Some(stmt.clone()),
+                                ..NodeConfig::default()
+                            };
+                            let id = pipe_graph.add_node(node.clone());
+                            from_map.insert(f.to_string(), id);
+                            nodes_by_name.insert(name.clone().into(), id);
+                        }
+
+                        let mut into_map = HashMap::new();
+                        for i in pd.into {
+                            let name = into_name(&prefix, i.as_str());
+                            let node = NodeConfig {
+                                id: name.clone(),
+                                kind: NodeKind::Operator,
+                                op_type: "passthrough".to_string(),
+                                stmt: Some(stmt.clone()),
+                                ..NodeConfig::default()
+                            };
+                            let id = pipe_graph.add_node(node.clone());
+                            into_map.insert(i.to_string(), id);
+                            nodes_by_name.insert(name.clone().into(), id);
+                        }
+
+                        let mut graph = query.to_pipe(idgen)?;
+                        graph.optimize();
+
+                        if included_graphs
+                            .insert(
+                                name,
+                                InlcudedGraph {
+                                    prefix,
+                                    graph,
+                                    from_map,
+                                    into_map,
+                                },
+                            )
+                            .is_some()
+                        {
+                            return Err(Error::from(err_generic(
+                                &s.extent(),
+                                &s.extent(),
+                                &format!("Can't create the pipeline `{}` twice", s.alias),
+                            )));
+                        }
+                    } else {
+                        return Err(Error::from(err_generic(
+                            &s.extent(),
+                            &s.extent(),
+                            &format!("Unknown pipeline `{}`", s.target),
+                        )));
+                    }
                 }
-                Stmt::Operator(o) => {
-                    if nodes.contains_key(&common_cow(o.node_id.id())) {
-                        let error_func = if has_builtin_node_name(&common_cow(o.node_id.id())) {
-                            query_node_reserved_name_err
-                        } else {
-                            query_node_duplicate_name_err
-                        };
-                        return Err(
-                            error_func(o, o.node_id.id().to_string(), &query.node_meta).into()
-                        );
+                Stmt::OperatorCreate(o) => {
+                    if nodes_by_name.contains_key(&common_cow(&o.id)) {
+                        return Err(query_node_duplicate_name_err(o, o.id.clone()).into());
                     }
 
-                    let fqon = o.node_id.target_fqn(&o.target);
+                    let mut defn: OperatorDefinition =
+                        helper.get(&o.target)?.ok_or("operator not found")?;
 
+                    defn.params.ingest_creational_with(&o.params)?;
+
+                    let that = Stmt::OperatorDefinition(defn);
                     let node = NodeConfig {
-                        id: o.node_id.id().to_string(),
+                        id: o.id.clone(),
                         kind: NodeKind::Operator,
                         op_type: "trickle::operator".to_string(),
+                        stmt: Some(that),
                         ..NodeConfig::default()
                     };
                     let id = pipe_graph.add_node(node.clone());
 
-                    let stmt_srs =
-                        srs::Stmt::try_new_from_query::<&'static str, _>(&self.0.query, |query| {
-                            let mut decl = query
-                                .operators
-                                .get(&fqon)
-                                .ok_or("operator not found")?
-                                .clone();
-                            if let Some(Stmt::Operator(o)) = query.stmts.get(i) {
-                                if let Some(params) = &o.params {
-                                    if let Some(decl_params) = decl.params.as_mut() {
-                                        for (k, v) in params {
-                                            decl_params.insert(k.clone(), v.clone());
-                                        }
-                                    } else {
-                                        decl.params = Some(params.clone());
-                                    }
-                                }
-                            };
-                            let inner_stmt = Stmt::OperatorDecl(decl);
-
-                            Ok(inner_stmt)
-                        })?;
-
-                    let that = stmt_srs;
-                    let op = node.to_op(
-                        idgen.next_id(),
-                        supported_operators,
-                        None,
-                        Some(&that),
-                        None,
-                    )?;
-                    pipe_ops.insert(id, op);
-                    nodes.insert(common_cow(o.node_id.id()), id);
-                    outputs.push(id);
+                    nodes_by_name.insert(common_cow(&o.id), id);
                 }
-                Stmt::Script(o) => {
-                    if nodes.contains_key(&common_cow(o.node_id.id())) {
-                        let error_func = if has_builtin_node_name(&common_cow(o.node_id.id())) {
-                            query_node_reserved_name_err
-                        } else {
-                            query_node_duplicate_name_err
-                        };
-                        return Err(
-                            error_func(o, o.node_id.id().to_string(), &query.node_meta).into()
-                        );
+                Stmt::ScriptCreate(o) => {
+                    if nodes_by_name.contains_key(&common_cow(&o.id)) {
+                        return Err(query_node_duplicate_name_err(o, o.id.clone()).into());
                     }
 
-                    let fqsn = o.node_id.target_fqn(&o.target);
+                    let mut defn: ScriptDefinition = helper
+                        .get(&o.target)?
+                        .ok_or_else(|| not_defined_err(o, "script"))?;
+                    defn.params.ingest_creational_with(&o.params)?;
+                    // we const fold twice to ensure that we are able
+                    ConstFolder::new(&helper).walk_definitional_args(&mut defn.params)?;
+                    let inner_args = defn.params.render()?;
+                    ArgsRewriter::new(inner_args, &mut helper, defn.params.meta())
+                        .walk_script_defn(&mut defn)?;
+                    ConstFolder::new(&helper).walk_script_defn(&mut defn)?;
 
-                    let stmt_srs =
-                        srs::Stmt::try_new_from_query::<&'static str, _>(&self.0.query, |query| {
-                            let decl = query.scripts.get(&fqsn).ok_or("script not found")?.clone();
-                            let inner_stmt = Stmt::ScriptDecl(Box::new(decl));
-                            Ok(inner_stmt)
-                        })?;
-
-                    let label = if let Stmt::ScriptDecl(s) = stmt_srs.suffix() {
-                        let e = s.extent(&query.node_meta);
-                        let mut h = Dumb::new();
-                        // We're trimming the code so no spaces are at the end then adding a newline
-                        // to ensure we're left justified (this is a dot thing, don't question it)
-                        h.highlight_str(self.source(), "", false, Some(e))
-                            .ok()
-                            .map(|_| format!("{}\n", h.to_string().trim_end()))
-                    } else {
-                        None
-                    };
-
-                    let that_defn = stmt_srs;
+                    let e = defn.extent();
+                    let mut h = Dumb::new();
+                    // We're trimming the code so no spaces are at the end then adding a newline
+                    // to ensure we're left justified (this is a dot thing, don't question it)
+                    let label = h
+                        .highlight_range(e)
+                        .ok()
+                        .map(|_| format!("{}\n", h.to_string().trim_end()));
+                    let that_defn = Stmt::ScriptDefinition(Box::new(defn));
 
                     let node = NodeConfig {
-                        id: o.node_id.id().to_string(),
+                        id: o.id.clone(),
                         kind: NodeKind::Script,
                         label,
                         op_type: "trickle::script".to_string(),
-                        defn: Some(that_defn.clone()),
-                        node: Some(stmt.clone()),
+                        stmt: Some(that_defn),
                         ..NodeConfig::default()
                     };
-
                     let id = pipe_graph.add_node(node.clone());
-                    let op = node.to_op(
-                        idgen.next_id(),
-                        supported_operators,
-                        Some(&that_defn),
-                        Some(&stmt),
-                        None,
-                    )?;
-                    pipe_ops.insert(id, op);
-                    nodes.insert(common_cow(o.node_id.id()), id);
-                    outputs.push(id);
+
+                    nodes_by_name.insert(common_cow(&o.id), id);
                 }
             };
-        }
-
-        // Make sure the subq names don't conlict  with operators or
-        // reserved names in `nodes` (or vice versa).
-        for (id, stmt) in subqueries {
-            if nodes.contains_key(&common_cow(&id)) {
-                let error_func = if has_builtin_node_name(&common_cow(&id)) {
-                    query_node_reserved_name_err
-                } else {
-                    query_node_duplicate_name_err
-                };
-                return Err(error_func(&stmt, id, &query.node_meta).into());
-            }
         }
 
         // Link graph edges
         for (from, tos) in &links {
             for to in tos {
-                let from_idx = *nodes.get(&from.id).ok_or_else(|| {
+                let from_idx = *nodes_by_name.get(&from.id).ok_or_else(|| {
                     query_stream_not_defined_err(
-                        &from.location,
-                        &from.location,
+                        from,
+                        from,
                         from.id.to_string(),
-                        &query.node_meta,
+                        from.port.to_string(),
                     )
                 })?;
-                let to_idx = *nodes.get(&to.id).ok_or_else(|| {
-                    query_stream_not_defined_err(
-                        &to.location,
-                        &to.location,
-                        to.id.to_string(),
-                        &query.node_meta,
-                    )
+                let to_idx = *nodes_by_name.get(&to.id).ok_or_else(|| {
+                    query_stream_not_defined_err(to, to, to.id.to_string(), to.port.to_string())
                 })?;
 
-                let from_tpl = (from_idx, from.port.clone());
-                let to_tpl = (to_idx, to.port.clone());
-                match port_indexes.get_mut(&from_tpl) {
-                    None => {
-                        port_indexes.insert(from_tpl, vec![to_tpl]);
-                    }
-                    Some(ports) => {
-                        ports.push(to_tpl);
-                    }
-                }
                 pipe_graph.add_edge(
                     from_idx,
                     to_idx,
@@ -596,32 +488,94 @@ impl Query {
             }
         }
 
+        for (_ig_name, ig) in included_graphs {
+            let mut old_index_to_new_index = HashMap::new();
+
+            for (old_idx, mut node) in ig.graph.graph.into_iter().enumerate() {
+                let new_idx = if let NodeKind::Output(port) = &node.kind {
+                    let port: &str = port;
+                    node.config.kind = NodeKind::Operator;
+                    let new_idx = pipe_graph.add_node(node.config);
+                    let to_id = ig.into_map.get(port).ok_or(format!(
+                        "invalid sub graph bad output port {}, availabile: {:?}",
+                        port,
+                        ig.into_map.keys().collect::<Vec<_>>()
+                    ))?;
+                    let con = Connection {
+                        from: "out".into(),
+                        to: "in".into(),
+                    };
+                    pipe_graph.add_edge(new_idx, *to_id, con);
+                    new_idx
+                } else if let NodeKind::Input { .. } = &node.kind {
+                    node.config.kind = NodeKind::Operator;
+                    let port = node.id;
+                    let new_idx = pipe_graph.add_node(node.config);
+                    let from_id = ig.from_map.get(&port).ok_or(format!(
+                        "invalid sub graph bad input port {}, availabile: {:?}",
+                        port,
+                        ig.from_map.keys().collect::<Vec<_>>()
+                    ))?;
+                    let con = Connection {
+                        from: "out".into(),
+                        to: "in".into(),
+                    };
+                    pipe_graph.add_edge(*from_id, new_idx, con);
+                    new_idx
+                } else {
+                    pipe_graph.add_node(node.config)
+                };
+                old_index_to_new_index.insert(old_idx, new_idx);
+            }
+
+            for ((from_id, from_port), tos) in ig.graph.port_indexes {
+                let from_id = old_index_to_new_index
+                    .get(&from_id)
+                    .copied()
+                    .ok_or("invalid graph unknown from_id")?;
+                for (to_id, to_port) in tos {
+                    let to_id = old_index_to_new_index
+                        .get(&to_id)
+                        .copied()
+                        .ok_or("invalid graph unknown to_id")?;
+                    let con = Connection {
+                        from: from_port.clone(),
+                        to: to_port,
+                    };
+                    pipe_graph.add_edge(from_id, to_id, con);
+                }
+            }
+        }
+
+        loop {
+            let mut unused = Vec::new();
+            for idx in pipe_graph
+                .externals(Incoming)
+                .chain(pipe_graph.externals(Outgoing))
+            {
+                if !matches!(
+                    pipe_graph.node_weight(idx),
+                    Some(NodeConfig {
+                        kind: NodeKind::Input | NodeKind::Output(_),
+                        ..
+                    })
+                ) {
+                    unused.push(idx);
+                }
+            }
+            if unused.is_empty() {
+                break;
+            }
+            for idx in unused.drain(..) {
+                pipe_graph.remove_node(idx);
+            }
+        }
+
         let dot = petgraph::dot::Dot::with_attr_getters(
             &pipe_graph,
             &[],
             &|_g, _r| "".to_string(),
-            &|_g, (_i, c)| match c {
-                NodeConfig {
-                    kind: NodeKind::Input,
-                    ..
-                } => r#"shape = "rarrow""#.to_string(),
-                NodeConfig {
-                    kind: NodeKind::Output(_),
-                    ..
-                } => r#"shape = "larrow""#.to_string(),
-                NodeConfig {
-                    kind: NodeKind::Select,
-                    ..
-                } => r#"shape = "box""#.to_string(),
-                NodeConfig {
-                    kind: NodeKind::Script,
-                    ..
-                } => r#"shape = "note""#.to_string(),
-                NodeConfig {
-                    kind: NodeKind::Operator,
-                    ..
-                } => "".to_string(),
-            },
+            &node_to_dot,
         );
 
         // iff cycles, fail and bail
@@ -635,9 +589,14 @@ impl Query {
             // Nodes that handle signals
             let mut signalflow = Vec::new();
             for (i, nx) in pipe_graph.node_indices().enumerate() {
-                let op = pipe_ops
-                    .remove(&nx)
-                    .ok_or_else(|| format!("Invalid pipeline can't find node {:?}", &nx))?;
+                let op = pipe_graph
+                    .node_weight(nx)
+                    .ok_or_else(|| {
+                        Error::from(format!("Invalid pipeline can't find node {:?}", &nx))
+                    })
+                    .and_then(|node| {
+                        node.to_op(idgen.next_id(), supported_operators, &mut helper)
+                    })?;
                 i2pos.insert(nx, i);
                 if op.handles_contraflow() {
                     contraflow.push(i);
@@ -650,241 +609,227 @@ impl Query {
             // since contraflow is the reverse we need to reverse it.
             contraflow.reverse();
 
-            //pub type PortIndexMap = HashMap<(NodeIndex, String), Vec<(NodeIndex, String)>>;
-
-            let mut port_indexes2 = HashMap::new();
-            for ((i1, s1), connections) in &port_indexes {
-                let connections = connections
-                    .iter()
-                    .filter_map(|(i, s)| Some((*i2pos.get(i)?, s.clone())))
-                    .collect();
-                let k = *i2pos.get(i1).ok_or_else(|| Error::from("Invalid graph"))?;
-                port_indexes2.insert((k, s1.clone()), connections);
+            let mut port_indexes: ExecPortIndexMap = HashMap::new();
+            for idx in pipe_graph.edge_indices() {
+                let (from, to) = pipe_graph.edge_endpoints(idx).ok_or("invalid edge")?;
+                let ports = pipe_graph.edge_weight(idx).cloned().ok_or("invalid edge")?;
+                let from = *i2pos
+                    .get(&from)
+                    .ok_or_else(|| Error::from("Invalid graph - failed to build connections"))?;
+                let to = *i2pos
+                    .get(&to)
+                    .ok_or_else(|| Error::from("Invalid graph - failed to build connections"))?;
+                let from = (from, ports.from);
+                let to = (to, ports.to);
+                if let Some(connections) = port_indexes.get_mut(&from) {
+                    connections.push(to);
+                } else {
+                    port_indexes.insert(from, vec![to]);
+                }
             }
 
-            let mut inputs2: HashMap<beef::Cow<'static, str>, usize> = HashMap::new();
-            for (k, idx) in &inputs {
-                let v = *i2pos.get(idx).ok_or_else(|| Error::from("Invalid graph"))?;
-                inputs2.insert(k.clone(), v);
+            let mut inputs: HashMap<beef::Cow<'static, str>, usize> = HashMap::new();
+            for idx in pipe_graph.externals(Incoming) {
+                if let Some(NodeConfig {
+                    kind: NodeKind::Input,
+                    id,
+                    ..
+                }) = pipe_graph.node_weight(idx)
+                {
+                    let v = *i2pos
+                        .get(&idx)
+                        .ok_or_else(|| Error::from("Invalid graph - failed to build inputs"))?;
+                    inputs.insert(id.clone().into(), v);
+                }
             }
 
-            let metrics_idx = *nodes
-                .get(&METRICS)
-                .and_then(|idx| i2pos.get(idx))
-                .ok_or_else(|| Error::from("metrics node missing"))?;
-            let mut exec = ExecutableGraph {
+            Ok(ExecutableGraph {
                 metrics: iter::repeat(NodeMetrics::default())
                     .take(graph.len())
                     .collect(),
                 stack: Vec::with_capacity(graph.len()),
                 id: pipeline_id.to_string(), // TODO make configurable
-                metrics_idx,
                 last_metrics: 0,
                 state: State::new(iter::repeat(Value::null()).take(graph.len()).collect()),
                 graph,
-                inputs: inputs2,
-                port_indexes: port_indexes2,
+                inputs,
+                port_indexes,
                 contraflow,
                 signalflow,
                 metric_interval,
                 insights: Vec::new(),
-                source: Some(self.0.source.clone()),
                 dot: format!("{}", dot),
-            };
-            exec.optimize();
-
-            Ok(exec)
+                metrics_channel: METRICS_CHANNEL.tx(),
+            })
         }
     }
 }
 
+struct InlcudedGraph {
+    prefix: String,
+    graph: ExecutableGraph,
+    from_map: HashMap<String, NodeIndex>,
+    into_map: HashMap<String, NodeIndex>,
+}
+
+fn node_to_dot(_g: &Graph<NodeConfig, Connection>, (_, c): (NodeIndex, &NodeConfig)) -> String {
+    match c {
+        NodeConfig {
+            kind: NodeKind::Input,
+            ..
+        } => r#"shape = "rarrow""#.to_string(),
+        NodeConfig {
+            kind: NodeKind::Output(_),
+            ..
+        } => r#"shape = "larrow""#.to_string(),
+        NodeConfig {
+            kind: NodeKind::Select,
+            ..
+        } => r#"shape = "box""#.to_string(),
+        NodeConfig {
+            kind: NodeKind::Script,
+            ..
+        } => r#"shape = "note""#.to_string(),
+        NodeConfig {
+            kind: NodeKind::Operator,
+            ..
+        } => "".to_string(),
+    }
+}
+
+fn prefix_for(s: &PipelineCreate) -> String {
+    let rand_id1: u64 = rand::thread_rng().gen();
+    let rand_id2: u64 = rand::thread_rng().gen();
+    format!("pipeline-{}-{rand_id1}-{rand_id2}", s.alias)
+}
+fn from_name(prefix: &str, port: &str) -> String {
+    format!("{prefix}-from/{port}")
+}
+fn into_name(prefix: &str, port: &str) -> String {
+    format!("{prefix}-into/{port}")
+}
+
 fn select(
-    operator_uid: u64,
+    operator_uid: OperatorId,
     config: &NodeConfig,
-    node: Option<&srs::Stmt>,
-    windows: Option<HashMap<String, window::Impl>>,
+    node: &ast::SelectStmt<'static>,
+    helper: &Helper<'static, '_>,
 ) -> Result<Box<dyn Operator>> {
-    let node = node.ok_or_else(|| {
-        ErrorKind::MissingOpConfig("trickle operators require a statement".into())
-    })?;
-    let select_type = match node.suffix() {
-        tremor_script::ast::Stmt::Select(ref select) => select.complexity(),
-        _ => {
-            return Err(ErrorKind::PipelineError(
-                "Trying to turn a non select into a select operator".into(),
-            )
-            .into())
-        }
-    };
+    let select_type = node.complexity();
     match select_type {
         SelectType::Passthrough => {
             let op = PassthroughFactory::new_boxed();
-            op.from_node(operator_uid, config)
+            op.node_to_operator(operator_uid, config)
         }
-        SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(config.id.clone(), node)?)),
+        SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(config.id.clone(), node))),
         SelectType::Normal => {
-            let windows = windows.ok_or_else(|| {
-                ErrorKind::MissingOpConfig("select operators require a window mapping".into())
-            })?;
-            let windows: Result<Vec<(String, window::Impl)>> =
-                if let tremor_script::ast::Stmt::Select(s) = node.suffix() {
-                    s.stmt
-                        .windows
-                        .iter()
-                        .map(|w| {
-                            let fqwn = w.fqwn();
-                            Ok(windows
-                                .get(&fqwn)
-                                .map(|imp| (w.id.clone(), imp.clone()))
-                                .ok_or_else(|| {
-                                    ErrorKind::BadOpConfig(format!("Unknown window: {}", &fqwn))
-                                })?)
+            let windows: Result<Vec<(String, window::Impl)>> = node
+                .stmt
+                .windows
+                .iter()
+                .map(|w| {
+                    helper
+                        .get::<WindowDefinition>(&w.id)?
+                        .ok_or_else(|| {
+                            Error::from(ErrorKind::BadOpConfig(format!(
+                                "Unknown window: {} available",
+                                &w.id,
+                            )))
                         })
-                        .collect()
-                } else {
-                    Err("Declared as select but isn't a select".into())
-                };
+                        .and_then(|mut imp| {
+                            ConstFolder::new(helper).walk_window_defn(&mut imp)?;
+                            Ok((w.id.id().to_string(), window_defn_to_impl(&imp)?))
+                        })
+                })
+                .collect();
 
-            Ok(Box::new(Select::with_stmt(
+            Ok(Box::new(Select::from_stmt(
                 operator_uid,
                 config.id.clone(),
                 windows?,
                 node,
-            )?))
+            )))
         }
     }
 }
 
 fn operator(
-    operator_uid: u64,
-    config: &NodeConfig,
-    node: Option<&srs::Stmt>,
+    operator_uid: OperatorId,
+    node: &ast::OperatorDefinition<'static>,
+    helper: &mut Helper,
 ) -> Result<Box<dyn Operator>> {
-    let node = node.ok_or_else(|| {
-        ErrorKind::MissingOpConfig("trickle operators require a statement".into())
-    })?;
     Ok(Box::new(TrickleOperator::with_stmt(
         operator_uid,
-        config.id.clone(),
         node,
+        helper,
     )?))
 }
 
-fn script(
-    config: &NodeConfig,
-    defn: Option<&srs::Stmt>,
-    node: Option<&srs::Stmt>,
-) -> Result<Box<dyn Operator>> {
-    let node = node.ok_or_else(|| {
-        ErrorKind::MissingOpConfig("trickle operators require a statement".into())
-    })?;
-    Ok(Box::new(Script::with_stmt(
-        config.id.clone(),
-        defn.ok_or_else(|| Error::from("Script definition missing"))?,
-        node,
-    )?))
-}
 pub(crate) fn supported_operators(
     config: &NodeConfig,
-    uid: u64,
-    defn: Option<&srs::Stmt>,
-    node: Option<&srs::Stmt>,
-    windows: Option<HashMap<String, window::Impl>>,
+    uid: OperatorId,
+    node: Option<&ast::Stmt<'static>>,
+    helper: &mut Helper<'static, '_>,
 ) -> Result<OperatorNode> {
-    let name_parts: Vec<&str> = config.op_type.split("::").collect();
-
-    let op: Box<dyn op::Operator> = match name_parts.as_slice() {
-        ["trickle", "select"] => select(uid, config, node, windows)?,
-        ["trickle", "operator"] => operator(uid, config, node)?,
-        ["trickle", "script"] => script(config, defn, node)?,
+    let op: Box<dyn op::Operator> = match node {
+        Some(ast::Stmt::ScriptDefinition(script)) => Box::new(op::trickle::script::Script {
+            id: format!("script-{uid}"),
+            script: tremor_script::Script {
+                script: script.script.clone(),
+                aid: script.aid(),
+                warnings: BTreeSet::new(),
+            },
+        }),
+        Some(tremor_script::ast::Stmt::SelectStmt(s)) => select(uid, config, s, helper)?,
+        Some(ast::Stmt::OperatorDefinition(o)) => operator(uid, o, helper)?,
         _ => crate::operator(uid, config)?,
     };
+
     Ok(OperatorNode {
         uid,
         id: config.id.clone(),
         kind: config.kind.clone(),
         op_type: config.op_type.clone(),
         op,
+        config: config.clone(),
     })
-}
-
-pub(crate) fn make_builtin_node_name_checker() -> impl Fn(&Cow<'static, str>) -> bool {
-    // saving these names for reuse
-    let builtin_node_names: Vec<Cow<'static, str>> =
-        BUILTIN_NODES.iter().map(|(n, _)| n.clone()).collect();
-    move |name| builtin_node_names.contains(name)
 }
 
 #[cfg(test)]
 mod test {
+    use tremor_common::ids::Id;
+
     use super::*;
     #[test]
     fn query() {
-        let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in into out;";
-        let query = Query::parse(
-            module_path,
-            src,
-            "<test>",
-            Vec::new(),
-            &*crate::FN_REGISTRY.lock().unwrap(),
-            &aggr_reg,
-        )
-        .unwrap();
+        let query =
+            Query::parse(src, &*tremor_script::FN_REGISTRY.read().unwrap(), &aggr_reg).unwrap();
         assert!(query.id().is_none());
-        assert_eq!(query.source().trim_end(), src);
 
         // check that we can overwrite the id with a config variable
         let src = "#!config id = \"test\"\nselect event from in into out;";
-        let query = Query::parse(
-            module_path,
-            src,
-            "<test>",
-            Vec::new(),
-            &*crate::FN_REGISTRY.lock().unwrap(),
-            &aggr_reg,
-        )
-        .unwrap();
+        let query =
+            Query::parse(src, &*tremor_script::FN_REGISTRY.read().unwrap(), &aggr_reg).unwrap();
         assert_eq!(query.id().unwrap(), "test");
-        assert_eq!(query.source().trim_end(), src);
     }
 
     #[test]
     fn custom_port() {
-        let module_path = &tremor_script::path::ModulePath { mounts: Vec::new() };
         let aggr_reg = tremor_script::aggr_registry();
 
         let src = "select event from in/test_in into out/test_out;";
-        let q = Query::parse(
-            module_path,
-            src,
-            "<test>",
-            Vec::new(),
-            &*crate::FN_REGISTRY.lock().unwrap(),
-            &aggr_reg,
-        )
-        .unwrap();
+        let q = Query::parse(src, &*tremor_script::FN_REGISTRY.read().unwrap(), &aggr_reg).unwrap();
 
         let mut idgen = OperatorIdGen::new();
         let first = idgen.next_id();
         let g = q.to_pipe(&mut idgen).unwrap();
         assert!(g.inputs.contains_key("in/test_in"));
-        assert_eq!(idgen.next_id(), first + g.graph.len() as u64 + 1);
-        let out = g.graph.get(5).unwrap();
+        assert_eq!(idgen.next_id().id(), first.id() + g.graph.len() as u64 + 1);
+        let out = g.graph.get(4).unwrap();
         assert_eq!(out.id, "out/test_out");
         assert_eq!(out.kind, NodeKind::Output("test_out".into()));
-    }
-
-    #[test]
-    fn builtin_nodes() {
-        let has_builtin_node_name = make_builtin_node_name_checker();
-        assert!(has_builtin_node_name(&"in".into()));
-        assert!(has_builtin_node_name(&"out".into()));
-        assert!(has_builtin_node_name(&"err".into()));
-        assert!(has_builtin_node_name(&"metrics".into()));
-        assert!(!has_builtin_node_name(&"snot".into()));
-        assert!(!has_builtin_node_name(&"badger".into()));
     }
 }

@@ -14,27 +14,20 @@
 use pretty_assertions::assert_eq;
 use std::io::prelude::*;
 use tremor_common::{file, ids::OperatorIdGen};
-
 use tremor_pipeline::query::Query;
 use tremor_pipeline::ExecutableGraph;
-use tremor_pipeline::FN_REGISTRY;
-use tremor_pipeline::{Event, EventId};
+use tremor_pipeline::{Event, EventId, GraphReturns};
+use tremor_script::FN_REGISTRY;
 
+use serial_test::serial;
 use tremor_runtime::errors::*;
-use tremor_script::path::ModulePath;
+use tremor_script::module::Manager;
 use tremor_script::utils::*;
 
-fn to_pipe(module_path: &ModulePath, file_name: &str, query: &str) -> Result<ExecutableGraph> {
+fn to_pipe(query: String) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
     let mut idgen = OperatorIdGen::new();
-    let q = Query::parse(
-        module_path,
-        query,
-        file_name,
-        vec![],
-        &*FN_REGISTRY.lock()?,
-        &aggr_reg,
-    )?;
+    let q = Query::parse(&query, &*FN_REGISTRY.read()?, &aggr_reg)?;
     Ok(q.to_pipe(&mut idgen)?)
 }
 
@@ -42,21 +35,22 @@ macro_rules! test_cases {
 
     ($($file:ident),* ,) => {
         $(
-            #[test]
-            fn $file() -> Result<()> {
-
+            #[async_std::test]
+            #[serial(query)]
+            async fn $file() -> Result<()> {
                 tremor_runtime::functions::load()?;
                 let query_dir = concat!("tests/queries/", stringify!($file), "/").to_string();
                 let query_file = concat!("tests/queries/", stringify!($file), "/query.trickle");
                 let in_file = concat!("tests/queries/", stringify!($file), "/in");
                 let out_file = concat!("tests/queries/", stringify!($file), "/out");
-                let module_path = ModulePath { mounts: vec![query_dir, "tremor-script/lib/".to_string()] };
-
+                Manager::clear_path()?;
+                Manager::add_path(&"tremor-script/lib")?;
+                Manager::add_path(&query_dir)?;
                 println!("Loading query: {}", query_file);
                 let mut file = file::open(query_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let mut pipeline = to_pipe(&module_path, query_file, &contents)?;
+                let mut pipeline = to_pipe(contents)?;
 
                 println!("Loading input: {}", in_file);
                 let in_json = load_event_file(in_file)?;
@@ -68,14 +62,14 @@ macro_rules! test_cases {
                 let mut results = Vec::new();
                 for (id, json) in in_json.into_iter().enumerate() {
                     let event = Event {
-                        id: EventId::new(0, 0, (id as u64)),
+                        id: EventId::new(0, 0, (id as u64), (id as u64)),
                         data: json.clone_static().into(),
                         ingest_ns: id as u64,
                         ..Event::default()
                     };
-                    let mut r = Vec::new();
-                    pipeline.enqueue("in", event, &mut r)?;
-                    results.append(&mut r);
+                    let mut r = GraphReturns::default();
+                    pipeline.enqueue("in", event, &mut r).await?;
+                    results.append(&mut r.output);
                 }
                 assert_eq!(results.len(), out_json.len(), "Number of events differ error");
                 for (_, result) in results {
@@ -107,7 +101,7 @@ test_cases!(
     merge,
     multi_dimensions,
     mutate,
-    passthrough,
+    simple_passthrough,
     patch,
     rewrite_root,
     script_params_overwrite,
@@ -120,7 +114,6 @@ test_cases!(
     window_by_two_scripted,
     window_by_two,
     window_size_tilted,
-    // Preprocessor + modules
     pp_win,
     pp_script,
     pp_operator,
@@ -129,19 +122,18 @@ test_cases!(
     pp_alias_operator,
     pp_config_directive,
     // INSERT
-    subquery_group_by_size,
-    subquery_complex_args,
-    subquery_nested_script,
-    subquery_nested_operator,
+    route_emit,
+    drop_event,
+    pipeline_group_by_size,
+    pipeline_complex_args,
+    pipeline_nested_script,
+    pipeline_nested_operator,
     args_nesting_no_leakage,
     args_nesting_redefine,
-    module_module_containment,
-    module_in_subquery,
-    subquery_nested_subquery,
-    subquery_passthrough,
+    pipeline_nested_pipeline,
+    pipeline_passthrough,
     alias_script_params_overwrite,
     cardinality,
-    mod_def,
     window_mixed_2,
     window_mixed_1,
     pp_const,
@@ -151,5 +143,4 @@ test_cases!(
     guard_having,
     history,
     roundrobin,
-    wal,
 );

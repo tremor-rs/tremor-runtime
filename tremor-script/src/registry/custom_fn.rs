@@ -13,10 +13,13 @@
 // limitations under the License.
 
 use super::{FResult, FunctionError, Result};
-use crate::ast::{Expr, Exprs, FnDecl, ImutExpr, ImutExprInt, ImutExprs, InvokeAggrFn};
 use crate::interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack};
 use crate::prelude::*;
 use crate::Value;
+use crate::{
+    ast::{visitors::IsConstFn, Expr, Exprs, FnDefn, ImutExpr, ImutExprs, NodeMeta},
+    NO_AGGRS,
+};
 use beef::Cow;
 //use std::mem;
 const RECUR_STR: &str = "recur";
@@ -28,7 +31,7 @@ pub(crate) const RECUR_REF: &Value<'static> = &RECUR;
 /// Encapsulates a user defined or standard library function
 pub struct CustomFn<'script> {
     /// Name
-    pub name: Cow<'script, str>,
+    pub name: String,
     /// Function body
     pub body: Exprs<'script>,
     /// Nominal arguments
@@ -43,14 +46,15 @@ pub struct CustomFn<'script> {
     pub inline: bool,
 }
 
-impl<'script> From<FnDecl<'script>> for CustomFn<'script> {
-    fn from(f: FnDecl<'script>) -> Self {
+impl<'script> From<FnDefn<'script>> for CustomFn<'script> {
+    fn from(mut f: FnDefn<'script>) -> Self {
+        let is_const = IsConstFn::is_const(&mut f.body).unwrap_or_default();
         CustomFn {
-            name: f.name.id,
+            name: f.name,
             args: f.args.iter().map(ToString::to_string).collect(),
             locals: f.locals,
             body: f.body,
-            is_const: false, // TODO we should find a way to examine this!
+            is_const,
             open: f.open,
             inline: f.inline,
         }
@@ -62,6 +66,7 @@ impl<'script> CustomFn<'script> {
         self.is_const
     }
     pub(crate) fn can_inline(&self) -> bool {
+        use ImutExpr::{Invoke, Invoke1, Invoke2, Invoke3};
         if self.body.len() != 1 {
             return false;
         }
@@ -69,17 +74,12 @@ impl<'script> CustomFn<'script> {
             return true;
         }
         let i = match self.body.first() {
-            Some(Expr::Imut(
-                ImutExprInt::Invoke1(i)
-                | ImutExprInt::Invoke2(i)
-                | ImutExprInt::Invoke3(i)
-                | ImutExprInt::Invoke(i),
-            )) => i,
+            Some(Expr::Imut(Invoke1(i) | Invoke2(i) | Invoke3(i) | Invoke(i))) => i,
             _ => return false,
         };
         let mut a_idx = 0;
         for a in &i.args {
-            if let ImutExpr(ImutExprInt::Local { idx, .. }) = a {
+            if let ImutExpr::Local { idx, .. } = a {
                 if *idx != a_idx {
                     return false;
                 }
@@ -94,19 +94,15 @@ impl<'script> CustomFn<'script> {
     pub(crate) fn inline(
         &self,
         args: ImutExprs<'script>,
-        mid: usize,
-    ) -> Result<ImutExprInt<'script>> {
+        mid: Box<NodeMeta>,
+    ) -> Result<ImutExpr<'script>> {
+        use ImutExpr::{Invoke, Invoke1, Invoke2, Invoke3};
         if self.body.len() != 1 {
             return Err(format!("can't inline {}: too large body", self.name).into());
         }
 
         let i = match self.body.first() {
-            Some(Expr::Imut(
-                ImutExprInt::Invoke1(i)
-                | ImutExprInt::Invoke2(i)
-                | ImutExprInt::Invoke3(i)
-                | ImutExprInt::Invoke(i),
-            )) => i,
+            Some(Expr::Imut(Invoke1(i) | Invoke2(i) | Invoke3(i) | Invoke(i))) => i,
             Some(e) => {
                 return Err(format!("can't inline {}: bad expression: {:?}", self.name, e).into())
             }
@@ -122,10 +118,10 @@ impl<'script> CustomFn<'script> {
         i.args = args;
 
         Ok(match i.args.len() {
-            1 => ImutExprInt::Invoke1(i),
-            2 => ImutExprInt::Invoke2(i),
-            3 => ImutExprInt::Invoke3(i),
-            _ => ImutExprInt::Invoke(i),
+            1 => Invoke1(i),
+            2 => Invoke2(i),
+            3 => Invoke3(i),
+            _ => Invoke(i),
         })
     }
 
@@ -137,8 +133,6 @@ impl<'script> CustomFn<'script> {
     where
         'script: 'event,
     {
-        const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
-
         let args_const = Value::from(
             args.iter()
                 .skip(self.locals)
@@ -159,7 +153,6 @@ impl<'script> CustomFn<'script> {
             context: env.context,
             consts,
             aggrs: &NO_AGGRS,
-            meta: env.meta,
             recursion_limit: env.recursion_limit,
         };
         let mut recursion_depth = 0;

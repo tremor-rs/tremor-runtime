@@ -1,0 +1,9 @@
+        use std::string;
+        # checks if the event is the successful response of a put command for the key "exit" with the value "exit"
+        fn is_put_exit(payload, meta) with
+            let meta_ok = match meta of
+              case %{kv ~= %{op == "put", ok == string::into_binary("exit")}} => true
+              default => false
+            end;
+            meta_ok and payload == "exit"
+        end;

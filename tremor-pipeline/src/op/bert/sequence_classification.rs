@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // this is not enabled
-#![cfg(not(tarpaulin_include))]
+// #![cfg_attr(coverage, no_coverage)]
 
 use crate::errors::*;
 use crate::op::prelude::*;
@@ -27,6 +27,7 @@ use tremor_script::prelude::*;
 use url::Url;
 
 #[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 struct Config {
     #[serde(default = "dflt_config")]
     config_file: String,

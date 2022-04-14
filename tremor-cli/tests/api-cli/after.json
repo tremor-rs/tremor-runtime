@@ -1,7 +1,0 @@
-{
-  "run": "tests/api-cli/after",
-  "cmd": "bash",
-  "args": [
-    "after/stop.sh"
-  ]
-}

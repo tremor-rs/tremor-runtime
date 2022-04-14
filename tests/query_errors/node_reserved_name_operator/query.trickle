@@ -1,5 +1,4 @@
-define generic::counter operator counter;
-create operator metrics from counter;
+define operator counter from generic::counter;
+create operator out from counter;
 
-select event from in into metrics;
-select event from metrics into out;
+select event from in into out;

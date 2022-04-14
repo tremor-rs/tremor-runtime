@@ -13,26 +13,89 @@
 // limitations under the License.
 
 use crate::ast::raw::*;
+use crate::ast::deploy::raw::*;
 use crate::ast::query::raw::*;
-use crate::ast::{BinOpKind, UnaryOpKind};
+use crate::ast::module::*;
+use crate::ast::{BinOpKind, UnaryOpKind, NodeId};
 use crate::lexer::Token;
 use crate::pos::Location;
 use crate::Value;
 use crate::prelude::*;
+use crate::NodeMeta;
 use beef::Cow;
+
 
 grammar<'input>;
 
-////////////////////////////// Root statements //////////////////////////////
-// These statements for the root of the language.
+////////////////////////////// Module system  //////////////////////////////
+// Statements or partials shared between grammers
 
-/// Root
-pub(crate) Query : QueryRaw<'input> = {
-    <config:ConfigDirectives> <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config, stmts},
-    <stmts:Stmts> "<end-of-stream>"? => QueryRaw{config: vec![], stmts},
+pub(crate) ModuleFile: ModuleRaw<'input> = {
+    <ModuleBody> => <>,
 }
 
-ConfigDirectives: WithExprsRaw<'input> = {
+ModuleBody: ModuleRaw<'input> = {
+    <start:@L> <doc:ModComment> <stmts:ModuleStmts> <end:@L> => ModuleRaw{name: IdentRaw::none(NodeMeta::new_box(start, end)), mid: NodeMeta::new_box(start, end), stmts, doc},
+}
+
+ModComment: Option<Vec<Cow<'input, str>>> = {
+    (<ModComment_>)? => <>
+}
+  
+ModComment_: Vec<Cow<'input, str>> = {
+    <c:"<mod-comment>"> => vec![c.into()],
+    <v:ModComment_> <c:"<mod-comment>"> => {
+        let mut v = v;
+        v.push(c.into());
+        v
+    },
+}
+
+/// Comments
+DocComment: Option<Vec<Cow<'input, str>>> = {
+    (<DocComment_>)? => <>
+}
+DocComment_: Vec<Cow<'input, str>> = {
+    <c:"<doc-comment>"> => vec![c.into()],
+    <v:DocComment_> <c:"<doc-comment>"> => {
+        let mut v = v;
+        v.push(c.into());
+        v
+    },
+}
+
+/// List of expressions at the root of the script
+ModuleStmts: ModuleStmtsRaw<'input> = {
+    <stmt:ModuleStmt> ";" <list:ModuleStmts> => {
+       let mut list = list;
+       list.insert(0,stmt);
+       list
+    },
+    <item:ModuleStmt> ";"? => vec![item],
+}
+
+// In case we need to limit the content of deploy stmt
+ModuleStmt: ModuleStmtRaw<'input> = {
+   // Generic
+   Use => ModuleStmtRaw::Use(<>),
+   
+   // Script
+   Const => ModuleStmtRaw::Const(<>),
+   FnDefn => ModuleStmtRaw::FnDefn(<>),
+   Intrinsic => ModuleStmtRaw::FnDefn(<>),
+
+   // Trickle
+   DefineWindow => ModuleStmtRaw::Window(<>),
+   DefineOperator => ModuleStmtRaw::Operator(<>),
+   DefineScript => ModuleStmtRaw::Script(<>),
+   DefinePipeline => ModuleStmtRaw::Pipeline(<>),
+
+   /// Troy
+   DefineConnector => ModuleStmtRaw::Connector(<>),
+   DefineFlow => ModuleStmtRaw::Flow(<>),
+}
+
+ConfigDirectives: ConfigRaw<'input> = {
     <directive:ConfigDirective> <directives:ConfigDirectives> => {
         let mut directives = directives;
         directives.insert(0, directive);
@@ -45,6 +108,202 @@ ConfigDirective: (IdentRaw<'input>, ImutExprRaw<'input>) = {
     "#!config" <WithExpr> => <>
 }
 
+Use: UseRaw = {
+    <start:@L> "use" <module:ModularTarget> <end:@L>  => UseRaw{module, alias: None, mid: NodeMeta::new_box(start, end)},
+    <start:@L> "use" <module:ModularTarget> "as" <alias:Ident> <end:@L> => UseRaw{module, alias: Some(alias.to_string()), mid: NodeMeta::new_box(start, end)},
+}
+
+
+///
+/// args
+///  arg1,
+///  arg2 = 5
+/// with
+///  config = {},
+///  oops = args.arg1
+/// end;
+ArgsWithEnd: DefinitionalArgsWithRaw<'input> = {
+    <start:@L> <args:ArgsClause?> <with:WithEndClause> <end:@L> => {
+        DefinitionalArgsWithRaw {
+            mid: NodeMeta::new_box(start, end),
+            args: args.unwrap_or_default(),
+            with: with
+        }
+    },
+    <start:@L> => {
+        DefinitionalArgsWithRaw::none(NodeMeta::new_box(start, start))
+    }
+}
+
+/// args
+///   arg1,
+///   arg2 = 5
+/// # something else
+DefinitionArgs: DefinitionalArgsRaw<'input> = {
+    <start:@L> <args:ArgsClause?> <end:@L> => DefinitionalArgsRaw {
+        args: args.unwrap_or_default(),
+        mid: NodeMeta::new_box(start, end)
+    }
+}
+
+ArgsClause: ArgsExprsRaw<'input> = {
+    "args" <ArgsExprs> => ArgsExprsRaw(<>),
+}
+
+ArgsExprs: Vec<(IdentRaw<'input>, Option<ImutExprRaw<'input>>)> = {
+    <Sep<ArgsExprs, ArgsExpr, ",">> => <>
+}
+
+ArgsExpr: (IdentRaw<'input>, Option<ImutExprRaw<'input>>) = {
+    <name:Ident> "=" <expr:ExprImut> => (name, Some(expr)),
+    <name:Ident> => (name, None)
+}
+
+/// with
+///   a = 5,
+///   b = args.xxx
+/// end
+CreationWithEnd: CreationalWithRaw<'input> = {
+    <WithEndClause> => CreationalWithRaw::from(<>),
+    <start:@L> => CreationalWithRaw::none(NodeMeta::new_box(start, start))
+}
+
+CreationWith: CreationalWithRaw<'input> = {
+    <WithClause> => CreationalWithRaw::from(<>),
+    <start:@L> => CreationalWithRaw::none(NodeMeta::new_box(start, start))
+}
+
+WithClause: WithExprsRaw<'input> = {
+    <start:@L> "with" <exprs:WithExprs> <end:@L> => WithExprsRaw{exprs, mid: NodeMeta::new_box(start, end) }
+}
+
+WithEndClause: WithExprsRaw<'input> = {
+    <WithClause> "end" => <>,
+}
+
+WithExprs: Vec<(IdentRaw<'input>, ImutExprRaw<'input>)> = {
+    <Sep<WithExprs, WithExpr, ",">> => <>
+}
+
+WithExpr: (IdentRaw<'input>, ImutExprRaw<'input>) = {
+    <name:Ident> "=" <expr:ExprImut> => (name, expr)
+}
+
+/// Module target
+ModularTarget: NodeId = {
+    <Ident> => NodeId::from(<>),
+    <m:ModPath> "::" <target:Ident> => NodeId{id: target.to_string(), module: m.iter().map(ToString::to_string).collect()},
+}
+
+  
+////////////////////////////// Troy statements //////////////////////////////
+// These statements for the root of the language.
+
+/// Root
+pub(crate) Deploy : DeployRaw<'input> = {
+    <config:ConfigDirectives> <doc:ModComment> <stmts:DeployStmts> => DeployRaw{config, stmts, doc},
+    <doc:ModComment> <stmts:DeployStmts>=> DeployRaw{config: vec![], stmts, doc},
+}
+
+DeployStmts: DeployStmtsRaw<'input> = {
+    <stmt:DeployStmt> ";" <list:DeployStmts> => {
+      let mut list = list;
+      list.insert(0,stmt);
+      list
+  },
+  <item:DeployStmt> ";"? => vec![item],
+}
+
+
+DeployStmt: DeployStmtRaw<'input> = {
+    DefineFlow => DeployStmtRaw::FlowDefinition(<>),
+    DeployFlowStmt => DeployStmtRaw::DeployFlow(<>),
+    Use => DeployStmtRaw::Use(<>),
+}
+
+DeployFlowStmt: DeployFlowRaw<'input> = {
+    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployFlowRaw { mid: NodeMeta::new_box(start, end), id, target, params, docs },
+    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> <params:CreationWithEnd> <end:@L> => DeployFlowRaw { mid: NodeMeta::new_box(start, end), id: id.clone(), target: id.into(), params, docs },
+}
+
+ConnectorKind: IdentRaw<'input> = {
+    <Ident> => <>,
+}
+
+
+FlowStmts: FlowStmtsRaw<'input> = {
+    <fields:FlowStmts_> => {
+        let mut fields = fields;
+        fields.reverse();
+        fields
+    },
+}
+
+FlowStmts_: FlowStmtsRaw<'input> = {
+    <Sep<FlowStmts_, FlowStmtInner, ";">> => <>
+}
+
+CreateKind: CreateKind = {
+    "connector" => CreateKind::Connector,
+    "pipeline" => CreateKind::Pipeline,
+}
+
+
+FlowStmtInner: FlowStmtRaw<'input> = {
+    <Define> => <>,
+    <Create> => FlowStmtRaw::Create(<>),
+    <Connect> => FlowStmtRaw::Connect(<>),
+    <Use> => FlowStmtRaw::Use(<>)
+}
+
+Define: FlowStmtRaw<'input> =  {
+    DefinePipeline => FlowStmtRaw::PipelineDefinition(<>),
+    DefineConnector => FlowStmtRaw::ConnectorDefinition(<>),
+}
+Create: CreateStmtRaw<'input> = {
+    <start:@L> "create" <kind:CreateKind> <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => CreateStmtRaw { mid: NodeMeta::new_box(start, end), id, target, params, kind },
+    <start:@L> "create" <kind:CreateKind> <id:Ident> <params:CreationWithEnd> <end:@L> => CreateStmtRaw { mid: NodeMeta::new_box(start, end), id: id.clone(),  target: id.into(), params, kind },
+
+}
+
+
+Connect: ConnectStmtRaw<'input> = {
+    <start:@L> "connect" "/"  <from:ConnectFromConnector> "to" "/" <to:ConnectToPipeline> <end:@L>  => ConnectStmtRaw::ConnectorToPipeline{mid: NodeMeta::new_box(start, end), from, to},
+    <start:@L> "connect" "/"  <from:ConnectFromPipeline> "to" "/" <to:ConnectToConnector> <end:@L>  => ConnectStmtRaw::PipelineToConnector{mid: NodeMeta::new_box(start, end), from, to},
+    <start:@L> "connect" "/"  <from:ConnectFromPipeline> "to" "/" <to:ConnectToPipeline> <end:@L>  => ConnectStmtRaw::PipelineToPipeline{mid: NodeMeta::new_box(start, end), from, to}
+}
+
+ConnectFromConnector: DeployEndpointRaw<'input> = {
+    <start:@L> "connector" "/" <alias:Ident> <port_pos:@L> <port:MaybePort> <end:@L> => DeployEndpointRaw{mid: NodeMeta::new_box(start, end),alias, port: port.unwrap_or_else(|| IdentRaw::literal(NodeMeta::new_box(port_pos, port_pos), "out"))},
+}
+ConnectFromPipeline: DeployEndpointRaw<'input> = {
+    <start:@L> "pipeline" "/" <alias:Ident> <port_pos:@L> <port:MaybePort> <end:@L> => DeployEndpointRaw{mid: NodeMeta::new_box(start, end), alias, port: port.unwrap_or_else(|| IdentRaw::literal(NodeMeta::new_box(port_pos, port_pos), "out"))},
+}
+ConnectToPipeline: DeployEndpointRaw<'input> = {
+    <start:@L>  "pipeline" "/" <alias:Ident> <port_pos:@L> <port:MaybePort> <end:@L>  => DeployEndpointRaw{mid: NodeMeta::new_box(start, end), alias, port: port.unwrap_or_else(|| IdentRaw::literal(NodeMeta::new_box(port_pos, port_pos), "in"))},
+}
+ConnectToConnector: DeployEndpointRaw<'input> = {
+    <start:@L> "connector" "/" <alias:Ident> <port_pos:@L> <port:MaybePort> <end:@L>  => DeployEndpointRaw{mid: NodeMeta::new_box(start, end), alias, port: port.unwrap_or_else(|| IdentRaw::literal(NodeMeta::new_box(port_pos, port_pos), "in"))},
+}
+
+DefineConnector: ConnectorDefinitionRaw<'input> =  {
+    // Connectors - these define connectors for deployment
+    <start:@L> <docs:DocComment> "define" "connector" <id:Ident> "from" <kind:ConnectorKind> <params:ArgsWithEnd> <end:@L> => ConnectorDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), kind, params, docs },
+}
+
+DefineFlow: FlowDefinitionRaw<'input> = {
+    // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
+    <start:@L> <doc:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> "flow" <stmts:FlowStmts> "end" <end:@L> => FlowDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), params, stmts, doc },
+}
+
+////////////////////////////// Trickle statements //////////////////////////////
+// These statements for the root of the language.
+
+/// Root
+pub(crate) Query : QueryRaw<'input> = {
+    <start:@L> <config:ConfigDirectives> <stmts:Stmts> <end:@L>  => QueryRaw{mid: NodeMeta::new_box(start, end), config: config, stmts, params: DefinitionalArgsRaw::none(NodeMeta::new_box(start, end))},
+    <start:@L> <stmts:Stmts> <end:@L> => QueryRaw{mid: NodeMeta::new_box(start, end), config: vec![], stmts, params: DefinitionalArgsRaw::none(NodeMeta::new_box(start, end))},
+}
 
 Stmts: StmtsRaw<'input> = {
     <stmt:Stmt> ";" <list:Stmts> => {
@@ -55,88 +314,112 @@ Stmts: StmtsRaw<'input> = {
   <item:Stmt> ";"? => vec![item],
 }
 
-ModuleStmt: ModuleStmtRaw<'input> = {
-    <start:@L> "mod" <name:Ident> "with" <doc:ModComment> <stmts:ModuleStmts> "end" <end:@L> => ModuleStmtRaw{name, start, end, stmts, doc: doc},
-}
-
-/// List of expressions at the root of the script
-ModuleStmts: StmtsRaw<'input> = {
-    //<stmt:Stmt> ";" <list:ModuleStmts> => {
-    //    let mut list = list;
-    //    list.insert(0,stmt);
-    //    list
-    // },
-    //<item:Stmt> ";"? => vec![item],
-     <stmt:ModuleInnerStmt> ";" <list:ModuleStmts> => {
-        let mut list = list;
-        list.insert(0,stmt);
-        list
-     },
-     <item:ModuleInnerStmt> ";"? => vec![item],
- }
-
-// In case we need to limit the content of stmt
-ModuleInnerStmt: StmtRaw<'input> = {
-    <m:ModuleStmt> => StmtRaw::ModuleStmt(m),
-
-    DefineWindow => <>,
-    DefineOperator => <>,
-    DefineScript => <>,
-    DefineSubquery => <>,
-
-    Const => StmtRaw::Expr(Box::new(<>)),
-    FnDecl => StmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
-    Intrinsic => StmtRaw::Expr(Box::new(ExprRaw::FnDecl(<>))),
-
-}
-
-WindowKind: WindowKind = {
-  "sliding" => WindowKind::Sliding,
-  "tumbling" => WindowKind::Tumbling,
-}
-
 Stmt: StmtRaw<'input> = {
-    <m:ModuleStmt> => StmtRaw::ModuleStmt(m),
+    // Generic
+    Use => StmtRaw::Use(<>),
 
-    DefineWindow => <>,
-
-    DefineOperator => <>,
+    // Query
+    DefineWindow => StmtRaw::WindowDefinition(<>),
+    DefineOperator => StmtRaw::OperatorDefinition(Box::new(<>)),
+    DefineScript => StmtRaw::ScriptDefinition(<>),
+    DefinePipeline => StmtRaw::PipelineDefinition(<>),
+    
     CreateOperator => <>,
-
-    DefineScript => <>,
     CreateScript => <>,
-
-    DefineSubquery => <>,
-    CreateSubquery => <>,
-
-    <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::Stream(StreamStmtRaw { start, end, id: id.to_string() }),
-
-    <start:@L> "select" <target:ComplexExprImut> "from" <from:StreamPort> <windows:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:StreamPort> <maybe_having:HavingClause> <end:@L> => StmtRaw::Select(Box::new(SelectRaw { start, end, from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
+    CreatePipeline => <>,
+    CreateStream => <>,
+    OperatorSelect => <>,
 }
+
+//// DEFINEs
+
+DefineWindow: WindowDefinitionRaw<'input> = {
+    <doc:DocComment> <start:@L> "define" "window" <id:Ident> "from"  <kind:WindowKind> <params:CreationWith> <script:EmbeddedScriptImut> "end" <end:@L> => {
+        WindowDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), kind, params, script, doc }
+    }
+}
+
+DefineOperator: OperatorDefinitionRaw<'input> = {
+    <doc:DocComment> <start:@L> "define" "operator" <id:Ident> "from" <kind:OperatorKind> <params:ArgsWithEnd> <end:@L> =>  {
+        OperatorDefinitionRaw { mid: NodeMeta::new_box(start, end), kind, id: id.to_string(), params: params, doc }
+    }
+}
+
+DefineScript: ScriptDefinitionRaw<'input> = {
+    <doc:DocComment> <start:@L> "define" "script" <id:Ident> <params:DefinitionArgs> <script:EmbeddedScript> <end:@L> => {
+        ScriptDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), script, params, doc }
+    }
+}
+
+DefinePipeline: PipelineDefinitionRaw<'input> = {
+    <doc:DocComment> <start:@L> "define" "pipeline" <id:Ident> <from:("from" <Ports>)?> <into:("into" <Ports>)?> <params:DefinitionArgs> <pipeline:Pipeline> <end:@L> => {
+        PipelineDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), pipeline: pipeline.1, config: pipeline.0, params, from, into, doc }
+    }
+}
+
+//// BUILTIN OPERATORS
+
+OperatorSelect: StmtRaw<'input> = {
+    <start:@L> "select" <target:ComplexExprImut> "from" <from:StreamPort> <windows:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:StreamPort> <maybe_having:HavingClause> <end:@L> => StmtRaw::SelectStmt(Box::new(SelectRaw { mid: NodeMeta::new_box(start, end), from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
+}
+
+//// CREATEs
+
+CreateStream: StmtRaw<'input> = {
+    <start:@L> "create" "stream" <id:Ident> <end:@L> => StmtRaw::StreamStmt(StreamStmtRaw { mid: NodeMeta::new_box(start, end), id: id.to_string() }),
+}
+
+CreateScript: StmtRaw<'input> = {
+    <start:@L> "create" "script" <id:Ident> <params:CreationWithEnd> <end:@L> => {
+        StmtRaw::ScriptCreate(ScriptCreateRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), target: id.into(), params })
+    },
+
+    // With ModularTarget
+    <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
+        StmtRaw::ScriptCreate(ScriptCreateRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), target, params })
+    }
+}
+
+CreateOperator: StmtRaw<'input> = {
+    <start:@L> "create" "operator" <id:Ident> <params:CreationWithEnd> <end:@L> => {
+        StmtRaw::OperatorCreate(OperatorCreateRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), target: id.into(), params })
+    },
+
+    // With ModulartTarget
+    <start:@L> "create" "operator" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
+        StmtRaw::OperatorCreate(OperatorCreateRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), target, params })
+    }
+}
+
+CreatePipeline: StmtRaw<'input> = {
+    <start:@L> "create" "pipeline" <alias:Ident> <params:CreationWithEnd> <end:@L>  => {
+        StmtRaw::PipelineCreate(PipelineCreateRaw { mid: NodeMeta::new_box(start, end), alias: alias.to_string(), target: alias.into(), params })
+    },
+    // With ModulartTarget
+    <start:@L> "create" "pipeline" <alias:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => {
+        StmtRaw::PipelineCreate(PipelineCreateRaw { mid: NodeMeta::new_box(start, end), alias: alias.to_string(), target, params })
+    }
+}
+
 
 MaybePort: Option<IdentRaw<'input>> = {
     ("/" <Ident>)? => <>,
-}
-
-ModularTarget: (Vec<IdentRaw<'input>>, IdentRaw<'input>) = {
-    <target:Ident> => (vec![], target),
-    <m:ModPath> "::" <target:Ident> => (m, target),
 }
 
 StreamPort: (IdentRaw<'input>, Option<IdentRaw<'input>>) = {
     <op:Ident> <port:MaybePort> => (op, port),
 }
 
-WindowClause: Option<Vec<WindowDefnRaw<'input>>> = {
+WindowKind: WindowKind = {
+    "sliding" => WindowKind::Sliding,
+    "tumbling" => WindowKind::Tumbling,
+}
+    
+WindowClause: Option<Vec<WindowName>> = {
     (<WindowDefn>)? => <>,
 }
 
-Window: WindowDefnRaw<'input> = {
-    <start:@L> <id:Ident> <end:@L> => WindowDefnRaw { start, end, module: vec![], id: id.to_string() },
-    <start:@L> <module:ModPath> "::" <id:Ident> <end:@L> => WindowDefnRaw { start, end, module, id: id.to_string() },
-}
-
-Windows: Vec<WindowDefnRaw<'input>> = {
+Windows: Vec<WindowName> = {
     <fields:Windows_> => {
         let mut fields = fields;
         fields.reverse();
@@ -144,12 +427,15 @@ Windows: Vec<WindowDefnRaw<'input>> = {
     },
 }
 
-Windows_: Vec<WindowDefnRaw<'input>> = {
+Windows_: Vec<WindowName> = {
     <Sep<Windows_, Window, ",">> => <>
 }
 
+Window: WindowName = {
+    <start:@L> <id:ModularTarget> <end:@L> => WindowName { mid: NodeMeta::new_box(start, end), id},
+}
 
-WindowDefn: Vec<WindowDefnRaw<'input>>  = {
+WindowDefn: Vec<WindowName>  = {
     "[" <windows:Windows> "]" => windows
 }
 
@@ -166,9 +452,9 @@ GroupByClause: Option<GroupByRaw<'input>> = {
 }
 
 GroupDef: GroupByRaw<'input> = {
-    <start:@L> <expr:ExprImut> <end:@L> => GroupByRaw::Expr{start, expr, end},
-    <start:@L> "set" "("<items:GroupDefs>")" <end:@L> => GroupByRaw::Set{start, items, end},
-    <start:@L> "each" "("<expr:ExprImut>")" <end:@L> => GroupByRaw::Each{start, expr, end},
+    <start:@L> <expr:ExprImut> <end:@L> => GroupByRaw::Expr{expr, mid: NodeMeta::new_box(start, end)},
+    <start:@L> "set" "("<items:GroupDefs>")" <end:@L> => GroupByRaw::Set{items, mid: NodeMeta::new_box(start, end)},
+    <start:@L> "each" "("<expr:ExprImut>")" <end:@L> => GroupByRaw::Each{expr, mid: NodeMeta::new_box(start, end)},
 }
 
 GroupDefs: Vec<GroupByRaw<'input>> = {
@@ -188,35 +474,7 @@ EmbeddedScriptImut: Option<ScriptRaw<'input>> = {
 }
 
 EmbeddedScriptContent: Option<ScriptRaw<'input>> = {
-    <ExprImut> => Some(ScriptRaw::new(vec![ExprRaw::Imut(<>)], None)),
-}
-
-WithScriptClause: (WithExprsRaw<'input>, Option<ScriptRaw<'input>>) = {
-    "with" <with:WithExprs> <script:EmbeddedScriptImut> "end" => (with, script),
-}
-
-WithClause: WithExprsRaw<'input> = {
-    <ScriptWithClause> "end" => <>,
-}
-
-ScriptWithClause: WithExprsRaw<'input> = {
-    "with" <WithExprs> => <>,
-}
-
-WithExprs: WithExprsRaw<'input> = {
-    <fields:WithExprs_> => {
-        let mut fields = fields;
-        fields.reverse();
-        fields
-    },
-}
-
-WithExprs_: WithExprsRaw<'input> = {
-    <Sep<WithExprs_, WithExpr, ",">> => <>
-}
-
-WithExpr: (IdentRaw<'input>, ImutExprRaw<'input>) = {
-    <start:@L> <name:Ident> "=" <expr:ExprImut> => (name, expr)
+    <start:@L> <expr:ExprImut> <end:@L> => Some(ScriptRaw::new(NodeMeta::new_box(start, end), vec![TopLevelExprRaw::Expr(ExprRaw::Imut(expr))], None)),
 }
 
 
@@ -225,18 +483,21 @@ Ports: Vec<IdentRaw<'input>> = {
 }
 
 OperatorKind: OperatorKindRaw = {
-    <start:@L> <module:Ident> "::" <oper:Ident> <end:@L> => OperatorKindRaw { start, end, module:  module.id.to_string(), operation: oper.id.to_string() }
+    <start:@L> <module:Ident> "::" <oper:Ident> <end:@L> => OperatorKindRaw { mid: NodeMeta::new_box(start, end), module:  module.id.to_string(), operation: oper.id.to_string() }
 }
 
 EmbeddedScript: ScriptRaw<'input> = {
-    "script" <exprs:Exprs> "end" => ScriptRaw::new(exprs, None),
+    "script" <start:@L> <exprs:TopLevelExprs> <end:@L> "end" => ScriptRaw::new(NodeMeta::new_box(start, end), exprs, None),
 }
 
-Subquery: StmtsRaw<'input> = {
-    "query" <inner_stmts:SubqueryStmtInner> "end" => inner_stmts,
+Pipeline: (ConfigRaw<'input>, StmtsRaw<'input>) = {
+    "pipeline" 
+      <cfg:ConfigDirectives?>
+      <inner_stmts:PipelineCreateInner>
+    "end" => (cfg.unwrap_or_default(), inner_stmts),
 }
 
-SubqueryStmtInner : StmtsRaw<'input> = {
+PipelineCreateInner : StmtsRaw<'input> = {
     <stmt:Stmt> ";" <list:Stmts> => {
         let mut list = list;
         list.insert(0,stmt);
@@ -245,115 +506,47 @@ SubqueryStmtInner : StmtsRaw<'input> = {
     <item:Stmt> ";"? => vec![item],
 }
 
-DefineSubquery: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" "query" <id:Ident> <from:("from" <Ports>)?> <into:("into" <Ports>)?> <params:(<ScriptWithClause>)?> <subquery:Subquery> <end:@L> => {
-        StmtRaw::SubqueryDecl(SubqueryDeclRaw { start, end, id: id.to_string(), subquery, params: params.map(|params| params.into()), from, into, doc })
-    }
-}
-
-CreateSubquery: StmtRaw<'input> = {
-    <start:@L> "create" "query" <id:Ident> <params:(<WithClause>)?> <end:@L>  => {
-        StmtRaw::SubqueryStmt(SubqueryStmtRaw { start, end, module: vec![], id: id.to_string(), target: id.to_string(), params: params.map(|params| params.into()) })
-    },
-    // With ModulartTarget
-    <start:@L> "create" "query" <id:Ident> "from" <target:ModularTarget> <params:(<WithClause>)?> <end:@L> => {
-        StmtRaw::SubqueryStmt(SubqueryStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params: params.map(|params| params.into()) })
-    }
-}
-
-DefineOperator: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" <kind:OperatorKind> "operator" <id:Ident> <params:(<WithClause>)?> <end:@L> =>  {
-        StmtRaw::OperatorDecl(Box::new(OperatorDeclRaw { start, end, kind, id: id.to_string(), params: params.map(|params| params.into()), doc }))
-    }
-}
-
-CreateOperator: StmtRaw<'input> = {
-    <start:@L> "create" "operator" <id:Ident> <params:(<WithClause>)?> <end:@L> => {
-        StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params: params.map(|params| params.into()) })
-    },
-
-    // With ModulartTarget
-    <start:@L> "create" "operator" <id:Ident> "from" <target:ModularTarget> <params:(<WithClause>)?> <end:@L> => {
-        StmtRaw::Operator(OperatorStmtRaw { start, end, id: id.to_string(), module: target.0, target: target.1.id.to_string(), params: params.map(|params| params.into()) })
-    }
-}
-
-DefineScript: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" "script" <id:Ident> <params:(<ScriptWithClause>)?> <script:EmbeddedScript> <end:@L> => {
-        StmtRaw::ScriptDecl(ScriptDeclRaw { start, end, id: id.to_string(), script, params: params.map(|params| params.into()), doc })
-    }
-}
-
-CreateScript: StmtRaw<'input> = {
-    <start:@L> "create" "script" <id:Ident> <params:(<WithClause>)?> <end:@L> => {
-        StmtRaw::Script(ScriptStmtRaw { start, end, id: id.to_string(), module: vec![], target: id.to_string(), params: params.map(|params| params.into()) })
-    },
-
-    // With ModulartTarget
-    <start:@L> "create" "script" <id:Ident> "from" <target:ModularTarget> <params:(<WithClause>)?> <end:@L> => {
-        StmtRaw::Script(ScriptStmtRaw { start, end, module: target.0, id: id.to_string(), target: target.1.id.to_string(), params: params.map(|params| params.into()) })
-    }
-}
-
-DefineWindow: StmtRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" <kind:WindowKind> "window" <id:Ident> <params:WithScriptClause> <end:@L> => {
-        StmtRaw::WindowDecl(WindowDeclRaw { start, end, id: id.to_string(), kind, params: params.0.into(), script: params.1, doc })
-    }
-}
-
-///////////////////////////////////////
+////////////////////////////// Tremorscript statements //////////////////////////////
+// These statements for the root of the language.
 
 pub(crate) Script : ScriptRaw<'input> = {
-  <doc:ModComment> <exprs:Exprs> "<end-of-stream>"? => ScriptRaw::new(exprs, doc),
-}
-
-ModComment: Option<Vec<Cow<'input, str>>> = {
-    (<ModComment_>)? => <>
-}
-
-ModComment_: Vec<Cow<'input, str>> = {
-    <c:"<mod-comment>"> => vec![c.into()],
-    <v:ModComment_> <c:"<mod-comment>"> => {
-        let mut v = v;
-        v.push(c.into());
-        v
-    },
+    <start:@L> <doc:ModComment> <exprs:TopLevelExprs> <end:@L>  => ScriptRaw::new(NodeMeta::new_box(start, end), exprs, doc),
 }
 
 /// List of expressions at the root of the script
-Exprs: ExprsRaw<'input> = {
-    <expr:MayBeConstExpr> ";" <list:Exprs> => {
+TopLevelExprs: TopLevelExprsRaw<'input> = {
+    <expr:TopLevelExpr> ";" <list:TopLevelExprs> => {
        let mut list = list;
        list.insert(0,expr);
        list
     },
-    <item:MayBeConstExpr> ";"? => vec![item],
+    <item:TopLevelExpr> ";"? => vec![item],
 }
 
-MayBeConstExpr: ExprRaw<'input> = {
-     Const => <>,
-     FnDecl => ExprRaw::FnDecl(<>),
-     Intrinsic => ExprRaw::FnDecl(<>),
-     Module => ExprRaw::Module(<>),
-     Expr => <>
-}
-
-/// A const expressions (this gets compiled out during the 2nd phjase)
-Const: ExprRaw<'input> = {
-    <comment:DocComment> <start:@L> "const" <name:Ident> @L "=" @R <expr:SimpleExprImut> <end:@L> => ExprRaw::Const{name: name.id, expr: expr, start, end, comment},
-}
-
-DocComment: Option<Vec<Cow<'input, str>>> = {
-    (<DocComment_>)? => <>
-}
-DocComment_: Vec<Cow<'input, str>> = {
-    <c:"<doc-comment>"> => vec![c.into()],
-    <v:DocComment_> <c:"<doc-comment>"> => {
-        let mut v = v;
-        v.push(c.into());
-        v
+/// List of expressions at the root of the script
+InnerExprs: ExprsRaw<'input> = {
+    <expr:Expr> ";" <list:InnerExprs> => {
+       let mut list = list;
+       list.insert(0,expr);
+       list
     },
+    <item:Expr> ";"? => vec![item],
 }
+
+
+TopLevelExpr: TopLevelExprRaw<'input> = {
+     Const => TopLevelExprRaw::Const(<>),
+     FnDefn => TopLevelExprRaw::FnDefn(<>),
+     Intrinsic => TopLevelExprRaw::FnDefn(<>),
+     Expr => TopLevelExprRaw::Expr(<>),
+     Use => TopLevelExprRaw::Use(<>),
+}
+
+/// A const expressions (this gets compiled out during the 2nd phase)
+Const: ConstRaw<'input> = {
+    <comment:DocComment> <start:@L> "const" <name:Ident> @L "=" @R <expr:ComplexExprImut> <end:@L> => ConstRaw{name: name.id, expr: expr, mid: NodeMeta::new_box(start, end), comment},
+}
+
 
 ////////////////////////////// Expr (mutable) //////////////////////////////
 // Expressions are the fundamental building block of the language
@@ -390,8 +583,8 @@ AlwaysImutExpr: ImutExprRaw<'input> = {
 }
 
 Recur: RecurRaw<'input> = {
-    <start:@L> "recur" "(" ")" <end:@L> => RecurRaw{start,end, exprs: vec![]},
-    <start:@L> "recur" "(" <args:InvokeArgs> ")" <end:@L> => RecurRaw{start, end, exprs: args},
+    <start:@L> "recur" "(" ")" <end:@L> => RecurRaw{mid: NodeMeta::new_box(start, end), exprs: vec![]},
+    <start:@L> "recur" "(" <args:InvokeArgs> ")" <end:@L> => RecurRaw{mid: NodeMeta::new_box(start, end), exprs: args},
 }
 
 ////////////////////////////// Expr (immutable) ////////////////////////////////////////
@@ -424,7 +617,6 @@ AndExprImut: ImutExprRaw<'input> = {
 
 /// Bitwise or
 BitOrExprImut: ImutExprRaw<'input> = {
-//    <o:BinOp<BinBitOr, BitOrExprImut, BitXorExprImut>> => <>,
     BitXorExprImut => <>,
 }
 
@@ -472,8 +664,8 @@ MulExprImut: ImutExprRaw<'input> = {
 
 /// Mathematical unary expressions (unary +, unary - )
 UnaryExprImut: ImutExprRaw<'input> = {
-    <start:@L> "+" <expr:UnaryExprImut> <end:@L> => ImutExprRaw::Unary(Box::new(UnaryExprRaw { kind: UnaryOpKind::Plus, expr: expr, start, end })),
-    <start:@L> "-" <expr:UnaryExprImut> <end:@L> => ImutExprRaw::Unary(Box::new(UnaryExprRaw { kind: UnaryOpKind::Minus, expr: expr, start, end })),
+    <start:@L> "+" <expr:UnaryExprImut> <end:@L> => ImutExprRaw::Unary(Box::new(UnaryExprRaw { kind: UnaryOpKind::Plus, expr: expr, mid: NodeMeta::new_box(start, end) })),
+    <start:@L> "-" <expr:UnaryExprImut> <end:@L> => ImutExprRaw::Unary(Box::new(UnaryExprRaw { kind: UnaryOpKind::Minus, expr: expr, mid: NodeMeta::new_box(start, end) })),
     UnarySimpleExprImut => <>,
 }
 
@@ -482,16 +674,16 @@ UnaryExprImut: ImutExprRaw<'input> = {
 UnarySimpleExprImut: ImutExprRaw<'input> = {
     /// TODO ask about change from PresenceSimplExprImut
     /// also should include these on the same level as unary +, -?
-    <start:@L> "not" <expr:UnarySimpleExprImut> <end:@L> => ImutExprRaw::Unary(Box::new(UnaryExprRaw { kind: UnaryOpKind::Not, expr: expr, start, end })),
-    <start:@L> "!" <expr:UnarySimpleExprImut> <end:@L> => ImutExprRaw::Unary(Box::new(UnaryExprRaw { kind: UnaryOpKind::BitNot, expr: expr, start, end })),
+    <start:@L> "not" <expr:UnarySimpleExprImut> <end:@L> => ImutExprRaw::Unary(Box::new(UnaryExprRaw { kind: UnaryOpKind::Not, expr: expr, mid: NodeMeta::new_box(start, end) })),
+    <start:@L> "!" <expr:UnarySimpleExprImut> <end:@L> => ImutExprRaw::Unary(Box::new(UnaryExprRaw { kind: UnaryOpKind::BitNot, expr: expr, mid: NodeMeta::new_box(start, end) })),
     PresenceSimplExprImut => <>,
 }
 
 /// Presence operations (present, absent)
 PresenceSimplExprImut: ImutExprRaw<'input> = {
-    <start:@L> "present" <path:Path> <end:@L> => ImutExprRaw::Present{path, start, end},
+    <start:@L> "present" <path:Path> <end:@L> => ImutExprRaw::Present{path, mid: NodeMeta::new_box(start, end)},
     /// TODO link to !?
-    <start:@L> "absent" <path:Path> <end:@L> => ImutExprRaw::Unary(Box::new(UnaryExprRaw { kind: UnaryOpKind::Not, expr: ImutExprRaw::Present{path, start, end}, start, end })),
+    <start:@L> "absent" <path:Path> <end:@L> => ImutExprRaw::Unary(Box::new(UnaryExprRaw { kind: UnaryOpKind::Not, expr: ImutExprRaw::Present{path, mid: NodeMeta::new_box(start, end)}, mid: NodeMeta::new_box(start, end) })),
     SimpleExprImut => <>,
 }
 
@@ -507,93 +699,81 @@ ComplexExprImut: ImutExprRaw<'input> = {
 Intrinsic: AnyFnRaw<'input> = {
     <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "("  ")" "as" <imod:ModularTarget>  <end:@L> => {
         let invoce_args = vec![];
+        let mut imod = imod;
+        let mut module = vec!["core".to_string()];
+        module.append(&mut imod.module);
         let invoke = InvokeRaw{
-            start,
-            end,
-            module: vec!["core".into(), imod.0.iter().map(|i|i.id.to_string()).collect::<Vec<String>>().join("::")],
-            fun: imod.1.id.to_string(),
+            mid: NodeMeta::new_box(start, end),
+            module,
+            fun: imod.id,
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
-        AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, start, end, doc, open: false, inline: true})
+        AnyFnRaw::Normal(FnDefnRaw{name, args: vec![], body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: true})
     },
     <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> ")" "as" <imod:ModularTarget><end:@L> => {
-        let invoce_args = args.iter().map(|a|
+        let invoce_args = args.iter().map(|root|
             ImutExprRaw::Path(
                 PathRaw::Local(
-                    LocalPathRaw{start: a.start, end: a.end, segments: vec![SegmentRaw::from_id(a.clone())]}
+                    LocalPathRaw{mid: root.mid.clone(), segments: vec![], root: root.clone()}
                 ))).collect();
+        let mut imod = imod;
+        let mut module = vec!["core".to_string()];
+        module.append(&mut imod.module);
+        
         let invoke = InvokeRaw{
-            start,
-            end,
-            module: vec!["core".into(), imod.0.iter().map(|i|i.id.to_string()).collect::<Vec<String>>().join("::")],
-            fun: imod.1.id.to_string(),
+            mid: NodeMeta::new_box(start, end),
+            module,
+            fun: imod.id,
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
-        AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: false, inline: true})
+        AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: true})
     },
     <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> "," "." "." "." ")" "as" <imod:ModularTarget> <end:@L> => {
-        let invoce_args = args.iter().map(|a|
+        let invoce_args = args.iter().map(|root|
             ImutExprRaw::Path(
                 PathRaw::Local(
-                    LocalPathRaw{start: a.start, end: a.end, segments: vec![SegmentRaw::from_id(a.clone())]}
+                    LocalPathRaw{mid: root.mid.clone(), segments: vec![], root: root.clone()}
                 ))).collect();
+        let mut imod = imod;
+        let mut module = vec!["core".to_string()];
+        module.append(&mut imod.module);
         let invoke = InvokeRaw{
-            start,
-            end,
-            module: vec!["core".into(), imod.0.iter().map(|i|i.id.to_string()).collect::<Vec<String>>().join("::")],
-            fun: imod.1.id.to_string(),
+            mid: NodeMeta::new_box(start, end),
+            module,
+            fun: imod.id,
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
-        AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: true, inline: true})
+        AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: true})
     },
     <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" "." "." "." ")" "as" <imod:ModularTarget> <end:@L> => {
         let args = vec![];
         let invoce_args = vec![];
+        let mut imod = imod;
+        let mut module = vec!["core".to_string()];
+        module.append(&mut imod.module);
         let invoke = InvokeRaw{
-            start,
-            end,
-            module: vec!["core".into(), imod.0.iter().map(|i|i.id.to_string()).collect::<Vec<String>>().join("::")],
-            fun: imod.1.id.to_string(),
+            mid: NodeMeta::new_box(start, end),
+            module,
+            fun: imod.id,
             args: invoce_args
         };
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
-        AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: true, inline: true})
+        AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: true})
     },
 }
 
-Module: ModuleRaw<'input> = {
-    <start:@L> "mod" <name:Ident> "with" <doc:ModComment> <exprs:ModuleExprs> "end" <end:@L> => ModuleRaw{name, start, end, exprs, doc: doc},
-}
+FnDefn: AnyFnRaw<'input> = {
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" "." "." "." ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args: vec![], body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: false}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs>  "," "." "." "." ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: false}),
 
-/// List of expressions at the root of the script
-ModuleExprs: ExprsRaw<'input> = {
-    <expr:ModuleExpr> ";" <list:ModuleExprs> => {
-       let mut list = list;
-       list.insert(0,expr);
-       list
-    },
-    <item:ModuleExpr> ";"? => vec![item],
-}
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "("  ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args: vec![], body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: false}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: false}),
 
-ModuleExpr: ExprRaw<'input> = {
-    Const => <>,
-    FnDecl => ExprRaw::FnDecl(<>),
-    Intrinsic => ExprRaw::FnDecl(<>),
-    Module => ExprRaw::Module(<>),
-}
-
-FnDecl: AnyFnRaw<'input> = {
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" "." "." "." ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, start, end, doc, open: true, inline: false}),
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs>  "," "." "." "." ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: true, inline: false}),
-
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "("  ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args: vec![], body, start, end, doc, open: false, inline: false}),
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:Exprs> "end" <end:@L> => AnyFnRaw::Normal(FnDeclRaw{name, args, body, start, end, doc, open: false, inline: false}),
-
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "("  ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDeclRaw{name, args: vec![], start, end, cases, doc, open: false, inline: false}),
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDeclRaw{name, args, start, end, cases, doc, open: false, inline: false}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "("  ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDefnRaw{name, args: vec![], mid: NodeMeta::new_box(start, end), cases, doc, open: false, inline: false}),
+  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDefnRaw{name, args, mid: NodeMeta::new_box(start, end), cases, doc, open: false, inline: false}),
 }
 
 FnCases: Vec<PredicateClauseRaw<'input, ExprRaw<'input>>> = {
@@ -602,7 +782,7 @@ FnCases: Vec<PredicateClauseRaw<'input, ExprRaw<'input>>> = {
         cases.push(default);
         cases
     },
-    <start:@L> <default:FnCaseDefault> => {
+    <default:FnCaseDefault> => {
         let mut cases = Vec::new();
         cases.push(default);
         cases
@@ -611,7 +791,7 @@ FnCases: Vec<PredicateClauseRaw<'input, ExprRaw<'input>>> = {
 
 FnCaseDefault: PredicateClauseRaw<'input, ExprRaw<'input>> = {
     <start:@L> "default" <exprs:Effectors> <end:@L> => {
-        PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, start, end}
+        PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, mid: NodeMeta::new_box(start, end)}
     }
 }
 
@@ -619,12 +799,11 @@ FnCase: PredicateClauseRaw<'input, ExprRaw<'input>> = {
     <start:@L> "case" <pstart:@L> "(" <pattern:ArrayPredicatePatterns>  ")" <guard:WhenClause> <pend:@L> <exprs:Effectors> <end:@L> => PredicateClauseRaw {
         pattern: PatternRaw::Assign(AssignPatternRaw {
             id: FN_RES_NAME.into(),
-            pattern: Box::new(PatternRaw::Tuple(TuplePatternRaw{exprs: pattern, start: pstart, end: pend, open: false}))
+            pattern: Box::new(PatternRaw::Tuple(TuplePatternRaw{exprs: pattern, mid: NodeMeta::new_box(pstart, pend), open: false}))
         }),
         exprs,
         guard,
-        start,
-        end
+        mid: NodeMeta::new_box(start, end)
     },
 }
 
@@ -659,15 +838,15 @@ SimpleExprImut: ImutExprRaw<'input> = {
 
 /// Basic literals
 Literal: LiteralRaw<'input> = {
-    <start:@L> <v:Nil> <end:@L> => LiteralRaw{value: v, start, end},
-    <start:@L> <v:Bool> <end:@L> => LiteralRaw{value: v, start, end},
-    <start:@L> <v:Int> <end:@L> => LiteralRaw{value: v, start, end},
-    <start:@L> <v:Float> <end:@L> => LiteralRaw{value: v, start, end},
+    <start:@L> <v:Nil> <end:@L> => LiteralRaw{value: v, mid: NodeMeta::new_box(start, end)},
+    <start:@L> <v:Bool> <end:@L> => LiteralRaw{value: v, mid: NodeMeta::new_box(start, end)},
+    <start:@L> <v:Int> <end:@L> => LiteralRaw{value: v, mid: NodeMeta::new_box(start, end)},
+    <start:@L> <v:Float> <end:@L> => LiteralRaw{value: v, mid: NodeMeta::new_box(start, end)},
 }
 
 /// null
 Nil: Value<'input> = {
-    <literal:"nil">  => Value::null(),
+    <_literal:"nil">  => Value::null(),
 }
 
 /// booleans
@@ -687,23 +866,14 @@ Float: Value<'input> = {
 
 StringLiteral: StringLitRaw<'input> = {
     <start:@L> "heredoc_start" <elements:StrLitElements> "heredoc_end" <end:@L> => {
-        StringLitRaw {
-            start,
-            end,
-            elements
-        }
+        StringLitRaw { mid: NodeMeta::new_box(start, end), elements }
     },
     <start:@L> "\"" <elements:StrLitElements> "\"" <end:@L> => {
-        StringLitRaw {
-            start,
-            end,
-            elements
-        }
+        StringLitRaw { mid: NodeMeta::new_box(start, end), elements }
     },
     <start:@L> "\""  "\"" <end:@L> => {
         StringLitRaw {
-            start,
-            end,
+            mid: NodeMeta::new_box(start, end),
             elements: vec!["".into()],
         }
     },
@@ -730,7 +900,6 @@ StrLitElements: StrLitElementsRaw<'input> = {
 
     <literal:StringPart> => vec![literal.into()],
     "\\#" => vec!["#".into()],
-
     "#{" <expr:ExprImut> "}" => vec![expr.into()],
 }
 
@@ -741,8 +910,8 @@ StringPart: Cow<'input, str> = {
 
 /// array semi literals
 List: ListRaw<'input> = {
-    <start:@L> "[" <exprs:ListElements> "]" <end:@L> => ListRaw{start, end, exprs},
-    <start:@L> "[" "]" <end:@L> => ListRaw{start, end, exprs: vec![]},
+    <start:@L> "[" <exprs:ListElements> "]" <end:@L> => ListRaw{mid: NodeMeta::new_box(start, end), exprs},
+    <start:@L> "[" "]" <end:@L> => ListRaw{mid: NodeMeta::new_box(start, end), exprs: vec![]},
 }
 
 ListElements: ImutExprsRaw<'input> = {
@@ -759,14 +928,14 @@ ListElements_: ImutExprsRaw<'input> = {
 
 /// A semi literal record
 Record: RecordRaw<'input> = {
-    <start:@L> "{" <fields:Fields> "}" <end:@L> => RecordRaw { fields: fields, start, end },
-    <start:@L> "{" "}" <end:@L> => RecordRaw { fields: vec![], start, end }
+    <start:@L> "{" <fields:Fields> "}" <end:@L> => RecordRaw { fields: fields, mid: NodeMeta::new_box(start, end) },
+    <start:@L> "{" "}" <end:@L> => RecordRaw { fields: vec![], mid: NodeMeta::new_box(start, end) }
 }
 
 /// Fields for a static record
 Field: FieldRaw<'input> = {
     <start:@L> <name:StringLiteral> ":" <value:ComplexExprImut> <end:@L> => {
-        FieldRaw { name, value, start, end }
+        FieldRaw { name, value, mid: NodeMeta::new_box(start, end) }
     }
 }
 
@@ -807,65 +976,59 @@ ExprPathRoot: ImutExprRaw<'input> = {
 ExprPath: PathRaw<'input> = {
     <start:@L> <expr:ExprPathRoot> <segments:PathSegments> <end:@L> => {
         let expr = Box::new(expr);
-        PathRaw::Expr(ExprPathRaw { expr, segments, start, end })
+        PathRaw::Expr(ExprPathRaw { expr, segments, mid: NodeMeta::new_box(start, end) })
     }
 }
 
 /// A metadata path
 MetaPath: PathRaw<'input> = {
-    <start:@L> "$" <segment:PathSegment> <segments:PathSegments> <end:@L> => {
+    <start:@L> "$" <root:Ident> <segments:PathSegments> <end:@L> => {
         let mut segments = segments;
-        segments.insert(0, segment);
+        segments.insert(0, root.into());
 
-        PathRaw::Meta(MetadataPathRaw { segments, start, end })
+        PathRaw::Meta(MetadataPathRaw { segments, mid: NodeMeta::new_box(start, end) })
     },
-    <start:@L> "$" <segment:PathSegment> <end:@L> => {
-        PathRaw::Meta(MetadataPathRaw { segments: vec![segment], start, end })
+    <start:@L> "$" <root:Ident> <end:@L> => {
+        PathRaw::Meta(MetadataPathRaw { segments: vec![root.into()], mid: NodeMeta::new_box(start, end) })
     },
-    <start:@L> "$" <end:@L> => PathRaw::Meta(MetadataPathRaw { segments: vec![], start, end }),
+    <start:@L> "$" <end:@L> => PathRaw::Meta(MetadataPathRaw { segments: vec![], mid: NodeMeta::new_box(start, end) }),
 }
 
 /// A window/group path
 AggrPath: PathRaw<'input> = {
-    <start:@L> "group" <mid:@L> <segments:PathSegments> <end:@L> => {
-        let mut segments = segments;
-        PathRaw::Reserved(ReservedPathRaw::Group { segments, start, end })
+    <start:@L> "group" <segments:PathSegments> <end:@L> => {
+        PathRaw::Reserved(ReservedPathRaw::Group { segments, mid: NodeMeta::new_box(start, end) })
     },
-    <start:@L> "group" <end:@L> => PathRaw::Reserved(ReservedPathRaw::Group { segments: vec![], start, end }),
-    <start:@L> "window" <mid:@L> <segments:PathSegments> <end:@L> => {
-        let mut segments = segments;
-        PathRaw::Reserved(ReservedPathRaw::Window { segments, start, end })
+    <start:@L> "group" <end:@L> => PathRaw::Reserved(ReservedPathRaw::Group { segments: vec![], mid: NodeMeta::new_box(start, end) }),
+    <start:@L> "window" <segments:PathSegments> <end:@L> => {
+        PathRaw::Reserved(ReservedPathRaw::Window { segments, mid: NodeMeta::new_box(start, end) })
     },
-    <start:@L> "window" <end:@L> => PathRaw::Reserved(ReservedPathRaw::Window { segments: vec![], start, end }),
+    <start:@L> "window" <end:@L> => PathRaw::Reserved(ReservedPathRaw::Window { segments: vec![], mid: NodeMeta::new_box(start, end) }),
 }
 
 /// Arguments to a script or function
 ArgsPath: PathRaw<'input> = {
-    <start:@L> "args" <mid:@L> <segments:PathSegments> <end:@L> => {
-        let mut segments = segments;
-        PathRaw::Reserved(ReservedPathRaw::Args { segments, start, end })
+    <start:@L> "args" <segments:PathSegments> <end:@L> => {
+        PathRaw::Reserved(ReservedPathRaw::Args { segments, mid: NodeMeta::new_box(start, end) })
     },
-    <start:@L> "args" <end:@L> => PathRaw::Reserved(ReservedPathRaw::Args { segments: vec![], start, end }),
+    <start:@L> "args" <end:@L> => PathRaw::Reserved(ReservedPathRaw::Args { segments: vec![], mid: NodeMeta::new_box(start, end) }),
 }
 
 /// Local path
 LocalPath: PathRaw<'input> = {
-    <start:@L> <segment:PathSegment> <segments:PathSegments> <end:@L> => {
-        let mut segments = segments;
-        segments.insert(0, segment);
-        PathRaw::Local(LocalPathRaw { segments, start, end })
+    <start:@L> <root:Ident> <segments:PathSegments> <end:@L> => {
+        PathRaw::Local(LocalPathRaw { root, segments, mid: NodeMeta::new_box(start, end) })
     },
-    <start:@L> <segment:PathSegment> <end:@L> => {
-        PathRaw::Local(LocalPathRaw { segments:  vec![segment], start, end })
+    <start:@L> <root:Ident> <end:@L> => {
+        PathRaw::Local(LocalPathRaw { segments:  vec![], root, mid: NodeMeta::new_box(start, end) })
     },
 }
 
 /// Const path - absolute path prefixed with module
 ConstPath: PathRaw<'input> = {
     <start:@L> <module:ModPath> "::" <path:LocalPath> <end:@L> => {
-        if let PathRaw::Local(LocalPathRaw { segments, .. }) = path {
-
-            PathRaw::Const(ConstPathRaw { module, segments, start, end })
+        if let PathRaw::Local(LocalPathRaw { root, segments, .. }) = path {
+            PathRaw::Const(ConstPathRaw { module, root, segments, mid: NodeMeta::new_box(start, end) })
         } else {
             unreachable!()
         }
@@ -875,21 +1038,21 @@ ConstPath: PathRaw<'input> = {
 
 /// State path
 StatePath: PathRaw<'input> = {
-    <start:@L> "state" <segments:PathSegments> <end:@L> => PathRaw::State(StatePathRaw { segments, start, end }),
-    <start:@L> "state" <end:@L> => PathRaw::State(StatePathRaw { segments: vec![], start, end }),
+    <start:@L> "state" <segments:PathSegments> <end:@L> => PathRaw::State(StatePathRaw { segments, mid: NodeMeta::new_box(start, end) }),
+    <start:@L> "state" <end:@L> => PathRaw::State(StatePathRaw { segments: vec![], mid: NodeMeta::new_box(start, end) }),
 }
 
 /// Event path
 EventPath: PathRaw<'input> = {
-    <start:@L> "event" <segments:PathSegments> <end:@L> => PathRaw::Event(EventPathRaw { segments, start, end }),
-    <start:@L> "event" <end:@L> => PathRaw::Event(EventPathRaw { segments: vec![], start, end }),
+    <start:@L> "event" <segments:PathSegments> <end:@L> => PathRaw::Event(EventPathRaw { segments, mid: NodeMeta::new_box(start, end) }),
+    <start:@L> "event" <end:@L> => PathRaw::Event(EventPathRaw { segments: vec![], mid: NodeMeta::new_box(start, end) }),
 }
 
 /// Segments of a path
 PathSegments: SegmentsRaw<'input> = {
-    "." <segment:PathSegment> <segments:PathSegments> => {
+    "." <segment:Ident> <segments:PathSegments> => {
         let mut segments = segments;
-        segments.insert(0, segment);
+        segments.insert(0, segment.into());
         segments
     },
     "[" <selector:Selector> "]" <segments:PathSegments> => {
@@ -898,18 +1061,18 @@ PathSegments: SegmentsRaw<'input> = {
         segments
     },
     "[" <selector:Selector> "]" => vec![selector],
-    "." <segment:PathSegment> => vec![segment],
-}
-
-/// Singular part of a path
-PathSegment: SegmentRaw<'input> = {
-    <id:Ident> => SegmentRaw::from_id(id),
+    "." <segment:Ident> => vec![segment.into()],
 }
 
 /// A path selector aka [...]
 Selector: SegmentRaw<'input> = {
-    <start_lower:@L> <range_start:ComplexExprImut> <end_lower:@L> ":" <start_upper:@L> <range_end:ComplexExprImut> <end_upper:@L> => SegmentRaw::Range(Box::new(SegmentRangeRaw{range_start, range_end, start_lower, end_lower, start_upper, end_upper})),
-    <start:@L> <expr:ComplexExprImut> <end:@L>  => SegmentRaw::Element(Box::new(SegmentElementRaw{expr, start, end})),
+    <range_start:ComplexExprImut> ":" <range_end:ComplexExprImut> => {
+        SegmentRaw::Range(Box::new(SegmentRangeRaw{
+            range_start,
+            range_end,
+        }))
+    },
+    <start:@L> <expr:ComplexExprImut> <end:@L>  => SegmentRaw::Element(Box::new(SegmentElementRaw{expr, mid: NodeMeta::new_box(start, end)})),
 }
 
 
@@ -919,8 +1082,8 @@ Selector: SegmentRaw<'input> = {
 
 /// Function invocation
 Invoke: InvokeRaw<'input> = {
-    <start:@L> <fun:FunctionName> "(" <args:InvokeArgs> ")" <end:@L> => InvokeRaw { module: fun.0, fun: fun.1, args, start, end },
-    <start:@L> <fun:FunctionName> "(" ")" <end:@L> => InvokeRaw { module: fun.0, fun: fun.1, args: vec![], start, end },
+    <start:@L> <fun:FunctionName> "(" <args:InvokeArgs> ")" <end:@L> => InvokeRaw { module: fun.0, fun: fun.1, args, mid: NodeMeta::new_box(start, end) },
+    <start:@L> <fun:FunctionName> "(" ")" <end:@L> => InvokeRaw { module: fun.0, fun: fun.1, args: vec![], mid: NodeMeta::new_box(start, end) },
 }
 
 FunctionName: (Vec<String>, String) = {
@@ -955,15 +1118,15 @@ InvokeArgs_: ImutExprsRaw<'input> = {
 
 /// drop the current event.
 Drop: ExprRaw<'input> = {
-    <start:@L> "drop" <end:@L> => ExprRaw::Drop{start, end } ,
+    <start:@L> "drop" <end:@L> => ExprRaw::Drop{mid: NodeMeta::new_box(start, end) } ,
 }
 
 /// emits the current event to a given output
 Emit: ExprRaw<'input> = {
-    <start:@L> "emit" <expr:ComplexExprImut> "=>" <port:StringLiteral> <end:@L> => ExprRaw::Emit(Box::new(EmitExprRaw { expr: expr, start, end, port: Some(ImutExprRaw::String(port)) })),
-    <start:@L> "emit" <expr:ComplexExprImut>  <end:@L> => ExprRaw::Emit(Box::new(EmitExprRaw { expr: expr, start, end, port: None })),
-    <start:@L> "emit" "=>" <port:StringLiteral> <end:@L> => ExprRaw::Emit(Box::new(EmitExprRaw { expr: ImutExprRaw::Path(PathRaw::Event(EventPathRaw { segments: vec![], start, end })).into(), start, end, port: Some(ImutExprRaw::String(port)) })) ,
-    <start:@L> "emit" <end:@L> => ExprRaw::Emit(Box::new(EmitExprRaw { expr: ImutExprRaw::Path(PathRaw::Event(EventPathRaw { segments: vec![], start, end })).into(), start, end, port: None })),
+    <start:@L> "emit" <expr:ComplexExprImut> "=>" <port:StringLiteral> <end:@L> => ExprRaw::Emit(Box::new(EmitExprRaw { expr: expr, mid: NodeMeta::new_box(start, end), port: Some(ImutExprRaw::String(port)) })),
+    <start:@L> "emit" <expr:ComplexExprImut>  <end:@L> => ExprRaw::Emit(Box::new(EmitExprRaw { expr: expr, mid: NodeMeta::new_box(start, end), port: None })),
+    <start:@L> "emit" "=>" <port:StringLiteral> <end:@L> => ExprRaw::Emit(Box::new(EmitExprRaw { expr: ImutExprRaw::Path(PathRaw::Event(EventPathRaw { segments: vec![], mid: NodeMeta::new_box(start, end) })).into(), mid: NodeMeta::new_box(start, end), port: Some(ImutExprRaw::String(port)) })) ,
+    <start:@L> "emit" <end:@L> => ExprRaw::Emit(Box::new(EmitExprRaw { expr: ImutExprRaw::Path(PathRaw::Event(EventPathRaw { segments: vec![], mid: NodeMeta::new_box(start, end) })).into(), mid: NodeMeta::new_box(start, end), port: None })),
 }
 
 ////////////////////////////// Let expression  //////////////////////////////
@@ -971,11 +1134,11 @@ Emit: ExprRaw<'input> = {
 
 /// Let expression to assign values
 Let: ExprRaw<'input> = {
-    <start:@L> "let" <expr:Assignment> <end:@L> => expr, // Expr::Let(Let { exprs: vec![expr], start, end }),
+    "let" <expr:Assignment> => expr, // Expr::Let(Let { exprs: vec![expr], mid: NodeMeta::new_box(start, end) }),
 }
 
 Assignment: ExprRaw<'input> = {
-    <start:@L> <path:Path> @L "=" @R <expr:SimpleExpr> <end:@L> => ExprRaw::Assign(Box::new(AssignRaw { path, expr: expr, start, end })),
+    <start:@L> <path:Path> @L "=" @R <expr:SimpleExpr> <end:@L> => ExprRaw::Assign(Box::new(AssignRaw { path, expr: expr, mid: NodeMeta::new_box(start, end) })),
 }
 
 ////////////////////////////// patch expression  //////////////////////////////
@@ -983,12 +1146,12 @@ Assignment: ExprRaw<'input> = {
 
 Patch: PatchRaw<'input> = {
   // NOTE: ASSUMPTION array and literal targets are banned
-    <start:@L> "patch" <target:ComplexExprImut> <end:@L> "of" <operations:PatchOperations> "end" => PatchRaw { target, operations, start, end }
+    <start:@L> "patch" <target:ComplexExprImut> "of" <operations:PatchOperations> "end" <end:@L> => PatchRaw { target, operations, mid: NodeMeta::new_box(start, end) }
 }
 
 PatchOperations: PatchOperationsRaw<'input> = {
     <e:PatchOperationClause> => vec![e],
-    <v:PatchOperations> "," <e:PatchOperationClause> => {
+    <v:PatchOperations> ";" <e:PatchOperationClause> => {
     let mut v = v;
     v.push(e);
     v
@@ -1000,30 +1163,30 @@ PatchField: StringLitRaw<'input> = {
 }
 
 PatchOperationClause: PatchOperationRaw<'input> = {
-    "insert" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperationRaw::Insert{ ident, expr },
-    "upsert" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperationRaw::Upsert{ ident, expr },
-    "update" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperationRaw::Update{ ident, expr },
-    "erase" <ident:PatchField> => PatchOperationRaw::Erase{ ident },
-    "move" <from:PatchField> "=>" <to:PatchField>  => PatchOperationRaw::Move{ from, to },
-    "copy" <from:PatchField> "=>" <to:PatchField>  => PatchOperationRaw::Copy{ from, to },
-    "merge" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperationRaw::Merge { ident, expr },
-    "merge" "=>" <expr:ComplexExprImut> => PatchOperationRaw::MergeRecord { expr },
-    "default" <ident:PatchField> "=>" <expr:ComplexExprImut> => PatchOperationRaw::Default { ident, expr },
-    "default" "=>" <expr:ComplexExprImut> => PatchOperationRaw::DefaultRecord { expr },
+    <start: @L> "insert" <ident:PatchField> "=>" <expr:ComplexExprImut> <end:@L>=> PatchOperationRaw::Insert{ ident, expr, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "upsert" <ident:PatchField> "=>" <expr:ComplexExprImut> <end:@L>=> PatchOperationRaw::Upsert{ ident, expr, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "update" <ident:PatchField> "=>" <expr:ComplexExprImut> <end:@L>=> PatchOperationRaw::Update{ ident, expr, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "erase" <ident:PatchField> <end:@L>=> PatchOperationRaw::Erase{ ident, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "move" <from:PatchField> "=>" <to:PatchField>  <end:@L>=> PatchOperationRaw::Move{ from, to, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "copy" <from:PatchField> "=>" <to:PatchField> <end:@L> => PatchOperationRaw::Copy{ from, to, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "merge" <ident:PatchField> "=>" <expr:ComplexExprImut> <end:@L>=> PatchOperationRaw::Merge { ident, expr, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "merge" "=>" <expr:ComplexExprImut> <end:@L>=> PatchOperationRaw::MergeRecord { expr, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "default" <ident:PatchField> "=>" <expr:ComplexExprImut> <end:@L>=> PatchOperationRaw::Default { ident, expr, mid: NodeMeta::new_box(start, end) },
+    <start: @L> "default" "=>" <expr:ComplexExprImut> <end:@L>=> PatchOperationRaw::DefaultRecord { expr, mid: NodeMeta::new_box(start, end) },
 }
 
 ////////////////////////////// merge expression  //////////////////////////////
 // Merges a perge spec (record) into the target
 
 Merge: MergeRaw<'input> = {
-    <start:@L> "merge" <target:ComplexExprImut> "of" <expr:ComplexExprImut> "end" <end:@L> => MergeRaw { target, expr, start, end }
+    <start:@L> "merge" <target:ComplexExprImut> "of" <expr:ComplexExprImut> "end" <end:@L> => MergeRaw { target, expr, mid: NodeMeta::new_box(start, end) }
 }
 
 ////////////////////////////// for comprehension (mut)  //////////////////////////////
 // Merges a perge spec (record) into the target
 
 For: ComprehensionRaw<'input, ExprRaw<'input>> = {
-    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClauses> "end" <end:@L> => ComprehensionRaw{target, cases, start, end},
+    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClauses> "end" <end:@L> => ComprehensionRaw{target, cases, mid: NodeMeta::new_box(start, end)},
 }
 
 ForCaseClauses: ComprehensionCasesRaw<'input, ExprRaw<'input>> = {
@@ -1036,14 +1199,14 @@ ForCaseClauses: ComprehensionCasesRaw<'input, ExprRaw<'input>> = {
 }
 
 ForCaseClause: ComprehensionCaseRaw<'input, ExprRaw<'input>> = {
-    "case" <start:@L>  "(" <k:Ident> "," <v:Ident> ")" <end:@L> <guard:WhenClause> <exprs:Effectors>  => ComprehensionCaseRaw { key_name: k.id, value_name: v.id, exprs, guard, start, end },
+    "case" <start:@L>  "(" <k:Ident> "," <v:Ident> ")" <end:@L> <guard:WhenClause> <exprs:Effectors>  => ComprehensionCaseRaw { key_name: k.id, value_name: v.id, exprs, guard, mid: NodeMeta::new_box(start, end) },
 }
 
 // ////////////////////////////// for comprehension (imutmut)  //////////////////////////////
 // // Merges a perge spec (record) into the target
 
 ForImut: ComprehensionRaw<'input, ImutExprRaw<'input>> = {
-    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClausesImut> "end" <end:@L> => ComprehensionRaw{target, cases, start, end},
+    <start:@L> "for" <target:ComplexExprImut> "of" <cases:ForCaseClausesImut> "end" <end:@L> => ComprehensionRaw{target, cases, mid: NodeMeta::new_box(start, end)},
 }
 
 ForCaseClausesImut: ComprehensionCasesRaw<'input, ImutExprRaw<'input>> = {
@@ -1056,7 +1219,7 @@ ForCaseClausesImut: ComprehensionCasesRaw<'input, ImutExprRaw<'input>> = {
 }
 
 ForCaseClauseImut: ComprehensionCaseRaw<'input, ImutExprRaw<'input>> = {
-    "case" <start:@L>  "(" <k:Ident> "," <v:Ident> ")" <end:@L> <guard:WhenClause> <exprs:EffectorsImut>  => ComprehensionCaseRaw { key_name: k.id, value_name: v.id, exprs, guard, start, end },
+    "case" <start:@L>  "(" <k:Ident> "," <v:Ident> ")" <end:@L> <guard:WhenClause> <exprs:EffectorsImut>  => ComprehensionCaseRaw { key_name: k.id, value_name: v.id, exprs, guard, mid: NodeMeta::new_box(start, end) },
 }
 
 ////////////////////////////// match expression (mutating)  //////////////////////////////
@@ -1064,7 +1227,7 @@ ForCaseClauseImut: ComprehensionCaseRaw<'input, ImutExprRaw<'input>> = {
 
 /// A match expression
 Match: MatchRaw<'input, ExprRaw<'input>> = {
-    <start:@L> "match" <target:ComplexExprImut> "of" <patterns:Predicates> "end" <end:@L> => MatchRaw { target, patterns, start, end },
+    <start:@L> "match" <target:ComplexExprImut> "of" <patterns:Predicates> "end" <end:@L> => MatchRaw { target, patterns, mid: NodeMeta::new_box(start, end) },
 }
 
 /// Predicates for a match statement (aka list of case statements)
@@ -1079,8 +1242,8 @@ Predicates: PredicatesRaw<'input, ExprRaw<'input>> = {
 
 /// A case statement
 PredicateClause: PredicateClauseRaw<'input, ExprRaw<'input>> = {
-    <start:@L> "case" <pattern:CasePattern> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern, exprs, guard, start, end },
-    <start:@L> "default" <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, start, end },
+    <start:@L> "case" <pattern:CasePattern> <guard:WhenClause> <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern, exprs, guard, mid: NodeMeta::new_box(start, end) },
+    <start:@L> "default" <exprs:Effectors> <end:@L> => PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, mid: NodeMeta::new_box(start, end) },
 }
 
 /// Effoectors aka (=>  ... )
@@ -1091,7 +1254,7 @@ Effectors: ExprsRaw<'input> = {
 /// The effectors for a case statement
 Block: ExprsRaw<'input> = {
     <e:Expr> => vec![e],
-    <v:Block> "," <e:Expr> => {
+    <v:Block> ";" <e:Expr> => {
         let mut v = v;
         v.push(e);
         v
@@ -1103,7 +1266,7 @@ Block: ExprsRaw<'input> = {
 
 /// A match expression
 MatchImut: MatchRaw<'input, ImutExprRaw<'input>> = {
-    <start:@L> "match" <target:ComplexExprImut> "of" <patterns:PredicatesImut> "end" <end:@L> => MatchRaw { target, patterns, start, end },
+    <start:@L> "match" <target:ComplexExprImut> "of" <patterns:PredicatesImut> "end" <end:@L> => MatchRaw { target, patterns, mid: NodeMeta::new_box(start, end) },
 }
 
 /// Predicates for a match statement (aka list of case statements)
@@ -1127,8 +1290,8 @@ CasePattern: PatternRaw<'input> = {
 }
 /// A case statement
 PredicateClauseImut: PredicateClauseRaw<'input, ImutExprRaw<'input>> = {
-    <start:@L> "case" <pattern:CasePattern> <guard:WhenClause> <exprs:EffectorsImut> <end:@L> => PredicateClauseRaw { pattern, exprs, guard, start, end },
-    <start:@L> "default" <exprs:EffectorsImut> <end:@L> => PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, start, end },
+    <start:@L> "case" <pattern:CasePattern> <guard:WhenClause> <exprs:EffectorsImut> <end:@L> => PredicateClauseRaw { pattern, exprs, guard, mid: NodeMeta::new_box(start, end) },
+    <start:@L> "default" <exprs:EffectorsImut> <end:@L> => PredicateClauseRaw { pattern: PatternRaw::Default, exprs, guard: None, mid: NodeMeta::new_box(start, end) },
 }
 
 /// Effoectors aka (=>  ... )
@@ -1156,37 +1319,36 @@ WhenClause: Option<ImutExprRaw<'input>> = {
 
 /// Predicate Patterns (aka tests) for record pattrens
 PredicateFieldPattern: PredicatePatternRaw<'input> = {
-    <start:@L> <lhs:Ident> <op:"~="> <expr:TestExpr> <end:@L> => PredicatePatternRaw::TildeEq { assign: lhs.id.clone(), lhs: lhs.id, test: expr},
-    <start:@L> <assign:Ident> "=" <lhs:Ident> <op:"~="> <expr:TestExpr> <end:@L> => PredicatePatternRaw::TildeEq { assign: assign.id, lhs: lhs.id, test: expr} ,
-
-    <start:@L> <lhs:Ident> <op:"~="> <rp:RecordPattern> <end:@L> => PredicatePatternRaw::RecordPatternEq { lhs: lhs.id, pattern: rp },
-    <start:@L> <lhs:Ident> <op:"~="> <ap:ArrayPattern> <end:@L> => PredicatePatternRaw::ArrayPatternEq { lhs: lhs.id, pattern: ap },
-    <start:@L> <lhs:Ident> <op:"~="> <ap:TuplePattern> <end:@L> => PredicatePatternRaw::TuplePatternEq { lhs: lhs.id, pattern: ap },
-    <start:@L> "present" <lhs:Ident> <end:@L> => PredicatePatternRaw::FieldPresent { lhs: lhs.id },
-    <start:@L> "absent" <lhs:Ident> <end:@L> => PredicatePatternRaw::FieldAbsent { lhs: lhs.id },
+    <lhs:Ident> "~=" <expr:TestExpr> => PredicatePatternRaw::TildeEq { assign: lhs.id.clone(), lhs: lhs.id, test: expr},
+    <assign:Ident> "=" <lhs:Ident> "~=" <expr:TestExpr> => PredicatePatternRaw::TildeEq { assign: assign.id, lhs: lhs.id, test: expr} ,
+    <lhs:Ident> "~=" <rp:RecordPattern> => PredicatePatternRaw::RecordPatternEq { lhs: lhs.id, pattern: rp },
+    <lhs:Ident> "~=" <ap:ArrayPattern>  => PredicatePatternRaw::ArrayPatternEq { lhs: lhs.id, pattern: ap },
+    <lhs:Ident> "~=" <ap:TuplePattern>  => PredicatePatternRaw::TuplePatternEq { lhs: lhs.id, pattern: ap },
+    "present" <lhs:Ident> => PredicatePatternRaw::FieldPresent { lhs: lhs.id },
+    "absent" <lhs:Ident> => PredicatePatternRaw::FieldAbsent { lhs: lhs.id },
     <lhs:Ident> <kind:BinCmpEq> <expr:ComplexExprImut> => PredicatePatternRaw::Bin { lhs: lhs.id, rhs: expr, kind },
 }
 
 TestExpr: TestExprRaw = {
     <start:@L> <id:Ident> <tl:TestLiteral> <end:@L> => {
-        TestExprRaw { id: id.to_string(), test: tl, start, end}
+        TestExprRaw { id: id.to_string(), test: tl, mid: NodeMeta::new_box(start, end)}
     },
 }
 
 RecordPattern: RecordPatternRaw<'input> = {
-    <start:@L> "%{" <fields:PatternFields> "}" <end:@L> => RecordPatternRaw { fields: fields, start, end },
-    <start:@L> "%{" "}" <end:@L> => RecordPatternRaw { fields: vec![], start, end },
+    <start:@L> "%{" <fields:PatternFields> "}" <end:@L> => RecordPatternRaw { fields: fields, mid: NodeMeta::new_box(start, end) },
+    <start:@L> "%{" "}" <end:@L> => RecordPatternRaw { fields: vec![], mid: NodeMeta::new_box(start, end) },
 }
 
 ArrayPattern: ArrayPatternRaw<'input> = {
-    <start:@L> "%[" <exprs:ArrayPredicatePatterns> "]" <end:@L> => ArrayPatternRaw { exprs, start, end },
-    <start:@L> "%[" "]" <end:@L> => ArrayPatternRaw { exprs: vec![], start, end },
+    <start:@L> "%[" <exprs:ArrayPredicatePatterns> "]" <end:@L> => ArrayPatternRaw { exprs, mid: NodeMeta::new_box(start, end) },
+    <start:@L> "%[" "]" <end:@L> => ArrayPatternRaw { exprs: vec![], mid: NodeMeta::new_box(start, end) },
 }
 
 TuplePattern: TuplePatternRaw<'input> = {
-    <start:@L> "%(" <exprs:TuplePredicatePatterns> <open:OpenTuple> ")" <end:@L> => TuplePatternRaw { exprs, start, end, open },
-    <start:@L> "%(" ")" <end:@L> => TuplePatternRaw { exprs: vec![], start, end, open: false },
-    <start:@L> "%(" "." "." "." ")" <end:@L> => TuplePatternRaw { exprs: vec![], start, end, open: true },
+    <start:@L> "%(" <exprs:TuplePredicatePatterns> <open:OpenTuple> ")" <end:@L> => TuplePatternRaw { exprs, mid: NodeMeta::new_box(start, end), open },
+    <start:@L> "%(" ")" <end:@L> => TuplePatternRaw { exprs: vec![], mid: NodeMeta::new_box(start, end), open: false },
+    <start:@L> "%(" "." "." "." ")" <end:@L> => TuplePatternRaw { exprs: vec![], mid: NodeMeta::new_box(start, end), open: true },
 }
 
 OpenTuple: bool = {
@@ -1243,14 +1405,13 @@ Fields: FieldsRaw<'input> = {
     },
 }
 
-
 Fields_: FieldsRaw<'input> = {
     <fields:Sep<Fields_, Field, ",">> => fields,
 }
 
 #[inline]
 Ident: IdentRaw<'input> = {
-    <start:@L> <name:"<ident>"> <end:@L> => IdentRaw { id: name.0, start, end },
+    <start:@L> <name:"<ident>"> <end:@L> => IdentRaw { id: name.0, mid: NodeMeta::new_box(start, end) },
 }
 
 #[inline]
@@ -1259,8 +1420,8 @@ TestLiteral: String = {
 }
 
 BytesLiteral: BytesRaw<'input> = {
-    <start:@L> "<<" ">>" <end:@L> => BytesRaw{ start, end, bytes: Vec::new()},
-    <start:@L> "<<" <bytes:Bytes> ">>" <end:@L> => BytesRaw{ start, end, bytes }
+    <start:@L> "<<" ">>" <end:@L> => BytesRaw{ mid: NodeMeta::new_box(start, end), bytes: Vec::new()},
+    <start:@L> "<<" <bytes:Bytes> ">>" <end:@L> => BytesRaw{ mid: NodeMeta::new_box(start, end), bytes }
 }
 
 Bytes: Vec<BytesPartRaw<'input>> = {
@@ -1273,10 +1434,10 @@ Bytes: Vec<BytesPartRaw<'input>> = {
 }
 
 BytesPart: BytesPartRaw<'input> = {
-    <start:@L> <data:SimpleExprImut> <end:@L> => BytesPartRaw{start, end, data, ..Default::default()},
-    <start:@L> <data:SimpleExprImut> ":" <bits:"int"> <end:@L> => BytesPartRaw{start, end, data, bits: Some(bits), ..Default::default()},
-    <start:@L> <data:SimpleExprImut> "/" <data_type:Ident> <end:@L> => BytesPartRaw{start, end, data, data_type, ..Default::default()},
-    <start:@L> <data:SimpleExprImut> ":" <bits:"int"> "/" <data_type:Ident>  <end:@L> => BytesPartRaw{start, end, data, bits: Some(bits), data_type},
+    <start:@L> <data:SimpleExprImut> <end:@L> => BytesPartRaw{mid: NodeMeta::new_box(start, end), data, data_type: IdentRaw::none(NodeMeta::new_box(start, end)), bits: None},
+    <start:@L> <data:SimpleExprImut> ":" <bits:"int"> <end:@L> => BytesPartRaw{mid: NodeMeta::new_box(start, end), data, data_type: IdentRaw::none(NodeMeta::new_box(start, end)), bits: Some(bits)},
+    <start:@L> <data:SimpleExprImut> "/" <data_type:Ident> <end:@L> => BytesPartRaw{mid: NodeMeta::new_box(start, end), data, data_type, bits: None },
+    <start:@L> <data:SimpleExprImut> ":" <bits:"int"> "/" <data_type:Ident>  <end:@L> => BytesPartRaw{mid: NodeMeta::new_box(start, end), data, bits: Some(bits), data_type},
 }
 
 
@@ -1296,8 +1457,7 @@ BinOp<Op, Current, Next>: ImutExprRaw<'input> = {
         kind: op,
         lhs: lhs,
         rhs: rhs,
-        start,
-        end,
+        mid: NodeMeta::new_box(start, end)
     })),
 }
 
@@ -1430,7 +1590,7 @@ extern {
         "~=" => Token::TildeEq,
         "~" => Token::Tilde,
         "bool" => Token::BoolLiteral(<bool>),
-        "int" => Token::IntLiteral(<i64>),
+        "int" => Token::IntLiteral(<u64>),
         "float" => Token::FloatLiteral(<f64>, <String>),
         "string" => Token::StringLiteral(<Cow<'input, str>>),
         "heredoc_start" => Token::HereDocStart,
@@ -1439,7 +1599,6 @@ extern {
         "<extractor>" => Token::TestLiteral(_, <Vec<String>>),
         "<ident>" => Token::Ident(<Cow<'input, str>>, <bool>),
         "<error>" => Token::Bad(<String>),
-        "<end-of-stream>" => Token::EndOfStream,
         "<newline>" => Token::NewLine,
 
         "select" => Token::Select,
@@ -1460,14 +1619,19 @@ extern {
         "define" => Token::Define,
         "args" => Token::Args,
         "recur" => Token::Recur,
-        "query" => Token::Subquery,
 
         "set" => Token::Set,
         "each" => Token::Each,
         "use" => Token::Use,
         "as" => Token::As,
 
+        "pipeline" => Token::Pipeline,
+        "connector" => Token::Connector,
+        "flow" => Token::Flow,
+        "connect" => Token::Connect,
+        "to" => Token::To,
+        "deploy" => Token::Deploy,
+
         "#!config" => Token::ConfigDirective,
     }
 }
-

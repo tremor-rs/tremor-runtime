@@ -13,12 +13,36 @@
 // limitations under the License.
 
 // this are macros
-#![cfg(not(tarpaulin_include))]
+// #![cfg_attr(coverage, no_coverage)]
 
 macro_rules! instance {
-    // crate::metrics::INSTANCE is never mutated after the initial setting
+    // crate::INSTANCE is never mutated after the initial setting
     // in main::run() so we can use this safely.
     () => {
-        unsafe { crate::metrics::INSTANCE.to_string() }
+        unsafe { crate::INSTANCE.to_string() }
     };
+}
+
+// stolen from https://github.com/popzxc/stdext-rs and slightly adapted
+#[cfg(test)]
+macro_rules! function_name {
+    () => {{
+        // Okay, this is ugly, I get it. However, this is the best we can get on a stable rust.
+        fn f() {}
+        fn type_name_of<T>(_: T) -> &'static str {
+            std::any::type_name::<T>()
+        }
+        let mut name = type_name_of(f);
+        if let Some(stripped) = name.strip_suffix("::f") {
+            name = stripped;
+        };
+        while let Some(stripped) = name.strip_suffix("::{{closure}}") {
+            name = stripped;
+        }
+        if let Some(last) = name.split("::").last() {
+            &last
+        } else {
+            &name
+        }
+    }};
 }

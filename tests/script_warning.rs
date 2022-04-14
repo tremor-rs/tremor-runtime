@@ -14,36 +14,38 @@
 use pretty_assertions::assert_eq;
 use std::io::prelude::*;
 use tremor_common::file;
-use tremor_pipeline::FN_REGISTRY;
+use tremor_script::FN_REGISTRY;
 
+use serial_test::serial;
 use tremor_runtime::errors::*;
-use tremor_script::errors::CompilerError;
 use tremor_script::highlighter::{Dumb, Highlighter};
-use tremor_script::path::ModulePath;
-use tremor_script::Script;
+use tremor_script::{module::Manager, Script};
 
 macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
+            #[serial(script_warning)]
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
                 let script_dir = concat!("tests/script_warnings/", stringify!($file), "/").to_string();
                 let script_file = concat!("tests/script_warnings/", stringify!($file), "/script.tremor");
                 let err_file = concat!("tests/script_warnings/", stringify!($file), "/warning.txt");
+                Manager::clear_path()?;
+                Manager::add_path(&"tremor-script/lib")?;
+                Manager::add_path(&script_dir)?;
 
                 println!("Loading script: {}", script_file);
                 let mut file = file::open(script_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let contents2 = contents.clone();
 
                 let mut file = file::open(err_file)?;
                 let mut err = String::new();
                 file.read_to_string(&mut err)?;
                 let err = err.trim();
-                let s = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, script_file, contents2, &*FN_REGISTRY.lock()?).map_err(CompilerError::error)?;
+                let s = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
                 let mut h = Dumb::new();
                 s.format_warnings_with(&mut h)?;
                 h.finalize()?;

@@ -1,0 +1,4 @@
+Error: 
+    9 | with
+   10 |  new_param = 43
+      | ^^^^^^^^^^^^^^^ Unknown parameter new_param

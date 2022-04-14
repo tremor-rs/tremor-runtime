@@ -1,7 +1,0 @@
-{
-    "run": "tests/integration/postgres",
-    "cmd": "bash",
-    "args": [
-        "before/down.sh"
-    ]
-}

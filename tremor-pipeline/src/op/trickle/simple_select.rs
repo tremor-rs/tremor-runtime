@@ -17,11 +17,11 @@
 use crate::{errors::Result, op::prelude::*, Event, Operator};
 use tremor_script::{
     self,
-    ast::{InvokeAggrFn, Select, SelectStmt},
+    ast::{self, Select, SelectStmt},
     errors::query_guard_not_bool,
     interpreter::{Env, LocalStack},
     prelude::*,
-    srs,
+    NO_AGGRS,
 };
 
 /// optimized variant for a simple select of the form:
@@ -30,20 +30,17 @@ use tremor_script::{
 #[derive(Debug)]
 pub struct SimpleSelect {
     pub id: String,
-    pub(crate) select: srs::Select,
+    pub(crate) select: ast::SelectStmt<'static>,
     recursion_limit: u32,
 }
 
-const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
-
 impl SimpleSelect {
-    pub fn with_stmt(id: String, stmt: &srs::Stmt) -> Result<Self> {
-        let select = srs::Select::try_new_from_stmt(stmt)?;
-        Ok(Self {
+    pub fn with_stmt(id: String, stmt: &ast::SelectStmt<'static>) -> Self {
+        Self {
             id,
-            select,
+            select: stmt.clone(),
             recursion_limit: tremor_script::recursion_limit(),
-        })
+        }
     }
     fn opts() -> ExecOpts {
         ExecOpts {
@@ -56,64 +53,55 @@ impl SimpleSelect {
 impl Operator for SimpleSelect {
     fn on_event(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _port: &str,
         state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights> {
         let opts = Self::opts();
 
-        self.select.rent(
-            |SelectStmt {
-                 stmt,
-                 consts,
-                 node_meta,
-                 ..
-             }| {
-                let stmt: &Select = stmt;
+        let SelectStmt { stmt, consts, .. } = &self.select;
+        let stmt: &Select = stmt;
 
-                // We can't have locals in the where and having clause
-                let local_stack = LocalStack::with_size(0);
+        // We can't have locals in the where and having clause
+        let local_stack = LocalStack::with_size(0);
 
-                let ctx = EventContext::new(event.ingest_ns, event.origin_uri.as_ref());
+        let ctx = EventContext::new(event.ingest_ns, event.origin_uri.as_ref());
 
-                //
-                // Before any select processing, we filter by where clause
-                //
-                let env = Env {
-                    context: &ctx,
-                    consts: consts.run(),
-                    aggrs: &NO_AGGRS,
-                    meta: node_meta,
-                    recursion_limit: self.recursion_limit,
+        //
+        // Before any select processing, we filter by where clause
+        //
+        let env = Env {
+            context: &ctx,
+            consts: consts.run(),
+            aggrs: &NO_AGGRS,
+            recursion_limit: self.recursion_limit,
+        };
+        if let Some(guard) = &stmt.maybe_where {
+            let (data, meta) = event.data.parts();
+            let test = guard.run(opts, &env, data, state, meta, &local_stack)?;
+            if let Some(test) = test.as_bool() {
+                if !test {
+                    return Ok(EventAndInsights::default());
                 };
-                if let Some(guard) = &stmt.maybe_where {
-                    let (data, meta) = event.data.parts();
-                    let test = guard.run(opts, &env, data, state, meta, &local_stack)?;
-                    if let Some(test) = test.as_bool() {
-                        if !test {
-                            return Ok(EventAndInsights::default());
-                        };
-                    } else {
-                        return query_guard_not_bool(stmt, guard, &test, node_meta)?;
-                    };
-                }
+            } else {
+                return query_guard_not_bool(stmt, guard, &test)?;
+            };
+        }
 
-                if let Some(guard) = &stmt.maybe_having {
-                    let (data, meta) = event.data.parts();
+        if let Some(guard) = &stmt.maybe_having {
+            let (data, meta) = event.data.parts();
 
-                    let test = guard.run(opts, &env, data, state, meta, &local_stack)?;
-                    if let Some(test) = test.as_bool() {
-                        if !test {
-                            return Ok(EventAndInsights::default());
-                        };
-                    } else {
-                        return query_guard_not_bool(stmt, guard, &test, node_meta)?;
-                    };
-                }
+            let test = guard.run(opts, &env, data, state, meta, &local_stack)?;
+            if let Some(test) = test.as_bool() {
+                if !test {
+                    return Ok(EventAndInsights::default());
+                };
+            } else {
+                return query_guard_not_bool(stmt, guard, &test)?;
+            };
+        }
 
-                Ok(event.into())
-            },
-        )
+        Ok(event.into())
     }
 }

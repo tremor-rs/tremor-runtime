@@ -1,11 +1,11 @@
 [
   # TODO fix this
-  #"bitwise NOT",
-  #!42,
-  #!0,
-  #!-42,
-  #!true,
-  #!false,
+  # "bitwise NOT",
+  # !42,
+  # !0,
+  # !-42,
+  # !true,
+  # !false,
 
   "bitwise AND",
   42 & 2,
@@ -17,14 +17,14 @@
   false & true,
 
   # TODO fix this
-  #"bitwise OR",
-  #42 | 2,
-  #42 | -2,
-  #42 | 0,
-  #-42 | 2,
-  #-42 | -2,
-  #true | true,
-  #true | false,
+  # "bitwise OR",
+  # 42 | 2,
+  # 42 | -2,
+  # 42 | 0,
+  # -42 | 2,
+  # -42 | -2,
+  # true | true,
+  # true | false,
 
   "bitwise XOR",
   42 ^ 2,
@@ -40,13 +40,13 @@
   -42 ^ -42
 
   # invalid
-  #42 & 2.0
-  #42 & "2"
-  #42 & true
-  #true & "2"
-  #42 &&& 2
-  #42 ^^ 2
+  # 42 & 2.0
+  # 42 & "2"
+  # 42 & true
+  # true & "2"
+  # 42 &&& 2
+  # 42 ^^ 2
   # 42 ! 2
   # 42 !! 2
-  #!!42
+  # !!42
 ]

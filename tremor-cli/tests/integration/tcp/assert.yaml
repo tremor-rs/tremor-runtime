@@ -1,0 +1,7 @@
+status: 0
+name: tcp connector
+asserts:
+  - source: client_out.log
+    equals_file: expected_client.json
+  - source: server_out.log
+    equals_file: in.json

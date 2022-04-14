@@ -17,9 +17,6 @@ use clap::{ArgEnum, Parser};
 #[derive(Parser, Debug)]
 #[clap(name = "tremor", author, version)]
 pub(crate) struct Cli {
-    /// Sets the level of verbosity (does not apply to logging)
-    #[clap(parse(from_occurrences), short, long)]
-    pub(crate) verbose: u8,
     /// Instance identifier
     #[clap(short, long, default_value = "tremor")]
     pub(crate) instance: String,
@@ -86,9 +83,9 @@ pub(crate) struct Test {
     /// Optional tags to filter test incusions by
     #[clap(short, long)]
     pub(crate) excludes: Vec<String>,
-    /// Only print failed tests
+    /// Sets the level of verbosity (does not apply to logging)
     #[clap(short, long)]
-    pub(crate) quiet: bool,
+    pub(crate) verbose: bool,
 }
 
 /// Shell type
@@ -157,12 +154,13 @@ pub(crate) struct Run {
     #[clap(short, long, default_value = "-")]
     pub(crate) outfile: String,
     /// Preprocessors to pass data through before decoding
-    #[clap(long, default_value = "lines")]
+    #[clap(long, default_value = "separate")]
     pub(crate) preprocessor: String,
     /// Postprocessor to pass data through after encoding
-    #[clap(long, default_value = "lines")]
+    #[clap(long, default_value = "separate")]
     pub(crate) postprocessor: String,
     /// Specifies the port that is printed to the output
+
     #[clap(short, long)]
     pub(crate) port: Option<String>,
 }
@@ -239,6 +237,9 @@ pub(crate) struct ServerRun {
     /// Disable the API
     #[clap(short, long)]
     pub(crate) no_api: bool,
+    /// Loads the debug connectors
+    #[clap(short, long)]
+    pub(crate) debug_connectors: bool,
     /// The `host:port` to listen for the API
     #[clap(short, long, default_value = "0.0.0.0:9898")]
     pub(crate) api_host: String,
@@ -258,6 +259,8 @@ pub(crate) struct Api {
       args:
         - FORMAT:
             short: f
+            multiple_values: false
+            multiple_occurrences: false
             about: Sets the output format
             possible_values: [json, yaml]
             takes_value: true

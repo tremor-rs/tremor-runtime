@@ -1,0 +1,4 @@
+define flow error
+flow
+  define connector empty from 1 + 2 + 3;
+end;

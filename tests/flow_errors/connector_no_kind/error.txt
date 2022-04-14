@@ -1,0 +1,6 @@
+Error: 
+    1 | define flow error
+    2 | flow
+    3 |   define connector empty;
+      |                         ^ Found the token `;` but expected `from`
+    4 | end;

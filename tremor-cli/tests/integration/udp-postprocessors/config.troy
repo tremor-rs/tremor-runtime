@@ -1,0 +1,37 @@
+
+define flow main
+flow
+  use troy::connectors;
+  use integration;
+
+
+  define connector in from file
+  with
+    codec = "json",
+    preprocessors = ["separate"],
+    config = {
+        "path": "in.json",
+        "mode": "read"
+    }
+  end;
+
+  define connector `udp-out` from udp_client
+  with
+    codec = "yaml",
+    postprocessors = ["base64"],
+    config = {
+      "url": "localhost:4242",
+    }
+  end;
+  
+  create pipeline main from integration::out_or_exit;
+  create connector in;
+  create connector `udp-out`;
+  create connector exit from connectors::exit;
+
+  connect /connector/in/out to /pipeline/main/in;
+  connect /pipeline/main/out to /connector/`udp-out`/in;
+  connect /pipeline/main/exit to /connector/exit/in;
+end;
+
+deploy flow main;

@@ -7,13 +7,30 @@ name = "tremor-api"
 version = "0.11.4"
 
 [dependencies]
-hashbrown = { version = "0.12", features = ["serde"] }
+async-std = { version = "1.10.0", features = [
+	"unstable",
+	"attributes",
+	"tokio03",
+	"tokio1",
+] }
+halfbrown = "0.1"
 http-types = "2.12"
+log = "0.4"
 serde = "1"
 serde_derive = "1"
 serde_yaml = "0.8"
 simd-json = "0.4"
-tide = "0.16"
+# we don't need sessions or cookies or shitty logging middleware
+tide = { version = "0.16", default-features = false, features = ["h1-server"] }
 tremor-pipeline = { path = "../tremor-pipeline" }
 tremor-runtime = { path = "../" }
 tremor-script = { path = "../tremor-script" }
+tremor-value = { path = "../tremor-value" }
+tremor-common = { path = "../tremor-common" }
+# value-trait = "0.2"
+
+[dev-dependencies]
+surf = { version = "2.3", default-features = false, features = [
+	"h1-client-rustls",
+] }
+env_logger = "0.9"

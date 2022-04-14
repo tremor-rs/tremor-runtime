@@ -1,0 +1,12 @@
+define window by_10 from tumbling
+with
+  size = 10
+end;
+
+select {
+  "g": group,
+  "c": aggr::stats::sum(event.c)
+}
+from in[by_10]
+group by event.g
+into out;

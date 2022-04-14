@@ -1,0 +1,32 @@
+
+define flow main
+flow
+  use integration;
+  define pipeline main
+  into out, exit
+  pipeline
+    define window my_window from tumbling
+    with
+      size = 3,
+      max_groups = 2
+    end;
+
+    select {
+      "win": window,
+      "group": group[0],
+      "count": aggr::stats::count(),
+      "collect": aggr::win::collect_flattened(event.payload)
+    } from in[my_window] where event != "exit" group by event["group"] into out;
+    select {"exit": 0, "delay": 0} from in where event == "exit" into exit;
+  end;
+
+  create connector in from integration::read_file;
+  create connector out from integration::write_file;
+  create connector exit from integration::exit;
+  create pipeline main;
+
+  connect /connector/in to /pipeline/main;
+  connect /pipeline/main to /connector/out;
+  connect /pipeline/main/exit to /connector/exit;
+end;
+deploy flow main;

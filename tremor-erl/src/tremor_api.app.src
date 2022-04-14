@@ -1,6 +1,6 @@
 {application, tremor_api,
  [{description, "Erlang client for the tremor API"},
-  {vsn, "0.1.0"},
+  {vsn, "0.12.0"},
   {registered, [tremor_api]},
   {applications,
    [

@@ -12,6 +12,7 @@ use std::re;
 use std::record;
 use std::string;
 use std::test;
+use std::time::nanos;
 use std::type;
 use std::url;
 use tremor::system;
@@ -113,11 +114,11 @@ test::suite({
   "tests": [
     test::test({
       "name": "integer min",
-      "test": test::assert("integer min", integer::min, -9223372036854775807)
+      "test": test::assert("integer min", integer::signed::min, -9223372036854775808)
     }),
     test::test({
       "name": "integer max",
-      "test": test::assert("integer max", integer::max, 9223372036854775807)
+      "test": test::assert("integer max", integer::signed::max, 9223372036854775807)
     }),
     test::test({
       "name": "integer parse",
@@ -669,6 +670,41 @@ test::suite({
       "test": test::assert("path::try_default", path::try_default({"snot": [ "badger" ]}, ["snot", 0], "horse"), "badger")
     }),
   ],
+});
+
+test::suite({
+  "name": "time::nanos utility functions",
+  "tags": ["time", "nanos"],
+  "tests": [
+    test::test({
+      "name": "from_weeks",
+      "test": test::assert("time::nanos::from_weeks", nanos::to_weeks(nanos::from_weeks(42)), 42)
+    }),
+    test::test({
+      "name": "from_days",
+      "test": test::assert("time::nanos::from_days", nanos::to_days(nanos::from_days(42)), 42)
+    }),
+    test::test({
+      "name": "from_hours",
+      "test": test::assert("time::nanos::from_hours", nanos::to_hours(nanos::from_hours(42)), 42)
+    }),
+    test::test({
+      "name": "from_minutes",
+      "test": test::assert("time::nanos::from_minutes", nanos::to_minutes(nanos::from_minutes(42)), 42)
+    }),
+    test::test({
+      "name": "from_seconds",
+      "test": test::assert("time::nanos::from_seconds", nanos::to_seconds(nanos::from_seconds(42)), 42)
+    }),
+    test::test({
+      "name": "from_millis",
+      "test": test::assert("time::nanos::from_millis", nanos::to_millis(nanos::from_millis(42)), 42)
+    }),
+    test::test({
+      "name": "from_micros",
+      "test": test::assert("time::nanos::from_micros", nanos::to_micros(nanos::from_micros(42)), 42)
+    }),
+  ]
 });
 
 "snot badger";

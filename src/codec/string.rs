@@ -18,13 +18,11 @@ use super::prelude::*;
 pub struct String {}
 
 impl Codec for String {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "string"
     }
 
-    #[cfg(not(tarpaulin_include))]
-    fn mime_types(&self) -> Vec<&str> {
+    fn mime_types(&self) -> Vec<&'static str> {
         vec!["text/plain", "text/html"]
     }
 
@@ -36,7 +34,7 @@ impl Codec for String {
         std::str::from_utf8(data)
             .map(Value::from)
             .map(Some)
-            .map_err(|e| e.into())
+            .map_err(Error::from)
     }
 
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {
@@ -47,7 +45,6 @@ impl Codec for String {
         }
     }
 
-    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }

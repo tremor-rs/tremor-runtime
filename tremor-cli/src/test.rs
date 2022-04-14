@@ -40,15 +40,222 @@ pub mod stats;
 pub mod tag;
 mod unit;
 
+async fn suite_bench(
+    root: &Path,
+    config: &TestConfig,
+) -> Result<(stats::Stats, Vec<report::TestReport>)> {
+    if let Ok(benches) = GlobWalkerBuilder::new(root, &config.meta.includes)
+        .case_insensitive(true)
+        .file_type(FileType::DIR)
+        .build()
+    {
+        let benches = benches.filter_map(std::result::Result::ok);
+
+        let mut suite = vec![];
+        let mut stats = stats::Stats::new();
+
+        status::h0("Framework", "Finding benchmark test scenarios")?;
+
+        for bench in benches {
+            let (s, t) = run_bench(bench.path(), config, stats).await?;
+
+            stats = s;
+            if let Some(report) = t {
+                suite.push(report);
+            }
+        }
+
+        Ok((stats, suite))
+    } else {
+        Err("Unable to walk test path for benchmarks".into())
+    }
+}
+
+async fn run_bench(
+    root: &Path,
+    config: &TestConfig,
+    mut stats: stats::Stats,
+) -> Result<(stats::Stats, Option<report::TestReport>)> {
+    let bench_root = root.to_string_lossy();
+    let tags = tag::resolve(config.base_directory.as_path(), root)?;
+    let (matched, is_match) = config.matches(&tags);
+
+    if is_match {
+        let mut tags_file = PathBuf::from(root);
+        tags_file.push("tags.yaml");
+        if tags_file.exists() {
+            status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
+            let cwd = std::env::current_dir()?;
+            std::env::set_current_dir(Path::new(&root))?;
+            status::tags(&tags, Some(&matched), Some(&config.excludes))?;
+            let test_report = process::run_process(
+                "bench",
+                config.base_directory.as_path(),
+                &cwd.join(root),
+                &tags,
+            )
+            .await?;
+
+            // Restore cwd
+            file::set_current_dir(&cwd)?;
+
+            status::duration(test_report.duration, "  ")?;
+            if test_report.stats.is_pass() {
+                stats.pass();
+            } else {
+                stats.fail(&bench_root);
+            }
+            Ok((stats, Some(test_report)))
+        } else {
+            Ok((stats, None))
+        }
+    } else {
+        stats.skip();
+        status::h1(
+            "  Benchmark",
+            &format!("Skipping {}", &basename(&bench_root)),
+        )?;
+        status::tags(&tags, Some(&matched), Some(&config.excludes))?;
+        Ok((stats, None))
+    }
+}
+
+async fn suite_integration(
+    root: &Path,
+    config: &TestConfig,
+) -> Result<(stats::Stats, Vec<report::TestReport>)> {
+    if let Ok(tests) = GlobWalkerBuilder::new(root, &config.meta.includes)
+        .case_insensitive(true)
+        .file_type(FileType::DIR)
+        .build()
+    {
+        let tests = tests.filter_map(std::result::Result::ok);
+
+        let mut suite = vec![];
+        let mut stats = stats::Stats::new();
+
+        status::h0("Framework", "Finding integration test scenarios")?;
+
+        for test in tests {
+            let mut tags = PathBuf::from(test.path());
+            tags.push("tags.yaml");
+            if tags.exists() {
+                let (s, t) = run_integration(test.path(), config, stats).await?;
+
+                stats = s;
+                if let Some(report) = t {
+                    suite.push(report);
+                }
+            }
+        }
+
+        status::rollups("\n  Integration", &stats)?;
+
+        Ok((stats, suite))
+    } else {
+        Err("Unable to walk test path for integration tests".into())
+    }
+}
+
+async fn run_integration(
+    root: &Path,
+    config: &TestConfig,
+    mut stats: stats::Stats,
+) -> Result<(stats::Stats, Option<report::TestReport>)> {
+    let base = config.base_directory.as_path();
+    let bench_root = root.to_string_lossy();
+    let tags = tag::resolve(base, root)?;
+
+    let (matched, is_match) = config.matches(&tags);
+    if is_match {
+        status::h1(
+            "Integration",
+            &format!("Running {}", &basename(&bench_root)),
+        )?;
+        // Set cwd to test root
+        let cwd = std::env::current_dir()?;
+        std::env::set_current_dir(&root)?;
+        status::tags(&tags, Some(&matched), Some(&config.excludes))?;
+
+        // Run integration tests
+        let test_report = process::run_process("integration", base, root, &tags).await?;
+
+        // Restore cwd
+        file::set_current_dir(&cwd)?;
+
+        if test_report.stats.is_pass() {
+            stats.pass();
+        } else {
+            stats.fail(&bench_root);
+        }
+        stats.assert += &test_report.stats.assert;
+
+        status::stats(&test_report.stats, "  ")?;
+        status::duration(test_report.duration, "    ")?;
+        Ok((stats, Some(test_report)))
+    } else {
+        stats.skip();
+        status::h1(
+            "Integration",
+            &format!("Skipping {}", &basename(&bench_root)),
+        )?;
+        status::tags(&tags, Some(&matched), Some(&config.excludes))?;
+        Ok((stats, None))
+    }
+}
+
+fn suite_unit(root: &Path, conf: &TestConfig) -> Result<(stats::Stats, Vec<report::TestReport>)> {
+    let base = conf.base_directory.as_path();
+    let suites = GlobWalkerBuilder::new(root, "all.tremor")
+        .case_insensitive(true)
+        .file_type(FileType::FILE)
+        .build()
+        .map_err(|e| format!("Unable to walk test path for unit tests: {}", e))?;
+
+    let suites = suites.filter_map(std::result::Result::ok);
+    let mut reports = vec![];
+    let mut stats = stats::Stats::new();
+
+    status::h0("Framework", "Finding unit test scenarios")?;
+
+    for suite in suites {
+        status::h0("  Unit Test Scenario", &suite.path().to_string_lossy())?;
+        let scenario_tags = tag::resolve(base, root)?;
+        status::tags(&scenario_tags, Some(&conf.includes), Some(&conf.excludes))?;
+        let report = unit::run_suite(suite.path(), &scenario_tags, conf)?;
+        stats.merge(&report.stats);
+        status::stats(&report.stats, "  ")?;
+        status::duration(report.duration, "    ")?;
+        reports.push(report);
+    }
+
+    status::rollups("  Unit", &stats)?;
+
+    Ok((stats, reports))
+}
+
+pub(crate) struct TestConfig {
+    pub(crate) verbose: bool,
+    pub(crate) sys_filter: &'static [&'static str],
+    pub(crate) includes: Vec<String>,
+    pub(crate) excludes: Vec<String>,
+    pub(crate) meta: Meta,
+    pub(crate) base_directory: PathBuf,
+}
+impl TestConfig {
+    fn matches(&self, filter: &TagFilter) -> (Vec<String>, bool) {
+        filter.matches(self.sys_filter, &self.includes, &self.excludes)
+    }
+}
+
 impl Test {
     #[allow(clippy::too_many_lines)]
-    pub(crate) fn run(&self, verbose: bool) -> Result<()> {
+    pub(crate) async fn run(&self) -> Result<()> {
         env_logger::init();
 
         let base_directory = tremor_common::file::canonicalize(&self.path)?;
         let mut config = TestConfig {
-            quiet: self.quiet,
-            verbose,
+            verbose: self.verbose,
             includes: self.includes.clone(),
             excludes: self.excludes.clone(),
             sys_filter: &[],
@@ -56,12 +263,10 @@ impl Test {
             base_directory,
         };
 
-        let found = GlobWalkerBuilder::new(&config.base_directory, "meta.json")
+        let found = GlobWalkerBuilder::new(&config.base_directory, "meta.yaml")
             .case_insensitive(true)
             .build()
-            .map_err(|e| {
-                Error::from(format!("failed to walk directory `{}`: {}", &self.path, e))
-            })?;
+            .map_err(|e| Error::from(format!("failed to walk directory `{}`: {}", self.path, e)))?;
 
         let mut reports = HashMap::new();
         let mut bench_stats = stats::Stats::new();
@@ -73,17 +278,14 @@ impl Test {
         let start = nanotime();
 
         if found.is_empty() {
-            // No meta.json was found, therefore we might have the path to a
+            // No meta.yaml was found, therefore we might have the path to a
             // specific folder. Let's apply some heuristics to see if we have
             // something runnable.
-            let files = GlobWalkerBuilder::from_patterns(
-                &config.base_directory,
-                &["*.{yaml,tremor,trickle}", "!assert.yaml", "!logger.yaml"],
-            )
-            .case_insensitive(true)
-            .max_depth(1)
-            .build()?
-            .filter_map(std::result::Result::ok);
+            let files = GlobWalkerBuilder::from_patterns(&config.base_directory, &["*.{troy}"])
+                .case_insensitive(true)
+                .max_depth(1)
+                .build()?
+                .filter_map(std::result::Result::ok);
 
             if files.count() >= 1 {
                 let stats = stats::Stats::new();
@@ -93,7 +295,7 @@ impl Test {
                 let test_report = match config.meta.mode {
                     TestMode::Bench => {
                         let (s, t) =
-                            run_bench(PathBuf::from(&self.path).as_path(), &config, stats)?;
+                            run_bench(PathBuf::from(&self.path).as_path(), &config, stats).await?;
                         match t {
                             Some(x) => {
                                 bench_stats.merge(&s);
@@ -108,7 +310,8 @@ impl Test {
                     }
                     TestMode::Integration => {
                         let (s, t) =
-                            run_integration(PathBuf::from(&self.path).as_path(), &config, stats)?;
+                            run_integration(PathBuf::from(&self.path).as_path(), &config, stats)
+                                .await?;
                         match t {
                             Some(x) => {
                                 integration_stats.merge(&s);
@@ -125,7 +328,8 @@ impl Test {
                     // well result in many tests run
                     TestMode::Command => {
                         let (s, t) =
-                            command::suite_command(PathBuf::from(&self.path).as_path(), &config)?;
+                            command::suite_command(PathBuf::from(&self.path).as_path(), &config)
+                                .await?;
                         cmd_stats.merge(&s);
                         t
                     }
@@ -162,17 +366,17 @@ impl Test {
 
                     let test_reports = match config.meta.mode {
                         TestMode::Bench => {
-                            let (s, t) = suite_bench(root, &config)?;
+                            let (s, t) = suite_bench(root, &config).await?;
                             bench_stats.merge(&s);
                             t
                         }
                         TestMode::Integration => {
-                            let (s, t) = suite_integration(root, &config)?;
+                            let (s, t) = suite_integration(root, &config).await?;
                             integration_stats.merge(&s);
                             t
                         }
                         TestMode::Command => {
-                            let (s, t) = suite_command(root, &config)?;
+                            let (s, t) = suite_command(root, &config).await?;
                             cmd_stats.merge(&s);
                             t
                         }
@@ -230,203 +434,5 @@ impl Test {
         } else {
             Ok(())
         }
-    }
-}
-
-fn suite_bench(
-    root: &Path,
-    config: &TestConfig,
-) -> Result<(stats::Stats, Vec<report::TestReport>)> {
-    if let Ok(benches) = GlobWalkerBuilder::new(root, &config.meta.includes)
-        .case_insensitive(true)
-        .file_type(FileType::DIR)
-        .build()
-    {
-        let benches = benches.filter_map(std::result::Result::ok);
-
-        let mut suite = vec![];
-        let mut stats = stats::Stats::new();
-
-        status::h0("Framework", "Finding benchmark test scenarios")?;
-
-        for bench in benches {
-            let (s, t) = run_bench(bench.path(), config, stats)?;
-
-            stats = s;
-            if let Some(report) = t {
-                suite.push(report);
-            }
-        }
-
-        Ok((stats, suite))
-    } else {
-        Err("Unable to walk test path for benchmarks".into())
-    }
-}
-
-fn run_bench(
-    root: &Path,
-    config: &TestConfig,
-    mut stats: stats::Stats,
-) -> Result<(stats::Stats, Option<report::TestReport>)> {
-    let bench_root = root.to_string_lossy();
-    let tags = tag::resolve(config.base_directory.as_path(), root)?;
-
-    let (matched, is_match) = config.matches(&tags);
-    if is_match {
-        status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
-        let cwd = std::env::current_dir()?;
-        std::env::set_current_dir(Path::new(&root))?;
-        status::tags(&tags, Some(&matched), Some(&config.excludes))?;
-        let test_report = process::run_process(
-            "bench",
-            config.base_directory.as_path(),
-            &cwd.join(root),
-            &tags,
-        )?;
-
-        // Restore cwd
-        file::set_current_dir(&cwd)?;
-
-        status::duration(test_report.duration, "  ")?;
-        if test_report.stats.is_pass() {
-            stats.pass();
-        } else {
-            stats.fail(&bench_root);
-        }
-        Ok((stats, Some(test_report)))
-    } else {
-        stats.skip();
-        status::h1(
-            "  Benchmark",
-            &format!("Skipping {}", &basename(&bench_root)),
-        )?;
-        status::tags(&tags, Some(&matched), Some(&config.excludes))?;
-        Ok((stats, None))
-    }
-}
-
-fn suite_integration(
-    root: &Path,
-    config: &TestConfig,
-) -> Result<(stats::Stats, Vec<report::TestReport>)> {
-    if let Ok(tests) = GlobWalkerBuilder::new(root, &config.meta.includes)
-        .case_insensitive(true)
-        .file_type(FileType::DIR)
-        .build()
-    {
-        let tests = tests.filter_map(std::result::Result::ok);
-
-        let mut suite = vec![];
-        let mut stats = stats::Stats::new();
-
-        status::h0("Framework", "Finding integration test scenarios")?;
-
-        for test in tests {
-            let (s, t) = run_integration(test.path(), config, stats)?;
-
-            stats = s;
-            if let Some(report) = t {
-                suite.push(report);
-            }
-        }
-
-        status::rollups("\n  Integration", &stats)?;
-
-        Ok((stats, suite))
-    } else {
-        Err("Unable to walk test path for integration tests".into())
-    }
-}
-
-fn run_integration(
-    root: &Path,
-    config: &TestConfig,
-    mut stats: stats::Stats,
-) -> Result<(stats::Stats, Option<report::TestReport>)> {
-    let base = config.base_directory.as_path();
-    let bench_root = root.to_string_lossy();
-    let tags = tag::resolve(base, root)?;
-
-    let (matched, is_match) = config.matches(&tags);
-    if is_match {
-        status::h1(
-            "Integration",
-            &format!("Running {}", &basename(&bench_root)),
-        )?;
-        // Set cwd to test root
-        let cwd = std::env::current_dir()?;
-        std::env::set_current_dir(&root)?;
-        status::tags(&tags, Some(&matched), Some(&config.excludes))?;
-
-        // Run integration tests
-        let test_report = process::run_process("integration", base, root, &tags)?;
-
-        // Restore cwd
-        file::set_current_dir(&cwd)?;
-
-        if test_report.stats.is_pass() {
-            stats.pass();
-        } else {
-            stats.fail(&bench_root);
-        }
-        stats.assert += &test_report.stats.assert;
-
-        status::stats(&test_report.stats, "  ")?;
-        status::duration(test_report.duration, "    ")?;
-        Ok((stats, Some(test_report)))
-    } else {
-        stats.skip();
-        status::h1(
-            "Integration",
-            &format!("Skipping {}", &basename(&bench_root)),
-        )?;
-        status::tags(&tags, Some(&matched), Some(&config.excludes))?;
-        Ok((stats, None))
-    }
-}
-
-fn suite_unit(root: &Path, conf: &TestConfig) -> Result<(stats::Stats, Vec<report::TestReport>)> {
-    let base = conf.base_directory.as_path();
-    let suites = GlobWalkerBuilder::new(root, "all.tremor")
-        .case_insensitive(true)
-        .file_type(FileType::FILE)
-        .build()
-        .map_err(|e| format!("Unable to walk test path for unit tests: {}", e))?;
-
-    let suites = suites.filter_map(std::result::Result::ok);
-    let mut reports = vec![];
-    let mut stats = stats::Stats::new();
-
-    status::h0("Framework", "Finding unit test scenarios")?;
-
-    for suite in suites {
-        status::h0("  Unit Test Scenario", &suite.path().to_string_lossy())?;
-        let scenario_tags = tag::resolve(base, root)?;
-        status::tags(&scenario_tags, Some(&conf.includes), Some(&conf.excludes))?;
-        let report = unit::run_suite(suite.path(), &scenario_tags, conf)?;
-        stats.merge(&report.stats);
-        status::stats(&report.stats, "  ")?;
-        status::duration(report.duration, "    ")?;
-        reports.push(report);
-    }
-
-    status::rollups("  Unit", &stats)?;
-
-    Ok((stats, reports))
-}
-
-pub(crate) struct TestConfig {
-    pub(crate) quiet: bool,
-    pub(crate) verbose: bool,
-    pub(crate) sys_filter: &'static [&'static str],
-    pub(crate) includes: Vec<String>,
-    pub(crate) excludes: Vec<String>,
-    pub(crate) meta: Meta,
-    pub(crate) base_directory: PathBuf,
-}
-impl TestConfig {
-    fn matches(&self, filter: &TagFilter) -> (Vec<String>, bool) {
-        filter.matches(self.sys_filter, &self.includes, &self.excludes)
     }
 }

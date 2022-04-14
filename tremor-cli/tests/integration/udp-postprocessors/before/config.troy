@@ -1,0 +1,39 @@
+
+define flow main
+flow
+  use troy::connectors;
+  use integration;
+  
+
+  define connector `udp-in` from udp_server
+  with
+    codec = "string",
+    config = { 
+      "url": "localhost:4242",
+    }
+  end;
+
+  define connector out from file
+  with
+    codec = "string",
+    postprocessors = ["separate"],
+    config = {
+      "path": "../gen.log",
+      "mode": "truncate"
+    }
+  end;
+
+
+  create pipeline main from integration::out_or_exit;
+  create connector `udp-in`;
+  create connector debug from connectors::console;
+  create connector exit from connectors::exit;
+  create connector out;
+
+  connect /connector/`udp-in` to /pipeline/main/in;
+  connect /pipeline/main/out to /connector/out;
+  connect /pipeline/main/out to /connector/debug;
+  connect /pipeline/main/exit to /connector/exit/in;
+end;
+
+deploy flow main;

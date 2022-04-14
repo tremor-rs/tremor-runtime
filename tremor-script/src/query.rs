@@ -12,26 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{self, Warning};
-use crate::errors::{CompilerError, Error, Result};
-use crate::highlighter::{Dumb as DumbHighlighter, Highlighter};
-use crate::path::ModulePath;
-use crate::prelude::*;
-use crate::{lexer, srs};
+use crate::lexer;
+use crate::{arena, errors::Result};
+use crate::{arena::Arena, highlighter::Highlighter};
+use crate::{ast::base_expr::Ranged, prelude::*};
+use crate::{
+    ast::{self, helper::Warning, visitors::ConstFolder, walkers::QueryWalker},
+    lexer::Lexer,
+};
 use std::collections::BTreeSet;
-use std::io::Write;
 
 /// A tremor query
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Query {
     /// The query
-    pub query: srs::Query,
-    /// Source of the query
-    pub source: String,
+    pub query: ast::Query<'static>,
     /// Warnings emitted by the script
     pub warnings: BTreeSet<Warning>,
-    /// Number of local variables (should be 0)
-    pub locals: usize,
+    /// Arena index of the string
+    pub aid: crate::arena::Index,
 }
 
 impl<'run, 'event, 'script> Query
@@ -39,116 +38,86 @@ where
     'script: 'event,
     'event: 'run,
 {
-    /// Extracts SRS  statements
-    #[must_use]
-    pub fn extract_stmts(&self) -> Vec<srs::Stmt> {
-        self.query.extract_stmts()
+    /// Removes a deploy from the arena, freeing the memory and marking it valid for reause
+    /// this function generally should not ever be used. It is a special case for the language
+    /// server where we know that we really only parse the script to check for errors and
+    /// warnings.
+    /// That's also why it's behind a feature falg
+    #[cfg(feature = "arena-delete")]
+    pub unsafe fn consume_and_free(self) -> Result<()> {
+        let Query { aid, query, .. } = self;
+        drop(query);
+        Arena::delte_index_this_is_really_unsafe_dont_use_it(aid)
     }
-    /// Borrows the query
+
+    /// Converts a troy embedded pipeline with resolved arguments to a runnable query
+    /// # Errors
+    ///   If the query fails to parse and convert correctly
     #[must_use]
-    pub fn suffix(&self) -> &ast::Query {
-        self.query.suffix()
+    pub fn from_query(query: ast::Query<'static>) -> Self {
+        let warnings = BTreeSet::new();
+        let aid = query.aid();
+        Self {
+            query,
+            warnings,
+            aid,
+        }
     }
-    /// Parses a string into a query
+
+    /// Parses a string into a query supporting query arguments
+    ///
+    /// this is used in the language server to delete lements on a
+    /// parsing error
     ///
     /// # Errors
     /// if the query can not be parsed
-    pub fn parse(
-        module_path: &ModulePath,
-        file_name: &str,
-        script: &'script str,
-        cus: Vec<ast::CompilationUnit>,
+    #[cfg(feature = "arena-delete")]
+    pub fn parse_with_aid<S>(
+        src: &S,
         reg: &Registry,
         aggr_reg: &AggrRegistry,
-    ) -> std::result::Result<Self, CompilerError> {
-        let mut source = script.to_string();
+    ) -> std::result::Result<Self, crate::errors::ErrorWithIndex>
+    where
+        S: ToString + ?Sized,
+    {
+        let (aid, src) = Arena::insert(src)?;
+        Self::parse_(aid, src, reg, aggr_reg).map_err(|e| crate::errors::ErrorWithIndex(aid, e))
+    }
 
-        let mut warnings = BTreeSet::new();
-        let mut locals = 0;
+    /// Parses a string into a query supporting query arguments
+    ///
+    /// # Errors
+    /// if the query can not be parsed
 
-        // TODO make lexer EOS tolerant to avoid this kludge
-        source.push('\n');
+    pub fn parse<S>(src: &S, reg: &Registry, aggr_reg: &AggrRegistry) -> Result<Self>
+    where
+        S: ToString + ?Sized,
+    {
+        let (aid, src) = Arena::insert(src)?;
+        Self::parse_(aid, src, reg, aggr_reg)
+    }
 
-        let mut include_stack = lexer::IncludeStack::default();
-
-        let r = |include_stack: &mut lexer::IncludeStack| -> Result<Self> {
-            let query = srs::Query::try_new::<Error, _>(source.clone(), |src: &mut String| {
-                let mut helper = ast::Helper::new(reg, aggr_reg, cus);
-                let cu = include_stack.push(&file_name)?;
-                let lexemes: Vec<_> = lexer::Preprocessor::preprocess(
-                    module_path,
-                    file_name,
-                    src,
-                    cu,
-                    include_stack,
-                )?;
-                let filtered_tokens = lexemes
-                    .into_iter()
-                    .filter_map(Result::ok)
-                    .filter(|t| !t.value.is_ignorable());
-                let script_stage_1 = crate::parser::g::QueryParser::new().parse(filtered_tokens)?;
-                let script = script_stage_1.up_script(&mut helper)?;
-
-                std::mem::swap(&mut warnings, &mut helper.warnings);
-                locals = helper.locals.len();
-                Ok(script)
-            })?;
-
-            Ok(Self {
-                query,
-                source,
-                warnings,
-                locals,
-            })
-        }(&mut include_stack);
-        r.map_err(|error| CompilerError {
-            error,
-            cus: include_stack.into_cus(),
+    /// Parses a string into a query supporting query arguments
+    ///
+    /// # Errors
+    /// if the query can not be parsed
+    fn parse_(
+        aid: arena::Index,
+        src: &'static str,
+        reg: &Registry,
+        aggr_reg: &AggrRegistry,
+    ) -> Result<Self> {
+        let mut helper = ast::Helper::new(reg, aggr_reg);
+        let tokens = Lexer::new(src, aid).collect::<Result<Vec<_>>>()?;
+        let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
+        let query_stage_1 = crate::parser::g::QueryParser::new().parse(filtered_tokens)?;
+        let mut query = query_stage_1.up_script(&mut helper)?;
+        ConstFolder::new(&helper).walk_query(&mut query)?;
+        Ok(Self {
+            query,
+            warnings: helper.warnings,
+            aid,
         })
-    }
-
-    /// Highlights a script with a given highlighter.
-    /// # Errors
-    /// on io errors
-    #[cfg(not(tarpaulin_include))]
-    pub fn highlight_script_with<H: Highlighter>(
-        script: &str,
-        h: &mut H,
-        emit_lines: bool,
-    ) -> std::io::Result<()> {
-        let mut script = script.to_string();
-        script.push('\n');
-        let tokens: Vec<_> = lexer::Tokenizer::new(&script)
-            .tokenize_until_err()
-            .collect();
-        h.highlight(None, &tokens, "", emit_lines, None)
-    }
-
-    /// Format an error given a script source.
-    /// # Errors
-    /// on io errors
-    pub fn format_error_from_script<H: Highlighter>(
-        script: &str,
-        h: &mut H,
-        e: &Error,
-    ) -> std::io::Result<()> {
-        let mut script = script.to_string();
-        script.push('\n');
-
-        let tokens: Vec<_> = lexer::Tokenizer::new(&script)
-            .tokenize_until_err()
-            .collect();
-        match e.context() {
-            (Some(r), _) => {
-                h.highlight_error(None, &tokens, "", true, Some(r), Some(e.into()))?;
-                h.finalize()
-            }
-
-            _other => {
-                write!(h.get_writer(), "Error: {}", e)?;
-                h.finalize()
-            }
-        }
     }
 
     /// Format an error given a script source.
@@ -156,82 +125,12 @@ where
     /// on io errors
     pub fn format_warnings_with<H: Highlighter>(&self, h: &mut H) -> std::io::Result<()> {
         for w in &self.warnings {
-            let tokens: Vec<_> = lexer::Tokenizer::new(&self.source)
-                .tokenize_until_err()
-                .collect();
+            let tokens: Vec<_> =
+                lexer::Lexer::new(Arena::io_get(self.query.aid())?, self.query.aid())
+                    .tokenize_until_err()
+                    .collect();
             h.highlight_error(None, &tokens, "", true, Some(w.outer), Some(w.into()))?;
         }
         h.finalize()
-    }
-
-    /// Formats an error within this script
-    #[must_use]
-    pub fn format_error(&self, e: &Error) -> String {
-        let mut h = DumbHighlighter::default();
-        if self.format_error_with(&mut h, e).is_ok() {
-            h.to_string()
-        } else {
-            format!("Failed to extract code for error: {}", e)
-        }
-    }
-
-    /// Formats an error within this script using a given highlighter
-    ///
-    /// # Errors
-    /// on io errors
-    pub fn format_error_with<H: Highlighter>(&self, h: &mut H, e: &Error) -> std::io::Result<()> {
-        Self::format_error_from_script(&self.source, h, e)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    fn parse(query: &str) {
-        let reg = crate::registry();
-        let aggr_reg = crate::aggr_registry();
-        let module_path = crate::path::load();
-        let cus = vec![];
-        if let Err(e) = Query::parse(&module_path, "test.trickle", query, cus, &reg, &aggr_reg) {
-            eprintln!("{}", e.error());
-            assert!(false)
-        } else {
-            assert!(true)
-        }
-    }
-    #[test]
-    fn for_in_select() {
-        parse(r#"select for event of case (a, b) => b end from in into out;"#);
-    }
-
-    #[test]
-    fn script_with_args() {
-        parse(
-            r#"
-define script test
-with
-  beep = "beep"
-script
-  { "beep": "{args.beep}" }
-end;
-
-create script beep from test;
-create script boop from test
-with
-  beep = "boop" # override
-end;
-
-# Stream ingested data into script with default params
-select event from in into beep;
-
-# Stream ingested data into script with overridden params
-select event from in into boop;
-
-# Stream script operator synthetic events into out stream
-select event from beep into out;
-select event from boop into out;
-        "#,
-        )
     }
 }

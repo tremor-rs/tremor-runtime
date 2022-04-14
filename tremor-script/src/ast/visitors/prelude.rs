@@ -14,15 +14,21 @@
 
 pub use crate::ast::base_expr::BaseExpr;
 pub(crate) use crate::ast::eq::AstEq;
-pub(crate) use crate::ast::walkers::ImutExprWalker;
+pub(crate) use crate::ast::walkers::{self, DeployWalker, ExprWalker, ImutExprWalker, QueryWalker};
 pub(crate) use crate::ast::{
-    ArrayPattern, ArrayPredicatePattern, BinExpr, Bytes, ClauseGroup, Comprehension, DefaultCase,
-    EmitExpr, EventPath, Expr, ExprPath, GroupBy, GroupByInt, Helper, IfElse, ImutExpr,
-    ImutExprInt, Invoke, InvokeAggr, List, Literal, LocalPath, Match, Merge, MetadataPath,
-    NodeMetas, Patch, PatchOperation, Path, Pattern, PredicateClause, PredicatePattern, Record,
-    RecordPattern, Recur, ReservedPath, Segment, StatePath, StrLitElement, StringLit, TestExpr,
-    TuplePattern, UnaryExpr,
+    ArgsExpr, ArrayPattern, ArrayPredicatePattern, BinExpr, Bytes, BytesPart, ClauseGroup,
+    ClausePreCondition, Comprehension, ConnectStmt, ConnectorDefinition, CreateStmt,
+    CreateTargetDefinition, CreationalWith, DefaultCase, DefinitionalArgs, DefinitionalArgsWith,
+    DeployEndpoint, EmitExpr, EventPath, Expr, ExprPath, Exprs, Field, FlowDefinition, FnDefn,
+    GroupBy, Helper, Ident, IfElse, ImutExpr, Invoke, InvokeAggr, List, Literal, LocalPath, Match,
+    Merge, MetadataPath, OperatorCreate, OperatorDefinition, Patch, PatchOperation, Path, Pattern,
+    PipelineCreate, PipelineDefinition, PredicateClause, PredicatePattern, Query, Record,
+    RecordPattern, Recur, ReservedPath, Script, ScriptCreate, ScriptDefinition, Segment, Select,
+    SelectStmt, StatePath, Stmt, StrLitElement, StreamStmt, StringLit, TestExpr, TuplePattern,
+    UnaryExpr, WindowDefinition, WithExpr,
 };
 
-pub(crate) use super::{GroupByVisitor, ImutExprVisitor, VisitRes};
+pub(crate) use crate::ast::visitors::{
+    self, DeployVisitor, ExprVisitor, GroupByVisitor, ImutExprVisitor, QueryVisitor, VisitRes,
+};
 pub(crate) use crate::errors::Result;

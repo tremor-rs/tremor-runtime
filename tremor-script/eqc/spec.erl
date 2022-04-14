@@ -206,7 +206,7 @@ spec_uop_bool(S, N) ->
     ?SHRINK({'not', spec_inner_bool(S, N - 1)},
 	    [spec_inner_bool(S, N - 1)]).
 
-spec_string_interpolation(S, N) when N =< 1 ->
+spec_string_interpolation(_S, N) when N =< 1 ->
     ?SHRINK({'#', string(), string(),
 	     oneof([float(), string(), small_int()])},
 	    [string(), string(),

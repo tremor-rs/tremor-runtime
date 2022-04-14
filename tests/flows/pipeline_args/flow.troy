@@ -1,0 +1,23 @@
+define flow test
+flow
+  define connector metronome from metronome
+  with
+    config = {
+      "interval": 1
+    }
+  end;
+  define connector exit from exit;
+  define pipeline identity
+  args
+    snot = "badger",
+  pipeline
+    select args.snot from in into out;
+  end;
+  create connector metronome;
+  create connector exit;
+  create pipeline identity;
+  connect /connector/metronome to /pipeline/identity;
+  connect /pipeline/identity to /connector/exit;
+end;
+
+deploy flow test

@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::ast::NodeId;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
 /// default `TREMOR_PATH`
 ///
-/// * `/usr/share/tremor/tremor-script` - in packages this directory contains the stdlib
+/// * `/usr/share/tremor/lib` - in packages this directory contains the stdlib
 /// * `/usr/local/share/tremor`         - place for custom user libraries and modules, takes precedence over stdlib
 const DEFAULT: &str = "/usr/local/share/tremor:/usr/share/tremor/lib";
 /// Structure representing module library paths
@@ -28,32 +29,64 @@ pub struct ModulePath {
     pub mounts: Vec<String>,
 }
 
+impl Default for ModulePath {
+    fn default() -> Self {
+        ModulePath::load()
+    }
+}
+
 impl ModulePath {
+    /// removes all module path
+    pub fn clear(&mut self) {
+        self.mounts.clear();
+    }
+
     /// Adds to the module path
-    pub fn add(&mut self, path: String) {
-        self.mounts.push(path);
+    pub fn add<S: ToString>(&mut self, path: &S) {
+        let p = path.to_string();
+        if !self.mounts.contains(&p) {
+            self.mounts.push(p);
+        }
     }
 
     /// Does a particular module exist relative to the module path in force
-    pub fn resolve<S: AsRef<Path> + ?Sized>(&self, rel_file: &S) -> Option<Box<Path>> {
+    #[must_use]
+    pub fn resolve_id(&self, id: &NodeId) -> Option<PathBuf> {
+        let mut p = PathBuf::new();
+        for e in &id.module {
+            p.push(e);
+        }
+
+        let mut p_tremor = p.clone();
+        p_tremor.push(format!("{}.tremor", id.id));
+        self.resolve(p_tremor)
+            .or_else(|| {
+                let mut p_trickle = p.clone();
+                p_trickle.push(format!("{}.trickle", id.id));
+                self.resolve(p_trickle)
+            })
+            .or_else(|| {
+                let mut p_troy = p.clone();
+                p_troy.push(format!("{}.troy", id.id));
+                self.resolve(p_troy)
+            })
+    }
+
+    /// Does a particular module exist relative to the module path in force
+    pub fn resolve<S: AsRef<Path>>(&self, rel_file: S) -> Option<PathBuf> {
         for mount in &self.mounts {
             let mut target = PathBuf::new();
             target.push(mount);
-            target.push(rel_file);
+            target.push(&rel_file);
             if let Ok(meta) = std::fs::metadata(&target) {
                 if meta.is_file() {
-                    return Some(target.into()); // NOTE The first match on the path is returned so overriding is neither possible nor supported
+                    return Some(target); // NOTE The first match on the path is returned so overriding is neither possible nor supported
                 }
             }
         }
         None
     }
 
-    /// Convert a relative file path to a module reference
-    #[must_use]
-    pub fn file_to_module(rel_file: &str) -> String {
-        rel_file.trim_end_matches(".tremor").replace("/", "::")
-    }
     /// Load module path
     #[must_use]
     pub fn load() -> Self {
@@ -115,19 +148,11 @@ mod tests {
     fn test_add() {
         let mounts = vec![];
         let mut paths = ModulePath { mounts };
-        paths.add(String::from("/foo/bar/baz"));
-        paths.add(String::from("snot/badger"));
+        paths.add(&"/foo/bar/baz");
+        paths.add(&"snot/badger");
         assert_eq!(
             vec![String::from("/foo/bar/baz"), String::from("snot/badger")],
             paths.mounts
-        );
-    }
-
-    #[test]
-    fn test_file_to_module() {
-        assert_eq!(
-            String::from("foo::snot::badger"),
-            ModulePath::file_to_module("foo/snot/badger.tremor")
         );
     }
 

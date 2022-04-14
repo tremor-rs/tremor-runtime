@@ -12,48 +12,79 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::util::{get_source_kind, SourceKind};
 use crate::{
-    cli::ServerCommand,
+    cli::{ServerCommand, ServerRun},
     errors::{Error, ErrorKind, Result},
 };
-use crate::{
-    cli::ServerRun,
-    util::{get_source_kind, SourceKind},
-};
-use async_std::task;
+use anyhow::Context;
+use async_std::stream::StreamExt;
+use futures::future;
+use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
+use signal_hook::low_level::signal_name;
+use signal_hook_async_std::Signals;
 use std::io::Write;
 use std::sync::atomic::Ordering;
 use tremor_api as api;
 use tremor_common::file;
-use tremor_runtime::system::World;
+use tremor_runtime::system::{ShutdownMode, World};
 use tremor_runtime::{self, version};
 
-impl ServerCommand {
-    pub(crate) fn run(&self) {
-        match self {
-            ServerCommand::Run(c) => c.run(),
+macro_rules! log_and_print_error {
+    ($($arg:tt)*) => {
+        eprintln!($($arg)*);
+        error!($($arg)*);
+    };
+}
+
+async fn handle_signals(signals: Signals, world: World) {
+    let mut signals = signals.fuse();
+
+    while let Some(signal) = signals.next().await {
+        info!(
+            "Received SIGNAL: {}",
+            signal_name(signal).unwrap_or(&signal.to_string())
+        );
+        match signal {
+            SIGINT | SIGTERM => {
+                if let Err(_e) = world.stop(ShutdownMode::Graceful).await {
+                    if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
+                        error!("Error handling signal {}: {}", signal, e);
+                    }
+                }
+            }
+            SIGQUIT => {
+                if let Err(_e) = world.stop(ShutdownMode::Forceful).await {
+                    if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
+                        error!("Error handling signal {}: {}", signal, e);
+                    }
+                }
+            }
+            signal => {
+                if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
+                    error!("Error handling signal {}: {}", signal, e);
+                }
+            }
         }
     }
 }
 impl ServerRun {
-    pub(crate) fn run(&self) {
-        version::print();
-        if let Err(ref e) = task::block_on(self.run_dun()) {
-            error!("error: {}", e);
-            for e in e.iter().skip(1) {
-                error!("error: {}", e);
-            }
-            error!("We are SHUTTING DOWN due to errors during initialization!");
+    #[allow(clippy::too_many_lines)]
+    async fn run_dun(&self) -> Result<i32> {
+        use tremor_runtime::system::WorldConfig;
 
-            // ALLOW: main.rs
-            ::std::process::exit(1);
-        }
-    }
-    #[cfg(not(tarpaulin_include))]
-    pub(crate) async fn run_dun(&self) -> Result<()> {
+        let mut result = 0;
+
         // Logging
         if let Some(logger_config) = &self.logger_config {
-            log4rs::init_file(logger_config, log4rs::config::Deserializers::default())?;
+            if let Err(e) =
+                log4rs::init_file(logger_config, log4rs::config::Deserializers::default())
+                    .with_context(|| {
+                        format!("Error loading logger-config from '{}'", logger_config)
+                    })
+            {
+                return Err(e.into());
+            }
         } else {
             env_logger::init();
         }
@@ -66,7 +97,7 @@ impl ServerRun {
             if d.is_cuda() {
                 eprintln!("CUDA is supported");
             } else {
-                eprintln!("CUDA is NOT  supported, falling back to the CPU");
+                eprintln!("CUDA is NOT supported, falling back to the CPU");
             }
         }
         if let Some(pid_file) = &self.pid {
@@ -83,108 +114,106 @@ impl ServerRun {
         tremor_script::RECURSION_LIMIT.store(self.recursion_limit, Ordering::Relaxed);
 
         // TODO: Allow configuring this for offramps and pipelines
-        let (world, handle) = World::start(64).await?;
+        let config = WorldConfig {
+            debug_connectors: self.debug_connectors,
+            ..WorldConfig::default()
+        };
 
-        let mut yaml_files = Vec::with_capacity(16);
+        let (world, handle) = World::start(config).await?;
+
+        // signal handling
+        let signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
+        let signal_handle = signals.handle();
+        let signal_handler_task = async_std::task::spawn(handle_signals(signals, world.clone()));
+
+        let mut troy_files = Vec::with_capacity(16);
         // We process trickle files first
         for config_file in &self.artefacts {
             let kind = get_source_kind(config_file);
-            match kind {
-                SourceKind::Trickle => {
-                    if let Err(e) = tremor_runtime::load_query_file(&world, config_file).await {
-                        return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
-                    }
-                }
-                SourceKind::Tremor | SourceKind::Json | SourceKind::Unsupported(_) => {
-                    return Err(ErrorKind::UnsupportedFileType(
-                        config_file.to_string(),
-                        kind,
-                        "yaml",
-                    )
-                    .into());
-                }
-                SourceKind::Yaml => yaml_files.push(config_file),
+            if kind == SourceKind::Troy {
+                troy_files.push(config_file);
+            } else {
+                return Err(
+                    ErrorKind::UnsupportedFileType(config_file.to_string(), kind, "troy").into(),
+                );
             };
         }
 
         // We process config files thereafter
-        for config_file in yaml_files {
-            if let Err(e) = tremor_runtime::load_cfg_file(&world, config_file).await {
+        for config_file in troy_files {
+            if let Err(e) = tremor_runtime::load_troy_file(&world, config_file).await {
                 return Err(ErrorKind::FileLoadError(config_file.to_string(), e).into());
             }
         }
 
-        if !self.no_api {
-            let app = api_server(&world);
+        let api_handle = if self.no_api {
+            // dummy task never finishing
+            async_std::task::spawn(async move {
+                future::pending::<()>().await;
+                Ok(())
+            })
+        } else {
             eprintln!("Listening at: http://{}", &self.api_host);
             info!("Listening at: http://{}", &self.api_host);
-
-            if let Err(e) = app.listen(&self.api_host).await {
-                return Err(format!("API Error: {}", e).into());
+            api::serve(self.api_host.clone(), &world)
+        };
+        // waiting for either
+        match future::select(handle, api_handle).await {
+            future::Either::Left((manager_res, api_handle)) => {
+                // manager stopped
+                if let Err(e) = manager_res {
+                    error!("Manager failed with: {}", e);
+                    result = 1;
+                }
+                api_handle.cancel().await;
             }
-            warn!("API stopped");
-            world.stop().await?;
-        }
+            future::Either::Right((_api_res, manager_handle)) => {
+                // api stopped
+                if let Err(e) = world.stop(ShutdownMode::Graceful).await {
+                    error!("Error shutting down gracefully: {}", e);
+                    result = 2;
+                }
+                manager_handle.cancel().await;
+            }
+        };
+        signal_handle.close();
+        signal_handler_task.cancel().await;
+        warn!("Tremor stopped.");
+        Ok(result)
+    }
 
-        handle.await?;
-        warn!("World stopped");
-        Ok(())
+    async fn run(&self) {
+        version::print();
+        match self.run_dun().await {
+            Err(e) => {
+                match e {
+                    Error(ErrorKind::AnyhowError(anyhow_e), _) => {
+                        log_and_print_error!("{:?}", anyhow_e);
+                    }
+                    e => {
+                        log_and_print_error!("Error: {}", e);
+                        for e in e.iter().skip(1) {
+                            eprintln!("Caused by: {}", e);
+                        }
+                    }
+                }
+                log_and_print_error!("We are SHUTTING DOWN due to errors during initialization!");
+
+                // ALLOW: we are purposefully exiting the process here
+                ::std::process::exit(1);
+            }
+            Ok(res) => {
+                // ALLOW: we are purposefully exiting the process here
+                ::std::process::exit(res)
+            }
+        }
     }
 }
 
-async fn handle_api_request<
-    G: std::future::Future<Output = api::Result<tide::Response>>,
-    F: Fn(api::Request) -> G,
->(
-    req: api::Request,
-    handler_func: F,
-) -> tide::Result {
-    let resource_type = api::accept(&req);
-
-    // Handle request. If any api error is returned, serialize it into a tide response
-    // as well, respecting the requested resource type. (and if there's error during
-    // this serialization, fall back to the error's conversion into tide response)
-    handler_func(req).await.or_else(|api_error| {
-        api::serialize_error(resource_type, api_error)
-            .or_else(|e| Ok(Into::<tide::Response>::into(e)))
-    })
-}
-
-fn api_server(world: &World) -> tide::Server<api::State> {
-    let mut app = tide::Server::with_state(api::State {
-        world: world.clone(),
-    });
-
-    app.at("/version")
-        .get(|r| handle_api_request(r, api::version::get));
-    app.at("/binding")
-        .get(|r| handle_api_request(r, api::binding::list_artefact))
-        .post(|r| handle_api_request(r, api::binding::publish_artefact));
-    app.at("/binding/:aid")
-        .get(|r| handle_api_request(r, api::binding::get_artefact))
-        .delete(|r| handle_api_request(r, api::binding::unpublish_artefact));
-    app.at("/binding/:aid/:sid")
-        .get(|r| handle_api_request(r, api::binding::get_servant))
-        .post(|r| handle_api_request(r, api::binding::link_servant))
-        .delete(|r| handle_api_request(r, api::binding::unlink_servant));
-    app.at("/pipeline")
-        .get(|r| handle_api_request(r, api::pipeline::list_artefact))
-        .post(|r| handle_api_request(r, api::pipeline::publish_artefact));
-    app.at("/pipeline/:aid")
-        .get(|r| handle_api_request(r, api::pipeline::get_artefact))
-        .delete(|r| handle_api_request(r, api::pipeline::unpublish_artefact));
-    app.at("/onramp")
-        .get(|r| handle_api_request(r, api::onramp::list_artefact))
-        .post(|r| handle_api_request(r, api::onramp::publish_artefact));
-    app.at("/onramp/:aid")
-        .get(|r| handle_api_request(r, api::onramp::get_artefact))
-        .delete(|r| handle_api_request(r, api::onramp::unpublish_artefact));
-    app.at("/offramp")
-        .get(|r| handle_api_request(r, api::offramp::list_artefact))
-        .post(|r| handle_api_request(r, api::offramp::publish_artefact));
-    app.at("/offramp/:aid")
-        .get(|r| handle_api_request(r, api::offramp::get_artefact))
-        .delete(|r| handle_api_request(r, api::offramp::unpublish_artefact));
-
-    app
+impl ServerCommand {
+    pub(crate) async fn run(&self) {
+        match self {
+            ServerCommand::Run(cmd) => cmd.run().await,
+        }
+    }
 }

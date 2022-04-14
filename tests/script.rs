@@ -14,19 +14,19 @@
 use pretty_assertions::assert_eq;
 use std::io::prelude::*;
 use tremor_common::file;
-use tremor_pipeline::{EventOriginUri, FN_REGISTRY};
+use tremor_pipeline::EventOriginUri;
 
+use serial_test::serial;
 use tremor_runtime::errors::*;
-use tremor_script::errors::CompilerError;
-use tremor_script::path::ModulePath;
 use tremor_script::prelude::*;
 use tremor_script::utils::*;
-use tremor_script::{AggrType, EventContext, Return, Script};
+use tremor_script::{module::Manager, AggrType, EventContext, Return, Script, FN_REGISTRY};
 
 macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
+            #[serial(script)]
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
@@ -39,9 +39,11 @@ macro_rules! test_cases {
                 let mut file = file::open(script_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let contents2 = contents.clone();
 
-                let script = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, script_file, contents2, &*FN_REGISTRY.lock()?).map_err(CompilerError::error)?;
+                Manager::clear_path()?;
+                Manager::add_path(&"tremor-script/lib")?;
+                Manager::add_path(&script_dir)?;
+                let script = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
 
                 println!("Loading input: {}", in_file);
                 let in_json = load_event_file(in_file)?;
@@ -58,8 +60,6 @@ macro_rules! test_cases {
                         path: vec!["snot".into()],
                         port: Some(23),
                         scheme: "snot".into(),
-                        uid: 42
-
                     };
                     let context = EventContext::new(id as u64, Some(&uri));
                     let mut meta = Value::from(Object::default());
@@ -130,7 +130,7 @@ test_cases!(
     record_comprehension_imut,
     record_comprehension,
     record,
-    recordpattern_eq,
+    recordpattern,
     regex,
     simple_match,
     state_null,
@@ -149,11 +149,14 @@ test_cases!(
     pp_alias1,
     pp_alias2,
     pp_alias3,
-    // regression
     empty_array_pattern,
-    // TODO
-    // const_in_const_lookup,
+    const_in_const_lookup,
     // INSERT
+    drop,
+    const_fn_tremor,
+    const_string_interpolation,
+    const_in_const,
+    const_basic,
     size_functions,
     const_expr_path_non_const_segment,
     merge_assign_target_state,
@@ -196,11 +199,7 @@ test_cases!(
     escape_in_extractor,
     const_of_const,
     fn_extractors,
-    mod_access_const,
-    module,
     fn_fib,
-    fn_nest2_fib,
-    fn_nest2_abs_fib,
     pp_fn_fib,
     heredoc_interpolation,
     heredoc_usefn_interpolation,

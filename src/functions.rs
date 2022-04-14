@@ -12,18 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::connectors::impls::otel;
 use crate::errors::Result;
 use crate::version::VERSION;
-use tremor_pipeline::FN_REGISTRY;
 use tremor_script::registry::Registry;
 use tremor_script::tremor_fn;
+use tremor_script::FN_REGISTRY;
 
 /// Loads the function library
 ///
 /// # Errors
 ///  * if we can't load the registry
 pub fn load() -> Result<()> {
-    let mut reg = FN_REGISTRY.lock()?;
+    let mut reg = FN_REGISTRY.write()?;
     install(&mut reg)
 }
 
@@ -32,8 +33,7 @@ pub fn load() -> Result<()> {
 /// # Errors
 ///  * if we can't install extensions
 pub fn install(reg: &mut Registry) -> Result<()> {
-    crate::connectors::otel::load(reg);
-
+    otel::load(reg);
     reg.insert(tremor_fn!(system|instance(_context) {
         Ok(Value::from(instance!()))
     }))

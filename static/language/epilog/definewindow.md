@@ -1,0 +1,9 @@
+
+
+```trickle
+define window four from tumbling
+with
+  size = 4
+end;
+```
+

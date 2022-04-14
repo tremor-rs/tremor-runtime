@@ -41,75 +41,8 @@
 ### > These rules allow new receivers to correctly interpret data received from old senders.
 ###
 
-mod code with
-  ### Represents the status code
-  ### > For the semantics of status codes see
-  ### >  https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/api.md#set-status
-
-  ## The default status.
-  const unset = 0;
-
-  ## The span has been validated to have been completed/processed successfully.
-  const ok = 1;
-
-  ## The span contains an error
-  const error = 2;
-end;
-
-mod deprecated with
-  ### Represents deprecated status codes
-
-  ## Deprecated status - Ok
-  const ok = 0;
-
-  ## Deprecated status - Cancelled
-  const cancelled = 1;
-
-  ## Deprecated status - Unknown error
-  const unknown_error = 2;
-
-  ## Deprecated status - Invalid argument
-  const invalid_argument = 3;
-
-  ## Deprecated status - Deadline exceeded
-  const deadline_exceeded = 4;
-
-  ## Deprecated status - Not found
-  const not_found = 5;
-
-  ## Deprecated status - Already exists
-  const already_exists = 6;
-
-  ## Deprecated status - Permission denied
-  const permission_denied = 7;
-
-  ## Deprecated status - Resource exhausted
-  const resource_exhausted = 8;
-
-  ## Deprecated status - Failed precodition
-  const failed_precondition = 9;
-
-  ## Deprecated status - Aborted
-  const aborted = 10;
-
-  ## Deprecated status - Out of range
-  const out_of_range = 11;
-
-  ## Deprecated status - Unimplemented
-  const unimplemented = 12;
-
-  ## Deprecated status - Internal error
-  const internal_error = 13;
-
-  ## Deprecated status - Unavailable
-  const unvailable = 14;
-
-  ## Deprecated status - Data loss
-  const data_loss = 15;
-
-  ## Deprecated status - Unauthenticated
-  const unauthenticated = 16;
-end;
+use cncf::otel::trace::status::deprecated;
+use cncf::otel::trace::status::code;
 
 ## Returns a success status code
 fn ok() with

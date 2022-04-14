@@ -1,0 +1,5 @@
+- dir: "./before"
+  cmd: "sh"
+  args:
+   - "prepare_input_file.sh"
+  max-await-secs: 2

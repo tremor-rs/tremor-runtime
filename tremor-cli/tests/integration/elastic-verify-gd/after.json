@@ -1,9 +1,0 @@
-{
-    "run": "tests/integration/elastic",
-    "cmd": "docker",
-    "args": [
-        "rm",
-        "-f",
-        "tremor-elasticsearch-integration-blabla-unique"
-    ]
-}

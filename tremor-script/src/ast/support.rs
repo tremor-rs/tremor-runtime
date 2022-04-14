@@ -34,7 +34,7 @@ impl BinOpKind {
             Self::Or => "or",
             Self::Xor => "xor",
             Self::And => "and",
-            Self::BitOr => "|",
+            // not implemented Self::BitOr => "|",
             Self::BitXor => "^",
             Self::BitAnd => "&",
             Self::Eq => "==",
@@ -81,16 +81,13 @@ impl fmt::Display for UnaryOpKind {
 /// custom implementation because field `invocable` is not `PartialEq`
 impl<'script> PartialEq for Invoke<'script> {
     fn eq(&self, other: &Self) -> bool {
-        self.mid == other.mid
-            && self.module == other.module
-            && self.fun == other.fun
-            && self.args == other.args
+        self.mid == other.mid && self.node_id == other.node_id && self.args == other.args
     }
 }
 
 impl<'script> fmt::Debug for Invoke<'script> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "fn {}::{}", self.module.join("::"), self.fun)
+        write!(f, "fn {}", self.node_id.fqn())
     }
 }
 

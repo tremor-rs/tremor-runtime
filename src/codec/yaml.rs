@@ -18,12 +18,11 @@ use super::prelude::*;
 pub struct Yaml {}
 
 impl Codec for Yaml {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "yaml"
     }
-    #[cfg(not(tarpaulin_include))]
-    fn mime_types(&self) -> Vec<&str> {
+
+    fn mime_types(&self) -> Vec<&'static str> {
         vec!["application/yaml"]
     }
 
@@ -35,13 +34,12 @@ impl Codec for Yaml {
         serde_yaml::from_slice::<simd_json::OwnedValue>(data)
             .map(Value::from)
             .map(Some)
-            .map_err(|e| e.into())
+            .map_err(Error::from)
     }
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {
         Ok(serde_yaml::to_vec(data)?)
     }
 
-    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }
@@ -58,9 +56,9 @@ mod test {
 
         let mut codec = Yaml {};
         let mut as_raw = codec.encode(&seed)?;
-        let as_json = codec.decode(as_raw.as_mut_slice(), 0);
+        let as_json = codec.decode(as_raw.as_mut_slice(), 0)?;
 
-        let _ = dbg!(as_json);
+        assert_eq!(Some(seed), as_json);
 
         Ok(())
     }

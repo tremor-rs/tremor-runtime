@@ -1,0 +1,41 @@
+define flow main
+flow
+  use troy::connectors;
+  use integration;
+
+  define pipeline main
+  into out, err, exit
+  pipeline
+    define script runtime
+    script
+      let event["new"] = event.foo_script;
+      emit event
+    end;
+
+
+    create script runtime;
+    create stream pass;
+    select event from in where event == "exit" into exit;
+    select event from in where event != "exit" into pass;    
+    select event.foo_select
+      from pass
+        where event.foo_where == true
+      group by event.foo_group
+      into runtime
+        having event["foo_having"] == true;
+    select event from runtime into out;
+    select event from runtime/err into err;
+  end;
+
+  create connector in from integration::read_file;
+  create connector out from integration::write_file;
+  create connector exit from connectors::exit;
+  create pipeline main;
+
+  connect /connector/in to /pipeline/main;
+  connect /pipeline/main to /connector/out;
+  connect /pipeline/main/err to /connector/out;
+  connect /pipeline/main/exit to /connector/exit;
+
+end;
+deploy flow main;

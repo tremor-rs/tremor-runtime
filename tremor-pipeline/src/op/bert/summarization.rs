@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // this is not enabled
-#![cfg(not(tarpaulin_include))]
+// #![cfg_attr(coverage, no_coverage)]
 
 use std::fmt;
 
@@ -24,6 +24,7 @@ use rust_bert::pipelines::summarization::{SummarizationConfig, SummarizationMode
 use tremor_script::prelude::*;
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Config {
     #[serde(default = "Default::default")]
     file: String, // just a stupid placeholder

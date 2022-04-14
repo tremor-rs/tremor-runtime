@@ -22,21 +22,21 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
-// TODO this is needed due to a false positive in clippy
-// https://github.com/rust-lang/rust/issues/83125
-// we will need this in 1.53.1
-#![allow(proc_macro_back_compat)]
 
 #[cfg(test)]
 #[macro_use]
 extern crate pretty_assertions;
 
+/// Memory arena for souces
+pub mod arena;
 /// The Tremor Script AST
 pub mod ast;
 mod compat;
 /// Context struct for tremor-script
 pub mod ctx;
 mod datetime;
+/// Tremor Deploy ( troy )
+pub mod deploy;
 /// Tremor script function doc helper
 pub mod docs;
 /// Errors
@@ -56,7 +56,7 @@ pub mod path;
 pub mod pos;
 /// Prelude module with important exports
 pub mod prelude;
-/// Tremor Query
+/// Tremor Query ( trickle )
 pub mod query;
 /// Function registry
 pub mod registry;
@@ -68,15 +68,18 @@ mod std_lib;
 mod tilde;
 /// Utility functions
 pub mod utils;
-
 pub use srs::{EventPayload, ValueAndMeta};
 
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 
+pub use crate::ast::deploy::raw::run_script;
+pub use crate::ast::module;
 pub use crate::ast::query::SelectType;
+pub use crate::ast::NodeMeta;
 pub use crate::ctx::{EventContext, EventOriginUri};
+pub use crate::errors::{Kind as ErrorKind, Result};
 pub use crate::query::Query;
 pub use crate::registry::{
     aggr as aggr_registry, registry, Aggr as AggrRegistry, CustomFn, Registry, TremorAggrFn,
@@ -86,12 +89,17 @@ pub use crate::script::{Return, Script};
 use ast::{Consts, InvokeAggrFn};
 pub use interpreter::{AggrType, FALSE, NULL, TRUE};
 use lazy_static::lazy_static;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::{
+    atomic::{AtomicU32, Ordering},
+    RwLock,
+};
 pub use tremor_common::stry;
-pub use tremor_value::{KnownKey, Object, Value};
+pub use tremor_value::{literal, KnownKey, Object, Value};
 
 /// Default recursion limit
 pub static RECURSION_LIMIT: AtomicU32 = AtomicU32::new(1024);
+/// No aggregates
+pub const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 
 /// recursion limit
 #[inline]
@@ -99,40 +107,32 @@ pub fn recursion_limit() -> u32 {
     RECURSION_LIMIT.load(Ordering::Relaxed)
 }
 
-pub(crate) const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
 lazy_static! {
-    static ref NO_CONSTS: Consts<'static> = Consts::new();
+    /// No Constants
+    pub static ref NO_CONSTS: Consts<'static> = Consts::new();
+}
+
+lazy_static! {
+    /// Function registory for the pipeline to look up functions
+    // We wrap the registry in a mutex so that we can add functions from the outside
+    // if required.
+    pub static ref FN_REGISTRY: RwLock<Registry> = {
+        let registry: Registry = crate::registry();
+        RwLock::new(registry)
+    };
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::errors::Result;
     use crate::interpreter::AggrType;
-    use crate::lexer::TokenSpan;
-    use crate::path::ModulePath;
     use crate::prelude::*;
     use halfbrown::hashmap;
 
     macro_rules! eval {
         ($src:expr, $expected:expr) => {{
-            let _r: Registry = registry();
-            let mut src: String = format!("{} ", $src.to_string());
-            let src1 = src.clone();
-            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new(&mut src).collect();
-            let lexed_tokens = lexed_tokens.expect("");
-            let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
-
-            for t in lexed_tokens {
-                let keep = !t.value.is_ignorable();
-                if keep {
-                    filtered_tokens.push(Ok(t));
-                }
-            }
             let reg: Registry = registry::registry();
-            let runnable: Script =
-                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src1, &reg)
-                    .expect("parse failed");
+            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
             let mut global_map = Value::object();
@@ -155,23 +155,8 @@ mod tests {
 
     macro_rules! eval_global {
         ($src:expr, $expected:expr) => {{
-            let _r: Registry = registry();
-            let mut src = format!("{} ", $src).to_string();
-            let src1 = src.clone();
-            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new(&mut src).collect();
-            let lexed_tokens = lexed_tokens.expect("");
-            let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
-
-            for t in lexed_tokens {
-                let keep = !t.value.is_ignorable();
-                if keep {
-                    filtered_tokens.push(Ok(t));
-                }
-            }
             let reg: Registry = registry::registry();
-            let runnable: Script =
-                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src1, &reg)
-                    .expect("parse failed");
+            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
             let mut global_map = Value::from(hashmap! {});
@@ -188,23 +173,8 @@ mod tests {
 
     macro_rules! eval_event {
         ($src:expr, $expected:expr) => {{
-            let _r: Registry = registry();
-            let mut src = format!("{} ", $src).to_string();
-            let src1 = src.clone();
-            let lexed_tokens: Result<Vec<TokenSpan>> = lexer::Tokenizer::new(&mut src).collect();
-            let lexed_tokens = lexed_tokens.expect("");
-            let mut filtered_tokens: Vec<Result<TokenSpan>> = Vec::new();
-
-            for t in lexed_tokens {
-                let keep = !t.value.is_ignorable();
-                if keep {
-                    filtered_tokens.push(Ok(t));
-                }
-            }
             let reg: Registry = registry::registry();
-            let runnable: Script =
-                Script::parse(&ModulePath { mounts: vec![] }, "<test>", src1, &reg)
-                    .expect("parse failed");
+            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
             let mut event = Value::object();
             let mut state = Value::null();
             let mut global_map = Value::from(hashmap! {});

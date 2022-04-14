@@ -1,0 +1,14 @@
+
+## The exit connector, when getting an event it terminates the preprocessors
+define connector exit from exit;
+
+## The metrics connector that can be used to receive metrics
+define connector metrics from metrics;
+
+## A line seperated stdio based connector
+define connector console from stdio
+with
+  preprocessors = ["separate"],
+  postprocessors = ["separate"],
+  codec = "string"
+end;

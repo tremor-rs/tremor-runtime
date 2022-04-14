@@ -1,0 +1,51 @@
+define flow main
+flow
+  use troy::connectors;
+  use std::time::nanos;
+  define connector cb_check from cb
+  with
+    codec = "json",
+    config = {
+      "path": "in.json",
+      "timeout": nanos::from_seconds(1),
+    }
+  end;
+
+  define pipeline inner
+  into out, not_connected
+  pipeline
+
+    define script drop_script
+    script
+        drop;
+    end;
+
+    create script drop_script;
+
+    define script dead_end
+    script
+        emit event => "dead_end"
+    end;
+    create script dead_end;
+
+    # Create a dead end
+    select event from in where event == "dead_end" into dead_end;
+
+    select event from in where event == "drop" into drop_script;
+    # no event should ever go here, actually
+    select event from drop_script into out;
+    select event from dead_end into out;
+
+    select event from in where event == "not_connected_port" into not_connected;
+    select event from in where event == "passthrough" into out;
+  end;
+
+  create pipeline inner;
+  create connector cb_check;
+  create connector console from connectors::console;
+
+  connect /connector/cb_check/out to /pipeline/inner/in;
+  connect /pipeline/inner/out to /connector/console/in;
+end;
+
+deploy flow main;

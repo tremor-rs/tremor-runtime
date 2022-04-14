@@ -12,19 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use pretty_assertions::assert_eq;
+use serial_test::serial;
 use std::io::prelude::*;
 use tremor_common::file;
-use tremor_pipeline::FN_REGISTRY;
-
 use tremor_runtime::errors::*;
-use tremor_script::highlighter::{Dumb, Highlighter};
-use tremor_script::path::ModulePath;
-use tremor_script::Script;
+use tremor_script::{highlighter::Dumb, module::Manager, Script, FN_REGISTRY};
 
 macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
+            #[serial(script_error)]
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
@@ -36,24 +34,23 @@ macro_rules! test_cases {
                 let mut file = file::open(script_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let contents2 = contents.clone();
 
                 println!("Loading error: {}", err_file);
                 let mut file = file::open(err_file)?;
                 let mut err = String::new();
                 file.read_to_string(&mut err)?;
                 let err = err.trim();
-                let s = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, script_file, contents2, &*FN_REGISTRY.lock()?);
+
+                Manager::clear_path()?;
+                Manager::add_path(&script_dir)?;
+                Manager::add_path(&"tremor-script/lib")?;
+                let s = Script::parse(&contents, &*FN_REGISTRY.read()?);
                 if let Err(e) = s {
-                    let mut h = Dumb::new();
-                    Script::format_error_from_script(&contents, &mut h, &e)?;
-                    h.finalize()?;
-                    let got = h.to_string();
-                    let got = got.trim();
+                    let got = Dumb::error_to_string(&e)?;
                     println!("{}", got);
-                    assert_eq!(err, got);
+                    assert_eq!(err.trim(), got.trim());
                 } else {
-                    println!("Expected error, but got succeess");
+                    println!("Expected error, but got succeess :/");
                     assert!(false);
                 }
                 Ok(())
@@ -66,6 +63,7 @@ macro_rules! ignored_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
+            #[serial(script_error)]
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
@@ -77,24 +75,24 @@ macro_rules! ignored_cases {
                 let mut file = file::open(script_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let contents2 = contents.clone();
 
+                println!("Loading error: {}", err_file);
                 let mut file = file::open(err_file)?;
                 let mut err = String::new();
                 file.read_to_string(&mut err)?;
                 let _err = err.trim();
-                let s = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, script_file, contents2, &*FN_REGISTRY.lock()?);
+
+                Manager::clear_path()?;
+                Manager::add_path(&script_dir)?;
+                Manager::add_path(&"tremor-script/lib")?;
+                let s = Script::parse(&contents, &*FN_REGISTRY.read()?);
                 if let Err(e) = s {
-                    let mut h = Dumb::new();
-                    Script::format_error_from_script(&contents, &mut h, &e)?;
-                    h.finalize()?;
-                    let got = h.to_string();
-                    let got = got.trim();
+                    let got = Dumb::error_to_string(&e)?;
                     println!("{}", got);
-                    //assert_eq!(err, got);
+                    assert_eq!(err.trim(), got.trim());
                 } else {
-                    println!("Expected error, but got succeess");
-                    //assert!(false);
+                    println!("Expected error, but got succeess :(");
+                    assert!(false);
                 }
                 Ok(())
             }
@@ -130,10 +128,15 @@ test_cases!(
     pp_unrecognized_token5,
     pp_mod_not_found,
     unknown_function_in_function,
-    mod_bound_cross,
     pp_cyclic,
     pp_nest_cyclic,
     // INSERT
+    tailing_gt,
+    lexer_invalid_float_exp,
+    invalid_escape_extractor,
+    tailing_heredoc,
+    invalid_utf8_3,
+    lexer_invalid_pp,
     const_expr_id_into_arr,
     const_expr_range_on_non_array,
     const_expr_index_into_int,
@@ -144,7 +147,6 @@ test_cases!(
     const_expr_reverse_range,
     const_expr_unknown_key,
     patch_non_str_key,
-    double_const_mod,
     bin_invalid_bits,
     bin_invalid_type,
     merge_ident,

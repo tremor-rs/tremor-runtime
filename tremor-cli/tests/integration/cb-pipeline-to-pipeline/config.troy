@@ -1,0 +1,26 @@
+
+define flow main
+flow
+  use troy::pipelines;
+  use std::time::nanos;
+  
+  define connector cb_check from cb
+  with
+    codec = "json",
+    config = {
+      "path": "in.json",
+      "timeout": nanos::from_seconds(5)
+    }
+  end;
+
+  create pipeline main1 from pipelines::passthrough;
+  create pipeline main2 from pipelines::passthrough;
+  create connector cb_check;
+
+  connect /connector/cb_check/out to /pipeline/main1/in;
+  connect /pipeline/main1/out to /pipeline/main2/in;
+  connect /pipeline/main2/out to /connector/cb_check/in;
+end;
+
+deploy flow main;
+

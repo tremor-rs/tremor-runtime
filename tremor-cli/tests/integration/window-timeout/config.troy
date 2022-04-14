@@ -1,0 +1,53 @@
+
+define flow main
+flow
+  use integration;
+  use troy::connectors;
+
+  # we need our own here, as args in queries is not supported
+  define pipeline out_or_exit
+  into 
+      out, exit
+  pipeline
+      select event from in where event != "exit" into out;
+      # wait for 200ms to trigger a window timeout
+      select {"exit": 0, "delay": 200_000_000} from in where event == "exit" into exit;
+  end;
+
+  define pipeline main
+  args
+    foo = "bar"
+  pipeline 
+    define window win from tumbling
+    with
+      interval = 100_000_000 # 100ms
+    end;
+
+    # checking for all the possible references
+    select {
+      "args": args,
+      "aggregate": aggr::stats::count(),
+      "group": group,
+      "from_group": event.values,
+      "event_last": aggr::win::last(event.foo),
+      "meta": aggr::win::collect_flattened($),
+      "state": state,
+      "window": window
+    } from in[win] group by set(each(event.values)) into out;
+  end;
+
+  create pipeline main;
+  create pipeline or_exit from out_or_exit;
+  create connector in from integration::read_file;
+  create connector out from integration::write_file;
+  create connector debug from connectors::console;
+  create connector exit from integration::exit;
+
+  connect /connector/in to /pipeline/or_exit;
+  connect /pipeline/or_exit/out to /pipeline/main;
+  connect /pipeline/main to /connector/debug;
+  connect /pipeline/or_exit/exit to /connector/exit;
+  connect /pipeline/main to /connector/out;
+
+end;
+deploy flow main

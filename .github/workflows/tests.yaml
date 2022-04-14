@@ -11,39 +11,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install deps [Linux]
-        run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
-      - uses: actions-rs/toolchain@v1
-        with:
-          override: true
-          profile: minimal
-      - uses: Swatinem/rust-cache@v1
-      - name: Run tests and validate lockfile
-        env:
-          PROPTEST_CASES: 2500
-          RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
-        run: cargo test --all --locked
-  code-coverage:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
       - name: Install deps
         run: sudo apt-get -qy update && sudo apt-get install -y libssl-dev libssl1.1
       - uses: actions-rs/toolchain@v1
         with:
-          override: true
           profile: minimal
+          components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v1
-      - name: Run cargo-tarpaulin
-        uses: actions-rs/tarpaulin@v0.1
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - name: Generate code coverage
         env:
           PROPTEST_CASES: 2500
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
-        with:
-          version: "0.19.1"
-          args: " --exclude-files target* tremor-cli tremor-api **/errors.rs --out Lcov --all"
-      - name: Coveralls
+          RUST_BACKTRACE: 1
+        run: cargo llvm-cov --workspace --lcov --output-path lcov.txt --features integration
+      - name: Upload to Coveralls
         uses: coverallsapp/github-action@master
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: ./lcov.info
+          path-to-lcov: ./lcov.txt
+      - uses: codecov/codecov-action@v2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+          files: ./lcov.txt # optional
+          flags: unittests # optional
+          fail_ci_if_error: true # optional (default = false)
+          verbose: true # optional (default = false)      

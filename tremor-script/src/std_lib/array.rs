@@ -19,6 +19,11 @@ use crate::Value;
 
 pub fn load(registry: &mut Registry) {
     registry
+        .insert(tremor_const_fn! (array|sort(_context, _input: Array) {
+            let mut output = _input.clone();
+            output.sort();
+            Ok(Value::from(output))
+        }))
         .insert(tremor_const_fn! (array|len(_context, _input: Array) {
             Ok(Value::from(_input.len() as i64))
         }))

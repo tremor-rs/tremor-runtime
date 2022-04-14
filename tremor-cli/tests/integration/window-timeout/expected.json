@@ -1,0 +1,4 @@
+{"aggregate":1,"args":{"foo":"bar"},"event_last":"bar","from_group":1,"group":[1,"[1]"],"meta":[{"file":{"path":"in.json"}}],"state":null,"window":"win"}
+{"aggregate":2,"args":{"foo":"bar"},"event_last":"baz","from_group":2,"group":[2,"[2]"],"meta":[{"file":{"path":"in.json"}},{"file":{"path":"in.json"}}],"state":null,"window":"win"}
+{"aggregate":2,"args":{"foo":"bar"},"event_last":"booze","from_group":3,"group":[3,"[3]"],"meta":[{"file":{"path":"in.json"}},{"file":{"path":"in.json"}}],"state":null,"window":"win"}
+{"aggregate":1,"args":{"foo":"bar"},"event_last":"booze","from_group":4,"group":[4,"[4]"],"meta":[{"file":{"path":"in.json"}}],"state":null,"window":"win"}

@@ -1,0 +1,23 @@
+
+define flow main
+flow
+  use integration;
+  use troy::connectors;
+
+  define pipeline locals
+  pipeline
+    select { "test": for [1, 2] of case (i, d) => { "i": i, "d": d} end } from in into out;
+  end;
+
+  create pipeline locals;
+  create pipeline main from integration::out_or_exit;
+  create connector in from integration::read_file;
+  create connector out from integration::write_file;
+  create connector exit from connectors::exit;
+
+  connect /connector/in to /pipeline/main;
+  connect /pipeline/main/exit to /connector/exit;
+  connect /pipeline/main to /pipeline/locals;
+  connect /pipeline/locals to /connector/out;
+end;
+deploy flow main;

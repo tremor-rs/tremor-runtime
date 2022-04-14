@@ -15,8 +15,8 @@
 mod custom_fn;
 pub use self::custom_fn::CustomFn;
 pub(crate) use self::custom_fn::{RECUR_PTR, RECUR_REF};
-use crate::ast::{BaseExpr, NodeMetas};
-use crate::errors::{best_hint, Error, ErrorKind, Result};
+use crate::ast::base_expr::Ranged;
+use crate::errors::{best_hint, Error, Kind as ErrorKind, Result};
 use crate::utils::hostname as get_hostname;
 use crate::Value;
 use crate::{tremor_fn, EventContext};
@@ -35,11 +35,6 @@ pub trait TremorAggrFn: DowncastSync + Sync + Send {
     /// # Errors
     /// if the data can not be acumulated
     fn accumulate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
-    /// Compensate for a value being removed
-    ///
-    /// # Errors
-    /// if the function can not compensate the data
-    // fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()>;
     /// Emits the function
     ///
     /// # Errors
@@ -211,7 +206,7 @@ pub enum FunctionError {
     Error(Box<Error>),
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl PartialEq for FunctionError {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -254,7 +249,7 @@ impl PartialEq for FunctionError {
     }
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl From<Error> for FunctionError {
     fn from(error: Error) -> Self {
         Self::Error(Box::new(error))
@@ -263,18 +258,17 @@ impl From<Error> for FunctionError {
 
 impl FunctionError {
     /// Turns a function error into a tremor script error
-    pub fn into_err<O: BaseExpr, I: BaseExpr>(
+    pub fn into_err<O: Ranged, I: Ranged>(
         self,
         outer: &O,
         inner: &I,
         registry: Option<&Registry>,
-        meta: &NodeMetas,
     ) -> crate::errors::Error {
         use FunctionError::{
             BadArity, BadType, Error, MissingFunction, MissingModule, RecursionLimit, RuntimeError,
         };
-        let outer = outer.extent(meta);
-        let inner = inner.extent(meta);
+        let outer = outer.extent();
+        let inner = inner.extent();
         match self {
             BadArity { mfa, calling_a } => {
                 ErrorKind::BadArity(outer, inner, mfa.m, mfa.f, mfa.a..=mfa.a, calling_a).into()
@@ -335,13 +329,11 @@ impl TremorFnWrapper {
 
     /// Check if a given arity is valit for the function
     #[must_use]
-    #[cfg(not(tarpaulin_include))] // just a passthrough
     pub fn valid_arity(&self, n: usize) -> bool {
         self.fun.valid_arity(n)
     }
     /// Returns the functions arity
     #[must_use]
-    #[cfg(not(tarpaulin_include))] // just a passthrough
     pub fn arity(&self) -> RangeInclusive<usize> {
         self.fun.arity()
     }
@@ -362,13 +354,13 @@ impl Clone for TremorFnWrapper {
         }
     }
 }
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl fmt::Debug for TremorFnWrapper {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}::{}", self.module, self.name)
     }
 }
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl PartialEq for TremorFnWrapper {
     fn eq(&self, other: &Self) -> bool {
         self.module == other.module && self.name == other.name
@@ -379,7 +371,6 @@ impl PartialEq for TremorFnWrapper {
 #[derive(Debug, Clone)]
 pub struct Registry {
     functions: HashMap<String, HashMap<String, TremorFnWrapper>>,
-    modules: Vec<String>,
 }
 
 #[doc(hidden)]
@@ -659,12 +650,11 @@ macro_rules! tremor_fn_ {
     };
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl Default for Registry {
     fn default() -> Self {
         Self {
             functions: HashMap::new(),
-            modules: Vec::new(),
         }
     }
 }
@@ -744,15 +734,6 @@ impl TremorAggrFnWrapper {
         self.fun.accumulate(args)
     }
 
-    // /// Compensate for a value being removed
-    // ///
-    // /// # Errors
-    // /// if compensating the function fails
-    // #[cfg(not(tarpaulin_include))] // just a passthrough
-    // pub fn compensate<'event>(&mut self, args: &[&Value<'event>]) -> FResult<()> {
-    //     self.fun.compensate(args)
-    // }
-
     /// Emits the function
     ///
     /// # Errors
@@ -795,14 +776,14 @@ impl TremorAggrFnWrapper {
     }
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl fmt::Debug for TremorAggrFnWrapper {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "(aggr){}::{}", self.module, self.name)
     }
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl PartialEq for TremorAggrFnWrapper {
     fn eq(&self, other: &Self) -> bool {
         self.module == other.module && self.name == other.name
@@ -815,7 +796,7 @@ pub struct Aggr {
     functions: HashMap<String, HashMap<String, TremorAggrFnWrapper>>,
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl Default for Aggr {
     fn default() -> Self {
         Self {

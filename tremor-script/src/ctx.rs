@@ -22,8 +22,6 @@ use url::Url;
     Debug, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize, simd_json_derive::Deserialize,
 )]
 pub struct EventOriginUri {
-    /// UID of the sink/source
-    pub uid: u64,
     /// schema part
     pub scheme: String,
     /// host part
@@ -32,23 +30,15 @@ pub struct EventOriginUri {
     pub port: Option<u16>,
     /// path part
     pub path: Vec<String>,
-    // implement query params if we find a good usecase for it
-    //pub query: Hashmap<String, String>
 }
 
 impl EventOriginUri {
-    /// Sets the uid if it currently is 0
-    pub fn maybe_set_uid(&mut self, uid: u64) {
-        if self.uid == 0 {
-            self.uid = uid;
-        }
-    }
     /// parses a string into a URI
     ///
     /// # Errors
     /// * if the rul can not be parsed
     /// * the url does not include a host
-    pub fn parse(uid: u64, url: &str) -> Result<Self> {
+    pub fn parse(url: &str) -> Result<Self> {
         match Url::parse(url) {
             Ok(r) => {
                 let host = r
@@ -56,7 +46,6 @@ impl EventOriginUri {
                     // TODO add an error kind here
                     .ok_or_else(|| Error::from("EventOriginUri Parse Error: Missing host"))?;
                 Ok(Self {
-                    uid,
                     scheme: r.scheme().to_string(),
                     host: host.to_string(),
                     port: r.port(),
@@ -118,7 +107,6 @@ impl fmt::Display for EventOriginUri {
 impl default::Default for EventOriginUri {
     fn default() -> Self {
         Self {
-            uid: 0,
             scheme: "tremor-script".to_string(),
             host: "localhost".to_string(),
             port: None,
@@ -127,11 +115,19 @@ impl default::Default for EventOriginUri {
     }
 }
 
+pub(crate) const NO_CONTEXT: EventContext<'static> = EventContext {
+    at: 0,
+    origin_uri: None,
+    panic_on_assert: false,
+    cardinality: 0,
+};
+
 // TODO check if we need all of these derives here still
 
 /// Context in that an event is executed
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize)]
 pub struct EventContext<'run> {
+    /// The ingest_ns
     at: u64,
     /// URI of the origin
     pub origin_uri: Option<&'run EventOriginUri>,
@@ -173,7 +169,7 @@ mod tests {
     #[test]
     fn valid_event_origin_uris() {
         // Base-line: scheme + hostname
-        let eouri = EventOriginUri::parse(0, "protocol://the.host.name").expect("Valid URI");
+        let eouri = EventOriginUri::parse("protocol://the.host.name").expect("Valid URI");
         assert_eq!(eouri.scheme(), "protocol");
         assert_eq!(eouri.host(), "the.host.name");
         assert_eq!(eouri.port(), None);
@@ -182,7 +178,7 @@ mod tests {
         assert_eq!(eouri.to_string(), "protocol://the.host.name");
 
         // IPv4 host
-        let eouri = EventOriginUri::parse(0, "protocol://192.168.1.1").expect("Valid URI");
+        let eouri = EventOriginUri::parse("protocol://192.168.1.1").expect("Valid URI");
         assert_eq!(eouri.scheme(), "protocol");
         assert_eq!(eouri.host(), "192.168.1.1");
         assert_eq!(eouri.port(), None);
@@ -191,7 +187,7 @@ mod tests {
         assert_eq!(eouri.to_string(), "protocol://192.168.1.1");
 
         // With port
-        let eouri = EventOriginUri::parse(0, "protocol://the.host.name:8080").expect("Valid URI");
+        let eouri = EventOriginUri::parse("protocol://the.host.name:8080").expect("Valid URI");
         assert_eq!(eouri.scheme(), "protocol");
         assert_eq!(eouri.host(), "the.host.name");
         assert_eq!(eouri.port(), Some(8080));
@@ -200,7 +196,7 @@ mod tests {
         assert_eq!(eouri.to_string(), "protocol://the.host.name:8080");
 
         // With terminating slash
-        let eouri = EventOriginUri::parse(0, "protocol://the.host.name/").expect("Valid URI");
+        let eouri = EventOriginUri::parse("protocol://the.host.name/").expect("Valid URI");
         assert_eq!(eouri.scheme(), "protocol");
         assert_eq!(eouri.host(), "the.host.name");
         assert_eq!(eouri.port(), None);
@@ -209,7 +205,7 @@ mod tests {
         assert_eq!(eouri.to_string(), "protocol://the.host.name/");
 
         // With path
-        let eouri = EventOriginUri::parse(0, "protocol://the.host.name/some/path/segments")
+        let eouri = EventOriginUri::parse("protocol://the.host.name/some/path/segments")
             .expect("Valid URI");
         assert_eq!(eouri.scheme(), "protocol");
         assert_eq!(eouri.host(), "the.host.name");
@@ -222,7 +218,7 @@ mod tests {
         );
 
         // With path with terminating slash
-        let eouri = EventOriginUri::parse(0, "protocol://the.host.name/some/path/segments/")
+        let eouri = EventOriginUri::parse("protocol://the.host.name/some/path/segments/")
             .expect("Valid URI");
         assert_eq!(eouri.scheme(), "protocol");
         assert_eq!(eouri.host(), "the.host.name");
@@ -235,8 +231,7 @@ mod tests {
         );
 
         // Non-ASCII characters in host
-        let eouri =
-            EventOriginUri::parse(0, "protocol://host.names.are.\u{1f525}").expect("Valid URI");
+        let eouri = EventOriginUri::parse("protocol://host.names.are.🔥").expect("Valid URI");
         assert_eq!(eouri.scheme(), "protocol");
         assert_eq!(eouri.host(), "host.names.are.%F0%9F%94%A5"); // 🔥 gets percent-encoded by `url`
         assert_eq!(eouri.port(), None);
@@ -257,26 +252,25 @@ mod tests {
     #[test]
     fn invalid_event_origin_uris() {
         // Wrong protocol/host-separator: extra slash
-        let err = EventOriginUri::parse(0, "protocol:///the.host.name").expect_err("Invalid URI");
+        let err = EventOriginUri::parse("protocol:///the.host.name").expect_err("Invalid URI");
         assert_eq!(
             err.description(),
             "EventOriginUri Parse Error: Missing host"
         );
 
         // Wrong protocol/host-separator: missing slash
-        let err = EventOriginUri::parse(0, "protocol:/the.host.name").expect_err("Invalid URI");
+        let err = EventOriginUri::parse("protocol:/the.host.name").expect_err("Invalid URI");
         assert_eq!(
             err.description(),
             "EventOriginUri Parse Error: Missing host"
         );
 
         // Port number out of range
-        let err =
-            EventOriginUri::parse(0, "protocol://the.host.name:66000").expect_err("Invalid URI");
+        let err = EventOriginUri::parse("protocol://the.host.name:66000").expect_err("Invalid URI");
         assert_eq!(err.description(), "Url Parse Error: invalid port number");
 
         // Space inside the host name
-        let err = EventOriginUri::parse(0, "protocol://oops.a space").expect_err("Invalid URI");
+        let err = EventOriginUri::parse("protocol://oops.a space").expect_err("Invalid URI");
         assert_eq!(
             err.description(),
             "Url Parse Error: invalid domain character"

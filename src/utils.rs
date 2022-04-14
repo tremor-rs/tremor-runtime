@@ -11,10 +11,10 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::errors::{Error, ErrorKind};
+use crate::errors::{Error, Kind as ErrorKind};
 /// Fetches a hostname with `tremor-host.local` being the default
 #[must_use]
-#[cfg(not(tarpaulin_include))]
+
 pub fn hostname() -> String {
     hostname::get()
         .map_err(Error::from)

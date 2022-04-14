@@ -1,0 +1,18 @@
+- {
+    "dir": "./before",
+    "cmd": "tremor",
+    "args": [
+      "server",
+      "run",
+      "-p",
+      "../before.pid",
+      "-n",
+      "config.troy"
+    ],
+    "await": {
+      "port-open": [
+        "4242"
+      ]
+    },
+    "max-await-secs": 15
+  }

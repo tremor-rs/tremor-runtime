@@ -1,0 +1,6 @@
+const inside = 42;
+const linked = inside; 
+
+fn f_inside() with
+  inside
+end;

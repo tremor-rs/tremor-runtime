@@ -1,0 +1,57 @@
+define flow my_flow
+flow
+  use integration;
+  use troy::connectors;
+  use std::time::nanos;
+
+  define pipeline main
+  pipeline
+    define window win from tumbling
+    with
+      interval = 1_000_000_000 # 1s
+    end;
+
+    define script preprocess
+    script
+      # set a metadata variable we expect to be gone in the end
+      let $foo = "bar";
+      event
+    end;
+    create script preprocess;
+
+    create stream post;
+    select event from in into preprocess;
+
+    # checking for all the possible references possible
+    select {
+      "args": args, # should be empty here
+      "aggregate": aggr::stats::count(),
+      "group": group,
+      "from_group": event.values,
+      "event_last": aggr::win::last(event.foo),
+      "meta": aggr::win::collect_flattened($),
+      "state": state,
+      "window": window
+    } from preprocess[win] group by set(each(event.values)) into post;
+
+    select {
+      "event": event,
+      "meta": $
+    } from post into out;
+  end;
+
+  create pipeline or_exit from integration::out_or_exit with
+    delay = nanos::from_seconds(2)
+  end;
+  create pipeline main;
+  create connector in from integration::read_file;
+  create connector out from integration::write_file;
+  create connector exit from integration::exit;
+
+  connect /connector/in to /pipeline/or_exit;
+  connect /pipeline/or_exit/out to /pipeline/main;
+  connect /pipeline/or_exit/exit to /connector/exit;
+  connect /pipeline/main to /connector/out;
+end;
+
+deploy flow my_flow;

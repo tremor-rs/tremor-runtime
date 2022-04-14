@@ -16,63 +16,64 @@ pub(crate) mod analyzer;
 /// Base definition for expressions
 pub mod base_expr;
 pub(crate) mod binary;
+/// Tremor Deploy ( troy ) AST
+pub mod deploy;
 /// custom equality definition - checking for equivalence of different AST nodes
 /// e.g. two different event paths with different metadata
 pub mod eq;
+/// Helper code
+pub mod helper;
+/// Module related code
+pub mod module;
 mod node_id;
 /// Query AST
 pub mod query;
 pub(crate) mod raw;
 mod support;
-mod to_static;
 mod upable;
 /// collection of AST visitors
 pub mod visitors;
 
+/// docs
+pub mod docs;
 /// collection of AST visitors
 pub mod walkers;
 
-pub use crate::lexer::CompilationUnit;
+pub use self::helper::Helper;
+pub use self::node_id::{BaseRef, NodeId};
+use self::walkers::ImutExprWalker;
+use self::{base_expr::Ranged, visitors::ConstFolder};
 use crate::{
+    arena,
     ast::{
-        binary::extend_bytes_from_value,
         eq::AstEq,
         raw::{BytesDataType, Endian},
     },
-    errors::{
-        err_need_obj, error_array_out_of_bound, error_bad_key_err, error_decreasing_range,
-        error_generic, error_need_arr, error_need_int, error_no_consts, error_no_locals, ErrorKind,
-        Result,
-    },
-    impl_expr_ex_mid, impl_expr_mid,
-    interpreter::{exec_binary, exec_unary, AggrType, Cont, Env, ExecOpts, LocalStack},
-    pos::{Location, Range},
+    errors::{error_generic, error_no_locals, Kind as ErrorKind, Result},
+    impl_expr, impl_expr_ex, impl_expr_no_lt,
+    interpreter::{AggrType, Cont, Env, ExecOpts, LocalStack},
+    lexer::Span,
+    pos::Location,
     prelude::*,
-    registry::{
-        Aggr as AggrRegistry, CustomFn, FResult, Registry, TremorAggrFnWrapper, TremorFnWrapper,
-    },
+    registry::{CustomFn, FResult, TremorAggrFnWrapper, TremorFnWrapper},
     script::Return,
     stry,
     tilde::Extractor,
-    EventContext, KnownKey, Value, NO_AGGRS, NO_CONSTS,
+    KnownKey, Value,
 };
 pub(crate) use analyzer::*;
 pub use base_expr::BaseExpr;
 use beef::Cow;
+pub use deploy::*;
 use halfbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    mem,
-};
+use std::{collections::BTreeMap, mem};
 use upable::Upable;
 
 pub(crate) type Exprs<'script> = Vec<Expr<'script>>;
-/// A list of lexical compilation units
-pub type Imports = Vec<LexicalUnit>;
 /// A list of immutable expressions
-pub type ImutExprs<'script> = Vec<ImutExpr<'script>>;
+pub(crate) type ImutExprs<'script> = Vec<ImutExpr<'script>>;
 pub(crate) type Fields<'script> = Vec<Field<'script>>;
 pub(crate) type Segments<'script> = Vec<Segment<'script>>;
 pub(crate) type PatternFields<'script> = Vec<PredicatePattern<'script>>;
@@ -91,123 +92,78 @@ pub trait Expression: Clone + std::fmt::Debug + PartialEq + Serialize {
     /// tests if the expression is a null literal
     fn is_null_lit(&self) -> bool;
 
-    /// a null literal
-    fn null_lit() -> Self;
+    /// crteate a null literal
+    fn null_lit(mid: Box<NodeMeta>) -> Self;
 }
 
-fn shadow_name(id: usize) -> String {
-    format!(" __SHADOW {}__ ", id)
-}
-
-#[derive(Default, Clone, Serialize, Debug, PartialEq)]
-struct NodeMeta {
-    start: Location,
-    end: Location,
+/// Node metadata
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+pub struct NodeMeta {
+    range: Span,
     name: Option<String>,
-    /// Id of current compilation unit part
-    cu: usize,
-    terminal: bool,
 }
 
-impl From<(Location, Location, usize)> for NodeMeta {
-    fn from((start, end, cu): (Location, Location, usize)) -> Self {
-        Self {
-            start,
-            end,
-            name: None,
-            cu,
-            terminal: false,
+// #[cfg_attr(coverage, no_coverage)]
+impl std::fmt::Debug for NodeMeta {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if let Some(name) = &self.name {
+            write!(f, "{name}:")?;
         }
+        self.range.fmt(f)
     }
 }
-/// Information about node metadata
-#[derive(Serialize, Clone, Debug, PartialEq)]
-pub struct NodeMetas {
-    nodes: Vec<NodeMeta>,
-    #[serde(skip)]
-    pub(crate) cus: Vec<CompilationUnit>,
-}
 
-impl<'script> NodeMetas {
-    /// Initializes meta noes with a given set of
+impl NodeMeta {
+    /// Creates a new boxed meta node
+    pub(crate) fn new_box(start: Location, end: Location) -> Box<Self> {
+        Box::new(Self::new(start, end))
+    }
+    /// Creates a new meta node
     #[must_use]
-    pub fn new(cus: Vec<CompilationUnit>) -> Self {
-        Self {
-            nodes: Vec::new(),
-            cus,
+    pub fn new(start: Location, end: Location) -> Self {
+        NodeMeta {
+            range: Span::new(start, end),
+            name: None,
         }
     }
-    pub(crate) fn add_meta(&mut self, mut start: Location, mut end: Location, cu: usize) -> usize {
-        let mid = self.nodes.len();
-        start.set_cu(cu);
-        end.set_cu(cu);
-        self.nodes.push((start, end, cu).into());
-        mid
+    #[cfg(test)]
+    pub(crate) fn dummy() -> Box<Self> {
+        Box::new(NodeMeta::new(
+            Location::start_of_file(arena::Index::INVALID),
+            Location::start_of_file(arena::Index::INVALID),
+        ))
     }
-    pub(crate) fn add_meta_w_name<S>(
-        &mut self,
-        mut start: Location,
-        mut end: Location,
-        name: &S,
-        cu: usize,
-    ) -> usize
+    pub(crate) fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+    pub(crate) fn set_name<S>(&mut self, name: &S)
     where
-        S: ToString,
+        S: ToString + ?Sized,
     {
-        start.set_cu(cu);
-        end.set_cu(cu);
-        let mid = self.nodes.len();
-        self.nodes.push(NodeMeta {
-            start,
-            end,
-            cu,
-            name: Some(name.to_string()),
-            terminal: false,
-        });
-        mid
+        self.name = Some(name.to_string());
+    }
+    pub(crate) fn with_name<S>(mut self, name: &S) -> Self
+    where
+        S: ToString + ?Sized,
+    {
+        self.name = Some(name.to_string());
+        self
+    }
+    pub(crate) fn box_with_name<S>(self, name: &S) -> Box<Self>
+    where
+        S: ToString + ?Sized,
+    {
+        Box::new(self.with_name(name))
     }
 
-    pub(crate) fn start(&self, idx: usize) -> Option<Location> {
-        self.nodes.get(idx).map(|v| v.start)
+    pub(crate) fn end(&self) -> Location {
+        self.range.end()
     }
-
-    pub(crate) fn end(&self, idx: usize) -> Option<Location> {
-        self.nodes.get(idx).map(|v| v.end)
+    pub(crate) fn start(&self) -> Location {
+        self.range.start()
     }
-
-    pub(crate) fn name(&self, idx: usize) -> Option<&str> {
-        self.nodes
-            .get(idx)
-            .and_then(|v| v.name.as_ref())
-            .map(String::as_str)
-    }
-
-    pub(crate) fn name_dflt(&self, idx: usize) -> &str {
-        self.name(idx).unwrap_or("<UNKNOWN>")
-    }
-}
-
-#[derive(Serialize, Debug, Clone, Eq, PartialEq, Ord, PartialOrd)]
-/// A warning generated while lexing or parsing
-pub struct Warning {
-    /// Outer span of the warning
-    pub outer: Range,
-    /// Inner span of thw warning
-    pub inner: Range,
-    /// Warning message
-    pub msg: String,
-}
-
-impl Warning {
-    fn new<T: ToString>(inner: Range, outer: Range, msg: &T) -> Self {
-        Self {
-            outer,
-            inner,
-            msg: msg.to_string(),
-        }
-    }
-    fn new_with_scope<T: ToString>(warning_scope: Range, msg: &T) -> Self {
-        Self::new(warning_scope, warning_scope, msg)
+    pub(crate) fn aid(&self) -> arena::Index {
+        self.range.aid()
     }
 }
 
@@ -222,200 +178,32 @@ struct Function<'script> {
 /// A section of a binary
 pub struct BytesPart<'script> {
     /// metadata id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// data
-    pub data: ImutExpr<'script>,
+    pub(crate) data: ImutExpr<'script>,
     /// type we want to convert this to
-    pub data_type: BytesDataType,
+    pub(crate) data_type: BytesDataType,
     /// Endianness
-    pub endianess: Endian,
+    pub(crate) endianess: Endian,
     /// bits allocated for this
-    pub bits: u64,
+    pub(crate) bits: u64,
 }
-impl_expr_mid!(BytesPart);
+impl_expr!(BytesPart);
+
+impl<'script> BytesPart<'script> {
+    pub(crate) fn is_lit(&self) -> bool {
+        self.data.is_lit()
+    }
+}
 
 /// Binary semiliteral
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Bytes<'script> {
-    mid: usize,
+    mid: Box<NodeMeta>,
     /// Bytes
     pub value: Vec<BytesPart<'script>>,
 }
-impl_expr_mid!(Bytes);
-
-impl<'script> Bytes<'script> {
-    fn try_reduce(mut self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        self.value = self
-            .value
-            .into_iter()
-            .map(|mut v| {
-                v.data = v.data.0.try_reduce(helper).map(ImutExpr)?;
-                Ok(v)
-            })
-            .collect::<Result<Vec<BytesPart>>>()?;
-        if self.value.iter().all(|v| v.data.0.is_lit()) {
-            let mut bytes: Vec<u8> = Vec::with_capacity(self.value.len());
-            let outer = self.extent(&helper.meta);
-            let mut used = 0;
-            let mut buf = 0;
-
-            for part in self.value {
-                let inner = part.extent(&helper.meta);
-                let value = part.data.0.try_into_value(helper)?;
-                extend_bytes_from_value(
-                    &outer,
-                    &inner,
-                    &helper.meta,
-                    part.data_type,
-                    part.endianess,
-                    part.bits,
-                    &mut buf,
-                    &mut used,
-                    &mut bytes,
-                    &value,
-                )?;
-            }
-            if used > 0 {
-                bytes.push(buf >> (8 - used));
-            }
-            Ok(ImutExprInt::Literal(Literal {
-                mid: self.mid,
-                value: Value::Bytes(bytes.into()),
-            }))
-        } else {
-            Ok(ImutExprInt::Bytes(self))
-        }
-    }
-}
-
-/// Documentation from constant
-#[derive(Debug, Clone, PartialEq)]
-pub struct ConstDoc {
-    /// Constant name
-    pub name: String,
-    /// Constant documentation
-    pub doc: Option<String>,
-    /// Constant value type
-    pub value_type: ValueType,
-}
-
-impl ToString for ConstDoc {
-    fn to_string(&self) -> String {
-        format!(
-            r#"
-### {}
-
-*type*: {:?}
-
-{}
-"#,
-            self.name,
-            self.value_type,
-            &self.doc.clone().unwrap_or_default()
-        )
-    }
-}
-
-/// Documentation from function
-#[derive(Debug, Clone, PartialEq)]
-pub struct FnDoc {
-    /// Function name
-    pub name: String,
-    /// Function arguments
-    pub args: Vec<String>,
-    /// Function documentation
-    pub doc: Option<String>,
-    /// Whether the function is open or not
-    // TODO clarify what open exactly is
-    pub open: bool,
-}
-
-impl ToString for FnDoc {
-    fn to_string(&self) -> String {
-        format!(
-            r#"
-### {}({})
-
-{}
-"#,
-            self.name,
-            self.args.join(", "),
-            self.doc.clone().unwrap_or_default()
-        )
-    }
-}
-
-/// Documentation from a module
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct ModDoc {
-    /// Module name
-    pub name: String,
-    /// Module documentation
-    pub doc: Option<String>,
-}
-
-impl ModDoc {
-    /// Prints the module documentation
-    #[must_use]
-    pub fn print_with_name(&self, name: &str) -> String {
-        format!(
-            r#"
-# {}
-
-{}
-"#,
-            name,
-            &self.doc.clone().unwrap_or_default()
-        )
-    }
-}
-
-/// Documentation from a query statement
-#[derive(Debug, Clone, PartialEq)]
-pub struct QueryDeclDoc {
-    /// Statment name
-    pub name: String,
-    /// Statment documentation
-    pub doc: Option<String>,
-}
-
-impl ToString for QueryDeclDoc {
-    fn to_string(&self) -> String {
-        format!(
-            r#"
-### {}
-
-{}
-"#,
-            self.name,
-            &self.doc.clone().unwrap_or_default()
-        )
-    }
-}
-
-/// Documentation from a module
-#[derive(Debug, Clone, PartialEq)]
-pub struct Docs {
-    /// Constants
-    pub consts: Vec<ConstDoc>,
-    /// Functions
-    pub fns: Vec<FnDoc>,
-    /// Query Stament documentation
-    pub query_decls: Vec<QueryDeclDoc>,
-    /// Module level documentation
-    pub module: Option<ModDoc>,
-}
-
-impl Default for Docs {
-    fn default() -> Self {
-        Self {
-            consts: Vec::new(),
-            fns: Vec::new(),
-            query_decls: Vec::new(),
-            module: None,
-        }
-    }
-}
+impl_expr!(Bytes);
 
 /// Constants and special keyword values
 #[derive(Clone, Copy, Debug)]
@@ -423,8 +211,6 @@ pub struct RunConsts<'run, 'script>
 where
     'script: 'run,
 {
-    names: &'run HashMap<Vec<String>, usize>,
-    values: &'run Vec<Value<'script>>,
     /// the `args` keyword
     pub args: &'run Value<'script>,
     /// the `group` keyword
@@ -437,17 +223,11 @@ impl<'run, 'script> RunConsts<'run, 'script>
 where
     'script: 'run,
 {
-    pub(crate) fn get(&self, idx: usize) -> Option<&Value<'script>> {
-        self.values.get(idx)
-    }
-
     pub(crate) fn with_new_args<'r>(&'r self, args: &'r Value<'script>) -> RunConsts<'r, 'script>
     where
         'run: 'r,
     {
         RunConsts {
-            names: self.names,
-            values: self.values,
             args,
             group: self.group,
             window: self.window,
@@ -458,8 +238,6 @@ where
 /// Constants and special keyword values
 #[derive(Debug, Default, Clone, PartialEq, Serialize)]
 pub struct Consts<'script> {
-    names: HashMap<Vec<String>, usize>,
-    values: Vec<Value<'script>>,
     // always present 'special' constants
     /// the `args` keyword
     pub args: Value<'script>,
@@ -474,261 +252,37 @@ impl<'script> Consts<'script> {
     #[must_use]
     pub fn run(&self) -> RunConsts<'_, 'script> {
         RunConsts {
-            names: &self.names,
-            values: &self.values,
             args: &self.args,
             group: &self.group,
             window: &self.window,
         }
     }
-    pub(crate) fn new() -> Self {
+    pub(crate) const fn new() -> Self {
         Consts {
-            names: HashMap::new(),
-            values: Vec::new(),
             args: Value::const_null(),
             group: Value::const_null(),
             window: Value::const_null(),
         }
     }
-    fn is_const(&self, id: &[String]) -> Option<&usize> {
-        self.names.get(id)
-    }
-
-    fn len(&self) -> usize {
-        self.values.len()
-    }
-
-    fn insert(
-        &mut self,
-        name_v: Vec<String>,
-        val: Value<'script>,
-    ) -> std::result::Result<usize, usize> {
-        let idx = self.values.len();
-
-        self.names.insert(name_v, idx).map_or_else(
-            || {
-                self.values.push(val);
-                Ok(idx)
-            },
-            Err,
-        )
-    }
-    pub(crate) fn get(&self, idx: usize) -> Option<&Value<'script>> {
-        self.values.get(idx)
-    }
 }
-
-/// ordered collection of warnings
-pub type Warnings = std::collections::BTreeSet<Warning>;
 
 /// don't use
-#[allow(clippy::struct_excessive_bools)]
-pub struct Helper<'script, 'registry>
-where
-    'script: 'registry,
-{
-    reg: &'registry Registry,
-    aggr_reg: &'registry AggrRegistry,
-    can_emit: bool,
-    is_in_aggr: bool,
-    windows: HashMap<String, WindowDecl<'script>>,
-    scripts: HashMap<String, ScriptDecl<'script>>,
-    operators: HashMap<String, OperatorDecl<'script>>,
-    subquery_defns: HashMap<String, SubqueryDecl<'script>>,
-    aggregates: Vec<InvokeAggrFn<'script>>,
-    /// Warnings
-    pub warnings: Warnings,
-    shadowed_vars: Vec<String>,
-    func_vec: Vec<CustomFn<'script>>,
-    pub(crate) locals: HashMap<String, usize>,
-    pub(crate) functions: HashMap<Vec<String>, usize>,
-    pub(crate) consts: Consts<'script>,
-    pub(crate) meta: NodeMetas,
-    docs: Docs,
-    module: Vec<String>,
-    possible_leaf: bool,
-    fn_argc: usize,
-    is_open: bool,
-    file_offset: Location,
-    cu: usize,
-}
-
-impl<'script, 'registry> Helper<'script, 'registry>
-where
-    'script: 'registry,
-{
-    fn is_const(&self, id: &[String]) -> Option<&usize> {
-        self.consts.is_const(id)
-    }
-
-    fn add_const_doc<N: ToString>(
-        &mut self,
-        name: &N,
-        doc: Option<Vec<Cow<'script, str>>>,
-        value_type: ValueType,
-    ) {
-        let doc = doc.map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
-        self.docs.consts.push(ConstDoc {
-            name: name.to_string(),
-            doc,
-            value_type,
-        });
-    }
-    fn add_query_decl_doc<N: ToString>(&mut self, name: &N, doc: Option<Vec<Cow<'script, str>>>) {
-        let doc = doc.map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
-        self.docs.query_decls.push(QueryDeclDoc {
-            name: name.to_string(),
-            doc,
-        });
-    }
-    pub(crate) fn add_meta(&mut self, start: Location, end: Location) -> usize {
-        self.meta
-            .add_meta(start - self.file_offset, end - self.file_offset, self.cu)
-    }
-    pub(crate) fn add_meta_w_name<S>(&mut self, start: Location, end: Location, name: &S) -> usize
-    where
-        S: ToString,
-    {
-        self.meta.add_meta_w_name(
-            start - self.file_offset,
-            end - self.file_offset,
-            name,
-            self.cu,
-        )
-    }
-    pub(crate) fn has_locals(&self) -> bool {
-        self.locals
-            .iter()
-            .any(|(n, _)| !n.starts_with(" __SHADOW "))
-    }
-
-    pub(crate) fn swap(
-        &mut self,
-        aggregates: &mut Vec<InvokeAggrFn<'script>>,
-        locals: &mut HashMap<String, usize>,
-    ) {
-        mem::swap(&mut self.aggregates, aggregates);
-        mem::swap(&mut self.locals, locals);
-    }
-
-    pub(crate) fn new(
-        reg: &'registry Registry,
-        aggr_reg: &'registry AggrRegistry,
-        cus: Vec<crate::lexer::CompilationUnit>,
-    ) -> Self {
-        Helper {
-            reg,
-            aggr_reg,
-            can_emit: true,
-            is_in_aggr: false,
-            windows: HashMap::new(),
-            scripts: HashMap::new(),
-            operators: HashMap::new(),
-            subquery_defns: HashMap::new(),
-            aggregates: Vec::new(),
-            warnings: BTreeSet::new(),
-            locals: HashMap::new(),
-            consts: Consts::default(),
-            functions: HashMap::new(),
-            func_vec: Vec::new(),
-            shadowed_vars: Vec::new(),
-            meta: NodeMetas::new(cus),
-            docs: Docs::default(),
-            module: Vec::new(),
-            possible_leaf: false,
-            fn_argc: 0,
-            is_open: false,
-            file_offset: Location::default(),
-            cu: 0,
-        }
-    }
-
-    fn register_fun(&mut self, f: CustomFn<'script>) -> Result<usize> {
-        let i = self.func_vec.len();
-        let mut mf = self.module.clone();
-        mf.push(f.name.clone().to_string());
-
-        if self.functions.insert(mf, i).is_none() {
-            self.func_vec.push(f);
-            Ok(i)
-        } else {
-            Err(format!("function {} already defined.", f.name).into())
-        }
-    }
-
-    fn register_shadow_var(&mut self, id: &str) -> usize {
-        let r = self.reserve_shadow();
-        self.shadowed_vars.push(id.to_string());
-        r
-    }
-
-    fn end_shadow_var(&mut self) {
-        self.shadowed_vars.pop();
-    }
-
-    fn find_shadow_var(&self, id: &str) -> Option<String> {
-        let mut r = None;
-        for (i, s) in self.shadowed_vars.iter().enumerate() {
-            if s == id {
-                //TODO: make sure we never overwrite this,
-                r = Some(shadow_name(i));
-            }
-        }
-        r
-    }
-
-    fn reserve_shadow(&mut self) -> usize {
-        self.var_id(&shadow_name(self.shadowed_vars.len()))
-    }
-
-    fn reserve_2_shadow(&mut self) -> (usize, usize) {
-        let l = self.shadowed_vars.len();
-        let n1 = shadow_name(l);
-        let n2 = shadow_name(l + 1);
-        (self.var_id(&n1), self.var_id(&n2))
-    }
-
-    fn var_id(&mut self, id: &str) -> usize {
-        let id = self.find_shadow_var(id).unwrap_or_else(|| id.to_string());
-
-        self.locals.get(id.as_str()).copied().unwrap_or_else(|| {
-            self.locals.insert(id.to_string(), self.locals.len());
-            self.locals.len() - 1
-        })
-    }
-
-    fn warn<S: ToString>(&mut self, inner: Range, outer: Range, msg: &S) {
-        self.warnings.insert(Warning::new(inner, outer, msg));
-    }
-    fn warn_with_scope<S: ToString>(&mut self, r: Range, msg: &S) {
-        self.warnings.insert(Warning::new_with_scope(r, msg));
-    }
-}
 
 /// A tremor script instance
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Script<'script> {
-    /// Import definitions
-    pub imports: Imports,
+    pub(crate) mid: Box<NodeMeta>,
     /// Expressions of the script
     pub exprs: Exprs<'script>,
-    /// Constants defined in this script
-    pub consts: Consts<'script>,
-    /// Aggregate functions
-    pub aggregates: Vec<InvokeAggrFn<'script>>,
-    windows: HashMap<String, WindowDecl<'script>>,
-    functions: Vec<CustomFn<'script>>,
     /// Locals
     pub locals: usize,
-    /// Node metadata
-    pub node_meta: NodeMetas,
     #[serde(skip)]
     /// Documentation from the script
-    pub docs: Docs,
+    pub docs: docs::Docs,
 }
+impl_expr!(Script);
 
 impl<'script> Script<'script> {
-    const NOT_IMUT: &'static str = "Not an imutable expression";
     /// Runs the script and evaluates to a resulting event.
     /// This expects the script to be imutable!
     ///
@@ -754,30 +308,23 @@ impl<'script> Script<'script> {
 
         let env = Env {
             context,
-            consts: self.consts.run(),
-            aggrs: &self.aggregates,
-            meta: &self.node_meta,
-            recursion_limit: crate::recursion_limit(),
+            ..Env::default()
         };
 
         self.exprs.last().map_or(Ok(Return::Drop), |expr| {
-            if let Expr::Imut(imut) = expr {
-                let v = stry!(imut.run(opts.with_result(), &env, event, state, meta, &local));
-                Ok(Return::Emit {
-                    value: v.into_owned(),
-                    port: None,
-                })
-            } else {
-                let e = expr.extent(&self.node_meta);
-                error_generic(&e.expand_lines(2), expr, &Self::NOT_IMUT, &self.node_meta)
-            }
+            let imut = expr.as_imut()?;
+            let v = stry!(imut.run(opts.with_result(), &env, event, state, meta, &local));
+            Ok(Return::Emit {
+                value: v.into_owned(),
+                port: None,
+            })
         })
     }
     /// Runs the script and evaluates to a resulting event
     ///
     /// # Errors
     /// on runtime errors
-    pub fn run<'event>(
+    pub(crate) fn run<'event>(
         &self,
         context: &crate::EventContext,
         aggr: AggrType,
@@ -798,10 +345,7 @@ impl<'script> Script<'script> {
 
         let env = Env {
             context,
-            consts: self.consts.run(),
-            aggrs: &self.aggregates,
-            meta: &self.node_meta,
-            recursion_limit: crate::recursion_limit(),
+            ..Env::default()
         };
 
         while let Some(expr) = exprs.next() {
@@ -837,26 +381,27 @@ impl<'script> Script<'script> {
     }
 }
 
-/// A lexical compilation unit
-#[derive(Debug, PartialEq, Serialize, Clone)]
-pub enum LexicalUnit {
-    /// Import declaration with no alias
-    NakedImportDecl(Vec<raw::IdentRaw<'static>>),
-    /// Import declaration with an alias
-    AliasedImportDecl(Vec<raw::IdentRaw<'static>>, raw::IdentRaw<'static>),
-    /// Line directive with embedded "<string> <num> ;"
-    LineDirective(String),
-}
-// impl_expr_mid!(Ident);
-
 /// An ident
 #[derive(Debug, PartialEq, Serialize, Clone)]
 pub struct Ident<'script> {
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// the text of the ident
     pub id: beef::Cow<'script, str>,
 }
-impl_expr_mid!(Ident);
+
+impl<'script> Ident<'script> {
+    /// Creates a new ident
+    #[must_use]
+    pub fn new(id: beef::Cow<'script, str>, mid: Box<NodeMeta>) -> Self {
+        Self { mid, id }
+    }
+    /// As a string
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.id
+    }
+}
+impl_expr!(Ident);
 
 impl<'script> std::fmt::Display for Ident<'script> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -864,84 +409,58 @@ impl<'script> std::fmt::Display for Ident<'script> {
     }
 }
 
-impl<'script> From<&'script str> for Ident<'script> {
-    fn from(id: &'script str) -> Self {
-        Self {
-            mid: 0,
-            id: id.into(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulation of a record structure field
 pub struct Field<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Name of the field
     pub name: StringLit<'script>,
     /// Value expression for the field
-    pub value: ImutExprInt<'script>,
+    pub value: ImutExpr<'script>,
 }
-impl_expr_mid!(Field);
+impl_expr!(Field);
 
-#[derive(Clone, Debug, PartialEq, Serialize, Default)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulation of a record structure
 pub struct Record<'script> {
     /// Id
-    pub mid: usize,
-    /// base (or static part of the cecord)
+    pub(crate) mid: Box<NodeMeta>,
+    /// base (or static part of the record)
     pub base: crate::Object<'script>,
     /// Fields of this record
     pub fields: Fields<'script>,
 }
-impl_expr_mid!(Record);
+impl_expr!(Record);
 impl<'script> Record<'script> {
-    fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        let (base, fields): (Vec<_>, Vec<_>) = self
-            .fields
-            .into_iter()
-            .partition(|f| f.name.is_lit() && f.value.is_lit());
-
-        let base: Result<crate::Object> = base
-            .into_iter()
-            .map(|f| {
-                let n = f.name.try_into_cow()?;
-                f.value.try_into_value(helper).map(|v| (n, v))
-            })
-            .collect();
-        let base = base?;
-
-        if fields.is_empty() {
-            Ok(ImutExprInt::Literal(Literal {
-                mid: self.mid,
-                value: Value::from(base),
-            }))
-        } else {
-            Ok(ImutExprInt::Record(Record {
-                mid: self.mid,
-                base,
-                fields,
-            }))
-        }
-    }
-
     /// Gets the expression for a given name
+    /// Attention: Clones its values!
+    /// used only in the test suite
     #[must_use]
-    pub fn get_field_expr(&self, name: &str) -> Option<&ImutExprInt> {
-        self.fields.iter().find_map(|f| {
-            f.name
-                .as_str()
-                .and_then(|n| if n == name { Some(&f.value) } else { None })
-        })
+    pub fn cloned_field_expr(&self, name: &str) -> Option<ImutExpr> {
+        self.base
+            .get(name)
+            .map(|base_value| ImutExpr::literal(self.mid.clone(), base_value.clone()))
+            .or_else(|| {
+                self.fields.iter().find_map(|f| {
+                    f.name.as_str().and_then(|n| {
+                        if n == name {
+                            Some(f.value.clone())
+                        } else {
+                            None
+                        }
+                    })
+                })
+            })
     }
-    /// Tries to fetch a literal from a record
+    /// Tries to fetch a literal from a record and clones it, snot!
+    /// used only in the test suite
     #[must_use]
-    pub fn get_literal(&self, name: &str) -> Option<&Value> {
-        if let Some(ImutExprInt::Literal(Literal { value, .. })) = self.get_field_expr(name) {
+    pub fn cloned_field_literal(&self, name: &str) -> Option<Value> {
+        if let Some(ImutExpr::Literal(Literal { value, .. })) = self.cloned_field_expr(name) {
             Some(value)
         } else {
-            self.base.get(name)
+            self.base.get(name).cloned()
         }
     }
 }
@@ -950,52 +469,56 @@ impl<'script> Record<'script> {
 /// Encapsulation of a list structure
 pub struct List<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Value expressions for list elements of this list
     pub exprs: ImutExprs<'script>,
 }
-impl_expr_mid!(List);
-
-impl<'script> List<'script> {
-    fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        if self.exprs.iter().map(|v| &v.0).all(ImutExprInt::is_lit) {
-            let elements: Result<Vec<Value>> = self
-                .exprs
-                .into_iter()
-                .map(|v| v.0.try_into_value(helper))
-                .collect();
-            Ok(ImutExprInt::Literal(Literal {
-                mid: self.mid,
-                value: Value::from(elements?),
-            }))
-        } else {
-            Ok(ImutExprInt::List(self))
-        }
-    }
-}
+impl_expr!(List);
 
 /// A Literal
-#[derive(Clone, Debug, PartialEq, Serialize, Default)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Literal<'script> {
     /// Id
-    pub mid: usize,
+    pub mid: Box<NodeMeta>,
     /// Literal value
     pub value: Value<'script>,
 }
-impl_expr_mid!(Literal);
+
+impl<'script> Literal<'script> {
+    pub(crate) fn boxed_expr(mid: Box<NodeMeta>, value: Value<'script>) -> Box<ImutExpr<'script>> {
+        Box::new(ImutExpr::literal(mid, value))
+    }
+
+    pub(crate) fn null(mid: Box<NodeMeta>) -> Self {
+        Self {
+            mid,
+            value: Value::null(),
+        }
+    }
+}
+impl_expr!(Literal);
 
 /// Damn you public interfaces
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct FnDecl<'script> {
-    pub(crate) mid: usize,
-    pub(crate) name: Ident<'script>,
+pub struct FnDefn<'script> {
+    pub(crate) mid: Box<NodeMeta>,
+    pub(crate) name: String,
     pub(crate) args: Vec<Ident<'script>>,
     pub(crate) body: Exprs<'script>,
     pub(crate) locals: usize,
     pub(crate) open: bool,
     pub(crate) inline: bool,
 }
-impl_expr_mid!(FnDecl);
+impl_expr!(FnDefn);
+
+/// A Constant
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Const<'script> {
+    pub(crate) mid: Box<NodeMeta>,
+    pub(crate) value: Value<'script>,
+    pub(crate) id: String,
+}
+impl_expr!(Const);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Legal expression forms
@@ -1007,7 +530,7 @@ pub enum Expr<'script> {
     /// Assignment expression
     Assign {
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// Target
         path: Path<'script>,
         /// Value expression
@@ -1016,7 +539,7 @@ pub enum Expr<'script> {
     /// Assignment from local expression
     AssignMoveLocal {
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// Target
         path: Path<'script>,
         /// Local Index
@@ -1027,26 +550,32 @@ pub enum Expr<'script> {
     /// A drop expression
     Drop {
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
     },
     /// An emit expression
     Emit(Box<EmitExpr<'script>>),
     /// An immutable expression
-    Imut(ImutExprInt<'script>),
+    Imut(ImutExpr<'script>),
 }
 
 impl<'script> Expr<'script> {
+    const NOT_IMUT: &'static str = "Not an imutable expression";
+
     /// Tries to borrow the Expor as an `Invoke`
     #[must_use]
     pub fn as_invoke(&self) -> Option<&Invoke<'script>> {
         match self {
-            Expr::Imut(
-                ImutExprInt::Invoke(i)
-                | ImutExprInt::Invoke1(i)
-                | ImutExprInt::Invoke2(i)
-                | ImutExprInt::Invoke3(i),
-            ) => Some(i),
+            Expr::Imut(i) => i.as_invoke(),
             _ => None,
+        }
+    }
+
+    fn as_imut(&self) -> Result<&ImutExpr<'script>> {
+        if let Expr::Imut(imut) = self {
+            Ok(imut)
+        } else {
+            let e = self.extent();
+            error_generic(&e.expand_lines(2), self, &Self::NOT_IMUT)
         }
     }
 }
@@ -1055,9 +584,9 @@ impl<'script> Expression for Expr<'script> {
     fn replace_last_shadow_use(&mut self, replace_idx: usize) {
         match self {
             Expr::Assign { path, expr, mid } => match expr.as_ref() {
-                Expr::Imut(ImutExprInt::Local { idx, .. }) if idx == &replace_idx => {
+                Expr::Imut(ImutExpr::Local { idx, .. }) if idx == &replace_idx => {
                     *self = Expr::AssignMoveLocal {
-                        mid: *mid,
+                        mid: mid.clone(),
                         idx: *idx,
                         path: path.clone(),
                     };
@@ -1075,76 +604,29 @@ impl<'script> Expression for Expr<'script> {
     }
 
     fn is_null_lit(&self) -> bool {
-        matches!(self, Expr::Imut(ImutExprInt::Literal(Literal { value, .. })) if value.is_null())
+        matches!(self, Expr::Imut(ImutExpr::Literal(Literal { value, .. })) if value.is_null())
     }
 
-    fn null_lit() -> Self {
-        Expr::Imut(ImutExprInt::Literal(Literal::default()))
+    fn null_lit(mid: Box<NodeMeta>) -> Self {
+        Expr::Imut(ImutExpr::Literal(Literal::null(mid)))
     }
 }
 
-impl<'script> From<ImutExprInt<'script>> for Expr<'script> {
-    fn from(imut: ImutExprInt<'script>) -> Expr<'script> {
+impl<'script> From<ImutExpr<'script>> for Expr<'script> {
+    fn from(imut: ImutExpr<'script>) -> Expr<'script> {
         Expr::Imut(imut)
-    }
-}
-
-/// An immutable expression
-#[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct ImutExpr<'script>(pub ImutExprInt<'script>);
-
-impl<'script> ImutExpr<'script> {
-    /// Tries to borrow the `ImutExpr` as a `Record`
-    #[must_use]
-    pub fn as_record(&self) -> Option<&Record<'script>> {
-        if let ImutExpr(ImutExprInt::Record(r)) = self {
-            Some(r)
-        } else {
-            None
-        }
-    }
-}
-#[cfg(not(tarpaulin_include))] // this is a simple passthrough
-impl<'script> Expression for ImutExpr<'script> {
-    fn replace_last_shadow_use(&mut self, replace_idx: usize) {
-        self.0.replace_last_shadow_use(replace_idx);
-    }
-    fn is_null_lit(&self) -> bool {
-        self.0.is_null_lit()
-    }
-    fn null_lit() -> Self {
-        Self(ImutExprInt::null_lit())
     }
 }
 
 impl<'script> From<Literal<'script>> for ImutExpr<'script> {
     fn from(lit: Literal<'script>) -> Self {
-        Self(ImutExprInt::Literal(lit))
-    }
-}
-
-#[cfg(not(tarpaulin_include))] // this is a simple passthrough
-impl<'script> BaseExpr for ImutExpr<'script> {
-    fn mid(&self) -> usize {
-        self.0.mid()
-    }
-
-    fn s(&self, meta: &NodeMetas) -> Location {
-        self.0.s(meta)
-    }
-
-    fn e(&self, meta: &NodeMetas) -> Location {
-        self.0.e(meta)
-    }
-
-    fn extent(&self, meta: &NodeMetas) -> Range {
-        self.0.extent(meta)
+        ImutExpr::Literal(lit)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an immutable expression
-pub enum ImutExprInt<'script> {
+pub enum ImutExpr<'script> {
     /// Record
     Record(Record<'script>),
     /// List
@@ -1156,7 +638,7 @@ pub enum ImutExprInt<'script> {
     /// Patch
     Patch(Box<Patch<'script>>),
     /// Match
-    Match(Box<Match<'script, ImutExprInt<'script>>>),
+    Match(Box<Match<'script, ImutExpr<'script>>>),
     /// Comprehension
     Comprehension(Box<Comprehension<'script, Self>>),
     /// Merge
@@ -1170,9 +652,7 @@ pub enum ImutExprInt<'script> {
         /// Local Index
         idx: usize,
         /// Id
-        mid: usize,
-        /// True, if it is declared constant
-        is_const: bool,
+        mid: Box<NodeMeta>,
     },
     /// Literal
     Literal(Literal<'script>),
@@ -1181,7 +661,7 @@ pub enum ImutExprInt<'script> {
         /// Path
         path: Path<'script>,
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
     },
     /// Function invocation
     Invoke1(Invoke<'script>),
@@ -1199,52 +679,49 @@ pub enum ImutExprInt<'script> {
     Bytes(Bytes<'script>),
 }
 
-impl<'script> ImutExprInt<'script> {
-    pub(crate) fn try_into_value(self, helper: &Helper<'script, '_>) -> Result<Value<'script>> {
-        if let ImutExprInt::Literal(Literal { value: v, .. }) = self {
+impl<'script> ImutExpr<'script> {
+    fn as_invoke(&self) -> Option<&Invoke<'script>> {
+        use ImutExpr::{Invoke, Invoke1, Invoke2, Invoke3};
+        match self {
+            Invoke(i) | Invoke1(i) | Invoke2(i) | Invoke3(i) => Some(i),
+            _ => None,
+        }
+    }
+    pub(crate) fn literal(mid: Box<NodeMeta>, value: Value<'script>) -> Self {
+        ImutExpr::Literal(Literal { mid, value })
+    }
+    /// Tries to borrow the `ImutExpr` as a `Record`
+    #[must_use]
+    pub fn as_record(&self) -> Option<&Record<'script>> {
+        if let ImutExpr::Record(r) = self {
+            Some(r)
+        } else {
+            None
+        }
+    }
+    pub(crate) fn try_into_value(mut self, helper: &Helper<'script, '_>) -> Result<Value<'script>> {
+        ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut self)?;
+        if let ImutExpr::Literal(Literal { value: v, .. }) = self {
             Ok(v)
         } else {
-            let e = self.extent(&helper.meta);
+            let e = self.extent();
             Err(ErrorKind::NotConstant(e, e.expand_lines(2)).into())
         }
     }
     /// Tries to borrow the expression as a list
     #[must_use]
     pub fn as_list(&self) -> Option<&List<'script>> {
-        if let ImutExprInt::List(l) = self {
+        if let ImutExpr::List(l) = self {
             Some(l)
         } else {
             None
         }
     }
-    pub(crate) fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<Self> {
-        match self {
-            ImutExprInt::Unary(u) => u.try_reduce(helper),
-            ImutExprInt::Bytes(b) => b.try_reduce(helper),
-            ImutExprInt::Binary(b) => b.try_reduce(helper),
-            ImutExprInt::List(l) => l.try_reduce(helper),
-            ImutExprInt::Record(r) => r.try_reduce(helper),
-            ImutExprInt::Path(p) => p.try_reduce(helper),
-            ImutExprInt::String(s) => Ok(s.try_reduce(helper)),
-            ImutExprInt::Invoke1(i)
-            | ImutExprInt::Invoke2(i)
-            | ImutExprInt::Invoke3(i)
-            | ImutExprInt::Invoke(i) => i.try_reduce(helper),
-            other => Ok(other),
-        }
-    }
-    pub(crate) fn try_reduce_into_value(
-        self,
-        helper: &Helper<'script, '_>,
-    ) -> Result<Value<'script>> {
-        self.try_reduce(helper)?.try_into_value(helper)
-    }
 }
 
-impl<'script> Expression for ImutExprInt<'script> {
-    #[cfg(not(tarpaulin_include))] // this has no function
+impl<'script> Expression for ImutExpr<'script> {
     fn replace_last_shadow_use(&mut self, replace_idx: usize) {
-        if let ImutExprInt::Match(m) = self {
+        if let ImutExpr::Match(m) = self {
             // In each pattern we can replace the use in the last assign
             for cg in &mut m.patterns {
                 cg.replace_last_shadow_use(replace_idx);
@@ -1252,10 +729,10 @@ impl<'script> Expression for ImutExprInt<'script> {
         }
     }
     fn is_null_lit(&self) -> bool {
-        matches!(self, ImutExprInt::Literal(Literal { value, .. }) if value.is_null())
+        matches!(self, ImutExpr::Literal(Literal { value, .. }) if value.is_null())
     }
-    fn null_lit() -> Self {
-        Self::Literal(Literal::default())
+    fn null_lit(mid: Box<NodeMeta>) -> Self {
+        Self::Literal(Literal::null(mid))
     }
 }
 
@@ -1263,25 +740,23 @@ impl<'script> Expression for ImutExprInt<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct StringLit<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Elements
     pub elements: StrLitElements<'script>,
 }
 
-impl<'s> From<&'s str> for StringLit<'s> {
-    fn from(s: &'s str) -> Self {
-        Self {
-            mid: 0,
-            elements: vec![StrLitElement::Lit(s.into())],
+// we only have this for tests as we don't get a node meta
+#[cfg(test)]
+impl<'script> From<&'script str> for StringLit<'script> {
+    fn from(l: &'script str) -> Self {
+        StringLit {
+            mid: NodeMeta::dummy(),
+            elements: vec![StrLitElement::Lit(l.into())],
         }
     }
 }
 
 impl<'script> StringLit<'script> {
-    pub(crate) fn is_lit(&self) -> bool {
-        matches!(self.elements.as_slice(), [StrLitElement::Lit(_)])
-    }
-
     pub(crate) fn as_str(&self) -> Option<&str> {
         if let [StrLitElement::Lit(l)] = self.elements.as_slice() {
             Some(l)
@@ -1289,14 +764,13 @@ impl<'script> StringLit<'script> {
             None
         }
     }
-
-    pub(crate) fn try_into_cow(mut self) -> Result<Cow<'script, str>> {
-        if self.elements.len() != 1 {
-            Err("Not a static string".into())
-        } else if let Some(StrLitElement::Lit(l)) = self.elements.pop() {
-            Ok(l)
+    pub(crate) fn into_str(mut self) -> Option<Cow<'script, str>> {
+        // We use this as a guard to ensure that we only have a single element
+        self.as_str()?;
+        if let Some(StrLitElement::Lit(lit)) = self.elements.pop() {
+            Some(lit)
         } else {
-            Err("Not a static string".into())
+            None
         }
     }
 
@@ -1312,7 +786,7 @@ impl<'script> StringLit<'script> {
     where
         'script: 'event,
     {
-        // Shortcircut when we have a 1 literal string
+        // Short-circuit when we have a 1 literal string
         if let [StrLitElement::Lit(l)] = self.elements.as_slice() {
             return Ok(l.clone());
         }
@@ -1334,7 +808,6 @@ impl<'script> StringLit<'script> {
                 // as we don't want to over engineer and write own format functions.
                 // any suggestions are welcome
                 #[cfg(feature = "erlang-float-testing")]
-                #[cfg(not(tarpaulin_include))]
                 crate::ast::StrLitElement::Expr(e) => {
                     let r = e.run(opts, env, event, state, meta, local)?;
                     if let Some(s) = r.as_str() {
@@ -1349,27 +822,8 @@ impl<'script> StringLit<'script> {
         }
         Ok(Cow::owned(out))
     }
-    fn try_reduce(self, _helper: &Helper<'script, '_>) -> ImutExprInt<'script> {
-        let StringLit { mid, mut elements } = self;
-        if elements.len() == 1 {
-            match elements.pop() {
-                Some(StrLitElement::Lit(l)) => {
-                    let value = Value::from(l);
-                    return ImutExprInt::Literal(Literal { mid, value });
-                }
-                Some(other) => elements.push(other),
-                None => (),
-            }
-        } else if elements.is_empty() {
-            return ImutExprInt::Literal(Literal {
-                mid,
-                value: Value::from(""),
-            });
-        }
-        ImutExprInt::String(StringLit { mid, elements })
-    }
 }
-impl_expr_mid!(StringLit);
+impl_expr!(StringLit);
 
 /// A part of a string literal with interpolation
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1377,7 +831,23 @@ pub enum StrLitElement<'script> {
     /// A literal string
     Lit(Cow<'script, str>),
     /// An expression in a string interpolation
-    Expr(ImutExprInt<'script>),
+    Expr(ImutExpr<'script>),
+}
+
+impl<'script> StrLitElement<'script> {
+    pub(crate) fn is_lit(&self) -> bool {
+        match self {
+            StrLitElement::Lit(_) => true,
+            StrLitElement::Expr(e) => e.is_lit(),
+        }
+    }
+    pub(crate) fn as_str(&self) -> Option<&str> {
+        match self {
+            StrLitElement::Lit(l) => Some(l.as_ref()),
+            StrLitElement::Expr(ImutExpr::Literal(Literal { value, .. })) => value.as_str(),
+            StrLitElement::Expr(_) => None,
+        }
+    }
 }
 
 /// we're forced to make this pub because of lalrpop
@@ -1387,75 +857,35 @@ pub type StrLitElements<'script> = Vec<StrLitElement<'script>>;
 /// Encapsulates an emit expression
 pub struct EmitExpr<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Value expression
-    pub expr: ImutExprInt<'script>,
+    pub expr: ImutExpr<'script>,
     /// Port name
-    pub port: Option<ImutExprInt<'script>>,
+    pub port: Option<ImutExpr<'script>>,
 }
-impl_expr_mid!(EmitExpr);
+impl_expr!(EmitExpr);
 
 #[derive(Clone, Serialize)]
 /// Encapsulates a function invocation expression
 pub struct Invoke<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Module path
-    pub module: Vec<String>,
-    /// Function name
-    pub fun: String,
+    pub node_id: NodeId,
     /// Invocable implementation
     #[serde(skip)]
     pub invocable: Invocable<'script>,
     /// Arguments
     pub args: ImutExprs<'script>,
 }
-impl_expr_mid!(Invoke);
+impl_expr!(Invoke);
 
 impl<'script> Invoke<'script> {
-    fn inline(self) -> Result<ImutExprInt<'script>> {
+    fn inline(self) -> Result<ImutExpr<'script>> {
         self.invocable.inline(self.args, self.mid)
     }
     fn can_inline(&self) -> bool {
         self.invocable.can_inline()
-    }
-
-    fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        if self.invocable.is_const() && self.args.iter().all(|f| f.0.is_lit()) {
-            let ex = self.extent(&helper.meta);
-            let args: Result<Vec<Value<'script>>> = self
-                .args
-                .into_iter()
-                .map(|v| v.0.try_into_value(helper))
-                .collect();
-            let args = args?;
-            // Construct a view into `args`, since `invoke` expects a slice of references.
-            let args2: Vec<&Value<'script>> = args.iter().collect();
-            let env = Env {
-                context: &EventContext::default(),
-                consts: NO_CONSTS.run(),
-                aggrs: &NO_AGGRS,
-                meta: &helper.meta,
-                recursion_limit: crate::recursion_limit(),
-            };
-
-            let v = self
-                .invocable
-                .invoke(&env, &args2)
-                .map_err(|e| e.into_err(&ex, &ex, Some(helper.reg), &helper.meta))?
-                .into_static();
-            Ok(ImutExprInt::Literal(Literal {
-                value: v,
-                mid: self.mid,
-            }))
-        } else {
-            Ok(match self.args.len() {
-                1 => ImutExprInt::Invoke1(self),
-                2 => ImutExprInt::Invoke2(self),
-                3 => ImutExprInt::Invoke3(self),
-                _ => ImutExprInt::Invoke(self),
-            })
-        }
     }
 }
 
@@ -1469,7 +899,7 @@ pub enum Invocable<'script> {
 }
 
 impl<'script> Invocable<'script> {
-    fn inline(self, args: ImutExprs<'script>, mid: usize) -> Result<ImutExprInt<'script>> {
+    fn inline(self, args: ImutExprs<'script>, mid: Box<NodeMeta>) -> Result<ImutExpr<'script>> {
         match self {
             Invocable::Intrinsic(_f) => Err("can't inline intrinsic".into()),
             Invocable::Tremor(f) => f.inline(args, mid),
@@ -1492,7 +922,7 @@ impl<'script> Invocable<'script> {
     ///
     /// # Errors
     /// if the funciton fails to be invoked
-    pub fn invoke<'event, 'run>(
+    pub(crate) fn invoke<'event, 'run>(
         &'run self,
         env: &'run Env<'run, 'event>,
         args: &'run [&'run Value<'event>],
@@ -1512,7 +942,7 @@ impl<'script> Invocable<'script> {
 /// Encapsulates the tail-recursion entry-point in a tail-recursive function
 pub struct Recur<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Arity
     pub argc: usize,
     /// True, if supports variable arguments
@@ -1520,13 +950,13 @@ pub struct Recur<'script> {
     /// Capture of argument value expressions
     pub exprs: ImutExprs<'script>,
 }
-impl_expr_mid!(Recur);
+impl_expr!(Recur);
 
 #[derive(Clone, Serialize, PartialEq)]
 /// Encapsulates an Aggregate function invocation
 pub struct InvokeAggr {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Module name
     pub module: String,
     /// Function name
@@ -1534,11 +964,12 @@ pub struct InvokeAggr {
     /// Unique Id of this instance
     pub aggr_id: usize,
 }
+impl_expr_no_lt!(InvokeAggr);
 
 /// A Invocable aggregate function
 #[derive(Clone, Serialize)]
 pub struct InvokeAggrFn<'script> {
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// The invocable function
     #[serde(skip)]
     pub invocable: TremorAggrFnWrapper,
@@ -1547,13 +978,13 @@ pub struct InvokeAggrFn<'script> {
     /// Arguments passed to the function
     pub args: ImutExprs<'script>,
 }
-impl_expr_mid!(InvokeAggrFn);
+impl_expr!(InvokeAggrFn);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a pluggable extractor expression form
 pub struct TestExpr {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Extractor name
     pub id: String,
     /// Extractor format
@@ -1561,6 +992,7 @@ pub struct TestExpr {
     /// Extractor plugin
     pub extractor: Extractor,
 }
+impl_expr_no_lt!(TestExpr);
 
 /// default case for a match expression
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1584,29 +1016,29 @@ pub enum DefaultCase<Ex: Expression> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Match<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// The target of the match
-    pub target: ImutExprInt<'script>,
+    pub target: ImutExpr<'script>,
     /// Patterns to match against the target
     pub patterns: Predicates<'script, Ex>,
     /// Default case
     pub default: DefaultCase<Ex>,
 }
-impl_expr_ex_mid!(Match);
+impl_expr_ex!(Match);
 
 /// If / Else style match
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct IfElse<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// The target of the match
-    pub target: ImutExprInt<'script>,
+    pub target: ImutExpr<'script>,
     /// The if case
     pub if_clause: PredicateClause<'script, Ex>,
     /// Default/else case
     pub else_clause: DefaultCase<Ex>,
 }
-impl_expr_ex_mid!(IfElse);
+impl_expr_ex!(IfElse);
 
 /// Precondition for a case group
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1650,15 +1082,6 @@ pub enum ClauseGroup<'script, Ex: Expression + 'script> {
         pattern: PredicateClause<'script, Ex>,
     },
 }
-
-// impl<'script, Ex: Expression + 'script> Default for ClauseGroup<'script, Ex> {
-//     fn default() -> Self {
-//         Self::Simple {
-//             precondition: None,
-//             patterns: Vec::new(),
-//         }
-//     }
-// }
 
 impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
     const MAX_OPT_RUNS: u64 = 128;
@@ -1705,7 +1128,6 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
         *(self.precondition_mut()) = None;
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub(crate) fn precondition(&self) -> Option<&ClausePreCondition<'script>> {
         match self {
             ClauseGroup::Single { precondition, .. }
@@ -1715,7 +1137,6 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
         }
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     pub(crate) fn precondition_mut(&mut self) -> &mut Option<ClausePreCondition<'script>> {
         match self {
             ClauseGroup::Single { precondition, .. }
@@ -1754,10 +1175,9 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
 
     // allow this otherwise clippy complains after telling us to use matches
     #[allow(
-        // clippy::blocks_in_if_conditions,
-        clippy::too_many_lines,
         // we allow this because of the borrow checker
-        clippy::option_if_let_else
+        clippy::option_if_let_else,
+        clippy::too_many_lines
     )]
     fn optimize(&mut self, n: u64) {
         if let Self::Simple {
@@ -1792,7 +1212,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
                                     if let Some((first, _)) = &first_key {
                                         first == key
                                     } else {
-                                        first_key = Some((key.clone(), *mid));
+                                        first_key = Some((key.clone(), mid.clone()));
                                         // this is the first item so we can assume so far it's all OK
                                         true
                                     }
@@ -1819,12 +1239,11 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
                     *precondition = Some(ClausePreCondition {
                         path: Path::Local(LocalPath {
                             segments: vec![Segment::Id {
-                                mid: *mid,
+                                mid: mid.clone(),
                                 key: key.clone(),
                             }],
                             idx: 0,
-                            is_const: true,
-                            mid: 0,
+                            mid: mid.clone(),
                         }),
                     });
 
@@ -1861,7 +1280,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
                     matches!(
                         p,
                         PredicateClause {
-                            pattern: Pattern::Expr(ImutExprInt::Literal(_)),
+                            pattern: Pattern::Expr(ImutExpr::Literal(_)),
                             guard: None,
                             ..
                         }
@@ -1881,7 +1300,7 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
                 for p in patterns1 {
                     match p {
                         PredicateClause {
-                            pattern: Pattern::Expr(ImutExprInt::Literal(Literal { value, .. })),
+                            pattern: Pattern::Expr(ImutExpr::Literal(Literal { value, .. })),
                             exprs,
                             last_expr,
                             ..
@@ -1914,11 +1333,11 @@ impl<'script, Ex: Expression + 'script> ClauseGroup<'script, Ex> {
 /// Encapsulates a predicate expression form
 pub struct PredicateClause<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Predicate pattern
     pub pattern: Pattern<'script>,
     /// Optional guard expression
-    pub guard: Option<ImutExprInt<'script>>,
+    pub guard: Option<ImutExpr<'script>>,
     /// Expressions to evaluate if predicate test and guard pass
     pub exprs: Vec<Ex>,
     /// The last expression
@@ -1936,7 +1355,7 @@ impl<'script, Ex: Expression + 'script> PredicateClause<'script, Ex> {
         }
     }
 }
-impl_expr_ex_mid!(PredicateClause);
+impl_expr_ex!(PredicateClause);
 
 /// A group of case statements
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -1949,13 +1368,13 @@ pub struct ImutClauseGroup<'script> {
 /// Encapsulates a path expression form
 pub struct Patch<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// The patch target
-    pub target: ImutExprInt<'script>,
+    pub target: ImutExpr<'script>,
     /// Operations to patch against the target
     pub operations: PatchOperations<'script>,
 }
-impl_expr_mid!(Patch);
+impl_expr!(Patch);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates patch operation forms
@@ -1965,26 +1384,34 @@ pub enum PatchOperation<'script> {
         /// Field
         ident: StringLit<'script>,
         /// Value expression
-        expr: ImutExprInt<'script>,
+        expr: ImutExpr<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Insert or update operation
     Upsert {
         /// Field
         ident: StringLit<'script>,
         /// Value expression
-        expr: ImutExprInt<'script>,
+        expr: ImutExpr<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Update only operation
     Update {
         /// Field
         ident: StringLit<'script>,
         /// Value expression
-        expr: ImutExprInt<'script>,
+        expr: ImutExpr<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Erase operation
     Erase {
         /// Field
         ident: StringLit<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Copy operation
     Copy {
@@ -1992,6 +1419,8 @@ pub enum PatchOperation<'script> {
         from: StringLit<'script>,
         /// To field
         to: StringLit<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Move operation
     Move {
@@ -1999,30 +1428,40 @@ pub enum PatchOperation<'script> {
         from: StringLit<'script>,
         /// Field to
         to: StringLit<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Merge convenience operation
     Merge {
         /// Field
         ident: StringLit<'script>,
         /// Value
-        expr: ImutExprInt<'script>,
+        expr: ImutExpr<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Tuple based merge operation
     MergeRecord {
         /// Value
-        expr: ImutExprInt<'script>,
+        expr: ImutExpr<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Merge convenience operation
     Default {
         /// Field
         ident: StringLit<'script>,
         /// Value
-        expr: ImutExprInt<'script>,
+        expr: ImutExpr<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
     /// Tuple based merge operation
     DefaultRecord {
         /// Value
-        expr: ImutExprInt<'script>,
+        expr: ImutExpr<'script>,
+        /// Metadata
+        mid: Box<NodeMeta>,
     },
 }
 
@@ -2030,47 +1469,47 @@ pub enum PatchOperation<'script> {
 /// Encapsulates a merge form
 pub struct Merge<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Target of the merge
-    pub target: ImutExprInt<'script>,
+    pub target: ImutExpr<'script>,
     /// Value expression computing content to merge into the target
-    pub expr: ImutExprInt<'script>,
+    pub expr: ImutExpr<'script>,
 }
-impl_expr_mid!(Merge);
+impl_expr!(Merge);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a structure comprehension form
 pub struct Comprehension<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Key binding
     pub key_id: usize,
     /// Value binding
     pub val_id: usize,
     /// Target of the comprehension
-    pub target: ImutExprInt<'script>,
+    pub target: ImutExpr<'script>,
     /// Case applications against target elements
     pub cases: ComprehensionCases<'script, Ex>,
 }
-impl_expr_ex_mid!(Comprehension);
+impl_expr_ex!(Comprehension);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a comprehension case application
 pub struct ComprehensionCase<'script, Ex: Expression + 'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Key binding
     pub key_name: Cow<'script, str>,
     /// Value binding
     pub value_name: Cow<'script, str>,
     /// Guard expression
-    pub guard: Option<ImutExprInt<'script>>,
+    pub guard: Option<ImutExpr<'script>>,
     /// Case application against target on passing guard
     pub exprs: Vec<Ex>,
     /// Last case application against target on passing guard
     pub last_expr: Ex,
 }
-impl_expr_ex_mid!(ComprehensionCase);
+impl_expr_ex!(ComprehensionCase);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates predicate pattern form
@@ -2081,7 +1520,7 @@ pub enum Pattern<'script> {
     /// Array pattern
     Array(ArrayPattern<'script>),
     /// Expression
-    Expr(ImutExprInt<'script>),
+    Expr(ImutExpr<'script>),
     /// Assignment pattern
     Assign(AssignPattern<'script>),
     /// Tuple pattern
@@ -2107,25 +1546,19 @@ impl<'script> Pattern<'script> {
         matches!(self, Pattern::Assign(_))
     }
     fn is_exclusive_to(&self, other: &Self) -> bool {
+        use Pattern::{Assign, Expr, Record, Tuple};
         match (self, other) {
             // Two literals that are different are distinct
-            (Pattern::Expr(ImutExprInt::Literal(l1)), Pattern::Expr(ImutExprInt::Literal(l2))) => {
-                l1 != l2
-            }
+            (Expr(ImutExpr::Literal(l1)), Expr(ImutExpr::Literal(l2))) => !l1.ast_eq(l2),
             // For record patterns we compare directly
-            (Pattern::Record(r1), Pattern::Record(r2)) => {
-                r1.is_exclusive_to(r2) || r2.is_exclusive_to(r1)
-            }
+            (Record(r1), Record(r2)) => r1.is_exclusive_to(r2) || r2.is_exclusive_to(r1),
             // for assignments we compare internal value
-            (Pattern::Assign(AssignPattern { pattern, .. }), p2) => pattern.is_exclusive_to(p2),
-            (p1, Pattern::Assign(AssignPattern { pattern, .. })) => p1.is_exclusive_to(pattern),
+            (Assign(AssignPattern { pattern, .. }), p2) => pattern.is_exclusive_to(p2),
+            (p1, Assign(AssignPattern { pattern, .. })) => p1.is_exclusive_to(pattern),
             // else we're just not accepting equality
-            (
-                Pattern::Tuple(TuplePattern { exprs: exprs1, .. }),
-                Pattern::Tuple(TuplePattern { exprs: exprs2, .. }),
-            ) => exprs1
+            (Tuple(TuplePattern { exprs: e1, .. }), Tuple(TuplePattern { exprs: e2, .. })) => e1
                 .iter()
-                .zip(exprs2.iter())
+                .zip(e2.iter())
                 .any(|(e1, e2)| e1.is_exclusive_to(e2) || e2.is_exclusive_to(e1)),
             _ => false,
         }
@@ -2155,7 +1588,7 @@ pub enum PredicatePattern<'script> {
         #[serde(skip)]
         key: KnownKey<'script>,
         /// Rhs
-        rhs: ImutExprInt<'script>,
+        rhs: ImutExpr<'script>,
         /// Binary operation kind
         kind: BinOpKind,
     },
@@ -2214,43 +1647,52 @@ impl<'script> PredicatePattern<'script> {
                 PredicatePattern::Bin {
                     lhs: lhs1,
                     kind: BinOpKind::Eq,
-                    rhs: rhs1,
+                    rhs: ImutExpr::Literal(l1),
                     ..
                 },
                 PredicatePattern::Bin {
                     lhs: lhs2,
                     kind: BinOpKind::Eq,
-                    rhs: rhs2,
+                    rhs: ImutExpr::Literal(l2),
                     ..
                 },
-            ) if lhs1 == lhs2 && !rhs1.ast_eq(rhs2) => true,
+            ) if lhs1 == lhs2 && !l1.ast_eq(l2) => true,
             (
                 PredicatePattern::Bin { lhs: lhs1, .. },
                 PredicatePattern::FieldAbsent { lhs: lhs2, .. },
+            )
+            | (
+                PredicatePattern::FieldAbsent { lhs: lhs2, .. },
+                PredicatePattern::Bin { lhs: lhs1, .. },
             ) if lhs1 == lhs2 => true,
+
             (
                 PredicatePattern::FieldPresent { lhs: lhs1, .. },
                 PredicatePattern::FieldAbsent { lhs: lhs2, .. },
+            )
+            | (
+                PredicatePattern::FieldAbsent { lhs: lhs2, .. },
+                PredicatePattern::FieldPresent { lhs: lhs1, .. },
             ) if lhs1 == lhs2 => true,
             (
                 PredicatePattern::Bin {
                     lhs: lhs1,
                     kind: BinOpKind::Eq,
-                    rhs: ImutExprInt::Literal(Literal { value, .. }),
+                    rhs: ImutExpr::Literal(Literal { value, .. }),
                     ..
                 },
                 PredicatePattern::TildeEq {
                     lhs: lhs2, test, ..
                 },
-            ) if lhs1 == lhs2 => test.extractor.is_exclusive_to(value),
-            (
+            )
+            | (
                 PredicatePattern::TildeEq {
                     lhs: lhs2, test, ..
                 },
                 PredicatePattern::Bin {
                     lhs: lhs1,
                     kind: BinOpKind::Eq,
-                    rhs: ImutExprInt::Literal(Literal { value, .. }),
+                    rhs: ImutExpr::Literal(Literal { value, .. }),
                     ..
                 },
             ) if lhs1 == lhs2 => test.extractor.is_exclusive_to(value),
@@ -2298,8 +1740,7 @@ impl<'script> PredicatePattern<'script> {
 
     /// Get key
     #[must_use]
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
-    pub fn key(&self) -> &KnownKey<'script> {
+    pub(crate) fn key(&self) -> &KnownKey<'script> {
         use PredicatePattern::{
             ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
             TuplePatternEq,
@@ -2315,7 +1756,6 @@ impl<'script> PredicatePattern<'script> {
         }
     }
 
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn lhs(&self) -> &Cow<'script, str> {
         use PredicatePattern::{
             ArrayPatternEq, Bin, FieldAbsent, FieldPresent, RecordPatternEq, TildeEq,
@@ -2337,7 +1777,7 @@ impl<'script> PredicatePattern<'script> {
 /// Encapsulates a record pattern
 pub struct RecordPattern<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Pattern fields
     pub fields: PatternFields<'script>,
 }
@@ -2355,13 +1795,13 @@ impl<'script> RecordPattern<'script> {
         }
     }
 }
-impl_expr_mid!(RecordPattern);
+impl_expr!(RecordPattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an array predicate pattern
 pub enum ArrayPredicatePattern<'script> {
     /// Expression
-    Expr(ImutExprInt<'script>),
+    Expr(ImutExpr<'script>),
     /// Tilde predicate
     Tilde(Box<TestExpr>),
     /// Nested record pattern
@@ -2385,11 +1825,11 @@ impl<'script> ArrayPredicatePattern<'script> {
 /// Encapsulates an array pattern
 pub struct ArrayPattern<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Predicates
     pub exprs: ArrayPredicatePatterns<'script>,
 }
-impl_expr_mid!(ArrayPattern);
+impl_expr!(ArrayPattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates an assignment pattern
@@ -2406,19 +1846,17 @@ pub struct AssignPattern<'script> {
 /// Encapsulates a positional tuple pattern
 pub struct TuplePattern<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Predicates
     pub exprs: ArrayPredicatePatterns<'script>,
     /// True, if the pattern supports variable arguments
     pub open: bool,
 }
-impl_expr_mid!(TuplePattern);
+impl_expr!(TuplePattern);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Represents a path-like-structure
 pub enum Path<'script> {
-    /// A constant path
-    Const(LocalPath<'script>),
     /// A local path
     Local(LocalPath<'script>),
     /// The current event
@@ -2436,9 +1874,9 @@ pub enum Path<'script> {
 impl<'script> Path<'script> {
     /// Get segments as slice
     #[must_use]
-    pub fn segments(&self) -> &Segments<'script> {
+    pub(crate) fn segments(&self) -> &Segments<'script> {
         match self {
-            Path::Const(path) | Path::Local(path) => &path.segments,
+            Path::Local(path) => &path.segments,
             Path::Meta(path) => &path.segments,
             Path::Event(path) => &path.segments,
             Path::State(path) => &path.segments,
@@ -2449,192 +1887,14 @@ impl<'script> Path<'script> {
 
     /// Get segments as slice
     #[must_use]
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
-    pub fn segments_mut(&mut self) -> &mut Segments<'script> {
+    pub(crate) fn segments_mut(&mut self) -> &mut Segments<'script> {
         match self {
-            Path::Const(path) | Path::Local(path) => &mut path.segments,
+            Path::Local(path) => &mut path.segments,
             Path::Meta(path) => &mut path.segments,
             Path::Event(path) => &mut path.segments,
             Path::State(path) => &mut path.segments,
             Path::Expr(path) => &mut path.segments,
             Path::Reserved(path) => path.segments_mut(),
-        }
-    }
-    #[allow(clippy::too_many_lines)]
-    fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        match self {
-            Path::Const(LocalPath {
-                is_const: true,
-                segments,
-                idx,
-                mid,
-            }) if segments.is_empty() => {
-                if let Some(v) = helper.consts.get(idx) {
-                    let lit = Literal {
-                        mid,
-                        value: v.clone(),
-                    };
-                    Ok(ImutExprInt::Literal(lit))
-                } else {
-                    // ALLOW: if something is is_const: true it is a constant.
-                    unreachable!()
-                }
-            }
-            Path::Expr(path) => {
-                if let ImutExprInt::Literal(lit) = *path.expr.clone() {
-                    let base_value = lit.value;
-                    let mut subrange: Option<&[Value<'script>]> = None;
-                    let mut current = &base_value;
-                    for segment in &path.segments.clone() {
-                        match segment {
-                            // Next segment is an identifier: lookup the identifier on `current`, if it's an object
-                            Segment::Id { mid, key, .. } => {
-                                subrange = None;
-                                current = key.lookup(current).ok_or_else(|| {
-                                    current.as_object().map_or_else(
-                                        || {
-                                            err_need_obj(
-                                                &*path.expr,
-                                                segment,
-                                                current.value_type(),
-                                                &helper.meta,
-                                            )
-                                        },
-                                        |o| {
-                                            let key = helper.meta.name_dflt(*mid).to_string();
-                                            let options =
-                                                o.keys().map(ToString::to_string).collect();
-                                            error_bad_key_err(
-                                                &*path.expr,
-                                                segment,
-                                                &Path::Expr(path.clone()),
-                                                key,
-                                                options,
-                                                &helper.meta,
-                                            )
-                                        },
-                                    )
-                                })?;
-                                continue;
-                            }
-                            // Next segment is an index: index into `current`, if it's an array
-                            Segment::Idx { idx, .. } => {
-                                if let Some(a) = current.as_array() {
-                                    let range_to_consider =
-                                        subrange.unwrap_or_else(|| a.as_slice());
-                                    let idx = *idx;
-
-                                    if let Some(c) = range_to_consider.get(idx) {
-                                        current = c;
-                                        subrange = None;
-                                        continue;
-                                    }
-                                    let r = idx..idx;
-                                    let l = range_to_consider.len();
-                                    return error_array_out_of_bound(
-                                        &*path.expr,
-                                        segment,
-                                        &Path::Expr(path.clone()),
-                                        r,
-                                        l,
-                                        &helper.meta,
-                                    );
-                                }
-                                return error_need_arr(
-                                    &*path.expr,
-                                    segment,
-                                    current.value_type(),
-                                    &helper.meta,
-                                );
-                            }
-                            // Next segment is an index range: index into `current`, if it's an array
-                            Segment::Range { start, end, .. } => {
-                                if let Some(a) = current.as_array() {
-                                    let array = subrange.unwrap_or_else(|| a.as_slice());
-                                    let start = start.clone().try_reduce_into_value(helper);
-                                    let end = end.clone().try_reduce_into_value(helper);
-
-                                    // start or idx couldn't be reduced
-                                    // so the ExprPath can't be reduced
-                                    if start.is_err() || end.is_err() {
-                                        return Ok(ImutExprInt::Path(Path::Expr(path)));
-                                    }
-
-                                    let start = match start.as_usize() {
-                                        Some(id) => id,
-                                        None => {
-                                            return error_need_int(
-                                                &*path.expr,
-                                                segment,
-                                                current.value_type(),
-                                                &helper.meta,
-                                            )
-                                        }
-                                    };
-                                    let end = match end.as_usize() {
-                                        Some(id) => id,
-                                        None => {
-                                            return error_need_int(
-                                                &*path.expr,
-                                                segment,
-                                                current.value_type(),
-                                                &helper.meta,
-                                            )
-                                        }
-                                    };
-
-                                    if end < start {
-                                        return error_decreasing_range(
-                                            &*path.expr,
-                                            segment,
-                                            &Path::Expr(path.clone()),
-                                            start,
-                                            end,
-                                            &helper.meta,
-                                        );
-                                    } else if end > array.len() {
-                                        let r = start..end;
-                                        let l = array.len();
-                                        return error_array_out_of_bound(
-                                            &*path.expr,
-                                            segment,
-                                            &Path::Expr(path.clone()),
-                                            r,
-                                            l,
-                                            &helper.meta,
-                                        );
-                                    }
-                                    subrange = array.get(start..end);
-                                    continue;
-                                };
-                                return error_need_arr(
-                                    &*path.expr,
-                                    segment,
-                                    current.value_type(),
-                                    &helper.meta,
-                                );
-                            }
-                            // Next segment is an expression:
-                            // The `expr` inside `Segment::Element` is non-const
-                            // and cannot be reduced at compile time
-                            Segment::Element { .. } => {
-                                return Ok(ImutExprInt::Path(Path::Expr(path)))
-                            }
-                        }
-                    }
-                    let val = subrange.map_or_else(
-                        || current.clone(),
-                        |range_to_consider| Value::from(range_to_consider.to_vec()),
-                    );
-                    Ok(ImutExprInt::Literal(Literal {
-                        mid: path.mid,
-                        value: val,
-                    }))
-                } else {
-                    Ok(ImutExprInt::Path(Path::Expr(path)))
-                }
-            }
-            other => Ok(ImutExprInt::Path(other)),
         }
     }
 }
@@ -2648,70 +1908,73 @@ pub enum Segment<'script> {
         #[serde(skip)]
         key: KnownKey<'script>,
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
     },
     /// A numeric index
     Idx {
         /// Index
         idx: usize,
         /// id
-        mid: usize,
+        mid: Box<NodeMeta>,
     },
     /// An element
     Element {
         /// Value Expression
-        expr: ImutExprInt<'script>,
+        expr: ImutExpr<'script>,
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
     },
-    /// A range
+    /// A range with know start and end values
     Range {
-        /// Lower-inclusive
-        lower_mid: usize,
-        /// Max-exclusive
-        upper_mid: usize,
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// Start of range value expression
-        start: Box<ImutExprInt<'script>>,
+        start: usize,
         /// End of range value expression
-        end: Box<ImutExprInt<'script>>,
+        end: usize,
+    },
+    /// A range dynamic start and end values
+    RangeExpr {
+        /// Id
+        mid: Box<NodeMeta>,
+        /// Start of range value expression
+        start: Box<ImutExpr<'script>>,
+        /// End of range value expression
+        end: Box<ImutExpr<'script>>,
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Default)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// A path local to the current program
 pub struct LocalPath<'script> {
     /// Local Index
     pub idx: usize,
-    /// True, if declared const
-    pub is_const: bool,
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Segments
     pub segments: Segments<'script>,
 }
-impl_expr_mid!(LocalPath);
+impl_expr!(LocalPath);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// A metadata path
 pub struct MetadataPath<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Segments
     pub segments: Segments<'script>,
 }
-impl_expr_mid!(MetadataPath);
+impl_expr!(MetadataPath);
 
 /// A expression path
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct ExprPath<'script> {
-    pub(crate) expr: Box<ImutExprInt<'script>>,
+    pub(crate) expr: Box<ImutExpr<'script>>,
     pub(crate) segments: Segments<'script>,
     pub(crate) var: usize,
-    pub(crate) mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
 }
-impl_expr_mid!(ExprPath);
+impl_expr!(ExprPath);
 
 /// Reserved keyword path
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -2719,28 +1982,27 @@ pub enum ReservedPath<'script> {
     /// `args` keyword
     Args {
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// Segments
         segments: Segments<'script>,
     },
     /// `window` keyword
     Window {
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// Segments
         segments: Segments<'script>,
     },
     /// `group` keyword
     Group {
         /// Id
-        mid: usize,
+        mid: Box<NodeMeta>,
         /// Segments
         segments: Segments<'script>,
     },
 }
 
 impl<'script> ReservedPath<'script> {
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn segments(&self) -> &Segments<'script> {
         match self {
             ReservedPath::Args { segments, .. }
@@ -2748,7 +2010,6 @@ impl<'script> ReservedPath<'script> {
             | ReservedPath::Group { segments, .. } => segments,
         }
     }
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
     fn segments_mut(&mut self) -> &mut Segments<'script> {
         match self {
             ReservedPath::Args { segments, .. }
@@ -2759,12 +2020,11 @@ impl<'script> ReservedPath<'script> {
 }
 
 impl<'script> BaseExpr for ReservedPath<'script> {
-    #[cfg(not(tarpaulin_include))] // this is a simple asccessor
-    fn mid(&self) -> usize {
+    fn meta(&self) -> &NodeMeta {
         match self {
             ReservedPath::Args { mid, .. }
             | ReservedPath::Window { mid, .. }
-            | ReservedPath::Group { mid, .. } => *mid,
+            | ReservedPath::Group { mid, .. } => mid,
         }
     }
 }
@@ -2773,21 +2033,21 @@ impl<'script> BaseExpr for ReservedPath<'script> {
 /// The path representing the current in-flight event
 pub struct EventPath<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Segments
     pub segments: Segments<'script>,
 }
-impl_expr_mid!(EventPath);
+impl_expr!(EventPath);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// The path representing captured program state
 pub struct StatePath<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// Segments
     pub segments: Segments<'script>,
 }
-impl_expr_mid!(StatePath);
+impl_expr!(StatePath);
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
@@ -2799,8 +2059,8 @@ pub enum BinOpKind {
     /// we're forced to make this pub because of lalrpop
     And,
 
-    /// we're forced to make this pub because of lalrpop
-    BitOr,
+    // NOT IMPLEMENTED /// we're forced to make this pub because of lalrpop
+    // BitOr,
     /// we're forced to make this pub because of lalrpop
     BitXor,
     /// we're forced to make this pub because of lalrpop
@@ -2843,35 +2103,15 @@ pub enum BinOpKind {
 /// Encapsulates a binary expression form
 pub struct BinExpr<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// The operation kind
     pub kind: BinOpKind,
     /// The Left-hand-side operand
-    pub lhs: ImutExprInt<'script>,
+    pub lhs: ImutExpr<'script>,
     /// The Right-hand-side operand
-    pub rhs: ImutExprInt<'script>,
+    pub rhs: ImutExpr<'script>,
 }
-impl_expr_mid!(BinExpr);
-
-impl<'script> BinExpr<'script> {
-    fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        match &self {
-            BinExpr { lhs, rhs, .. } if lhs.is_lit() && rhs.is_lit() => {
-                // We need to clone here and use &self in the match so we can `exec_binary` later
-                let l = lhs.clone().try_into_value(helper)?;
-                let r = rhs.clone().try_into_value(helper)?;
-                let value =
-                    exec_binary(&self, &self, &helper.meta, self.kind, &l, &r)?.into_owned();
-                let lit = Literal {
-                    mid: self.mid,
-                    value,
-                };
-                Ok(ImutExprInt::Literal(lit))
-            }
-            _ => Ok(ImutExprInt::Binary(Box::new(self))),
-        }
-    }
-}
+impl_expr!(BinExpr);
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
@@ -2890,185 +2130,13 @@ pub enum UnaryOpKind {
 /// Encapsulates a unary expression form
 pub struct UnaryExpr<'script> {
     /// Id
-    pub mid: usize,
+    pub(crate) mid: Box<NodeMeta>,
     /// The operation kind
     pub kind: UnaryOpKind,
     /// The operand
-    pub expr: ImutExprInt<'script>,
+    pub expr: ImutExpr<'script>,
 }
-impl_expr_mid!(UnaryExpr);
-
-impl<'script> UnaryExpr<'script> {
-    fn try_reduce(self, helper: &Helper<'script, '_>) -> Result<ImutExprInt<'script>> {
-        let ex = self.extent(&helper.meta);
-        match self {
-            UnaryExpr {
-                expr, mid, kind, ..
-            } if expr.is_lit() => {
-                let expr = expr.try_into_value(helper)?;
-                let value = if let Some(v) = exec_unary(kind, &expr) {
-                    v.into_owned()
-                } else {
-                    let outer = ex.expand_lines(2);
-                    let e = ErrorKind::InvalidUnary(outer, ex, kind, expr.value_type());
-                    return Err(e.into());
-                };
-
-                let lit = Literal { mid, value };
-                Ok(ImutExprInt::Literal(lit))
-            }
-            _ => Ok(ImutExprInt::Unary(Box::new(self))),
-        }
-    }
-}
+impl_expr!(UnaryExpr);
 
 #[cfg(test)]
-mod test {
-
-    use super::{ConstDoc, FnDoc, ImutExpr, ModDoc, QueryDeclDoc};
-    use crate::{
-        ast::{Expr, ImutExprInt, Invocable, Invoke, Record},
-        prelude::*,
-        CustomFn,
-    };
-
-    fn v(s: &'static str) -> super::ImutExprInt<'static> {
-        super::ImutExprInt::Literal(super::Literal {
-            mid: 0,
-            value: Value::from(s),
-        })
-    }
-    #[test]
-    fn const_doc() {
-        let c = ConstDoc {
-            name: "const test".into(),
-            doc: Some("hello".into()),
-            value_type: ValueType::Null,
-        };
-        assert_eq!(
-            c.to_string(),
-            r#"
-### const test
-
-*type*: Null
-
-hello
-"#
-        );
-    }
-
-    #[test]
-    fn fn_doc() {
-        let c = FnDoc {
-            name: "fn_test".into(),
-            args: vec!["snot".into(), "badger".into()],
-            doc: Some("hello".into()),
-            open: false,
-        };
-        assert_eq!(
-            c.to_string(),
-            r#"
-### fn_test(snot, badger)
-
-hello
-"#
-        );
-    }
-
-    #[test]
-    fn mod_doc() {
-        let c = ModDoc {
-            name: "test mod".into(),
-            doc: Some("hello".into()),
-        };
-        assert_eq!(
-            c.print_with_name(&c.name),
-            r#"
-# test mod
-
-hello
-"#
-        );
-    }
-
-    #[test]
-    fn query_doc() {
-        let q = QueryDeclDoc {
-            name: "test query".into(),
-            doc: Some("hello".into()),
-        };
-        assert_eq!(
-            q.to_string(),
-            r#"
-### test query
-
-hello
-"#
-        );
-    }
-
-    #[test]
-    fn record() {
-        let f1 = super::Field {
-            mid: 0,
-            name: "snot".into(),
-            value: v("badger"),
-        };
-        let f2 = super::Field {
-            mid: 0,
-            name: "badger".into(),
-            value: v("snot"),
-        };
-
-        let r = super::Record {
-            base: crate::Object::new(),
-            mid: 0,
-            fields: vec![f1, f2],
-        };
-
-        assert_eq!(r.get_field_expr("snot"), Some(&v("badger")));
-        assert_eq!(r.get_field_expr("nots"), None);
-
-        assert_eq!(
-            r.get_literal("badger").and_then(ValueAccess::as_str),
-            Some("snot")
-        );
-        assert_eq!(r.get_field_expr("adgerb"), None);
-    }
-
-    #[test]
-    fn as_record() {
-        let i = ImutExpr(v("snot"));
-        assert!(i.as_record().is_none());
-        let i = ImutExpr(ImutExprInt::Record(Record::default()));
-        assert!(i.as_record().is_some());
-    }
-    #[test]
-    fn as_invoke() {
-        let invocable = Invocable::Tremor(CustomFn {
-            name: "f".into(),
-            body: Vec::new(),
-            args: Vec::new(),
-            open: false,
-            locals: 0,
-            is_const: false,
-            inline: false,
-        });
-        let i = Invoke {
-            mid: 0,
-            module: Vec::new(),
-            fun: "fun".to_string(),
-            invocable,
-            args: Vec::new(),
-        };
-        assert!(Expr::Imut(v("snut")).as_invoke().is_none());
-        let e = ImutExprInt::Invoke(i.clone());
-        assert!(Expr::Imut(e).as_invoke().is_some());
-        let e = ImutExprInt::Invoke1(i.clone());
-        assert!(Expr::Imut(e).as_invoke().is_some());
-        let e = ImutExprInt::Invoke2(i.clone());
-        assert!(Expr::Imut(e).as_invoke().is_some());
-        let e = ImutExprInt::Invoke3(i.clone());
-        assert!(Expr::Imut(e).as_invoke().is_some());
-    }
-}
+mod test;

@@ -1,0 +1,1 @@
+{"error":true,"event":null,"meta":{"correlation":"\"ketchup\"","error":"CAS error: expected ketchup but found ketchup.","kv":{"key":[104,101,105,110,122],"op":"cas"}}}

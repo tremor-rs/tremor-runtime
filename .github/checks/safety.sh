@@ -25,7 +25,7 @@ EOF
 
 
 
-files=$(find . -name '*.rs' | grep -v -f .checkignore)
+files=$(find . -name '*.rs' | grep -v -f .checkignore | grep -v 'test.rs$')
 
 while getopts hamuiprebldxcft opt; do
     case $opt in

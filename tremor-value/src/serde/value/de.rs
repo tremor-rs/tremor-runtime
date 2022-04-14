@@ -14,6 +14,7 @@
 
 use crate::{Error, Object, Value};
 use beef::Cow;
+use serde::de::{EnumAccess, IntoDeserializer, VariantAccess};
 use serde_ext::de::{
     self, Deserialize, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor,
 };
@@ -90,10 +91,132 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
         }
     }
 
+    #[cfg_attr(not(feature = "no-inline"), inline)]
+    fn deserialize_enum<V>(
+        self,
+        name: &str,
+        _variants: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Error>
+    where
+        V: Visitor<'de>,
+    {
+        let (variant, value) = match self {
+            Value::Object(value) => {
+                let mut iter = value.into_iter();
+                let (variant, value) = iter.next().ok_or_else(|| {
+                    Error::Serde(format!("Missing enum type for variant in enum `{name}`"))
+                })?;
+                // enums are encoded in json as maps with a single key:value pair
+                if let Some((extra, _)) = iter.next() {
+                    return Err(Error::Serde(format!(
+                        "extra values in enum `{name}`: `{variant}` .. `{extra}`"
+                    )));
+                }
+                (variant, Some(value))
+            }
+            Value::String(variant) => (variant, None),
+            _other => {
+                return Err(Error::Serde("Not a string".to_string()));
+            }
+        };
+
+        visitor.visit_enum(EnumDeserializer { variant, value })
+    }
+
     forward_to_deserialize_any! {
         bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
             bytes byte_buf unit unit_struct newtype_struct seq tuple
-            tuple_struct map enum identifier ignored_any
+            tuple_struct map identifier ignored_any
+    }
+}
+
+struct EnumDeserializer<'de> {
+    variant: Cow<'de, str>,
+    value: Option<Value<'de>>,
+}
+
+impl<'de> EnumAccess<'de> for EnumDeserializer<'de> {
+    type Error = Error;
+    type Variant = VariantDeserializer<'de>;
+
+    fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant), Error>
+    where
+        V: DeserializeSeed<'de>,
+    {
+        let variant = self.variant.into_deserializer();
+        let visitor = VariantDeserializer { value: self.value };
+        seed.deserialize(variant).map(|v| (v, visitor))
+    }
+}
+
+impl<'de> IntoDeserializer<'de, Error> for Value<'de> {
+    type Deserializer = Self;
+
+    fn into_deserializer(self) -> Self::Deserializer {
+        self
+    }
+}
+
+struct VariantDeserializer<'de> {
+    value: Option<Value<'de>>,
+}
+
+impl<'de> VariantAccess<'de> for VariantDeserializer<'de> {
+    type Error = Error;
+
+    fn unit_variant(self) -> Result<(), Error> {
+        match self.value {
+            Some(value) => Deserialize::deserialize(value),
+            None => Ok(()),
+        }
+    }
+
+    fn newtype_variant_seed<T>(self, seed: T) -> Result<T::Value, Error>
+    where
+        T: DeserializeSeed<'de>,
+    {
+        match self.value {
+            Some(value) => seed.deserialize(value),
+            None => Err(Error::Serde("expected newtype variant".to_string()))
+            // None => Err(serde::de::Error::invalid_type(
+            //     Unexpected::UnitVariant,
+            //     &"newtype variant",
+            // )),
+        }
+    }
+
+    fn tuple_variant<V>(self, _len: usize, visitor: V) -> Result<V::Value, Error>
+    where
+        V: Visitor<'de>,
+    {
+        match self.value {
+            Some(Value::Array(v)) => {
+                if v.is_empty() {
+                    visitor.visit_unit()
+                } else {
+                    visitor.visit_seq(Array(v.iter()))
+                }
+            }
+            Some(_) | None => Err(Error::Serde("expected tuple variant".to_string())),
+        }
+    }
+
+    fn struct_variant<V>(
+        self,
+        _fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Error>
+    where
+        V: Visitor<'de>,
+    {
+        match self.value {
+            Some(Value::Object(v)) => visitor.visit_map(ObjectAccess {
+                i: v.iter(),
+                v: &Value::Static(StaticNode::Null),
+            }),
+            Some(_) | None => Err(Error::Serde("expected struct variant".to_string())),
+        }
     }
 }
 
@@ -177,12 +300,14 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     /****************** Option ******************/
+
     #[cfg_attr(not(feature = "no-inline"), inline)]
     fn visit_none<E>(self) -> Result<Self::Value, E> {
         Ok(Value::Static(StaticNode::Null))
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_some<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
     where
         D: Deserializer<'de>,
@@ -200,6 +325,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
 
     /****************** i64 ******************/
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_i8<E>(self, value: i8) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -208,6 +334,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_i16<E>(self, value: i16) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -216,6 +343,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_i32<E>(self, value: i32) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -224,6 +352,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_i64<E>(self, value: i64) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -233,6 +362,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
 
     #[cfg(feature = "128bit")]
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_i128<E>(self, value: i128) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -243,6 +373,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     /****************** u64 ******************/
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_u8<E>(self, value: u8) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -251,6 +382,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_u16<E>(self, value: u16) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -259,6 +391,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_u32<E>(self, value: u32) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -267,6 +400,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -276,6 +410,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
 
     #[cfg(feature = "128bit")]
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_u128<E>(self, value: u128) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -286,6 +421,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     /****************** f64 ******************/
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_f32<E>(self, value: f32) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -294,6 +430,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_f64<E>(self, value: f64) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -303,6 +440,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
 
     /****************** stringy stuff ******************/
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_char<E>(self, value: char) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -311,6 +449,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_borrowed_str<E>(self, value: &'de str) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -319,6 +458,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -327,6 +467,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     }
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
     where
         E: de::Error,
@@ -337,6 +478,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     /****************** byte stuff ******************/
 
     #[cfg_attr(not(feature = "no-inline"), inline)]
+
     fn visit_borrowed_bytes<E>(self, value: &'de [u8]) -> Result<Self::Value, E>
     where
         E: de::Error,

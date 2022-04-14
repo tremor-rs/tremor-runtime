@@ -1,0 +1,15 @@
+status: 0
+name: Runtime errors should emit hygienic errors if possible
+asserts:
+  - source: fg.err.log
+    contains:
+       - "select event.foo_select"
+       - "             ^^^^^^^^^^ Trying to access a non existing event key `foo_select`"
+       - "    where event.foo_where == true"
+       - "                ^^^^^^^^^ Trying to access a non existing event key `foo_where`"
+       - "  group by event.foo_group"
+       - "                 ^^^^^^^^^ Trying to access a non existing event key `foo_group`"
+       - "    having event[\"foo_having\"] == true;"
+       - "                 ^^^^^^^^^^^^ Trying to access a non existing event key `foo_having`"
+  - source: out.log
+    equals_file: "expected.json"

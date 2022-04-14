@@ -14,69 +14,58 @@
 
 use crate::op::prelude::*;
 use beef::Cow;
-use tremor_script::{ast, prelude::*, srs};
+use tremor_script::{
+    ast::{self, Helper},
+    prelude::*,
+};
 #[derive(Debug)]
 pub(crate) struct TrickleOperator {
-    pub id: String,
     pub op: Box<dyn Operator>,
 }
 
-fn mk_node_config(
-    id: String,
-    op_type: String,
-    config: Option<HashMap<String, Value>>,
-) -> NodeConfig {
+fn mk_node_config(id: String, op_type: String, config: Value) -> NodeConfig {
     NodeConfig {
         id,
         kind: crate::NodeKind::Operator,
         op_type,
-        config: config.map(|v| {
-            serde_yaml::Value::from(
-                v.iter()
-                    .filter_map(|(k, v)| {
-                        let mut v = v.encode();
-                        Some((
-                            serde_yaml::Value::from(k.as_str()),
-                            simd_json::serde::from_str::<serde_yaml::Value>(&mut v).ok()?,
-                        ))
-                    })
-                    .collect::<serde_yaml::Mapping>(),
-            )
-        }),
+        config: if config
+            .as_object()
+            .map(HashMap::is_empty)
+            .unwrap_or_default()
+        {
+            None
+        } else {
+            Some(config.into_static())
+        },
         ..NodeConfig::default()
     }
 }
 
 impl TrickleOperator {
-    pub fn with_stmt(operator_uid: u64, id: String, decl: &srs::Stmt) -> Result<Self> {
+    pub fn with_stmt(
+        operator_uid: OperatorId,
+        defn: &ast::OperatorDefinition<'static>,
+        helper: &mut Helper,
+    ) -> Result<Self> {
         use crate::operator;
-        let stmt = decl.suffix();
-        let op: Box<dyn Operator> = match stmt {
-            ast::Stmt::OperatorDecl(ref op) => {
-                let op = op.clone().into_static();
-                let config = mk_node_config(
-                    op.node_id.id().to_string(),
-                    format!("{}::{}", op.kind.module, op.kind.operation),
-                    op.params,
-                );
-                operator(operator_uid, &config)?
-            }
-            _ => {
-                return Err(ErrorKind::PipelineError(
-                    "Trying to turn a non operator into a operator".into(),
-                )
-                .into())
-            }
-        };
 
-        Ok(Self { id, op })
+        let op = defn.clone();
+        let config = mk_node_config(
+            op.id.clone(),
+            format!("{}::{}", op.kind.module, op.kind.operation),
+            op.params.generate_config(helper)?,
+        );
+
+        Ok(Self {
+            op: operator(operator_uid, &config)?,
+        })
     }
 }
 
 impl Operator for TrickleOperator {
     fn on_event(
         &mut self,
-        uid: u64,
+        uid: OperatorId,
         port: &str,
         state: &mut Value<'static>,
         event: Event,
@@ -89,7 +78,7 @@ impl Operator for TrickleOperator {
     }
     fn on_signal(
         &mut self,
-        uid: u64,
+        uid: OperatorId,
         state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -99,7 +88,7 @@ impl Operator for TrickleOperator {
     fn handles_contraflow(&self) -> bool {
         self.op.handles_contraflow()
     }
-    fn on_contraflow(&mut self, uid: u64, contraevent: &mut Event) {
+    fn on_contraflow(&mut self, uid: OperatorId, contraevent: &mut Event) {
         self.op.on_contraflow(uid, contraevent);
     }
 

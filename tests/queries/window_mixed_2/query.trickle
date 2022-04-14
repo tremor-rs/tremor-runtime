@@ -1,11 +1,11 @@
 use tremor::system;
 
-define tumbling window size_two
+define window size_two from tumbling
 with
   size = 2
 end;
 
-define tumbling window time_two
+define window time_two from tumbling
 with
   interval = 5
 end;

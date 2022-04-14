@@ -1,4 +1,4 @@
 match event of
-  case foo = %[ 2, 4 ] => foo
+  case foo = %[ 2, ~ re|4| ] => foo
   default => "ko"
 end

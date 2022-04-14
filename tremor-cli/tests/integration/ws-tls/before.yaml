@@ -1,0 +1,8 @@
+- dir: "./before"
+  cmd: "sh"
+  args:
+    - "refresh_keys.sh"
+  await:
+    status: ["0"]
+    file-exists: ["localhost.cert", "localhost.key"]
+  max-await-secs: 5

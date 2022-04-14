@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // This file is urely for testing w/ EQC
-#![cfg(not(tarpaulin_include))]
+// #![cfg_attr(coverage, no_coverage)]
 
 use crate::prelude::*;
 use crate::{
@@ -28,9 +28,7 @@ use std::ptr;
 
 fn eval(src: &str) -> Result<String> {
     let reg: Registry = registry::registry();
-    // let aggr_reg: AggrRegistry = registry::aggr_registry();
-    let script = Script::parse(&crate::path::load(), "<eval>", src.to_string(), &reg)
-        .map_err(|e| e.error)?;
+    let script = Script::parse(src, &reg)?;
 
     let mut event = Value::object();
     let mut meta = Value::object();
@@ -51,7 +49,11 @@ fn eval(src: &str) -> Result<String> {
 
 #[no_mangle]
 
-pub extern "C" fn tremor_script_c_eval(script: *const c_char, dst: *mut u8, len: usize) -> usize {
+pub extern "C" fn tremor_script_c_eval(
+    script: *const c_char,
+    dst: *mut c_char,
+    len: usize,
+) -> usize {
     let cstr = unsafe { CStr::from_ptr(script) };
     match cstr
         .to_str()
@@ -61,7 +63,7 @@ pub extern "C" fn tremor_script_c_eval(script: *const c_char, dst: *mut u8, len:
         Ok(result) => {
             if result.len() < len {
                 unsafe {
-                    let src = result.as_ptr().cast::<u8>();
+                    let src = result.as_ptr().cast::<c_char>();
                     ptr::copy_nonoverlapping(src, dst, result.len());
                     *dst.add(result.len()) = 0;
                     0

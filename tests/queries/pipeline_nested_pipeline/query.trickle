@@ -1,0 +1,27 @@
+define pipeline outer
+args
+ min_aint = 20
+pipeline
+  define pipeline inner
+  args
+    min_aint = 30
+  pipeline
+    select event from in where event.aint > args.min_aint into out;
+  end;
+
+  create pipeline inner
+  with
+    min_aint = args.min_aint
+  end;
+
+  select event from in into inner;
+  select event from inner into out having event.abool;
+end;
+
+create pipeline outer
+with
+  min_aint = 35
+end;
+
+select event from in into outer;
+select event from outer into out;

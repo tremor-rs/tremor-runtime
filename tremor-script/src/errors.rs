@@ -19,9 +19,10 @@
 
 pub use crate::prelude::ValueType;
 use crate::{
-    ast::{self, BaseExpr, NodeMetas},
+    arena,
+    ast::{self, base_expr::Ranged, BaseExpr},
     errors, lexer,
-    pos::{self, Range},
+    pos::{self, Span},
     prelude::*,
     Value,
 };
@@ -31,25 +32,26 @@ use lalrpop_util::ParseError as LalrpopError;
 use std::num;
 use std::ops::{Range as RangeExclusive, RangeInclusive};
 
-/// A compile-time error capturing the preprocessors cus at the time of the error
 #[derive(Debug)]
-pub struct CompilerError {
-    /// The original error
-    pub error: Error,
-    /// The cus
-    pub cus: Vec<lexer::CompilationUnit>,
-}
+//// An error with a associated arena index
+pub struct ErrorWithIndex(pub arena::Index, pub Error);
 
-impl CompilerError {
-    /// Turns this into the underlying error
-    #[must_use]
-    pub fn error(self) -> Error {
-        self.error
+impl std::fmt::Display for ErrorWithIndex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.1.fmt(f)
     }
 }
-impl From<CompilerError> for Error {
-    fn from(e: CompilerError) -> Self {
-        e.error()
+
+impl std::error::Error for ErrorWithIndex {}
+
+impl From<ErrorWithIndex> for Error {
+    fn from(e: ErrorWithIndex) -> Self {
+        e.1
+    }
+}
+impl From<Error> for ErrorWithIndex {
+    fn from(e: Error) -> Self {
+        ErrorWithIndex(arena::Index::INVALID, e)
     }
 }
 
@@ -73,6 +75,12 @@ impl From<url::ParseError> for Error {
 impl From<Error> for std::io::Error {
     fn from(e: Error) -> Self {
         std::io::Error::new(std::io::ErrorKind::Other, format!("{}", e))
+    }
+}
+
+impl<P> From<std::sync::PoisonError<P>> for Error {
+    fn from(e: std::sync::PoisonError<P>) -> Self {
+        Self::from(format!("Poison Error: {:?}", e))
     }
 }
 
@@ -149,23 +157,23 @@ pub(crate) fn best_hint(
         .min()
         .map(|(d, s)| (d, s.clone()))
 }
-pub(crate) type ErrorLocation = (Option<Range>, Option<Range>);
+pub(crate) type ErrorLocation = (Option<Span>, Option<Span>);
 
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UnfinishedToken {
-    pub(crate) range: Range,
+    pub(crate) range: Span,
     pub(crate) value: String,
 }
 
 impl UnfinishedToken {
-    pub(crate) fn new(range: Range, value: String) -> Self {
+    pub(crate) fn new(range: Span, value: String) -> Self {
         Self { range, value }
     }
 }
 
 impl ErrorKind {
-    pub(crate) fn cu(&self) -> usize {
-        self.expr().0.map(Range::cu).unwrap_or_default()
+    pub(crate) fn aid(&self) -> arena::Index {
+        self.expr().0.map(Span::aid).unwrap_or_default()
     }
     #[allow(clippy::too_many_lines)]
     pub(crate) fn expr(&self) -> ErrorLocation {
@@ -173,107 +181,112 @@ impl ErrorKind {
             AccessError, AggrInAggr, ArrayOutOfRange, AssignIntoArray, AssignToConst,
             BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity,
             BadArrayIndex, BadType, BinaryDrop, BinaryEmit, CantSetArgsConst, CantSetGroupConst,
-            CantSetWindowConst, Common, DecreasingRange, DoubleConst, DoubleStream,
-            DoubleSubqueryStmt, EmptyInterpolation, EmptyScript, ExtraToken, Generic, Grok,
-            InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst, InvalidDrop, InvalidEmit,
-            InvalidExtractor, InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidIntLiteral,
-            InvalidMod, InvalidRecur, InvalidToken, InvalidUnary, InvalidUtf8Sequence, Io,
-            JsonError, MergeTypeConflict, MissingEffectors, MissingFunction, MissingModule,
-            ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed, NoEventReferencesAllowed,
-            NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops, ParseIntError,
-            ParserError, PatchKeyExists, PreprocessorError, QueryNodeDuplicateName,
-            QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit, RuntimeError,
-            SubqueryUnknownPort, TailingHereDoc, TypeConflict, UnexpectedCharacter,
-            UnexpectedEndOfStream, UnexpectedEscapeCode, UnrecognizedToken, UnterminatedExtractor,
+            CantSetWindowConst, Common, CyclicUse, DecreasingRange, DeployArgNotSpecified,
+            DeployArtefactNotDefined, DeployRequiredArgDoesNotResolve, DoubleConst,
+            DoublePipelineCreate, DoubleStream, EmptyInterpolation, EmptyScript, ExtraToken,
+            Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst,
+            InvalidDrop, InvalidEmit, InvalidExtractor, InvalidFloatLiteral, InvalidFn,
+            InvalidHexLiteral, InvalidIntLiteral, InvalidPP, InvalidRecur, InvalidToken,
+            InvalidUnary, InvalidUtf8Sequence, Io, JsonError, MergeTypeConflict, MissingEffectors,
+            MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed,
+            NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
+            ParseIntError, ParserError, PatchKeyExists, PipelineUnknownPort,
+            QueryNodeDuplicateName, QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit,
+            RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
+            UnexpectedEscapeCode, UnknownLocal, UnrecognizedToken, UnterminatedExtractor,
             UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
             UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error, ValueError,
         };
         match self {
             NoClauseHit(outer)
+            | UnexpectedEndOfStream(outer)
             | Oops(outer, _, _)
             | QueryNodeDuplicateName(outer, _)
             | QueryNodeReservedName(outer, _) => (Some(outer.expand_lines(2)), Some(*outer)),
-            ArrayOutOfRange(outer, inner, _, _)
+            AggrInAggr(outer, inner)
+            | ArrayOutOfRange(outer, inner, _, _)
             | AssignIntoArray(outer, inner)
+            | AssignToConst(outer, inner)
             | BadAccessInEvent(outer, inner, _, _)
-            | BadAccessInState(outer, inner, _, _)
             | BadAccessInGlobal(outer, inner, _, _)
             | BadAccessInLocal(outer, inner, _, _)
+            | BadAccessInState(outer, inner, _, _)
             | BadArity(outer, inner, _, _, _, _)
             | BadArrayIndex(outer, inner, _, _)
             | BadType(outer, inner, _, _, _)
             | BinaryDrop(outer, inner)
             | BinaryEmit(outer, inner)
             | DecreasingRange(outer, inner, _, _)
+            | DeployArgNotSpecified(outer, inner, _)
+            | DeployArtefactNotDefined(outer, inner, _, _)
+            | DeployRequiredArgDoesNotResolve(outer, inner, _)
+            | DoubleConst(outer, inner, _)
+            | DoublePipelineCreate(outer, inner, _)
+            | DoubleStream(outer, inner, _)
+            | EmptyInterpolation(outer, inner, _)
             | ExtraToken(outer, inner, _)
-            | PatchKeyExists(outer, inner, _)
+            | Generic(outer, inner, _)
             | InvalidAssign(outer, inner)
             | InvalidBinary(outer, inner, _, _, _)
             | InvalidBitshift(outer, inner)
+            | InvalidConst(outer, inner)
             | InvalidDrop(outer, inner)
             | InvalidEmit(outer, inner)
-            | InvalidRecur(outer, inner)
-            | RecursionLimit(outer, inner)
-            | InvalidConst(outer, inner)
-            | InvalidMod(outer, inner)
-            | InvalidFn(outer, inner)
-            | AssignToConst(outer, inner, _)
-            | DoubleConst(outer, inner, _)
-            | DoubleStream(outer, inner, _)
-            | DoubleSubqueryStmt(outer, inner, _)
             | InvalidExtractor(outer, inner, _, _, _)
             | InvalidFloatLiteral(outer, inner, _)
+            | InvalidFn(outer, inner)
             | InvalidHexLiteral(outer, inner, _)
             | InvalidIntLiteral(outer, inner, _)
+            | InvalidPP(outer, inner, _)
+            | InvalidRecur(outer, inner)
             | InvalidToken(outer, inner)
             | InvalidUnary(outer, inner, _, _)
+            | InvalidUtf8Sequence(outer, inner, _)
             | MergeTypeConflict(outer, inner, _, _)
             | MissingEffectors(outer, inner)
             | MissingFunction(outer, inner, _, _, _)
             | MissingModule(outer, inner, _, _)
             | ModuleNotFound(outer, inner, _, _)
+            | NoConstsAllowed(outer, inner)
             | NoEventReferencesAllowed(outer, inner)
             | NoLocalsAllowed(outer, inner)
-            | NoConstsAllowed(outer, inner)
-            | QueryStreamNotDefined(outer, inner, _)
-            | SubqueryUnknownPort(outer, inner, _, _)
+            | NotConstant(outer, inner)
+            | PatchKeyExists(outer, inner, _)
+            | PipelineUnknownPort(outer, inner, _, _)
+            | QueryStreamNotDefined(outer, inner, _, _)
+            | RecursionLimit(outer, inner)
             | RuntimeError(outer, inner, _, _, _, _)
+            | TailingHereDoc(outer, inner, _, _)
             | TypeConflict(outer, inner, _, _)
             | UnexpectedCharacter(outer, inner, _, _)
             | UnexpectedEscapeCode(outer, inner, _, _)
-            | InvalidUtf8Sequence(outer, inner, _)
             | UnrecognizedToken(outer, inner, _, _)
             | UnterminatedExtractor(outer, inner, _)
-            | UnterminatedIdentLiteral(outer, inner, _)
-            | UnterminatedStringLiteral(outer, inner, _)
-            | UpdateKeyMissing(outer, inner, _)
             | UnterminatedHereDoc(outer, inner, _)
+            | UnterminatedIdentLiteral(outer, inner, _)
             | UnterminatedInterpolation(outer, inner, _)
-            | EmptyInterpolation(outer, inner, _)
-            | TailingHereDoc(outer, inner, _, _)
-            | Generic(outer, inner, _)
-            | AggrInAggr(outer, inner)
-            | NotConstant(outer, inner) => (Some(*outer), Some(*inner)),
+            | UnterminatedStringLiteral(outer, inner, _)
+            | UnknownLocal(outer, inner, _)
+            | CyclicUse(outer, inner, _)
+            | UpdateKeyMissing(outer, inner, _) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
+            | AccessError(_)
+            | CantSetArgsConst
+            | CantSetGroupConst
+            | CantSetWindowConst
             | Common(_)
             | Grok(_)
             | Io(_)
             | JsonError(_)
-            | ValueError(_)
-            | AccessError(_)
             | Msg(_)
             | NoObjectError(_)
             | NotFound
             | ParseIntError(_)
             | ParserError(_)
-            | PreprocessorError(_)
-            | UnexpectedEndOfStream
+            | Self::__Nonexhaustive { .. }
             | Utf8Error(_)
-            | CantSetWindowConst
-            | CantSetArgsConst
-            | CantSetGroupConst
-            | Self::__Nonexhaustive { .. } => (Some(Range::default()), None),
+            | ValueError(_) => (Some(Span::yolo()), None),
         }
     }
     pub(crate) fn token(&self) -> Option<UnfinishedToken> {
@@ -308,8 +321,9 @@ impl ErrorKind {
             TypeConflict, UnrecognizedToken, UnterminatedInterpolation,
         };
         match self {
-            UnrecognizedToken(outer, inner, t, _) if t.is_empty() && inner.0.absolute() == outer.1.absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
-            UnrecognizedToken(_, _, t, _) if t == "default" || t == "case" => Some("You might have a trailing `,` in the prior statement".into()),
+            UnrecognizedToken(outer, inner, t, _) if t.is_empty() && inner.start().absolute() == outer.start().absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
+            UnrecognizedToken(_, _, t, _) if t == "##" => Some(format!("`{t}` is as doc comment, it needs to be followed by a statement, did you want to use `#` here?")),
+            UnrecognizedToken(_, _, t, _) if t == "default" || t == "case" => Some("You might have a trailing `;` in the prior statement".into()),
             UnrecognizedToken(_, _, t, l) if !matches!(lexer::ident_to_token(t), lexer::Token::Ident(_, _)) && l.contains(&("`<ident>`".to_string())) => Some(format!("It looks like you tried to use the '{}' as a ident, consider quoting it as `{}` to make it an identifier.", t, t)),
             UnrecognizedToken(_, _, t, l) if t == "-" && l.contains(&("`(`".to_string())) => Some("Try wrapping this expression in parentheses `(` ... `)`".into()),
             UnrecognizedToken(_, _, key, options) => {
@@ -371,8 +385,8 @@ impl Error {
     }
     /// The compilation unit
     #[must_use]
-    pub fn cu(&self) -> usize {
-        self.0.cu()
+    pub fn aid(&self) -> arena::Index {
+        self.0.aid()
     }
 
     pub(crate) fn hint(&self) -> Option<String> {
@@ -388,7 +402,18 @@ impl Error {
     #[must_use]
     pub fn locate_in_source(&self, source: &str) -> Option<String> {
         match self.context() {
-            (Some(Range(ctx_start, ctx_end)), Some(Range(error_loc_start, error_loc_end))) => {
+            (
+                Some(Span {
+                    start: ctx_start,
+                    end: ctx_end,
+                    ..
+                }),
+                Some(Span {
+                    start: error_loc_start,
+                    end: error_loc_end,
+                    ..
+                }),
+            ) => {
                 // display error we can locate in the source
                 let start_line = ctx_start.line();
                 let context_lines = source
@@ -440,12 +465,13 @@ where
             "one of {}",
             choices
                 .iter()
-                .map(|e| e.to_string())
+                .map(ToString::to_string)
                 .collect::<Vec<String>>()
                 .join(", ")
         )
     }
 }
+pub type Kind = ErrorKind;
 
 error_chain! {
     foreign_links {
@@ -464,39 +490,48 @@ error_chain! {
          * ParserError
          */
          /// An unrecognized token
-        UnrecognizedToken(range: Range, loc: Range, token: String, expected: Vec<String>) {
+        UnrecognizedToken(range: Span, loc: Span, token: String, expected: Vec<String>) {
             description("Unrecognized token")
                 display("Found the token `{}` but expected {}", token, choices(expected))
         }
-        ExtraToken(range: Range, loc: Range, token: String) {
+        ExtraToken(range: Span, loc: Span, token: String) {
             description("Extra token")
                 display("Found an extra token: `{}` that does not belong there", token)
         }
-        InvalidToken(range: Range, loc: Range) {
+        InvalidToken(range: Span, loc: Span) {
             description("Invalid token")
                 display("Invalid token")
+        }
+        InvalidPP(range: Span, loc: Span, directive: String) {
+            description("Invalid preprocessor directive")
+                display("Found the preprocessor directive `{}` but expected {}", directive, choices(&["#!config"]))
         }
         /*
          * Generic
          */
-        Generic(expr: Range, inner: Range, msg: String) {
+        Generic(expr: Span, inner: Span, msg: String) {
             description("Generic error")
                 display("{}", msg)
         }
+        CyclicUse(expr: Span, inner: Span, uses: Vec<String>) {
+            description(" Cyclic dependency detected!")
+                display(" Cyclic dependency detected: {}", uses.join(" -> "))
+        }
+
 
         EmptyScript {
             description("No expressions were found in the script")
                 display("No expressions were found in the script")
         }
-        NotConstant(expr: Range, inner: Range) {
+        NotConstant(expr: Span, inner: Span) {
             description("The expression isn't constant and can't be evaluated at compile time")
                 display("The expression isn't constant and can't be evaluated at compile time")
         }
-        TypeConflict(expr: Range, inner: Range, got: ValueType, expected: Vec<ValueType>) {
+        TypeConflict(expr: Span, inner: Span, got: ValueType, expected: Vec<ValueType>) {
             description("Conflicting types")
                 display("Conflicting types, got {} but expected {}", t2s(*got), choices(&expected.iter().map(|v| t2s(*v).to_string()).collect::<Vec<String>>()))
         }
-        Oops(expr: Range, id: u64, msg: String) {
+        Oops(expr: Span, id: u64, msg: String) {
             description("Something went wrong and we're not sure what it was")
                 display("Something went wrong and we're not sure what it was: {}", msg)
         }
@@ -507,35 +542,35 @@ error_chain! {
         /*
          * Functions
          */
-        BadArity(expr: Range, inner: Range, m: String, f: String, a: RangeInclusive<usize>, calling_a: usize) {
+        BadArity(expr: Span, inner: Span, m: String, f: String, a: RangeInclusive<usize>, calling_a: usize) {
             description("Bad arity for function")
                 display("Bad arity for function {}::{}/{:?} but was called with {} arguments", m, f, a, calling_a)
         }
-        MissingModule(expr: Range, inner: Range, m: String, suggestion: Option<(usize, String)>) {
+        MissingModule(expr: Span, inner: Span, m: String, suggestion: Option<(usize, String)>) {
             description("Call to undefined module")
                 display("Call to undefined module {}", m)
         }
-        MissingFunction(expr: Range, inner: Range, m: Vec<String>, f: String, suggestion: Option<(usize, String)>) {
+        MissingFunction(expr: Span, inner: Span, m: Vec<String>, f: String, suggestion: Option<(usize, String)>) {
             description("Call to undefined function")
                 display("Call to undefined function {}::{}", m.join("::"), f)
         }
-        AggrInAggr(expr: Range, inner: Range) {
+        AggrInAggr(expr: Span, inner: Span) {
             description("Aggregates can not be called inside of aggregates")
                 display("Aggregates can not be called inside of aggregates")
         }
-        BadType(expr: Range, inner: Range, m: String, f: String, a: usize) {
+        BadType(expr: Span, inner: Span, m: String, f: String, a: usize) {
             description("Bad type passed to function")
                 display("Bad type passed to function {}::{}/{}", m, f, a)
         }
-        RuntimeError(expr: Range, inner: Range, m: String, f: String,  a: usize, c: String) {
+        RuntimeError(expr: Span, inner: Span, m: String, f: String,  a: usize, c: String) {
             description("Runtime error in function")
                 display("Runtime error in function {}::{}/{}: {}", m, f, a, c)
         }
-        InvalidRecur(expr: Range, inner: Range) {
+        InvalidRecur(expr: Span, inner: Span) {
             description("Can not recur from this location")
                 display("Can not recur from this location")
         }
-        RecursionLimit(expr: Range, inner: Range) {
+        RecursionLimit(expr: Span, inner: Span) {
             description("Recursion limit Reached")
                 display("Recursion limit Reached")
         }
@@ -543,72 +578,72 @@ error_chain! {
         /*
          * Lexer, Preprocessor and Parser
          */
-        UnterminatedExtractor(expr: Range, inner: Range, extractor: UnfinishedToken) {
+        UnterminatedExtractor(expr: Span, inner: Span, extractor: UnfinishedToken) {
             description("Unterminated extractor")
                 display("It looks like you forgot to terminate an extractor with a closing '|'")
         }
 
-        UnterminatedStringLiteral(expr: Range, inner: Range, string: UnfinishedToken) {
+        UnterminatedStringLiteral(expr: Span, inner: Span, string: UnfinishedToken) {
             description("Unterminated string")
                 display("It looks like you forgot to terminate a string with a closing '\"'")
         }
 
-        UnterminatedHereDoc(expr: Range, inner: Range, string: UnfinishedToken) {
+        UnterminatedHereDoc(expr: Span, inner: Span, string: UnfinishedToken) {
             description("Unterminated heredoc")
                 display("It looks like you forgot to terminate a here doc with with a closing '\"\"\"'")
         }
-        TailingHereDoc(expr: Range, inner: Range, hd: UnfinishedToken, ch: char) {
+        TailingHereDoc(expr: Span, inner: Span, hd: UnfinishedToken, ch: char) {
             description("Tailing Characters after opening a here doc")
                 display("It looks like you have characters tailing the here doc opening, it needs to be followed by a newline")
         }
-        UnterminatedInterpolation(expr: Range, inner: Range, string_with_interpolation: UnfinishedToken) {
+        UnterminatedInterpolation(expr: Span, inner: Span, string_with_interpolation: UnfinishedToken) {
             description("Unterminated String interpolation")
                 display("It looks like you forgot to terminate a string interpolation with a closing '}}'")
         }
-        EmptyInterpolation(expr: Range, inner: Range, string_with_interpolation: UnfinishedToken) {
+        EmptyInterpolation(expr: Span, inner: Span, string_with_interpolation: UnfinishedToken) {
             description("Empty interpolation")
                 display("You have an interpolation without content.")
         }
 
-        UnterminatedIdentLiteral(expr: Range, inner: Range, ident: UnfinishedToken)
+        UnterminatedIdentLiteral(expr: Span, inner: Span, ident: UnfinishedToken)
         {
             description("Unterminated ident")
                 display("It looks like you forgot to terminate an ident with a closing '`'")
         }
 
-        UnexpectedCharacter(expr: Range, inner: Range, token: UnfinishedToken, found: char){
+        UnexpectedCharacter(expr: Span, inner: Span, token: UnfinishedToken, found: char){
             description("An unexpected character was found")
                 display("An unexpected character '{}' was found", found)
         }
 
-        UnexpectedEscapeCode(expr: Range, inner: Range, token: UnfinishedToken, found: char){
+        UnexpectedEscapeCode(expr: Span, inner: Span, token: UnfinishedToken, found: char){
             description("An unexpected escape code was found")
                 display("An unexpected escape code '{}' was found", found)
 
         }
-        InvalidUtf8Sequence(expr: Range, inner: Range, token: UnfinishedToken){
+        InvalidUtf8Sequence(expr: Span, inner: Span, token: UnfinishedToken){
             description("An invalid UTF8 escape sequence was found")
                 display("An invalid UTF8 escape sequence was found")
 
         }
-        InvalidHexLiteral(expr: Range, inner: Range, token: UnfinishedToken){
+        InvalidHexLiteral(expr: Span, inner: Span, token: UnfinishedToken){
             description("An invalid hexadecimal")
                 display("An invalid hexadecimal")
 
         }
 
-        InvalidIntLiteral(expr: Range, inner: Range, token: UnfinishedToken) {
+        InvalidIntLiteral(expr: Span, inner: Span, token: UnfinishedToken) {
             description("An invalid integer literal")
                 display("An invalid integer literal")
 
         }
-        InvalidFloatLiteral(expr: Range, inner: Range, token: UnfinishedToken) {
+        InvalidFloatLiteral(expr: Span, inner: Span, token: UnfinishedToken) {
             description("An invalid float literal")
                 display("An invalid float literal")
 
         }
 
-        UnexpectedEndOfStream {
+        UnexpectedEndOfStream(loc: Span) {
             description("An unexpected end of stream was found")
                 display("An unexpected end of stream was found")
 
@@ -617,12 +652,7 @@ error_chain! {
         /*
          * Preprocessor
          */
-         PreprocessorError(msg: String) {
-            description("Preprocessor due to user error")
-                display("Preprocessor due to user error: {}", msg)
-         }
-
-        ModuleNotFound(range: Range, loc: Range, resolved_relative_file_path: String, expected: Vec<String>) {
+        ModuleNotFound(range: Span, loc: Span, resolved_relative_file_path: String, expected: Vec<String>) {
             description("Module not found")
                 display("Module `{}` not found or not readable error in module path: {}",
                 resolved_relative_file_path.trim(),
@@ -640,34 +670,37 @@ error_chain! {
         /*
          * Resolve / Assign path walking
          */
-
-        BadAccessInLocal(expr: Range, inner: Range, key: String, options: Vec<String>) {
+        UnknownLocal(outer: Span, inner: Span, name: String) {
+            description("Unknown local variable")
+                display("Unknown local variable: `{}`", name)
+        }
+        BadAccessInLocal(expr: Span, inner: Span, key: String, options: Vec<String>) {
             description("Trying to access a non existing local key")
                 display("Trying to access a non existing local key `{}`", key)
         }
-        BadAccessInGlobal(expr: Range, inner: Range, key: String, options: Vec<String>) {
+        BadAccessInGlobal(expr: Span, inner: Span, key: String, options: Vec<String>) {
             description("Trying to access a non existing global key")
                 display("Trying to access a non existing global key `{}`", key)
         }
-        BadAccessInEvent(expr: Range, inner: Range, key: String, options: Vec<String>) {
+        BadAccessInEvent(expr: Span, inner: Span, key: String, options: Vec<String>) {
             description("Trying to access a non existing event key")
                 display("Trying to access a non existing event key `{}`", key)
         }
-        BadAccessInState(expr: Range, inner: Range, key: String, options: Vec<String>) {
+        BadAccessInState(expr: Span, inner: Span, key: String, options: Vec<String>) {
             description("Trying to access a non existing state key")
                 display("Trying to access a non existing state key `{}`", key)
         }
-        BadArrayIndex(expr: Range, inner: Range, idx: Value<'static>, len: usize) {
+        BadArrayIndex(expr: Span, inner: Span, idx: Value<'static>, len: usize) {
             description("Trying to index into an array with invalid index")
                 display("Bad array index, got `{}` but expected an index in the range 0:{}",
                         idx, len)
         }
-        DecreasingRange(expr: Range, inner: Range, start_idx: usize, end_idx: usize) {
+        DecreasingRange(expr: Span, inner: Span, start_idx: usize, end_idx: usize) {
             description("A range's end cannot be smaller than its start")
                 display("A range's end cannot be smaller than its start, {}:{} is invalid",
                         start_idx, end_idx)
         }
-        ArrayOutOfRange(expr: Range, inner: Range, r: RangeExclusive<usize>, len: usize) {
+        ArrayOutOfRange(expr: Span, inner: Span, r: RangeExclusive<usize>, len: usize) {
             description("Array index out of bounds")
                 display("Array index out of bounds, got {} but expected {}",
                         if r.start == r.end {
@@ -681,74 +714,70 @@ error_chain! {
                             format!("a subrange of 0:{}", len)
                         })
         }
-        AssignIntoArray(expr: Range, inner: Range) {
+        AssignIntoArray(expr: Span, inner: Span) {
             description("Can not assign into an array")
                 display("It is not supported to assign value into an array")
         }
-        InvalidAssign(expr: Range, inner: Range) {
+        InvalidAssign(expr: Span, inner: Span) {
             description("You can not assign that")
                 display("You are trying to assign to a value that isn't valid")
         }
-        InvalidConst(expr: Range, inner: Range) {
-            description("Can't declare a const here")
-                display("Can't declare a const here")
+        InvalidConst(expr: Span, inner: Span) {
+            description("Can't define a const here")
+                display("Can't define a const here")
         }
-        InvalidMod(expr: Range, inner: Range) {
-            description("Can't declare a module here")
-                display("Can't declare a module here")
+        InvalidFn(expr: Span, inner: Span) {
+            description("Can't define a function here")
+                display("Can't define a function here")
         }
-        InvalidFn(expr: Range, inner: Range) {
-            description("Can't declare a function here")
-                display("Can't declare a function here")
+        DoubleConst(expr: Span, inner: Span, name: String) {
+            description("Can't define a constant twice")
+                display("Can't define the constant `{}` twice", name)
         }
-        DoubleConst(expr: Range, inner: Range, name: String) {
-            description("Can't declare a constant twice")
-                display("Can't declare the constant `{}` twice", name)
+        DoubleStream(expr: Span, inner: Span, name: String) {
+            description("Can't define a stream twice")
+                display("Can't define the stream `{}` twice", name)
         }
-        DoubleStream(expr: Range, inner: Range, name: String) {
-            description("Can't declare a stream twice")
-                display("Can't declare the stream `{}` twice", name)
-        }
-        DoubleSubqueryStmt(expr: Range, inner: Range, name: String) {
+        DoublePipelineCreate(expr: Span, inner: Span, name: String) {
             description("Can't create a query twice")
-                display("Can't create the query `{}` twice", name)
+                display("Can't create the pipeline `{}` twice", name)
         }
-        AssignToConst(expr: Range, inner: Range, name: String) {
-            description("Can't assign to a constant")
-                display("Can't assign to the `{}` constant", name)
+        AssignToConst(expr: Span, inner: Span) {
+            description("Can't assign to a constant expression")
+                display("Can't assign to a constant expression")
         }
         /*
          * Emit & Drop
          */
-        InvalidEmit(expr: Range, inner: Range) {
+        InvalidEmit(expr: Span, inner: Span) {
             description("Can not emit from this location")
                 display("Can not emit from this location")
         }
-        InvalidDrop(expr: Range, inner: Range) {
+        InvalidDrop(expr: Span, inner: Span) {
             description("Can not drop from this location")
                 display("Can not drop from this location")
 
         }
-        BinaryEmit(expr: Range, inner: Range) {
+        BinaryEmit(expr: Span, inner: Span) {
             description("Please enclose the value you want to emit")
                 display("The expression can be read as a binary expression, please put the value you want to emit in parentheses.")
         }
-        BinaryDrop(expr: Range, inner: Range) {
+        BinaryDrop(expr: Span, inner: Span) {
             description("Please enclose the value you want to drop")
                 display("The expression can be read as a binary expression, please put the value you want to drop in parentheses.")
         }
         /*
          * Operators
          */
-        InvalidUnary(expr: Range, inner: Range, op: ast::UnaryOpKind, val: ValueType) {
+        InvalidUnary(expr: Span, inner: Span, op: ast::UnaryOpKind, val: ValueType) {
             description("Invalid unary operation")
                 display("The unary operation `{}` is not defined for the type `{}`", op, t2s(*val))
         }
-        InvalidBinary(expr: Range, inner: Range, op: ast::BinOpKind, left: ValueType, right: ValueType) {
+        InvalidBinary(expr: Span, inner: Span, op: ast::BinOpKind, left: ValueType, right: ValueType) {
             description("Invalid binary operation")
                 display("The binary operation `{}` is not defined for the type `{}` and `{}`", op, t2s(*left), t2s(*right))
         }
-        InvalidBitshift(expr: Range, inner: Range) {
+        InvalidBitshift(expr: Span, inner: Span) {
             description("Invalid value for bitshift")
                 display("RHS value is larger than or equal to the number of bits in LHS value")
         }
@@ -756,51 +785,51 @@ error_chain! {
         /*
          * match
          */
-        InvalidExtractor(expr: Range, inner: Range, name: String, pattern: String, error: String){
+        InvalidExtractor(expr: Span, inner: Span, name: String, pattern: String, error: String){
             description("Invalid tilde predicate pattern")
                 display("Invalid tilde predicate pattern: {}", error)
         }
-        NoClauseHit(expr: Range){
+        NoClauseHit(expr: Span){
             description("A match expression executed but no clause matched")
                 display("A match expression executed but no clause matched")
         }
-        MissingEffectors(expr: Range, inner: Range) {
+        MissingEffectors(expr: Span, inner: Span) {
             description("The clause has no effectors")
                 display("The clause is missing a body")
         }
         /*
          * Patch
          */
-        PatchKeyExists(expr: Range, inner: Range, key: String) {
+        PatchKeyExists(expr: Span, inner: Span, key: String) {
             description("The key that is supposed to be written to already exists")
                 display("The key that is supposed to be written to already exists: {}", key)
         }
-        UpdateKeyMissing(expr: Range, inner: Range, key:String) {
+        UpdateKeyMissing(expr: Span, inner: Span, key:String) {
             description("The key that is supposed to be updated does not exists")
                 display("The key that is supposed to be updated does not exists: {}", key)
         }
 
-        MergeTypeConflict(expr: Range, inner: Range, key:String, val: ValueType) {
+        MergeTypeConflict(expr: Span, inner: Span, key:String, val: ValueType) {
             description("Merge can only be performed on keys that either do not exist or are records")
                 display("Merge can only be performed on keys that either do not exist or are records but the key '{}' has the type {}", key, t2s(*val))
         }
 
         /*
-         * Query stream declarations
+         * Query stream definitions
          */
-        QueryStreamNotDefined(stmt: Range, inner: Range, name: String) {
-            description("Stream is not defined")
-                display("Stream used in `from` or `into` is not defined: {}", name)
+        QueryStreamNotDefined(stmt: Span, inner: Span, name: String, port: String) {
+            description("Stream / port is not defined")
+                display("Stream used in `from` or `into` is not defined: {}/{}", name, port)
         }
-        NoLocalsAllowed(stmt: Range, inner: Range) {
+        NoLocalsAllowed(stmt: Span, inner: Span) {
             description("Local variables are not allowed here")
                 display("Local variables are not allowed here")
         }
-        NoConstsAllowed(stmt: Range, inner: Range) {
+        NoConstsAllowed(stmt: Span, inner: Span) {
             description("Constants are not allowed here")
                 display("Constants are not allowed here")
         }
-        NoEventReferencesAllowed(stmt: Range, inner: Range) {
+        NoEventReferencesAllowed(stmt: Span, inner: Span) {
             description("References to `event` or `$` are not allowed in this context")
                 display("References to `event` or `$` are not allowed in this context")
         }
@@ -818,90 +847,123 @@ error_chain! {
                 display("Failed to initialize args constant")
         }
 
-        QueryNodeReservedName(stmt: Range, name: String) {
+        QueryNodeReservedName(stmt: Span, name: String) {
             description("Reserved name used for the node")
                 display("Name `{}` is reserved for built-in nodes, please use another name.", name)
         }
-        QueryNodeDuplicateName(stmt: Range, name: String) {
+        QueryNodeDuplicateName(stmt: Span, name: String) {
             description("Duplicate name used for the node")
                 // TODO would be nice to include location of the node where the name was already used
                 display("Name `{}` is already in use for another node, please use another name.", name)
         }
 
-        SubqueryUnknownPort(stmt: Range, inner: Range, subq_name: String, port_name: String) {
+        PipelineUnknownPort(stmt: Span, inner: Span, subq_name: String, port_name: String) {
             description("Query does not have this port")
                 display("Query `{}` does not have port `{}`", subq_name, port_name)
+        }
+        /*
+         * Troy statements
+         */
+        DeployArtefactNotDefined(stmt: Span, inner: Span, name: String, options: Vec<String>) {
+            description("Deployment artefact is not defined")
+                display("Artefact `{}` is not defined or not found, the following are defined: {}", name, options.join(", "))
+        }
+        DeployArgNotSpecified(stmt: Span, inner: Span, name: String) {
+            description("Deployment artefact has unknown argument")
+                display("Argument used was not formally specified in originating definition: {}", name)
+        }
+        DeployRequiredArgDoesNotResolve(stmt: Span, inner: Span, name: String) {
+            description("Deployment artefact argument has no value bound")
+                display("Argument `{}` is required, but no defaults are provided in the definition and no final values in the instance", name)
         }
     }
 }
 
+pub fn already_defined_err<S>(e: &S, what: &str) -> Error
+where
+    S: BaseExpr + Ranged,
+{
+    err_generic(
+        e,
+        e,
+        &format!(
+            "Can't define the {what} `{}` twice",
+            e.name().unwrap_or_default()
+        ),
+    )
+}
+
+pub fn not_defined_err<S>(e: &S, what: &str) -> Error
+where
+    S: BaseExpr + Ranged,
+{
+    err_generic(
+        e,
+        e,
+        &format!(
+            "The {what} `{}` is not defined",
+            e.name().unwrap_or_default()
+        ),
+    )
+}
+
 /// Creates a stream not defined error
 #[allow(clippy::borrowed_box)]
-pub fn query_stream_not_defined_err<S: BaseExpr, I: BaseExpr>(
-    stmt: &S,
-    inner: &I,
-    name: String,
-    meta: &NodeMetas,
-) -> Error {
+pub fn query_stream_not_defined_err<S, I>(stmt: &S, inner: &I, name: String, port: String) -> Error
+where
+    S: Ranged,
+    I: BaseExpr + Ranged,
+{
     // Subqueries store unmangled `name` in `meta`
     // Use `name` from `meta` if it exists.
-    let name = meta.name(inner.mid()).map_or(name, |s| s.into());
-    ErrorKind::QueryStreamNotDefined(stmt.extent(meta), inner.extent(meta), name).into()
+    let name = inner.meta().name().map_or(name, std::convert::Into::into);
+    ErrorKind::QueryStreamNotDefined(stmt.extent(), inner.extent(), name, port).into()
 }
 
 /// Creates a query stream duplicate name error
-pub fn query_stream_duplicate_name_err<S: BaseExpr, I: BaseExpr>(
+pub fn query_stream_duplicate_name_err<S: Ranged, I: BaseExpr + Ranged>(
     stmt: &S,
     inner: &I,
     name: String,
-    meta: &NodeMetas,
 ) -> Error {
-    let name = meta.name(stmt.mid()).map_or(name, |s| s.into());
-    ErrorKind::DoubleStream(stmt.extent(meta), inner.extent(meta), name).into()
+    let name = inner.meta().name().map_or(name, std::convert::Into::into);
+    ErrorKind::DoubleStream(stmt.extent(), inner.extent(), name).into()
 }
 
-/// Creates a subquery stmt duplicate name error
-pub fn subquery_stmt_duplicate_name_err<S: BaseExpr, I: BaseExpr>(
+/// Creates a pipeline stmt duplicate name error
+pub fn pipeline_stmt_duplicate_name_err<S: Ranged, I: BaseExpr + Ranged>(
     stmt: &S,
     inner: &I,
     name: String,
-    meta: &NodeMetas,
 ) -> Error {
-    let name = meta.name(stmt.mid()).map_or(name, |s| s.into());
-    ErrorKind::DoubleSubqueryStmt(stmt.extent(meta), inner.extent(meta), name).into()
+    let name = inner.meta().name().map_or(name, std::convert::Into::into);
+    ErrorKind::DoublePipelineCreate(stmt.extent(), inner.extent(), name).into()
 }
 
-/// Creates a subquery unknown port error
-pub fn subquery_unknown_port_err<S: BaseExpr, I: BaseExpr>(
+/// Creates a pipeline unknown port error
+pub fn pipeline_unknown_port_err<S: Ranged, I: BaseExpr + Ranged>(
     stmt: &S,
     inner: &I,
     subq_name: String,
     port_name: String,
-    meta: &NodeMetas,
 ) -> Error {
-    let subq_name = meta.name(inner.mid()).map_or(subq_name, |s| s.into());
-    ErrorKind::SubqueryUnknownPort(stmt.extent(meta), inner.extent(meta), subq_name, port_name)
-        .into()
+    let subq_name = inner
+        .meta()
+        .name()
+        .map_or(subq_name, std::convert::Into::into);
+    ErrorKind::PipelineUnknownPort(stmt.extent(), inner.extent(), subq_name, port_name).into()
 }
 
 /// Creates a query node reserved name error
-pub fn query_node_reserved_name_err<S: BaseExpr>(
-    stmt: &S,
-    name: String,
-    meta: &NodeMetas,
-) -> Error {
-    let name = meta.name(stmt.mid()).map_or(name, |s| s.into());
-    ErrorKind::QueryNodeReservedName(stmt.extent(meta), name).into()
+pub fn query_node_reserved_name_err<S: BaseExpr + Ranged>(stmt: &S, name: String) -> Error {
+    let name = stmt.meta().name().map_or(name, std::convert::Into::into);
+    ErrorKind::QueryNodeReservedName(stmt.extent(), name).into()
 }
 
 /// Creates a query node duplicate name error
-pub fn query_node_duplicate_name_err<S: BaseExpr>(
-    stmt: &S,
-    name: String,
-    meta: &NodeMetas,
-) -> Error {
-    let name = meta.name(stmt.mid()).map_or(name, |s| s.into());
-    ErrorKind::QueryNodeDuplicateName(stmt.extent(meta), name).into()
+pub fn query_node_duplicate_name_err<S: BaseExpr + Ranged>(stmt: &S, name: String) -> Error {
+    let name = stmt.meta().name().map_or(name, std::convert::Into::into);
+    ErrorKind::QueryNodeDuplicateName(stmt.extent(), name).into()
 }
 
 /// Creates a guard not bool error
@@ -909,176 +971,148 @@ pub fn query_node_duplicate_name_err<S: BaseExpr>(
 /// # Errors
 /// always, this is a function to create errors
 #[allow(clippy::borrowed_box)]
-pub fn query_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
+pub fn query_guard_not_bool<T, O: Ranged, I: Ranged>(
     stmt: &O,
     inner: &I,
     got: &Value,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    error_type_conflict_mult(stmt, inner, got.value_type(), vec![ValueType::Bool], meta)
+    error_type_conflict_mult(stmt, inner, got.value_type(), vec![ValueType::Bool])
 }
 
-pub fn query_guard_not_bool_err<O: BaseExpr, I: BaseExpr>(
-    stmt: &O,
-    inner: &I,
-    got: &Value,
-    meta: &NodeMetas,
-) -> Error {
-    error_type_conflict_mult_err(stmt, inner, got.value_type(), vec![ValueType::Bool], meta)
+pub fn query_guard_not_bool_err<O: Ranged, I: Ranged>(stmt: &O, inner: &I, got: &Value) -> Error {
+    err_type_conflict_mult(stmt, inner, got.value_type(), vec![ValueType::Bool])
 }
 
-pub(crate) fn error_generic<T, O: BaseExpr, I: BaseExpr, S: ToString>(
+/// A bad thing happened for which no specialized hygienic error handling strategy is defined
+/// We can still be polite in our error reports!
+/// # Errors
+/// The parameters transformed into a generic error
+pub fn error_generic<T, O: Ranged, I: Ranged, S: ToString>(
     outer: &O,
     inner: &I,
     error: &S,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(err_generic(outer, inner, error, meta))
+    Err(err_generic(outer, inner, error))
 }
 
-pub(crate) fn err_generic<O: BaseExpr, I: BaseExpr, S: ToString>(
-    outer: &O,
-    inner: &I,
-    error: &S,
-    meta: &NodeMetas,
-) -> Error {
-    ErrorKind::Generic(outer.extent(meta), inner.extent(meta), error.to_string()).into()
+pub fn err_generic<O: Ranged, I: Ranged, S: ToString>(outer: &O, inner: &I, error: &S) -> Error {
+    ErrorKind::Generic(outer.extent(), inner.extent(), error.to_string()).into()
 }
 
-pub(crate) fn error_type_conflict_mult<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_type_conflict_mult<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: ValueType,
     expected: Vec<ValueType>,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(error_type_conflict_mult_err(
-        outer, inner, got, expected, meta,
-    ))
+    Err(err_type_conflict_mult(outer, inner, got, expected))
 }
 
-pub(crate) fn error_type_conflict_mult_err<O: BaseExpr, I: BaseExpr>(
+pub(crate) fn err_type_conflict_mult<O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: ValueType,
     expected: Vec<ValueType>,
-    meta: &NodeMetas,
 ) -> Error {
-    ErrorKind::TypeConflict(outer.extent(meta), inner.extent(meta), got, expected).into()
+    ErrorKind::TypeConflict(outer.extent(), inner.extent(), got, expected).into()
 }
 
-pub(crate) fn error_no_locals<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_no_locals<T, O: Ranged, I: Ranged>(outer: &O, inner: &I) -> Result<T> {
+    Err(ErrorKind::NoLocalsAllowed(outer.extent(), inner.extent()).into())
+}
+
+pub(crate) fn error_event_ref_not_allowed<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(ErrorKind::NoLocalsAllowed(outer.extent(meta), inner.extent(meta)).into())
+    Err(ErrorKind::NoEventReferencesAllowed(outer.extent(), inner.extent()).into())
 }
 
-pub(crate) fn error_no_consts<T, O: BaseExpr, I: BaseExpr>(
-    outer: &O,
-    inner: &I,
-    meta: &NodeMetas,
-) -> Result<T> {
-    Err(ErrorKind::NoConstsAllowed(outer.extent(meta), inner.extent(meta)).into())
-}
-
-pub(crate) fn error_event_ref_not_allowed<T, O: BaseExpr, I: BaseExpr>(
-    outer: &O,
-    inner: &I,
-    meta: &NodeMetas,
-) -> Result<T> {
-    Err(ErrorKind::NoEventReferencesAllowed(outer.extent(meta), inner.extent(meta)).into())
-}
-
-pub(crate) fn error_need_obj<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_need_obj<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: ValueType,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(err_need_obj(outer, inner, got, meta))
+    Err(err_need_obj(outer, inner, got))
 }
 
-pub(crate) fn err_need_obj<O: BaseExpr, I: BaseExpr>(
+pub(crate) fn err_need_obj<O: Ranged, I: Ranged>(outer: &O, inner: &I, got: ValueType) -> Error {
+    err_type_conflict_mult(outer, inner, got, vec![ValueType::Object])
+}
+
+pub(crate) fn error_need_arr<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: ValueType,
-    meta: &NodeMetas,
-) -> Error {
-    error_type_conflict_mult_err(outer, inner, got, vec![ValueType::Object], meta)
+) -> Result<T> {
+    error_type_conflict_mult(outer, inner, got, vec![ValueType::Array])
 }
 
-pub(crate) fn error_need_arr<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_need_str<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: ValueType,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    error_type_conflict_mult(outer, inner, got, vec![ValueType::Array], meta)
+    error_type_conflict_mult(outer, inner, got, vec![ValueType::String])
 }
 
-pub(crate) fn error_need_str<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_need_int<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: ValueType,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    error_type_conflict_mult(outer, inner, got, vec![ValueType::String], meta)
+    Err(err_need_int(outer, inner, got))
 }
 
-pub(crate) fn error_need_int<T, O: BaseExpr, I: BaseExpr>(
-    outer: &O,
-    inner: &I,
-    got: ValueType,
-    meta: &NodeMetas,
-) -> Result<T> {
-    error_type_conflict_mult(outer, inner, got, vec![ValueType::I64], meta)
+pub(crate) fn err_need_int<O: Ranged, I: Ranged>(outer: &O, inner: &I, got: ValueType) -> Error {
+    err_type_conflict_mult(outer, inner, got, vec![ValueType::I64])
 }
 
-pub(crate) fn error_type_conflict<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_type_conflict<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: ValueType,
     expected: ValueType,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    error_type_conflict_mult(outer, inner, got, vec![expected], meta)
+    error_type_conflict_mult(outer, inner, got, vec![expected])
 }
 
-pub(crate) fn error_guard_not_bool<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_guard_not_bool<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     got: &Value,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    error_type_conflict(outer, inner, got.value_type(), ValueType::Bool, meta)
+    error_type_conflict(outer, inner, got.value_type(), ValueType::Bool)
 }
 
-pub(crate) fn error_invalid_unary<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_invalid_unary<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     op: ast::UnaryOpKind,
     val: &Value,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(
-        ErrorKind::InvalidUnary(outer.extent(meta), inner.extent(meta), op, val.value_type())
-            .into(),
-    )
+    Err(err_invalid_unary(outer, inner, op, val))
 }
 
-pub(crate) fn error_invalid_binary<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn err_invalid_unary<O: Ranged, I: Ranged>(
+    outer: &O,
+    inner: &I,
+    op: ast::UnaryOpKind,
+    val: &Value,
+) -> Error {
+    ErrorKind::InvalidUnary(outer.extent(), inner.extent(), op, val.value_type()).into()
+}
+
+pub(crate) fn error_invalid_binary<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     op: ast::BinOpKind,
     left: &Value,
     right: &Value,
-    meta: &NodeMetas,
 ) -> Result<T> {
     Err(ErrorKind::InvalidBinary(
-        outer.extent(meta),
-        inner.extent(meta),
+        outer.extent(),
+        inner.extent(),
         op,
         left.value_type(),
         right.value_type(),
@@ -1086,110 +1120,79 @@ pub(crate) fn error_invalid_binary<T, O: BaseExpr, I: BaseExpr>(
     .into())
 }
 
-pub(crate) fn error_invalid_bitshift<T, O: BaseExpr, I: BaseExpr>(
-    outer: &O,
-    inner: &I,
-    meta: &NodeMetas,
-) -> Result<T> {
-    Err(ErrorKind::InvalidBitshift(outer.extent(meta), inner.extent(meta)).into())
+pub(crate) fn error_invalid_bitshift<T, O: Ranged, I: Ranged>(outer: &O, inner: &I) -> Result<T> {
+    Err(ErrorKind::InvalidBitshift(outer.extent(), inner.extent()).into())
 }
 
-pub(crate) fn error_no_clause_hit<T, O: BaseExpr>(outer: &O, meta: &NodeMetas) -> Result<T> {
-    Err(ErrorKind::NoClauseHit(outer.extent(meta)).into())
+pub(crate) fn error_no_clause_hit<T, O: Ranged>(outer: &O) -> Result<T> {
+    Err(ErrorKind::NoClauseHit(outer.extent()).into())
 }
 
-pub(crate) fn error_oops<T, O: BaseExpr, S: ToString + ?Sized>(
+pub(crate) fn error_oops<T, O: Ranged, S: ToString + ?Sized>(
     outer: &O,
     id: u64,
     msg: &S,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(error_oops_err(outer, id, msg, meta))
+    Err(error_oops_err(outer, id, msg))
 }
 
-pub(crate) fn error_oops_err<O: BaseExpr, S: ToString + ?Sized>(
+pub(crate) fn error_oops_err<O: Ranged, S: ToString + ?Sized>(
     outer: &O,
     id: u64,
     msg: &S,
-    meta: &NodeMetas,
 ) -> Error {
-    ErrorKind::Oops(outer.extent(meta), id, msg.to_string()).into()
+    ErrorKind::Oops(outer.extent(), id, msg.to_string()).into()
 }
 
-pub(crate) fn error_patch_key_exists<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_patch_key_exists<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     key: String,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(ErrorKind::PatchKeyExists(outer.extent(meta), inner.extent(meta), key).into())
+    Err(ErrorKind::PatchKeyExists(outer.extent(), inner.extent(), key).into())
 }
 
-pub(crate) fn error_patch_update_key_missing<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_patch_update_key_missing<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     key: String,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(ErrorKind::UpdateKeyMissing(outer.extent(meta), inner.extent(meta), key).into())
+    Err(ErrorKind::UpdateKeyMissing(outer.extent(), inner.extent(), key).into())
 }
 
-pub(crate) fn error_missing_effector<O: BaseExpr, I: BaseExpr>(
-    outer: &O,
-    inner: &I,
-    meta: &NodeMetas,
-) -> Error {
-    ErrorKind::MissingEffectors(outer.extent(meta), inner.extent(meta)).into()
+pub(crate) fn error_missing_effector<O: Ranged, I: Ranged>(outer: &O, inner: &I) -> Error {
+    ErrorKind::MissingEffectors(outer.extent(), inner.extent()).into()
 }
-pub(crate) fn error_patch_merge_type_conflict<T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_patch_merge_type_conflict<T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     key: String,
     val: &Value,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(ErrorKind::MergeTypeConflict(
-        outer.extent(meta),
-        inner.extent(meta),
-        key,
-        val.value_type(),
-    )
-    .into())
+    Err(ErrorKind::MergeTypeConflict(outer.extent(), inner.extent(), key, val.value_type()).into())
 }
 
-pub(crate) fn error_assign_array<T, O: BaseExpr, I: BaseExpr>(
-    outer: &O,
-    inner: &I,
-    meta: &NodeMetas,
-) -> Result<T> {
-    Err(ErrorKind::AssignIntoArray(outer.extent(meta), inner.extent(meta)).into())
+pub(crate) fn error_assign_array<T, O: Ranged, I: Ranged>(outer: &O, inner: &I) -> Result<T> {
+    Err(ErrorKind::AssignIntoArray(outer.extent(), inner.extent()).into())
 }
-pub(crate) fn error_invalid_assign_target<T, O: BaseExpr>(
-    outer: &O,
-    meta: &NodeMetas,
-) -> Result<T> {
-    let inner: Range = outer.extent(meta);
+pub(crate) fn error_invalid_assign_target<T, O: Ranged>(outer: &O) -> Result<T> {
+    let inner: Span = outer.extent();
 
     Err(ErrorKind::InvalidAssign(inner.expand_lines(2), inner).into())
 }
-pub(crate) fn error_assign_to_const<T, O: BaseExpr>(
-    outer: &O,
-    name: String,
-    meta: &NodeMetas,
-) -> Result<T> {
-    let inner: Range = outer.extent(meta);
+pub(crate) fn error_assign_to_const<T, O: Ranged>(outer: &O) -> Result<T> {
+    let inner: Span = outer.extent();
 
-    Err(ErrorKind::AssignToConst(inner.expand_lines(2), inner, name).into())
+    Err(ErrorKind::AssignToConst(inner.expand_lines(2), inner).into())
 }
-pub(crate) fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_array_out_of_bound<'script, T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     path: &ast::Path<'script>,
     r: RangeExclusive<usize>,
     len: usize,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    let expr: Range = outer.extent(meta);
+    let expr: Span = outer.extent();
     // TODO: Why match on `path` when all arms do the same?!
     // -> ideally: put the `path` into the `ErrorKind::ArrayOutOfRange`, handle in display
     //        but: not trivial: `Path` is parametric in non-'static lifetime 'script
@@ -1199,22 +1202,18 @@ pub(crate) fn error_array_out_of_bound<'script, T, O: BaseExpr, I: BaseExpr>(
         | ast::Path::State(_)
         | ast::Path::Reserved(_)
         | ast::Path::Local(_)
-        | ast::Path::Expr(_)
-        | ast::Path::Const(_) => {
-            ErrorKind::ArrayOutOfRange(expr, inner.extent(meta), r, len).into()
-        }
+        | ast::Path::Expr(_) => ErrorKind::ArrayOutOfRange(expr, inner.extent(), r, len).into(),
     })
 }
 
-pub(crate) fn error_bad_array_index<'script, 'idx, T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_bad_array_index<'script, 'idx, T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     path: &ast::Path<'script>,
     idx: &Value<'idx>,
     len: usize,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    let expr: Range = outer.extent(meta);
+    let expr: Span = outer.extent();
     let idx = idx.clone_static();
     Err(match path {
         ast::Path::Reserved(_)
@@ -1222,66 +1221,77 @@ pub(crate) fn error_bad_array_index<'script, 'idx, T, O: BaseExpr, I: BaseExpr>(
         | ast::Path::Event(_)
         | ast::Path::Meta(_)
         | ast::Path::Local(_)
-        | ast::Path::Expr(_)
-        | ast::Path::Const(_) => {
-            ErrorKind::BadArrayIndex(expr, inner.extent(meta), idx, len).into()
-        }
+        | ast::Path::Expr(_) => ErrorKind::BadArrayIndex(expr, inner.extent(), idx, len).into(),
     })
 }
-pub(crate) fn error_decreasing_range<'script, T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_decreasing_range<'script, T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     path: &ast::Path<'script>,
     start_idx: usize,
     end_idx: usize,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    let expr: Range = outer.extent(meta);
+    let expr: Span = outer.extent();
     Err(match path {
         ast::Path::Meta(_)
         | ast::Path::Event(_)
         | ast::Path::State(_)
         | ast::Path::Reserved(_)
         | ast::Path::Local(_)
-        | ast::Path::Expr(_)
-        | ast::Path::Const(_) => {
-            ErrorKind::DecreasingRange(expr, inner.extent(meta), start_idx, end_idx).into()
+        | ast::Path::Expr(_) => {
+            ErrorKind::DecreasingRange(expr, inner.extent(), start_idx, end_idx).into()
         }
     })
 }
 
-pub(crate) fn error_bad_key<'script, T, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn error_bad_key<'script, T, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     path: &ast::Path<'script>,
     key: String,
     options: Vec<String>,
-    meta: &NodeMetas,
 ) -> Result<T> {
-    Err(error_bad_key_err(outer, inner, path, key, options, meta))
+    Err(error_bad_key_err(outer, inner, path, key, options))
 }
 
-pub(crate) fn error_bad_key_err<'script, O: BaseExpr, I: BaseExpr>(
+pub(crate) fn unknown_local<O: Ranged, I: BaseExpr>(outer: &O, inner: &I) -> Error {
+    ErrorKind::UnknownLocal(
+        outer.extent(),
+        inner.extent(),
+        inner.name_dflt().to_string(),
+    )
+    .into()
+}
+
+pub(crate) fn error_bad_key_err<'script, O: Ranged, I: Ranged>(
     outer: &O,
     inner: &I,
     path: &ast::Path<'script>,
     key: String,
     options: Vec<String>,
-    meta: &NodeMetas,
 ) -> Error {
-    let expr: Range = outer.extent(meta);
+    let expr: Span = outer.extent();
     match path {
-        ast::Path::Reserved(_) | ast::Path::Local(_) | ast::Path::Const(_) | ast::Path::Expr(_) => {
-            ErrorKind::BadAccessInLocal(expr, inner.extent(meta), key, options).into()
+        ast::Path::Reserved(_) | ast::Path::Local(_) | ast::Path::Expr(_) => {
+            ErrorKind::BadAccessInLocal(expr, inner.extent(), key, options).into()
         }
         ast::Path::Meta(_p) => {
-            ErrorKind::BadAccessInGlobal(expr, inner.extent(meta), key, options).into()
+            ErrorKind::BadAccessInGlobal(expr, inner.extent(), key, options).into()
         }
         ast::Path::Event(_p) => {
-            ErrorKind::BadAccessInEvent(expr, inner.extent(meta), key, options).into()
+            ErrorKind::BadAccessInEvent(expr, inner.extent(), key, options).into()
         }
         ast::Path::State(_p) => {
-            ErrorKind::BadAccessInState(expr, inner.extent(meta), key, options).into()
+            ErrorKind::BadAccessInState(expr, inner.extent(), key, options).into()
         }
     }
+}
+
+pub(crate) fn unexpected_character<O: Ranged, I: Ranged>(
+    outer: &O,
+    inner: &I,
+    tkn: UnfinishedToken,
+    ch: char,
+) -> Error {
+    ErrorKind::UnexpectedCharacter(outer.extent(), inner.extent(), tkn, ch).into()
 }

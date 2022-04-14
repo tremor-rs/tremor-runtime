@@ -61,7 +61,7 @@ where
         let mut elem = String::with_capacity(16);
         for (id, params) in sd.iter() {
             elem.push('[');
-            elem.push_str(&id.to_string());
+            elem.push_str(id);
             let params = params.as_array().ok_or_else(|| {
                 Error::from(ErrorKind::InvalidSyslogData(
                     "Invalid structured data: params not an array of objects",
@@ -80,7 +80,7 @@ where
                         ))
                     })?;
                     elem.push(' ');
-                    elem.push_str(&k.to_string());
+                    elem.push_str(k);
                     elem.push('=');
                     elem.push('"');
                     elem.push_str(value);
@@ -188,7 +188,6 @@ impl<N> Codec for Syslog<N>
 where
     N: Now + 'static,
 {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "syslog"
     }
@@ -281,7 +280,6 @@ where
         Ok(result.join(" ").as_bytes().to_vec())
     }
 
-    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }
@@ -405,7 +403,7 @@ mod test {
         let mut msg = b"an invalid message".to_vec();
         let mut codec = test_codec();
         let decoded = codec.decode(msg.as_mut_slice(), 0)?.unwrap();
-        let expected = Value::from(simd_json::json!({
+        let expected = Value::from(literal!({
             "msg": "an invalid message",
             "protocol": "RFC3164",
         }));

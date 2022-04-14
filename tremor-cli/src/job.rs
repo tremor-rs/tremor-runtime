@@ -13,18 +13,20 @@
 // limitations under the License.
 
 use crate::errors::{Error, Result};
+use async_std::io::{BufReader, Read};
 use std::ffi::OsStr;
-use std::io::{BufRead, BufReader, Read, Write};
-use tremor_common::file;
+use std::fmt::Display;
+use tremor_common::asy::file;
 
 use std::collections::HashMap;
 
+use async_std::channel::{unbounded, Receiver, Sender};
+use async_std::prelude::*;
+use async_std::process::{Child, Command, ExitStatus, Stdio};
+use async_std::task::{spawn, JoinHandle};
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
-use std::sync::mpsc::TryRecvError;
 
-use std::sync::mpsc;
-use std::{env, process, thread};
+use std::env;
 
 pub(crate) fn which<P>(exe_name: P) -> Result<PathBuf>
 where
@@ -35,7 +37,8 @@ where
     // use the current binary if `tremor` is used as an executable
     // this can be overwritten by giving it a path
     if name == "tremor" {
-        env::current_exe()
+        env::var("TREMOR_BIN")
+            .map_or_else(|_| env::current_exe(), |p| Ok(PathBuf::from(p)))
             .map_err(|e| Error::from(format!("Unable to execute current tremor binary: {}", e)))
     } else {
         env::var_os("PATH")
@@ -56,15 +59,15 @@ where
 }
 
 /// Read until EOF.
-pub(crate) fn readlines_until_eof<R: Read, F: FnMut(String) -> Result<()>>(
+pub(crate) async fn readlines_until_eof<R: Read + std::marker::Unpin>(
     reader: R,
-    mut handler: F,
+    sender: Sender<String>,
 ) -> Result<()> {
     let mut reader = BufReader::new(reader);
     loop {
         let mut buffy = String::new();
-        let nread = reader.read_line(&mut buffy)?;
-        handler(buffy)?;
+        let nread = reader.read_line(&mut buffy).await?;
+        sender.send(buffy).await?;
         if nread == 0 {
             break; // EOS
         }
@@ -76,15 +79,17 @@ pub(crate) fn readlines_until_eof<R: Read, F: FnMut(String) -> Result<()>>(
 /// Manage target process and communications with it
 #[derive(Debug)]
 pub(crate) struct TargetProcess {
-    stdout_thread: Option<thread::JoinHandle<Result<()>>>,
-    stderr_thread: Option<thread::JoinHandle<Result<()>>>,
-    pub(crate) process: process::Child,
-    pub(crate) stderr_receiver: mpsc::Receiver<String>,
-    pub(crate) stdout_receiver: mpsc::Receiver<String>,
+    cmdline: String,
+    stdout_handle: Option<JoinHandle<Result<()>>>,
+    stderr_handle: Option<JoinHandle<Result<()>>>,
+    pub(crate) process: Child,
+    pub(crate) stderr_receiver: Receiver<String>,
+    pub(crate) stdout_receiver: Receiver<String>,
 }
 
 impl TargetProcess {
-    pub fn new_with_stderr<S>(
+    /// create a process in the current directory
+    pub fn new_in_current_dir<S>(
         cmd: S,
         args: &[String],
         env: &HashMap<String, String>,
@@ -92,17 +97,52 @@ impl TargetProcess {
     where
         S: AsRef<OsStr>,
     {
-        TargetProcess::new(cmd, args, env)
+        TargetProcess::new(cmd, args, env, std::env::current_dir()?)
+    }
+
+    /// create a process in the given directory via `cwd`
+    pub fn new_in_dir<S, P>(
+        cmd: S,
+        args: &[String],
+        env: &HashMap<String, String>,
+        dir: P,
+    ) -> Result<Self>
+    where
+        S: AsRef<OsStr>,
+        P: AsRef<Path>,
+    {
+        TargetProcess::new(cmd, args, env, dir)
     }
 
     /// Spawn target process and pipe IO
-    fn new<S>(cmd: S, args: &[String], env: &HashMap<String, String>) -> Result<Self>
+    fn new<S, P>(cmd: S, args: &[String], env: &HashMap<String, String>, dir: P) -> Result<Self>
     where
         S: AsRef<OsStr>,
+        P: AsRef<Path>,
     {
         let cmd: &OsStr = cmd.as_ref();
+
+        let current_dir = {
+            let tmp = dir.as_ref();
+            let buf = if tmp.is_relative() {
+                std::env::current_dir()?.join(tmp)
+            } else {
+                tmp.to_path_buf()
+            };
+            buf.canonicalize()?
+        };
+        let cmdline = format!(
+            "{}{} {}",
+            env.iter()
+                .map(|(k, v)| format!("{}={} ", k, v))
+                .collect::<Vec<_>>()
+                .join(""),
+            cmd.to_string_lossy(),
+            args.join(" ")
+        );
         let mut target_cmd = Command::new(cmd)
             .args(args)
+            .current_dir(current_dir)
             .envs(env)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -113,31 +153,24 @@ impl TargetProcess {
         let stderr = target_cmd.stderr.take();
         match stdout.zip(stderr) {
             Some((stdout, stderr)) => {
-                let (stdout_tx, stdout_rx) = mpsc::channel();
-                let (stderr_tx, stderr_rx) = mpsc::channel();
+                let (stdout_tx, stdout_rx) = unbounded();
+                let (stderr_tx, stderr_rx) = unbounded();
 
-                let cmd_name = cmd.to_string_lossy().to_string();
-                let stdout_thread = Some(thread::spawn(move || -> Result<()> {
+                let stdout_handle = Some(spawn(async move {
                     // Redirect target process stdout
-                    readlines_until_eof(stdout, |resp| {
-                        trace!("[{} OUT] {}", cmd_name, &resp);
-                        stdout_tx.send(resp).map_err(|e| e.into())
-                    })
+                    readlines_until_eof(stdout, stdout_tx).await
                 }));
 
-                let cmd_name = cmd.to_string_lossy().to_string();
-                let stderr_thread = Some(thread::spawn(move || -> Result<()> {
+                let stderr_handle = Some(spawn(async move {
                     // Redirect target process stderr
-                    readlines_until_eof(stderr, |resp| {
-                        trace!("[{} ERR] {}", cmd_name, &resp);
-                        stderr_tx.send(resp).map_err(|e| e.into())
-                    })
+                    readlines_until_eof(stderr, stderr_tx).await
                 }));
 
                 Ok(Self {
+                    cmdline,
                     process: target_cmd,
-                    stdout_thread,
-                    stderr_thread,
+                    stdout_handle,
+                    stderr_handle,
                     stdout_receiver: stdout_rx,
                     stderr_receiver: stderr_rx,
                 })
@@ -146,64 +179,83 @@ impl TargetProcess {
         }
     }
 
-    pub fn wait_with_output(&mut self) -> Result<ExitStatus> {
-        Ok(self.process.wait()?)
+    pub(crate) async fn wait(&mut self) -> Result<ExitStatus> {
+        Ok(self.process.status().await?)
     }
 
-    pub(crate) fn tail(&mut self, stdout_path: &Path, stderr_path: &Path) -> Result<()> {
-        let mut tailout = file::create(stdout_path)?;
-        let mut tailerr = file::create(stderr_path)?;
-
-        self.wait_with_output()?;
-
-        loop {
-            match self.stdout_receiver.try_recv() {
-                Ok(line) => {
-                    tailout.write_all(line.as_bytes())?;
-                }
-                Err(TryRecvError::Empty) => (),
-                Err(TryRecvError::Disconnected) => {
-                    break;
-                }
+    pub(crate) async fn stdio_tailer(
+        &mut self,
+        stdout_path: &Path,
+        stderr_path: &Path,
+    ) -> Result<(JoinHandle<Result<()>>, JoinHandle<Result<()>>)> {
+        let stdout_rx = self.stdout_receiver.clone();
+        let stdout_path = stdout_path.to_path_buf();
+        let stdout_handle = spawn::<_, Result<()>>(async move {
+            let mut tailout = file::create(&stdout_path).await?;
+            while let Ok(line) = stdout_rx.recv().await {
+                tailout.write_all(line.as_bytes()).await?;
+                tailout.sync_data().await?;
             }
-        }
-
-        loop {
-            match self.stderr_receiver.try_recv() {
-                Ok(line) => {
-                    tailerr.write_all(line.as_bytes())?;
-                }
-                Err(TryRecvError::Empty) => (),
-                Err(TryRecvError::Disconnected) => {
-                    break;
-                }
+            Ok(())
+        });
+        let stderr_rx = self.stderr_receiver.clone();
+        let stderr_path = stderr_path.to_path_buf();
+        let stderr_handle = spawn::<_, Result<()>>(async move {
+            let mut tailerr = file::create(&stderr_path).await?;
+            while let Ok(line) = stderr_rx.recv().await {
+                tailerr.write_all(line.as_bytes()).await?;
+                tailerr.sync_data().await?;
             }
-        }
+            Ok(())
+        });
 
-        tailout.sync_all()?;
-        tailerr.sync_all()?;
+        Ok((stdout_handle, stderr_handle))
+    }
+    pub(crate) async fn join(&mut self) -> Result<ExitStatus> {
+        let exit_status = self.process.status().await?;
+
         if self.process.kill().is_err() {
             // Do nothing
         };
-        Ok(())
+        Ok(exit_status)
+    }
+
+    pub(crate) async fn tail(
+        &mut self,
+        stdout_path: &Path,
+        stderr_path: &Path,
+    ) -> Result<ExitStatus> {
+        let (stdout_handle, stderr_handle) = self.stdio_tailer(stdout_path, stderr_path).await?;
+
+        let exit_status = self.join().await?;
+
+        stdout_handle.await?;
+        stderr_handle.await?;
+        Ok(exit_status)
+    }
+}
+
+impl Display for TargetProcess {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", &self.cmdline)
     }
 }
 
 impl Drop for TargetProcess {
     fn drop(&mut self) {
-        if let Some(handle) = self.stdout_thread.take() {
-            if let Err(e) = handle.join() {
+        if let Some(handle) = self.stdout_handle.take() {
+            if let Err(e) = async_std::task::block_on(handle) {
                 eprintln!("target process drop error: {:?}", e);
             }
         }
 
-        if let Some(handle) = self.stderr_thread.take() {
-            if let Err(e) = handle.join().unwrap_or(Ok(())) {
+        if let Some(handle) = self.stderr_handle.take() {
+            if let Err(e) = async_std::task::block_on(handle) {
                 eprintln!("target process drop error: {:?}", e);
             }
         }
 
-        if let Err(e) = self.process.wait() {
+        if let Err(e) = async_std::task::block_on(self.process.status()) {
             eprintln!("target process drop error: {:?}", e);
         }
     }

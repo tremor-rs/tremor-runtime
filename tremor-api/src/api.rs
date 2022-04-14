@@ -1,4 +1,4 @@
-// Copyright 2020-2021, The Tremor Team
+// Copyright 2022, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,22 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// #![cfg_attr(coverage, no_coverage)]
+
+use std::time::Duration;
+
 use crate::errors::Error;
-use http_types::{headers, StatusCode};
+use async_std::{prelude::*, task::JoinHandle};
+use http_types::{
+    headers::{self, HeaderValue, ToHeaderValues},
+    StatusCode,
+};
 use serde::{Deserialize, Serialize};
 use tide::Response;
 use tremor_runtime::system::World;
-use tremor_runtime::url::TremorUrl;
 
-pub mod binding;
-pub mod offramp;
-pub mod onramp;
-pub mod pipeline;
+pub mod flow;
 pub mod prelude;
+pub mod status;
 pub mod version;
 
 pub type Request = tide::Request<State>;
 pub type Result<T> = std::result::Result<T, Error>;
+
+/// Default API timeout applied to operations triggered by the API. E.g. get flow status
+pub const DEFAULT_API_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]
 pub struct State {
@@ -39,6 +47,13 @@ pub enum ResourceType {
     Json,
     Yaml,
     Trickle,
+    Troy,
+}
+
+impl std::fmt::Display for ResourceType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.as_str().fmt(f)
+    }
 }
 impl ResourceType {
     #[must_use]
@@ -47,7 +62,16 @@ impl ResourceType {
             Self::Yaml => "application/yaml",
             Self::Json => "application/json",
             Self::Trickle => "application/vnd.trickle",
+            Self::Troy => "application/vnd.troy",
         }
+    }
+}
+
+impl ToHeaderValues for ResourceType {
+    type Iter = std::iter::Once<HeaderValue>;
+
+    fn to_header_values(&self) -> http_types::Result<Self::Iter> {
+        HeaderValue::from_bytes(self.as_str().as_bytes().to_vec()).map(std::iter::once)
     }
 }
 
@@ -61,6 +85,7 @@ pub fn content_type(req: &Request) -> Option<ResourceType> {
         Some("application/yaml") => Some(ResourceType::Yaml),
         Some("application/json") => Some(ResourceType::Json),
         Some("application/vnd.trickle") => Some(ResourceType::Trickle),
+        Some("application/vnd.troy") => Some(ResourceType::Troy),
         _ => None,
     }
 }
@@ -75,6 +100,7 @@ pub fn accept(req: &Request) -> ResourceType {
     {
         Some("application/yaml") => ResourceType::Yaml,
         Some("application/vnd.trickle") => ResourceType::Trickle,
+        Some("application/vnd.troy") => ResourceType::Troy,
         _ => ResourceType::Json,
     }
 }
@@ -89,9 +115,9 @@ pub fn serialize<T: Serialize>(t: ResourceType, d: &T, code: StatusCode) -> Resu
             .header(headers::CONTENT_TYPE, t.as_str())
             .body(simd_json::to_string(d)?)
             .build()),
-        ResourceType::Trickle => Err(Error::new(
+        _ => Err(Error::new(
             StatusCode::InternalServerError,
-            "Unsuported formatting as trickle".into(),
+            format!("Unsuported formatting: {}", t),
         )),
     }
 }
@@ -101,7 +127,7 @@ pub fn serialize_error(t: ResourceType, d: Error) -> Result<Response> {
         ResourceType::Json | ResourceType::Yaml => serialize(t, &d, d.code),
         // formatting errors as trickle does not make sense so for this
         // fall back to the error's conversion into tide response
-        ResourceType::Trickle => Ok(d.into()),
+        ResourceType::Trickle | ResourceType::Troy => Ok(d.into()),
     }
 }
 
@@ -113,41 +139,412 @@ pub fn reply<T: Serialize + Send + Sync + 'static>(
     serialize(accept(req), &result_in, ok_code)
 }
 
-async fn decode<T>(mut req: Request) -> Result<(Request, T)>
-where
-    for<'de> T: Deserialize<'de>,
-{
-    let mut body = req.body_bytes().await?;
-    match content_type(&req) {
-        Some(ResourceType::Yaml) => serde_yaml::from_slice(body.as_slice())
-            .map_err(|e| {
-                Error::new(
-                    StatusCode::BadRequest,
-                    format!("Could not decode YAML: {}", e),
-                )
-            })
-            .map(|data| (req, data)),
-        Some(ResourceType::Json) => simd_json::from_slice(body.as_mut_slice())
-            .map_err(|e| {
-                Error::new(
-                    StatusCode::BadRequest,
-                    format!("Could not decode JSON: {}", e),
-                )
-            })
-            .map(|data| (req, data)),
-        Some(ResourceType::Trickle) | None => Err(Error::new(
-            StatusCode::UnsupportedMediaType,
-            "No content type provided".into(),
-        )),
-    }
+async fn handle_api_request<
+    G: std::future::Future<Output = Result<tide::Response>>,
+    F: Fn(Request) -> G,
+>(
+    req: Request,
+    handler_func: F,
+) -> tide::Result {
+    let resource_type = accept(&req);
+    let path = req.url().path().to_string();
+    let method = req.method();
+
+    // Handle request. If any api error is returned, serialize it into a tide response
+    // as well, respecting the requested resource type. (and if there's error during
+    // this serialization, fall back to the error's conversion into tide response)
+    let r = match handler_func(req).timeout(DEFAULT_API_TIMEOUT).await {
+        Err(e) => {
+            error!("[API {method} {path}] Timeout");
+            Err(e.into())
+        }
+        Ok(Err(e)) => {
+            error!("[API {method} {path}] Error: {e}");
+            Err(e)
+        }
+        Ok(Ok(r)) => Ok(r),
+    };
+    r.or_else(|api_error| {
+        serialize_error(resource_type, api_error).or_else(|e| Ok(Into::<tide::Response>::into(e)))
+    })
 }
 
-fn build_url(path: &[&str]) -> Result<TremorUrl> {
-    let url = format!("/{}", path.join("/"));
-    TremorUrl::parse(&url).map_err(|_e| {
-        Error::new(
-            StatusCode::InternalServerError,
-            format!("Could not decode Tremor URL: {}", url),
-        )
+/// server the tremor API in a separately spawned task
+#[must_use]
+pub fn serve(host: String, world: &World) -> JoinHandle<Result<()>> {
+    let mut v1_app = tide::Server::with_state(State {
+        world: world.clone(),
+    });
+    v1_app
+        .at("/version")
+        .get(|r| handle_api_request(r, version::get));
+    v1_app
+        .at("/status")
+        .get(|r| handle_api_request(r, status::get_runtime_status));
+    v1_app
+        .at("/flows")
+        .get(|r| handle_api_request(r, flow::list_flows));
+    v1_app
+        .at("/flows/:id")
+        .get(|r| handle_api_request(r, flow::get_flow))
+        .patch(|r| handle_api_request(r, flow::patch_flow_status));
+    v1_app
+        .at("/flows/:id/connectors")
+        .get(|r| handle_api_request(r, flow::get_flow_connectors));
+    v1_app
+        .at("/flows/:id/connectors/:connector")
+        .get(|r| handle_api_request(r, flow::get_flow_connector_status))
+        .patch(|r| handle_api_request(r, flow::patch_flow_connector_status));
+
+    let mut app = tide::Server::new();
+    app.at("/v1").nest(v1_app);
+
+    // spawn API listener
+    async_std::task::spawn(async move {
+        let res = app.listen(host).await;
+        warn!("API stopped.");
+        if let Err(e) = res {
+            error!("API Error: {}", e);
+            Err(e.into())
+        } else {
+            Ok(())
+        }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Instant;
+
+    use async_std::net::TcpListener;
+    use http_types::Url;
+    use simd_json::ValueAccess;
+    use tremor_runtime::{
+        errors::Result as RuntimeResult,
+        instance::State as InstanceState,
+        system::{
+            flow::{ConnectorAlias, StatusReport},
+            ShutdownMode, WorldConfig,
+        },
+    };
+    use tremor_script::{aggr_registry, ast::DeployStmt, deploy::Deploy, FN_REGISTRY};
+    use tremor_value::{literal, value::StaticValue};
+
+    use crate::flow::PatchStatus;
+
+    use super::*;
+
+    #[async_std::test]
+    async fn test_api() -> RuntimeResult<()> {
+        let _ = env_logger::try_init();
+        let config = WorldConfig {
+            qsize: 16,
+            debug_connectors: true,
+        };
+        let (world, world_handle) = World::start(config).await?;
+
+        let free_port = {
+            let listener = TcpListener::bind("127.0.0.1:0").await?;
+            let port = listener.local_addr()?.port();
+            drop(listener);
+            port
+        };
+        let host = format!("127.0.0.1:{free_port}");
+        let api_handle = serve(host.clone(), &world);
+        info!("Listening on: {}", host);
+
+        let src = r#"
+        define flow api_test
+        flow
+            define pipeline main
+            pipeline
+                select event from in into out;
+            end;
+            create pipeline main;
+
+            define connector my_null from `null`;
+            create connector my_null;
+
+            connect /connector/my_null to /pipeline/main;
+            connect /pipeline/main to /connector/my_null;
+        end;
+        deploy flow api_test;
+        "#;
+        let aggr_reg = aggr_registry();
+        let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg)?;
+        let deploy = deployable
+            .deploy
+            .stmts
+            .into_iter()
+            .find_map(|stmt| match stmt {
+                DeployStmt::DeployFlowStmt(deploy_flow) => Some((*deploy_flow).clone()),
+                _other => None,
+            })
+            .expect("No deploy in the given troy file");
+        world.start_flow(&deploy).await?;
+
+        // check the status endpoint
+        let start = Instant::now();
+        let client: surf::Client = surf::Config::new()
+            .set_base_url(Url::parse(&format!("http://{host}/"))?)
+            .try_into()
+            .expect("Could not create surf client");
+
+        let mut body = client
+            .get("/v1/status")
+            .await?
+            .body_json::<StaticValue>()
+            .await
+            .map(StaticValue::into_value);
+        while body.is_err() || !body.get_bool("all_running").unwrap_or_default() {
+            if start.elapsed() > Duration::from_secs(2) {
+                assert!(false, "Timeout waiting for all flows to run: {body:?}");
+            } else {
+                body = client
+                    .get("/v1/status")
+                    .await?
+                    .body_json::<StaticValue>()
+                    .await
+                    .map(StaticValue::into_value);
+            }
+        }
+        assert_eq!(
+            literal!({
+                "flows": {
+                    "running": 1_u64
+                },
+                "num_flows": 1_u64,
+                "all_running": true
+            }),
+            body?
+        );
+
+        // check the version endpoint
+        let body = client
+            .get("/v1/version")
+            .await?
+            .body_json::<StaticValue>()
+            .await?
+            .into_value();
+        assert!(body.contains_key("version"));
+        assert!(body.contains_key("debug"));
+
+        // list flows
+        let body = client
+            .get("/v1/flows")
+            .await?
+            .body_json::<Vec<StatusReport>>()
+            .await?;
+        assert_eq!(1, body.len());
+        assert_eq!("api_test".to_string(), body[0].alias);
+        assert_eq!(InstanceState::Running, body[0].status);
+        assert_eq!(1, body[0].connectors.len());
+        assert_eq!(ConnectorAlias::from("my_null"), body[0].connectors[0]);
+
+        // get flow
+        let res = client.get("/v1/flows/i_do_not_exist").await?;
+        assert_eq!(StatusCode::NotFound, res.status());
+
+        let body = client
+            .get("/v1/flows/api_test")
+            .await?
+            .body_json::<StatusReport>()
+            .await?;
+
+        assert_eq!("api_test".to_string(), body.alias);
+        assert_eq!(InstanceState::Running, body.status);
+        assert_eq!(1, body.connectors.len());
+        assert_eq!(ConnectorAlias::from("my_null"), body.connectors[0]);
+
+        // patch flow status
+        let body = client
+            .patch("/v1/flows/api_test")
+            .body_json(&PatchStatus {
+                status: InstanceState::Paused,
+            })?
+            .await?
+            .body_json::<StatusReport>()
+            .await?;
+
+        assert_eq!("api_test".to_string(), body.alias);
+        assert_eq!(InstanceState::Paused, body.status);
+        assert_eq!(1, body.connectors.len());
+        assert_eq!(ConnectorAlias::from("my_null"), body.connectors[0]);
+
+        // invalid patch
+        let mut res = client
+            .patch("/v1/flows/api_test")
+            .body_json(&PatchStatus {
+                status: InstanceState::Failed,
+            })?
+            .await?;
+        assert_eq!(StatusCode::BadRequest, res.status());
+        let _ = res.body_bytes().await?; // consume the body
+
+        // resume
+        let body = client
+            .patch("/v1/flows/api_test")
+            .body_json(&PatchStatus {
+                status: InstanceState::Running,
+            })?
+            .await?
+            .body_json::<StatusReport>()
+            .await?;
+
+        assert_eq!("api_test".to_string(), body.alias);
+        assert_eq!(InstanceState::Running, body.status);
+        assert_eq!(1, body.connectors.len());
+        assert_eq!(ConnectorAlias::from("my_null"), body.connectors[0]);
+
+        // list flow connectors
+        let body = client
+            .get("/v1/flows/api_test/connectors")
+            .await?
+            .body_json::<StaticValue>()
+            .await?
+            .into_value();
+        assert_eq!(
+            literal!([
+                {
+                    "alias": "my_null",
+                    "status": "running",
+                    "connectivity": "connected",
+                    "pipelines": {
+                        "out": [
+                            {
+                                "port":  "in",
+                                "alias": "main"
+                            }
+                        ],
+                        "in": [
+                            {
+                                "port": "out",
+                                "alias": "main"
+                            }
+                        ]
+                    }
+                }
+            ]),
+            body
+        );
+
+        // get flow connector
+        let mut res = client
+            .get("/v1/flows/api_test/connectors/i_do_not_exist")
+            .await?;
+        assert_eq!(StatusCode::NotFound, res.status());
+        let _ = res.body_bytes().await?; //consume body
+
+        let body = client
+            .get("/v1/flows/api_test/connectors/my_null")
+            .await?
+            .body_json::<StaticValue>()
+            .await?
+            .into_value();
+        assert_eq!(
+            literal!({
+                "alias": "my_null",
+                "status": "running",
+                "connectivity": "connected",
+                "pipelines": {
+                    "out": [
+                        {
+                            "port":  "in",
+                            "alias": "main"
+                        }
+                    ],
+                    "in": [
+                        {
+                            "port": "out",
+                            "alias": "main"
+                        }
+                    ]
+                }
+            }),
+            body
+        );
+
+        // patch flow connector status
+        let body = client
+            .patch("/v1/flows/api_test/connectors/my_null")
+            .body_json(&PatchStatus {
+                status: InstanceState::Paused,
+            })?
+            .await?
+            .body_json::<StaticValue>()
+            .await?
+            .into_value();
+
+        assert_eq!(
+            literal!({
+                "alias": "my_null",
+                "status": "paused",
+                "connectivity": "connected",
+                "pipelines": {
+                    "out": [
+                        {
+                            "port":  "in",
+                            "alias": "main"
+                        }
+                    ],
+                    "in": [
+                        {
+                            "port": "out",
+                            "alias": "main"
+                        }
+                    ]
+                }
+            }),
+            body
+        );
+
+        // invalid patch
+        let mut res = client
+            .patch("/v1/flows/api_test/connectors/my_null")
+            .body_json(&PatchStatus {
+                status: InstanceState::Failed,
+            })?
+            .await?;
+        assert_eq!(StatusCode::BadRequest, res.status());
+        let _ = res.body_bytes().await?; // consume the body
+
+        // resume
+        let body = client
+            .patch("/v1/flows/api_test/connectors/my_null")
+            .body_json(&PatchStatus {
+                status: InstanceState::Running,
+            })?
+            .await?
+            .body_json::<StaticValue>()
+            .await?
+            .into_value();
+        assert_eq!(
+            literal!({
+                "alias": "my_null",
+                "status": "running",
+                "connectivity": "connected",
+                "pipelines": {
+                    "out": [
+                        {
+                            "port":  "in",
+                            "alias": "main"
+                        }
+                    ],
+                    "in": [
+                        {
+                            "port": "out",
+                            "alias": "main"
+                        }
+                    ]
+                }
+            }),
+            body
+        );
+
+        // cleanup
+        world.stop(ShutdownMode::Graceful).await?;
+        world_handle.cancel().await;
+        api_handle.cancel().await;
+        Ok(())
+    }
 }

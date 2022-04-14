@@ -26,6 +26,11 @@ pub struct KnownKey<'key> {
     key: Cow<'key, str>,
     hash: u64,
 }
+impl<'key> std::fmt::Display for KnownKey<'key> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.key.fmt(f)
+    }
+}
 
 /// Error for known keys
 #[derive(Debug, PartialEq, Clone)]
@@ -34,7 +39,7 @@ pub enum Error {
     NotAnObject(ValueType),
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

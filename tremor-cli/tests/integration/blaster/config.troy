@@ -1,0 +1,33 @@
+
+define flow main
+flow
+  use troy::connectors;
+  use integration;
+
+  define connector bench from bench
+  with
+    codec = "json",
+    config = {
+      "source": "in.json",
+      "interval": 1000000,
+      "iters": 1
+    }
+  end;
+
+  create pipeline main from integration::out_or_exit;
+  create connector bench;
+  create connector exit from connectors::exit;
+
+  create connector out_file from integration::write_file;
+
+  create connector err_file from integration::write_file
+  with
+    file = "err.log"
+  end;
+
+  connect /connector/bench to /pipeline/main;
+  connect /pipeline/main to /connector/out_file;
+  connect /pipeline/main/exit to /connector/exit;
+end;
+
+deploy flow main;

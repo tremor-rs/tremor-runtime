@@ -29,19 +29,18 @@ use tremor_common::stry;
 
 use tremor_script::{
     self,
-    ast::{self, ImutExpr, InvokeAggrFn, NodeMetas, RunConsts, SelectStmt},
-    errors::Result as TSResult,
+    ast::{self, ImutExpr, RunConsts, SelectStmt},
+    errors::{error_generic, Result as TSResult},
     interpreter::{Env, LocalStack},
     prelude::*,
-    srs,
     utils::sorted_serialize,
-    Value,
+    Value, NO_AGGRS,
 };
 
 #[derive(Debug)]
 pub struct Select {
     pub id: String,
-    pub(crate) select: srs::Select,
+    pub(crate) select: ast::SelectStmt<'static>,
     pub windows: Vec<Window>,
     pub groups: HashMap<String, Group>,
     pub event_id_gen: EventIdGenerator,
@@ -50,48 +49,41 @@ pub struct Select {
     max_groups: usize,
 }
 
-pub(crate) const NO_AGGRS: [InvokeAggrFn<'static>; 0] = [];
-
 impl Select {
-    pub fn with_stmt(
-        operator_uid: u64,
+    pub fn from_stmt(
+        operator_uid: OperatorId,
         id: String,
         windows: Vec<(String, window::Impl)>,
-        stmt: &srs::Stmt,
-    ) -> Result<Self> {
+        select: &ast::SelectStmt<'static>,
+    ) -> Self {
         let windows: Vec<_> = windows
             .into_iter()
             .map(|(fqwn, window_impl)| Window {
-                module: Window::module_path(&fqwn),
                 name: Window::ident_name(&fqwn).to_string(),
                 window_impl,
             })
             .collect();
-        let select = srs::Select::try_new_from_stmt(stmt)?;
-        let event_id_gen = EventIdGenerator::new(operator_uid);
-        if let ast::Stmt::Select(SelectStmt { aggregates, .. }) = stmt.suffix() {
-            let windows_itr = windows.iter();
-            let dflt_group = Group {
-                value: Value::const_null(),
-                windows: GroupWindow::from_windows(aggregates, &EventId::default(), windows_itr),
-            };
-            let windows_itr = windows.iter();
-            let max_groups = windows_itr
-                .map(|w| w.window_impl.max_groups())
-                .min()
-                .unwrap_or(0) as usize;
-            Ok(Self {
-                id,
-                windows,
-                select,
-                groups: HashMap::new(),
-                event_id_gen,
-                recursion_limit: tremor_script::recursion_limit(),
-                dflt_group,
-                max_groups,
-            })
-        } else {
-            Err("Wrong type of statement".into())
+        let event_id_gen = EventIdGenerator::for_operator(operator_uid);
+        let SelectStmt { aggregates, .. } = select;
+        let windows_itr = windows.iter();
+        let dflt_group = Group {
+            value: Value::const_null(),
+            windows: GroupWindow::from_windows(aggregates, &EventId::default(), windows_itr),
+        };
+        let windows_itr = windows.iter();
+        let max_groups = windows_itr
+            .map(|w| w.window_impl.max_groups())
+            .min()
+            .unwrap_or(0) as usize;
+        Self {
+            id,
+            windows,
+            select: select.clone(),
+            groups: HashMap::new(),
+            event_id_gen,
+            recursion_limit: tremor_script::recursion_limit(),
+            dflt_group,
+            max_groups,
         }
     }
     const fn opts() -> ExecOpts {
@@ -127,8 +119,8 @@ pub(crate) fn execute_select_and_having(
         ctx.opts,
         env,
         &result,
+        event_meta,
         ctx.local_stack,
-        ctx.node_meta,
     ));
     if having {
         Ok(Some((
@@ -153,18 +145,17 @@ pub(crate) fn execute_select_and_having(
 fn env<'run, 'script>(
     context: &'run EventContext<'run>,
     consts: RunConsts<'run, 'script>,
-    meta: &'run NodeMetas,
     recursion_limit: u32,
 ) -> Env<'run, 'script> {
     Env {
         context,
         consts,
         aggrs: &NO_AGGRS,
-        meta,
         recursion_limit,
     }
 }
 
+#[derive(Debug)]
 /// Simple enum to decide what we return
 enum Res {
     Event,
@@ -188,7 +179,7 @@ impl Operator for Select {
     // so the state can never be changed.
     fn on_event(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _port: &str,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -203,7 +194,6 @@ impl Operator for Select {
             max_groups,
             ..
         } = self;
-
         let Event {
             ingest_ns,
             ref mut data,
@@ -219,124 +209,119 @@ impl Operator for Select {
 
         let opts = Self::opts();
 
-        let res = data.apply_select(
-            select,
-            |event,
-             SelectStmt {
-                 stmt: select,
-                 consts,
-                 locals,
-                 node_meta,
-                 ..
-             }|
-             -> TSResult<Res> {
-                let locals = tremor_script::interpreter::LocalStack::with_size(*locals);
+        let SelectStmt {
+            stmt: select,
+            consts,
+            locals,
+            ..
+        } = select;
+        let res = data.rent_mut(|event| -> TSResult<Res> {
+            let (data, meta) = event.parts_mut();
+            let locals = tremor_script::interpreter::LocalStack::with_size(*locals);
 
-                let (data, meta) = event.parts_mut();
+            // Before any select processing, we filter by where clause
+            //
+            let guard = &select.maybe_where;
+            let e = env(&ctx, consts.run(), *recursion_limit);
+            if !run_guard(select, guard, opts, &e, data, meta, &locals)? {
+                return Ok(Res::None);
+            };
+
+            let mut inner = select.meta();
+            let group_values = if let Some(group_by) = &select.maybe_group_by {
+                 inner = group_by.meta();
+                let groups = stry!(group_by.generate_groups(&ctx, data, meta));
+                groups.into_iter().map(Value::from).collect()
+            } else if windows.is_empty() {
                 //
-                // Before any select processing, we filter by where clause
+                // select without group by or windows
+                // event stays the same, only the value might change based on select clause
+                // and we might drop it altogether based on having clause.
                 //
+                consts.group = Value::from(vec![Value::const_null(), Value::from("[null]")]);
 
-                let guard = &select.maybe_where;
-                let e = env(&ctx, consts.run(), node_meta, *recursion_limit);
-                let w_guard = run_guard(select, guard, opts, &e, data, &locals, node_meta);
-                if !stry!(w_guard) {
-                    return Ok(Res::None);
-                };
-
-                let group_values = if let Some(group_by) = &select.maybe_group_by {
-                    let groups = stry!(group_by.generate_groups(&ctx, data, node_meta, meta));
-                    groups.into_iter().map(Value::from).collect()
-                } else if windows.is_empty() {
-                    //
-                    // select without group by or windows
-                    // event stays the same, only the value might change based on select clause
-                    // and we might drop it altogether based on having clause.
-                    //
-                    consts.group = Value::from(vec![Value::const_null(), Value::from("[null]")]);
-
-                    let e = env(&ctx, consts.run(), node_meta, *recursion_limit);
-                    let value = stry!(select.target.run(opts, &e, data, &NULL, meta, &locals));
-                    let h_guard = &select.maybe_having;
-                    let h_guard = run_guard(select, h_guard, opts, &e, &value, &locals, node_meta);
-                    return if stry!(h_guard) {
-                        *data = value.into_owned();
-                        Ok(Res::Event)
-                    } else {
-                        Ok(Res::None)
-                    };
+                let e = env(&ctx, consts.run(), *recursion_limit);
+                let value = stry!(select.target.run(opts, &e, data, &NULL, meta, &locals));
+                let h_guard = run_guard(select, &select.maybe_having, opts, &e, &value, meta, &locals);
+                return if stry!(h_guard) {
+                    *data = value.into_owned();
+                    Ok(Res::Event)
                 } else {
-                    vec![Value::from(vec![Value::const_null()])]
+                    Ok(Res::None)
+                };
+            } else {
+                vec![Value::from(vec![Value::const_null()])]
+            };
+
+            // Usually one or two windows emit, this is the common case so we don't pre-allocate
+            // for the entire window depth
+            let mut events = Vec::with_capacity(group_values.len() * 2);
+
+            // with the `each` grouping an event could be in more then one group, so we
+            // iterate over all groups we found
+            for group_value in group_values {
+                let group_str = stry!(sorted_serialize(&group_value));
+
+                ctx.cardinality = groups.len();
+
+                let sel_ctx = SelectCtx {
+                    select,
+                    local_stack: &locals,
+                    opts,
+                    ctx: &ctx,
+                    event_id: id.clone(),
+                    event_id_gen,
+                    ingest_ns,
+                    op_meta,
+                    origin_uri,
+                    transactional,
+                    recursion_limit: *recursion_limit,
                 };
 
-                // Usually one or two windows emit, this is the common case so we don't pre-allocate
-                // for the entire window depth
-                let mut events = Vec::with_capacity(group_values.len() * 2);
-
-                // with the `each` grouping an event could be in more then one group, so we
-                // iterate over all groups we found
-                for group_value in group_values {
-                    let group_str = stry!(sorted_serialize(&group_value));
-
-                    ctx.cardinality = groups.len();
-
-                    let sel_ctx = SelectCtx {
-                        select,
-                        local_stack: &locals,
-                        node_meta,
-                        opts,
-                        ctx: &ctx,
-                        event_id: id.clone(),
-                        event_id_gen,
-                        ingest_ns,
-                        op_meta,
-                        origin_uri,
-                        transactional,
-                        recursion_limit: *recursion_limit,
-                    };
-
-                    // see if we know the group already, we use the `entry` here so we don't
-                    // need to add / remove from the groups unenessessarily
-                    match groups.entry(group_str) {
-                        Entry::Occupied(mut o) => {
-                            // If we found a group execute it, and remove it if it is not longer
-                            // needed
-                            if stry!(o.get_mut().on_event(sel_ctx, consts, event, &mut events)) {
-                                o.remove();
-                            }
+                // see if we know the group already, we use the `entry` here so we don't
+                // need to add / remove from the groups unenessessarily
+                match groups.entry(group_str) {
+                    Entry::Occupied(mut o) => {
+                        // If we found a group execute it, and remove it if it is not longer
+                        // needed
+                        if stry!(o.get_mut().on_event(sel_ctx, consts, event, &mut events)) {
+                            o.remove();
                         }
-                        Entry::Vacant(v) => {
-                            // If we didn't find a group re-use the statements default group and set
-                            // the group value of it
-                            dflt_group.value = group_value;
-                            dflt_group.value.try_push(v.key().to_string());
-
-                            // execute it
-                            if !stry!(dflt_group.on_event(sel_ctx, consts, event, &mut events)) {
-                                // if we can't delete it check if we're having too many groups,
-                                // if so, error.
-                                if ctx.cardinality >= *max_groups {
-                                    return Err(format!("Maxmimum amount of groups reached ({}). Ignoring group [{}]", max_groups, *max_groups+1).into());
-                                }
-                                // otherwise we clone the default group (this is a cost we got to pay)
-                                // and reset it . If we didn't clone here we'd need to allocate a new
-                                // group for every event we haven't seen yet
-                                v.insert(dflt_group.clone());
-                                dflt_group.reset();
+                    }
+                    Entry::Vacant(v) => {
+                        // If we didn't find a group re-use the statements default group and set
+                        // the group value of it
+                        dflt_group.value = group_value;
+                        dflt_group.value.try_push(v.key().to_string());
+                        // execute it
+                        if !stry!(dflt_group.on_event(sel_ctx, consts, event, &mut events)) {
+                            // if we can't delete it check if we're having too many groups,
+                            // if so, error.
+                            if ctx.cardinality >= *max_groups {
+                                return error_generic(select.as_ref(), inner, &format!(
+                                        "Maxmimum amount of groups reached ({}). Ignoring group [{}]",
+                                        max_groups,
+                                        *max_groups + 1
+                                    ));
                             }
+                            // otherwise we clone the default group (this is a cost we got to pay)
+                            // and reset it . If we didn't clone here we'd need to allocate a new
+                            // group for every event we haven't seen yet
+                            v.insert(dflt_group.clone());
+                            dflt_group.reset();
                         }
                     }
                 }
-                Ok(Res::Data(events.into()))
-            },
-        )?;
+            }
+            Ok(Res::Data(events.into()))
+        })?;
 
         Ok(res.into_insights(event))
     }
 
     fn on_signal(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -360,94 +345,90 @@ impl Operator for Select {
         let ingest_ns = signal.ingest_ns;
 
         let opts = Self::opts();
-        select.rent_mut(|stmt| {
-            let SelectStmt {
-                stmt: select,
-                consts,
-                locals,
-                node_meta,
-                ..
-            } = stmt;
-            let mut res = EventAndInsights::default();
+        let SelectStmt {
+            stmt: select,
+            consts,
+            locals,
+            ..
+        } = select;
+        let mut res = EventAndInsights::default();
 
-            let data: ValueAndMeta = (Value::const_null(), Value::object()).into();
-            let op_meta = OpMeta::default();
-            let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
+        let data: ValueAndMeta = (Value::const_null(), Value::object()).into();
+        let op_meta = OpMeta::default();
+        let local_stack = tremor_script::interpreter::LocalStack::with_size(*locals);
 
-            consts.window = Value::const_null();
-            consts.group = Value::const_null();
-            consts.args = Value::const_null();
+        consts.window = Value::const_null();
+        consts.group = Value::const_null();
+        consts.args = Value::const_null();
 
-            let mut ctx = EventContext::new(ingest_ns, None);
-            ctx.cardinality = groups.len();
+        let mut ctx = EventContext::new(ingest_ns, None);
+        ctx.cardinality = groups.len();
 
-            let mut to_remove = vec![];
-            for (group_str, g) in groups.iter_mut() {
-                if let Some(w) = &mut g.windows {
+        let mut to_remove = vec![];
+        for (group_str, g) in groups.iter_mut() {
+            if let Some(w) = &mut g.windows {
+                let mut outgoing_event_id = event_id_gen.next_id();
+                mem::swap(&mut w.id, &mut outgoing_event_id);
+
+                let mut run = consts.run();
+                run.group = &g.value;
+                run.window = &w.name;
+                let window_event = w.window.on_tick(ingest_ns);
+                let mut can_remove = window_event.emit;
+
+                if window_event.emit {
+                    // push
+                    let mut env = env(&ctx, run, recursion_limit);
+                    env.aggrs = &w.aggrs;
+
                     let mut outgoing_event_id = event_id_gen.next_id();
-                    mem::swap(&mut w.id, &mut outgoing_event_id);
 
-                    let mut run = consts.run();
-                    run.group = &g.value;
-                    run.window = &w.name;
-                    let window_event = w.window.on_tick(ingest_ns);
-                    let mut can_remove = window_event.emit;
+                    mem::swap(&mut outgoing_event_id, &mut w.id);
 
-                    if window_event.emit {
-                        // push
-                        let mut env = env(&ctx, run, node_meta, recursion_limit);
-                        env.aggrs = &w.aggrs;
-
-                        let mut outgoing_event_id = event_id_gen.next_id();
-
-                        mem::swap(&mut outgoing_event_id, &mut w.id);
-
-                        let mut ctx = SelectCtx {
-                            select,
-                            local_stack: &local_stack,
-                            node_meta,
-                            opts,
-                            ctx: &ctx,
-                            event_id: outgoing_event_id,
-                            event_id_gen,
-                            ingest_ns,
-                            op_meta: &op_meta,
-                            origin_uri: &None,
-                            transactional: w.transactional,
-                            recursion_limit,
+                    let mut ctx = SelectCtx {
+                        select,
+                        local_stack: &local_stack,
+                        opts,
+                        ctx: &ctx,
+                        event_id: outgoing_event_id,
+                        event_id_gen,
+                        ingest_ns,
+                        op_meta: &op_meta,
+                        origin_uri: &None,
+                        transactional: w.transactional,
+                        recursion_limit,
+                    };
+                    if w.holds_data {
+                        if let Some(port_and_event) =
+                            super::select::execute_select_and_having(&ctx, &env, &data)?
+                        {
+                            res.events.push(port_and_event);
                         };
-                        if w.holds_data {
-                            if let Some(port_and_event) =
-                                super::select::execute_select_and_having(&ctx, &env, &data)?
-                            {
-                                res.events.push(port_and_event);
-                            };
-                        }
-                        // re-initialize aggr state for new window
-                        // reset transactional state for outgoing events
+                    }
+                    // re-initialize aggr state for new window
+                    // reset transactional state for outgoing events
 
-                        if let Some(next) = &mut w.next {
-                            can_remove = next.on_event(
-                                &mut ctx,
-                                run,
-                                &data,
-                                &mut res.events,
-                                Some((w.holds_data, &w.aggrs)),
-                                can_remove,
-                            )?;
-                        }
-                        w.reset();
+                    if let Some(next) = &mut w.next {
+                        can_remove = next.on_event(
+                            &mut ctx,
+                            run,
+                            &data,
+                            &mut res.events,
+                            Some((w.holds_data, &w.aggrs)),
+                            can_remove,
+                        )?;
                     }
-                    if can_remove {
-                        to_remove.push(group_str.clone());
-                    }
+                    w.reset();
+                }
+                if can_remove {
+                    to_remove.push(group_str.clone());
                 }
             }
-            for g in to_remove {
-                groups.remove(&g);
-            }
-            Ok(res)
-        })
+        }
+        for g in to_remove {
+            groups.remove(&g);
+        }
+        Ok(res)
     }
 
     fn handles_signal(&self) -> bool {
@@ -460,15 +441,14 @@ fn run_guard(
     guard: &Option<ImutExpr>,
     opts: ExecOpts,
     env: &Env,
-    result: &Value,
+    data: &Value,
+    meta: &Value,
     local_stack: &LocalStack,
-    node_meta: &NodeMetas,
 ) -> TSResult<bool> {
     if let Some(guard) = guard {
-        let test = stry!(guard.run(opts, env, result, &NULL, &NULL, local_stack));
-        test.as_bool().ok_or_else(|| {
-            tremor_script::errors::query_guard_not_bool_err(select, guard, &test, node_meta)
-        })
+        let test = stry!(guard.run(opts, env, data, &NULL, meta, local_stack));
+        test.as_bool()
+            .ok_or_else(|| tremor_script::errors::query_guard_not_bool_err(select, guard, &test))
     } else {
         Ok(true)
     }

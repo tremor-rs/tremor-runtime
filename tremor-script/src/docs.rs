@@ -31,7 +31,7 @@ pub struct FunctionSignatureDoc {
     pub result: String,
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl fmt::Display for FunctionSignatureDoc {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let r = write!(f, "{}({})", self.full_name, self.args.join(", "));
@@ -55,7 +55,7 @@ pub struct FunctionDoc {
     pub examples: Option<String>,
 }
 
-#[cfg(not(tarpaulin_include))]
+// #[cfg_attr(coverage, no_coverage)]
 impl fmt::Display for FunctionDoc {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}\n\n{}", self.signature, self.description)

@@ -9,7 +9,7 @@ fi
 
 cnt=0
 
-for d in $(remarshal -i $path/Cargo.toml -of json | jq -r '.dependencies | keys []' | grep -v -f .depignore)
+for d in $( remarshal -i $path/Cargo.toml -of json | jq -r '.dependencies | keys []' | if  [ -f $path/.depignore ]; then grep -v -f  $path/.depignore; else cat; fi )
 do
     dep=$(echo $d | sed -e 's/-/_/g')
     if ! rg "use $dep(::|;| )" $path -trust > /dev/null

@@ -21,7 +21,7 @@ use std::{collections::HashMap, fs, path::Path};
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct After {
-    run: String,
+    dir: String,
     cmd: String,
     args: Vec<String>,
     #[serde(default = "Default::default")]
@@ -29,21 +29,34 @@ pub(crate) struct After {
 }
 
 impl After {
-    pub(crate) fn spawn(&self, _base: &Path) -> Result<Option<TargetProcess>> {
+    pub(crate) async fn spawn(
+        &self,
+        base: &Path,
+        env: &HashMap<String, String>,
+    ) -> Result<Option<TargetProcess>> {
         let cmd = job::which(&self.cmd)?;
+        // interpret `dir` as relative to `base`
+        let current_dir = base.join(&self.dir).canonicalize()?;
 
-        let mut process = job::TargetProcess::new_with_stderr(&cmd, &self.args, &self.env)?;
-        process.wait_with_output()?;
+        let mut env = env.clone();
+        for (k, v) in &self.env {
+            env.insert(k.clone(), v.clone());
+        }
+        let mut process = job::TargetProcess::new_in_dir(&cmd, &self.args, &env, &current_dir)?;
+        let out_file = base.join("after.out.log");
+        let err_file = base.join("after.err.log");
+        process.stdio_tailer(&out_file, &err_file).await?;
+
         Ok(Some(process))
     }
 }
 
 pub(crate) fn load_after(path: &Path) -> Result<After> {
-    let mut tags_data = slurp_string(path)?;
-    match simd_json::from_str(&mut tags_data) {
+    let tags_data = slurp_string(path)?;
+    match serde_yaml::from_str(&tags_data) {
         Ok(s) => Ok(s),
         Err(_not_well_formed) => Err(Error::from(format!(
-            "Unable to load `after.json` from path: {}",
+            "Unable to load `after.yaml` from path: {}",
             path.display()
         ))),
     }
@@ -51,34 +64,34 @@ pub(crate) fn load_after(path: &Path) -> Result<After> {
 
 pub(crate) struct AfterController {
     base: PathBuf,
+    env: HashMap<String, String>,
 }
 
 impl AfterController {
-    pub(crate) fn new(base: &Path) -> Self {
+    pub(crate) fn new(base: &Path, env: &HashMap<String, String>) -> Self {
         Self {
             base: base.to_path_buf(),
+            env: env.clone(),
         }
     }
 
-    pub(crate) fn spawn(&mut self) -> Result<()> {
+    pub(crate) async fn spawn(&mut self) -> Result<()> {
         let root = &self.base;
-        let after_path = root.join("after.json");
+        let after_path = root.join("after.yaml");
         // This is optional
         if (&after_path).is_file() {
             let after_json = load_after(&after_path)?;
-            let after_process = after_json.spawn(root)?;
+            let after_process = after_json.spawn(root, &self.env).await?;
             if let Some(mut process) = after_process {
                 let after_out_file = root.join("after.out.log");
                 let after_err_file = root.join("after.err.log");
-                let after_process = std::thread::spawn(move || {
-                    if let Err(e) = process.tail(&after_out_file, &after_err_file) {
+                let after_process = async_std::task::spawn(async move {
+                    if let Err(e) = process.tail(&after_out_file, &after_err_file).await {
                         eprintln!("failed to tail tremor process: {}", e);
                     }
                 });
 
-                if after_process.join().is_err() {
-                    return Err("Failed to join test after thread/process error".into());
-                }
+                after_process.await;
             }
         }
         Ok(())

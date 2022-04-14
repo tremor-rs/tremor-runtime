@@ -1,0 +1,24 @@
+define flow main
+flow
+  use troy::pipelines;
+  use troy::connectors;
+  use std::time::nanos;
+  
+  define connector cb_in from cb
+  with
+    codec = "json",
+    config = {
+      "path": "in.json",
+      "timeout": nanos::from_seconds(2)
+    }
+  end;
+
+  create connector cb_in;
+  create connector stdio from connectors::console;
+  create pipeline passthrough from pipelines::passthrough;
+ 
+  connect /connector/cb_in/out to /pipeline/passthrough/in;
+  connect /pipeline/passthrough/out to /connector/stdio/in;
+end;
+
+deploy flow main;

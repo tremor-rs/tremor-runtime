@@ -1,0 +1,18 @@
+connector:
+  - id: bench
+    type: bench
+    preprocessors:
+      - lines
+    codec: string
+    config:
+      source: ./demo/data/example_1000.csv
+      chunk_size: 8192
+      warmup_secs: 10
+      stop_after_secs: 100
+      significant_figures: 2
+
+binding:
+  - id: bench
+    links:
+      "/connector/bench/{instance}/out": ["/pipeline/main/{instance}/in"]
+      "/pipeline/main/{instance}/out": ["/connector/bench/{instance}/in"] #, "/connector/system::stdout/{instance}/n"]

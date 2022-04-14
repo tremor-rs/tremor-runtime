@@ -1,0 +1,31 @@
+define flow main
+flow
+  use troy::connectors;
+  use std::time::nanos;
+  define connector in from cb
+  with
+    codec = "json",
+    config = {
+      "path": "in.json",
+      "timeout": nanos::from_seconds(1),
+      "expect_batched": true
+    }
+  end;
+  define pipeline main
+  pipeline
+    define window my_window from tumbling
+    with
+      size = 2
+    end;
+
+    # verify that a grouped select honours our cb/gs guarantees
+    select aggr::win::last(event) from in[my_window] group by event.cb into out;
+  end;
+
+  create connector in;
+  create pipeline main;
+  create connector out from connectors::console;
+  connect /connector/in to /pipeline/main;
+  connect /pipeline/main to /connector/out;
+end;
+deploy flow main;

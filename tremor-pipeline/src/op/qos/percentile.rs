@@ -33,6 +33,7 @@ use tremor_script::prelude::*;
 const OVERFLOW: Cow<'static, str> = Cow::const_str("overflow");
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     /// The maximum allowed timeout before backoff is applied
     pub timeout: f64,
@@ -84,7 +85,7 @@ op!(PercentileFactory(_uid, node) {
 impl Operator for Percentile {
     fn on_event(
         &mut self,
-        uid: u64,
+        uid: OperatorId,
         _port: &str,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -111,7 +112,7 @@ impl Operator for Percentile {
         true
     }
 
-    fn on_contraflow(&mut self, uid: u64, insight: &mut Event) {
+    fn on_contraflow(&mut self, uid: OperatorId, insight: &mut Event) {
         // If the related event never touched this operator we don't take
         // action
         if !insight.op_meta.contains_key(uid) {
@@ -142,17 +143,19 @@ impl Operator for Percentile {
 
 #[cfg(test)]
 mod test {
+    use tremor_common::ids::Id;
+
     use super::*;
 
     #[test]
     fn pass_wo_error() {
+        let uid = OperatorId::new(0);
         let mut op: Percentile = Config {
             timeout: 100.0,
             step_up: d_step_up(),
             step_down: d_step_down(),
         }
         .into();
-        let uid = 0;
 
         let mut state = Value::null();
 
@@ -197,7 +200,7 @@ mod test {
             step_up: d_step_up(),
         }
         .into();
-        let uid = 42;
+        let uid = OperatorId::new(42);
 
         let mut state = Value::null();
 
@@ -260,7 +263,7 @@ mod test {
             step_up: 0.1,
         }
         .into();
-        let uid = 123;
+        let uid = OperatorId::new(123);
         // An contraflow that fails the timeout
         let mut m = Object::new();
         m.insert("time".into(), 200.0.into());

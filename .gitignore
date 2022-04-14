@@ -40,8 +40,6 @@ perf.data*
 .gitconfig
 logger-*
 tremor.log
-docs
-aggr-docs
 /packaging/out/
 report.txt
 report.json
@@ -50,3 +48,6 @@ lcov.info
 tremor-value/proptest-regressions/
 *.release
 tremor-script/current_counterexample.eqc
+/docs
+/tremor-script/docs
+lalrpop-docgen

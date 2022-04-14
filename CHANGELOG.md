@@ -12,10 +12,11 @@
 - print names of failing tests
 - Add `check_topic_metadata` configuration flag to kafka source to bypass topic metadata fetch
 - port `json!` improvements to `literal!`
+- Add support for `troy` deployment language. The language adds the `pipeline`, `connector`, `flow`, `links`, `connect`, `to`, `deploy` and `config` reserved keywords. These are now reserved in the scripting and query languages and must now be escaped when they appear in event data. This is a breaking change in the query and script language dialects.
 - Add support for `FLOAT4` and `FLOAT8` serialization/deserialization to postgres connectors
 - Add `std::path::try_default` fn
 - Experimental ARM support
-- Add `default => {...}` and `default "key" => "value` to patch
+- Add `default => {...}` and `default "key" => "value"` to patch
 - Add `zstd` pre- and post-processors [#1100](https://github.com/tremor-rs/tremor-runtime/issues/1100)
 - Remove `rental` from `Event` [#1031](https://github.com/tremor-rs/tremor-runtime/issues/1031) [#1037](https://github.com/tremor-rs/tremor-runtime/issues/1037)
 - Put event raw payload into `Arc` to improve cloning perf
@@ -42,6 +43,9 @@
 - Add the `permissions` option for setting the file mode for the `unix-socket` source
 - Tests can be run without their suite. [#1238](https://github.com/tremor-rs/tremor-runtime/pull/1283)
 - Add the `std::size` module to convert sizes
+- Add custom function calls to constant folding
+- Integration test names are added as a tag so they can be run by name
+- integration tests low log stdout/stderr for before and after
 
 ### Fixes
 
@@ -56,31 +60,45 @@
 - Fix some errors in otel pb <-> json translation
 - Fix windowed queries emitting events with `null` metadata on tick
 - Fix sorting for artefacts
-- Fix issde where the test framework would generate reports without being asked for it [#1072](https://github.com/tremor-rs/tremor-runtime/issues/1072)
+- Fix issue where the test framework would generate reports without being asked for it [#1072](https://github.com/tremor-rs/tremor-runtime/issues/1072)
 - Remove the need for eviction_period for time based windows
 - Remove dead code and unneeded allows in otel and gcp code
 - Fix test and suite names not being printed
 - Fix badly nested structure in unit tests
 - Fix bug in the unit testing framework that would ignore all tags
-- Fix illogical structure of suites that required a doubly nested record
+- Fix the illogical structure of suites that required a doubly nested record
 - Fix `-v` flag
 - Fix issue with double counting of unit test stats
 - Fix issue with wrong script snippets being shown for unit tests
 - Fix argument order in test cases
-- Fix gcs go-auth token refresh
+- Fix GCS go-auth token refresh
 - Fix `create script` syntax for aliased scripts with overridden `params`
 - Add benchmark names to benchmark tags
 - Kafka onramp: Remove failing metadata fetch in order to verify topic existance. Instead detect subscription errors and stop the onramp in that case.
 - Unix offramp: Add the missing StartStream message
 - tremor-script: Add more details about Unicode in the documentation of the `string` module
+- Fix `hdr` and `dds` aggregation function losing events when aggregating > 8192 events
+- Ensure merge can only happen on objects
 
 ### Breaking Changes
 
 - changed naming for `record` object to avoid keywords like `select` and `merge`. New names are `record.extract` and `record.combine`.
+- command separators are now unified, both `patch`, `match` and `for` now use `;` the same way the rest of the language does
+- in all definitional statements `args` now specifies interface arguments that are overwritable in the correspanding `create` statement, while `with` specifies non-overwritable configuration in both `define` and `create` statements - this unifies the use of `with`  and `args` between trickle and troy
+- file connector no longer splits by lines - it now requires a preconnector
+- define for both troy and trickle now follow the same principle of `define <type> <alias> from <source>`
+- `wal` is no longer an operator but a connector
+- for the elastic connector indexes have not to be set on the batch not the individual event so one batch can only be to a single index.
+- metronome interval is now in nanoseconds (as all other timings)
+- Most connectors require a specified codec now instead of using JSON as a default
+- `merge` no longer treats `null` in the spec as a delete option but rather as a normal value
+- Combine all compression and decompression pre/postprocessors.
+
 ## 0.11.4
 - Update to clap 3, this forced some breaking changes:
   - `tremor server run -f file1 file2` now is `tremor server run file1 file2`
   - `tremor test -i i1 i2 -e e1 e2` is now `tremor test -i i1 -i i2 -e e1 -e e2`
+
 
 ### New features
 

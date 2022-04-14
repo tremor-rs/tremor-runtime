@@ -15,9 +15,7 @@
 pub mod backpressure;
 pub mod percentile;
 pub mod rr;
-pub mod wal;
 
 pub use backpressure::BackpressureFactory;
 pub use percentile::PercentileFactory;
 pub use rr::RoundRobinFactory;
-pub use wal::WalFactory;

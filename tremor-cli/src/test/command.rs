@@ -23,8 +23,8 @@ use crate::test::stats;
 use crate::test::tag::{self, Tags};
 use crate::util::slurp_string;
 use globwalk::{FileType, GlobWalkerBuilder};
+use std::collections::HashMap;
 use std::path::Path;
-use std::{collections::HashMap, thread};
 use tremor_common::file;
 use tremor_common::time::nanotime;
 
@@ -32,8 +32,6 @@ use super::TestConfig;
 
 #[derive(Deserialize, Debug)]
 pub(crate) struct CommandRun {
-    pub(crate) name: String,
-    pub(crate) tags: Option<Tags>,
     pub(crate) suites: Vec<CommandSuite>,
 }
 
@@ -56,7 +54,7 @@ pub(crate) struct CommandTest {
 }
 
 #[allow(clippy::too_many_lines)]
-pub(crate) fn suite_command(
+pub(crate) async fn suite_command(
     root: &Path,
     config: &TestConfig,
 ) -> Result<(stats::Stats, Vec<report::TestReport>)> {
@@ -86,27 +84,27 @@ pub(crate) fn suite_command(
         if let Some(suite_root) = suite.path().parent() {
             let base_tags = tag::resolve(base, suite_root)?;
 
+            let env = HashMap::new();
             // Set cwd to test root
             let cwd = std::env::current_dir()?;
             file::set_current_dir(&suite_root)?;
 
-            let mut before = before::BeforeController::new(suite_root);
-            let before_process = before.spawn()?;
-            thread::spawn(move || {
-                if let Err(e) = before.capture(before_process) {
-                    eprint!("Can't capture results from 'before' process: {}", e);
-                };
-            });
+            let mut before = before::BeforeController::new(suite_root, &env);
+            let mut after = after::AfterController::new(suite_root, &env);
+            if let Err(e) = before.spawn().await {
+                after.spawn().await?;
+                return Err(e);
+            }
 
             let suite_start = nanotime();
             let command_str = slurp_string(&suite.path())?;
             let suite = serde_yaml::from_str::<CommandRun>(&command_str)?;
             let mut header_printed = false;
             for suite in suite.suites {
-                let suite_tags = base_tags.join(suite.tags);
+                let suite_tags = base_tags.clone_joined(suite.tags);
                 let mut casex = stats::Stats::new();
                 for case in suite.cases {
-                    let current_tags = suite_tags.join(case.tags.clone());
+                    let current_tags = suite_tags.clone_joined(case.tags.clone());
                     if let (_, false) = config.matches(&current_tags) {
                         if config.verbose {
                             status::h1("Command Test ( Skipping )", &case.name)?;
@@ -137,13 +135,12 @@ pub(crate) fn suite_command(
 
                         // TODO wintel
                         let mut fg_process =
-                            job::TargetProcess::new_with_stderr(resolved_cmd, args, &case.env)?;
-                        let exit_status = fg_process.wait_with_output();
+                            job::TargetProcess::new_in_current_dir(resolved_cmd, args, &case.env)?;
 
                         let fg_out_file = suite_root.join(&format!("fg.{}.out.log", counter));
                         let fg_err_file = suite_root.join(&format!("fg.{}.err.log", counter));
                         let start = nanotime();
-                        fg_process.tail(&fg_out_file, &fg_err_file)?;
+                        let exit_status = fg_process.tail(&fg_out_file, &fg_err_file).await?;
                         let elapsed = nanotime() - start;
 
                         counter += 1;
@@ -151,7 +148,7 @@ pub(crate) fn suite_command(
                         let (case_stats, elements) = process_testcase(
                             &fg_out_file,
                             &fg_err_file,
-                            exit_status?.code(),
+                            exit_status.code(),
                             elapsed,
                             &case,
                         )?;
@@ -184,8 +181,7 @@ pub(crate) fn suite_command(
 
             before::update_evidence(suite_root, &mut evidence)?;
 
-            let mut after = after::AfterController::new(suite_root);
-            after.spawn()?;
+            after.spawn().await?;
             after::update_evidence(suite_root, &mut evidence)?;
 
             // Reset cwd

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // this are macros
-#![cfg(not(tarpaulin_include))]
+// #![cfg_attr(coverage, no_coverage)]
 
 /// A macro that makes it simple to create a operator and the
 /// required factory usage is:
@@ -24,9 +24,9 @@ macro_rules! op {
         #[derive(Default)]
         pub struct $factory {}
         impl crate::op::InitializableOperator for $factory {
-            fn from_node(
+            fn node_to_operator(
                 &self,
-                $uid: u64,
+                $uid: tremor_common::ids::OperatorId,
                 $node: &crate::NodeConfig,
             ) -> crate::errors::Result<Box<dyn crate::op::Operator>> {
                 $constructor

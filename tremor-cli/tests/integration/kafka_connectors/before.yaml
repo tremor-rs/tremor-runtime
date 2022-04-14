@@ -1,0 +1,45 @@
+- dir: "."
+  cmd: "docker"
+  args:
+    - "run"
+    - "--name"
+    - "tremor-redpanda-blabla-unique"
+    - "-p"
+    - "127.0.0.1:9092:9092"
+    - "-p"
+    - "127.0.0.1:9644:9644"
+    - "docker.vectorized.io/vectorized/redpanda:latest"
+    - "redpanda"
+    - "start"
+    - "--overprovisioned"
+    - "--smp=1"
+    - "--memory=1G"
+    - "--reserve-memory=0M"
+    - "--node-id=0"
+    - "--check=false"
+    - "--kafka-addr=0.0.0.0:9092"
+    - "--advertise-kafka-addr=127.0.0.1:9092"
+  await:
+    "port-open":
+      - "9092"
+    "http-ok":
+      - "http://localhost:9644/v1/status/ready"
+  max-await-secs: 10
+- dir: "."
+  cmd: "docker"
+  args:
+    - "exec"
+    - "tremor-redpanda-blabla-unique"
+    - "rpk"
+    - "topic"
+    - "--brokers=127.0.0.1:9092"
+    - "create"
+    - "tremor_test"
+    - "-p"
+    - "2"
+    - "-r"
+    - "1"
+  await:
+    status:
+     - "0"
+  max-await-secs: 10

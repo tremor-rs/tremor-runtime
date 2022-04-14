@@ -19,13 +19,11 @@ use rmp_serde as rmps;
 pub struct MsgPack {}
 
 impl Codec for MsgPack {
-    #[cfg(not(tarpaulin_include))]
     fn name(&self) -> &str {
         "msgpack"
     }
 
-    #[cfg(not(tarpaulin_include))]
-    fn mime_types(&self) -> Vec<&str> {
+    fn mime_types(&self) -> Vec<&'static str> {
         vec![
             "application/msgpack",
             "application/x-msgpack",
@@ -40,14 +38,13 @@ impl Codec for MsgPack {
     ) -> Result<Option<Value<'input>>> {
         rmps::from_slice::<Value>(data)
             .map(Some)
-            .map_err(|e| e.into())
+            .map_err(Error::from)
     }
 
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {
         Ok(rmps::to_vec(&data)?)
     }
 
-    #[cfg(not(tarpaulin_include))]
     fn boxed_clone(&self) -> Box<dyn Codec> {
         Box::new(self.clone())
     }

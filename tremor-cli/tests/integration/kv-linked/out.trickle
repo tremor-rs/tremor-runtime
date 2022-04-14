@@ -1,4 +1,0 @@
-select {
-  "event": event,
-  "meta": $
-} from in into out;

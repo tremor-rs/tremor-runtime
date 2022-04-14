@@ -1,0 +1,41 @@
+define flow main
+flow
+  use integration;
+  define pipeline main
+  into out, exit
+  pipeline
+    use std::string;
+    use std::time::nanos;
+    define window my_window from tumbling
+    with
+      interval = nanos::from_seconds(1)
+    end;
+    define window my_other_window from tumbling
+    with
+      interval = nanos::from_seconds(2)
+    end;
+
+    select
+      [
+        window,
+        string::lowercase(event.name),
+        not not event.bool,
+        aggr::win::last(event.array),
+        aggr::win::collect_flattened($)
+      ]
+    from in[my_window, my_other_window] where event != "exit"
+    group by set(event.name, not event.bool)
+    into out;
+    select {"exit": 0, "delay": nanos::from_seconds(2)} from in where event == "exit" into exit;
+  end;
+  create pipeline main;
+  create connector in from integration::read_file;
+  create connector out from integration::write_file;
+  create connector exit from integration::exit;
+
+
+  connect /connector/in to /pipeline/main;
+  connect /pipeline/main to /connector/out;
+  connect /pipeline/main/exit to /connector/exit;
+end;
+deploy flow main;

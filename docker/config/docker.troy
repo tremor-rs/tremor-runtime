@@ -1,0 +1,46 @@
+define flow docker
+flow
+    use troy::connectors;
+    use troy::pipelines;
+    use std::time::nanos;
+
+    define pipeline main
+    pipeline
+        #!config metrics_interval_s = 5
+        define script runtime
+        script
+            use tremor::system;
+            let event.hostname = system::hostname();
+            event
+        end;
+
+        create script runtime;
+
+        select event from in into runtime;
+        select event from runtime into out;
+        select event from runtime/err into err;
+    end;
+
+    define connector metronome from metronome
+    with
+        config = {
+            "interval": nanos::from_seconds(1)
+        }
+    end;
+
+    create connector metronome;
+    create connector console from connectors::console;
+    create connector metrics from connectors::metrics;
+    
+    create pipeline main;
+    create pipeline passthrough from pipelines::passthrough;
+
+    connect /connector/metronome to /pipeline/main;
+    connect /pipeline/main/out to /connector/console;
+    connect /pipeline/main/err to /connector/console/stderr;
+
+    connect /connector/metrics to /pipeline/passthrough;
+    connect /pipeline/passthrough to /connector/console;
+end;
+
+deploy flow docker;

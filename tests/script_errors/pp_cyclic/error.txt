@@ -1,2 +1,3 @@
 Error: 
-      | ^ Cyclic dependency detected: tests/script_errors/pp_cyclic/script.tremor -> tests/script_errors/pp_cyclic/script.tremor
+    1 | use `script` as s;
+      | ^^^^^^^^^^^^^^^^^  Cyclic dependency detected: tests/script_errors/pp_cyclic/script.tremor

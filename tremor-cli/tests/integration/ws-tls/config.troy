@@ -1,0 +1,67 @@
+define flow main
+flow
+  use integration;
+  use troy::pipelines;
+  use troy::connectors;
+
+  define connector ws_client from ws_client
+  with
+    codec = "json",
+    config = {
+      "url": "wss://0.0.0.0:65535",
+      "no_delay": false,
+      "tls": {
+        "cafile": "./before/localhost.cert",
+        "domain": "localhost",
+      }
+    },
+    reconnect = {
+      "retry": {
+        "interval_ms": 500,
+        "growth_rate": 2,
+        "max_retries": 3,
+      }
+    }
+  end;
+
+  define connector ws_server from ws_server
+  with
+    codec = "json",
+    config = {
+      "url": "0.0.0.0:65535",
+      "tls": {
+        "cert": "./before/localhost.cert",
+        "key": "./before/localhost.key",
+      }
+    }
+  end;
+
+  create connector in from integration::read_file;
+  create connector out from integration::write_file;
+  create connector exit from integration::exit;
+  create connector stdio from connectors::console;
+  create connector ws_client;
+  create connector ws_server;
+
+  create pipeline server_side from integration::out_or_exit;
+  create pipeline to_client from pipelines::passthrough;
+  create pipeline debug from pipelines::passthrough;
+
+  connect /connector/in to /pipeline/to_client;
+  connect /connector/in/err to /pipeline/debug;
+  connect /pipeline/to_client to /connector/ws_client;
+  # send out any responses to stdout
+  connect /connector/ws_client to /pipeline/debug;
+  connect /connector/ws_client/err to /pipeline/debug;
+  connect /pipeline/debug to /connector/stdio;
+  # flow from ws_server to file
+  connect /connector/ws_server to /pipeline/server_side;
+  connect /connector/ws_server/err to /pipeline/debug;
+  connect /pipeline/server_side to /connector/out;
+  # aaaand echo it back
+  connect /pipeline/server_side to /connector/ws_server;
+  connect /pipeline/server_side to /connector/exit;
+
+end;
+
+deploy flow main;

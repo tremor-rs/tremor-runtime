@@ -18,26 +18,25 @@ use crate::{
     common_cow,
     errors::Result,
     errors::{Error, ErrorKind},
-    influx_value,
-    op::{prelude::IN, trickle::window},
-    ConfigMap, ExecPortIndexMap, NodeLookupFn,
+    metrics::value_count,
+    op::prelude::IN,
+    ConfigMap, ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
 use halfbrown::HashMap;
-use tremor_common::stry;
-use tremor_script::{srs, Value};
+use tremor_common::{ids::OperatorId, stry};
+use tremor_script::{ast::Helper, ast::Stmt, Value};
 
 /// Configuration for a node
-#[derive(Debug, Clone, PartialOrd, Eq, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct NodeConfig {
     pub(crate) id: String,
     pub(crate) kind: NodeKind,
     pub(crate) op_type: String,
     pub(crate) config: ConfigMap,
-    pub(crate) defn: Option<srs::Stmt>,
-    pub(crate) node: Option<srs::Stmt>,
     pub(crate) label: Option<String>,
+    pub(crate) stmt: Option<Stmt<'static>>,
 }
 
 impl Display for NodeConfig {
@@ -52,20 +51,18 @@ impl NodeConfig {
         self.label.as_deref().unwrap_or(dflt)
     }
 
-    /// Creates a `NodeConfig` from a config struct
-    pub fn from_config<C, I>(id: &I, config: C) -> Result<Self>
+    #[cfg(test)]
+    /// Creates a `curlNodeConfig` from a config struct
+    pub(crate) fn from_config<I>(id: &I, config: Option<tremor_value::Value<'static>>) -> Self
     where
-        C: serde::Serialize,
         I: ToString,
     {
-        let config = serde_yaml::to_vec(&config)?;
-
-        Ok(NodeConfig {
+        NodeConfig {
             id: id.to_string(),
             kind: NodeKind::Operator,
-            config: serde_yaml::from_slice(&config)?,
+            config,
             ..NodeConfig::default()
-        })
+        }
     }
 }
 
@@ -82,25 +79,14 @@ impl PartialEq for NodeConfig {
     }
 }
 
-impl std::hash::Hash for NodeConfig {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.id.hash(state);
-        self.kind.hash(state);
-        self.op_type.hash(state);
-        self.config.hash(state);
-    }
-}
-
 impl NodeConfig {
     pub(crate) fn to_op(
         &self,
-        uid: u64,
+        uid: OperatorId,
         resolver: NodeLookupFn,
-        defn: Option<&srs::Stmt>,
-        node: Option<&srs::Stmt>,
-        window: Option<HashMap<String, window::Impl>>,
+        helper: &mut Helper<'static, '_>,
     ) -> Result<OperatorNode> {
-        resolver(self, uid, defn, node, window)
+        resolver(self, uid, self.stmt.as_ref(), helper)
     }
 }
 
@@ -129,13 +115,15 @@ pub struct OperatorNode {
     /// The executable operator
     pub op: Box<dyn Operator>,
     /// Tremor unique identifyer
-    pub uid: u64,
+    pub uid: OperatorId,
+    /// The original config
+    pub config: NodeConfig,
 }
 
 impl Operator for OperatorNode {
     fn on_event(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         port: &str,
         state: &mut Value<'static>,
         event: Event,
@@ -148,7 +136,7 @@ impl Operator for OperatorNode {
     }
     fn on_signal(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -158,7 +146,7 @@ impl Operator for OperatorNode {
     fn handles_contraflow(&self) -> bool {
         self.op.handles_contraflow()
     }
-    fn on_contraflow(&mut self, _uid: u64, contraevent: &mut Event) {
+    fn on_contraflow(&mut self, _uid: OperatorId, contraevent: &mut Event) {
         self.op.on_contraflow(self.uid, contraevent);
     }
 
@@ -229,7 +217,7 @@ impl NodeMetrics {
         tags.insert("direction".into(), "input".into());
         for (k, v) in &self.inputs {
             tags.insert("port".into(), Value::from(k.clone()));
-            res.push(influx_value(
+            res.push(value_count(
                 metric_name.to_string().into(),
                 tags.clone(),
                 *v,
@@ -239,7 +227,7 @@ impl NodeMetrics {
         tags.insert("direction".into(), "output".into());
         for (k, v) in &self.outputs {
             tags.insert("port".into(), Value::from(k.clone()));
-            res.push(influx_value(
+            res.push(value_count(
                 metric_name.to_string().into(),
                 tags.clone(),
                 *v,
@@ -264,19 +252,24 @@ pub struct ExecutableGraph {
     pub(crate) contraflow: Vec<usize>,
     pub(crate) port_indexes: ExecPortIndexMap,
     pub(crate) metrics: Vec<NodeMetrics>,
-    pub(crate) metrics_idx: usize,
     pub(crate) last_metrics: u64,
     pub(crate) metric_interval: Option<u64>,
+    pub(crate) metrics_channel: MetricsSender,
     /// snot
     pub insights: Vec<(usize, Event)>,
-    /// source code of the pipeline
-    pub source: Option<String>,
     /// the dot representation of the graph
     pub dot: String,
 }
 
 /// The return of a graph execution
-pub type Returns = Vec<(Cow<'static, str>, Event)>;
+#[derive(Default, Debug)]
+pub struct Returns {
+    /// Resulting events
+    pub output: Vec<(Cow<'static, str>, Event)>,
+    /// Dropped events
+    pub dead_ends: Vec<Event>,
+}
+
 impl ExecutableGraph {
     /// Tries to optimise a pipeline
     pub fn optimize(&mut self) -> Option<()> {
@@ -299,7 +292,7 @@ impl ExecutableGraph {
                 !self
                     .graph
                     .get(**id)
-                    .map(|n| n.skippable())
+                    .map(Operator::skippable)
                     .unwrap_or_default()
             })
             .copied()
@@ -310,7 +303,7 @@ impl ExecutableGraph {
                 !self
                     .graph
                     .get(**id)
-                    .map(|n| n.skippable())
+                    .map(Operator::skippable)
                     .unwrap_or_default()
             })
             .copied()
@@ -429,7 +422,7 @@ impl ExecutableGraph {
     ///
     /// # Errors
     /// Errors if the event can not be processed, or an operator fails
-    pub fn enqueue(
+    pub async fn enqueue(
         &mut self,
         stream_name: &str,
         event: Event,
@@ -443,7 +436,7 @@ impl ExecutableGraph {
         {
             let mut tags = HashMap::with_capacity(8);
             tags.insert("pipeline".into(), common_cow(&self.id).into());
-            self.enqueue_metrics("events", tags, event.ingest_ns);
+            self.send_metrics("events", tags, event.ingest_ns).await;
             self.last_metrics = event.ingest_ns;
         }
         let input = *stry!(self.inputs.get(stream_name).ok_or_else(|| {
@@ -468,7 +461,7 @@ impl ExecutableGraph {
                 return Err(e);
             }
         } {}
-        returns.reverse();
+        returns.output.reverse();
         Ok(())
     }
 
@@ -478,17 +471,17 @@ impl ExecutableGraph {
             // If we have emitted a signal event we got to handle it as a signal flow
             // the signal flow will
             if event.kind.is_some() {
-                stry!(self.signalflow(event));
+                stry!(self.signalflow(event, returns));
             } else {
                 // count ingres
                 let node = unsafe { self.graph.get_unchecked_mut(idx) };
                 if let NodeKind::Output(port) = &node.kind {
-                    returns.push((port.clone(), event));
+                    returns.output.push((port.clone(), event));
                 } else {
                     // ALLOW: We know the state was initiated
                     let state = unsafe { self.state.ops.get_unchecked_mut(idx) };
                     let EventAndInsights { events, insights } =
-                        stry!(node.on_event(0, &port, state, event));
+                        stry!(node.on_event(node.uid, &port, state, event));
 
                     for (out_port, _) in &events {
                         unsafe { self.metrics.get_unchecked_mut(idx) }.inc_output(out_port);
@@ -496,7 +489,7 @@ impl ExecutableGraph {
                     for insight in insights {
                         self.insights.push((idx, insight));
                     }
-                    self.enqueue_events(idx, events);
+                    self.enqueue_events(idx, events, returns);
                 };
             }
             Ok(!self.stack.is_empty())
@@ -506,7 +499,7 @@ impl ExecutableGraph {
         }
     }
 
-    fn enqueue_metrics(
+    async fn send_metrics(
         &mut self,
         metric_name: &str,
         mut tags: HashMap<Cow<'static, str>, Value<'static>>,
@@ -518,37 +511,43 @@ impl ExecutableGraph {
             });
             if let Ok(metrics) = unsafe { self.graph.get_unchecked(i) }.metrics(&tags, ingest_ns) {
                 for value in metrics {
-                    self.stack.push((
-                        self.metrics_idx,
-                        IN,
-                        Event {
-                            data: value.into(),
-                            ingest_ns,
-                            // TODO update this to point to tremor instance producing the metrics?
+                    if let Err(e) = self
+                        .metrics_channel
+                        .broadcast(MetricsMsg {
+                            payload: value.into(),
                             origin_uri: None,
-                            ..Event::default()
-                        },
-                    ));
+                        })
+                        .await
+                    {
+                        error!("Failed to send metrics: {}", e);
+                    };
                 }
             }
 
             for value in m.to_value(metric_name, &mut tags, ingest_ns) {
-                self.stack.push((
-                    self.metrics_idx,
-                    IN,
-                    Event {
-                        data: value.into(),
-                        ingest_ns,
-                        // TODO update this to point to tremor instance producing the metrics?
+                if let Err(e) = self
+                    .metrics_channel
+                    .broadcast(MetricsMsg {
+                        payload: value.into(),
                         origin_uri: None,
-                        ..Event::default()
-                    },
-                ));
+                    })
+                    .await
+                {
+                    error!("Failed to send metrics: {}", e);
+                };
             }
         }
     }
+    // Takes the output of one operator, identified by `idx` and puts them on the stack
+    // for the connected operators to pick up.
+    // If the output is not connected we register this as a dropped event
     #[inline]
-    fn enqueue_events(&mut self, idx: usize, events: Vec<(Cow<'static, str>, Event)>) {
+    fn enqueue_events(
+        &mut self,
+        idx: usize,
+        events: Vec<(Cow<'static, str>, Event)>,
+        returns: &mut Returns,
+    ) {
         for (out_port, event) in events {
             if let Some((last, rest)) = self
                 .port_indexes
@@ -562,6 +561,8 @@ impl ExecutableGraph {
                 let (idx, in_port) = last;
                 unsafe { self.metrics.get_unchecked_mut(*idx) }.inc_input(in_port);
                 self.stack.push((*idx, in_port.clone(), event));
+            } else if event.transactional {
+                returns.dead_ends.push(event);
             }
         }
     }
@@ -583,13 +584,13 @@ impl ExecutableGraph {
     /// if the singal fails to be processed in the singal flow or if any forward going
     /// events spawned by this signal fail to be processed
     pub fn enqueue_signal(&mut self, signal: Event, returns: &mut Returns) -> Result<()> {
-        if stry!(self.signalflow(signal)) {
+        if stry!(self.signalflow(signal, returns)) {
             stry!(self.run(returns));
         }
         Ok(())
     }
 
-    fn signalflow(&mut self, mut signal: Event) -> Result<bool> {
+    fn signalflow(&mut self, mut signal: Event, returns: &mut Returns) -> Result<bool> {
         let mut has_events = false;
         // We can't use an iterator over signalfow here
         // rust refuses to let us use enqueue_events if we do
@@ -603,7 +604,7 @@ impl ExecutableGraph {
             };
             self.insights.extend(insights.into_iter().map(|cf| (i, cf)));
             has_events = has_events || !events.is_empty();
-            self.enqueue_events(i, events);
+            self.enqueue_events(i, events, returns);
         }
         Ok(has_events)
     }
@@ -612,54 +613,38 @@ impl ExecutableGraph {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::op::{
-        identity::PassthroughFactory,
-        prelude::{METRICS, OUT},
+    use crate::{
+        op::{identity::PassthroughFactory, prelude::OUT},
+        GraphReturns, METRICS_CHANNEL,
     };
-    use std::{
-        collections::hash_map::DefaultHasher,
-        hash::{Hash, Hasher},
-    };
+    use tremor_common::ids::Id;
     use tremor_script::prelude::*;
-    #[test]
-    fn node_conjfig_eq() {
-        let n0 = NodeConfig::from_config(&"node", ()).unwrap();
-        let n1 = NodeConfig::from_config(&"other", ()).unwrap();
-        assert_eq!(n0, n0);
-        assert_ne!(n0, n1);
-        let mut h1 = DefaultHasher::new();
-        let mut h2 = DefaultHasher::new();
-        let mut h3 = DefaultHasher::new();
-        n0.hash(&mut h1);
-        n0.hash(&mut h2);
-
-        assert_eq!(h1.finish(), h2.finish());
-        n1.hash(&mut h3);
-        assert_ne!(h2.finish(), h3.finish());
-    }
-
-    fn pass(uid: u64, id: &'static str) -> OperatorNode {
-        let c = NodeConfig::from_config(&"passthrough", ()).unwrap();
+    fn pass(uid: OperatorId, id: &'static str) -> OperatorNode {
+        let config = NodeConfig::from_config(&"passthrough", None);
         OperatorNode {
             id: id.into(),
             kind: NodeKind::Operator,
             op_type: id.into(),
-            op: PassthroughFactory::new_boxed().from_node(uid, &c).unwrap(),
-            uid: 0,
+            op: PassthroughFactory::new_boxed()
+                .node_to_operator(uid, &config)
+                .unwrap(),
+            uid,
+            config,
         }
     }
     #[test]
     fn operator_node() {
-        let mut n = pass(0, "passthrough");
+        let op_id = OperatorId::new(0);
+        let mut n = pass(op_id, "passthrough");
         assert!(!n.handles_contraflow());
         assert!(!n.handles_signal());
         assert!(!n.handles_contraflow());
         let mut e = Event::default();
         let mut state = Value::null();
-        n.on_contraflow(0, &mut e);
+        n.on_contraflow(op_id, &mut e);
         assert_eq!(e, Event::default());
         assert_eq!(
-            n.on_signal(0, &mut state, &mut e).unwrap(),
+            n.on_signal(op_id, &mut state, &mut e).unwrap(),
             EventAndInsights::default()
         );
         assert_eq!(e, Event::default());
@@ -699,7 +684,7 @@ mod test {
     impl Operator for AllOperator {
         fn on_event(
             &mut self,
-            _uid: u64,
+            _uid: OperatorId,
             _port: &str,
             _state: &mut Value<'static>,
             event: Event,
@@ -712,7 +697,7 @@ mod test {
 
         fn on_signal(
             &mut self,
-            _uid: u64,
+            _uid: OperatorId,
             _state: &mut Value<'static>,
             _signal: &mut Event,
         ) -> Result<EventAndInsights> {
@@ -724,7 +709,7 @@ mod test {
             true
         }
 
-        fn on_contraflow(&mut self, _uid: u64, _insight: &mut Event) {}
+        fn on_contraflow(&mut self, _uid: OperatorId, _insight: &mut Event) {}
 
         fn metrics(
             &self,
@@ -745,67 +730,71 @@ mod test {
             kind: NodeKind::Operator,
             op_type: "test".into(),
             op: Box::new(AllOperator {}),
-            uid: 0,
+            uid: OperatorId::default(),
+            config: NodeConfig::default(),
         }
     }
 
-    fn test_metrics(mut metrics: Vec<Event>, n: u64) {
+    fn test_metrics(mut metrics: Vec<MetricsMsg>, n: u64) {
         // out/in
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "out");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "in");
 
         // all-2/out
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-2");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "out");
 
         // all-2/in
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-2");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "in");
 
         // all-1/out
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-1");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "out");
 
         // all-1/in
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "all-1");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "in");
 
         // out/in
         let this = metrics.pop().unwrap();
-        let (data, _) = this.data.parts();
+        let (data, _) = this.payload.parts();
         test_metric(data, "test-metric", n);
         assert_eq!(data.get("tags").unwrap().get("node").unwrap(), "in");
         assert_eq!(data.get("tags").unwrap().get("port").unwrap(), "out");
         assert!(metrics.is_empty());
     }
 
-    #[test]
-    fn eg_metrics() {
-        let mut in_n = pass(1, "in");
+    #[async_std::test]
+    async fn eg_metrics() {
+        let mut in_n = pass(OperatorId::new(1), "in");
         in_n.kind = NodeKind::Input;
-        let mut out_n = pass(2, "out");
+        let mut out_n = pass(OperatorId::new(2), "out");
         out_n.kind = NodeKind::Output(OUT);
-        let mut metrics_n = pass(3, "metrics");
-        metrics_n.kind = NodeKind::Output(METRICS);
 
         // The graph is in -> 1 -> 2 -> out, we pre-stack the edges since we do not
         // need to have order in here.
-        let graph = vec![in_n, all_op("all-1"), all_op("all-2"), out_n, metrics_n];
+        let graph = vec![
+            in_n,            // 0
+            all_op("all-1"), // 1
+            all_op("all-2"), // 2
+            out_n,           // 3
+        ];
 
         let mut inputs = HashMap::new();
         inputs.insert("in".into(), 0);
@@ -822,18 +811,12 @@ mod test {
             NodeMetrics::default(),
             NodeMetrics::default(),
             NodeMetrics::default(),
-            NodeMetrics::default(),
         ];
         // Create state for all nodes
         let state = State {
-            ops: vec![
-                Value::null(),
-                Value::null(),
-                Value::null(),
-                Value::null(),
-                Value::null(),
-            ],
+            ops: vec![Value::null(), Value::null(), Value::null(), Value::null()],
         };
+        let mut rx = METRICS_CHANNEL.rx();
         let mut g = ExecutableGraph {
             id: "test".into(),
             graph,
@@ -845,65 +828,65 @@ mod test {
             port_indexes,
             metrics,
             // The index of the metrics node in our pipeline
-            metrics_idx: 4,
             last_metrics: 0,
             metric_interval: Some(1),
             insights: vec![],
-            source: None,
             dot: String::from(""),
+            metrics_channel: METRICS_CHANNEL.tx(),
         };
 
         // Test with one event
         let e = Event::default();
-        let mut returns = Vec::new();
-        g.enqueue("in", e, &mut returns).unwrap();
-        assert_eq!(returns.len(), 1);
-        returns.clear();
+        let mut returns = GraphReturns::default();
+        g.enqueue("in", e, &mut returns).await.unwrap();
+        assert_eq!(returns.output.len(), 1);
+        assert_eq!(returns.dead_ends.len(), 0);
+        returns.output.clear();
 
-        g.enqueue_metrics("test-metric", HashMap::new(), 123);
-        g.run(&mut returns).unwrap();
-        let (ports, metrics): (Vec<_>, Vec<_>) = returns.drain(..).unzip();
-        assert!(ports.iter().all(|v| v == "metrics"));
+        g.send_metrics("test-metric", HashMap::new(), 123).await;
+        let mut metrics = Vec::new();
+        while let Ok(m) = rx.try_recv() {
+            metrics.push(m);
+        }
         test_metrics(metrics, 1);
 
         // Test with two events
         let e = Event::default();
-        let mut returns = Vec::new();
-        g.enqueue("in", e, &mut returns).unwrap();
-        assert_eq!(returns.len(), 1);
-        returns.clear();
+        let mut returns = GraphReturns::default();
+        g.enqueue("in", e, &mut returns).await.unwrap();
+        assert_eq!(returns.output.len(), 1);
+        assert_eq!(returns.dead_ends.len(), 0);
+        returns.output.clear();
 
         let e = Event::default();
-        let mut returns = Vec::new();
-        g.enqueue("in", e, &mut returns).unwrap();
-        assert_eq!(returns.len(), 1);
-        returns.clear();
+        let mut returns = GraphReturns::default();
+        g.enqueue("in", e, &mut returns).await.unwrap();
+        assert_eq!(returns.output.len(), 1);
+        assert_eq!(returns.dead_ends.len(), 0);
+        returns.output.clear();
 
-        g.enqueue_metrics("test-metric", HashMap::new(), 123);
-        g.run(&mut returns).unwrap();
-        let (ports, metrics): (Vec<_>, Vec<_>) = returns.drain(..).unzip();
-        assert!(ports.iter().all(|v| v == "metrics"));
+        g.send_metrics("test-metric", HashMap::new(), 123).await;
+        let mut metrics = Vec::new();
+        while let Ok(m) = rx.try_recv() {
+            metrics.push(m);
+        }
         test_metrics(metrics, 3);
     }
 
-    #[test]
-    fn eg_optimize() {
-        let mut in_n = pass(1, "in");
+    #[async_std::test]
+    async fn eg_optimize() {
+        let mut in_n = pass(OperatorId::new(0), "in");
         in_n.kind = NodeKind::Input;
-        let mut out_n = pass(2, "out");
+        let mut out_n = pass(OperatorId::new(1), "out");
         out_n.kind = NodeKind::Output(OUT);
-        let mut metrics_n = pass(3, "metrics");
-        metrics_n.kind = NodeKind::Output(METRICS);
-
         // The graph is in -> 1 -> 2 -> out, we pre-stack the edges since we do not
         // need to have order in here.
         let graph = vec![
-            in_n,
-            all_op("all-1"),
-            pass(4, "nop"),
-            all_op("all-2"),
-            out_n,
-            metrics_n,
+            in_n,                            // 0
+            all_op("all-1"),                 // 1
+            pass(OperatorId::new(2), "nop"), // 2
+            all_op("all-2"),                 // 3
+            out_n,                           // 4
         ];
 
         let mut inputs = HashMap::new();
@@ -923,12 +906,10 @@ mod test {
             NodeMetrics::default(),
             NodeMetrics::default(),
             NodeMetrics::default(),
-            NodeMetrics::default(),
         ];
         // Create state for all nodes
         let state = State {
             ops: vec![
-                Value::null(),
                 Value::null(),
                 Value::null(),
                 Value::null(),
@@ -947,20 +928,20 @@ mod test {
             port_indexes,
             metrics,
             // The index of the metrics node in our pipeline
-            metrics_idx: 5,
             last_metrics: 0,
-            metric_interval: Some(1),
+            metric_interval: None,
             insights: vec![],
-            source: None,
             dot: String::from(""),
+            metrics_channel: METRICS_CHANNEL.tx(),
         };
         assert!(g.optimize().is_some());
         // Test with one event
         let e = Event::default();
-        let mut returns = Vec::new();
-        g.enqueue("in", e, &mut returns).unwrap();
-        assert_eq!(returns.len(), 1);
-        returns.clear();
+        let mut returns = GraphReturns::default();
+        g.enqueue("in", e, &mut returns).await.unwrap();
+        assert_eq!(returns.output.len(), 1);
+        assert_eq!(returns.dead_ends.len(), 0);
+        returns.output.clear();
 
         // check that the Input was moved from 0 to 1, skipping the input
         assert_eq!(g.inputs.len(), 1);

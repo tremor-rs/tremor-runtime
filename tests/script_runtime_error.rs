@@ -14,12 +14,12 @@
 use pretty_assertions::assert_eq;
 use std::io::prelude::*;
 use tremor_common::file;
-use tremor_pipeline::FN_REGISTRY;
+use tremor_script::FN_REGISTRY;
 
+use serial_test::serial;
 use tremor_runtime::errors::*;
-use tremor_script::errors::CompilerError;
-use tremor_script::highlighter::{Dumb, Highlighter};
-use tremor_script::path::ModulePath;
+use tremor_script::highlighter::Dumb;
+use tremor_script::module::Manager;
 use tremor_script::prelude::*;
 use tremor_script::utils::*;
 use tremor_script::{AggrType, EventContext, Script};
@@ -29,6 +29,7 @@ macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
+            #[serial(script_runtime_error)]
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
@@ -41,9 +42,11 @@ macro_rules! test_cases {
                 let mut file = file::open(script_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let contents2 = contents.clone();
 
-                let script = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".into()] }, script_file, contents2, &*FN_REGISTRY.lock()?).map_err(CompilerError::error)?;
+                Manager::clear_path()?;
+                Manager::add_path(&script_dir)?;
+                Manager::add_path(&"tremor-script/lib")?;
+                let script = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
 
                 println!("Loading input: {}", in_file);
                 let mut in_json = load_event_file(in_file)?;
@@ -60,10 +63,9 @@ macro_rules! test_cases {
                     let mut state = Value::null();
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta);
                     if let Err(e) = s {
-                        let got = script.format_error(&e);
-                        let got = got.trim();
-                        println!("{}", got);
-                        assert_eq!(err, got);
+                        let got = Dumb::error_to_string(&e)?;
+                        print!("{}", got);
+                        assert_eq!(err.trim(), got.trim());
                     } else {
                         println!("Expected error, but got succeess");
                         assert!(false);
@@ -80,6 +82,7 @@ macro_rules! ignore_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
+            #[serial(script_runtime_error)]
             fn $file() -> Result<()> {
 
                 tremor_runtime::functions::load()?;
@@ -92,9 +95,11 @@ macro_rules! ignore_cases {
                 let mut file = file::open(script_file)?;
                 let mut contents = String::new();
                 file.read_to_string(&mut contents)?;
-                let contents2 = contents.clone();
 
-                let script = Script::parse(&ModulePath { mounts: vec![script_dir, "tremor-script/lib".to_string()] }, script_file, contents2, &*FN_REGISTRY.lock()?).map_err(CompilerError::error)?;
+                Manager::clear_path()?;
+                Manager::add_path(&script_dir)?;
+                Manager::add_path(&"tremor-script/lib")?;
+                let script = Script::parse(&contents, &*FN_REGISTRY.read()?)?;
 
                 println!("Loading input: {}", in_file);
                 let mut in_json = load_event_file(in_file)?;
@@ -111,13 +116,9 @@ macro_rules! ignore_cases {
                     let mut meta = Value::object();
                     let s = script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta);
                     if let Err(e) = s {
-                        let mut h = Dumb::new();
-                        script.format_error_with(&mut h, &e)?;
-                        h.finalize()?;
-                        let got = h.to_string();
-                        let got = got.trim();
-                        println!("{}", got);
-                        //assert_eq!(err, got);
+                        let got = Dumb::error_to_string(&e)?;
+                        print!("{}", got);
+                        assert_eq!(err.trim(), got.trim());
                     } else {
                         println!("Expected error, but got succeess");
                         assert!(false);
@@ -164,6 +165,9 @@ test_cases!(
     subslice_no_arr,
     subslice_out_of_bounds,
     // INSERT
+    bad_merge2,
+    bad_merge,
+    meta_and_use,
     assign_expr,
     assign_reserved,
     assign_const,

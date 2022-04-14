@@ -1,7 +1,7 @@
 status: 0
 name: Query for locals
 asserts:
-  - source: events.log
+  - source: out.log
     equals_file: expected.json
     contains:
       - '{"test":[{"d":1,"i":0},{"d":2,"i":1}]}'
