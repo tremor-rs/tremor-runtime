@@ -114,7 +114,7 @@ pub enum SourceReply {
         port: Option<Cow<'static, str>>,
         /// Overwrite the codec being used for deserializing this data.
         /// Should only be used when setting `stream` to `None`
-        codec_overwrite: Option<Box<dyn Codec>>,
+        codec_overwrite: Option<String>,
     },
     /// an already structured event payload
     Structured {
@@ -500,10 +500,7 @@ impl Streams {
         })
     }
 
-    fn create_anonymous_stream(
-        &self,
-        codec_overwrite: Option<Box<dyn Codec>>,
-    ) -> Result<StreamState> {
+    fn create_anonymous_stream(&self, codec_overwrite: Option<String>) -> Result<StreamState> {
         Self::build_stream(
             self.uid,
             DEFAULT_STREAM_ID,
@@ -518,11 +515,11 @@ impl Streams {
         source_uid: SourceId,
         stream_id: u64,
         codec_config: &CodecConfig,
-        codec_overwrite: Option<Box<dyn Codec>>,
+        codec_overwrite: Option<String>,
         preprocessor_configs: &[PreprocessorConfig],
     ) -> Result<StreamState> {
         let codec = if let Some(codec_overwrite) = codec_overwrite {
-            codec_overwrite
+            codec::resolve(&codec_overwrite.as_str().into())?
         } else {
             codec::resolve(codec_config)?
         };
@@ -1088,7 +1085,7 @@ where
         port: Option<Cow<'static, str>>,
         data: Vec<u8>,
         meta: Option<Value<'static>>,
-        codec_overwrite: Option<Box<dyn Codec>>,
+        codec_overwrite: Option<String>,
     ) -> Result<()> {
         let mut ingest_ns = nanotime();
         if let Some(stream) = stream {
