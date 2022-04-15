@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.12.0-rc.1
+## [0.12.0-rc.1]
 
 ### New featues
 
@@ -93,6 +93,53 @@
 - Most connectors require a specified codec now instead of using JSON as a default
 - `merge` no longer treats `null` in the spec as a delete option but rather as a normal value
 - Combine all compression and decompression pre/postprocessors.
+
+## [0.11.12]
+
+### Fixes
+- Unix onramp: Add the missing StartStream message to handle multiple connections correctly
+
+## 0.11.10
+
+### Fixes
+
+- Fix windowed queries emitting events with `null` metadata on tick
+
+## 0.11.9
+
+### Fixes
+
+- Kafka onramp: Remove failing metadata fetch in order to verify topic existance. Instead detect subscription errors and stop the onramp in that case.
+
+
+## 0.11.8
+
+### Fixes
+
+- Fix `hdr` and `dds` aggregation function losing events when aggregating > 8192 events
+- Make otel severity_number optional: #1248
+
+### New Features
+
+- Add the `unix-socket` onramp
+
+## 0.11.7
+
+### Fixes
+
+- Upgrade dependency on librdkafka to 1.6.1 [#1228](https://github.com/tremor-rs/tremor-runtime/pull/1228).
+
+## 0.11.6
+
+### Fixes
+
+- Fix possible memory unsafety issue when using patch or merge on `state` [#1217](https://github.com/tremor-rs/tremor-runtime/pull/1217).
+
+## 0.11.5
+
+### Fixes
+
+- Fix artefact sorting in tremor startup script
 
 ## 0.11.4
 - Update to clap 3, this forced some breaking changes:
@@ -345,3 +392,6 @@
 - Update CLI: -i allows selecting a subset now [#580](https://github.com/tremor-rs/tremor-runtime/pull/580)
 - Allow using err for errors in tremor run [#592](https://github.com/tremor-rs/tremor-runtime/pull/592)
 - Update to rust toolchain 1.48
+
+[0.12.0-rc.1]: https://github.com/tremor-rs/tremor-runtime/compare/v0.11.12...v0.12.0-rc.1
+[0.11.12]: https://github.com/tremor-rs/tremor-runtime/compare/v0.11.11...v0.11.12
