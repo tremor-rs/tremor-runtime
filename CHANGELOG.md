@@ -99,20 +99,20 @@
 ### Fixes
 - Unix onramp: Add the missing StartStream message to handle multiple connections correctly
 
-## 0.11.10
+## [0.11.10]
 
 ### Fixes
 
 - Fix windowed queries emitting events with `null` metadata on tick
 
-## 0.11.9
+## [0.11.9]
 
 ### Fixes
 
 - Kafka onramp: Remove failing metadata fetch in order to verify topic existance. Instead detect subscription errors and stop the onramp in that case.
 
 
-## 0.11.8
+## [0.11.8]
 
 ### Fixes
 
@@ -123,25 +123,25 @@
 
 - Add the `unix-socket` onramp
 
-## 0.11.7
+## [0.11.7]
 
 ### Fixes
 
 - Upgrade dependency on librdkafka to 1.6.1 [#1228](https://github.com/tremor-rs/tremor-runtime/pull/1228).
 
-## 0.11.6
+## [0.11.6]
 
 ### Fixes
 
 - Fix possible memory unsafety issue when using patch or merge on `state` [#1217](https://github.com/tremor-rs/tremor-runtime/pull/1217).
 
-## 0.11.5
+## [0.11.5]
 
 ### Fixes
 
 - Fix artefact sorting in tremor startup script
 
-## 0.11.4
+## [0.11.4]
 - Update to clap 3, this forced some breaking changes:
   - `tremor server run -f file1 file2` now is `tremor server run file1 file2`
   - `tremor test -i i1 i2 -e e1 e2` is now `tremor test -i i1 -i i2 -e e1 -e e2`
@@ -158,7 +158,7 @@
 - Fix the Release archive and package build process
 - Replace preprocess from tremor-cli dbg with --preprocess option [#1085](https://github.com/tremor-rs/tremor-runtime/issues/1085)
 
-## 0.11.3
+## [0.11.3]
 
 ### New features
 
@@ -172,7 +172,7 @@
 - Catalog remaining transmutes with related tickets
 - Bump snmalloc-rs to 0.2.26 to ensure builds succeed on systems with libc < 2.25
 
-## 0.11.2
+## [0.11.2]
 
 ### New features
 
@@ -201,7 +201,7 @@
 - Fix bug in mean that invalid values would be counted as part of the total number of values.
 - Avoid possible contraflow cycles via `system::metrics` pipeline, if a pipeline is connected to an output port of `system::metrics` pipeline.
 
-## 0.11.1
+## [0.11.1]
 
 ### New features
 
@@ -233,7 +233,7 @@
 - Send correlation metadata for send error events in elastic sink
 - Record the partition number assigned during rebalancing when running Kafka.
 
-## 0.11.0
+## [0.11.0]
 
 ### New features
 
@@ -292,7 +292,7 @@
 - Fix wrong error message for misconfigured UDP sinks
 - the `api-host` argument is renamed from `-h` to `-a` to resolve a conflict with `-h` being used for help
 
-## 0.10.2
+## [0.10.2]
 
 ### Fixes
 
@@ -307,13 +307,13 @@
 
 - Add discord connector to allow communicating with the discord API
 
-## 0.10.1
+## [0.10.1]
 
 ### Fixes
 
 - Update tremor-value to 0.2 to include binary changes and thus unbreak the 0.10 tremor-script crate
 
-## 0.10.0
+## [0.10.0]
 
 ### Breaking Changes
 
@@ -335,7 +335,7 @@
 
 - rewrite string interpolation to fix [#726](https://github.com/tremor-rs/tremor-runtime/issues/726)
 
-## 0.9.4
+## [0.9.4]
 
 ### New features
 
@@ -352,7 +352,7 @@
 - Fix missing newlines when error line doesnt end with a newline [#676](https://github.com/tremor-rs/tremor-runtime/pull/676)
 - Fix possible panic in random::integer and random::float when used with values <= 0. [#679](https://github.com/tremor-rs/tremor-runtime/pull/679)
 
-## 0.9.3
+## [0.9.3]
 
 ### New features
 
@@ -368,7 +368,7 @@
 - Fix gelf preprocessor to accept valid (unchunked) gelf messages [#628](https://github.com/tremor-rs/tremor-runtime/pull/628)
 - Fix memory access issue for large objects
 
-## 0.9.2
+## [0.9.2]
 
 ### New Features
 
@@ -394,4 +394,22 @@
 - Update to rust toolchain 1.48
 
 [0.12.0-rc.1]: https://github.com/tremor-rs/tremor-runtime/compare/v0.11.12...v0.12.0-rc.1
-[0.11.12]: https://github.com/tremor-rs/tremor-runtime/compare/v0.11.11...v0.11.12
+[0.11.12]: https://github.com/tremor-rs/tremor-runtime/compare/v0.11.10...v0.11.12
+[0.11.10]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.9...v0.11.10
+[0.11.9]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.8...v0.11.9
+[0.11.8]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.7...v0.11.8
+[0.11.7]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.6...v0.11.7
+[0.11.6]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.5...v0.11.6
+[0.11.5]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.4...v0.11.5
+[0.11.4]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.3...v0.11.4
+[0.11.3]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.2...v0.11.3
+[0.11.2]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.1...v0.11.2
+[0.11.1]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.0...v0.11.1
+[0.11.0]:https://github.com/tremor-rs/tremor-runtime/compare/v0.10.2...v0.11.0
+[0.10.2]:https://github.com/tremor-rs/tremor-runtime/compare/v0.10.1...v0.10.2
+[0.10.1]:https://github.com/tremor-rs/tremor-runtime/compare/v0.10.0...v0.10.1
+[0.10.0]:https://github.com/tremor-rs/tremor-runtime/compare/v0.9.4...v0.10.0
+[0.9.4]:https://github.com/tremor-rs/tremor-runtime/compare/v0.9.3...v0.9.4
+[0.9.3]:https://github.com/tremor-rs/tremor-runtime/compare/v0.9.2...v0.9.3
+[0.9.2]:https://github.com/tremor-rs/tremor-runtime/compare/v0.9.1...v0.9.2
+
