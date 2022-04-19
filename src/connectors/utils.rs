@@ -83,8 +83,6 @@ pub(crate) mod url {
         const PORT: u16 = 443;
     }
 
-    // TODO: should this be defined here or in the same module as the
-    // ClickHouse connector?
     pub(crate) struct ClickHouseDefaults;
     impl Defaults for ClickHouseDefaults {
         const SCHEME: &'static str = "tcp";
