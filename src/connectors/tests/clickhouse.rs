@@ -20,7 +20,7 @@ use crate::{
     errors::{Error, Result},
 };
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use async_std::stream::StreamExt;
 use clickhouse_rs::Pool;
@@ -154,13 +154,29 @@ async fn simple_insertion() -> Result<()> {
 
 // Blocks the task until calling GET on `url` returns an HTTP 200.
 async fn wait_for_ok(port: u16) -> Result<()> {
-    // Actually we don't do what you expect.
-    //
-    // Let's suppose it takes less than 30 seconds for the database to start.
-    // We'll do more accurate in the future.
-    async_std::task::sleep(Duration::from_secs(30)).await;
+    let wait_for = Duration::from_secs(60);
+    let start = Instant::now();
+
+    while let Err(e) = test_status_endpoint(port).await {
+        if start.elapsed() > wait_for {
+            error!("We waited for more than {wait_for}");
+            return Err(
+                Error::from(e).chain_err(|| "Waiting for the ClickHouse container timed out.")
+            );
+        }
+
+        async_std::task::sleep(Duration::from_secs(1)).await;
+    }
 
     Ok(())
+}
+
+async fn test_status_endpoint(port: u16) -> Result<()> {
+    Pool::new(format!("tcp://{DB_HOST}:{port}/?connection_timeout=100ms&send_retries=1&retry_timeout=1s&ping_timeout=100ms"))
+        .get_handle()
+        .await
+        .map(drop)
+        .map_err(Error::from)
 }
 
 async fn create_table(port: u16, table: &str) -> Result<()> {
