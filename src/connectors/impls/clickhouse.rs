@@ -165,7 +165,7 @@ impl Sink for ClickhouseSink {
 
         client.insert("people", block.clone()).await?;
 
-        Ok(SinkReply::ACK)
+        Ok(SinkReply::NONE)
     }
 
     fn auto_ack(&self) -> bool {
