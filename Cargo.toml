@@ -258,6 +258,7 @@ integration-docker = [
   "s3-integration",
   "kafka-integration",
   "gcp-integration",
+  "ch-integration",
 ]
 integration-local = [
   "ws-integration",
@@ -281,6 +282,7 @@ metronome-integration = []
 socket-integration = []
 net-integration = []
 wal-integration = []
+ch-integration = []
 tarpaulin-exclude = []
 # those are falky tests
 flaky-test = []
