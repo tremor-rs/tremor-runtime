@@ -17,8 +17,7 @@
 //!
 //! ....
 
-// TODO: what is this feature? Do we know what it does?
-// #[cfg(feature = "es-integration")]
+#[cfg(feature = "ch-integration")]
 mod clickhouse;
 #[cfg(feature = "crononome-integration")]
 mod crononome;
