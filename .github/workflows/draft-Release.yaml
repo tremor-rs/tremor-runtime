@@ -31,6 +31,10 @@ jobs:
           crate: cargo-edit
           version: latest
       - run: cargo set-version --workspace ${{github.event.inputs.new-version}}
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+      - run: cargo check
       - name: Commit changelog and manifest files
         id: make-commit
         run: |
