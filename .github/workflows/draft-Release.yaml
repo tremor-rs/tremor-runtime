@@ -26,6 +26,11 @@ jobs:
           git config user.email noreply@github.com
       - name: Bump new version in TOML files
         run: sh ./scriptBump.sh ${{github.event.inputs.old-version}} ${{github.event.inputs.new-version}}
+      - uses: actions-rs/install@v0.1
+        with:
+          crate: cargo-edit
+          version: latest
+      - run: cargo set-version --workspace ${{github.event.inputs.new-version}}
       - name: Commit changelog and manifest files
         id: make-commit
         run: |
