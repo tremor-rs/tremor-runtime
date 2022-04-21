@@ -1178,7 +1178,7 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         Box::new(impls::http::server::Builder::default()),
         Box::new(impls::otel::client::Builder::default()),
         Box::new(impls::otel::server::Builder::default()),
-        Box::new(impls::gbq::Builder::default())
+        Box::new(impls::gbq::Builder::default()),
     ]
 }
 

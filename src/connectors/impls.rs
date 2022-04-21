@@ -28,6 +28,8 @@ pub(crate) mod elastic;
 pub(crate) mod exit;
 /// file connector implementation
 pub(crate) mod file;
+/// Google Big Query
+pub(crate) mod gbq;
 /// HTTP
 pub(crate) mod http;
 /// Kafka consumer and producer
@@ -57,5 +59,3 @@ pub(crate) mod unix_socket;
 pub(crate) mod wal;
 /// `WebSockets`
 pub(crate) mod ws;
-/// Google Big Query
-pub(crate) mod gbq;

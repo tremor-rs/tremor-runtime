@@ -1,15 +1,15 @@
 mod sink;
 
-use tremor_pipeline::ConfigImpl;
-use crate::connectors::{Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
-use crate::connectors::prelude::*;
-use serde::Deserialize;
 use crate::connectors::impls::gbq::sink::GbqSink;
+use crate::connectors::prelude::*;
+use crate::connectors::{Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
+use serde::Deserialize;
+use tremor_pipeline::ConfigImpl;
 
 #[derive(Deserialize, Clone)]
 pub(crate) struct Config {
-    pub token:String,
-    pub table_id:String
+    pub token: String,
+    pub table_id: String,
 }
 impl ConfigImpl for Config {}
 
@@ -22,7 +22,11 @@ struct Gbq {
 
 #[async_trait::async_trait]
 impl Connector for Gbq {
-    async fn create_sink(&mut self, sink_context: SinkContext, builder: SinkManagerBuilder) -> Result<Option<SinkAddr>> {
+    async fn create_sink(
+        &mut self,
+        sink_context: SinkContext,
+        builder: SinkManagerBuilder,
+    ) -> Result<Option<SinkAddr>> {
         let sink = GbqSink::new(self.config.clone()).await?;
 
         builder.spawn(sink, sink_context).map(Some)
