@@ -223,6 +223,7 @@ pub type ConnectorIdGen = IdGen<ConnectorId>;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::str::FromStr;
 
     #[test]
     fn id_gen() {
@@ -239,5 +240,12 @@ mod tests {
                 _ => assert!(false, "invalid window"),
             }
         }
+    }
+
+    #[test]
+    fn id_can_be_created_from_string() {
+        let id = OperatorId::from_str("1024");
+
+        assert_eq!(Ok(OperatorId(1024)), id);
     }
 }
