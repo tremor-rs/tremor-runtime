@@ -5991,6 +5991,8 @@ dependencies = [
  "port_scanner",
  "pretty_assertions",
  "proptest",
+ "prost",
+ "prost-types",
  "qwal",
  "rand 0.8.5",
  "rdkafka",
