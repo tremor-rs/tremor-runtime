@@ -6,8 +6,9 @@ use futures::stream;
 use googapis::google::cloud::bigquery::storage::v1::append_rows_request::ProtoData;
 use googapis::google::cloud::bigquery::storage::v1::big_query_write_client::BigQueryWriteClient;
 use googapis::google::cloud::bigquery::storage::v1::{append_rows_request, write_stream, AppendRowsRequest, CreateWriteStreamRequest, ProtoRows, ProtoSchema, WriteStream, TableFieldSchema, table_field_schema};
-use prost::encoding::WireType;
+use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Type as TableType;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
+use prost_types::field_descriptor_proto::Type;
 use tonic::codegen::InterceptedService;
 use tonic::metadata::{Ascii, MetadataValue};
 use tonic::service::Interceptor;
@@ -34,27 +35,46 @@ impl Interceptor for AuthInterceptor {
     }
 }
 
+struct Field {
+    grpc_type: field_descriptor_proto::Type,
+    tag: u32
+}
+
 struct JsonToProtobufMapping {
-    field_types: HashMap<String, table_field_schema::Type>,
-    field_tags: HashMap<String, u32>,
+    fields: HashMap<String, Field>,
     descriptor: DescriptorProto
 }
 
 impl JsonToProtobufMapping {
     pub fn new(vec: &Vec<TableFieldSchema>) -> Self {
-        let field_types:HashMap<String, table_field_schema::Type> = vec.iter().map(|x| (x.name.clone(), table_field_schema::Type::from_i32(x.r#type).unwrap())).collect();
-        let mut field_tags:HashMap<String, u32> = HashMap::new();
+        let mut fields = HashMap::new();
         let mut proto_fields = vec![];
 
         let mut tag:u32 = 1;
-        for (name, _type) in field_types.iter() {
-            field_tags.insert(name.to_string(), tag);
+        for raw_field in vec.iter() {
+            let r#type = match table_field_schema::Type::from_i32(raw_field.r#type) {
+                None => todo!("Unknown field type"),
+                Some(table_field_schema::Type::Int64) => field_descriptor_proto::Type::Int64,
+                Some(TableType::String) => field_descriptor_proto::Type::String,
+                Some(TableType::Double) => field_descriptor_proto::Type::Double,
+                Some(TableType::Bool) => field_descriptor_proto::Type::Bool,
+                Some(TableType::Bytes) => field_descriptor_proto::Type::Bytes,
+
+                Some(TableType::Date) |
+                Some(TableType::Time) |
+                Some(TableType::Datetime) |
+                Some(TableType::Geography) |
+                Some(TableType::Numeric) |
+                Some(TableType::Bignumeric) |
+                Some(TableType::Interval) |
+                Some(TableType::Json) | Some(TableType::Timestamp) | Some(TableType::Unspecified) | Some(TableType::Struct) => todo!("Unsupported field type")
+            };
 
             proto_fields.push(FieldDescriptorProto {
-                name: Some(name.to_string()),
+                name: Some(raw_field.name.to_string()),
                 number: Some(i32::try_from(tag).unwrap()),
                 label: None,
-                r#type: Some(i32::from(field_descriptor_proto::Type::Int64)), // fixme support other types too!
+                r#type: Some(i32::from(r#type)),
                 type_name: None,
                 extendee: None,
                 default_value: None,
@@ -63,6 +83,8 @@ impl JsonToProtobufMapping {
                 options: None,
                 proto3_optional: None,
             });
+
+            fields.insert(raw_field.name.to_string(), Field {tag, grpc_type: r#type });
 
             tag += 1;
         }
@@ -81,9 +103,8 @@ impl JsonToProtobufMapping {
         };
 
         Self {
-            field_types,
-            field_tags,
-            descriptor
+            descriptor,
+            fields
         }
     }
 
@@ -91,13 +112,22 @@ impl JsonToProtobufMapping {
         let mut result = vec![];
         if let Some(obj) = value.as_object() {
             for (key, val) in obj {
-                if let Some(tag) = self.field_tags.get(&key.to_string()) {
-                    // fixme this will crash on anything that is not an int
-                    // fixme check which fields are required and fail if they're missing
-                    assert_eq!(self.field_types[&key.to_string()], table_field_schema::Type::Int64);
+                if let Some(field) = self.fields.get(&key.to_string()) {
+                    let tag = field.tag;
 
-                    prost::encoding::encode_key(*tag, WireType::Varint, &mut result);
-                    prost::encoding::encode_varint(val.as_u64().unwrap(), &mut result);
+                    // fixme check which fields are required and fail if they're missing
+                    // fixme do not panic if the tremor type does not match
+                    match field.grpc_type {
+                        Type::Double => prost::encoding::double::encode(tag, &val.as_f64().unwrap(), &mut result),
+                        Type::Float => prost::encoding::float::encode(tag, &val.as_f32().unwrap(), &mut result),
+                        Type::Int64 => prost::encoding::int64::encode(tag, &val.as_i64().unwrap(), &mut result),
+                        Type::Uint64 => prost::encoding::uint64::encode(tag, &val.as_u64().unwrap(), &mut result),
+                        Type::Int32 => prost::encoding::int32::encode(tag, &val.as_i32().unwrap(), &mut result),
+                        Type::Uint32 => prost::encoding::uint32::encode(tag, &val.as_u32().unwrap(), &mut result),
+                        Type::Bool => prost::encoding::bool::encode(tag, &val.as_bool().unwrap(), &mut result),
+                        Type::String => prost::encoding::string::encode(tag, &val.as_str().unwrap().to_string(), &mut result),
+                        Type::Bytes | Type::Sint64 | Type::Sint32 | Type::Sfixed64 | Type::Sfixed32 | Type::Enum | Type::Message | Type::Group | Type::Fixed32 | Type::Fixed64 => todo!("This type is not supported"),
+                    }
                 }
             }
         }
