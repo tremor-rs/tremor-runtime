@@ -144,7 +144,9 @@ fn encode_field(val: &Value, field:&Field, result:&mut Vec<u8>) {
         | TableType::Date
         | TableType::Time
         | TableType::Datetime
-        | TableType::Timestamp => prost::encoding::string::encode(tag, &val.as_str().unwrap().to_string(), result),
+        | TableType::Timestamp
+        | TableType::Numeric
+        | TableType::Bignumeric => prost::encoding::string::encode(tag, &val.as_str().unwrap().to_string(), result),
         TableType::Struct => {
             let mut struct_buf:Vec<u8> = vec![];
             for (k,v) in val.as_object().unwrap() {
@@ -155,15 +157,16 @@ fn encode_field(val: &Value, field:&Field, result:&mut Vec<u8>) {
             prost::encoding::encode_varint(struct_buf.len() as u64, result);
             result.append(&mut struct_buf);
         },
+        TableType::Bytes => prost::encoding::bytes::encode(tag, &Vec::from(val.as_bytes().unwrap()), result),
+        // fixme to test this we need a json field, which we don't have right now
+        TableType::Json => prost::encoding::string::encode(tag, &simd_json::to_string(val).unwrap(), result),
 
-        // fixme handle those types!
-        TableType::Unspecified => {}
-        TableType::Bytes => {}
+        // fixme not sure how this should be handled, the docs aren't quite clear
         TableType::Geography => {}
-        TableType::Numeric => {}
-        TableType::Bignumeric => {}
+        // fixme this is not GA, need to test
         TableType::Interval => {}
-        TableType::Json => {}
+
+        TableType::Unspecified => { warn!("Found a field of unspecified type - ignoring.")}
     }
 }
 
