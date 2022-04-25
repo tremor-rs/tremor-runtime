@@ -482,22 +482,6 @@ dependencies = [
 
 [[package]]
 name = "async-tungstenite"
-version = "0.11.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f7cc5408453d37e2b1c6f01d8078af1da58b6cfa6a80fa2ede3bd2b9a6ada9c4"
-dependencies = [
- "futures-io",
- "futures-util",
- "log",
- "pin-project",
- "tokio 1.17.0",
- "tokio-rustls 0.22.0",
- "tungstenite 0.11.1",
- "webpki-roots 0.20.0",
-]
-
-[[package]]
-name = "async-tungstenite"
 version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1b71b31561643aa8e7df3effe284fa83ab1a840e52294c5f4bd7bfd8b2becbb"
@@ -508,7 +492,10 @@ dependencies = [
  "futures-util",
  "log",
  "pin-project-lite 0.2.8",
- "tungstenite 0.17.2",
+ "tokio 1.17.0",
+ "tokio-rustls 0.23.3",
+ "tungstenite",
+ "webpki-roots 0.22.3",
 ]
 
 [[package]]
@@ -1136,7 +1123,6 @@ dependencies = [
  "libc",
  "num-integer",
  "num-traits",
- "serde",
  "time 0.1.43",
  "winapi 0.3.9",
 ]
@@ -1625,6 +1611,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "num_cpus",
  "parking_lot 0.12.0",
+ "serde",
 ]
 
 [[package]]
@@ -2731,15 +2718,6 @@ name = "infer"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "64e9829a50b42bb782c1df523f78d332fe371b10c661e78b7a3c34b0198e9fac"
-
-[[package]]
-name = "input_buffer"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19a8a95243d5a0398cae618ec29477c6e3cb631152be5c19481f80bc71559754"
-dependencies = [
- "bytes 0.5.6",
-]
 
 [[package]]
 name = "instant"
@@ -4709,22 +4687,28 @@ dependencies = [
 
 [[package]]
 name = "serenity"
-version = "0.10.10"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dde86919535c6047e055d512641c5241320c01cb8fee54f1e5ba77c939a0ec23"
+checksum = "96455fdd03a3cb8c3270c47adf21d748b65067affc6c911ed4ed4ae05f097cab"
 dependencies = [
  "async-trait",
- "async-tungstenite 0.11.0",
+ "async-tungstenite",
  "base64 0.13.0",
  "bitflags",
  "bytes 1.1.0",
- "chrono",
+ "cfg-if 1.0.0",
+ "dashmap 5.2.0",
  "flate2",
  "futures",
+ "mime",
+ "mime_guess",
+ "parking_lot 0.12.0",
  "percent-encoding",
  "reqwest 0.11.10",
  "serde",
+ "serde-value",
  "serde_json",
+ "time 0.3.9",
  "tokio 1.17.0",
  "tracing",
  "typemap_rev",
@@ -4753,19 +4737,6 @@ dependencies = [
  "quote",
  "rustversion",
  "syn",
-]
-
-[[package]]
-name = "sha-1"
-version = "0.9.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99cd6713db3cf16b6c84e06321e049a9b9f699826e16096d23bbcc44d15d51a6"
-dependencies = [
- "block-buffer 0.9.0",
- "cfg-if 1.0.0",
- "cpufeatures",
- "digest 0.9.0",
- "opaque-debug",
 ]
 
 [[package]]
@@ -5422,8 +5393,10 @@ version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2702e08a7a860f005826c6815dcac101b19b5eb330c27fe4a5928fec1d20ddd"
 dependencies = [
+ "itoa 1.0.1",
  "libc",
  "num_threads",
+ "serde",
 ]
 
 [[package]]
@@ -5943,7 +5916,7 @@ dependencies = [
  "async-std-resolver",
  "async-tls 0.11.0",
  "async-trait",
- "async-tungstenite 0.17.2",
+ "async-tungstenite",
  "aws-config",
  "aws-sdk-s3",
  "aws-smithy-http",
@@ -6024,7 +5997,7 @@ dependencies = [
  "tremor-pipeline",
  "tremor-script",
  "tremor-value",
- "tungstenite 0.17.2",
+ "tungstenite",
  "url",
  "uuid 1.0.0",
  "value-trait",
@@ -6152,25 +6125,6 @@ checksum = "59547bce71d9c38b83d9c0e92b6066c4253371f15005def0c30d9657f50c7642"
 
 [[package]]
 name = "tungstenite"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0308d80d86700c5878b9ef6321f020f29b1bb9d5ff3cab25e75e23f3a492a23"
-dependencies = [
- "base64 0.12.3",
- "byteorder",
- "bytes 0.5.6",
- "http",
- "httparse",
- "input_buffer",
- "log",
- "rand 0.7.3",
- "sha-1 0.9.8",
- "url",
- "utf-8",
-]
-
-[[package]]
-name = "tungstenite"
 version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d96a2dea40e7570482f28eb57afbe42d97551905da6a9400acc5c328d24004f5"
@@ -6183,10 +6137,11 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "rustls 0.20.4",
- "sha-1 0.10.0",
+ "sha-1",
  "thiserror",
  "url",
  "utf-8",
+ "webpki 0.22.0",
 ]
 
 [[package]]
