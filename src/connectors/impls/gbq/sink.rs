@@ -305,15 +305,17 @@ impl Sink for GbqSink {
             })),
         };
 
-        let mut apnd_response = self
+        let mut append_response = self
             .client
             .append_rows(stream::iter(vec![request]))
             .await?
             .into_inner();
 
-        if let Some(response) = apnd_response.next().await {
+        if let Some(response) = append_response.next().await {
             match response {
-                Ok(_) => Ok(SinkReply::ACK),
+                Ok(_) => {
+                    Ok(SinkReply::ACK)
+                },
                 Err(e) => {
                     error!("Failed to write event to BigQuery: {}", e);
 
@@ -321,6 +323,7 @@ impl Sink for GbqSink {
                 }
             }
         } else {
+            error!("No response when sending AppendRowsRequest");
             Ok(SinkReply::FAIL)
         }
     }
