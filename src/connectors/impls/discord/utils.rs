@@ -14,14 +14,14 @@
 
 // #![cfg_attr(coverage, no_coverage)] // We need a life discord api for this
 use serenity::{
-    client::bridge::gateway::GatewayIntents,
     model::{
         channel::{Channel, ChannelCategory, GuildChannel, Message, Reaction, ReactionType},
         event::{GuildMembersChunkEvent, ResumedEvent, TypingStartEvent, VoiceServerUpdateEvent},
-        guild::{Emoji, Guild, GuildUnavailable, Member, PartialGuild, Role},
+        guild::{Emoji, Guild, Member, PartialGuild, Role},
         id::{ChannelId, EmojiId, GuildId, MessageId, RoleId},
         prelude::{CurrentUser, Presence, User, VoiceState},
     },
+    prelude::*,
 };
 use std::collections::HashMap;
 use tremor_value::prelude::*;
@@ -70,7 +70,7 @@ impl From<Intents> for GatewayIntents {
             Intents::Guilds => GatewayIntents::GUILDS,
             Intents::GuildMembers => GatewayIntents::GUILD_MEMBERS,
             Intents::GuildBans => GatewayIntents::GUILD_BANS,
-            Intents::GuildEmojis => GatewayIntents::GUILD_EMOJIS,
+            Intents::GuildEmojis => GatewayIntents::GUILD_EMOJIS_AND_STICKERS,
             Intents::GuildIntegrations => GatewayIntents::GUILD_INTEGRATIONS,
             Intents::GuildWebHooks => GatewayIntents::GUILD_WEBHOOKS,
             Intents::GuildInvites => GatewayIntents::GUILD_INVITES,
@@ -113,17 +113,16 @@ pub(crate) enum DiscordMessage {
         guild: Guild,
         is_new: bool,
     },
-    GuildDelete {
-        incomplete: GuildUnavailable,
-        full: Option<Guild>,
-    },
+    // GuildDelete {
+    //     incomplete: GuildUnavailable,
+    //     full: Option<Guild>,
+    // },
     EmojiUpdate {
         guild_id: GuildId,
         current_state: HashMap<EmojiId, Emoji>,
     },
     IntegrationsUpdate(GuildId),
     MemberAddition {
-        guild_id: GuildId,
         new_member: Member,
     },
     MemberRemoval {
@@ -136,7 +135,6 @@ pub(crate) enum DiscordMessage {
         new: Member,
     },
     RoleCreate {
-        guild_id: GuildId,
         new: Role,
     },
     RoleDelete {
@@ -145,7 +143,6 @@ pub(crate) enum DiscordMessage {
         removed_role_data_if_available: Option<Role>,
     },
     RoleUpdate {
-        guild_id: GuildId,
         old_data_if_available: Option<Role>,
         new: Role,
     },
