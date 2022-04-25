@@ -9,6 +9,7 @@ use googapis::google::cloud::bigquery::storage::v1::{
     append_rows_request, table_field_schema, write_stream, AppendRowsRequest,
     CreateWriteStreamRequest, ProtoRows, ProtoSchema, TableFieldSchema, WriteStream,
 };
+use gouth::Token;
 use prost::encoding::WireType;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
 use std::collections::HashMap;
@@ -230,8 +231,9 @@ impl JsonToProtobufMapping {
 }
 impl GbqSink {
     pub async fn new(config: Config) -> Result<Self> {
-        let token_metadata_value =
-            MetadataValue::from_str(format!("Bearer {}", config.token).as_str())?;
+        let token = Token::new()?.header_value()?;
+
+        let token_metadata_value = MetadataValue::from_str(token.as_str())?;
 
         let tls_config = ClientTlsConfig::new()
             .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
