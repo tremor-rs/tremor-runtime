@@ -184,6 +184,7 @@ error_chain! {
         WalInfailable(qwal::Error<std::convert::Infallible>);
         Uuid(uuid::Error);
         Serenity(serenity::Error);
+        InvalidMetadataValue(tonic::metadata::errors::InvalidMetadataValue);
     }
 
     errors {
@@ -312,6 +313,10 @@ error_chain! {
         InvalidInputData(msg: &'static str) {
             description("Invalid Input data")
                 display("Invalid Input data: {}", msg)
+        }
+        GbqSinkFailed(msg: &'static str) {
+            description("GBQ Sink failed"),
+                display("GBQ Sink failed: {}", msg)
         }
     }
 }
