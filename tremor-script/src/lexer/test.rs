@@ -113,8 +113,8 @@ fn number_parsing() -> Result<()> {
 #[test]
 fn paths() -> Result<()> {
     lex_ok! {
-        "  hello-hahaha8ABC ",
-        "  ~~~~~~~~~~~~~~~~ " => Token::Ident("hello-hahaha8ABC".into(), false),
+        "  hello_hahaha8ABC ",
+        "  ~~~~~~~~~~~~~~~~ " => Token::Ident("hello_hahaha8ABC".into(), false),
     };
     lex_ok! {
         "  .florp ",

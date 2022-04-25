@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+## Breaking Changes
+
+- the `-` is no longer a valid part of identifiers
+
 ## [0.12.0-rc.1]
 
 ### New featues
