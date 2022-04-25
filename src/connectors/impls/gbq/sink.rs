@@ -72,8 +72,8 @@ fn map_field(schema_name:&str, raw_fields:&Vec<TableFieldSchema>) -> (Descriptor
             Some(TableType::Time) => field_descriptor_proto::Type::String,
             // YYYY-[M]M-[D]D[( |T)[H]H:[M]M:[S]S[.F]]
             Some(TableType::Datetime) => field_descriptor_proto::Type::String,
-            // fixme is this a json string or what?
-            Some(TableType::Geography) => todo!("Need to support geography"),
+            // The GEOGRAPHY type is based on the OGC Simple Features specification (SFS)
+            Some(TableType::Geography) => field_descriptor_proto::Type::String,
             // String, because it's a precise, f32/f64 would lose precision
             Some(TableType::Numeric) => field_descriptor_proto::Type::String,
             Some(TableType::Bignumeric) => field_descriptor_proto::Type::String,
@@ -146,7 +146,8 @@ fn encode_field(val: &Value, field:&Field, result:&mut Vec<u8>) {
         | TableType::Datetime
         | TableType::Timestamp
         | TableType::Numeric
-        | TableType::Bignumeric => prost::encoding::string::encode(tag, &val.as_str().unwrap().to_string(), result),
+        | TableType::Bignumeric
+        | TableType::Geography => prost::encoding::string::encode(tag, &val.as_str().unwrap().to_string(), result),
         TableType::Struct => {
             let mut struct_buf:Vec<u8> = vec![];
             for (k,v) in val.as_object().unwrap() {
@@ -158,11 +159,9 @@ fn encode_field(val: &Value, field:&Field, result:&mut Vec<u8>) {
             result.append(&mut struct_buf);
         },
         TableType::Bytes => prost::encoding::bytes::encode(tag, &Vec::from(val.as_bytes().unwrap()), result),
+
         // fixme to test this we need a json field, which we don't have right now
         TableType::Json => prost::encoding::string::encode(tag, &simd_json::to_string(val).unwrap(), result),
-
-        // fixme not sure how this should be handled, the docs aren't quite clear
-        TableType::Geography => {}
         // fixme this is not GA, need to test
         TableType::Interval => {}
 
