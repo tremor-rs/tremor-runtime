@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-## Breaking Changes
+### Fixes
+
+- fix the use of `args` in the with part of a `create` insode of a `flow`.
+
+### Breaking Changes
 
 - the `-` is no longer a valid part of identifiers.
 - binaries now use `_` to sepoerate type names as `-` is no longer a identifier.

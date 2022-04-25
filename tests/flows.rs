@@ -47,7 +47,6 @@ macro_rules! test_cases {
                     let mut file = file::open(deploy_file)?;
                     let mut contents = String::new();
                     file.read_to_string(&mut contents)?;
-
                     match parse(&contents) {
                         Ok(deployable) => {
                             let (world, h) = World::start(WorldConfig::default()).await?;
@@ -75,5 +74,6 @@ test_cases!(
     pipeline_args,
     pipeline_with,
     // INSERT
+    args_in_create,
     chained_pipelines,
 );
