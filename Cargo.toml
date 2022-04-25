@@ -180,7 +180,7 @@ tide-rustls = "0.3"
 #async-nats = "0.10.1"
 
 # discord
-serenity = { version = "0.10", default-features = false, features = [
+serenity = { version = "0.11", default-features = false, features = [
   "client",
   "gateway",
   "rustls_backend",
