@@ -31,7 +31,7 @@ use crate::{
         },
         raw::{IdentRaw, UseRaw},
         visitors::ConstFolder,
-        walkers::ImutExprWalker,
+        walkers::{ImutExprWalker, QueryWalker},
         Deploy, DeployStmt, Helper, NodeMeta, Script, Upable,
     },
     errors::{Error, Kind as ErrorKind, Result},
@@ -462,6 +462,12 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
         };
         let upped_params = self.params.up(helper)?;
         defn.params.ingest_creational_with(&upped_params)?;
+        ConstFolder::new(helper).walk_definitional_args(&mut defn.params)?;
+        let defn_args = defn.params.render()?;
+
+        for c in &mut defn.creates {
+            c.with.substitute_args(&defn_args, helper)?;
+        }
 
         let create_stmt = DeployFlow {
             mid: self.mid.box_with_name(&self.id.id),

@@ -57,12 +57,12 @@ fn is_ws(ch: char) -> bool {
 }
 
 fn is_ident_start(ch: char) -> bool {
-    UnicodeXID::is_xid_start(ch) || ch == '_' || ch == '-'
+    UnicodeXID::is_xid_start(ch) || ch == '_'
 }
 
 fn is_ident_continue(ch: char) -> bool {
     let ch = ch as char;
-    UnicodeXID::is_xid_continue(ch) || ch == '_' || ch == '-'
+    UnicodeXID::is_xid_continue(ch) || ch == '_'
 }
 
 fn is_test_start(ch: char) -> bool {
