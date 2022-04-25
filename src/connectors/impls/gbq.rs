@@ -8,7 +8,6 @@ use tremor_pipeline::ConfigImpl;
 
 #[derive(Deserialize, Clone)]
 pub(crate) struct Config {
-    pub token: String,
     pub table_id: String,
 }
 impl ConfigImpl for Config {}
