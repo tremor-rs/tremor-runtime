@@ -199,7 +199,7 @@ tonic = { version = "0.6.1", default-features = false, features = [
 tremor-otelapis = { version = "0.2.4" }
 
 # aws-s3
-aws-sdk-s3 = "0.9.0"
+aws-sdk-s3 = "0.10.1"
 aws-types = "0.9.0"
 aws-config = "0.9.0"
 aws-smithy-http = "0.39"
