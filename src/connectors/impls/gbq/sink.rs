@@ -1,18 +1,16 @@
 use crate::connectors::impls::gbq::Config;
 use crate::connectors::prelude::*;
-use async_std::prelude::StreamExt;
+use async_std::prelude::{FutureExt, StreamExt};
 use futures::stream;
 use googapis::google::cloud::bigquery::storage::v1::append_rows_request::ProtoData;
 use googapis::google::cloud::bigquery::storage::v1::big_query_write_client::BigQueryWriteClient;
 use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Type as TableType;
-use googapis::google::cloud::bigquery::storage::v1::{
-    append_rows_request, table_field_schema, write_stream, AppendRowsRequest,
-    CreateWriteStreamRequest, ProtoRows, ProtoSchema, TableFieldSchema, WriteStream,
-};
+use googapis::google::cloud::bigquery::storage::v1::{append_rows_request, table_field_schema, write_stream, AppendRowsRequest, CreateWriteStreamRequest, ProtoRows, ProtoSchema, TableFieldSchema, WriteStream};
 use gouth::Token;
 use prost::encoding::WireType;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
 use std::collections::HashMap;
+use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::metadata::{Ascii, MetadataValue};
 use tonic::service::Interceptor;
@@ -20,9 +18,10 @@ use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::{Request, Status};
 
 pub(crate) struct GbqSink {
-    client: BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor>>,
-    write_stream: WriteStream,
-    mapping: JsonToProtobufMapping,
+    client: Option<BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor>>>,
+    write_stream: Option<WriteStream>,
+    mapping: Option<JsonToProtobufMapping>,
+    config: Config
 }
 
 pub(crate) struct AuthInterceptor {
@@ -231,6 +230,86 @@ impl JsonToProtobufMapping {
 }
 impl GbqSink {
     pub async fn new(config: Config) -> Result<Self> {
+        Ok(Self {
+            client: None,
+            write_stream: None,
+            mapping: None,
+            config
+        })
+    }
+}
+
+#[async_trait::async_trait]
+impl Sink for GbqSink {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        event: Event,
+        ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+        _start: u64,
+    ) -> Result<SinkReply> {
+        let client = self.client.as_mut().ok_or(ErrorKind::BigQueryClientNotAvailable("The client is not connected"))?;
+        let write_stream = self.write_stream.as_ref().ok_or(ErrorKind::BigQueryClientNotAvailable("The write stream is not available"))?;
+        let mapping = self.mapping.as_ref().ok_or(ErrorKind::BigQueryClientNotAvailable("The mapping is not available"))?;
+
+        let request = AppendRowsRequest {
+            write_stream: write_stream.name.clone(),
+            offset: None,
+            trace_id: "".to_string(),
+            rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
+                writer_schema: Some(ProtoSchema {
+                    proto_descriptor: Some(mapping.descriptor().clone()),
+                }),
+                rows: Some(ProtoRows {
+                    serialized_rows: vec![mapping.map(event.data.parts().0)],
+                }),
+            })),
+        };
+
+        let append_response = client
+            .append_rows(stream::iter(vec![request]))
+            .timeout(Duration::from_secs(10))
+            .await;
+
+        let append_response = match append_response {
+            Ok(rsp) => {rsp}
+            Err(_) => {
+                ctx.notifier.connection_lost().await?;
+
+                return Ok(SinkReply::FAIL);
+            }
+        };
+
+        let mut append_response = append_response?
+            .into_inner();
+
+            match append_response.next().timeout(Duration::from_secs(10)).await {
+                Ok(x) => {
+                    match x {
+                        Some(Ok(_)) => Ok(SinkReply::ACK),
+                        Some(Err(e)) => {
+                            error!("BigQuery error: {}", e);
+
+                            Ok(SinkReply::FAIL)
+                        }
+                        None => {
+                            error!("No response from BigQuery");
+
+                            Ok(SinkReply::FAIL)
+                        }
+                    }
+                },
+                Err(_) => {
+                    ctx.notifier.connection_lost().await?;
+
+                    Ok(SinkReply::FAIL)
+                }
+            }
+    }
+
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+        error!("Connecting to BigQuery");
         let token = Token::new()?.header_value()?;
 
         let token_metadata_value = MetadataValue::from_str(token.as_str())?;
@@ -240,6 +319,9 @@ impl GbqSink {
             .domain_name("pubsub.googleapis.com");
 
         let channel = Channel::from_static("https://bigquerystorage.googleapis.com")
+            .timeout(Duration::from_secs(10))
+            .keep_alive_timeout(Duration::from_secs(10))
+            .connect_timeout(Duration::from_secs(10))
             .tls_config(tls_config)?
             .connect()
             .await?;
@@ -253,7 +335,7 @@ impl GbqSink {
 
         let write_stream = client
             .create_write_stream(CreateWriteStreamRequest {
-                parent: config.table_id.clone(),
+                parent: self.config.table_id.clone(),
                 write_stream: Some(WriteStream {
                     name: "".to_string(),
                     r#type: i32::from(write_stream::Type::Committed),
@@ -273,59 +355,12 @@ impl GbqSink {
                 .clone()
                 .fields,
         );
-        Ok(Self {
-            client,
-            write_stream,
-            mapping,
-        })
-    }
-}
 
-#[async_trait::async_trait]
-impl Sink for GbqSink {
-    async fn on_event(
-        &mut self,
-        _input: &str,
-        event: Event,
-        _ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
-        _start: u64,
-    ) -> Result<SinkReply> {
-        let request = AppendRowsRequest {
-            write_stream: self.write_stream.name.clone(),
-            offset: None,
-            trace_id: "".to_string(),
-            rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
-                writer_schema: Some(ProtoSchema {
-                    proto_descriptor: Some(self.mapping.descriptor().clone()),
-                }),
-                rows: Some(ProtoRows {
-                    serialized_rows: vec![self.mapping.map(event.data.parts().0)],
-                }),
-            })),
-        };
+        self.mapping = Some(mapping);
+        self.write_stream = Some(write_stream);
+        self.client = Some(client);
 
-        let mut append_response = self
-            .client
-            .append_rows(stream::iter(vec![request]))
-            .await?
-            .into_inner();
-
-        if let Some(response) = append_response.next().await {
-            match response {
-                Ok(_) => {
-                    Ok(SinkReply::ACK)
-                },
-                Err(e) => {
-                    error!("Failed to write event to BigQuery: {}", e);
-
-                    Ok(SinkReply::FAIL)
-                }
-            }
-        } else {
-            error!("No response when sending AppendRowsRequest");
-            Ok(SinkReply::FAIL)
-        }
+        Ok(true)
     }
 
     fn auto_ack(&self) -> bool {

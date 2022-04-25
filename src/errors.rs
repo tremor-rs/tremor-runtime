@@ -315,8 +315,12 @@ error_chain! {
                 display("Invalid Input data: {}", msg)
         }
         GbqSinkFailed(msg: &'static str) {
-            description("GBQ Sink failed"),
+            description("GBQ Sink failed")
                 display("GBQ Sink failed: {}", msg)
+        }
+        BigQueryClientNotAvailable(msg: &'static str) {
+            description("BigQuery client not available")
+                display("BigQuery client not available: {}", msg)
         }
     }
 }
