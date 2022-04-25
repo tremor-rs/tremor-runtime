@@ -12,7 +12,7 @@
 ## > "string" == type::as_string("snot");
 ## > "array" == type::as_string([null,true,"snot"]);
 ## > "record" == type::as_string({"snot": [1, 1.e23, "badger"]});
-## > "bytes" == type::as_string(<< 1/unsigned-integer >>);
+## > "bytes" == type::as_string(<< 1/unsigned_integer >>);
 ## > ```
 ##
 ## Returns a `string`
@@ -110,7 +110,7 @@ intrinsic fn is_record(value) as type::is_record;
 ##
 ## > ```tremor
 ## > use std::type;
-## > true == type::is_binary(<< 1/unsigned-integer >>);;
+## > true == type::is_binary(<< 1/unsigned_integer >>);;
 ## > false == type::is_binary(true);
 ## > ```
 ##

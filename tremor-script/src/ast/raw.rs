@@ -206,7 +206,7 @@ impl<'script> Upable<'script> for BytesPartRaw<'script> {
     // We allow this for casting the bits
     #[allow(clippy::cast_sign_loss)]
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        let data_type: Vec<&str> = self.data_type.id.split('-').collect();
+        let data_type: Vec<&str> = self.data_type.id.split('_').collect();
         let (data_type, endianess) = match data_type.as_slice() {
             ["binary"] => (BytesDataType::Binary, Endian::Big),
             []
