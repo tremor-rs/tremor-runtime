@@ -25,9 +25,10 @@ use serenity::{
             ChannelPinsUpdateEvent, GuildMembersChunkEvent, ResumedEvent, TypingStartEvent,
             VoiceServerUpdateEvent,
         },
-        guild::{Emoji, Guild, GuildUnavailable, Member, PartialGuild, Role},
+        guild::{Emoji, Guild, Member, PartialGuild, Role},
         id::{ChannelId, EmojiId, GuildId, MessageId, RoleId, UserId},
-        prelude::{CurrentUser, Presence, Ready, User, VoiceState},
+        prelude::{CurrentUser, Presence, Ready, User},
+        voice::VoiceState,
     },
     prelude::*,
 };
@@ -131,13 +132,13 @@ impl EventHandler for Handler {
         self.forward(DiscordMessage::PresenceReplace(p)).await;
     }
 
-    async fn presence_update(
-        &self,
-        _ctx: Context,
-        new_data: serenity::model::event::PresenceUpdateEvent,
-    ) {
-        self.forward(new_data).await;
-    }
+    // async fn presence_update(
+    //     &self,
+    //     _ctx: Context,
+    //     new_data: serenity::model::event::PresenceUpdateEvent,
+    // ) {
+    //     self.forward(new_data).await;
+    // }
 
     async fn ready(&self, _: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
@@ -167,10 +168,10 @@ impl EventHandler for Handler {
             .await;
     }
 
-    async fn guild_delete(&self, _ctx: Context, incomplete: GuildUnavailable, full: Option<Guild>) {
-        self.forward(DiscordMessage::GuildDelete { incomplete, full })
-            .await;
-    }
+    // async fn guild_delete(&self, _ctx: Context, incomplete: GuildUnavailable, full: Option<Guild>) {
+    //     self.forward(DiscordMessage::GuildDelete { incomplete, full })
+    //         .await;
+    // }
 
     async fn guild_emojis_update(
         &self,
@@ -190,12 +191,9 @@ impl EventHandler for Handler {
             .await;
     }
 
-    async fn guild_member_addition(&self, _ctx: Context, guild_id: GuildId, new_member: Member) {
-        self.forward(DiscordMessage::MemberAddition {
-            guild_id,
-            new_member,
-        })
-        .await;
+    async fn guild_member_addition(&self, _ctx: Context, new_member: Member) {
+        self.forward(DiscordMessage::MemberAddition { new_member })
+            .await;
     }
 
     async fn guild_member_removal(
@@ -230,9 +228,8 @@ impl EventHandler for Handler {
         self.forward(DiscordMessage::GuildMembersChunk(chunk)).await;
     }
 
-    async fn guild_role_create(&self, _ctx: Context, guild_id: GuildId, new: Role) {
-        self.forward(DiscordMessage::RoleCreate { guild_id, new })
-            .await;
+    async fn guild_role_create(&self, _ctx: Context, new: Role) {
+        self.forward(DiscordMessage::RoleCreate { new }).await;
     }
 
     async fn guild_role_delete(
@@ -253,12 +250,10 @@ impl EventHandler for Handler {
     async fn guild_role_update(
         &self,
         _ctx: Context,
-        guild_id: GuildId,
         old_data_if_available: Option<Role>,
         new: Role,
     ) {
         self.forward(DiscordMessage::RoleUpdate {
-            guild_id,
             old_data_if_available,
             new,
         })
@@ -355,13 +350,7 @@ impl EventHandler for Handler {
             .await;
     }
 
-    async fn voice_state_update(
-        &self,
-        _ctx: Context,
-        _: Option<GuildId>,
-        old: Option<VoiceState>,
-        new: VoiceState,
-    ) {
+    async fn voice_state_update(&self, _ctx: Context, old: Option<VoiceState>, new: VoiceState) {
         self.forward(DiscordMessage::VoiceUpdate { old, new }).await;
     }
 
