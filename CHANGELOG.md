@@ -5,7 +5,7 @@
 ## Breaking Changes
 
 - the `-` is no longer a valid part of identifiers.
-- binaries now use `_` to sepoerate type names as `-` is no longer a identifyer.
+- binaries now use `_` to sepoerate type names as `-` is no longer a identifier.
 
 ## [0.12.0-rc.1]
 
