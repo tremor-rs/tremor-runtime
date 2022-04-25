@@ -115,8 +115,8 @@ fn test_list_eq() -> Result<()> {
     test_ast_eq(
         r#"
         let x = event.len;
-        [1, -x, <<x:7/unsigned-integer>>, "foo"];
-        [1, -x, <<x:7/unsigned-integer>>, "foo"]
+        [1, -x, <<x:7/unsigned_integer>>, "foo"];
+        [1, -x, <<x:7/unsigned_integer>>, "foo"]
         "#,
         true,
     )
@@ -126,8 +126,8 @@ fn test_list_not_eq() -> Result<()> {
     test_ast_eq(
         r#"
         let x = event.len;
-        [1, -x, <<x:7/unsigned-integer>>, "foo"];
-        [1, -x, <<x:7/signed-integer>>, "foo"]
+        [1, -x, <<x:7/unsigned_integer>>, "foo"];
+        [1, -x, <<x:7/signed_integer>>, "foo"]
         "#,
         false,
     )
