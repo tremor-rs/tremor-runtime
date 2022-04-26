@@ -176,6 +176,7 @@ pub(crate) mod url {
                 Err(e) => Err(e.into()),
             }
         }
+
         pub(crate) fn port_or_dflt(&self) -> u16 {
             self.url.port().unwrap_or(D::PORT)
         }

@@ -82,7 +82,7 @@ async fn http_server_test() -> Result<()> {
     let port = free_port::find_free_tcp_port().await?;
     let url = format!("http://localhost:{port}/");
     let defn = literal!({
-        "codec": "json-sorted",
+        "codec": "json",
         "config": {
             "url": url.clone()
         }
@@ -95,6 +95,7 @@ async fn http_server_test() -> Result<()> {
     let start = Instant::now();
     let timeout = Duration::from_secs(30);
 
+    // send an empty body, return request data in the body as json
     let req = surf::Request::builder(Method::Get, Url::parse(url.as_str())?)
         .body(Body::empty())
         .build();
@@ -160,33 +161,35 @@ async fn http_server_test() -> Result<()> {
     );
     assert_eq!(
         literal!({
-            "value": null,
             "meta": {
-                "url": {
+                "url_parts": {
                     "port": port,
-                    "scheme": "http",
+                    "path": "/",
                     "host": "localhost",
-                    "path": "/"
+                    "scheme": "http"
                 },
-                "method": "GET",
+                "url": url.clone(),
                 "headers": {
                     "content-length": ["0"],
-                    "host": [format!("localhost:{port}")],
                     "content-type": ["application/octet-stream"], // h1-client injects this
+                    "host": [format!("localhost:{port}")],
                     "connection": ["keep-alive"]
-                }
-            }
+                },
+                "method": "GET"
+            },
+            "value": null,
         }),
         body
     );
 
-    let req = surf::Request::builder(
-        Method::Patch,
-        Url::parse(format!("{}path/path/path?query=yes&another#fragment", url).as_str())?,
-    )
-    .header("content-type", "text/plain")
-    .body_bytes("snot, badger".as_bytes())
-    .build();
+    // send patch request
+    // with text/plain body
+    // and return the request meta and body as a json (codec picked up from connector config)
+    let req_url = format!("{}path/path/path?query=yes&another", url);
+    let req = surf::Request::builder(Method::Patch, Url::parse(req_url.as_str())?)
+        .header("content-type", "text/plain")
+        .body_bytes("snot, badger".as_bytes())
+        .build();
     let mut res = handle_req(
         req,
         |req_data| {
@@ -223,13 +226,14 @@ async fn http_server_test() -> Result<()> {
     assert_eq!(
         literal!({
             "meta": {
-                "url": {
+                "url_parts": {
                     "port": port,
                     "query": "query=yes&another",
                     "path": "/path/path/path",
                     "host": "localhost",
                     "scheme": "http"
                 },
+                "url": req_url.clone(),
                 "headers": {
                     "content-length": ["12"],
                     "content-type": ["text/plain"],
@@ -326,7 +330,7 @@ async fn https_server_test() -> Result<()> {
     let port = free_port::find_free_tcp_port().await?;
     let url = format!("https://localhost:{port}/");
     let defn = literal!({
-        "codec": "json-sorted",
+        "codec": "json",
         "config": {
             "url": url.clone(),
             "tls": {
@@ -343,6 +347,8 @@ async fn https_server_test() -> Result<()> {
         .expect("No pipeline connected to out")
         .clone();
     let c_addr = connector.addr.clone();
+
+    // respond to requests with value and meta in body, encoded as yaml
     let handle = async_std::task::spawn::<_, Result<()>>(async move {
         while let Ok(inbound) = out.get_event().await {
             let inbound_value = inbound.data.suffix().value();
@@ -400,11 +406,12 @@ async fn https_server_test() -> Result<()> {
         format!(
             r#"---
 meta:
-  url:
+  url_parts:
     port: {port}
     scheme: https
     host: localhost
     path: /
+  url: "https://localhost:{port}/"
   method: DELETE
   headers:
     content-length:

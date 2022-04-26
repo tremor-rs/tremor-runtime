@@ -21,9 +21,10 @@ use halfbrown::HashMap;
 use http_client::h1::H1Client;
 use http_client::HttpClient;
 use http_types::Method;
+use tremor_common::time::nanotime;
 
 use super::auth::Auth;
-use super::meta::HttpRequestBuilder;
+use super::meta::{extract_request_meta, extract_response_meta, HttpRequestBuilder};
 use super::utils::RequestId;
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
@@ -111,7 +112,7 @@ impl ConnectorBuilder for Builder {
                 ).into());
             }
             let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-            let mime_codec_map = MimeCodecMap::with_overwrites(&config.custom_codecs)?;
+            let mime_codec_map = Arc::new(MimeCodecMap::with_overwrites(&config.custom_codecs));
 
             let configured_codec = connector_config
                 .codec
@@ -137,7 +138,8 @@ pub struct Client {
     response_rx: Receiver<SourceReply>,
     config: Config,
     tls_client_config: Option<rustls::ClientConfig>,
-    mime_codec_map: MimeCodecMap,
+    // this is basically an immutable map, we use arc to share it across tasks (e.g. for each request sending)
+    mime_codec_map: Arc<MimeCodecMap>,
     configured_codec: String,
 }
 
@@ -222,12 +224,13 @@ struct HttpRequestSink {
     request_counter: u64,
     clients: H1Clients,
     response_tx: Sender<SourceReply>,
+    reply_tx: Sender<AsyncSinkReply>,
     config: Config,
     tls_client_config: Option<rustls::ClientConfig>,
     // reply_tx: Sender<AsyncSinkReply>,
     concurrency_cap: ConcurrencyCap,
     origin_uri: EventOriginUri,
-    codec_map: MimeCodecMap,
+    codec_map: Arc<MimeCodecMap>,
     configured_codec: String,
 }
 
@@ -237,15 +240,15 @@ impl HttpRequestSink {
         reply_tx: Sender<AsyncSinkReply>,
         config: Config,
         tls_client_config: Option<rustls::ClientConfig>,
-        codec_map: MimeCodecMap,
+        codec_map: Arc<MimeCodecMap>,
         configured_codec: String,
     ) -> Self {
-        let concurrency_cap = ConcurrencyCap::new(config.concurrency, reply_tx);
+        let concurrency_cap = ConcurrencyCap::new(config.concurrency, reply_tx.clone());
         Self {
-            // ALLOW: we give it a constant 1
-            request_counter: 1,
+            request_counter: 1, // always start by 1, 0 is DEFAULT_STREAM_ID and this might interfere with custom codecs
             clients: H1Clients::new(vec![]),
             response_tx,
+            reply_tx,
             config,
             tls_client_config,
             concurrency_cap,
@@ -284,30 +287,39 @@ impl Sink for HttpRequestSink {
         Ok(true)
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn on_event(
         &mut self,
         _input: &str,
         event: Event,
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
-        _start: u64,
+        start: u64,
     ) -> Result<SinkReply> {
         // constrain to max concurrency - propagate CB close on hitting limit
         let guard = self.concurrency_cap.inc_for(&event).await?;
 
         if let Some(client) = self.clients.next() {
-            let ctx = ctx.clone();
-            let _response_tx = self.response_tx.clone();
-            let _origin_uri = self.origin_uri.clone();
+            let send_ctx = ctx.clone();
+            let response_tx = self.response_tx.clone();
+            let reply_tx = self.reply_tx.clone();
+            let contraflow_data = if event.transactional {
+                Some(ContraflowData::from(&event))
+            } else {
+                None
+            };
+            let mut origin_uri = self.origin_uri.clone();
             let ingest_ns = event.ingest_ns;
 
-            let event_meta = event.data.suffix().meta();
-            let _correlation_meta = event_meta.get("correlation").map(Value::clone_static); // :sob:
+            // take the metadata from the first element of the batch
+            let event_meta = event.value_meta_iter().next().map(|t| t.1);
+            let correlation_meta = event_meta.get("correlation").map(Value::clone_static); // :sob:
 
             // assign a unique request id to this event
             let request_id = RequestId::new(self.request_counter);
             self.request_counter = self.request_counter.wrapping_add(1).max(1);
-            let http_meta = ctx.extract_meta(event_meta);
+
+            let http_meta = event_meta.and_then(|meta| ctx.extract_meta(meta));
             let mut builder = ctx.bail_err(
                 HttpRequestBuilder::new(
                     request_id,
@@ -318,19 +330,109 @@ impl Sink for HttpRequestSink {
                 ),
                 "Error turning event into an HTTP Request",
             )?;
+            let configured_codec = self.configured_codec.clone();
+            let codec_map = self.codec_map.clone();
+            let mut request = builder.get_chunked_request();
+            let request_is_chunked = request.is_some();
+            if !request_is_chunked {
+                // if the request is not chunked
+                // we need to populate the request body from the (possibly batched) event payloads first
+                for value in event.value_iter() {
+                    ctx.bail_err(
+                        builder.append(value, ingest_ns, serializer).await,
+                        "Error serializing event into request body",
+                    )?;
+                }
+                // the request will only be available after finalizing
+                request = ctx.bail_err(
+                    builder.finalize(serializer).await,
+                    "Error serializing final parts of the event into request body",
+                )?;
+            }
 
-            if let Some(request) = builder.get_chunked_request() {
-                // if chunked we can send the response away already - spawn the task
-                // FIXME
-                // FIXME: extract into a function so we can reuse
-                async_std::task::spawn(async move {
+            if let Some(request) = request {
+                // spawn the sending task
+                async_std::task::spawn::<_, Result<()>>(async move {
+                    // extract request meta for the response metadata from the finally prepared request
+                    // the actual sent request might differ from the metadata used to create this request
+                    let req_meta = extract_request_meta(&request);
+                    if let Some(host) = request.host() {
+                        origin_uri.host = host.to_string();
+                    }
+                    origin_uri.port = request.url().port_or_known_default();
+                    origin_uri.path = request
+                        .url()
+                        .path_segments()
+                        .map(|iter| iter.map(ToString::to_string).collect::<Vec<_>>())
+                        .unwrap_or_default();
                     match client.send(request).await {
-                        Ok(_response) => {}
-                        Err(_e) => {}
+                        Ok(mut response) => {
+                            let response_meta = extract_response_meta(&response);
+                            let mut meta = send_ctx.meta(literal!({
+                                "request": req_meta,
+                                "request_id": request_id.get(),
+                                "response": response_meta
+                            }));
+
+                            if let Some(corr_meta) = correlation_meta {
+                                meta.try_insert("correlation", corr_meta);
+                            }
+                            let data = send_ctx.bail_err(
+                                response.body_bytes().await.map_err(Error::from),
+                                "Error receiving response body",
+                            )?;
+                            let codec_name = if let Some(mime) = response.content_type() {
+                                codec_map.get_codec_name(mime.essence())
+                            } else {
+                                None
+                            };
+                            let codec_overwrite = codec_name
+                                .filter(|codec| *codec != &configured_codec)
+                                .cloned();
+                            let reply = SourceReply::Data {
+                                origin_uri,
+                                data,
+                                meta: Some(meta),
+                                stream: None, // a response (as well as a request) is a discrete unit and not part of a stream
+                                port: None,
+                                codec_overwrite,
+                            };
+                            send_ctx.swallow_err(
+                                response_tx.send(reply).await,
+                                "Error sending response to source",
+                            );
+                            if let Some(contraflow_data) = contraflow_data {
+                                send_ctx.swallow_err(
+                                    reply_tx
+                                        .send(AsyncSinkReply::Ack(
+                                            contraflow_data,
+                                            nanotime() - start,
+                                        ))
+                                        .await,
+                                    "Error sending ack contraflow",
+                                );
+                            }
+                        }
+                        Err(_e) => {
+                            if let Some(contraflow_data) = contraflow_data {
+                                send_ctx.swallow_err(
+                                    reply_tx.send(AsyncSinkReply::Fail(contraflow_data)).await,
+                                    "Error sending fail contraflow",
+                                );
+                            }
+                        }
                     }
                     drop(guard);
+                    Ok(())
                 });
+            } else {
+                // NOTE: this shouldn't happen
+                error!("{ctx} Unable to serialize event into HTTP request.");
+                return Err("Unable to serialize event into HTTP request.".into());
+            }
 
+            if request_is_chunked {
+                // if we have a chunked request we still gotta do some work (sending the chunks)
                 for value in event.value_iter() {
                     ctx.bail_err(
                         builder.append(value, ingest_ns, serializer).await,
@@ -341,29 +443,6 @@ impl Sink for HttpRequestSink {
                     builder.finalize(serializer).await,
                     "Error serializing final parts of the event into request body",
                 )?;
-            } else {
-                for value in event.value_iter() {
-                    ctx.bail_err(
-                        builder.append(value, ingest_ns, serializer).await,
-                        "Error serializing event into request body",
-                    )?;
-                }
-                let request = ctx.bail_err(
-                    builder.finalize(serializer).await,
-                    "Error serializing final parts of the event into request body",
-                )?;
-                // spawn the sending task
-                // FIXME
-                if let Some(request) = request {
-                    async_std::task::spawn(async move {
-                        match client.send(request).await {
-                            Ok(_response) => {}
-                            Err(_e) => {}
-                        }
-
-                        drop(guard);
-                    });
-                }
             }
         } else {
             error!("{ctx} No http client available.");
@@ -377,214 +456,8 @@ impl Sink for HttpRequestSink {
         true
     }
 
+    // we do ack when the response is sent
     fn auto_ack(&self) -> bool {
-        true
+        false
     }
 }
-
-/* FIXME
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use env_logger;
-    use http_types::Method;
-
-    #[async_std::test]
-    async fn http_client_builder() -> Result<()> {
-        let with_processors = literal!({
-            "id": "my_rest_client",
-            "type": "rest_client",
-            "config": {
-                "url": "https://www.google.com"
-            },
-        });
-        let config: ConnectorConfig = crate::config::Connector::from_config(
-            ConnectorType("rest_client".into()),
-            &with_processors,
-        )?;
-
-        let builder = super::Builder::default();
-        builder.build("foo", &config).await?;
-
-        Ok(())
-    }
-
-    #[test]
-    fn default_http_meta_codec_handling() -> Result<()> {
-        let connector_config = literal!({
-            "id": "my_rest_client",
-            "type": "rest_client",
-            "config": {
-                "url": "https://www.google.com"
-            },
-        });
-        let config: ConnectorConfig = crate::config::Connector::from_config(
-            ConnectorType("rest_client".into()),
-            &connector_config,
-        )?;
-        let http_meta = HttpRequestBuilder::from_config(&config, "json")?;
-        assert_eq!("json", http_meta.codec.name());
-        let http_meta = HttpRequestBuilder::from_config(&config, "string")?;
-        assert_eq!("string", http_meta.codec.name());
-        let http_meta = HttpRequestBuilder::from_config(&config, "snot");
-        assert!(http_meta.is_err());
-
-        let connector_config = literal!({
-            "id": "my_rest_client",
-            "type": "rest_client",
-            "config": {
-                "url": "https://www.google.com"
-            },
-            "codec": "msgpack",
-        });
-        let config: ConnectorConfig = crate::config::Connector::from_config(
-            ConnectorType("rest_client".into()),
-            &connector_config,
-        )?;
-        let http_meta = HttpRequestBuilder::from_config(&config, "snot")?;
-        assert_eq!("msgpack", http_meta.codec.name());
-
-        Ok(())
-    }
-
-    #[test]
-    fn default_http_meta_endpoint_handling() -> Result<()> {
-        env_logger::init();
-        let connector_config = literal!({
-            "id": "my_rest_client",
-            "type": "rest_client",
-            "config": {
-            },
-        });
-        let config: ConnectorConfig = crate::config::Connector::from_config(
-            ConnectorType("rest_client".into()),
-            &connector_config,
-        )?;
-        let http_meta = HttpRequestBuilder::from_config(&config, "json")?;
-        assert_eq!("http://localhost/", http_meta.endpoint.to_string());
-
-        let connector_config = literal!({
-            "id": "my_rest_client",
-            "type": "rest_client",
-            "config": {
-                "url": "https://tremor.rs/"
-            },
-        });
-        let config: ConnectorConfig = crate::config::Connector::from_config(
-            ConnectorType("rest_client".into()),
-            &connector_config,
-        )?;
-        let http_meta = HttpRequestBuilder::from_config(&config, "json")?;
-        assert_eq!("https://tremor.rs/", http_meta.endpoint.to_string());
-        Ok(())
-    }
-
-    #[test]
-    fn default_http_meta_method_handling() -> Result<()> {
-        let connector_config = literal!({
-            "id": "my_rest_client",
-            "type": "rest_client",
-            "config": {
-                "url": "https://tremor.rs/benchmarks/"
-            },
-        });
-        let config: ConnectorConfig = crate::config::Connector::from_config(
-            ConnectorType("rest_client".into()),
-            &connector_config,
-        )?;
-        let http_meta = HttpRequestBuilder::from_config(&config, "json")?;
-        assert_eq!("json", http_meta.codec.name());
-        assert_eq!(
-            "https://tremor.rs/benchmarks/",
-            http_meta.endpoint.to_string()
-        );
-        assert_eq!(Method::Post, http_meta.method);
-
-        let connector_config = literal!({
-            "id": "my_rest_client",
-            "type": "rest_client",
-            "config": {
-                "url": "https://tremor.rs/",
-                "method": "get"
-            },
-        });
-        let config: ConnectorConfig = crate::config::Connector::from_config(
-            ConnectorType("rest_client".into()),
-            &connector_config,
-        )?;
-        let http_meta = HttpRequestBuilder::from_config(&config, "json")?;
-        assert_eq!("json", http_meta.codec.name());
-        assert_eq!("https://tremor.rs/", http_meta.endpoint.url().to_string());
-        assert_eq!(Method::Get, http_meta.method);
-        Ok(())
-    }
-
-    #[test]
-    fn default_http_meta_headers_handling() -> Result<()> {
-        let connector_config = literal!({
-            "id": "my_rest_client",
-            "type": "rest_client",
-            "config": {
-                "method": "pUt",
-            },
-        });
-        let config: ConnectorConfig = crate::config::Connector::from_config(
-            ConnectorType("rest_client".into()),
-            &connector_config,
-        )?;
-        let http_meta = HttpRequestBuilder::from_config(&config, "json")?;
-        assert_eq!("json", http_meta.codec.name());
-        assert_eq!("http://localhost/", http_meta.endpoint.url().to_string());
-        assert_eq!(Method::Put, http_meta.method);
-        assert_eq!(0, http_meta.headers.len());
-
-        let connector_config = literal!({
-            "id": "my_rest_client",
-            "type": "rest_client",
-            "config": {
-                "url": "https://tremor.rs/",
-                "method": "pAtCH",
-                "headers": {
-                    "snot": [ "Badger" ],
-                }
-            },
-        });
-        let config: ConnectorConfig = crate::config::Connector::from_config(
-            ConnectorType("rest_client".into()),
-            &connector_config,
-        )?;
-        let http_meta = HttpRequestBuilder::from_config(&config, "json")?;
-        assert_eq!("json", http_meta.codec.name());
-        assert_eq!("https://tremor.rs/", http_meta.endpoint.url().to_string());
-        assert_eq!(Method::Patch, http_meta.method);
-        assert_eq!(1, http_meta.headers.len());
-        assert_eq!(
-            "Badger",
-            http_meta.headers.get("snot").unwrap()[0].to_string()
-        );
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use std::str::FromStr;
-
-    use super::*;
-    use crate::connectors::prelude::ConfigImpl;
-    use crate::errors::Result;
-    use http_types::Method;
-    use tremor_value::literal;
-
-    #[test]
-    fn deserialize_method() -> Result<()> {
-        let v = literal!({
-          "url": "http://localhost:8080/",
-          "method": "PATCH"
-        });
-        let config = Config::new(&v)?;
-        assert_eq!(Method::Patch, Method::from_str(&config.method)?);
-        Ok(())
-    }
-}
-*/

@@ -376,7 +376,7 @@ impl TestPipeline {
     }
 
     /// get a single event from the pipeline
-    /// wait for up to 2 seconds for an event to arrive
+    /// wait for an event to arrive
     pub(crate) async fn get_event(&self) -> Result<Event> {
         let start = Instant::now();
         const TIMEOUT: Duration = Duration::from_secs(120);

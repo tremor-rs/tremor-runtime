@@ -36,7 +36,7 @@ use tide::{
 use tide_rustls::TlsListener;
 use tremor_common::ids::Id;
 
-use super::meta::BodyData;
+use super::meta::{extract_header_case_insensitive, extract_request_meta, BodyData};
 use super::utils::{FixedBodyReader, RequestId, StreamingBodyReader};
 
 #[derive(Deserialize, Debug, Clone)]
@@ -88,7 +88,7 @@ impl ConnectorBuilder for Builder {
                 .as_ref()
                 .map_or_else(|| HttpServer::DEFAULT_CODEC.to_string(), |c| c.name.clone());
             let inflight = Arc::default();
-            let codec_map = MimeCodecMap::with_overwrites(&config.custom_codecs)?;
+            let codec_map = MimeCodecMap::with_overwrites(&config.custom_codecs);
 
             Ok(Box::new(HttpServer {
                 config,
@@ -116,6 +116,11 @@ pub(crate) struct HttpServer {
 
 impl HttpServer {
     const DEFAULT_CODEC: &'static str = "json";
+    /// we need to avoid 0 as a request id
+    ///
+    /// As we misuse the request_id as the stream_id and if we use 0, we get `DEFAULT_STREAM_ID`
+    /// and with that id the custom codec overwrite doesn't work
+    const REQUEST_COUNTER_START: u64 = 1;
 }
 
 #[async_trait::async_trait()]
@@ -133,6 +138,7 @@ impl Connector for HttpServer {
         let source = HttpServerSource {
             url: self.config.url.clone(),
             inflight: self.inflight.clone(),
+            request_counter: Self::REQUEST_COUNTER_START,
             request_tx,
             request_rx,
             origin_uri: self.origin_uri.clone(),
@@ -162,6 +168,7 @@ struct HttpServerSource {
     url: Url,
     origin_uri: EventOriginUri,
     inflight: Arc<DashMap<RequestId, Sender<Response>>>,
+    request_counter: u64,
     request_rx: Receiver<RawRequestData>,
     request_tx: Sender<RawRequestData>,
     server_task: Option<JoinHandle<()>>,
@@ -248,8 +255,12 @@ impl Source for HttpServerSource {
             response_channel,
         } = self.request_rx.recv().await?;
 
-        // assign request id and prepare meta
-        let request_id = RequestId::new(*pull_id);
+        // assign request id, set pull_id
+        let request_id = RequestId::new(self.request_counter);
+        *pull_id = self.request_counter;
+        self.request_counter = self.request_counter.wrapping_add(1);
+
+        // prepare meta
         debug!("{ctx} Received HTTP request with request id {request_id}");
         let meta = ctx.meta(literal!({
             "request": request_meta,
@@ -264,7 +275,7 @@ impl Source for HttpServerSource {
             SourceReply::Structured {
                 origin_uri: self.origin_uri.clone(),
                 payload: EventPayload::from(ValueAndMeta::from_parts(Value::const_null(), meta)),
-                stream: DEFAULT_STREAM_ID,
+                stream: DEFAULT_STREAM_ID, // a http request is a discrete unit and not part of any stream
                 port: None,
             }
         } else {
@@ -345,7 +356,6 @@ impl Sink for HttpServerSink {
         // - send response immediately in case of chunked encoding
         let mut response_map = HashMap::new();
         for (value, meta) in event.value_meta_iter() {
-            // set codec and content-type upon first iteration
             let http_meta = ctx.extract_meta(meta);
 
             // first try to extract request_id from event batch element metadata
@@ -546,7 +556,7 @@ impl SinkResponse {
         let headers = response_meta.get("headers");
 
         // extract if we use chunked encoding
-        let chunked_header = headers.get(headers::TRANSFER_ENCODING.as_str());
+        let chunked_header = extract_header_case_insensitive(headers, headers::TRANSFER_ENCODING);
 
         // extract content type and transfer-encoding from first batch element
         let chunked = chunked_header
@@ -556,7 +566,8 @@ impl SinkResponse {
             .or_else(|| chunked_header.as_str())
             .map_or(false, |te| te == "chunked");
 
-        let content_type_header = headers.get(headers::CONTENT_TYPE.as_str());
+        let content_type_header =
+            extract_header_case_insensitive(headers, headers::CONTENT_TYPE.as_str());
         let header_content_type = content_type_header
             .as_array()
             .and_then(|ct| ct.last())
@@ -573,7 +584,7 @@ impl SinkResponse {
         let codec_content_type: Option<String> = codec_overwrite
             .as_ref()
             .and_then(|codec| codec_map.get_mime_type(codec.as_str()))
-            .or_else(|| codec_map.get_mime_type(&configured_codec))
+            .or_else(|| codec_map.get_mime_type(configured_codec))
             .cloned();
         // extract content-type and thus possible codec overwrite only from first element
         // precedence:
@@ -612,8 +623,8 @@ impl SinkResponse {
         }
         let (body_data, res) = if chunked {
             let (chunk_tx, chunk_rx) = unbounded();
-            let chunked_reader = StreamingBodyReader::new(chunk_rx);
-            res.set_body(tide::Body::from_reader(chunked_reader, None));
+            let streaming_reader = StreamingBodyReader::new(chunk_rx);
+            res.set_body(tide::Body::from_reader(streaming_reader, None));
             // chunked encoding and content-length cannot go together
             res.remove_header(headers::CONTENT_LENGTH);
             // we can already send out the response and stream the rest of the chunks upon calling `append`
@@ -702,6 +713,7 @@ impl HttpServerState {
     }
 }
 
+#[derive(Debug)]
 struct RawRequestData {
     data: Vec<u8>,
     // metadata about the request, not the ready event meta, still needs to be wrapped
@@ -724,49 +736,8 @@ async fn handle_request(mut req: tide::Request<HttpServerState>) -> tide::Result
     }
 }
 async fn _handle_request(req: &mut tide::Request<HttpServerState>) -> tide::Result<tide::Response> {
+    let request_meta = extract_request_meta(req.as_ref());
     let content_type = req.content_type().map(|mime| mime.essence().to_string());
-    let headers = req
-        .header_names()
-        .map(|name| {
-            (
-                name.to_string(),
-                // a header name has the potential to take multiple values:
-                // https://tools.ietf.org/html/rfc7230#section-3.2.2
-                req.header(name)
-                    .iter()
-                    .flat_map(|value| {
-                        let mut a: Vec<Value> = Vec::new();
-                        for v in (*value).iter() {
-                            a.push(v.as_str().to_string().into());
-                        }
-                        a.into_iter()
-                    })
-                    .collect::<Value>(),
-            )
-        })
-        .collect::<Value>();
-
-    let mut meta = Value::object_with_capacity(3);
-    let mut url_meta = Value::object_with_capacity(7);
-    let url = req.url();
-    url_meta.insert("scheme", url.scheme().to_string())?;
-    if !url.username().is_empty() {
-        url_meta.insert("username", url.username().to_string())?;
-    }
-    url.password()
-        .and_then(|p| url_meta.insert("password", p.to_string()).ok());
-    url.host_str()
-        .and_then(|h| url_meta.insert("host", h.to_string()).ok());
-    url.port().and_then(|p| url_meta.insert("port", p).ok());
-    url_meta.insert("path", url.path().to_string())?;
-    url.query()
-        .and_then(|q| url_meta.insert("query", q.to_string()).ok());
-    url.fragment()
-        .and_then(|f| url_meta.insert("fragment", f.to_string()).ok());
-
-    meta.insert("method", req.method().to_string())?;
-    meta.insert("headers", headers)?;
-    meta.insert("url", url_meta)?;
     let data = req.body_bytes().await?;
 
     // Dispatch
@@ -775,7 +746,7 @@ async fn _handle_request(req: &mut tide::Request<HttpServerState>) -> tide::Resu
         .tx
         .send(RawRequestData {
             data,
-            request_meta: meta,
+            request_meta,
             content_type,
             response_channel: response_tx,
         })
