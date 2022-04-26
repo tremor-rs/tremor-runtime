@@ -13,10 +13,10 @@
 // limitations under the License.
 
 use super::super::ConnectorHarness;
+use super::redpanda_container;
 use crate::{connectors::tests::free_port, errors::Result};
 use async_std::task;
 use beef::Cow;
-use futures::StreamExt;
 use rdkafka::{
     admin::{AdminClient, AdminOptions, NewTopic, TopicReplication},
     config::FromClientConfig,
@@ -25,72 +25,21 @@ use rdkafka::{
     ClientConfig,
 };
 use serial_test::serial;
-use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
-use signal_hook_async_std::Signals;
 use std::time::Duration;
-use testcontainers::{
-    clients::Cli as DockerCli,
-    images::generic::{GenericImage, Stream as WaitForStream, WaitFor},
-    Docker, Image, RunArgs,
-};
+use testcontainers::clients::Cli as DockerCli;
 use tremor_pipeline::CbAction;
 use tremor_value::{literal, Value};
 use value_trait::Builder;
-
-const IMAGE: &str = "docker.vectorized.io/vectorized/redpanda";
-const VERSION: &str = "v21.11.10";
 
 #[async_std::test]
 #[serial(kafka)]
 async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
     let _ = env_logger::try_init();
+
     let docker = DockerCli::default();
-    let kafka_port = free_port::find_free_tcp_port().await?;
-    let args = vec![
-        "redpanda",
-        "start",
-        "--overprovisioned",
-        "--smp",
-        "1",
-        "--memory",
-        "512M",
-        "--reserve-memory=0M",
-        "--node-id=0",
-        "--check=false",
-        "--kafka-addr=0.0.0.0:9092",
-        &format!("--advertise-kafka-addr=127.0.0.1:{kafka_port}"),
-    ]
-    .into_iter()
-    .map(ToString::to_string)
-    .collect();
-    let image = GenericImage::new(format!("{}:{}", IMAGE, VERSION))
-        .with_args(args)
-        .with_wait_for(WaitFor::LogMessage {
-            message: "Successfully started Redpanda!".to_string(),
-            stream: WaitForStream::StdErr,
-        });
-    let container = docker.run_with_args(
-        image,
-        RunArgs::default()
-            .with_mapped_port((kafka_port, 9092_u16))
-            .with_mapped_port((free_port::find_free_tcp_port().await?, 9664_u16))
-            .with_mapped_port((free_port::find_free_tcp_port().await?, 8081_u16))
-            .with_mapped_port((free_port::find_free_tcp_port().await?, 8082_u16)),
-    );
+    let container = redpanda_container(&docker).await?;
 
-    let container_id = container.id().to_string();
-    let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
-    let signal_handle = signals.handle();
-    let signal_handler_task = async_std::task::spawn(async move {
-        let signal_docker = DockerCli::default();
-        while let Some(signal) = signals.next().await {
-            signal_docker.stop(container_id.as_str());
-            signal_docker.rm(container_id.as_str());
-            let _ = signal_hook::low_level::emulate_default_handler(signal);
-        }
-    });
-
-    let port = container.get_host_port(9092).unwrap_or(9092);
+    let port = container.get_host_port(9092);
     let mut admin_config = ClientConfig::new();
     let broker = format!("127.0.0.1:{}", port);
     let topic = "tremor_test";
@@ -317,8 +266,6 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
     assert!(out_events.is_empty());
     assert!(err_events.is_empty());
     // cleanup
-    signal_handle.close();
-    signal_handler_task.cancel().await;
     drop(container);
     Ok(())
 }
@@ -327,52 +274,11 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
 #[serial(kafka)]
 async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
     let _ = env_logger::try_init();
+
     let docker = DockerCli::default();
-    let kafka_port = free_port::find_free_tcp_port().await?;
-    let args = vec![
-        "redpanda",
-        "start",
-        "--overprovisioned",
-        "--smp",
-        "1",
-        "--memory",
-        "512M",
-        "--reserve-memory=0M",
-        "--node-id=0",
-        "--check=false",
-        "--kafka-addr=0.0.0.0:9092",
-        &format!("--advertise-kafka-addr=127.0.0.1:{kafka_port}"),
-    ]
-    .into_iter()
-    .map(ToString::to_string)
-    .collect();
-    let image = GenericImage::new(format!("{}:{}", IMAGE, VERSION))
-        .with_args(args)
-        .with_wait_for(WaitFor::LogMessage {
-            message: "Successfully started Redpanda!".to_string(),
-            stream: WaitForStream::StdErr,
-        });
-    let container = docker.run_with_args(
-        image,
-        RunArgs::default()
-            .with_mapped_port((kafka_port, 9092_u16))
-            .with_mapped_port((free_port::find_free_tcp_port().await?, 9664_u16))
-            .with_mapped_port((free_port::find_free_tcp_port().await?, 8081_u16))
-            .with_mapped_port((free_port::find_free_tcp_port().await?, 8082_u16)),
-    );
+    let container = redpanda_container(&docker).await?;
 
-    let container_id = container.id().to_string();
-    let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
-    let signal_handle = signals.handle();
-    let signal_handler_task = async_std::task::spawn(async move {
-        let signal_docker = DockerCli::default();
-        while let Some(_signal) = signals.next().await {
-            signal_docker.stop(container_id.as_str());
-            signal_docker.rm(container_id.as_str());
-        }
-    });
-
-    let port = container.get_host_port(9092).unwrap_or(9092);
+    let port = container.get_host_port(9092);
     let mut admin_config = ClientConfig::new();
     let broker = format!("127.0.0.1:{}", port);
     let topic = "tremor_test_no_retry";
@@ -581,8 +487,6 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
     assert!(out_events.is_empty());
     assert!(err_events.is_empty());
     // cleanup
-    signal_handle.close();
-    signal_handler_task.cancel().await;
     drop(container);
     Ok(())
 }
@@ -591,52 +495,11 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
 #[serial(kafka)]
 async fn connector_kafka_consumer_non_transactional() -> Result<()> {
     let _ = env_logger::try_init();
+
     let docker = DockerCli::default();
-    let kafka_port = free_port::find_free_tcp_port().await?;
-    let args = vec![
-        "redpanda",
-        "start",
-        "--overprovisioned",
-        "--smp",
-        "1",
-        "--memory",
-        "512M",
-        "--reserve-memory=0M",
-        "--node-id=0",
-        "--check=false",
-        "--kafka-addr=0.0.0.0:9092",
-        &format!("--advertise-kafka-addr=127.0.0.1:{kafka_port}"),
-    ]
-    .into_iter()
-    .map(ToString::to_string)
-    .collect();
-    let image = GenericImage::new(format!("{}:{}", IMAGE, VERSION))
-        .with_args(args)
-        .with_wait_for(WaitFor::LogMessage {
-            message: "Successfully started Redpanda!".to_string(),
-            stream: WaitForStream::StdErr,
-        });
-    let container = docker.run_with_args(
-        image,
-        RunArgs::default()
-            .with_mapped_port((kafka_port, 9092_u16))
-            .with_mapped_port((free_port::find_free_tcp_port().await?, 9664_u16))
-            .with_mapped_port((free_port::find_free_tcp_port().await?, 8081_u16))
-            .with_mapped_port((free_port::find_free_tcp_port().await?, 8082_u16)),
-    );
+    let container = redpanda_container(&docker).await?;
 
-    let container_id = container.id().to_string();
-    let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
-    let signal_handle = signals.handle();
-    let signal_handler_task = async_std::task::spawn(async move {
-        let signal_docker = DockerCli::default();
-        while let Some(_signal) = signals.next().await {
-            signal_docker.stop(container_id.as_str());
-            signal_docker.rm(container_id.as_str());
-        }
-    });
-
-    let port = container.get_host_port(9092).unwrap_or(9092);
+    let port = container.get_host_port(9092);
     let mut admin_config = ClientConfig::new();
     let broker = format!("127.0.0.1:{}", port);
     let topic = "tremor_test_no_retry";
@@ -846,8 +709,6 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
     assert!(out_events.is_empty());
     assert!(err_events.is_empty());
     // cleanup
-    signal_handle.close();
-    signal_handler_task.cancel().await;
     drop(container);
     Ok(())
 }
@@ -892,53 +753,11 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
 #[serial(kafka)]
 async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     let _ = env_logger::try_init();
-    let kafka_port = free_port::find_free_tcp_port().await?;
 
     let docker = DockerCli::default();
-    let args = vec![
-        "redpanda",
-        "start",
-        "--overprovisioned",
-        "--smp",
-        "1",
-        "--memory",
-        "512M",
-        "--reserve-memory=0M",
-        "--node-id=0",
-        "--check=false",
-        "--kafka-addr=0.0.0.0:9092",
-        &format!("--advertise-kafka-addr=127.0.0.1:{kafka_port}"),
-    ]
-    .into_iter()
-    .map(ToString::to_string)
-    .collect();
-    let image = GenericImage::new(format!("{}:{}", IMAGE, VERSION))
-        .with_args(args)
-        .with_wait_for(WaitFor::LogMessage {
-            message: "Successfully started Redpanda!".to_string(),
-            stream: WaitForStream::StdErr,
-        });
-    let container = docker.run_with_args(
-        image,
-        RunArgs::default()
-            .with_mapped_port((kafka_port, 9092_u16))
-            .with_mapped_port((free_port::find_free_tcp_port().await?, 9664_u16))
-            .with_mapped_port((free_port::find_free_tcp_port().await?, 8081_u16))
-            .with_mapped_port((free_port::find_free_tcp_port().await?, 8082_u16)),
-    );
+    let container = redpanda_container(&docker).await?;
 
-    let container_id = container.id().to_string();
-    let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
-    let signal_handle = signals.handle();
-    let signal_handler_task = async_std::task::spawn(async move {
-        let signal_docker = DockerCli::default();
-        while let Some(_signal) = signals.next().await {
-            signal_docker.stop(container_id.as_str());
-            signal_docker.rm(container_id.as_str());
-        }
-    });
-
-    let port = container.get_host_port(9092).unwrap_or(9092);
+    let port = container.get_host_port(9092);
     let mut admin_config = ClientConfig::new();
 
     let broker = format!("127.0.0.1:{}", port);
@@ -1041,8 +860,6 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     assert!(err_events.is_empty());
 
     // cleanup
-    signal_handle.close();
-    signal_handler_task.cancel().await;
     drop(container);
     Ok(())
 }
