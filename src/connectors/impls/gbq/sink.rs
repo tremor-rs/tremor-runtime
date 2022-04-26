@@ -1,3 +1,17 @@
+// Copyright 2021, The Tremor Team
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use crate::connectors::impls::gbq::Config;
 use crate::connectors::prelude::*;
 use async_std::prelude::{FutureExt, StreamExt};
@@ -5,7 +19,10 @@ use futures::stream;
 use googapis::google::cloud::bigquery::storage::v1::append_rows_request::ProtoData;
 use googapis::google::cloud::bigquery::storage::v1::big_query_write_client::BigQueryWriteClient;
 use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Type as TableType;
-use googapis::google::cloud::bigquery::storage::v1::{append_rows_request, table_field_schema, write_stream, AppendRowsRequest, CreateWriteStreamRequest, ProtoRows, ProtoSchema, TableFieldSchema, WriteStream};
+use googapis::google::cloud::bigquery::storage::v1::{
+    append_rows_request, table_field_schema, write_stream, AppendRowsRequest,
+    CreateWriteStreamRequest, ProtoRows, ProtoSchema, TableFieldSchema, WriteStream,
+};
 use gouth::Token;
 use prost::encoding::WireType;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
@@ -21,7 +38,7 @@ pub(crate) struct GbqSink {
     client: Option<BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor>>>,
     write_stream: Option<WriteStream>,
     mapping: Option<JsonToProtobufMapping>,
-    config: Config
+    config: Config,
 }
 
 pub(crate) struct AuthInterceptor {
@@ -58,7 +75,7 @@ fn map_field(
     let mut nested_types = vec![];
     let mut proto_fields = vec![];
     let mut fields = HashMap::new();
-    let mut tag = 1;
+    let mut tag: u16 = 1;
 
     for raw_field in raw_fields {
         let mut type_name = None;
@@ -114,7 +131,7 @@ fn map_field(
 
         proto_fields.push(FieldDescriptorProto {
             name: Some(raw_field.name.to_string()),
-            number: Some(tag as i32),
+            number: Some(i32::from(tag)),
             label: None,
             r#type: Some(i32::from(grpc_type)),
             type_name,
@@ -130,7 +147,7 @@ fn map_field(
             raw_field.name.to_string(),
             Field {
                 table_type,
-                tag,
+                tag: u32::from(tag),
                 subfields,
             },
         );
@@ -155,15 +172,33 @@ fn map_field(
     )
 }
 
-fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) {
+fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> {
     let tag = field.tag;
 
     // fixme check which fields are required and fail if they're missing
     // fixme do not panic if the tremor type does not match
     match field.table_type {
-        TableType::Double => prost::encoding::double::encode(tag, &val.as_f64().unwrap(), result),
-        TableType::Int64 => prost::encoding::int64::encode(tag, &val.as_i64().unwrap(), result),
-        TableType::Bool => prost::encoding::bool::encode(tag, &val.as_bool().unwrap(), result),
+        TableType::Double => prost::encoding::double::encode(
+            tag,
+            &val.as_f64().ok_or_else(|| {
+                ErrorKind::BigQueryTypeMismatch("f64", format!("{:?}", val.value_type()))
+            })?,
+            result,
+        ),
+        TableType::Int64 => prost::encoding::int64::encode(
+            tag,
+            &val.as_i64().ok_or_else(|| {
+                ErrorKind::BigQueryTypeMismatch("i64", format!("{:?}", val.value_type()))
+            })?,
+            result,
+        ),
+        TableType::Bool => prost::encoding::bool::encode(
+            tag,
+            &val.as_bool().ok_or_else(|| {
+                ErrorKind::BigQueryTypeMismatch("bool", format!("{:?}", val.value_type()))
+            })?,
+            result,
+        ),
         TableType::String
         | TableType::Date
         | TableType::Time
@@ -172,33 +207,58 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) {
         | TableType::Numeric
         | TableType::Bignumeric
         | TableType::Geography => {
-            prost::encoding::string::encode(tag, &val.as_str().unwrap().to_string(), result);
+            prost::encoding::string::encode(
+                tag,
+                &val.as_str()
+                    .ok_or_else(|| {
+                        ErrorKind::BigQueryTypeMismatch("string", format!("{:?}", val.value_type()))
+                    })?
+                    .to_string(),
+                result,
+            );
         }
         TableType::Struct => {
             let mut struct_buf: Vec<u8> = vec![];
-            for (k, v) in val.as_object().unwrap() {
-                let subfield_description = field.subfields.get(&k.to_string()).unwrap();
-                encode_field(v, subfield_description, &mut struct_buf);
+            for (k, v) in val.as_object().ok_or_else(|| {
+                ErrorKind::BigQueryTypeMismatch("object", format!("{:?}", val.value_type()))
+            })? {
+                let subfield_description = field.subfields.get(&k.to_string());
+
+                if let Some(subfield_description) = subfield_description {
+                    encode_field(v, subfield_description, &mut struct_buf)?;
+                } else {
+                    warn!(
+                        "Passed field {} as struct field, not present in definition",
+                        k
+                    );
+                }
             }
             prost::encoding::encode_key(tag, WireType::LengthDelimited, result);
             prost::encoding::encode_varint(struct_buf.len() as u64, result);
             result.append(&mut struct_buf);
         }
         TableType::Bytes => {
-            prost::encoding::bytes::encode(tag, &Vec::from(val.as_bytes().unwrap()), result);
+            prost::encoding::bytes::encode(
+                tag,
+                &Vec::from(val.as_bytes().ok_or_else(|| {
+                    ErrorKind::BigQueryTypeMismatch("bytes", format!("{:?}", val.value_type()))
+                })?),
+                result,
+            );
         }
-
-        // fixme to test this we need a json field, which we don't have right now
         TableType::Json => {
-            prost::encoding::string::encode(tag, &simd_json::to_string(val).unwrap(), result);
+            warn!("Found a field of type JSON, this is not supported, ignoring.");
         }
-        // fixme this is not GA, need to test
-        TableType::Interval => {}
+        TableType::Interval => {
+            warn!("Found a field of type Interval, this is not supported, ignoring.");
+        }
 
         TableType::Unspecified => {
             warn!("Found a field of unspecified type - ignoring.");
         }
     }
+
+    Ok(())
 }
 
 impl JsonToProtobufMapping {
@@ -211,17 +271,17 @@ impl JsonToProtobufMapping {
         }
     }
 
-    pub fn map(&self, value: &Value) -> Vec<u8> {
+    pub fn map(&self, value: &Value) -> Result<Vec<u8>> {
         let mut result = vec![];
         if let Some(obj) = value.as_object() {
             for (key, val) in obj {
                 if let Some(field) = self.fields.get(&key.to_string()) {
-                    encode_field(val, field, &mut result);
+                    encode_field(val, field, &mut result)?;
                 }
             }
         }
 
-        result
+        Ok(result)
     }
 
     pub fn descriptor(&self) -> &DescriptorProto {
@@ -234,7 +294,7 @@ impl GbqSink {
             client: None,
             write_stream: None,
             mapping: None,
-            config
+            config,
         })
     }
 }
@@ -249,9 +309,24 @@ impl Sink for GbqSink {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        let client = self.client.as_mut().ok_or(ErrorKind::BigQueryClientNotAvailable("The client is not connected"))?;
-        let write_stream = self.write_stream.as_ref().ok_or(ErrorKind::BigQueryClientNotAvailable("The write stream is not available"))?;
-        let mapping = self.mapping.as_ref().ok_or(ErrorKind::BigQueryClientNotAvailable("The mapping is not available"))?;
+        let client = self
+            .client
+            .as_mut()
+            .ok_or(ErrorKind::BigQueryClientNotAvailable(
+                "The client is not connected",
+            ))?;
+        let write_stream =
+            self.write_stream
+                .as_ref()
+                .ok_or(ErrorKind::BigQueryClientNotAvailable(
+                    "The write stream is not available",
+                ))?;
+        let mapping = self
+            .mapping
+            .as_ref()
+            .ok_or(ErrorKind::BigQueryClientNotAvailable(
+                "The mapping is not available",
+            ))?;
 
         let request = AppendRowsRequest {
             write_stream: write_stream.name.clone(),
@@ -262,7 +337,7 @@ impl Sink for GbqSink {
                     proto_descriptor: Some(mapping.descriptor().clone()),
                 }),
                 rows: Some(ProtoRows {
-                    serialized_rows: vec![mapping.map(event.data.parts().0)],
+                    serialized_rows: vec![mapping.map(event.data.parts().0)?],
                 }),
             })),
         };
@@ -272,40 +347,39 @@ impl Sink for GbqSink {
             .timeout(Duration::from_secs(10))
             .await;
 
-        let append_response = match append_response {
-            Ok(rsp) => {rsp}
-            Err(_) => {
-                ctx.notifier.connection_lost().await?;
+        let append_response = if let Ok(append_response) = append_response {
+            append_response
+        } else {
+            ctx.notifier.connection_lost().await?;
 
-                return Ok(SinkReply::FAIL);
-            }
+            return Ok(SinkReply::FAIL);
         };
 
-        let mut append_response = append_response?
-            .into_inner();
+        let mut append_response = append_response?.into_inner();
 
-            match append_response.next().timeout(Duration::from_secs(10)).await {
-                Ok(x) => {
-                    match x {
-                        Some(Ok(_)) => Ok(SinkReply::ACK),
-                        Some(Err(e)) => {
-                            error!("BigQuery error: {}", e);
+        if let Ok(x) = append_response
+            .next()
+            .timeout(Duration::from_secs(10))
+            .await
+        {
+            match x {
+                Some(Ok(_)) => Ok(SinkReply::ACK),
+                Some(Err(e)) => {
+                    error!("BigQuery error: {}", e);
 
-                            Ok(SinkReply::FAIL)
-                        }
-                        None => {
-                            error!("No response from BigQuery");
-
-                            Ok(SinkReply::FAIL)
-                        }
-                    }
-                },
-                Err(_) => {
-                    ctx.notifier.connection_lost().await?;
+                    Ok(SinkReply::FAIL)
+                }
+                None => {
+                    error!("No response from BigQuery");
 
                     Ok(SinkReply::FAIL)
                 }
             }
+        } else {
+            ctx.notifier.connection_lost().await?;
+
+            Ok(SinkReply::FAIL)
+        }
     }
 
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
