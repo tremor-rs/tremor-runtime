@@ -1,0 +1,29 @@
+define flow test
+args
+  ival,
+flow
+  define connector metronome from metronome
+  args
+    ival
+  with
+    config = {
+      "interval": args.ival
+    }
+  end;
+  define connector exit from exit;
+  define pipeline identity
+  pipeline
+    select event from in into out;
+  end;
+  create connector metronome with ival = args.ival end;
+  create connector exit;
+  create pipeline identity;
+  
+  connect /connector/metronome to /pipeline/identity;
+  connect /pipeline/identity to /connector/exit;
+end;
+
+deploy flow test
+with
+  ival = 1,
+end;

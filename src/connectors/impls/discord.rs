@@ -17,13 +17,13 @@
 mod handler;
 mod utils;
 
-use crate::connectors::{prelude::*, spawn_task};
+use crate::connectors::{prelude::*, spawn_task, Context};
 use async_std::{
     channel::{bounded, Receiver, Sender},
     task::JoinHandle,
 };
 use handler::Handler;
-use serenity::{client::bridge::gateway::GatewayIntents, Client};
+use serenity::prelude::*;
 use std::sync::atomic::AtomicBool;
 use utils::Intents;
 
@@ -121,24 +121,21 @@ impl Connector for Discord {
             client_task.cancel().await;
         }
         let token = self.config.token.clone();
-        let client = Client::builder(&token).event_handler(Handler {
+
+        let intents = self
+            .config
+            .intents
+            .iter()
+            .copied()
+            .map(Intents::into)
+            .fold(GatewayIntents::default(), |a, b| a | b);
+
+        let client = Client::builder(&token, intents).event_handler(Handler {
             tx: self.message_channel.0.clone(),
             rx: self.reply_channel.1.clone(),
             is_loop_running: AtomicBool::from(false),
         });
 
-        let client = if self.config.intents.is_empty() {
-            client
-        } else {
-            let intents = self
-                .config
-                .intents
-                .iter()
-                .copied()
-                .map(Intents::into)
-                .fold(GatewayIntents::default(), |a, b| a | b);
-            client.intents(intents)
-        };
         let mut client = client
             .await
             .map_err(|e| Error::from(format!("Err discord creating client: {}", e)))?;
