@@ -192,7 +192,7 @@ sled = "0.34"
 
 # opentelemetry
 port_scanner = "0.1.5"
-tonic = { version = "0.6.1", default-features = false, features = [
+tonic = { version = "0.7.1", default-features = false, features = [
   "transport",
   "tls",
 ] }
