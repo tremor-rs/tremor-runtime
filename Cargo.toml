@@ -199,10 +199,10 @@ tonic = { version = "0.6.1", default-features = false, features = [
 tremor-otelapis = { version = "0.2.4" }
 
 # aws-s3
-aws-sdk-s3 = "0.9.0"
-aws-types = "0.9.0"
-aws-config = "0.9.0"
-aws-smithy-http = "0.39"
+aws-sdk-s3 = "0.10"
+aws-types = "0.10"
+aws-config = "0.10"
+aws-smithy-http = "0.40"
 
 # gcp
 googapis = { version = "0.6", default-features = false, features = [
