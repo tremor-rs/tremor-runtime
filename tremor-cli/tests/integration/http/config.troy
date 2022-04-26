@@ -6,7 +6,7 @@ flow
 
   define connector http_server from http_server
   with
-    codec = "json-sorted",
+    codec = "json",
     config = {
       "url": "http://localhost:65535/",
     }
@@ -22,6 +22,8 @@ flow
     select { "event": array::sort(aggr::win::collect_flattened(event)), "meta": array::sort(aggr::win::collect_flattened($)) } from in[four] into out;
   end;
 
+  
+
   create pipeline instrument;
   create connector stdio from connectors::console;
   create connector http_server from http_server;
@@ -31,6 +33,7 @@ flow
   # Echo http server: <http:req> -> server -> server_side -> <http:resp>
   connect /connector/http_server to /pipeline/echo;
   connect /pipeline/echo to /connector/http_server;
+  connect /pipeline/echo to /connector/stdio;
 
   connect /connector/http_server to /pipeline/instrument;
   connect /pipeline/instrument to /connector/stdio;
@@ -44,10 +47,9 @@ flow
 
   define connector http_client from http_client
   with
-    codec = "json-sorted",
+    codec = "json",
     config = {
       "url": "http://localhost:65535/",
-      "method": "post",
     },
     reconnect = {
       "retry": {

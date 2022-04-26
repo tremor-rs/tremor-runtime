@@ -1265,7 +1265,9 @@ where
             let ctrl = match r {
                 Either::Left(msg) => self.handle_control_plane_msg(msg).await,
                 Either::Right(data) => {
-                    self.handle_source_reply(data, pull_id).await?;
+                    if let Err(e) = self.handle_source_reply(data, pull_id).await {
+                        error!("{} Error handling source reply: {}", self.ctx, e);
+                    }
                     self.pull_counter += 1;
                     Control::Continue
                 }

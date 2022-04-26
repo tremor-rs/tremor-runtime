@@ -890,10 +890,10 @@ pub(crate) struct ContraflowData {
 }
 
 impl ContraflowData {
-    fn into_ack(self, duration: u64) -> Event {
+    pub(crate) fn into_ack(self, duration: u64) -> Event {
         Event::cb_ack_with_timing(self.ingest_ns, self.event_id, self.op_meta, duration)
     }
-    fn into_fail(self) -> Event {
+    pub(crate) fn into_fail(self) -> Event {
         Event::cb_fail(self.ingest_ns, self.event_id, self.op_meta)
     }
     fn cb(&self, cb: CbAction) -> Event {

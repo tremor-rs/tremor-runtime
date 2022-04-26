@@ -33,7 +33,7 @@ impl RequestId {
     pub(crate) fn new(id: u64) -> Self {
         Self(id)
     }
-    pub(crate) fn get(&self) -> u64 {
+    pub(crate) fn get(self) -> u64 {
         self.0
     }
 }

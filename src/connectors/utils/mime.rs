@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Result;
-use bimap::BiMap;
 use halfbrown::HashMap;
-use serde::{Deserialize, Serialize};
 
 const MIME_TYPES: [(&str, &str); 9] = [
     ("application/json", "json"),
@@ -30,37 +27,42 @@ const MIME_TYPES: [(&str, &str); 9] = [
 ];
 
 /// Map from mime-type / content-type to codec name
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) struct MimeCodecMap {
-    map: BiMap<String, String>,
-}
+#[derive(Debug, Clone)]
+pub(crate) struct MimeCodecMap(HashMap<String, String>);
 
 impl MimeCodecMap {
     fn new() -> Self {
-        Self {
-            map: MIME_TYPES
+        Self(
+            MIME_TYPES
                 .into_iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect::<BiMap<_, _>>(),
-        }
+                .collect::<HashMap<String, String>>(),
+        )
     }
 
-    pub fn with_overwrites(custom_codecs: &HashMap<String, String>) -> Result<Self> {
+    pub fn with_overwrites(custom_codecs: &HashMap<String, String>) -> Self {
         let mut base = Self::new();
         for (mime, codec_name) in custom_codecs {
-            base.map.insert(mime.clone(), codec_name.clone());
+            base.0.insert(mime.clone(), codec_name.clone());
         }
-        Ok(base)
+        base
     }
 
     /// get codec name from given Content-Type essence (e.g. "application/json")
     pub fn get_codec_name(&self, content_type: &str) -> Option<&String> {
-        self.map.get_by_left(content_type)
+        self.0.get(content_type)
     }
 
     /// get mime type from given codec name
+    ///
+    /// More expensive lookup than getting the codec name by mime type
     pub fn get_mime_type(&self, codec_name: &str) -> Option<&String> {
-        self.map.get_by_right(codec_name)
+        for (k, v) in self.0.iter() {
+            if v.as_str().eq(codec_name) {
+                return Some(k);
+            }
+        }
+        None
     }
 }
 
@@ -73,34 +75,12 @@ impl Default for MimeCodecMap {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tremor_script::literal;
-    use tremor_value::structurize;
-
+    use crate::errors::Result;
     #[test]
-    fn codec_map_serde() -> Result<()> {
-        let empty = literal!({});
-        let mime_codec_map: MimeCodecMap = structurize(empty)?;
-        assert_eq!(0, mime_codec_map.map.len());
-
-        let absent = literal!(null);
-        let mime_codec_map: std::result::Result<MimeCodecMap, _> = structurize(absent);
-        assert!(mime_codec_map.is_err());
-
-        let bad_codec_name = literal!({
-            "application/json": "snot",
-        });
-        let mime_codec_map: std::result::Result<MimeCodecMap, _> = structurize(bad_codec_name);
-        assert!(mime_codec_map.is_err());
-
-        let valid = literal!({
-            "application/json": "json",
-        });
-        let mime_codec_map: MimeCodecMap = structurize(valid)?;
-        let codec = mime_codec_map.get_codec_name("application/json");
-        assert_eq!("json", codec.unwrap());
-
-        // TODO consider errors/warnings for unknown mime string codes
-
+    fn get_mime_type() -> Result<()> {
+        let map = MimeCodecMap::new();
+        let csv = Some(String::from("text/csv"));
+        assert_eq!(csv.as_ref(), map.get_mime_type("csv"));
         Ok(())
     }
 }

@@ -20,15 +20,21 @@ use crate::{
     },
     errors::Result,
 };
-use async_std::task::{spawn, JoinHandle};
-use http_types::Method;
+use async_std::{
+    io::Cursor,
+    task::{spawn, JoinHandle},
+};
+use http_types::{
+    headers::{HeaderValues, CONTENT_TYPE, TRANSFER_ENCODING},
+    Body,
+};
 use rustls::NoClientAuth;
 use tide;
 use tide_rustls::TlsListener;
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_script::{literal, Value, ValueAndMeta};
-use value_trait::ValueAccess;
+use value_trait::{Mutable, ValueAccess};
 
 /// Find free TCP host:port for use in test server endpoints
 pub(crate) async fn find_free_tcp_endpoint_str() -> String {
@@ -40,35 +46,29 @@ struct TestHttpServer {
     acceptor: Option<JoinHandle<Result<()>>>,
 }
 
-async fn fake_server_dispatch(req: tide::Request<()>) -> tide::Result<tide::Response> {
+async fn fake_server_dispatch(mut req: tide::Request<()>) -> tide::Result<tide::Response> {
     use tide::StatusCode;
-    match &req.method() {
-        Method::Get => {
-            let mut res = tide::Response::new(StatusCode::Ok);
-            res.set_body("get".to_string());
-            Ok(res)
+    let mut res = tide::Response::new(StatusCode::Ok);
+    dbg!(&req);
+    let chunked = req
+        .header(TRANSFER_ENCODING)
+        .map(HeaderValues::last)
+        .filter(|hv| hv.as_str() == "chunked")
+        .is_some();
+
+    let body = req.body_bytes().await?;
+
+    if chunked {
+        res.set_content_type(http_types::mime::PLAIN);
+        res.set_body(Body::from_reader(Cursor::new(body), None));
+    } else {
+        if let Some(ct) = req.content_type() {
+            res.set_content_type(ct);
         }
-        Method::Post => {
-            let mut res = tide::Response::new(StatusCode::Ok);
-            res.set_body("post".to_string());
-            Ok(res)
-        }
-        Method::Put => {
-            let mut res = tide::Response::new(StatusCode::Ok);
-            res.set_body("put".to_string());
-            Ok(res)
-        }
-        Method::Patch => {
-            let mut res = tide::Response::new(StatusCode::Ok);
-            res.set_body("patch".to_string());
-            Ok(res)
-        }
-        _otherwise => {
-            let mut res = tide::Response::new(StatusCode::BadRequest);
-            res.set_body("ko".to_string());
-            Ok(res)
-        }
+        res.set_body(body);
     }
+
+    Ok(res)
 }
 
 impl TestHttpServer {
@@ -119,20 +119,27 @@ impl TestHttpServer {
 
 // Convenience template for a round trip HTTP request/response interaction
 async fn rtt(
-    scheme: &str,
-    target: &str,
-    codec: &str,
+    scheme: &'static str,
+    target: String,
+    codec: &'static str,
     meta: Value<'static>,
+    data: Value<'static>,
+    auth: Option<Value<'static>>,
+    is_batch: bool,
 ) -> Result<ValueAndMeta<'static>> {
     let _ = env_logger::try_init();
     let url = format!("{}://{}", scheme, target);
+    let mut config = literal!({
+        "url": url.clone(),
+        "method": "get",
+    });
+    if let Some(auth) = auth {
+        config.try_insert("auth", auth.clone_static());
+    }
     let defn = literal!({
       "id": "my_http_client",
       "type": "http_client",
-      "config": {
-        "url": url.clone(),
-        "method": "get",
-      },
+      "config": config,
       "codec": codec.to_string(),
     });
 
@@ -145,12 +152,18 @@ async fn rtt(
 
     harness.start().await?;
     harness.wait_for_connected().await?;
+    harness.consume_initial_sink_contraflow().await?;
 
-    let meta = literal!({ "request": meta });
-    let data = literal!(null);
+    let meta = literal!({
+        "http_client": {
+            "request": meta
+        },
+        "correlation": "snot"
+    });
     let echo_back = Event {
         id: EventId::default(),
         data: (data, meta).into(),
+        is_batch,
         ..Event::default()
     };
     harness.send_to_sink(echo_back, IN).await?;
@@ -160,15 +173,15 @@ async fn rtt(
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
     let (value, meta) = event.data.parts();
-    Ok(ValueAndMeta::from_parts(
-        value.clone_static(),
-        meta.clone_static(),
-    ))
+    let vm: ValueAndMeta<'static> =
+        ValueAndMeta::from_parts(value.clone_static(), meta.clone_static());
+    Ok(vm)
 }
 
 macro_rules! assert_with_request_meta {
     ($res: expr, $meta: ident, $ctx: block) => {
-        let rqm = $res.meta().get("request");
+        let rqm = $res.meta().get("http_client");
+        let rqm = rqm.get("request");
         if let Some($meta) = rqm {
             $ctx
         } else {
@@ -179,7 +192,8 @@ macro_rules! assert_with_request_meta {
 
 macro_rules! assert_with_response_headers {
     ($res: expr, $meta: ident, $ctx: block) => {
-        let rqm = $res.meta().get("response");
+        let rqm = $res.meta().get("http_client");
+        let rqm = rqm.get("response");
         if let Some($meta) = rqm {
             let rqm = $meta.get("headers");
             if let Some($meta) = rqm {
@@ -198,7 +212,8 @@ macro_rules! assert_with_response_headers {
 
 macro_rules! assert_with_request_headers {
     ($res: expr, $meta: ident, $ctx: block) => {
-        let rqm = $res.meta().get("request");
+        let rqm = $res.meta().get("http_client");
+        let rqm = rqm.get("request");
         if let Some($meta) = rqm {
             let rqm = $meta.get("headers");
             if let Some($meta) = rqm {
@@ -218,16 +233,38 @@ macro_rules! assert_with_request_headers {
 #[async_std::test]
 async fn http_client_request_with_defaults() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
-    let res = rtt("http", &target, "string", literal!({})).await?;
-    assert_eq!("get", res.value().to_string());
+    let res = rtt(
+        "http",
+        target.clone(),
+        "string",
+        literal!({}),
+        literal!(null),
+        None,
+        false,
+    )
+    .await?;
+    assert_eq!(&Value::from("null"), res.value());
     Ok(())
 }
 
 #[async_std::test]
 async fn http_client_request_override_method() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
-    let res = rtt("http", &target, "string", literal!({ "method": "post" })).await?;
-    assert_eq!("post", res.value().to_string());
+    let res = rtt(
+        "http",
+        target.clone(),
+        "string",
+        literal!({ "method": "get" }),
+        Value::from(""),
+        None,
+        false,
+    )
+    .await?;
+    // empty response body
+    assert_eq!(&Value::from(""), res.value());
+    assert_with_request_meta!(res, meta, {
+        assert_eq!(Some("GET"), meta.get_str("method"));
+    });
     Ok(())
 }
 
@@ -236,9 +273,12 @@ async fn http_client_request_override_endpoint() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
     let res = rtt(
         "http",
-        &target,
+        target.clone(),
         "string",
         literal!({ "method": "put", "url": format!("http://{}/snot/badger?flork=mork", target) }),
+        literal!(null),
+        None,
+        false,
     )
     .await?;
 
@@ -248,23 +288,41 @@ async fn http_client_request_override_endpoint() -> Result<()> {
         assert_eq!(Some("PUT"), meta.get_str("method"));
     });
 
-    assert_eq!("put", res.value().to_string());
+    assert_eq!(&Value::from("null"), res.value());
     Ok(())
 }
 
 #[async_std::test]
 async fn http_client_request_override_codec() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
-    let res = rtt("http", &target, "json", literal!({ "method": "patch"})).await?;
+    let res = rtt(
+        "http",
+        target.clone(),
+        "json",
+        literal!({
+            "method": "patch",
+            "headers": {
+                "content-type": "application/yaml"
+            }
+        }),
+        literal!({ "snot": "badger" }),
+        None,
+        false,
+    )
+    .await?;
 
     let base_url: &str = &format!("http://{}/", target);
     assert_with_request_meta!(res, meta, {
         assert_eq!(Some(base_url), meta.get_str("url"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));
-        assert_eq!(Some("json"), meta.get_str("codec"));
     });
 
-    assert_eq!(literal!({"status": 415}), res.value());
+    assert_eq!(
+        literal!({
+            "snot": "badger"
+        }),
+        res.value()
+    );
     Ok(())
 }
 
@@ -273,9 +331,12 @@ async fn http_client_request_override_headers() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
     let res = rtt(
         "http",
-        &target,
+        target.clone(),
         "string",
         literal!({ "method": "patch", "headers": { "x-snot": [ "badger", "badger", "badger"] }}),
+        literal!(42),
+        None,
+        false,
     )
     .await?;
 
@@ -283,9 +344,8 @@ async fn http_client_request_override_headers() -> Result<()> {
     assert_with_request_meta!(res, meta, {
         assert_eq!(Some(base_url), meta.get_str("url"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));
-        assert_eq!(Some("string"), meta.get_str("codec"));
-        assert_eq!(None, meta.get_str("correlation"));
     });
+    assert_eq!(Some(&Value::from("snot")), res.meta().get("correlation"));
 
     assert_with_request_headers!(res, meta, {
         assert_eq!(
@@ -295,10 +355,10 @@ async fn http_client_request_override_headers() -> Result<()> {
     });
 
     assert_with_response_headers!(res, meta, {
-        assert_eq!(Some(&literal!(["5"])), meta.get("content-length"));
+        assert_eq!(Some(&literal!(["2"])), meta.get("content-length"));
     });
 
-    assert_eq!("patch", res.value().to_string());
+    assert_eq!(Value::from("42"), res.value());
     Ok(())
 }
 
@@ -307,9 +367,12 @@ async fn http_client_request_override_content_type() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
     let res = rtt(
         "http",
-        &target,
+        target.clone(),
         "string",
         literal!({ "method": "patch", "headers": { "content-type": [ "application/json"] }}),
+        literal!([{"snot": "badger"}, 42.0]),
+        None,
+        false,
     )
     .await?;
 
@@ -317,33 +380,32 @@ async fn http_client_request_override_content_type() -> Result<()> {
     assert_with_request_meta!(res, meta, {
         assert_eq!(Some(base_url), meta.get_str("url"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));
-        assert_eq!(Some("string"), meta.get_str("codec"));
-        assert_eq!(None, meta.get_str("correlation"));
     });
+
+    assert_eq!(Some(&Value::from("snot")), res.meta().get("correlation"));
 
     assert_with_request_headers!(res, meta, {
         assert_eq!(
-            Some(&literal!(["application/json"])), // NOTE - connector does not respect this and uses codec instead - see below for alternate
+            Some(&literal!(["application/json"])),
             meta.get("content-type")
         );
     });
 
     assert_with_response_headers!(res, meta, {
-        assert_eq!(Some(&literal!(["5"])), meta.get("content-length"));
+        assert_eq!(Some(&literal!(["24"])), meta.get("content-length"));
         assert_eq!(
-            // NOTE: Arguably - content-type/codec should be driven by content-type in
-            // the request if a header is provided, and fallback to a content-type
-            // header in defaults, and then and only then fallback to codecs
-            // for inferring the mime type
-            //
-            // Our legacy http connectors did not respect this or specify
-            // a graceful degradation semantic, unfortunately
-            Some(&literal!(["text/plain;charset=utf-8"])),
+            Some(&literal!(["application/json"])),
             meta.get("content-type")
         );
     });
 
-    assert_eq!("patch", res.value().to_string());
+    assert_eq!(
+        literal!([
+            {"snot": "badger"},
+            42.0
+        ]),
+        res.value()
+    );
     Ok(())
 }
 
@@ -352,9 +414,12 @@ async fn http_client_request_auth_none() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
     let res = rtt(
         "http",
-        &target,
+        target.clone(),
         "string",
-        literal!({ "method": "patch", "headers": { "content-type": [ "application/json"], "auth": "none" }}),
+        literal!({ "method": "patch", "headers": { "Content-Type": ["application/json"]}}),
+        literal!({"snot": "badger"}),
+        Some(literal!("none")),
+        false,
     )
     .await?;
 
@@ -362,33 +427,32 @@ async fn http_client_request_auth_none() -> Result<()> {
     assert_with_request_meta!(res, meta, {
         assert_eq!(Some(base_url), meta.get_str("url"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));
-        assert_eq!(Some("string"), meta.get_str("codec"));
-        assert_eq!(None, meta.get_str("correlation"));
     });
+
+    assert_eq!(Some(&Value::from("snot")), res.meta().get("correlation"));
 
     assert_with_request_headers!(res, meta, {
         assert_eq!(
             Some(&literal!(["application/json"])), // NOTE - connector does not respect this and uses codec instead - see below for alternate
-            meta.get("content-type")
+            meta.get(CONTENT_TYPE.as_str())
         );
     });
 
     assert_with_response_headers!(res, meta, {
-        assert_eq!(Some(&literal!(["5"])), meta.get("content-length"));
+        assert_eq!(Some(&literal!(["17"])), meta.get("content-length"));
+        // the server mirrors the request content-type
         assert_eq!(
-            // NOTE: Arguably - content-type/codec should be driven by content-type in
-            // the request if a header is provided, and fallback to a content-type
-            // header in defaults, and then and only then fallback to codecs
-            // for inferring the mime type
-            //
-            // Our legacy http connectors did not respect this or specify
-            // a graceful degradation semantic, unfortunately
-            Some(&literal!(["text/plain;charset=utf-8"])),
-            meta.get("content-type")
+            Some(&literal!(["application/json"])),
+            meta.get(CONTENT_TYPE.as_str())
         );
     });
 
-    assert_eq!("patch", res.value().to_string());
+    assert_eq!(
+        literal!({
+            "snot": "badger"
+        }),
+        res.value()
+    );
     Ok(())
 }
 
@@ -397,16 +461,24 @@ async fn http_client_request_auth_basic() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
     let res = rtt(
         "http",
-        &target,
+        target.clone(),
         "string",
         literal!({
-            "method": "patch",
+            "method": "PATCh",
             "headers": {
-                "content-type": [ "application/json"]
-            },
-            "auth": {
-                "basic": {
-                    "username": "snot", "password": "badger" }}}),
+                "content-TYPE": [ "application/json"]
+            }
+        }),
+        literal!({
+            "snot": "badger"
+        }),
+        Some(literal!({
+            "basic": {
+                "username": "snot",
+                "password": "badger"
+            }
+        })),
+        false,
     )
     .await?;
 
@@ -414,13 +486,12 @@ async fn http_client_request_auth_basic() -> Result<()> {
     assert_with_request_meta!(res, meta, {
         assert_eq!(Some(base_url), meta.get_str("url"));
         assert_eq!(Some("PATCH"), meta.get_str("method"));
-        assert_eq!(Some("string"), meta.get_str("codec"));
-        assert_eq!(None, meta.get_str("correlation"));
     });
+    assert_eq!(Some(&Value::from("snot")), res.meta().get("correlation"));
 
     assert_with_request_headers!(res, meta, {
         assert_eq!(
-            Some(&literal!(["application/json"])), // NOTE - connector does not respect this and uses codec instead - see below for alternate
+            Some(&literal!(["application/json"])),
             meta.get("content-type")
         );
         assert_eq!(
@@ -430,20 +501,86 @@ async fn http_client_request_auth_basic() -> Result<()> {
     });
 
     assert_with_response_headers!(res, meta, {
-        assert_eq!(Some(&literal!(["5"])), meta.get("content-length"));
+        assert_eq!(Some(&literal!(["17"])), meta.get("content-length"));
         assert_eq!(
-            // NOTE: Arguably - content-type/codec should be driven by content-type in
-            // the request if a header is provided, and fallback to a content-type
-            // header in defaults, and then and only then fallback to codecs
-            // for inferring the mime type
-            //
-            // Our legacy http connectors did not respect this or specify
-            // a graceful degradation semantic, unfortunately
-            Some(&literal!(["text/plain;charset=utf-8"])),
+            Some(&literal!(["application/json"])),
             meta.get("content-type")
         );
     });
 
-    assert_eq!("patch", res.value().to_string());
+    assert_eq!(literal!({"snot": "badger"}), res.value());
+    Ok(())
+}
+
+#[async_std::test]
+async fn chunked() -> Result<()> {
+    let target = find_free_tcp_endpoint_str().await;
+    let res = rtt(
+        "http",
+        target.clone(),
+        "string",
+        literal!({}),
+        literal!([
+            {
+                "data": {
+                    "value": "chunk01 ",
+                    "meta": {
+                        "http_client": {
+                            "request": {
+                                "method": "PATCh",
+                                "headers": {
+                                    "content-TYPE": [ "application/json"],
+                                    "transfer-Encoding": "chunked"
+                                }
+                            }
+                        },
+                        "correlation": "badger"
+                    }
+                },
+            },
+            {
+                "data": {
+                    "value": "chunk02 ",
+                    "meta": {
+                        "http_client": {
+                            "request": {
+                                "method": "ignored",
+                                "headers": {
+                                    "ignored": "true"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        ]),
+        None,
+        true,
+    )
+    .await?;
+    assert_with_request_headers!(res, meta, {
+        assert_eq!(
+            Some(&literal!(["chunked"])),
+            meta.get(TRANSFER_ENCODING.as_str())
+        );
+        assert_eq!(
+            Some(&literal!(["application/json"])),
+            meta.get("content-type")
+        );
+    });
+    // the fake server is setup to answer chunked requests with chunked responses
+    assert_with_response_headers!(res, meta, {
+        assert_eq!(
+            Some(&literal!(["chunked"])),
+            meta.get(TRANSFER_ENCODING.as_str())
+        );
+        assert_eq!(
+            // the fake server sends text/plain
+            Some(&literal!(["text/plain;charset=utf-8"])),
+            meta.get("content-type")
+        );
+    });
+    // the quotes are artifacts from request json encoding
+    assert_eq!(&Value::from("\"chunk01 \"\"chunk02 \""), res.value());
     Ok(())
 }
