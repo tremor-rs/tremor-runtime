@@ -15,20 +15,18 @@ mod reader;
 mod writer;
 
 use crate::errors::{Error, Result};
-use async_std::stream::StreamExt;
-use async_std::task::JoinHandle;
 use aws_sdk_s3::{Client, Config, Credentials, Endpoint, Region};
 use rand::{distributions::Alphanumeric, Rng};
-use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
-use signal_hook_async_std::{Handle, Signals};
 use std::{
     collections::HashMap,
     time::{Duration, Instant},
 };
-use testcontainers::Docker;
-use testcontainers::{clients, images::generic::GenericImage, Container, RunArgs};
+use testcontainers::{clients::Cli, images::generic::GenericImage, Container, RunnableImage};
 
 use super::free_port::find_free_tcp_port;
+const IMAGE: &str = "adobe/s3mock";
+const TAG: &str = "2.4.9";
+
 /// Keeps track of process env manipulations and restores previous values upon drop
 pub(crate) struct EnvHelper {
     restore: HashMap<String, String>,
@@ -66,38 +64,6 @@ impl Drop for EnvHelper {
     }
 }
 
-pub(crate) struct SignalHandler {
-    signal_handle: Handle,
-    handle_task: Option<JoinHandle<()>>,
-}
-
-impl SignalHandler {
-    pub(crate) fn new(container_id: String) -> Result<Self> {
-        let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
-        let signal_handle = signals.handle();
-        let handle_task = async_std::task::spawn(async move {
-            let signal_docker = clients::Cli::default();
-            while let Some(signal) = signals.next().await {
-                signal_docker.stop(container_id.as_str());
-                signal_docker.rm(container_id.as_str());
-                let _ = signal_hook::low_level::emulate_default_handler(signal);
-            }
-        });
-        Ok(Self {
-            signal_handle,
-            handle_task: Some(handle_task),
-        })
-    }
-}
-impl Drop for SignalHandler {
-    fn drop(&mut self) {
-        self.signal_handle.close();
-        if let Some(s) = self.handle_task.take() {
-            async_std::task::block_on(s.cancel());
-        }
-    }
-}
-
 async fn wait_for_s3mock(port: u16) -> Result<()> {
     let s3_client: Client = get_client(port);
 
@@ -114,19 +80,16 @@ async fn wait_for_s3mock(port: u16) -> Result<()> {
     Ok(())
 }
 
-async fn spawn_docker<'d, D: Docker>(
-    docker: &'d D,
+async fn spawn_docker<'d>(
+    docker: &'d Cli,
     image: GenericImage,
-) -> (Container<'d, D, GenericImage>, u16, u16) {
+) -> (Container<'d, GenericImage>, u16, u16) {
     let http_port = find_free_tcp_port().await.unwrap_or(10080);
     let https_port = find_free_tcp_port().await.unwrap_or(10443);
-    let container = docker.run_with_args(
-        image,
-        RunArgs::default()
-            .with_mapped_port((http_port, 9090_u16))
-            .with_mapped_port((https_port, 9191_u16)),
-    );
-
+    let image = RunnableImage::from(image)
+        .with_mapped_port((http_port, 9090_u16))
+        .with_mapped_port((https_port, 9191_u16));
+    let container = docker.run(image);
     (container, http_port, https_port)
 }
 
