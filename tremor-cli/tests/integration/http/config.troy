@@ -6,7 +6,7 @@ flow
 
   define connector http_server from http_server
   with
-    codec = "json",
+    codec = "json-sorted",
     config = {
       "url": "http://localhost:65535/",
     }
@@ -47,7 +47,7 @@ flow
 
   define connector http_client from http_client
   with
-    codec = "json",
+    codec = "json-sorted",
     config = {
       "url": "http://localhost:65535/",
     },

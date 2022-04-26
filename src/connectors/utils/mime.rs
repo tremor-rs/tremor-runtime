@@ -26,43 +26,60 @@ const MIME_TYPES: [(&str, &str); 9] = [
     ("application/octet-stream", "binary"),
 ];
 
+/// additional mapping from codec to mime-types
+const CODEC_TO_MIME_TYPES: [(&str, &str); 11] = [
+    ("json-sorted", "application/json"),
+    ("json", "application/json"),
+    ("csv", "text/csv"),
+    ("string", "text/plain"),
+    ("msgpack", "application/msgpack"),
+    ("yaml", "application/yaml"),
+    ("binary", "application/octet-stream"),
+    ("syslog", "text/plain"),
+    ("influx", "text/plain"),
+    ("binflux", "application/octet-stream"),
+    ("statsd", "text/plain"),
+];
+
 /// Map from mime-type / content-type to codec name
 #[derive(Debug, Clone)]
-pub(crate) struct MimeCodecMap(HashMap<String, String>);
+pub(crate) struct MimeCodecMap {
+    by_mime: HashMap<String, String>,
+    by_codec: HashMap<String, String>,
+}
 
 impl MimeCodecMap {
     fn new() -> Self {
-        Self(
-            MIME_TYPES
-                .into_iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect::<HashMap<String, String>>(),
-        )
+        let by_mime = MIME_TYPES
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect::<HashMap<String, String>>();
+        let by_codec = CODEC_TO_MIME_TYPES
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect::<HashMap<String, String>>();
+        Self { by_mime, by_codec }
     }
 
+    /// constructs this map while overriding the mapping from mime-type to codec by `custom_codecs`
     pub fn with_overwrites(custom_codecs: &HashMap<String, String>) -> Self {
         let mut base = Self::new();
         for (mime, codec_name) in custom_codecs {
-            base.0.insert(mime.clone(), codec_name.clone());
+            base.by_mime.insert(mime.clone(), codec_name.clone());
         }
         base
     }
 
     /// get codec name from given Content-Type essence (e.g. "application/json")
     pub fn get_codec_name(&self, content_type: &str) -> Option<&String> {
-        self.0.get(content_type)
+        self.by_mime.get(content_type)
     }
 
     /// get mime type from given codec name
     ///
     /// More expensive lookup than getting the codec name by mime type
     pub fn get_mime_type(&self, codec_name: &str) -> Option<&String> {
-        for (k, v) in self.0.iter() {
-            if v.as_str().eq(codec_name) {
-                return Some(k);
-            }
-        }
-        None
+        self.by_codec.get(codec_name)
     }
 }
 
