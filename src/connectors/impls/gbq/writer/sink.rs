@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::impls::gbq::Config;
+use crate::connectors::impls::gbq::writer::Config;
 use crate::connectors::prelude::*;
 use async_std::prelude::{FutureExt, StreamExt};
 use futures::stream;
@@ -390,7 +390,7 @@ impl Sink for GbqSink {
 
         let tls_config = ClientTlsConfig::new()
             .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
-            .domain_name("pubsub.googleapis.com");
+            .domain_name("bigquerystorage.googleapis.com");
 
         let channel = Channel::from_static("https://bigquerystorage.googleapis.com")
             .timeout(Duration::from_secs(10))
