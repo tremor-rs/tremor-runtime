@@ -322,5 +322,9 @@ error_chain! {
             description("BigQuery client not available")
                 display("BigQuery client not available: {}", msg)
         }
+        BigQueryTypeMismatch(expected: &'static str, actual:String) {
+            description("Type in the message does not match BigQuery type")
+                display("Type in the message does not match BigQuery type. Expected: {}, actual: {}", expected, actual)
+        }
     }
 }
