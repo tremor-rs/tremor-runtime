@@ -15,9 +15,7 @@
 use std::io::Read;
 
 use super::super::{ConnectorHarness, TestPipeline};
-use super::{
-    get_client, random_bucket_name, spawn_docker, wait_for_s3mock, EnvHelper, SignalHandler,
-};
+use super::{get_client, random_bucket_name, spawn_docker, wait_for_s3mock, EnvHelper, IMAGE, TAG};
 use crate::errors::Result;
 use aws_sdk_s3::Client;
 use bytes::Buf;
@@ -58,11 +56,8 @@ async fn connector_s3_no_credentials() -> Result<()> {
     let bucket_name = random_bucket_name("no-credentials");
 
     let docker = clients::Cli::default();
-    let image = GenericImage::new("adobe/s3mock").with_env_var("initialBuckets", &bucket_name);
-    let (container, http_port, _https_port) = spawn_docker(&docker, image).await;
-
-    // signal handling - stop and rm the container, even if we quit the test in the middle of everything
-    let _signal_handler = SignalHandler::new(container.id().to_string())?;
+    let image = GenericImage::new(IMAGE, TAG).with_env_var("initialBuckets", &bucket_name);
+    let (_container, http_port, _https_port) = spawn_docker(&docker, image).await;
 
     wait_for_s3mock(http_port).await?;
 
@@ -92,11 +87,8 @@ async fn connector_s3_no_region() -> Result<()> {
     let bucket_name = random_bucket_name("no-region");
 
     let docker = clients::Cli::default();
-    let image = GenericImage::new("adobe/s3mock").with_env_var("initialBuckets", &bucket_name);
-    let (container, http_port, _https_port) = spawn_docker(&docker, image).await;
-
-    // signal handling - stop and rm the container, even if we quit the test in the middle of everything
-    let _signal_handler = SignalHandler::new(container.id().to_string())?;
+    let image = GenericImage::new(IMAGE, TAG).with_env_var("initialBuckets", &bucket_name);
+    let (_container, http_port, _https_port) = spawn_docker(&docker, image).await;
 
     wait_for_s3mock(http_port).await?;
 
@@ -128,11 +120,8 @@ async fn connector_s3_no_bucket() -> Result<()> {
     let bucket_name = random_bucket_name("no-bucket");
 
     let docker = clients::Cli::default();
-    let image = GenericImage::new("adobe/s3mock");
-    let (container, http_port, _https_port) = spawn_docker(&docker, image).await;
-
-    // signal handling - stop and rm the container, even if we quit the test in the middle of everything
-    let _signal_handler = SignalHandler::new(container.id().to_string())?;
+    let image = GenericImage::new(IMAGE, TAG);
+    let (_container, http_port, _https_port) = spawn_docker(&docker, image).await;
 
     wait_for_s3mock(http_port).await?;
 
@@ -163,11 +152,8 @@ async fn connector_s3() -> Result<()> {
 
     // Run the mock s3 locally
     let docker = clients::Cli::default();
-    let image = GenericImage::new("adobe/s3mock").with_env_var("initialBuckets", &bucket_name);
-    let (container, http_port, _https_port) = spawn_docker(&docker, image).await;
-
-    // signal handling - stop and rm the container, even if we quit the test in the middle of everything
-    let _signal_handler = SignalHandler::new(container.id().to_string())?;
+    let image = GenericImage::new(IMAGE, TAG).with_env_var("initialBuckets", &bucket_name);
+    let (_container, http_port, _https_port) = spawn_docker(&docker, image).await;
 
     wait_for_s3mock(http_port).await?;
 
