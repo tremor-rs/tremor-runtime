@@ -118,7 +118,7 @@ impl HttpServer {
     const DEFAULT_CODEC: &'static str = "json";
     /// we need to avoid 0 as a request id
     ///
-    /// As we misuse the request_id as the stream_id and if we use 0, we get `DEFAULT_STREAM_ID`
+    /// As we misuse the `request_id` as the `stream_id` and if we use 0, we get `DEFAULT_STREAM_ID`
     /// and with that id the custom codec overwrite doesn't work
     const REQUEST_COUNTER_START: u64 = 1;
 }
