@@ -441,3 +441,39 @@ impl Sink for GbqSink {
         false
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use value_trait::StaticNode;
+
+    #[test]
+    fn encode_fails_on_type_mismatch() {
+        let data = [
+            (
+                Value::String("asdf".into()),
+                Field {
+                    table_type: TableType::Int64,
+                    tag: 1,
+                    subfields: Default::default(),
+                },
+            ),
+            (
+                Value::Static(StaticNode::F64(1.243)),
+                Field {
+                    table_type: TableType::String,
+                    tag: 2,
+                    subfields: Default::default(),
+                },
+            ),
+        ];
+
+        for (value, field) in data {
+            let mut result_data = vec![];
+
+            let result = encode_field(&value, &field, &mut result_data);
+
+            assert!(result.is_err());
+        }
+    }
+}
