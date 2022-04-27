@@ -13,8 +13,6 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use tremor_value::Value;
-use value_trait::ValueAccess;
 
 /// Authorization methods
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
