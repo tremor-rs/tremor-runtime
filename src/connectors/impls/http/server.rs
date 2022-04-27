@@ -25,7 +25,7 @@ use async_std::{
 };
 use dashmap::DashMap;
 use halfbrown::{Entry, HashMap};
-use http_types::headers::{self, HeaderValue};
+use http_types::headers::{self, HeaderValue, HeaderValues};
 use http_types::{mime::BYTE_STREAM, Mime, StatusCode};
 use simd_json::ValueAccess;
 use std::{str::FromStr, sync::Arc};
@@ -36,7 +36,7 @@ use tide::{
 use tide_rustls::TlsListener;
 use tremor_common::ids::Id;
 
-use super::meta::{extract_header_case_insensitive, extract_request_meta, BodyData};
+use super::meta::{extract_request_meta, BodyData};
 use super::utils::{FixedBodyReader, RequestId, StreamingBodyReader};
 
 #[derive(Deserialize, Debug, Clone)]
@@ -555,48 +555,6 @@ impl SinkResponse {
         res.set_status(status);
         let headers = response_meta.get("headers");
 
-        // extract if we use chunked encoding
-        let chunked_header = extract_header_case_insensitive(headers, headers::TRANSFER_ENCODING);
-
-        // extract content type and transfer-encoding from first batch element
-        let chunked = chunked_header
-            .as_array()
-            .and_then(|te| te.last())
-            .and_then(ValueAccess::as_str)
-            .or_else(|| chunked_header.as_str())
-            .map_or(false, |te| te == "chunked");
-
-        let content_type_header =
-            extract_header_case_insensitive(headers, headers::CONTENT_TYPE.as_str());
-        let header_content_type = content_type_header
-            .as_array()
-            .and_then(|ct| ct.last())
-            .and_then(ValueAccess::as_str)
-            .or_else(|| content_type_header.as_str())
-            .map(ToString::to_string);
-        let codec_overwrite = header_content_type
-            .as_ref()
-            .and_then(|mime_str| Mime::from_str(mime_str).ok())
-            .and_then(|codec| codec_map.get_codec_name(codec.essence()))
-            // only overwrite the codec if it is different from the configured one
-            .filter(|codec| *codec != configured_codec)
-            .cloned();
-        let codec_content_type: Option<String> = codec_overwrite
-            .as_ref()
-            .and_then(|codec| codec_map.get_mime_type(codec.as_str()))
-            .or_else(|| codec_map.get_mime_type(configured_codec))
-            .cloned();
-        // extract content-type and thus possible codec overwrite only from first element
-        // precedence:
-        //  1. from headers meta
-        //  2. from overwritten codec
-        //  3. from configured codec
-        //  4. fall back to application/octet-stream if codec doesn't provide a mime-type
-        let content_type = Some(
-            header_content_type
-                .or(codec_content_type)
-                .unwrap_or_else(|| BYTE_STREAM.to_string()),
-        );
         // build headers
         if let Some(headers) = headers.as_object() {
             for (name, values) in headers {
@@ -613,12 +571,42 @@ impl SinkResponse {
                 }
             }
         }
+        let chunked = res
+            .header(headers::TRANSFER_ENCODING)
+            .map(HeaderValues::last)
+            .map_or(false, |te| te.as_str() == "chunked");
+
+        let header_content_type = res.content_type();
+
+        let codec_overwrite = header_content_type
+            .as_ref()
+            .and_then(|mime| codec_map.get_codec_name(mime.essence()))
+            // only overwrite the codec if it is different from the configured one
+            .filter(|codec| *codec != configured_codec)
+            .cloned();
+        let codec_content_type = codec_overwrite
+            .as_ref()
+            .and_then(|codec| codec_map.get_mime_type(codec.as_str()))
+            .or_else(|| codec_map.get_mime_type(configured_codec))
+            .and_then(|mime| Mime::from_str(mime).ok());
+
+        // extract content-type and thus possible codec overwrite only from first element
+        // precedence:
+        //  1. from headers meta
+        //  2. from overwritten codec
+        //  3. from configured codec
+        //  4. fall back to application/octet-stream if codec doesn't provide a mime-type
+        let content_type = Some(
+            header_content_type
+                .or(codec_content_type)
+                .unwrap_or(BYTE_STREAM),
+        );
+
         // set content-type if not explicitly set in the response headers meta
         // either from the configured or overwritten codec
         if res.content_type().is_none() {
             if let Some(ct) = content_type {
-                let mime = Mime::from_str(ct.as_str())?;
-                res.set_content_type(mime);
+                res.set_content_type(ct);
             }
         }
         let (body_data, res) = if chunked {
