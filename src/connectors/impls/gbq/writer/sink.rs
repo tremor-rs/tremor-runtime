@@ -72,14 +72,15 @@ fn map_field(
     schema_name: &str,
     raw_fields: &Vec<TableFieldSchema>,
 ) -> (DescriptorProto, HashMap<String, Field>) {
+    // The capacity for nested_types isn't known here, as it depends on the number of fields that have the struct type
     let mut nested_types = vec![];
-    let mut proto_fields = vec![];
-    let mut fields = HashMap::new();
+    let mut proto_fields = Vec::with_capacity(raw_fields.len());
+    let mut fields = HashMap::with_capacity(raw_fields.len());
     let mut tag: u16 = 1;
 
     for raw_field in raw_fields {
         let mut type_name = None;
-        let mut subfields = HashMap::new();
+        let mut subfields = HashMap::with_capacity(raw_field.fields.len());
 
         let table_type =
             if let Some(table_type) = table_field_schema::Type::from_i32(raw_field.r#type) {
@@ -180,23 +181,20 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> 
     match field.table_type {
         TableType::Double => prost::encoding::double::encode(
             tag,
-            &val.as_f64().ok_or_else(|| {
-                ErrorKind::BigQueryTypeMismatch("f64", format!("{:?}", val.value_type()))
-            })?,
+            &val.as_f64()
+                .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("f64", val.value_type()))?,
             result,
         ),
         TableType::Int64 => prost::encoding::int64::encode(
             tag,
-            &val.as_i64().ok_or_else(|| {
-                ErrorKind::BigQueryTypeMismatch("i64", format!("{:?}", val.value_type()))
-            })?,
+            &val.as_i64()
+                .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("i64", val.value_type()))?,
             result,
         ),
         TableType::Bool => prost::encoding::bool::encode(
             tag,
-            &val.as_bool().ok_or_else(|| {
-                ErrorKind::BigQueryTypeMismatch("bool", format!("{:?}", val.value_type()))
-            })?,
+            &val.as_bool()
+                .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("bool", val.value_type()))?,
             result,
         ),
         TableType::String
@@ -210,18 +208,17 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> 
             prost::encoding::string::encode(
                 tag,
                 &val.as_str()
-                    .ok_or_else(|| {
-                        ErrorKind::BigQueryTypeMismatch("string", format!("{:?}", val.value_type()))
-                    })?
+                    .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("string", val.value_type()))?
                     .to_string(),
                 result,
             );
         }
         TableType::Struct => {
             let mut struct_buf: Vec<u8> = vec![];
-            for (k, v) in val.as_object().ok_or_else(|| {
-                ErrorKind::BigQueryTypeMismatch("object", format!("{:?}", val.value_type()))
-            })? {
+            for (k, v) in val
+                .as_object()
+                .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("object", val.value_type()))?
+            {
                 let subfield_description = field.subfields.get(&k.to_string());
 
                 if let Some(subfield_description) = subfield_description {
@@ -240,9 +237,11 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> 
         TableType::Bytes => {
             prost::encoding::bytes::encode(
                 tag,
-                &Vec::from(val.as_bytes().ok_or_else(|| {
-                    ErrorKind::BigQueryTypeMismatch("bytes", format!("{:?}", val.value_type()))
-                })?),
+                &Vec::from(
+                    val.as_bytes().ok_or_else(|| {
+                        ErrorKind::BigQueryTypeMismatch("bytes", val.value_type())
+                    })?,
+                ),
                 result,
             );
         }
@@ -328,6 +327,12 @@ impl Sink for GbqSink {
                 "The mapping is not available",
             ))?;
 
+        let mut serialized_rows = vec![];
+
+        for data in event.value_iter() {
+            serialized_rows.push(mapping.map(data)?);
+        }
+
         let request = AppendRowsRequest {
             write_stream: write_stream.name.clone(),
             offset: None,
@@ -336,15 +341,13 @@ impl Sink for GbqSink {
                 writer_schema: Some(ProtoSchema {
                     proto_descriptor: Some(mapping.descriptor().clone()),
                 }),
-                rows: Some(ProtoRows {
-                    serialized_rows: vec![mapping.map(event.data.parts().0)?],
-                }),
+                rows: Some(ProtoRows { serialized_rows }),
             })),
         };
 
         let append_response = client
             .append_rows(stream::iter(vec![request]))
-            .timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(self.config.request_timeout))
             .await;
 
         let append_response = if let Ok(append_response) = append_response {
@@ -355,11 +358,10 @@ impl Sink for GbqSink {
             return Ok(SinkReply::FAIL);
         };
 
-        let mut append_response = append_response?.into_inner();
-
-        if let Ok(x) = append_response
+        if let Ok(x) = append_response?
+            .into_inner()
             .next()
-            .timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(self.config.request_timeout))
             .await
         {
             match x {
@@ -369,11 +371,7 @@ impl Sink for GbqSink {
 
                     Ok(SinkReply::FAIL)
                 }
-                None => {
-                    error!("No response from BigQuery");
-
-                    Ok(SinkReply::FAIL)
-                }
+                None => Ok(SinkReply::NONE),
             }
         } else {
             ctx.notifier.connection_lost().await?;
@@ -393,9 +391,7 @@ impl Sink for GbqSink {
             .domain_name("bigquerystorage.googleapis.com");
 
         let channel = Channel::from_static("https://bigquerystorage.googleapis.com")
-            .timeout(Duration::from_secs(10))
-            .keep_alive_timeout(Duration::from_secs(10))
-            .connect_timeout(Duration::from_secs(10))
+            .connect_timeout(Duration::from_secs(self.config.connect_timeout))
             .tls_config(tls_config)?
             .connect()
             .await?;
