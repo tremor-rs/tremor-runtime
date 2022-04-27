@@ -16,7 +16,7 @@ use super::client;
 use super::utils::{FixedBodyReader, RequestId, StreamingBodyReader};
 use crate::connectors::{prelude::*, utils::mime::MimeCodecMap};
 use async_std::channel::{unbounded, Sender};
-use http_types::headers::HeaderName;
+use http_types::headers::HeaderValues;
 use http_types::Response;
 use http_types::{
     headers::{self, HeaderValue},
@@ -198,45 +198,7 @@ impl HttpRequestBuilder {
         };
         let mut request = Request::new(method, url.url().clone());
         let headers = request_meta.get("headers");
-        let chunked_header = extract_header_case_insensitive(headers, headers::TRANSFER_ENCODING);
-        let chunked = chunked_header
-            .as_array()
-            .and_then(|te| te.last())
-            .and_then(ValueAccess::as_str)
-            .or_else(|| chunked_header.as_str())
-            .map_or(false, |te| te == "chunked");
 
-        let content_type_header = extract_header_case_insensitive(headers, headers::CONTENT_TYPE);
-        let header_content_type = content_type_header
-            .as_array()
-            .and_then(|ct| ct.last())
-            .and_then(ValueAccess::as_str)
-            .or_else(|| content_type_header.as_str())
-            .map(ToString::to_string);
-        let codec_overwrite = header_content_type
-            .as_ref()
-            .and_then(|mime_str| Mime::from_str(mime_str).ok())
-            .and_then(|codec| codec_map.get_codec_name(codec.essence()))
-            // only overwrite the codec if it is different from the configured one
-            .filter(|codec| *codec != configured_codec)
-            .cloned();
-        let codec_content_type: Option<String> = codec_overwrite
-            .as_ref()
-            .and_then(|codec| codec_map.get_mime_type(codec.as_str()))
-            .or_else(|| codec_map.get_mime_type(configured_codec))
-            .cloned();
-
-        // extract content-type and thus possible codec overwrite only from first element
-        // precedence:
-        //  1. from headers meta
-        //  2. from overwritten codec
-        //  3. from configured codec
-        //  4. fall back to application/octet-stream if codec doesn't provide a mime-type
-        let content_type = Some(
-            header_content_type
-                .or(codec_content_type)
-                .unwrap_or_else(|| BYTE_STREAM.to_string()),
-        );
         // first insert config headers
         for (config_header_name, config_header_values) in &config.headers {
             for header_value in config_header_values {
@@ -260,11 +222,41 @@ impl HttpRequestBuilder {
             }
         }
 
+        let chunked = request
+            .header(headers::TRANSFER_ENCODING)
+            .map(HeaderValues::last)
+            .map_or(false, |te| te.as_str() == "chunked");
+
+        let header_content_type = request.content_type();
+
+        let codec_overwrite = header_content_type
+            .as_ref()
+            .and_then(|mime| codec_map.get_codec_name(mime.essence()))
+            // only overwrite the codec if it is different from the configured one
+            .filter(|codec| *codec != configured_codec)
+            .cloned();
+        let codec_content_type = codec_overwrite
+            .as_ref()
+            .and_then(|codec| codec_map.get_mime_type(codec.as_str()))
+            .or_else(|| codec_map.get_mime_type(configured_codec))
+            .and_then(|mime| Mime::from_str(mime).ok());
+
+        // extract content-type and thus possible codec overwrite only from first element
+        // precedence:
+        //  1. from headers meta
+        //  2. from overwritten codec
+        //  3. from configured codec
+        //  4. fall back to application/octet-stream if codec doesn't provide a mime-type
+        let content_type = Some(
+            header_content_type
+                .or(codec_content_type)
+                .unwrap_or(BYTE_STREAM),
+        );
+
         // set the content type if it is not set yet
         if request.content_type().is_none() {
             if let Some(ct) = content_type {
-                let mime = Mime::from_str(ct.as_str())?;
-                request.set_content_type(mime);
+                request.set_content_type(ct);
             }
         }
         // handle AUTH
@@ -361,30 +353,6 @@ impl HttpRequestBuilder {
             None
         }
     }
-}
-
-/// extracts header from metadata in a case insensitive way
-pub(super) fn extract_header_case_insensitive<'event, 'value>(
-    headers: Option<&'value Value<'event>>,
-    header: impl Into<HeaderName>,
-) -> Option<&'value Value<'event>>
-where
-    'event: 'value,
-{
-    let mut res = None;
-    if let Some(headers) = headers {
-        if let Some(object) = headers.as_object() {
-            let hm: HeaderName = header.into();
-            for (k, v) in object {
-                if k.to_ascii_lowercase().as_str() == hm.as_str() {
-                    res = Some(v);
-                    break;
-                }
-            }
-        }
-    }
-
-    return res;
 }
 
 /// Extract request metadata
