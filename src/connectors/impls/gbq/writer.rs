@@ -23,6 +23,8 @@ use tremor_pipeline::ConfigImpl;
 #[derive(Deserialize, Clone)]
 pub(crate) struct Config {
     pub table_id: String,
+    pub connect_timeout: u64,
+    pub request_timeout: u64,
 }
 impl ConfigImpl for Config {}
 
