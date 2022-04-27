@@ -32,7 +32,7 @@ use rustls::NoClientAuth;
 use tide;
 use tide_rustls::TlsListener;
 use tremor_common::ports::IN;
-use tremor_pipeline::{Event, EventId};
+use tremor_pipeline::Event;
 use tremor_script::{literal, Value, ValueAndMeta};
 use value_trait::{Mutable, ValueAccess};
 
@@ -122,10 +122,8 @@ async fn rtt(
     scheme: &'static str,
     target: String,
     codec: &'static str,
-    meta: Value<'static>,
-    data: Value<'static>,
     auth: Option<Value<'static>>,
-    is_batch: bool,
+    event: Event,
 ) -> Result<ValueAndMeta<'static>> {
     let _ = env_logger::try_init();
     let url = format!("{}://{}", scheme, target);
@@ -137,8 +135,6 @@ async fn rtt(
         config.try_insert("auth", auth.clone_static());
     }
     let defn = literal!({
-      "id": "my_http_client",
-      "type": "http_client",
       "config": config,
       "codec": codec.to_string(),
     });
@@ -154,19 +150,7 @@ async fn rtt(
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
 
-    let meta = literal!({
-        "http_client": {
-            "request": meta
-        },
-        "correlation": "snot"
-    });
-    let echo_back = Event {
-        id: EventId::default(),
-        data: (data, meta).into(),
-        is_batch,
-        ..Event::default()
-    };
-    harness.send_to_sink(echo_back, IN).await?;
+    harness.send_to_sink(event, IN).await?;
 
     let event = out_pipeline.get_event().await?;
     fake.stop().await?;
@@ -233,16 +217,21 @@ macro_rules! assert_with_request_headers {
 #[async_std::test]
 async fn http_client_request_with_defaults() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
-    let res = rtt(
-        "http",
-        target.clone(),
-        "string",
-        literal!({}),
-        literal!(null),
-        None,
-        false,
-    )
-    .await?;
+    let event = Event {
+        data: (
+            literal!(null),
+            literal!({
+                "http_client": {
+                    "request": {},
+                },
+                "correlation": "snot"
+            }),
+        )
+            .into(),
+        transactional: true,
+        ..Default::default()
+    };
+    let res = rtt("http", target.clone(), "string", None, event).await?;
     assert_eq!(&Value::from("null"), res.value());
     Ok(())
 }
@@ -250,16 +239,21 @@ async fn http_client_request_with_defaults() -> Result<()> {
 #[async_std::test]
 async fn http_client_request_override_method() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
-    let res = rtt(
-        "http",
-        target.clone(),
-        "string",
-        literal!({ "method": "get" }),
-        Value::from(""),
-        None,
-        false,
-    )
-    .await?;
+    let event = Event {
+        data: (
+            Value::from(""),
+            literal!({
+                "http_client": {
+                    "request": {
+                        "method": "get",
+                    }
+                }
+            }),
+        )
+            .into(),
+        ..Default::default()
+    };
+    let res = rtt("http", target.clone(), "string", None, event).await?;
     // empty response body
     assert_eq!(&Value::from(""), res.value());
     assert_with_request_meta!(res, meta, {
@@ -271,16 +265,22 @@ async fn http_client_request_override_method() -> Result<()> {
 #[async_std::test]
 async fn http_client_request_override_endpoint() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
-    let res = rtt(
-        "http",
-        target.clone(),
-        "string",
-        literal!({ "method": "put", "url": format!("http://{}/snot/badger?flork=mork", target) }),
-        literal!(null),
-        None,
-        false,
-    )
-    .await?;
+    let event = Event {
+        data: (
+            Value::const_null(),
+            literal!({
+                "http_client": {
+                    "request": {
+                        "method": "put",
+                        "url": format!("http://{}/snot/badger?flork=mork", target)
+                    }
+                }
+            }),
+        )
+            .into(),
+        ..Default::default()
+    };
+    let res = rtt("http", target.clone(), "string", None, event).await?;
 
     let overriden_url: &str = &format!("http://{}/snot/badger?flork=mork", target);
     assert_with_request_meta!(res, meta, {
@@ -295,21 +295,24 @@ async fn http_client_request_override_endpoint() -> Result<()> {
 #[async_std::test]
 async fn http_client_request_override_codec() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
-    let res = rtt(
-        "http",
-        target.clone(),
-        "json",
-        literal!({
-            "method": "patch",
-            "headers": {
-                "content-type": "application/yaml"
-            }
-        }),
-        literal!({ "snot": "badger" }),
-        None,
-        false,
-    )
-    .await?;
+    let event = Event {
+        data: (
+            literal!({ "snot": "badger" }),
+            literal!({
+                "http_client": {
+                    "request": {
+                        "method": "patch",
+                        "headers": {
+                            "content-type": "application/yaml"
+                        }
+                    }
+                }
+            }),
+        )
+            .into(),
+        ..Default::default()
+    };
+    let res = rtt("http", target.clone(), "json", None, event).await?;
 
     let base_url: &str = &format!("http://{}/", target);
     assert_with_request_meta!(res, meta, {
@@ -329,16 +332,23 @@ async fn http_client_request_override_codec() -> Result<()> {
 #[async_std::test]
 async fn http_client_request_override_headers() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
-    let res = rtt(
-        "http",
-        target.clone(),
-        "string",
-        literal!({ "method": "patch", "headers": { "x-snot": [ "badger", "badger", "badger"] }}),
-        literal!(42),
-        None,
-        false,
-    )
-    .await?;
+    let event = Event {
+        data: (
+            Value::from(42),
+            literal!({
+                "http_client": {
+                    "request": {
+                        "method": "patch",
+                        "headers": { "x-snot": [ "badger", "badger", "badger"] }
+                    }
+                },
+                "correlation": "snot"
+            }),
+        )
+            .into(),
+        ..Default::default()
+    };
+    let res = rtt("http", target.clone(), "string", None, event).await?;
 
     let base_url: &str = &format!("http://{}/", target);
     assert_with_request_meta!(res, meta, {
@@ -365,16 +375,24 @@ async fn http_client_request_override_headers() -> Result<()> {
 #[async_std::test]
 async fn http_client_request_override_content_type() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
-    let res = rtt(
-        "http",
-        target.clone(),
-        "string",
-        literal!({ "method": "patch", "headers": { "content-type": [ "application/json"] }}),
-        literal!([{"snot": "badger"}, 42.0]),
-        None,
-        false,
-    )
-    .await?;
+    let event = Event {
+        data: (
+            literal!([{"snot": "badger"}, 42.0]),
+            literal!({
+                "http_client": {
+                    "request": {
+                        "method": "patch",
+                        "headers": { "content-type": [ "application/json"] }
+                    }
+                },
+                "correlation": "snot"
+            }),
+        )
+            .into(),
+        transactional: true,
+        ..Default::default()
+    };
+    let res = rtt("http", target.clone(), "string", None, event).await?;
 
     let base_url: &str = &format!("http://{}/", target);
     assert_with_request_meta!(res, meta, {
@@ -412,14 +430,29 @@ async fn http_client_request_override_content_type() -> Result<()> {
 #[async_std::test]
 async fn http_client_request_auth_none() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
+    let event = Event {
+        data: (
+            literal!({"snot": "badger"}),
+            literal!({
+                "http_client": {
+                    "request": {
+                        "method": "patch",
+                        "headers": { "Content-type": [ "application/json"] }
+                    }
+                },
+                "correlation": "snot"
+            }),
+        )
+            .into(),
+        transactional: true,
+        ..Default::default()
+    };
     let res = rtt(
         "http",
         target.clone(),
         "string",
-        literal!({ "method": "patch", "headers": { "Content-Type": ["application/json"]}}),
-        literal!({"snot": "badger"}),
         Some(literal!("none")),
-        false,
+        event,
     )
     .await?;
 
@@ -459,26 +492,34 @@ async fn http_client_request_auth_none() -> Result<()> {
 #[async_std::test]
 async fn http_client_request_auth_basic() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
+    let event = Event {
+        data: (
+            literal!({"snot": "badger"}),
+            literal!({
+                "http_client": {
+                    "request": {
+                        "method": "PATCh",
+                        "headers": { "Content-TYPE": [ "application/json"] }
+                    }
+                },
+                "correlation": "snot"
+            }),
+        )
+            .into(),
+        transactional: true,
+        ..Default::default()
+    };
     let res = rtt(
         "http",
         target.clone(),
         "string",
-        literal!({
-            "method": "PATCh",
-            "headers": {
-                "content-TYPE": [ "application/json"]
-            }
-        }),
-        literal!({
-            "snot": "badger"
-        }),
         Some(literal!({
             "basic": {
                 "username": "snot",
                 "password": "badger"
             }
         })),
-        false,
+        event,
     )
     .await?;
 
@@ -515,49 +556,49 @@ async fn http_client_request_auth_basic() -> Result<()> {
 #[async_std::test]
 async fn chunked() -> Result<()> {
     let target = find_free_tcp_endpoint_str().await;
-    let res = rtt(
-        "http",
-        target.clone(),
-        "string",
-        literal!({}),
-        literal!([
-            {
-                "data": {
-                    "value": "chunk01 ",
-                    "meta": {
-                        "http_client": {
-                            "request": {
-                                "method": "PATCh",
-                                "headers": {
-                                    "content-TYPE": [ "application/json"],
-                                    "transfer-Encoding": "chunked"
+    let event = Event {
+        data: (
+            literal!([
+                {
+                    "data": {
+                        "value": "chunk01 ",
+                        "meta": {
+                            "http_client": {
+                                "request": {
+                                    "method": "PATCh",
+                                    "headers": {
+                                        "content-TYPE": [ "application/json"],
+                                        "transfer-Encoding": "chunked"
+                                    }
                                 }
-                            }
-                        },
-                        "correlation": "badger"
-                    }
+                            },
+                            "correlation": "badger"
+                        }
+                    },
                 },
-            },
-            {
-                "data": {
-                    "value": "chunk02 ",
-                    "meta": {
-                        "http_client": {
-                            "request": {
-                                "method": "ignored",
-                                "headers": {
-                                    "ignored": "true"
+                {
+                    "data": {
+                        "value": "chunk02 ",
+                        "meta": {
+                            "http_client": {
+                                "request": {
+                                    "method": "ignored",
+                                    "headers": {
+                                        "ignored": "true"
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-        ]),
-        None,
-        true,
-    )
-    .await?;
+            ]),
+            literal!({}),
+        )
+            .into(),
+        is_batch: true,
+        ..Default::default()
+    };
+    let res = rtt("http", target.clone(), "string", None, event).await?;
     assert_with_request_headers!(res, meta, {
         assert_eq!(
             Some(&literal!(["chunked"])),
@@ -582,5 +623,40 @@ async fn chunked() -> Result<()> {
     });
     // the quotes are artifacts from request json encoding
     assert_eq!(&Value::from("\"chunk01 \"\"chunk02 \""), res.value());
+    Ok(())
+}
+
+#[async_std::test]
+async fn missing_tls_config_https() -> Result<()> {
+    let defn = literal!({
+      "config": {
+        "url": "https://localhost:12345"
+      },
+      "codec": "influx",
+    });
+    let id = function_name!();
+    let res = ConnectorHarness::new(id, "http_client", &defn)
+        .await
+        .err()
+        .unwrap();
+
+    assert_eq!("Invalid Configuration for missing_tls_config_https: missing tls config for missing_tls_config_https with 'https' url. Set 'tls' to 'true' or provide a full tls config.", &res.to_string());
+
+    Ok(())
+}
+
+#[async_std::test]
+async fn missing_config() -> Result<()> {
+    let defn = literal!({
+      "codec": "binflux",
+    });
+    let id = function_name!();
+    let res = ConnectorHarness::new(id, "http_client", &defn)
+        .await
+        .err()
+        .unwrap();
+
+    assert!(res.to_string().contains("Missing Configuration"));
+
     Ok(())
 }

@@ -95,7 +95,7 @@ mod tests {
     use crate::errors::Result;
     #[test]
     fn get_mime_type() -> Result<()> {
-        let map = MimeCodecMap::new();
+        let map = MimeCodecMap::default();
         let csv = Some(String::from("text/csv"));
         assert_eq!(csv.as_ref(), map.get_mime_type("csv"));
         Ok(())

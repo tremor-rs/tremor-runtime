@@ -40,9 +40,9 @@ macro_rules! function_name {
             name = stripped;
         }
         if let Some(last) = name.split("::").last() {
-            &last
+            last
         } else {
-            &name
+            name
         }
     }};
 }
