@@ -26,7 +26,7 @@ use s3::Client as S3Client;
 
 const MINCHUNKSIZE: i64 = 8 * 1024 * 1024; // 8 MBs
 
-const CONNECTOR_TYPE: &str = "s3-reader";
+pub(crate) const CONNECTOR_TYPE: &str = "s3_reader";
 const URL_SCHEME: &str = "tremor-s3";
 
 #[derive(Deserialize, Debug, Default)]
@@ -265,11 +265,11 @@ struct S3Instance {
     origin_uri: EventOriginUri,
 }
 impl S3Instance {
-    fn event_from(&self, data: Vec<u8>, stream: u64) -> SourceReply {
+    fn event_from(&self, data: Vec<u8>, meta: Value<'static>, stream: u64) -> SourceReply {
         SourceReply::Data {
             origin_uri: self.origin_uri.clone(),
             data,
-            meta: None,
+            meta: Some(meta),
             stream: Some(stream),
             port: None,
             codec_overwrite: None,
@@ -298,16 +298,16 @@ impl S3Instance {
     /// The received data is sent to the `ChannelSource` channel.
     async fn start(self) -> Result<()> {
         while let Ok(KeyPayload {
-            object_data: Object { key, size, .. },
+            object_data,
             stream,
         }) = self.rx.recv().await
         {
-            debug!("{} Fetching key {key:?}...", self.ctx);
-            let err = if size <= self.multipart_threshold {
+            debug!("{} Fetching key {:?}...", self.ctx, object_data.key());
+            let err = if object_data.size() <= self.multipart_threshold {
                 // Perform a single fetch.
-                self.fetch_no_multipart(stream, key).await
+                self.fetch_no_multipart(stream, object_data).await
             } else {
-                self.fetch_multipart(stream, key, size).await
+                self.fetch_multipart(stream, object_data).await
             };
 
             // Close the stream
@@ -325,29 +325,34 @@ impl S3Instance {
         Ok(())
     }
 
-    async fn fetch_no_multipart(&self, stream: u64, key: Option<String>) -> Result<()> {
+    async fn fetch_no_multipart(&self, stream: u64, object_data: Object) -> Result<()> {
+        let key = object_data.key().map(ToString::to_string);
         let mut obj_stream = self.fetch_object_stream(key.clone(), None).await?;
 
+        let meta = self.into_object_meta(object_data, None);
         while let Some(chunk) = obj_stream.try_next().await? {
             // we iterate over the chunks the response provides
             debug!(
-                "{} Received chunk with {} bytes for key {key:?}.",
+                "{} Received chunk with {} bytes for key {:?}.",
                 self.ctx,
-                chunk.len()
+                chunk.len(),
+                key
             );
             // meh, we need to clone the chunk :(
             self.tx
-                .send(self.event_from(chunk.as_ref().to_vec(), stream))
+                .send(self.event_from(chunk.as_ref().to_vec(), meta.clone(), stream))
                 .await?;
         }
         Ok(())
     }
-    async fn fetch_multipart(&self, stream: u64, key: Option<String>, size: i64) -> Result<()> {
+    async fn fetch_multipart(&self, stream: u64, object_data: Object) -> Result<()> {
         // Fetch multipart.
         let mut fetched_bytes = 0; // represent the next byte to fetch.
+        let size = object_data.size();
+        let key = object_data.key().map(ToString::to_string);
 
         while fetched_bytes < size {
-            let fetch_till = fetched_bytes + self.part_size;
+            let fetch_till = (fetched_bytes + self.part_size).min(size);
             let range = Some(format!("bytes={}-{}", fetched_bytes, fetch_till - 1)); // -1 is reqd here as range is inclusive.
 
             debug!(
@@ -364,9 +369,10 @@ impl S3Instance {
                     self.ctx,
                     chunk.len()
                 );
-                // meh, we need to clone the chunk :(
+                let meta = self
+                    .into_object_meta(object_data.clone(), Some((fetched_bytes, fetch_till - 1)));
                 self.tx
-                    .send(self.event_from(chunk.as_ref().to_vec(), stream))
+                    .send(self.event_from(chunk.as_ref().to_vec(), meta, stream))
                     .await?;
             }
 
@@ -374,5 +380,32 @@ impl S3Instance {
             fetched_bytes = fetch_till;
         }
         Ok(())
+    }
+
+    fn into_object_meta(&self, object: Object, range: Option<(i64, i64)>) -> Value<'static> {
+        let Object {
+            size,
+            key,
+            last_modified,
+            e_tag,
+            .. // TODO: maybe owner and storage class are interesting for some?
+        } = object;
+        let range = range
+            .map(|(start, end)| {
+                literal!({
+                    "start": start,
+                    "end": end
+                })
+            })
+            .unwrap_or_else(|| Value::const_null());
+        let meta = literal!({
+            "size": size,
+            "bucket": self.bucket.clone(),
+            "key": key,
+            "last_modified": last_modified.map(|dt| dt.as_nanos() as u64),
+            "e_tag": e_tag,
+            "range": range // range is null if we have the full file in this event
+        });
+        self.ctx.meta(meta)
     }
 }
