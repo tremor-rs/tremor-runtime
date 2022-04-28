@@ -561,4 +561,100 @@ mod test {
 
         assert_eq!([130u8, 64u8, 5u8, 8u8, 1u8, 16u8, 128u8, 8u8], result[..])
     }
+
+    #[test]
+    pub fn can_encode_a_double() {
+        let value = Value::Static(StaticNode::F64(1.2345));
+        let field = Field {
+            table_type: TableType::Double,
+            tag: 2,
+            subfields: Default::default(),
+        };
+
+        let mut result = Vec::new();
+        assert!(encode_field(&value, &field, &mut result).is_ok());
+
+        assert_eq!(
+            [17u8, 141u8, 151u8, 110u8, 18u8, 131u8, 192u8, 243u8, 63u8],
+            result[..]
+        );
+    }
+
+    #[test]
+    pub fn can_encode_boolean() {
+        let value = Value::Static(StaticNode::Bool(false));
+        let field = Field {
+            table_type: TableType::Bool,
+            tag: 43,
+            subfields: Default::default(),
+        };
+
+        let mut result = Vec::new();
+        assert!(encode_field(&value, &field, &mut result).is_ok());
+
+        assert_eq!([216u8, 2u8, 0u8], result[..]);
+    }
+
+    #[test]
+    pub fn can_encode_bytes() {
+        let value = Value::Bytes(vec![0x1u8, 0x2u8, 0x3u8].into());
+        let field = Field {
+            table_type: TableType::Bytes,
+            tag: 1,
+            subfields: Default::default(),
+        };
+
+        let mut result = Vec::new();
+        assert!(encode_field(&value, &field, &mut result).is_ok());
+
+        assert_eq!([10u8, 3u8, 1u8, 2u8, 3u8], result[..]);
+    }
+
+    #[test]
+    pub fn can_encode_json() {
+        let value = Value::Object(Box::new(halfbrown::HashMap::new()));
+        let field = Field {
+            table_type: TableType::Json,
+            tag: 1,
+            subfields: Default::default(),
+        };
+
+        let mut result = Vec::new();
+        assert!(encode_field(&value, &field, &mut result).is_ok());
+
+        // json is currently not supported, so we expect the field to be skipped
+        assert_eq!([] as [u8; 0], result[..]);
+    }
+
+    #[test]
+    pub fn can_encode_interval() {
+        let value = Value::String("".into());
+        let field = Field {
+            table_type: TableType::Interval,
+            tag: 1,
+            subfields: Default::default(),
+        };
+
+        let mut result = Vec::new();
+        assert!(encode_field(&value, &field, &mut result).is_ok());
+
+        // interval is currently not supported, so we expect the field to be skipped
+        assert_eq!([] as [u8; 0], result[..]);
+    }
+
+    #[test]
+    pub fn can_skips_unspecified() {
+        let value = Value::String("".into());
+        let field = Field {
+            table_type: TableType::Unspecified,
+            tag: 1,
+            subfields: Default::default(),
+        };
+
+        let mut result = Vec::new();
+        assert!(encode_field(&value, &field, &mut result).is_ok());
+
+        // Fields should never have the "Unspecified" type, if that happens best we can do is to log a warning and ignore them
+        assert_eq!([] as [u8; 0], result[..]);
+    }
 }
