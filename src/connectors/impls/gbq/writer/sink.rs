@@ -446,12 +446,17 @@ mod test {
     #[test]
     fn interceptor_will_add_the_authorization_header() {
         let metadata_value = MetadataValue::from_str("test").unwrap();
-        let mut interceptor = AuthInterceptor{ token: metadata_value };
+        let mut interceptor = AuthInterceptor {
+            token: metadata_value,
+        };
 
         let request = Request::new(());
         let request = interceptor.call(request).unwrap();
 
-        assert_eq!(MetadataValue::from_str("test").unwrap(), request.metadata().get("authorization").unwrap())
+        assert_eq!(
+            MetadataValue::from_str("test").unwrap(),
+            request.metadata().get("authorization").unwrap()
+        )
     }
 
     #[test]
@@ -496,16 +501,25 @@ mod test {
             TableType::Geography,
             TableType::Numeric,
             TableType::Bignumeric,
-            TableType::Timestamp
+            TableType::Timestamp,
         ];
 
         for item in data {
             let mut result = vec![];
-            assert!(encode_field(&Value::String("I".into()), &Field {
-                table_type: item,
-                tag: 123,
-                subfields: Default::default()
-            }, &mut result).is_ok(), "TableType: {:?} did not encode correctly", item);
+            assert!(
+                encode_field(
+                    &Value::String("I".into()),
+                    &Field {
+                        table_type: item,
+                        tag: 123,
+                        subfields: Default::default()
+                    },
+                    &mut result
+                )
+                .is_ok(),
+                "TableType: {:?} did not encode correctly",
+                item
+            );
 
             assert_eq!([218u8, 7u8, 1u8, 73u8], result[..]);
         }
@@ -519,21 +533,27 @@ mod test {
         let input = Value::Object(Box::new(values));
 
         let mut subfields = HashMap::new();
-        subfields.insert("a".into(), Field {
-            table_type: TableType::Int64,
-            tag: 1,
-            subfields: Default::default()
-        });
-        subfields.insert("b".into(), Field {
-            table_type: TableType::Int64,
-            tag: 2,
-            subfields: Default::default()
-        });
+        subfields.insert(
+            "a".into(),
+            Field {
+                table_type: TableType::Int64,
+                tag: 1,
+                subfields: Default::default(),
+            },
+        );
+        subfields.insert(
+            "b".into(),
+            Field {
+                table_type: TableType::Int64,
+                tag: 2,
+                subfields: Default::default(),
+            },
+        );
 
         let field = Field {
             table_type: TableType::Struct,
             tag: 1024,
-            subfields
+            subfields,
         };
 
         let mut result = Vec::new();
