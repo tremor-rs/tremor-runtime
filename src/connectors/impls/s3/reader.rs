@@ -329,7 +329,7 @@ impl S3Instance {
         let key = object_data.key().map(ToString::to_string);
         let mut obj_stream = self.fetch_object_stream(key.clone(), None).await?;
 
-        let meta = self.into_object_meta(object_data, None);
+        let meta = self.to_object_meta(object_data, None);
         while let Some(chunk) = obj_stream.try_next().await? {
             // we iterate over the chunks the response provides
             debug!(
@@ -369,8 +369,8 @@ impl S3Instance {
                     self.ctx,
                     chunk.len()
                 );
-                let meta = self
-                    .into_object_meta(object_data.clone(), Some((fetched_bytes, fetch_till - 1)));
+                let meta =
+                    self.to_object_meta(object_data.clone(), Some((fetched_bytes, fetch_till - 1)));
                 self.tx
                     .send(self.event_from(chunk.as_ref().to_vec(), meta, stream))
                     .await?;
@@ -382,7 +382,8 @@ impl S3Instance {
         Ok(())
     }
 
-    fn into_object_meta(&self, object: Object, range: Option<(i64, i64)>) -> Value<'static> {
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
+    fn to_object_meta(&self, object: Object, range: Option<(i64, i64)>) -> Value<'static> {
         let Object {
             size,
             key,
@@ -390,14 +391,12 @@ impl S3Instance {
             e_tag,
             .. // TODO: maybe owner and storage class are interesting for some?
         } = object;
-        let range = range
-            .map(|(start, end)| {
-                literal!({
-                    "start": start,
-                    "end": end
-                })
+        let range = range.map_or_else(Value::const_null, |(start, end)| {
+            literal!({
+                "start": start,
+                "end": end
             })
-            .unwrap_or_else(|| Value::const_null());
+        });
         let meta = literal!({
             "size": size,
             "bucket": self.bucket.clone(),
