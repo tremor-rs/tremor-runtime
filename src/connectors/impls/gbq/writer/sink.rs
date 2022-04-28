@@ -444,6 +444,17 @@ mod test {
     use value_trait::StaticNode;
 
     #[test]
+    fn interceptor_will_add_the_authorization_header() {
+        let metadata_value = MetadataValue::from_str("test").unwrap();
+        let mut interceptor = AuthInterceptor{ token: metadata_value };
+
+        let request = Request::new(());
+        let request = interceptor.call(request).unwrap();
+
+        assert_eq!(MetadataValue::from_str("test").unwrap(), request.metadata().get("authorization").unwrap())
+    }
+
+    #[test]
     fn encode_fails_on_type_mismatch() {
         let data = [
             (
@@ -471,5 +482,63 @@ mod test {
 
             assert!(result.is_err());
         }
+    }
+
+    #[test]
+    pub fn test_can_encode_stringy_types() {
+        // NOTE: This test always passes the string "I" as the value to encode, this is not correct for some of the types (e.g. datetime),
+        // but we still allow it, leaving the validation to BigQuery
+        let data = [
+            TableType::String,
+            TableType::Date,
+            TableType::Time,
+            TableType::Datetime,
+            TableType::Geography,
+            TableType::Numeric,
+            TableType::Bignumeric,
+            TableType::Timestamp
+        ];
+
+        for item in data {
+            let mut result = vec![];
+            assert!(encode_field(&Value::String("I".into()), &Field {
+                table_type: item,
+                tag: 123,
+                subfields: Default::default()
+            }, &mut result).is_ok(), "TableType: {:?} did not encode correctly", item);
+
+            assert_eq!([218u8, 7u8, 1u8, 73u8], result[..]);
+        }
+    }
+
+    #[test]
+    pub fn test_can_encode_a_struct() {
+        let mut values = halfbrown::HashMap::new();
+        values.insert("a".into(), Value::Static(StaticNode::I64(1)));
+        values.insert("b".into(), Value::Static(StaticNode::I64(1024)));
+        let input = Value::Object(Box::new(values));
+
+        let mut subfields = HashMap::new();
+        subfields.insert("a".into(), Field {
+            table_type: TableType::Int64,
+            tag: 1,
+            subfields: Default::default()
+        });
+        subfields.insert("b".into(), Field {
+            table_type: TableType::Int64,
+            tag: 2,
+            subfields: Default::default()
+        });
+
+        let field = Field {
+            table_type: TableType::Struct,
+            tag: 1024,
+            subfields
+        };
+
+        let mut result = Vec::new();
+        assert!(encode_field(&input, &field, &mut result).is_ok());
+
+        assert_eq!([130u8, 64u8, 5u8, 8u8, 1u8, 16u8, 128u8, 8u8], result[..])
     }
 }
