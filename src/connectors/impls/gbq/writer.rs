@@ -42,7 +42,7 @@ impl Connector for Gbq {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = GbqSink::new(self.config.clone()).await?;
+        let sink = GbqSink::new(self.config.clone());
 
         builder.spawn(sink, sink_context).map(Some)
     }

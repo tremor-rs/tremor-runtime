@@ -29,7 +29,7 @@ use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto}
 use std::collections::HashMap;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
-use tonic::metadata::{Ascii, MetadataValue};
+use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::{Request, Status};
@@ -42,14 +42,34 @@ pub(crate) struct GbqSink {
 }
 
 pub(crate) struct AuthInterceptor {
-    token: MetadataValue<Ascii>,
+    token: Token,
 }
 
 impl Interceptor for AuthInterceptor {
     fn call(&mut self, mut request: Request<()>) -> ::std::result::Result<Request<()>, Status> {
+        let header_value = match self.token.header_value() {
+            Ok(val) => val,
+            Err(e) => {
+                error!("Failed to get token for BigQuery: {}", e);
+
+                return Err(Status::unavailable(
+                    "Failed to retrieve authentication token.",
+                ));
+            }
+        };
+        let metadata_value = match MetadataValue::from_str(header_value.as_str()) {
+            Ok(val) => val,
+            Err(e) => {
+                error!("Failed to get token for BigQuery: {}", e);
+
+                return Err(Status::unavailable(
+                    "Failed to retrieve authentication token.",
+                ));
+            }
+        };
         request
             .metadata_mut()
-            .insert("authorization", self.token.clone());
+            .insert("authorization", metadata_value);
 
         Ok(request)
     }
@@ -71,6 +91,7 @@ struct JsonToProtobufMapping {
 fn map_field(
     schema_name: &str,
     raw_fields: &Vec<TableFieldSchema>,
+    ctx: &SinkContext,
 ) -> (DescriptorProto, HashMap<String, Field>) {
     // The capacity for nested_types isn't known here, as it depends on the number of fields that have the struct type
     let mut nested_types = vec![];
@@ -84,14 +105,15 @@ fn map_field(
 
         let table_type =
             if let Some(table_type) = table_field_schema::Type::from_i32(raw_field.r#type) {
-                warn!("Found a field of unknown type: {}", raw_field.name);
                 table_type
             } else {
+                warn!("Found a field of unknown type: {}", raw_field.name);
+
                 continue;
             };
 
         let grpc_type = match table_type {
-            table_field_schema::Type::Int64 => field_descriptor_proto::Type::Int64,
+            TableType::Int64 => field_descriptor_proto::Type::Int64,
             TableType::Double => field_descriptor_proto::Type::Double,
             TableType::Bool => field_descriptor_proto::Type::Bool,
             TableType::Bytes => field_descriptor_proto::Type::Bytes,
@@ -116,7 +138,7 @@ fn map_field(
             | TableType::Timestamp => field_descriptor_proto::Type::String,
             TableType::Struct => {
                 let type_name_for_field = format!("struct_{}", raw_field.name);
-                let mapped = map_field(&type_name_for_field, &raw_field.fields);
+                let mapped = map_field(&type_name_for_field, &raw_field.fields, ctx);
                 nested_types.push(mapped.0);
                 subfields = mapped.1;
 
@@ -125,7 +147,7 @@ fn map_field(
             }
 
             TableType::Unspecified => {
-                warn!("Found a field of unspecified type: {}", raw_field.name);
+                warn!("{} Found a field of unspecified type: {}", ctx, raw_field.name);
                 continue;
             }
         };
@@ -261,8 +283,8 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> 
 }
 
 impl JsonToProtobufMapping {
-    pub fn new(vec: &Vec<TableFieldSchema>) -> Self {
-        let descriptor = map_field("table", vec);
+    pub fn new(vec: &Vec<TableFieldSchema>, ctx: &SinkContext) -> Self {
+        let descriptor = map_field("table", vec, ctx);
 
         Self {
             descriptor: descriptor.0,
@@ -271,16 +293,19 @@ impl JsonToProtobufMapping {
     }
 
     pub fn map(&self, value: &Value) -> Result<Vec<u8>> {
-        let mut result = vec![];
         if let Some(obj) = value.as_object() {
+            let mut result = Vec::with_capacity(obj.len());
+
             for (key, val) in obj {
                 if let Some(field) = self.fields.get(&key.to_string()) {
                     encode_field(val, field, &mut result)?;
                 }
             }
+
+            return Ok(result);
         }
 
-        Ok(result)
+        Ok(vec![])
     }
 
     pub fn descriptor(&self) -> &DescriptorProto {
@@ -288,13 +313,13 @@ impl JsonToProtobufMapping {
     }
 }
 impl GbqSink {
-    pub async fn new(config: Config) -> Result<Self> {
-        Ok(Self {
+    pub fn new(config: Config) -> Self {
+        Self {
             client: None,
             write_stream: None,
             mapping: None,
             config,
-        })
+        }
     }
 }
 
@@ -322,12 +347,12 @@ impl Sink for GbqSink {
                 ))?;
         let mapping = self
             .mapping
-            .as_ref()
+            .as_mut()
             .ok_or(ErrorKind::BigQueryClientNotAvailable(
                 "The mapping is not available",
             ))?;
 
-        let mut serialized_rows = vec![];
+        let mut serialized_rows = Vec::with_capacity(event.len());
 
         for data in event.value_iter() {
             serialized_rows.push(mapping.map(data)?);
@@ -380,11 +405,9 @@ impl Sink for GbqSink {
         }
     }
 
-    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        error!("Connecting to BigQuery");
-        let token = Token::new()?.header_value()?;
-
-        let token_metadata_value = MetadataValue::from_str(token.as_str())?;
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+        error!("{} Connecting to BigQuery", ctx);
+        let token = Token::new()?;
 
         let tls_config = ClientTlsConfig::new()
             .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
@@ -396,17 +419,13 @@ impl Sink for GbqSink {
             .connect()
             .await?;
 
-        let mut client = BigQueryWriteClient::with_interceptor(
-            channel,
-            AuthInterceptor {
-                token: token_metadata_value,
-            },
-        );
+        let mut client = BigQueryWriteClient::with_interceptor(channel, AuthInterceptor { token });
 
         let write_stream = client
             .create_write_stream(CreateWriteStreamRequest {
                 parent: self.config.table_id.clone(),
                 write_stream: Some(WriteStream {
+                    // The stream name here will be ignored and a generated value will be set in the response
                     name: "".to_string(),
                     r#type: i32::from(write_stream::Type::Committed),
                     create_time: None,
@@ -424,6 +443,7 @@ impl Sink for GbqSink {
                 .ok_or(ErrorKind::GbqSinkFailed("Table schema was not provided"))?
                 .clone()
                 .fields,
+            ctx,
         );
 
         self.mapping = Some(mapping);
@@ -442,22 +462,6 @@ impl Sink for GbqSink {
 mod test {
     use super::*;
     use value_trait::StaticNode;
-
-    #[test]
-    fn interceptor_will_add_the_authorization_header() {
-        let metadata_value = MetadataValue::from_str("test").unwrap();
-        let mut interceptor = AuthInterceptor {
-            token: metadata_value,
-        };
-
-        let request = Request::new(());
-        let request = interceptor.call(request).unwrap();
-
-        assert_eq!(
-            MetadataValue::from_str("test").unwrap(),
-            request.metadata().get("authorization").unwrap()
-        )
-    }
 
     #[test]
     fn encode_fails_on_type_mismatch() {
