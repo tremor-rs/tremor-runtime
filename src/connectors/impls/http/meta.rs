@@ -16,6 +16,7 @@ use super::client;
 use super::utils::{FixedBodyReader, RequestId, StreamingBodyReader};
 use crate::connectors::{prelude::*, utils::mime::MimeCodecMap};
 use async_std::channel::{unbounded, Sender};
+use either::Either;
 use http_types::headers::HeaderValues;
 use http_types::Response;
 use http_types::{
@@ -75,8 +76,15 @@ impl HttpRequestBuilder {
 
         // first insert config headers
         for (config_header_name, config_header_values) in &config.headers {
-            for header_value in config_header_values {
-                request.append_header(config_header_name.as_str(), header_value.as_str());
+            match config_header_values {
+                Either::Left(config_header_values) => {
+                    for header_value in config_header_values {
+                        request.append_header(config_header_name.as_str(), header_value.as_str());
+                    }
+                }
+                Either::Right(header_value) => {
+                    request.append_header(config_header_name.as_str(), header_value.as_str());
+                }
             }
         }
         // build headers
