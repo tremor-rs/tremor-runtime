@@ -461,7 +461,46 @@ impl Sink for GbqSink {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::connectors::reconnect::ConnectionLostNotifier;
+    use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
     use value_trait::StaticNode;
+
+    #[test]
+    fn can_map_simple_field() {
+        let data = vec![
+            (TableType::Int64, field_descriptor_proto::Type::Int64),
+            (TableType::Double, field_descriptor_proto::Type::Double),
+        ];
+
+        for item in data {
+            let (rx, _tx) = async_std::channel::unbounded();
+
+            let result = map_field(
+                "name",
+                &vec![TableFieldSchema {
+                    name: "something".to_string(),
+                    r#type: item.0.into(),
+                    mode: Mode::Required.into(),
+                    fields: vec![],
+                    description: "".to_string(),
+                    max_length: 0,
+                    precision: 0,
+                    scale: 0,
+                }],
+                &SinkContext {
+                    uid: Default::default(),
+                    alias: "".to_string(),
+                    connector_type: Default::default(),
+                    quiescence_beacon: Default::default(),
+                    notifier: ConnectionLostNotifier::new(rx),
+                },
+            );
+
+            assert_eq!(result.1.len(), 1);
+            assert_eq!(result.1["something"].table_type, item.0);
+            assert_eq!(result.0.field[0].r#type, Some(item.1.into()))
+        }
+    }
 
     #[test]
     fn encode_fails_on_type_mismatch() {
