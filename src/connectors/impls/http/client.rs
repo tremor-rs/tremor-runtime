@@ -48,7 +48,7 @@ pub struct Config {
     pub(super) concurrency: usize,
     /// Default HTTP headers
     #[serde(default = "Default::default")]
-    pub(super) headers: HashMap<String, Vec<String>>,
+    pub(super) headers: HashMap<String, Either<Vec<String>, String>>,
     /// Default HTTP method
     #[serde(default = "default_method")]
     pub(super) method: Method,
