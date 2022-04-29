@@ -505,7 +505,10 @@ impl EventSerializer {
         self.serialize_for_stream_with_codec(value, ingest_ns, stream_id, None)
     }
 
-    /// Serialize an event for a certain stream with the possibility to overwrite the configured codec
+    /// Serialize an event for a certain stream with the possibility to overwrite the configured codec.
+    ///
+    /// The `codec_overwrite` is only considered when creating new streams, not for existing streams.
+    /// It is also ignored when for the `DEFAULT_STREAM_ID`, which is `0`. Beware!
     ///
     /// # Errors
     ///   * if serialization fails (codec or postprocessors)
@@ -514,28 +517,28 @@ impl EventSerializer {
         value: &Value,
         ingest_ns: u64,
         stream_id: u64,
-        codec_overwrite: Option<&dyn Codec>,
+        codec_overwrite: Option<&String>,
     ) -> Result<Vec<Vec<u8>>> {
         if stream_id == DEFAULT_STREAM_ID {
-            let codec = codec_overwrite.unwrap_or_else(|| self.codec.as_ref());
+            // no codec_overwrite for the default stream
             postprocess(
                 &mut self.postprocessors,
                 ingest_ns,
-                codec.encode(value)?,
+                self.codec.encode(value)?,
                 &self.alias,
             )
         } else {
             match self.streams.entry(stream_id) {
                 Entry::Occupied(mut entry) => {
-                    let (c, pps) = entry.get_mut();
-                    let codec = codec_overwrite.unwrap_or_else(|| c.as_ref());
+                    let (codec, pps) = entry.get_mut();
                     postprocess(pps, ingest_ns, codec.encode(value)?, &self.alias)
                 }
                 Entry::Vacant(entry) => {
+                    // codec overwrite only considered for new streams
                     let codec = match codec_overwrite {
-                        Some(codec) => codec.boxed_clone(),
-                        None => codec::resolve(&self.codec_config)?,
-                    };
+                        Some(codec) => codec::resolve(&codec.into()),
+                        None => codec::resolve(&self.codec_config),
+                    }?;
                     let pps = make_postprocessors(self.postprocessor_configs.as_slice())?;
                     // insert data for a new stream
                     let (c, pps2) = entry.insert((codec, pps));
@@ -887,10 +890,10 @@ pub(crate) struct ContraflowData {
 }
 
 impl ContraflowData {
-    fn into_ack(self, duration: u64) -> Event {
+    pub(crate) fn into_ack(self, duration: u64) -> Event {
         Event::cb_ack_with_timing(self.ingest_ns, self.event_id, self.op_meta, duration)
     }
-    fn into_fail(self) -> Event {
+    pub(crate) fn into_fail(self) -> Event {
         Event::cb_fail(self.ingest_ns, self.event_id, self.op_meta)
     }
     fn cb(&self, cb: CbAction) -> Event {

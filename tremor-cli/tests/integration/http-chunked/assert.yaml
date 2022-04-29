@@ -1,0 +1,11 @@
+status: 0
+name: http connectors
+asserts:
+  - source: out.log
+    contains:
+    - "\"12345\""
+    - "\"678910\""
+    - "\"1112131415\""
+    - "\"1617181920\""
+  - source: fg.out.log
+    equals_file: expected_out.txt

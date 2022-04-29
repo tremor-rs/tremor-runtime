@@ -16,14 +16,9 @@ use std::time::{Duration, Instant};
 
 use super::ConnectorHarness;
 use crate::errors::{Error, Result};
-use async_std::stream::StreamExt;
 use elasticsearch::{http::transport::Transport, Elasticsearch};
 use futures::TryFutureExt;
-use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
-use signal_hook_async_std::Signals;
-use testcontainers::clients;
-use testcontainers::images::generic::GenericImage;
-use testcontainers::{Docker, RunArgs};
+use testcontainers::{clients, images::generic::GenericImage, RunnableImage};
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value::StaticValue};
@@ -36,25 +31,16 @@ async fn connector_elastic() -> Result<()> {
     let _ = env_logger::try_init();
 
     let docker = clients::Cli::default();
-    let image = GenericImage::new(format!("elasticsearch:{}", ELASTICSEARCH_VERSION))
-        .with_env_var("discovery.type", "single-node")
-        .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m");
-
     let port = super::free_port::find_free_tcp_port().await?;
-    let container =
-        docker.run_with_args(image, RunArgs::default().with_mapped_port((port, 9200_u16)));
-    // signal handling - stop and rm the container, even if we quit the test in the middle of everything
-    let container_id = container.id().to_string();
-    let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
-    let signal_handle = signals.handle();
-    let signal_handler_task = async_std::task::spawn(async move {
-        let signal_docker = clients::Cli::default();
-        while let Some(_signal) = signals.next().await {
-            signal_docker.stop(container_id.as_str());
-            signal_docker.rm(container_id.as_str());
-        }
-    });
-    let port = container.get_host_port(9200).unwrap();
+    let image = RunnableImage::from(
+        GenericImage::new("elasticsearch", ELASTICSEARCH_VERSION)
+            .with_env_var("discovery.type", "single-node")
+            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m"),
+    )
+    .with_mapped_port((port, 9200_u16));
+
+    let container = docker.run(image);
+    let port = container.get_host_port(9200);
 
     // wait for the image to be reachable
     let elastic = Elasticsearch::new(Transport::single_node(
@@ -70,13 +56,6 @@ async fn connector_elastic() -> Result<()> {
         .await
     {
         if start.elapsed() > wait_for {
-            let mut logs = container.logs();
-            let mut stderr = Vec::with_capacity(1024);
-            let mut read = logs.stderr.read(stderr.as_mut_slice())?;
-            while read > 0 {
-                error!("ES ERR: {}", String::from_utf8_lossy(&stderr[0..read]));
-                read = logs.stderr.read(stderr.as_mut_slice())?;
-            }
             return Err(
                 Error::from(e).chain_err(|| "Waiting for elasticsearch container timed out.")
             );
@@ -360,9 +339,6 @@ async fn connector_elastic() -> Result<()> {
     let (out_events, err_events) = harness.stop().await?;
     assert!(out_events.is_empty());
     assert!(err_events.is_empty());
-    // cleanup
-    signal_handle.close();
-    signal_handler_task.cancel().await;
     // will rm the container
     drop(container);
 
