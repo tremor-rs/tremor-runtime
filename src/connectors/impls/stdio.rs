@@ -112,7 +112,7 @@ impl Source for StdStreamSource {
     }
 
     fn asynchronous(&self) -> bool {
-        true
+        false
     }
 }
 
