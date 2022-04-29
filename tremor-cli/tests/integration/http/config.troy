@@ -50,6 +50,9 @@ flow
     codec = "json-sorted",
     config = {
       "url": "http://localhost:65535/",
+      "headers": {
+        "Client": "Tremor"
+      }
     },
     reconnect = {
       "retry": {
