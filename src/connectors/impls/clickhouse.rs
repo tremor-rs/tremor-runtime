@@ -17,6 +17,7 @@ use std::fmt::{self, Display, Formatter};
 use crate::connectors::{prelude::*, utils::url::ClickHouseDefaults};
 
 use clickhouse_rs::{Block, Pool};
+use simd_json::StaticNode;
 
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
@@ -52,7 +53,18 @@ impl Connector for Clickhouse {
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let db_url = self.connection_url();
-        let sink = ClickhouseSink { db_url, pool: None };
+        let columns = self
+            .config
+            .columns
+            .iter()
+            .map(|Column { name, type_ }| (name.clone(), type_.clone()))
+            .collect();
+
+        let sink = ClickhouseSink {
+            db_url,
+            pool: None,
+            columns,
+        };
         builder.spawn(sink, sink_context).map(Some)
     }
 
@@ -74,7 +86,6 @@ impl Clickhouse {
 struct ClickhouseConfig {
     url: Url<ClickHouseDefaults>,
     compression: Option<Compression>,
-    database: String,
     columns: Vec<Column>,
 }
 
@@ -108,26 +119,16 @@ impl Display for Compression {
 }
 
 #[derive(Deserialize)]
-struct DatabaseColumns {
-    #[serde(flatten)]
-    columns: Vec<Column>,
-}
-
-#[derive(Deserialize)]
 struct Column {
     name: String,
     #[serde(rename = "type")]
-    type_: ClickHouseType,
-}
-
-#[derive(Deserialize)]
-enum ClickHouseType {
-    UInt8,
+    type_: DummySqlType,
 }
 
 pub(crate) struct ClickhouseSink {
     db_url: String,
     pool: Option<Pool>,
+    columns: Vec<(String, DummySqlType)>,
 }
 
 #[async_trait::async_trait]
@@ -154,14 +155,12 @@ impl Sink for ClickhouseSink {
             .get_handle()
             .await?;
 
-        // TODO: fetch column data from the context?
-        let columns = get_column_data();
+        // TODO: initialize with correct size to avoir reallocations.
+        let block = Block::new();
 
-        let block = columns
-            .into_iter()
-            .fold(Block::new(), |block, (name, ty)| match ty {
-                ClickHouseType::UInt8 => add_uint8_column(block, name, &event),
-            });
+        for value in event.value_iter() {
+            let row = self.clickhouse_row_of(value)?;
+        }
 
         client.insert("people", block.clone()).await?;
 
@@ -173,23 +172,95 @@ impl Sink for ClickhouseSink {
     }
 }
 
-fn get_column_data() -> Vec<(String, ClickHouseType)> {
-    vec![("age".to_string(), ClickHouseType::UInt8)]
+impl ClickhouseSink {
+    fn clickhouse_row_of(
+        &self,
+        input: &tremor_value::Value,
+    ) -> Result<Vec<(String, clickhouse_rs::types::Value)>> {
+        let mut rslt = Vec::new();
+
+        let object = input.as_object().unwrap();
+
+        for (column_name, expected_type) in self.columns.iter() {
+            let cell = object.get(column_name.as_str()).unwrap();
+
+            let cell = clickhouse_value_of(cell, expected_type)?;
+
+            rslt.push((column_name.clone(), cell));
+        }
+
+        Ok(rslt)
+    }
 }
 
-fn add_uint8_column(block: Block, name: String, event: &Event) -> Block {
-    // TODO: better name
-    let values = event
-        .value_iter()
-        .map(|row| {
-            row.as_object()
-                .unwrap()
-                .get(name.as_str())
-                .unwrap()
-                .as_u8()
-                .unwrap()
-        })
-        .collect::<Vec<_>>();
+// This is just a subset of the types actually supported by clickhouse_rs.
+// It targets only the types that can be emitted by Tremor.
+//
+// Note: null is in a weird half-supported/half-unsupported on the clickhouse_rs
+// crate. Due to its special properties, it has nonetheless been added here, so
+// that most of the logic is already written once it is available.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+enum DummySqlType {
+    Array(Box<DummySqlType>),
+    Nullable(Box<DummySqlType>),
 
-    block.add_column(name.as_str(), values)
+    Int64,
+    UInt64,
+    String,
+}
+
+impl DummySqlType {
+    fn as_non_nullable(&self) -> &DummySqlType {
+        match self {
+            DummySqlType::Nullable(inner_type) => inner_type.as_ref(),
+            non_nullable => non_nullable,
+        }
+    }
+
+    fn wrap_if_nullable(&self, value: clickhouse_rs::types::Value) -> clickhouse_rs::types::Value {
+        match self {
+            DummySqlType::Nullable(_) => panic!("Nullable values can not be constructed :("),
+            _ => value,
+        }
+    }
+}
+
+fn clickhouse_value_of(
+    cell: &Value,
+    expected_type: &DummySqlType,
+) -> Result<clickhouse_rs::types::Value> {
+    use clickhouse_rs::types;
+
+    match cell {
+        Value::Static(value) => {
+            if matches!(
+                (value, expected_type),
+                (StaticNode::Null, DummySqlType::Nullable(_))
+            ) {
+                // Null can be of any type, as long as it is allowed by the
+                // schema.
+
+                // The situation is quite sad. The problem is that
+                // clickhouse_rs::types::Value::Nullable wraps an Either [1],
+                // which defined in clickhouse itself and is not publicly
+                // available [2]. As an interim solution, we will panic. A
+                // solution could be to open a pull-request to clickhouse-rs,
+                // changing its visibility from pub(crate) to pub.
+                //
+                // [1]: https://docs.rs/clickhouse-rs/1.0.0-alpha.1/clickhouse_rs/types/enum.Value.html#variant.Nullable
+                // [2]: https://docs.rs/clickhouse-rs/0.1.21/src/clickhouse_rs/types/either.rs.html#4
+                panic!("Null value can't be constructed for now :(");
+            }
+
+            let value_as_non_null = match (value, expected_type.as_non_nullable()) {
+                (StaticNode::U64(v), DummySqlType::UInt64) => types::Value::UInt64(*v),
+
+                _ => todo!(),
+            };
+
+            Ok(expected_type.wrap_if_nullable(value_as_non_null))
+        }
+
+        _ => todo!(),
+    }
 }
