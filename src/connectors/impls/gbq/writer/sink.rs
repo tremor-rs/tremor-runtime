@@ -470,6 +470,9 @@ mod test {
         let data = vec![
             (TableType::Int64, field_descriptor_proto::Type::Int64),
             (TableType::Double, field_descriptor_proto::Type::Double),
+            (TableType::Bool, field_descriptor_proto::Type::Bool),
+            (TableType::Bytes, field_descriptor_proto::Type::Bytes),
+            (TableType::Timestamp, field_descriptor_proto::Type::String),
         ];
 
         for item in data {
@@ -500,6 +503,53 @@ mod test {
             assert_eq!(result.1["something"].table_type, item.0);
             assert_eq!(result.0.field[0].r#type, Some(item.1.into()))
         }
+    }
+
+    #[test]
+    fn can_map_a_struct() {
+        let (rx, _tx) = async_std::channel::unbounded();
+
+        let result = map_field(
+            "name",
+            &vec![TableFieldSchema {
+                name: "something".to_string(),
+                r#type: TableType::Struct.into(),
+                mode: Mode::Required.into(),
+                fields: vec![TableFieldSchema {
+                    name: "subfield_a".to_string(),
+                    r#type: TableType::Int64.into(),
+                    mode: Mode::Required.into(),
+                    fields: vec![],
+                    description: "".to_string(),
+                    max_length: 0,
+                    precision: 0,
+                    scale: 0,
+                }],
+                description: "".to_string(),
+                max_length: 0,
+                precision: 0,
+                scale: 0,
+            }],
+            &SinkContext {
+                uid: Default::default(),
+                alias: "".to_string(),
+                connector_type: Default::default(),
+                quiescence_beacon: Default::default(),
+                notifier: ConnectionLostNotifier::new(rx),
+            },
+        );
+
+        assert_eq!(result.1.len(), 1);
+        assert_eq!(result.1["something"].table_type, TableType::Struct);
+        assert_eq!(
+            result.0.field[0].r#type,
+            Some(field_descriptor_proto::Type::Message.into())
+        );
+        assert_eq!(result.1["something"].subfields.len(), 1);
+        assert_eq!(
+            result.1["something"].subfields["subfield_a"].table_type,
+            TableType::Int64
+        )
     }
 
     #[test]
