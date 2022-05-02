@@ -44,7 +44,7 @@ async fn connector_s3_no_connection() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), "s3-writer", &connector_yaml).await?;
+    let harness = ConnectorHarness::new(function_name!(), "s3_writer", &connector_yaml).await?;
     assert!(harness.start().await.is_err());
     Ok(())
 }
@@ -74,7 +74,7 @@ async fn connector_s3_no_credentials() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), "s3-writer", &connector_yaml).await?;
+    let harness = ConnectorHarness::new(function_name!(), "s3_writer", &connector_yaml).await?;
     assert!(harness.start().await.is_err());
 
     Ok(())
@@ -107,7 +107,7 @@ async fn connector_s3_no_region() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), "s3-writer", &connector_yaml).await?;
+    let harness = ConnectorHarness::new(function_name!(), "s3_writer", &connector_yaml).await?;
     assert!(harness.start().await.is_err());
 
     Ok(())
@@ -137,7 +137,7 @@ async fn connector_s3_no_bucket() -> Result<()> {
             "endpoint": endpoint
         }
     });
-    let harness = ConnectorHarness::new(function_name!(), "s3-writer", &connector_yaml).await?;
+    let harness = ConnectorHarness::new(function_name!(), "s3_writer", &connector_yaml).await?;
     assert!(harness.start().await.is_err());
 
     Ok(())
@@ -174,7 +174,7 @@ async fn connector_s3() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), "s3-writer", &connector_yaml).await?;
+    let harness = ConnectorHarness::new(function_name!(), "s3_writer", &connector_yaml).await?;
     let in_pipe = harness
         .get_pipe(IN)
         .expect("No pipe connectored to port IN");
@@ -276,7 +276,7 @@ fn get_unbatched_event() -> (Event, value::Value<'static>) {
         },
     });
     let meta = literal!({
-        "s3": {
+        "s3_writer": {
                 "key": "unbatched_key"
             }
     });
@@ -307,7 +307,7 @@ fn get_batched_event() -> (
                     "field3": [],
                 },
                 "meta": {
-                    "s3": {
+                    "s3_writer": {
                         "key": "batched_key0"
                     }
                 }
@@ -323,7 +323,7 @@ fn get_batched_event() -> (
                     }
                 },
                 "meta": {
-                    "s3": {
+                    "s3_writer": {
                         "key": "batched_key1"
                     }
                 }
@@ -336,7 +336,7 @@ fn get_batched_event() -> (
                     "vec_field": ["elem1", "elem2", "elem3"],
                 },
                 "meta": {
-                    "s3": {
+                    "s3_writer": {
                         "key": "batched_key2"
                     }
                 }
@@ -381,7 +381,7 @@ fn large_unbatched_event() -> (Event, Vec<u8>) {
     let large_data = value::Value::Bytes(large_text.clone().into());
 
     let large_meta = literal!({
-        "s3": {
+        "s3_writer": {
             "key": "large_unbatched_event"
         }
     });
@@ -414,7 +414,7 @@ fn large_batched_event() -> (Event, Vec<u8>) {
             "data": {
                 "value": lit,
                 "meta" : {
-                    "s3" : {
+                    "s3_writer" : {
                         "key": "large_batched_event",
                     }
                 }

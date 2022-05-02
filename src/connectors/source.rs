@@ -114,7 +114,7 @@ pub enum SourceReply {
         port: Option<Cow<'static, str>>,
         /// Overwrite the codec being used for deserializing this data.
         /// Should only be used when setting `stream` to `None`
-        codec_overwrite: Option<Box<dyn Codec>>,
+        codec_overwrite: Option<String>,
     },
     /// an already structured event payload
     Structured {
@@ -500,10 +500,7 @@ impl Streams {
         })
     }
 
-    fn create_anonymous_stream(
-        &self,
-        codec_overwrite: Option<Box<dyn Codec>>,
-    ) -> Result<StreamState> {
+    fn create_anonymous_stream(&self, codec_overwrite: Option<String>) -> Result<StreamState> {
         Self::build_stream(
             self.uid,
             DEFAULT_STREAM_ID,
@@ -518,11 +515,11 @@ impl Streams {
         source_uid: SourceId,
         stream_id: u64,
         codec_config: &CodecConfig,
-        codec_overwrite: Option<Box<dyn Codec>>,
+        codec_overwrite: Option<String>,
         preprocessor_configs: &[PreprocessorConfig],
     ) -> Result<StreamState> {
         let codec = if let Some(codec_overwrite) = codec_overwrite {
-            codec_overwrite
+            codec::resolve(&codec_overwrite.as_str().into())?
         } else {
             codec::resolve(codec_config)?
         };
@@ -758,7 +755,8 @@ where
                     } else {
                         // At this point the connector has advised all reading from external connections to stop via the `QuiescenceBeacon`
                         // We change the source state to `Draining` and wait for all the streams to finish as we drain out everything that might be in flight
-                        // when reached the `Finished` point, we emit the `Drain` signal and wait for the CB answer (one for each connected pipeline)
+                        // when reached the `Finished` point, we emit the `Drain` signal and wait for the CB answer (one for each connected sink that sent a start message)
+                        // TODO: this assumption is not working correctly with e.g. tcp and http
                         self.state = SourceState::Draining;
                     }
                 }
@@ -993,7 +991,6 @@ where
                     .await;
                 if self.state == SourceState::Draining && self.streams.is_empty() {
                     self.on_fully_drained().await?;
-                    self.state = SourceState::Drained;
                 }
             }
             SourceReply::StreamFail(stream_id) => {
@@ -1001,13 +998,11 @@ where
                 self.streams.end_stream(stream_id);
                 if self.state == SourceState::Draining && self.streams.is_empty() {
                     self.on_fully_drained().await?;
-                    self.state = SourceState::Drained;
                 }
             }
             SourceReply::Finished => {
                 info!("{} Finished", self.ctx);
                 self.on_fully_drained().await?;
-                self.state = SourceState::Drained;
             }
         }
         Ok(())
@@ -1088,7 +1083,7 @@ where
         port: Option<Cow<'static, str>>,
         data: Vec<u8>,
         meta: Option<Value<'static>>,
-        codec_overwrite: Option<Box<dyn Codec>>,
+        codec_overwrite: Option<String>,
     ) -> Result<()> {
         let mut ingest_ns = nanotime();
         if let Some(stream) = stream {
@@ -1268,7 +1263,9 @@ where
             let ctrl = match r {
                 Either::Left(msg) => self.handle_control_plane_msg(msg).await,
                 Either::Right(data) => {
-                    self.handle_source_reply(data, pull_id).await?;
+                    if let Err(e) = self.handle_source_reply(data, pull_id).await {
+                        error!("{} Error handling source reply: {}", self.ctx, e);
+                    }
                     self.pull_counter += 1;
                     Control::Continue
                 }

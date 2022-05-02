@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New features
+
+- Add support for `chunked` requests and responses for the HTTP connectors
+- 
 ### Fixes
 
 - fix the use of `args` in the with part of a `create` insode of a `flow`.

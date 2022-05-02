@@ -13,11 +13,9 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use tremor_value::Value;
-use value_trait::ValueAccess;
 
 /// Authorization methods
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum Auth {
     #[serde(alias = "basic")]
@@ -28,47 +26,8 @@ pub enum Auth {
     None,
 }
 
-impl From<Option<&Value<'_>>> for Auth {
-    fn from(meta: Option<&Value<'_>>) -> Self {
-        match meta {
-            None => Auth::None,
-            Some(Value::Object(basic)) => {
-                if let Some(basic) = basic.get("basic") {
-                    let username = basic.get_str("username");
-                    let password = basic.get_str("password");
-                    match (username, password) {
-                        (Some(u), Some(p)) => Auth::Basic {
-                            username: u.to_string(),
-                            password: p.to_string(),
-                        },
-                        _otherwise => {
-                            error!("Unable to parse basic authentication configuration");
-                            Auth::None
-                        }
-                    }
-                } else {
-                    warn!("Unable to process HTTP basic authentication configuration");
-                    Auth::None
-                }
-            }
-            Some(Value::String(s)) => {
-                if "gcp" == &s.to_string() {
-                    Auth::Gcp
-                } else {
-                    error!("Invalid authentication type `{}`", &s.to_string());
-                    Auth::None
-                }
-            }
-            Some(_other) => {
-                error!("Invalid authentication type");
-                Auth::None
-            }
-        }
-    }
-}
-
 impl Auth {
-    /// Prepare a HTTP authentication header value given the authentication strategy
+    /// Prepare a HTTP autheorization header value given the auth strategy
     pub fn header_value(&self) -> Result<Option<String>> {
         match *self {
             Auth::Gcp => {
