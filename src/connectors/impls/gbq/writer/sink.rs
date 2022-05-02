@@ -466,6 +466,64 @@ mod test {
     use value_trait::StaticNode;
 
     #[test]
+    fn skips_unknown_field_types() {
+        let (rx, _tx) = async_std::channel::unbounded();
+
+        let result = map_field(
+            "name",
+            &vec![TableFieldSchema {
+                name: "something".to_string(),
+                r#type: -1,
+                mode: Mode::Required.into(),
+                fields: vec![],
+                description: "".to_string(),
+                max_length: 0,
+                precision: 0,
+                scale: 0,
+            }],
+            &SinkContext {
+                uid: Default::default(),
+                alias: "".to_string(),
+                connector_type: Default::default(),
+                quiescence_beacon: Default::default(),
+                notifier: ConnectionLostNotifier::new(rx),
+            },
+        );
+
+        assert_eq!(result.0.field.len(), 0);
+        assert_eq!(result.1.len(), 0);
+    }
+
+    #[test]
+    fn skips_fields_of_unspecified_type() {
+        let (rx, _tx) = async_std::channel::unbounded();
+
+        let result = map_field(
+            "name",
+            &vec![TableFieldSchema {
+                name: "something".to_string(),
+                r#type: TableType::Unspecified.into(),
+                mode: Mode::Required.into(),
+                fields: vec![],
+                description: "".to_string(),
+                max_length: 0,
+                precision: 0,
+                scale: 0,
+            }],
+            &SinkContext {
+                uid: Default::default(),
+                alias: "".to_string(),
+                connector_type: Default::default(),
+                quiescence_beacon: Default::default(),
+                notifier: ConnectionLostNotifier::new(rx),
+            },
+        );
+
+        assert_eq!(result.0.field.len(), 0);
+        assert_eq!(result.1.len(), 0);
+    }
+
+    #[test]
     fn can_map_simple_field() {
         let data = vec![
             (TableType::Int64, field_descriptor_proto::Type::Int64),
@@ -749,5 +807,49 @@ mod test {
 
         // Fields should never have the "Unspecified" type, if that happens best we can do is to log a warning and ignore them
         assert_eq!([] as [u8; 0], result[..]);
+    }
+
+    #[test]
+    pub fn can_map_json_to_protobuf() {
+        let (rx, _tx) = async_std::channel::unbounded();
+
+        let sink_context = SinkContext {
+            uid: Default::default(),
+            alias: "".to_string(),
+            connector_type: Default::default(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(rx),
+        };
+        let mapping = JsonToProtobufMapping::new(
+            &vec![
+                TableFieldSchema {
+                    name: "a".to_string(),
+                    r#type: TableType::Int64.into(),
+                    mode: Mode::Required.into(),
+                    fields: vec![],
+                    description: "".to_string(),
+                    max_length: 0,
+                    precision: 0,
+                    scale: 0,
+                },
+                TableFieldSchema {
+                    name: "b".to_string(),
+                    r#type: TableType::Int64.into(),
+                    mode: Mode::Required.into(),
+                    fields: vec![],
+                    description: "".to_string(),
+                    max_length: 0,
+                    precision: 0,
+                    scale: 0,
+                },
+            ],
+            &sink_context,
+        );
+        let mut fields = halfbrown::HashMap::new();
+        fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
+        fields.insert("a".into(), Value::Static(StaticNode::I64(21)));
+        let result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
+
+        assert_eq!([8u8, 21u8], result[..]);
     }
 }
