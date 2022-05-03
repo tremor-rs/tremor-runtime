@@ -51,7 +51,7 @@ byteorder = "1"
 bytes = "1.1"
 chrono = "0.4"
 csv = "1.1"
-dashmap = "5.2"
+dashmap = "5.3"
 either = { version = "1.6", features = ["serde"] }
 error-chain = "0.12"
 file-mode = "0.1"

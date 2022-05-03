@@ -1621,13 +1621,13 @@ dependencies = [
 
 [[package]]
 name = "dashmap"
-version = "5.2.0"
+version = "5.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c8858831f7781322e539ea39e72449c46b059638250c14344fec8d0aa6e539c"
+checksum = "391b56fbd302e585b7a9494fb70e40949567b1cf9003a8e4a6041a1687c26573"
 dependencies = [
  "cfg-if 1.0.0",
- "num_cpus",
- "parking_lot 0.12.0",
+ "hashbrown 0.12.1",
+ "lock_api",
  "serde",
 ]
 
@@ -4724,7 +4724,7 @@ dependencies = [
  "bitflags",
  "bytes 1.1.0",
  "cfg-if 1.0.0",
- "dashmap 5.2.0",
+ "dashmap 5.3.3",
  "flate2",
  "futures",
  "mime",
@@ -5958,7 +5958,7 @@ dependencies = [
  "chrono",
  "cron",
  "csv",
- "dashmap 5.2.0",
+ "dashmap 5.3.3",
  "either",
  "elasticsearch",
  "env_logger 0.9.0",
