@@ -52,7 +52,7 @@ fn verify_brokers(id: &str, brokers: &[String]) -> Result<(String, Option<u16>)>
             }
             [host, port] => {
                 let port: u16 = port.parse().map_err(|_| {
-                    Error::from(ErrorKind::InvalidConfiguration(
+                    Error::from(ErrorKind::InvalidConnectorDefinition(
                         id.to_string(),
                         format!("Invalid broker: {}:{}", host, port),
                     ))
@@ -60,7 +60,7 @@ fn verify_brokers(id: &str, brokers: &[String]) -> Result<(String, Option<u16>)>
                 first_broker.get_or_insert_with(|| ((*host).to_string(), Some(port)));
             }
             b => {
-                return Err(ErrorKind::InvalidConfiguration(
+                return Err(ErrorKind::InvalidConnectorDefinition(
                     id.to_string(),
                     format!("Invalid broker: {}", b.join(":")),
                 )
@@ -69,7 +69,7 @@ fn verify_brokers(id: &str, brokers: &[String]) -> Result<(String, Option<u16>)>
         }
     }
     first_broker.ok_or_else(|| {
-        ErrorKind::InvalidConfiguration(id.to_string(), "Missing brokers.".to_string()).into()
+        ErrorKind::InvalidConnectorDefinition(id.to_string(), "Missing brokers.".to_string()).into()
     })
 }
 

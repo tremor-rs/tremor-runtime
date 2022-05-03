@@ -209,6 +209,7 @@ mod tests {
             },
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
+            "my_otel_server",
             ConnectorType("otel_server".into()),
             &with_processors,
         )?;

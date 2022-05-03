@@ -66,17 +66,19 @@ impl ConnectorBuilder for Builder {
         if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
             if config.nodes.is_empty() {
-                Err(
-                    ErrorKind::InvalidConfiguration(id.to_string(), "empty nodes provided".into())
-                        .into(),
+                Err(ErrorKind::InvalidConnectorDefinition(
+                    id.to_string(),
+                    "empty nodes provided".into(),
                 )
+                .into())
             } else {
                 let node_urls = config
                     .nodes
                     .iter()
                     .map(|s| {
                         Url::parse(s.as_str()).map_err(|e| {
-                            ErrorKind::InvalidConfiguration(id.to_string(), e.to_string()).into()
+                            ErrorKind::InvalidConnectorDefinition(id.to_string(), e.to_string())
+                                .into()
                         })
                     })
                     .collect::<Result<Vec<Url>>>()?;

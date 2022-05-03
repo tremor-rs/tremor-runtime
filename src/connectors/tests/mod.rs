@@ -93,7 +93,7 @@ impl ConnectorHarness {
 
         let connector_type = connector_type.to_string();
 
-        let raw_config = config::Connector::from_config(connector_type.into(), defn)?;
+        let raw_config = config::Connector::from_config(id, connector_type.into(), defn)?;
         let connector_addr =
             connectors::spawn(id, &mut connector_id_gen, &known_connectors, raw_config).await?;
         let mut pipes = HashMap::new();

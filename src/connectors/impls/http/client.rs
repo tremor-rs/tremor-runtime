@@ -106,7 +106,7 @@ impl ConnectorBuilder for Builder {
                 Some(Either::Right(false)) | None => None,
             };
             if config.url.scheme() == "https" && tls_client_config.is_none() {
-                return Err(ErrorKind::InvalidConfiguration(
+                return Err(ErrorKind::InvalidConnectorDefinition(
                     id.to_string(),
                     format!("missing tls config for {id} with 'https' url. Set 'tls' to 'true' or provide a full tls config."),
                 ).into());

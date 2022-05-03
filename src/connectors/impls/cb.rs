@@ -242,7 +242,7 @@ impl CbSource {
                 world,
             })
         } else {
-            Err(ErrorKind::InvalidConfiguration(
+            Err(ErrorKind::InvalidConnectorDefinition(
                 alias.to_string(),
                 String::from("Missing path key."),
             )
