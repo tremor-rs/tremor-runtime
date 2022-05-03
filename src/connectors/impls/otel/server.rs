@@ -202,8 +202,6 @@ mod tests {
     #[async_std::test]
     async fn otel_client_builder() -> Result<()> {
         let with_processors = literal!({
-            "id": "my_otel_server",
-            "type": "otel_server",
             "config": {
                 "url": "localhost:4317",
             },

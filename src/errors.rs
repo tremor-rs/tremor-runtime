@@ -271,7 +271,7 @@ error_chain! {
         }
         InvalidConfiguration(configured_thing: String, msg: String) {
             description("Invalid Configuration")
-                display("Invalid Configuration for \"{}\": {}", configured_thing, msg)
+                display("Invalid Configuration for {}: {}", configured_thing, msg)
         }
         InvalidConnectorDefinition(connector_id: String, msg: String) {
             description("Invalid Connector Definition")

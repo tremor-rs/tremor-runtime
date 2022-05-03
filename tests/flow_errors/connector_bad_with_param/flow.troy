@@ -1,0 +1,8 @@
+define flow bad_with_param
+flow
+  define connector foo from fake
+  with
+    preprocessor = ["snot"],
+    config = {}
+  end;
+end;

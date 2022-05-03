@@ -185,17 +185,18 @@ impl ErrorKind {
             DeployArtefactNotDefined, DeployRequiredArgDoesNotResolve, DoubleConst,
             DoublePipelineCreate, DoubleStream, EmptyInterpolation, EmptyScript, ExtraToken,
             Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst,
-            InvalidDrop, InvalidEmit, InvalidExtractor, InvalidFloatLiteral, InvalidFn,
-            InvalidHexLiteral, InvalidIntLiteral, InvalidPP, InvalidRecur, InvalidToken,
-            InvalidUnary, InvalidUtf8Sequence, Io, JsonError, MergeTypeConflict, MissingEffectors,
-            MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed,
-            NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
-            ParseIntError, ParserError, PatchKeyExists, PipelineUnknownPort,
-            QueryNodeDuplicateName, QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit,
-            RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
-            UnexpectedEscapeCode, UnknownLocal, UnrecognizedToken, UnterminatedExtractor,
-            UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
-            UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error, ValueError,
+            InvalidDefinitionalWithParam, InvalidDrop, InvalidEmit, InvalidExtractor,
+            InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidIntLiteral, InvalidPP,
+            InvalidRecur, InvalidToken, InvalidUnary, InvalidUtf8Sequence, Io, JsonError,
+            MergeTypeConflict, MissingEffectors, MissingFunction, MissingModule, ModuleNotFound,
+            Msg, NoClauseHit, NoConstsAllowed, NoEventReferencesAllowed, NoLocalsAllowed,
+            NoObjectError, NotConstant, NotFound, Oops, ParseIntError, ParserError, PatchKeyExists,
+            PipelineUnknownPort, QueryNodeDuplicateName, QueryNodeReservedName,
+            QueryStreamNotDefined, RecursionLimit, RuntimeError, TailingHereDoc, TypeConflict,
+            UnexpectedCharacter, UnexpectedEndOfStream, UnexpectedEscapeCode, UnknownLocal,
+            UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
+            UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
+            UpdateKeyMissing, Utf8Error, ValueError,
         };
         match self {
             NoClauseHit(outer)
@@ -268,6 +269,7 @@ impl ErrorKind {
             | UnterminatedStringLiteral(outer, inner, _)
             | UnknownLocal(outer, inner, _)
             | CyclicUse(outer, inner, _)
+            | InvalidDefinitionalWithParam(outer, inner, _, _, _)
             | UpdateKeyMissing(outer, inner, _) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
@@ -317,8 +319,9 @@ impl ErrorKind {
     pub(crate) fn hint(&self) -> Option<String> {
         use ErrorKind::{
             BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, EmptyInterpolation,
-            MissingFunction, MissingModule, NoClauseHit, NoEventReferencesAllowed, Oops,
-            TypeConflict, UnrecognizedToken, UnterminatedInterpolation,
+            InvalidDefinitionalWithParam, MissingFunction, MissingModule, NoClauseHit,
+            NoEventReferencesAllowed, Oops, TypeConflict, UnrecognizedToken,
+            UnterminatedInterpolation,
         };
         match self {
             UnrecognizedToken(outer, inner, t, _) if t.is_empty() && inner.start().absolute() == outer.start().absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
@@ -372,6 +375,8 @@ impl ErrorKind {
 
             NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
             Oops(_, id, _) => Some(format!("Please take the error output script and test data and open a ticket, this should not happen.\nhttps://github.com/tremor-rs/tremor-runtime/issues/new?labels=bug&template=bug_report.md&title=Opps%20{}", id)),
+
+            InvalidDefinitionalWithParam(_, _, _, _, available_params) => Some(format!("Available parameters are: {}", available_params.join(", "))),
             _ => None,
         }
     }
@@ -875,6 +880,10 @@ error_chain! {
         DeployRequiredArgDoesNotResolve(stmt: Span, inner: Span, name: String) {
             description("Deployment artefact argument has no value bound")
                 display("Argument `{}` is required, but no defaults are provided in the definition and no final values in the instance", name)
+        }
+        InvalidDefinitionalWithParam(stmt: Span, inner: Span, definition: String, param: String, available_params: &'static [&'static str]) {
+            description("Invalid `with` parameter")
+                display("Invalid `with` parameter \"{}\" in definition of {}.", param, definition)
         }
     }
 }
