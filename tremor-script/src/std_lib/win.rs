@@ -297,6 +297,24 @@ mod test {
     }
 
     #[test]
+    fn last_merge() -> Result<()> {
+        let mut a = Last::default();
+        let mut b = Last::default();
+        a.init();
+        b.init();
+
+        a.accumulate(&[&Value::from(1)])?;
+        a.accumulate(&[&Value::from(2)])?;
+        b.accumulate(&[&Value::from(3)])?;
+
+        a.merge(&b)?;
+
+        assert_eq!(Value::from(3), a.emit().unwrap());
+
+        Ok(())
+    }
+
+    #[test]
     fn cardinality() {
         let f = fun("win", "cardinality");
 
