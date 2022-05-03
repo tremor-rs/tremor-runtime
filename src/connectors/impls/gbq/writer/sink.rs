@@ -297,7 +297,7 @@ impl JsonToProtobufMapping {
             return Ok(result);
         }
 
-        Ok(vec![])
+        Err(ErrorKind::BigQueryTypeMismatch("object", value.value_type()).into())
     }
 
     pub fn descriptor(&self) -> &DescriptorProto {
@@ -884,7 +884,7 @@ mod test {
     }
 
     #[test]
-    fn map_field_ignores_struct_fields_that_are_not_in_definition() {
+    fn map_field_ignores_fields_that_are_not_in_definition() {
         let (rx, _tx) = async_std::channel::unbounded();
 
         let sink_context = SinkContext {
@@ -926,5 +926,116 @@ mod test {
         let result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
 
         assert_eq!([8u8, 12u8, 16u8, 21u8], result[..]);
+    }
+
+    #[test]
+    fn map_field_ignores_struct_fields_that_are_not_in_definition() {
+        let (rx, _tx) = async_std::channel::unbounded();
+
+        let sink_context = SinkContext {
+            uid: Default::default(),
+            alias: "".to_string(),
+            connector_type: Default::default(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(rx),
+        };
+        let mapping = JsonToProtobufMapping::new(
+            &vec![TableFieldSchema {
+                name: "a".to_string(),
+                r#type: TableType::Struct.into(),
+                mode: Mode::Required.into(),
+                fields: vec![TableFieldSchema {
+                    name: "x".to_string(),
+                    r#type: TableType::Int64.into(),
+                    mode: Mode::Required.into(),
+                    fields: vec![],
+                    description: "".to_string(),
+                    max_length: 0,
+                    precision: 0,
+                    scale: 0,
+                }],
+                description: "".to_string(),
+                max_length: 0,
+                precision: 0,
+                scale: 0,
+            }],
+            &sink_context,
+        );
+        let mut inner_fields = halfbrown::HashMap::new();
+        inner_fields.insert("x".into(), Value::Static(StaticNode::I64(10)));
+        inner_fields.insert("y".into(), Value::Static(StaticNode::I64(10)));
+        let mut fields = halfbrown::HashMap::new();
+        fields.insert("a".into(), Value::Object(Box::new(inner_fields)));
+        let result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
+
+        assert_eq!([10u8, 2u8, 8u8, 10u8], result[..]);
+    }
+
+    #[test]
+    fn fails_on_bytes_type_mismatch() {
+        let (rx, _tx) = async_std::channel::unbounded();
+
+        let sink_context = SinkContext {
+            uid: Default::default(),
+            alias: "".to_string(),
+            connector_type: Default::default(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(rx),
+        };
+        let mapping = JsonToProtobufMapping::new(
+            &vec![TableFieldSchema {
+                name: "a".to_string(),
+                r#type: TableType::Bytes.into(),
+                mode: Mode::Required.into(),
+                fields: vec![],
+                description: "".to_string(),
+                max_length: 0,
+                precision: 0,
+                scale: 0,
+            }],
+            &sink_context,
+        );
+        let mut fields = halfbrown::HashMap::new();
+        fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
+        let result = mapping.map(&Value::Object(Box::new(fields)));
+
+        if let Err(Error(ErrorKind::BigQueryTypeMismatch("bytes", x), _)) = result {
+            assert_eq!(x, ValueType::I64);
+        } else {
+            assert!(false, "Bytes conversion did not fail on type mismatch");
+        }
+    }
+
+    #[test]
+    fn fails_if_the_event_is_not_an_object() {
+        let (rx, _tx) = async_std::channel::unbounded();
+
+        let sink_context = SinkContext {
+            uid: Default::default(),
+            alias: "".to_string(),
+            connector_type: Default::default(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(rx),
+        };
+        let mapping = JsonToProtobufMapping::new(
+            &vec![TableFieldSchema {
+                name: "a".to_string(),
+                r#type: TableType::Bytes.into(),
+                mode: Mode::Required.into(),
+                fields: vec![],
+                description: "".to_string(),
+                max_length: 0,
+                precision: 0,
+                scale: 0,
+            }],
+            &sink_context,
+        );
+        let result = mapping.map(&Value::Static(StaticNode::I64(123)));
+
+        if let Err(Error(ErrorKind::BigQueryTypeMismatch("object", x), _)) = result {
+            assert_eq!(x, ValueType::I64);
+        } else {
+            assert!(false, "Mapping did not fail on non-object event");
+        }
     }
 }
