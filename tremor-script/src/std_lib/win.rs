@@ -297,6 +297,27 @@ mod test {
     }
 
     #[test]
+    fn collect_merge() -> Result<()> {
+        let mut a = CollectFlattened::default();
+        let mut b = CollectFlattened::default();
+        a.init();
+        b.init();
+
+        a.accumulate(&[&Value::from(1)])?;
+        a.accumulate(&[&Value::from(2)])?;
+        b.accumulate(&[&Value::from(3)])?;
+
+        a.merge(&b)?;
+
+        let result = a.emit().unwrap();
+        assert_eq!(Value::from(1), result.get_idx(0).unwrap());
+        assert_eq!(Value::from(2), result.get_idx(1).unwrap());
+        assert_eq!(Value::from(3), result.get_idx(2).unwrap());
+
+        Ok(())
+    }
+
+    #[test]
     fn last_merge() -> Result<()> {
         let mut a = Last::default();
         let mut b = Last::default();
