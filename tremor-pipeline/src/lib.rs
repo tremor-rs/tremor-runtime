@@ -1083,4 +1083,19 @@ mod test {
         assert_eq!(Some(1), e1.get_max_by_stream(source, stream));
         assert_eq!(Some((stream + 1, 2)), e1.get_max_by_source(source));
     }
+
+    #[test]
+    fn get_stream_from_self() {
+        let event_id = EventId::from_id(12, 34, 56);
+
+        assert_eq!(event_id.get_stream(12), Some(34));
+    }
+
+    #[test]
+    fn get_stream_from_tracked() {
+        let mut event_id = EventId::from_id(12, 34, 56);
+        event_id.track(&EventId::from_id(99, 75, 1024));
+
+        assert_eq!(event_id.get_stream(99), Some(75));
+    }
 }
