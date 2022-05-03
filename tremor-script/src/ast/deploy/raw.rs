@@ -166,6 +166,22 @@ impl_expr!(ConnectorDefinitionRaw);
 impl<'script> Upable<'script> for ConnectorDefinitionRaw<'script> {
     type Target = ConnectorDefinition<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        // verify supported parameters
+        for (ident, _) in &self.params.with.exprs {
+            let key: &str = ident.id.as_ref();
+            if !ConnectorDefinition::AVAILABLE_PARAMS.contains(&key) {
+                let range = ident.mid.range;
+                return Err(ErrorKind::InvalidDefinitionalWithParam(
+                    range.expand_lines(2),
+                    range,
+                    format!("connector \"{}\"", self.id),
+                    ident.id.to_string(),
+                    &ConnectorDefinition::AVAILABLE_PARAMS,
+                )
+                .into());
+            }
+        }
+
         let query_defn = ConnectorDefinition {
             config: Value::const_null(),
             mid: self.mid.box_with_name(&self.id),

@@ -640,7 +640,7 @@ async fn missing_tls_config_https() -> Result<()> {
         .err()
         .unwrap();
 
-    assert_eq!("Invalid Configuration for missing_tls_config_https: missing tls config for missing_tls_config_https with 'https' url. Set 'tls' to 'true' or provide a full tls config.", &res.to_string());
+    assert_eq!("Invalid Definition for connector \"missing_tls_config_https\": missing tls config for missing_tls_config_https with 'https' url. Set 'tls' to 'true' or provide a full tls config.", &res.to_string());
 
     Ok(())
 }

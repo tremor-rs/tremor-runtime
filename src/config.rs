@@ -15,6 +15,7 @@
 use crate::connectors::prelude::*;
 use simd_json::ValueType;
 use tremor_script::{
+    ast::deploy::ConnectorDefinition,
     ast::{self, Helper},
     FN_REGISTRY,
 };
@@ -151,24 +152,6 @@ pub(crate) struct Connector {
 }
 
 impl Connector {
-    const CONNECTOR_TYPE: &'static str = "connector_type";
-    const CODEC: &'static str = "codec";
-    const CONFIG: &'static str = "config";
-    const PREPROCESSORS: &'static str = "preprocessors";
-    const POSTPROCESSORS: &'static str = "postprocessors";
-    const METRICS_INTERVAL_S: &'static str = "metrics_interval_s";
-    const RECONNECT: &'static str = "reconnect";
-
-    const FIELDS: [&'static str; 7] = [
-        Self::CODEC,
-        Self::CONFIG,
-        Self::CONNECTOR_TYPE,
-        Self::METRICS_INTERVAL_S,
-        Self::POSTPROCESSORS,
-        Self::PREPROCESSORS,
-        Self::RECONNECT,
-    ];
-
     /// Spawns a connector from a definition
     pub(crate) fn from_defn(defn: &ast::ConnectorDefinition<'static>) -> crate::Result<Self> {
         let aggr_reg = tremor_script::registry::aggr();
@@ -182,6 +165,7 @@ impl Connector {
         Self::from_config(defn.id.as_str(), defn.builtin_kind.clone().into(), &conf)
     }
     /// Creates a connector from it's definition (aka config + settings)
+    #[allow(clippy::too_many_lines)]
     pub(crate) fn from_config(
         connector_id: &str,
         connector_type: ConnectorType,
@@ -200,22 +184,7 @@ impl Connector {
             }
             Ok(())
         }
-        // check for unknown fields
-        if let Some(obj) = connector_config.as_object() {
-            for key in obj.keys() {
-                let s: &str = key.as_ref();
-                if !Self::FIELDS.contains(&s) {
-                    return Err(ErrorKind::InvalidConnectorDefinition(
-                        connector_id.to_string(),
-                        format!(
-                            "Unknown field: {s}. Available fields: {}",
-                            Self::FIELDS.join(", ")
-                        ),
-                    )
-                    .into());
-                }
-            }
-        } else {
+        if !connector_config.is_object() {
             // invalid type
             return Err(ErrorKind::InvalidConnectorDefinition(
                 connector_id.to_string(),
@@ -226,50 +195,50 @@ impl Connector {
             )
             .into());
         }
-        let config = connector_config.get(Self::CONFIG).cloned();
+        let config = connector_config.get(ConnectorDefinition::CONFIG).cloned();
 
         // TODO: can we get hygenic errors here?
 
         validate_type(
             connector_config,
-            Self::CODEC,
+            ConnectorDefinition::CODEC,
             ValueType::String,
             connector_id,
         )?;
         validate_type(
             connector_config,
-            Self::CONFIG,
+            ConnectorDefinition::CONFIG,
             ValueType::Object,
             connector_id,
         )?;
         validate_type(
             connector_config,
-            Self::RECONNECT,
+            ConnectorDefinition::RECONNECT,
             ValueType::Object,
             connector_id,
         )?;
         validate_type(
             connector_config,
-            Self::PREPROCESSORS,
+            ConnectorDefinition::PREPROCESSORS,
             ValueType::Array,
             connector_id,
         )?;
         validate_type(
             connector_config,
-            Self::POSTPROCESSORS,
+            ConnectorDefinition::POSTPROCESSORS,
             ValueType::Array,
             connector_id,
         )?;
         validate_type(
             connector_config,
-            Self::METRICS_INTERVAL_S,
+            ConnectorDefinition::METRICS_INTERVAL_S,
             ValueType::U64,
             connector_id,
         )
         .or_else(|_| {
             validate_type(
                 connector_config,
-                Self::METRICS_INTERVAL_S,
+                ConnectorDefinition::METRICS_INTERVAL_S,
                 ValueType::I64,
                 connector_id,
             )
@@ -279,22 +248,22 @@ impl Connector {
             connector_type,
             config,
             preprocessors: connector_config
-                .get_array(Self::PREPROCESSORS)
+                .get_array(ConnectorDefinition::PREPROCESSORS)
                 .map(|o| o.iter().map(Preprocessor::try_from).collect::<Result<_>>())
                 .transpose()?,
             postprocessors: connector_config
-                .get_array(Self::POSTPROCESSORS)
+                .get_array(ConnectorDefinition::POSTPROCESSORS)
                 .map(|o| o.iter().map(Preprocessor::try_from).collect::<Result<_>>())
                 .transpose()?,
             reconnect: connector_config
-                .get(Self::RECONNECT)
+                .get(ConnectorDefinition::RECONNECT)
                 .cloned()
                 .map(tremor_value::structurize)
                 .transpose()?
                 .unwrap_or_default(),
-            metrics_interval_s: connector_config.get_u64(Self::METRICS_INTERVAL_S),
+            metrics_interval_s: connector_config.get_u64(ConnectorDefinition::METRICS_INTERVAL_S),
             codec: connector_config
-                .get(Self::CODEC)
+                .get(ConnectorDefinition::CODEC)
                 .map(Codec::try_from)
                 .transpose()?,
         })

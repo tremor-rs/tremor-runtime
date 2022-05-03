@@ -76,6 +76,7 @@ test_cases!(
     pipeline_bad_query,
     connector_no_kind,
     connector_bad_kind,
+    connector_bad_with_param,
     // connector_bad_with, look at this once we have connectors included
     flow_not_found,
 );
