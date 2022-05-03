@@ -63,7 +63,7 @@ impl ConnectorBuilder for Builder {
             let host = match config.url.host() {
                 Some(host) => host.to_string(),
                 None => {
-                    return Err(ErrorKind::InvalidConfiguration(
+                    return Err(ErrorKind::InvalidConnectorDefinition(
                         id.to_string(),
                         "Invalid `url` - host missing".to_string(),
                     )
@@ -72,7 +72,7 @@ impl ConnectorBuilder for Builder {
             };
             // TODO: do we really need to make the port required when we have a default defined on the URL?
             if config.url.port().is_none() {
-                return Err(ErrorKind::InvalidConfiguration(
+                return Err(ErrorKind::InvalidConnectorDefinition(
                     id.to_string(),
                     "Not a valid WS type url - port specification missing".to_string(),
                 )

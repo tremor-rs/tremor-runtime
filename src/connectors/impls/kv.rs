@@ -179,7 +179,7 @@ impl ConnectorBuilder for Builder {
         if let Some(config) = &config.config {
             let config: Config = Config::new(config)?;
             if !PathBuf::from(&config.dir).is_dir().await {
-                return Err(ErrorKind::InvalidConfiguration(
+                return Err(ErrorKind::InvalidConnectorDefinition(
                     id.to_string(),
                     "Invalid `dir`. Not a directory or not accessible.".to_string(),
                 )

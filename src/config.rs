@@ -151,8 +151,26 @@ pub(crate) struct Connector {
 }
 
 impl Connector {
+    const CONNECTOR_TYPE: &'static str = "connector_type";
+    const CODEC: &'static str = "codec";
+    const CONFIG: &'static str = "config";
+    const PREPROCESSORS: &'static str = "preprocessors";
+    const POSTPROCESSORS: &'static str = "postprocessors";
+    const METRICS_INTERVAL_S: &'static str = "metrics_interval_s";
+    const RECONNECT: &'static str = "reconnect";
+
+    const FIELDS: [&'static str; 7] = [
+        Self::CODEC,
+        Self::CONFIG,
+        Self::CONNECTOR_TYPE,
+        Self::METRICS_INTERVAL_S,
+        Self::POSTPROCESSORS,
+        Self::PREPROCESSORS,
+        Self::RECONNECT,
+    ];
+
     /// Spawns a connector from a definition
-    pub(crate) fn from_defn(defn: &ast::ConnectorDefinition<'static>) -> crate::Result<Connector> {
+    pub(crate) fn from_defn(defn: &ast::ConnectorDefinition<'static>) -> crate::Result<Self> {
         let aggr_reg = tremor_script::registry::aggr();
         let reg = &*FN_REGISTRY.read()?;
 
@@ -161,55 +179,122 @@ impl Connector {
 
         let conf = params.generate_config(&mut helper)?;
 
-        Connector::from_config(defn.builtin_kind.clone().into(), &conf)
+        Self::from_config(defn.id.as_str(), defn.builtin_kind.clone().into(), &conf)
     }
     /// Creates a connector from it's definition (aka config + settings)
     pub(crate) fn from_config(
+        connector_id: &str,
         connector_type: ConnectorType,
         connector_config: &Value<'static>,
-    ) -> crate::Result<Connector> {
-        fn validate_type(v: &Value, k: &str, t: ValueType) -> Result<()> {
+    ) -> crate::Result<Self> {
+        fn validate_type(v: &Value, k: &str, t: ValueType, connector_id: &str) -> Result<()> {
             if v.get(k).is_some() && v.get(k).map(Value::value_type) != Some(t) {
-                return Err(format!(
-                    "Expect type {:?} for key {} but got {:?}",
-                    t,
-                    k,
-                    v.get(k).map_or(ValueType::Null, Value::value_type)
+                return Err(ErrorKind::InvalidConnectorDefinition(
+                    connector_id.to_string(),
+                    format!(
+                        "Expected type {t:?} for key {k} but got {:?}",
+                        v.get(k).map_or(ValueType::Null, Value::value_type)
+                    ),
                 )
                 .into());
             }
             Ok(())
         }
-        let config = connector_config.get("config").cloned();
+        // check for unknown fields
+        if let Some(obj) = connector_config.as_object() {
+            for key in obj.keys() {
+                let s: &str = key.as_ref();
+                if !Self::FIELDS.contains(&s) {
+                    return Err(ErrorKind::InvalidConnectorDefinition(
+                        connector_id.to_string(),
+                        format!(
+                            "Unknown field: {s}. Available fields: {}",
+                            Self::FIELDS.join(", ")
+                        ),
+                    )
+                    .into());
+                }
+            }
+        } else {
+            // invalid type
+            return Err(ErrorKind::InvalidConnectorDefinition(
+                connector_id.to_string(),
+                format!(
+                    "Invalid connector config. Expected object, got: {:?}",
+                    connector_config.value_type()
+                ),
+            )
+            .into());
+        }
+        let config = connector_config.get(Self::CONFIG).cloned();
 
         // TODO: can we get hygenic errors here?
 
-        validate_type(connector_config, "codec_map", ValueType::Object)?;
-        validate_type(connector_config, "preprocessors", ValueType::Array)?;
-        validate_type(connector_config, "postprocessors", ValueType::Array)?;
-        validate_type(connector_config, "metrics_interval_s", ValueType::U64)
-            .or_else(|_| validate_type(connector_config, "metrics_interval_s", ValueType::I64))?;
+        validate_type(
+            connector_config,
+            Self::CODEC,
+            ValueType::String,
+            connector_id,
+        )?;
+        validate_type(
+            connector_config,
+            Self::CONFIG,
+            ValueType::Object,
+            connector_id,
+        )?;
+        validate_type(
+            connector_config,
+            Self::RECONNECT,
+            ValueType::Object,
+            connector_id,
+        )?;
+        validate_type(
+            connector_config,
+            Self::PREPROCESSORS,
+            ValueType::Array,
+            connector_id,
+        )?;
+        validate_type(
+            connector_config,
+            Self::POSTPROCESSORS,
+            ValueType::Array,
+            connector_id,
+        )?;
+        validate_type(
+            connector_config,
+            Self::METRICS_INTERVAL_S,
+            ValueType::U64,
+            connector_id,
+        )
+        .or_else(|_| {
+            validate_type(
+                connector_config,
+                Self::METRICS_INTERVAL_S,
+                ValueType::I64,
+                connector_id,
+            )
+        })?;
 
-        Ok(Connector {
+        Ok(Self {
             connector_type,
             config,
             preprocessors: connector_config
-                .get_array("preprocessors")
+                .get_array(Self::PREPROCESSORS)
                 .map(|o| o.iter().map(Preprocessor::try_from).collect::<Result<_>>())
                 .transpose()?,
             postprocessors: connector_config
-                .get_array("postprocessors")
+                .get_array(Self::POSTPROCESSORS)
                 .map(|o| o.iter().map(Preprocessor::try_from).collect::<Result<_>>())
                 .transpose()?,
             reconnect: connector_config
-                .get("reconnect")
+                .get(Self::RECONNECT)
                 .cloned()
                 .map(tremor_value::structurize)
                 .transpose()?
                 .unwrap_or_default(),
-            metrics_interval_s: connector_config.get_u64("metrics_interval_s"),
+            metrics_interval_s: connector_config.get_u64(Self::METRICS_INTERVAL_S),
             codec: connector_config
-                .get("codec")
+                .get(Self::CODEC)
                 .map(Codec::try_from)
                 .transpose()?,
         })
@@ -265,6 +350,7 @@ mod tests {
     #[test]
     fn test_config_builtin_preproc_with_config() -> Result<()> {
         let c = Connector::from_config(
+            "my_otel_client",
             ConnectorType::from("otel_client".to_string()),
             &literal!({
                 "preprocessors": [ {"name": "snot", "config": { "separator": "\n" }}],

@@ -271,7 +271,11 @@ error_chain! {
         }
         InvalidConfiguration(configured_thing: String, msg: String) {
             description("Invalid Configuration")
-                display("Invalid Configuration for {}: {}", configured_thing, msg)
+                display("Invalid Configuration for \"{}\": {}", configured_thing, msg)
+        }
+        InvalidConnectorDefinition(connector_id: String, msg: String) {
+            description("Invalid Connector Definition")
+                display("Invalid Definition for connector \"{}\": {}", connector_id, msg)
         }
         InvalidConnect(target: String, port: Cow<'static, str>) {
             description("Invalid Connect attempt")

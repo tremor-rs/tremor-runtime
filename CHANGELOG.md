@@ -9,6 +9,7 @@
 ### Fixes
 
 - fix the use of `args` in the with part of a `create` insode of a `flow`.
+- fix silent swallowing of unknown fields in connector definition.
 
 ### Breaking Changes
 

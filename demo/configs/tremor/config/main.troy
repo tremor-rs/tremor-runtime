@@ -248,7 +248,7 @@ flow
                 "Content-Type": ["text/plain; charset=utf-8"],
                 "Accept": ["application/json"]
             },
-            "codec_map": {
+            "custom_codecs": {
                 "application/json":"json"
             }
         },
