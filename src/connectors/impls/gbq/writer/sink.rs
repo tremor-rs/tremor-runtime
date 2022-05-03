@@ -484,6 +484,18 @@ mod test {
     }
 
     #[test]
+    fn interceptor_will_pass_token_error() {
+        let mut interceptor = AuthInterceptor {
+            token: Box::new(|| Err(Status::unavailable("boo"))),
+        };
+        let request = Request::new(());
+
+        let result = interceptor.call(request);
+
+        assert_eq!(result.unwrap_err().message(), "boo");
+    }
+
+    #[test]
     fn skips_unknown_field_types() {
         let (rx, _tx) = async_std::channel::unbounded();
 
@@ -865,9 +877,54 @@ mod test {
         );
         let mut fields = halfbrown::HashMap::new();
         fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
-        fields.insert("a".into(), Value::Static(StaticNode::I64(21)));
+        fields.insert("b".into(), Value::Static(StaticNode::I64(21)));
         let result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
 
-        assert_eq!([8u8, 21u8], result[..]);
+        assert_eq!([8u8, 12u8, 16u8, 21u8], result[..]);
+    }
+
+    #[test]
+    fn map_field_ignores_struct_fields_that_are_not_in_definition() {
+        let (rx, _tx) = async_std::channel::unbounded();
+
+        let sink_context = SinkContext {
+            uid: Default::default(),
+            alias: "".to_string(),
+            connector_type: Default::default(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(rx),
+        };
+        let mapping = JsonToProtobufMapping::new(
+            &vec![
+                TableFieldSchema {
+                    name: "a".to_string(),
+                    r#type: TableType::Int64.into(),
+                    mode: Mode::Required.into(),
+                    fields: vec![],
+                    description: "".to_string(),
+                    max_length: 0,
+                    precision: 0,
+                    scale: 0,
+                },
+                TableFieldSchema {
+                    name: "b".to_string(),
+                    r#type: TableType::Int64.into(),
+                    mode: Mode::Required.into(),
+                    fields: vec![],
+                    description: "".to_string(),
+                    max_length: 0,
+                    precision: 0,
+                    scale: 0,
+                },
+            ],
+            &sink_context,
+        );
+        let mut fields = halfbrown::HashMap::new();
+        fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
+        fields.insert("b".into(), Value::Static(StaticNode::I64(21)));
+        fields.insert("c".into(), Value::Static(StaticNode::I64(33)));
+        let result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
+
+        assert_eq!([8u8, 12u8, 16u8, 21u8], result[..]);
     }
 }
