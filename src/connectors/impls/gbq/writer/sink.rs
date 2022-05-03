@@ -27,6 +27,7 @@ use gouth::Token;
 use prost::encoding::WireType;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::metadata::MetadataValue;
@@ -42,21 +43,12 @@ pub(crate) struct GbqSink {
 }
 
 pub(crate) struct AuthInterceptor {
-    token: Token,
+    token: Box<dyn Fn() -> ::std::result::Result<Arc<String>, Status> + Send>,
 }
 
 impl Interceptor for AuthInterceptor {
     fn call(&mut self, mut request: Request<()>) -> ::std::result::Result<Request<()>, Status> {
-        let header_value = match self.token.header_value() {
-            Ok(val) => val,
-            Err(e) => {
-                error!("Failed to get token for BigQuery: {}", e);
-
-                return Err(Status::unavailable(
-                    "Failed to retrieve authentication token.",
-                ));
-            }
-        };
+        let header_value = (self.token)()?;
         let metadata_value = match MetadataValue::from_str(header_value.as_str()) {
             Ok(val) => val,
             Err(e) => {
@@ -419,7 +411,21 @@ impl Sink for GbqSink {
             .connect()
             .await?;
 
-        let mut client = BigQueryWriteClient::with_interceptor(channel, AuthInterceptor { token });
+        let mut client = BigQueryWriteClient::with_interceptor(
+            channel,
+            AuthInterceptor {
+                token: Box::new(move || match token.header_value() {
+                    Ok(val) => Ok(val),
+                    Err(e) => {
+                        error!("Failed to get token for BigQuery: {}", e);
+
+                        Err(Status::unavailable(
+                            "Failed to retrieve authentication token.",
+                        ))
+                    }
+                }),
+            },
+        );
 
         let write_stream = client
             .create_write_stream(CreateWriteStreamRequest {
@@ -464,6 +470,18 @@ mod test {
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
     use value_trait::StaticNode;
+
+    #[test]
+    fn interceptor_can_add_the_auth_header() {
+        let mut interceptor = AuthInterceptor {
+            token: Box::new(|| Ok(Arc::new("test".into()))),
+        };
+        let request = Request::new(());
+
+        let result = interceptor.call(request).unwrap();
+
+        assert_eq!(result.metadata().get("authorization").unwrap(), "test");
+    }
 
     #[test]
     fn skips_unknown_field_types() {
