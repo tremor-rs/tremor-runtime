@@ -253,7 +253,7 @@ impl Sink for HttpRequestSink {
             .set_max_connections_per_host(self.config.concurrency)
             .set_tls_config(tls_config);
 
-        let client = H1Client::try_from(client_config.clone())
+        let client = H1Client::try_from(client_config)
             .map_err(|e| format!("Invalid HTTP Client config: {e}."))?;
         self.client = Some(Arc::new(client));
 
@@ -272,7 +272,7 @@ impl Sink for HttpRequestSink {
         // constrain to max concurrency - propagate CB close on hitting limit
         let guard = self.concurrency_cap.inc_for(&event).await?;
 
-        if let Some(client) = self.client.as_ref().map(|client| client.clone()) {
+        if let Some(client) = self.client.as_ref().cloned() {
             let send_ctx = ctx.clone();
             let response_tx = self.response_tx.clone();
             let reply_tx = self.reply_tx.clone();
