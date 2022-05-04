@@ -197,32 +197,9 @@ impl Source for HttpRequestSource {
     }
 }
 
-struct H1Clients {
-    clients: Vec<Arc<H1Client>>,
-    idx: usize,
-}
-
-impl H1Clients {
-    fn new(clients: Vec<Arc<H1Client>>) -> Self {
-        Self { clients, idx: 0 }
-    }
-
-    /// Returns a freshly clones h1 client inside an Arc
-    fn next(&mut self) -> Option<Arc<H1Client>> {
-        let len = self.clients.len();
-        if len > 0 {
-            let idx = self.idx % len;
-            self.idx += 1;
-            self.clients.get(idx).cloned()
-        } else {
-            None
-        }
-    }
-}
-
 struct HttpRequestSink {
     request_counter: u64,
-    clients: H1Clients,
+    client: Option<Arc<H1Client>>,
     response_tx: Sender<SourceReply>,
     reply_tx: Sender<AsyncSinkReply>,
     config: Config,
@@ -246,7 +223,7 @@ impl HttpRequestSink {
         let concurrency_cap = ConcurrencyCap::new(config.concurrency, reply_tx.clone());
         Self {
             request_counter: 1, // always start by 1, 0 is DEFAULT_STREAM_ID and this might interfere with custom codecs
-            clients: H1Clients::new(vec![]),
+            client: None,
             response_tx,
             reply_tx,
             config,
@@ -267,22 +244,18 @@ impl HttpRequestSink {
 #[async_trait::async_trait()]
 impl Sink for HttpRequestSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let mut clients = Vec::with_capacity(self.config.concurrency);
-
         let timeout = self.config.timeout.map(Duration::from_nanos);
         let tls_config = self.tls_client_config.as_ref().cloned().map(Arc::new);
         let client_config = http_client::Config::new()
             .set_http_keep_alive(true) // TODO: make configurable, maybe some people don't want that
             .set_tcp_no_delay(true)
             .set_timeout(timeout)
+            .set_max_connections_per_host(self.config.concurrency)
             .set_tls_config(tls_config);
 
-        for _i in 1..self.config.concurrency {
-            let client = H1Client::try_from(client_config.clone())
-                .map_err(|e| format!("Invalid HTTP Client config: {e}."))?;
-            clients.push(Arc::new(client));
-        }
-        self.clients = H1Clients::new(clients);
+        let client = H1Client::try_from(client_config.clone())
+            .map_err(|e| format!("Invalid HTTP Client config: {e}."))?;
+        self.client = Some(Arc::new(client));
 
         Ok(true)
     }
@@ -299,7 +272,7 @@ impl Sink for HttpRequestSink {
         // constrain to max concurrency - propagate CB close on hitting limit
         let guard = self.concurrency_cap.inc_for(&event).await?;
 
-        if let Some(client) = self.clients.next() {
+        if let Some(client) = self.client.as_ref().map(|client| client.clone()) {
             let send_ctx = ctx.clone();
             let response_tx = self.response_tx.clone();
             let reply_tx = self.reply_tx.clone();

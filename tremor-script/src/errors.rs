@@ -181,22 +181,21 @@ impl ErrorKind {
             AccessError, AggrInAggr, ArrayOutOfRange, AssignIntoArray, AssignToConst,
             BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, BadAccessInState, BadArity,
             BadArrayIndex, BadType, BinaryDrop, BinaryEmit, CantSetArgsConst, CantSetGroupConst,
-            CantSetWindowConst, Common, CyclicUse, DecreasingRange, DeployArgNotSpecified,
-            DeployArtefactNotDefined, DeployRequiredArgDoesNotResolve, DoubleConst,
-            DoublePipelineCreate, DoubleStream, EmptyInterpolation, EmptyScript, ExtraToken,
-            Generic, Grok, InvalidAssign, InvalidBinary, InvalidBitshift, InvalidConst,
-            InvalidDefinitionalWithParam, InvalidDrop, InvalidEmit, InvalidExtractor,
-            InvalidFloatLiteral, InvalidFn, InvalidHexLiteral, InvalidIntLiteral, InvalidPP,
-            InvalidRecur, InvalidToken, InvalidUnary, InvalidUtf8Sequence, Io, JsonError,
-            MergeTypeConflict, MissingEffectors, MissingFunction, MissingModule, ModuleNotFound,
-            Msg, NoClauseHit, NoConstsAllowed, NoEventReferencesAllowed, NoLocalsAllowed,
-            NoObjectError, NotConstant, NotFound, Oops, ParseIntError, ParserError, PatchKeyExists,
-            PipelineUnknownPort, QueryNodeDuplicateName, QueryNodeReservedName,
-            QueryStreamNotDefined, RecursionLimit, RuntimeError, TailingHereDoc, TypeConflict,
-            UnexpectedCharacter, UnexpectedEndOfStream, UnexpectedEscapeCode, UnknownLocal,
-            UnrecognizedToken, UnterminatedExtractor, UnterminatedHereDoc,
-            UnterminatedIdentLiteral, UnterminatedInterpolation, UnterminatedStringLiteral,
-            UpdateKeyMissing, Utf8Error, ValueError,
+            CantSetWindowConst, Common, CyclicUse, DecreasingRange, DeployArtefactNotDefined,
+            DeployRequiredArgDoesNotResolve, DoubleConst, DoublePipelineCreate, DoubleStream,
+            EmptyInterpolation, EmptyScript, ExtraToken, Generic, Grok, InvalidAssign,
+            InvalidBinary, InvalidBitshift, InvalidConst, InvalidDefinitionalWithParam,
+            InvalidDrop, InvalidEmit, InvalidExtractor, InvalidFloatLiteral, InvalidFn,
+            InvalidHexLiteral, InvalidIntLiteral, InvalidPP, InvalidRecur, InvalidToken,
+            InvalidUnary, InvalidUtf8Sequence, Io, JsonError, MergeTypeConflict, MissingEffectors,
+            MissingFunction, MissingModule, ModuleNotFound, Msg, NoClauseHit, NoConstsAllowed,
+            NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
+            ParseIntError, ParserError, PatchKeyExists, PipelineUnknownPort,
+            QueryNodeDuplicateName, QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit,
+            RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
+            UnexpectedEscapeCode, UnknownLocal, UnrecognizedToken, UnterminatedExtractor,
+            UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
+            UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error, ValueError, WithParamNoArg,
         };
         match self {
             NoClauseHit(outer)
@@ -218,7 +217,7 @@ impl ErrorKind {
             | BinaryDrop(outer, inner)
             | BinaryEmit(outer, inner)
             | DecreasingRange(outer, inner, _, _)
-            | DeployArgNotSpecified(outer, inner, _)
+            | WithParamNoArg(outer, inner, _, _, _)
             | DeployArtefactNotDefined(outer, inner, _, _)
             | DeployRequiredArgDoesNotResolve(outer, inner, _)
             | DoubleConst(outer, inner, _)
@@ -321,7 +320,7 @@ impl ErrorKind {
             BadAccessInEvent, BadAccessInGlobal, BadAccessInLocal, EmptyInterpolation,
             InvalidDefinitionalWithParam, MissingFunction, MissingModule, NoClauseHit,
             NoEventReferencesAllowed, Oops, TypeConflict, UnrecognizedToken,
-            UnterminatedInterpolation,
+            UnterminatedInterpolation, WithParamNoArg,
         };
         match self {
             UnrecognizedToken(outer, inner, t, _) if t.is_empty() && inner.start().absolute() == outer.start().absolute() => Some("It looks like a `;` is missing at the end of the script".into()),
@@ -376,7 +375,16 @@ impl ErrorKind {
             NoClauseHit(_) => Some("Consider adding a `default => null` clause at the end of your match or validate full coverage beforehand.".into()),
             Oops(_, id, _) => Some(format!("Please take the error output script and test data and open a ticket, this should not happen.\nhttps://github.com/tremor-rs/tremor-runtime/issues/new?labels=bug&template=bug_report.md&title=Opps%20{}", id)),
 
-            InvalidDefinitionalWithParam(_, _, _, _, available_params) => Some(format!("Available parameters are: {}", available_params.join(", "))),
+            InvalidDefinitionalWithParam(_, _, _, _, available_params) => if available_params.is_empty() {
+                Some(format!("Definition does not allow any `with` parameters"))
+            } else {
+                Some(format!("Available parameters are: {}", available_params.join(", ")))
+            },
+            WithParamNoArg(_, _, _, definition_name, available_args) => if available_args.is_empty() {
+                Some(format!("The definition of \"{definition_name}\" does not expose any args. Remove this `with`."))
+            } else {
+                Some(format!("Available args are: {}", available_args.join(", ")))
+            }
             _ => None,
         }
     }
@@ -873,9 +881,10 @@ error_chain! {
             description("Deployment artefact is not defined")
                 display("Artefact `{}` is not defined or not found, the following are defined: {}", name, options.join(", "))
         }
-        DeployArgNotSpecified(stmt: Span, inner: Span, name: String) {
-            description("Deployment artefact has unknown argument")
-                display("Argument used was not formally specified in originating definition: {}", name)
+        // user provided with parameter that has no corresponding argument in the definition
+        WithParamNoArg(stmt: Span, inner: Span, param_name: String, definition_name: String, available_args: Vec<String>) {
+            description("`with` parameter does not correspond to an argument in the target definition")
+                display("`with` parameter \"{}\" does not correspond to an argument in the target definition \"{}\"", param_name, definition_name)
         }
         DeployRequiredArgDoesNotResolve(stmt: Span, inner: Span, name: String) {
             description("Deployment artefact argument has no value bound")

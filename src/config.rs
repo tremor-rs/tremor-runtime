@@ -184,17 +184,6 @@ impl Connector {
             }
             Ok(())
         }
-        if !connector_config.is_object() {
-            // invalid type
-            return Err(ErrorKind::InvalidConnectorDefinition(
-                connector_id.to_string(),
-                format!(
-                    "Invalid connector config. Expected object, got: {:?}",
-                    connector_config.value_type()
-                ),
-            )
-            .into());
-        }
         let config = connector_config.get(ConnectorDefinition::CONFIG).cloned();
 
         // TODO: can we get hygenic errors here?
@@ -335,6 +324,22 @@ mod tests {
                 assert_eq!("\n", config.get("separator").unwrap().to_string());
             }
         }
+        Ok(())
+    }
+
+    #[test]
+    fn test_connector_config_wrong_config() -> Result<()> {
+        let config = literal!({
+            "preprocessors": [],
+            "postprocessors": [],
+            "codec": "string",
+            "reconnect": {},
+            "metrics_interval_s": "wrong_type"
+        });
+        let id = "my_id";
+        let res = Connector::from_config(id, "fancy_schmancy".into(), &config);
+        assert!(res.is_err());
+        assert_eq!(String::from("Invalid Definition for connector \"my_id\": Expected type I64 for key metrics_interval_s but got String"), res.err().unwrap().to_string());
         Ok(())
     }
 }

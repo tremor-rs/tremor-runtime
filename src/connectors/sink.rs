@@ -137,6 +137,7 @@ pub(crate) enum AsyncSinkReply {
     /// failure
     Fail(ContraflowData),
     /// circuitbreaker shit
+    /// TODO: do we actually need ContraflowData here?
     CB(ContraflowData, CbAction),
 }
 
