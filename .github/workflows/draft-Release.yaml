@@ -3,11 +3,15 @@ name: "Draft new release"
 on:
   workflow_dispatch:
     inputs:
-      old-version:
-        description: "Old version"
-        required: true
       new-version:
-        description: "New version"
+        type: choice
+        description: "Which version you'd like to release?"
+        options:
+        - major
+        - minor
+        - patch
+        - rc
+        - release
         required: true
 
 jobs:
@@ -18,19 +22,24 @@ jobs:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      - name: Create release branch
-        run: git checkout -b release/${{ github.event.inputs.new-version }}
-      - name: Initialize mandatory git config
-        run: |
-          git config user.name "GitHub actions"
-          git config user.email noreply@github.com
       - name: Bump new version in TOML files
-        run: sh ./scriptBump.sh ${{github.event.inputs.old-version}} ${{github.event.inputs.new-version}}
       - uses: actions-rs/install@v0.1
         with:
           crate: cargo-edit
           version: latest
-      - run: cargo set-version --workspace ${{github.event.inputs.new-version}}
+      - run: |
+          OLD=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+          cargo set-version --workspace --bump ${{github.event.inputs.new-version}}    
+      - name: Create release branch
+        run: |
+          NEW=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+          git checkout -b release/$NEW
+      - name: Initialize mandatory git config
+        run: |
+          git config user.name "GitHub actions"
+          git config user.email noreply@github.com
+      - name: Updating Changelog and Dockerfile
+        run: .github/scripts/Bump.sh $OLD $NEW
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -39,26 +48,28 @@ jobs:
         id: make-commit
         run: |
 
-          git commit -sa -m "Prepare release ${{ github.event.inputs.new-version }}"
+          git commit -sa -m "Prepare release $NEW"
           echo "::set-output name=commit::$(git rev-parse HEAD)"
       - name: Push new branch
-        run: git push origin release/${{ github.event.inputs.new-version }}
+        run: git push origin release/$NEW
 
       - name: Create pull request
-        run: gh pr create -B main --title "Release-v${{ github.event.inputs.new-version }}" --body "Yay release" --label "Release"
+        run: |
+          echo "RELEASE_VERSION=$NEW" >> $GITHUB_ENV
+          gh pr create -B main --title "Release-v$NEW" --body "Yay release" --label "Release"
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
-      - name: Invoke workflow in tremor-www
-        uses: benc-uk/workflow-dispatch@v1
-        with:
-          workflow: Draft new release
-          repo: tremor-rs/tremor-www
-          token: ${{ secrets.PAT_TOKEN }}
-          inputs: '{ "new-version": "${{ github.event.inputs.new-version }}"}'
-      - name: Invoke workflow in tremor-language-server
-        uses: benc-uk/workflow-dispatch@v1
-        with:
-          workflow: Draft new release
-          repo: tremor-rs/tremor-language-server
-          token: ${{ secrets.PAT_TOKEN }}
-          inputs: '{ "new-version": "${{ github.event.inputs.new-version }}"}'
+      # - name: Invoke workflow in tremor-www
+      #   uses: benc-uk/workflow-dispatch@v1
+      #   with:
+      #     workflow: Draft new release
+      #     repo: tremor-rs/tremor-www
+      #     token: ${{ secrets.PAT_TOKEN }}
+      #     inputs: '{ "new-version": "${{ env.RELEASE_VERSION }}"}'
+      # - name: Invoke workflow in tremor-language-server
+      #   uses: benc-uk/workflow-dispatch@v1
+      #   with:
+      #     workflow: Draft new release
+      #     repo: tremor-rs/tremor-language-server
+      #     token: ${{ secrets.PAT_TOKEN }}
+      #     inputs: '{ "new-version": "${{ env.RELEASE_VERSION }}"}'

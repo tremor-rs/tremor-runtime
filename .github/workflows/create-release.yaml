@@ -19,12 +19,6 @@ jobs:
           BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
           VERSION=${BRANCH_NAME#release/}
           echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV
-      - name: Extract version from branch name (for hotfix branches)
-        if: startsWith(github.event.pull_request.head.ref, 'hotfix/')
-        run: |
-          BRANCH_NAME="${{ github.event.pull_request.head.ref }}"
-          VERSION=${BRANCH_NAME#hotfix/}
-          echo "RELEASE_VERSION=$VERSION" >> $GITHUB_ENV
       - name: Checkout
         uses: actions/checkout@v2
       - name: Initialize mandatory git config
@@ -48,3 +42,13 @@ jobs:
           body: ${{ steps.extract-release-notes.outputs.release_notes }}
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
+      - name: Publish packages to crates.io
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+      - uses: katyo/publish-crates@v1
+        with:
+          path: './tremor-script'
+          args: --no-verify
+          dry-run: true
