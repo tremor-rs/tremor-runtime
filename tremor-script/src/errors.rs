@@ -376,7 +376,7 @@ impl ErrorKind {
             Oops(_, id, _) => Some(format!("Please take the error output script and test data and open a ticket, this should not happen.\nhttps://github.com/tremor-rs/tremor-runtime/issues/new?labels=bug&template=bug_report.md&title=Opps%20{}", id)),
 
             InvalidDefinitionalWithParam(_, _, _, _, available_params) => if available_params.is_empty() {
-                Some(format!("Definition does not allow any `with` parameters"))
+                Some(String::from("Definition does not allow any `with` parameters"))
             } else {
                 Some(format!("Available parameters are: {}", available_params.join(", ")))
             },

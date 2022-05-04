@@ -432,11 +432,7 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
             CreateTargetDefinition::Pipeline(ref pipe) => &pipe.params.args.0,
         };
         for (ident, _) in &self.params.with.exprs {
-            if args
-                .iter()
-                .find(|(args_ident, _)| ident.id == args_ident.id)
-                .is_none()
-            {
+            if !args.iter().any(|(args_ident, _)| ident.id == args_ident.id) {
                 let range = ident.extent();
                 let available_args = args
                     .iter()
