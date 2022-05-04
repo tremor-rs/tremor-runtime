@@ -365,7 +365,7 @@ impl Sink for GbqSink {
 
         let append_response = client
             .append_rows(stream::iter(vec![request]))
-            .timeout(Duration::from_secs(self.config.request_timeout))
+            .timeout(Duration::from_nanos(self.config.request_timeout))
             .await;
 
         let append_response = if let Ok(append_response) = append_response {
@@ -379,7 +379,7 @@ impl Sink for GbqSink {
         if let Ok(x) = append_response?
             .into_inner()
             .next()
-            .timeout(Duration::from_secs(self.config.request_timeout))
+            .timeout(Duration::from_nanos(self.config.request_timeout))
             .await
         {
             match x {
@@ -407,7 +407,7 @@ impl Sink for GbqSink {
             .domain_name("bigquerystorage.googleapis.com");
 
         let channel = Channel::from_static("https://bigquerystorage.googleapis.com")
-            .connect_timeout(Duration::from_secs(self.config.connect_timeout))
+            .connect_timeout(Duration::from_nanos(self.config.connect_timeout))
             .tls_config(tls_config)?
             .connect()
             .await?;
