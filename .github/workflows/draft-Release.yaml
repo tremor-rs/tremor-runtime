@@ -31,11 +31,11 @@ jobs:
         run: |
           OLD_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
           echo "OLD=$OLD_VERSION" >> $GITHUB_ENV
-          cargo set-version --workspace --bump ${{github.event.inputs.new-version}}    
+          cargo set-version --workspace --bump ${{github.event.inputs.new-version}} 
+          NEW_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+          echo "NEW=$NEW_VERSION" >> $GITHUB_ENV   
       - name: Create release branch
         run: |
-          NEW_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
-          echo "NEW=$NEW_VERSION" >> $GITHUB_ENV
           git checkout -b release/${{ env.NEW }}
       - name: Initialize mandatory git config
         run: |
