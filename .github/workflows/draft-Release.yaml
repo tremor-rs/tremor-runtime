@@ -27,19 +27,21 @@ jobs:
         with:
           crate: cargo-edit
           version: latest
-      - run: |
-          OLD=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+        run: |
+          OLD_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+          echo "OLD=$OLD_VERSION" >> $GITHUB_ENV
           cargo set-version --workspace --bump ${{github.event.inputs.new-version}}    
       - name: Create release branch
         run: |
-          NEW=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
-          git checkout -b release/$NEW
+          NEW_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+          echo "NEW=$NEW_VERSION" >> $GITHUB_ENV
+          git checkout -b release/${{ env.NEW }}
       - name: Initialize mandatory git config
         run: |
           git config user.name "GitHub actions"
           git config user.email noreply@github.com
       - name: Updating Changelog and Dockerfile
-        run: .github/scripts/Bump.sh $OLD $NEW
+        run: .github/scripts/Bump.sh ${{ env.OLD }} ${{ env.NEW }}
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
@@ -48,15 +50,14 @@ jobs:
         id: make-commit
         run: |
 
-          git commit -sa -m "Prepare release $NEW"
+          git commit -sa -m "Prepare release ${{ env.NEW }}"
           echo "::set-output name=commit::$(git rev-parse HEAD)"
       - name: Push new branch
-        run: git push origin release/$NEW
+        run: git push origin release/${{ env.NEW }}
 
       - name: Create pull request
         run: |
-          echo "RELEASE_VERSION=$NEW" >> $GITHUB_ENV
-          gh pr create -B main --title "Release-v$NEW" --body "Yay release" --label "Release"
+          gh pr create -B main --title "Release-v${{ env.NEW }}" --body "Yay release" --label "Release"
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
       # - name: Invoke workflow in tremor-www
