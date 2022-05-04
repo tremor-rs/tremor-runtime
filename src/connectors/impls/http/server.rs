@@ -70,7 +70,7 @@ impl ConnectorBuilder for Builder {
             let tls_server_config = config.tls.clone();
 
             if tls_server_config.is_some() && config.url.scheme() != "https" {
-                return Err(ErrorKind::InvalidConfiguration(
+                return Err(ErrorKind::InvalidConnectorDefinition(
                     id.to_string(),
                     "Using SSL certificates requires setting up a https endpoint".into(),
                 )

@@ -104,6 +104,31 @@ pub struct ConnectorDefinition<'script> {
 }
 impl_expr!(ConnectorDefinition);
 
+impl<'script> ConnectorDefinition<'script> {
+    // check with definition of `Connector` in tremor-runtime/src/config.rs
+    /// param name for connector type
+    pub const CODEC: &'static str = "codec";
+    /// param name for connector config
+    pub const CONFIG: &'static str = "config";
+    /// param name for preprocessors
+    pub const PREPROCESSORS: &'static str = "preprocessors";
+    /// param name for postprocessors
+    pub const POSTPROCESSORS: &'static str = "postprocessors";
+    /// param name for `metrics_interval_s`
+    pub const METRICS_INTERVAL_S: &'static str = "metrics_interval_s";
+    /// param name for reconnct configuration
+    pub const RECONNECT: &'static str = "reconnect";
+
+    const AVAILABLE_PARAMS: [&'static str; 6] = [
+        Self::CODEC,
+        Self::CONFIG,
+        Self::METRICS_INTERVAL_S,
+        Self::POSTPROCESSORS,
+        Self::PREPROCESSORS,
+        Self::RECONNECT,
+    ];
+}
+
 type DeployStmts<'script> = Vec<DeployStmt<'script>>;
 
 /// A deployment link

@@ -202,14 +202,13 @@ mod tests {
     #[async_std::test]
     async fn otel_client_builder() -> Result<()> {
         let with_processors = literal!({
-            "id": "my_otel_client",
-            "type": "otel_client",
             "config": {
                 "host": "localhost",
                 "port": 4317,
             },
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
+            "my_otel_client",
             ConnectorType("otel_client".into()),
             &with_processors,
         )?;

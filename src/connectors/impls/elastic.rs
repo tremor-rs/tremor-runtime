@@ -66,17 +66,19 @@ impl ConnectorBuilder for Builder {
         if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
             if config.nodes.is_empty() {
-                Err(
-                    ErrorKind::InvalidConfiguration(id.to_string(), "empty nodes provided".into())
-                        .into(),
+                Err(ErrorKind::InvalidConnectorDefinition(
+                    id.to_string(),
+                    "empty nodes provided".into(),
                 )
+                .into())
             } else {
                 let node_urls = config
                     .nodes
                     .iter()
                     .map(|s| {
                         Url::parse(s.as_str()).map_err(|e| {
-                            ErrorKind::InvalidConfiguration(id.to_string(), e.to_string()).into()
+                            ErrorKind::InvalidConnectorDefinition(id.to_string(), e.to_string())
+                                .into()
                         })
                     })
                     .collect::<Result<Vec<Url>>>()?;
@@ -649,5 +651,60 @@ impl<'a, 'value> ESMeta<'a, 'value> {
         } else {
             Ok(None)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Connector as ConnectorConfig;
+
+    #[async_std::test]
+    async fn connector_builder_empty_nodes() -> Result<()> {
+        let config = literal!({
+            "config": {
+                "nodes": []
+            }
+        });
+        let id = "my_elastic";
+        let builder = super::Builder::default();
+        let connector_config = ConnectorConfig::from_config(id, builder.connector_type(), &config)?;
+        assert_eq!(
+            String::from("Invalid Definition for connector \"my_elastic\": empty nodes provided"),
+            builder
+                .build("my_elastic", &connector_config)
+                .await
+                .err()
+                .unwrap()
+                .to_string()
+        );
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn connector_builder_invalid_url() -> Result<()> {
+        let config = literal!({
+            "config": {
+                "nodes": [
+                    "http://localhost:12345/foo/bar/baz",
+                    ":::////*^%$"
+                ]
+            }
+        });
+        let id = "my_elastic";
+        let builder = super::Builder::default();
+        let connector_config = ConnectorConfig::from_config(id, builder.connector_type(), &config)?;
+        assert_eq!(
+            String::from(
+                "Invalid Definition for connector \"my_elastic\": relative URL without a base"
+            ),
+            builder
+                .build("my_elastic", &connector_config)
+                .await
+                .err()
+                .unwrap()
+                .to_string()
+        );
+        Ok(())
     }
 }

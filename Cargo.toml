@@ -51,7 +51,7 @@ byteorder = "1"
 bytes = "1.1"
 chrono = "0.4"
 csv = "1.1"
-dashmap = "5.2"
+dashmap = "5.3"
 either = { version = "1.6", features = ["serde"] }
 error-chain = "0.12"
 file-mode = "0.1"
@@ -196,6 +196,8 @@ tonic = { version = "0.6.1", default-features = false, features = [
   "transport",
   "tls",
 ] }
+prost = "0.9.0"
+prost-types = "0.9.0"
 tremor-otelapis = { version = "0.2.4" }
 
 # aws-s3
@@ -207,6 +209,7 @@ aws-smithy-http = "0.41"
 # gcp
 googapis = { version = "0.6", default-features = false, features = [
   "google-pubsub-v1",
+  "google-cloud-bigquery-storage-v1"
 ] }
 gouth = { version = "0.2" }
 http = "0.2.7"

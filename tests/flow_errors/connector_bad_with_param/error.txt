@@ -1,0 +1,8 @@
+Error: 
+    3 |   define connector foo from fake
+    4 |   with
+    5 |     preprocessor = ["snot"],
+      |     ^^^^^^^^^^^^ Invalid `with` parameter "preprocessor" in definition of connector "foo".
+      |                  NOTE: Available parameters are: codec, config, metrics_interval_s, postprocessors, preprocessors, reconnect
+    6 |     config = {}
+    7 |   end;

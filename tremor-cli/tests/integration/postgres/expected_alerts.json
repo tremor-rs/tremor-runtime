@@ -1,3 +1,0 @@
-{"temperature":72.333578345892,"humidity":87.28084271358814,"sensor_id":2,"time":"2021-08-10 11:31:50.336785 +00:00","alert":true,"sunup":false,"alert_description":"No Alarm"}
-{"temperature":110.333578345892,"humidity":97.28084271358814,"sensor_id":666,"time":"2021-08-10 11:31:50.336785 +00:00","alert":true,"alert_description":"High Temp Alarm"}
-{"temperature":-20.333578345892,"humidity":0.28084271358814,"sensor_id":666,"time":"2021-08-10 11:31:50.336785 +00:00","alert":true,"alert_description":"Low Temp Alarm"}

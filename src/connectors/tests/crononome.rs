@@ -21,8 +21,6 @@ async fn connector_crononome_routing() -> Result<()> {
     let _ = env_logger::try_init();
 
     let defn = literal!({
-    "id": "my_cron",
-    "type": "crononome",
     "config": {
         "entries":[{
           "name": "test",

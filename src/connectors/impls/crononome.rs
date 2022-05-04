@@ -54,7 +54,7 @@ impl ConnectorBuilder for Builder {
                     .map(CronEntryInt::try_from)
                     .collect::<Result<Vec<CronEntryInt>>>()?
             } else {
-                return Err(ErrorKind::InvalidConfiguration(
+                return Err(ErrorKind::InvalidConnectorDefinition(
                     id.to_string(),
                     "missing `entries` array".to_string(),
                 )

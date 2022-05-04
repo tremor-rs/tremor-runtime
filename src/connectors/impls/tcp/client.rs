@@ -66,7 +66,7 @@ impl ConnectorBuilder for Builder {
         if let Some(raw_config) = &config.config {
             let config = Config::new(raw_config)?;
             if config.url.port().is_none() {
-                return Err(ErrorKind::InvalidConfiguration(
+                return Err(ErrorKind::InvalidConnectorDefinition(
                     id.to_string(),
                     "Missing port for TCP client".to_string(),
                 )
@@ -75,7 +75,7 @@ impl ConnectorBuilder for Builder {
             let host = match config.url.host_str() {
                 Some(host) => host.to_string(),
                 None => {
-                    return Err(Error::from(ErrorKind::InvalidConfiguration(
+                    return Err(Error::from(ErrorKind::InvalidConnectorDefinition(
                         id.to_string(),
                         "missing host for TCP client".to_string(),
                     )))
