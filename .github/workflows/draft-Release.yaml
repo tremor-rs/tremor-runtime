@@ -23,7 +23,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Bump new version in TOML files
-      - uses: actions-rs/install@v0.1
+        uses: actions-rs/install@v0.1
         with:
           crate: cargo-edit
           version: latest
