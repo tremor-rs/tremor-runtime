@@ -670,7 +670,7 @@ mod tests {
         let builder = super::Builder::default();
         let connector_config = ConnectorConfig::from_config(id, builder.connector_type(), &config)?;
         assert_eq!(
-            String::from("Invalid Definition for connector "my_elastic": empty nodes provided"),
+            String::from("Invalid Definition for connector \"my_elastic\": empty nodes provided"),
             builder
                 .build("my_elastic", &connector_config)
                 .await
