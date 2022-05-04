@@ -43,7 +43,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
       - name: Publish packages to crates.io
-      - uses: actions-rs/toolchain@v1
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
