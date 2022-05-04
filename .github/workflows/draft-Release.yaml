@@ -22,11 +22,12 @@ jobs:
       - uses: actions/checkout@v2
         with:
           fetch-depth: 0
-      - name: Bump new version in TOML files
+      - name: Install cargo-edit
         uses: actions-rs/install@v0.1
         with:
           crate: cargo-edit
           version: latest
+      - name: Bump new version in TOML files
         run: |
           OLD_VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
           echo "OLD=$OLD_VERSION" >> $GITHUB_ENV
