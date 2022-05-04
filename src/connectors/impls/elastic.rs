@@ -653,3 +653,58 @@ impl<'a, 'value> ESMeta<'a, 'value> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Connector as ConnectorConfig;
+
+    #[async_std::test]
+    async fn connector_builder_empty_nodes() -> Result<()> {
+        let config = literal!({
+            "config": {
+                "nodes": []
+            }
+        });
+        let id = "my_elastic";
+        let builder = super::Builder::default();
+        let connector_config = ConnectorConfig::from_config(id, builder.connector_type(), &config)?;
+        assert_eq!(
+            String::from("Invalid Definition for connector "my_elastic": empty nodes provided"),
+            builder
+                .build("my_elastic", &connector_config)
+                .await
+                .err()
+                .unwrap()
+                .to_string()
+        );
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn connector_builder_invalid_url() -> Result<()> {
+        let config = literal!({
+            "config": {
+                "nodes": [
+                    "http://localhost:12345/foo/bar/baz",
+                    ":::////*^%$"
+                ]
+            }
+        });
+        let id = "my_elastic";
+        let builder = super::Builder::default();
+        let connector_config = ConnectorConfig::from_config(id, builder.connector_type(), &config)?;
+        assert_eq!(
+            String::from(
+                "Invalid Definition for connector \"my_elastic\": relative URL without a base"
+            ),
+            builder
+                .build("my_elastic", &connector_config)
+                .await
+                .err()
+                .unwrap()
+                .to_string()
+        );
+        Ok(())
+    }
+}

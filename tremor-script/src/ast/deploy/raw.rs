@@ -427,6 +427,31 @@ impl<'script> Upable<'script> for CreateStmtRaw<'script> {
                 }
             }
         };
+        let args = match defn {
+            CreateTargetDefinition::Connector(ref conn) => &conn.params.args.0,
+            CreateTargetDefinition::Pipeline(ref pipe) => &pipe.params.args.0,
+        };
+        for (ident, _) in &self.params.with.exprs {
+            if args
+                .iter()
+                .find(|(args_ident, _)| ident.id == args_ident.id)
+                .is_none()
+            {
+                let range = ident.extent();
+                let available_args = args
+                    .iter()
+                    .map(|(ident, _)| ident.id.to_string())
+                    .collect::<Vec<String>>();
+                return Err(ErrorKind::WithParamNoArg(
+                    range.expand_lines(2),
+                    range,
+                    ident.id.to_string(),
+                    self.id.id.to_string(),
+                    available_args,
+                )
+                .into());
+            }
+        }
 
         let create_stmt = CreateStmt {
             mid: self.mid.box_with_name(&self.id.id),

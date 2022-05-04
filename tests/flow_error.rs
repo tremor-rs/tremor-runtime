@@ -54,9 +54,6 @@ macro_rules! test_cases {
                 match parse(&contents) {
                     Err(e) => {
                         let got = Dumb::error_to_string(&e)?;
-                        print!("{}", got);
-                        println!("got wrong error: {:?}", e);
-
                         assert_eq!(err.trim(), got.trim());
                     }
                     _ =>{
@@ -77,6 +74,6 @@ test_cases!(
     connector_no_kind,
     connector_bad_kind,
     connector_bad_with_param,
-    // connector_bad_with, look at this once we have connectors included
+    connector_bad_with,
     flow_not_found,
 );
