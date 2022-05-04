@@ -468,6 +468,7 @@ impl Sink for GbqSink {
 mod test {
     use super::*;
     use crate::connectors::reconnect::ConnectionLostNotifier;
+    use crate::connectors::tests::ConnectorHarness;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
     use value_trait::StaticNode;
 
@@ -1099,5 +1100,18 @@ mod test {
         } else {
             assert!(false, "Mapping did not fail on non-object event");
         }
+    }
+
+    #[async_std::test]
+    async fn sink_fails_if_config_is_missing() -> Result<()> {
+        let config = literal!({
+            "config": {}
+        });
+
+        let result = ConnectorHarness::new(function_name!(), "gbq", &config).await;
+
+        assert!(result.is_err());
+
+        Ok(())
     }
 }
