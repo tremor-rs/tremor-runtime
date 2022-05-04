@@ -49,6 +49,6 @@ jobs:
           override: true
       - uses: katyo/publish-crates@v1
         with:
-          path: './tremor-script'
+          path: './tremor-common'
           args: --no-verify
           dry-run: true
