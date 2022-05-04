@@ -496,6 +496,19 @@ mod test {
     }
 
     #[test]
+    fn interceptor_fails_on_invalid_token_value() {
+        let mut interceptor = AuthInterceptor {
+            // control characters (ASCII < 32) are not allowed
+            token: Box::new(|| Ok(Arc::new("\r\n".into()))),
+        };
+        let request = Request::new(());
+
+        let result = interceptor.call(request);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn skips_unknown_field_types() {
         let (rx, _tx) = async_std::channel::unbounded();
 
@@ -837,6 +850,55 @@ mod test {
 
         // Fields should never have the "Unspecified" type, if that happens best we can do is to log a warning and ignore them
         assert_eq!([] as [u8; 0], result[..]);
+    }
+
+    #[test]
+    pub fn mapping_generates_a_correct_descriptor() {
+        let (rx, _tx) = async_std::channel::unbounded();
+
+        let sink_context = SinkContext {
+            uid: Default::default(),
+            alias: "".to_string(),
+            connector_type: Default::default(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(rx),
+        };
+        let mapping = JsonToProtobufMapping::new(
+            &vec![
+                TableFieldSchema {
+                    name: "a".to_string(),
+                    r#type: TableType::Int64.into(),
+                    mode: Mode::Required.into(),
+                    fields: vec![],
+                    description: "".to_string(),
+                    max_length: 0,
+                    precision: 0,
+                    scale: 0,
+                },
+                TableFieldSchema {
+                    name: "b".to_string(),
+                    r#type: TableType::Int64.into(),
+                    mode: Mode::Required.into(),
+                    fields: vec![],
+                    description: "".to_string(),
+                    max_length: 0,
+                    precision: 0,
+                    scale: 0,
+                },
+            ],
+            &sink_context,
+        );
+
+        let descriptor = mapping.descriptor();
+        assert_eq!(2, descriptor.field.len());
+        assert_eq!(
+            field_descriptor_proto::Type::Int64 as i32,
+            descriptor.field[0].r#type.unwrap()
+        );
+        assert_eq!(
+            field_descriptor_proto::Type::Int64 as i32,
+            descriptor.field[1].r#type.unwrap()
+        );
     }
 
     #[test]
