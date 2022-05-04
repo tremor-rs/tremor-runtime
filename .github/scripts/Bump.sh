@@ -16,4 +16,4 @@ done
 echo "."
 
 echo "Updating CHANGELOG.md"
-sed -e "s/^## \[${old}\]/## [${new}]/" -i.release "CHANGELOG.md"
+sed -e "s/^## Unreleased$/## ${new}/" -i.release "CHANGELOG.md"
