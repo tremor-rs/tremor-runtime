@@ -236,10 +236,42 @@ mod test {
         Ok(())
     }
 
+    fn assert_fingerprinted_symmetric(internal: &[u8], algo: &str) -> Result<()> {
+        let config_pre = literal!({ "algorithm": "autodetect" });
+        let mut pre = super::Decompress::from_config(Some(&config_pre))?;
+
+        let config_post = literal!({ "algorithm": algo });
+        let mut post = crate::postprocessor::Compress::from_config(Some(&config_post))?;
+
+        // Fake ingest_ns and egress_ns
+        let mut ingest_ns = 0_u64;
+        let egress_ns = 1_u64;
+
+        let r = post.process(ingest_ns, egress_ns, internal);
+        let ext = &r?[0];
+        let ext = ext.as_slice();
+
+        let r = pre.process(&mut ingest_ns, &ext);
+        let out = &r?[0];
+        let out = out.as_slice();
+        // Assert actual decoded form is as expected
+        assert_eq!(&internal, &out);
+        // assert empty finish, no leftovers
+        assert!(pre.finish(None)?.is_empty());
+        Ok(())
+    }
+
     #[test]
     fn test_gzip() -> Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric(int, "gzip")?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_gzip_fingerprinted() -> Result<()> {
+        let int = "snot".as_bytes();
+        assert_fingerprinted_symmetric(int, "gzip")?;
         Ok(())
     }
 
@@ -251,9 +283,23 @@ mod test {
     }
 
     #[test]
+    fn test_zlib_fingerprinted() -> Result<()> {
+        let int = "snot".as_bytes();
+        assert_fingerprinted_symmetric(int, "zlib")?;
+        Ok(())
+    }
+
+    #[test]
     fn test_snappy() -> Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric(int, "snappy")?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_snappy_fingerprinted() -> Result<()> {
+        let int = "snot".as_bytes();
+        assert_fingerprinted_symmetric(int, "snappy")?;
         Ok(())
     }
 
@@ -265,15 +311,37 @@ mod test {
     }
 
     #[test]
+    fn test_xz2_fingerprinted() -> Result<()> {
+        let int = "snot".as_bytes();
+        assert_fingerprinted_symmetric(int, "xz2")?;
+        Ok(())
+    }
+
+    #[test]
     fn test_lz4() -> Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric(int, "lz4")?;
         Ok(())
     }
+
+    #[test]
+    fn test_lz4_fingerprinted() -> Result<()> {
+        let int = "snot".as_bytes();
+        assert_fingerprinted_symmetric(int, "lz4")?;
+        Ok(())
+    }
+
     #[test]
     fn test_zstd() -> Result<()> {
         let int = "snot".as_bytes();
         assert_simple_symmetric(int, "zstd")?;
+        Ok(())
+    }
+
+    #[test]
+    fn test_zstd_fingerprinted() -> Result<()> {
+        let int = "snot".as_bytes();
+        assert_fingerprinted_symmetric(int, "zstd")?;
         Ok(())
     }
 }

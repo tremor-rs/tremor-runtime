@@ -5,7 +5,8 @@
 ### New features
 
 - Add support for `chunked` requests and responses for the HTTP connectors
-- 
+- Add the `gbq` connector for Google BigQuery
+
 ### Fixes
 
 - fix the use of `args` in the with part of a `create` insode of a `flow`.
