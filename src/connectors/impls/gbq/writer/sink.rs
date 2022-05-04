@@ -120,7 +120,7 @@ fn map_field(
             | TableType::Datetime
             // The GEOGRAPHY type is based on the OGC Simple Features specification (SFS)
             | TableType::Geography
-            // String, because it's a precise, f32/f64 would lose precision
+            // String, because it has decimal precision, f32/f64 would lose precision
             | TableType::Numeric
             | TableType::Bignumeric
             // [sign]Y-M [sign]D [sign]H:M:S[.F]
@@ -216,6 +216,7 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> 
         | TableType::Time
         | TableType::Datetime
         | TableType::Timestamp
+        // String, because it has decimal precision, f32/f64 would lose precision
         | TableType::Numeric
         | TableType::Bignumeric
         | TableType::Geography => {
