@@ -155,14 +155,16 @@ impl Sink for ClickhouseSink {
             .get_handle()
             .await?;
 
-        // TODO: initialize with correct size to avoir reallocations.
-        let block = Block::new();
+        // TODO: initialize with correct size to avoid reallocations.
+        let mut block = Block::new();
 
         for value in event.value_iter() {
             let row = self.clickhouse_row_of(value)?;
+            block.push(row)?;
         }
 
-        client.insert("people", block.clone()).await?;
+        debug!("Inserting block:{:#?}", block);
+        client.insert("people", block).await?;
 
         Ok(SinkReply::NONE)
     }
@@ -183,7 +185,6 @@ impl ClickhouseSink {
 
         for (column_name, expected_type) in self.columns.iter() {
             let cell = object.get(column_name.as_str()).unwrap();
-
             let cell = clickhouse_value_of(cell, expected_type)?;
 
             rslt.push((column_name.clone(), cell));

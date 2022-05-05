@@ -80,7 +80,7 @@ async fn simple_insertion() -> Result<()> {
             "columns": [
                 {
                     "name": "age",
-                    "type": "UInt8",
+                    "type": "UInt64",
                 }
             ]
         },
@@ -98,14 +98,14 @@ async fn simple_insertion() -> Result<()> {
         {
             "data": {
                 "value": {
-                    "age": 42u8,
+                    "age": 42u64,
                 }
             },
         },
         {
             "data": {
                 "value": {
-                    "age": 101u8,
+                    "age": 101u64,
                 }
             },
         },
@@ -142,7 +142,7 @@ async fn simple_insertion() -> Result<()> {
 
     let ages = block
         .rows()
-        .map(|row| row.get::<u8, _>("age").map_err(Error::from))
+        .map(|row| row.get::<u64, _>("age").map_err(Error::from))
         .collect::<Result<Vec<_>>>()?;
 
     assert_eq!(ages, [42, 101]);
@@ -159,7 +159,8 @@ async fn wait_for_ok(port: u16) -> Result<()> {
 
     while let Err(e) = test_status_endpoint(port).await {
         if start.elapsed() > wait_for {
-            error!("We waited for more than {wait_for}");
+            let max_time = wait_for.as_secs();
+            error!("We waited for more than {max_time}");
             return Err(
                 Error::from(e).chain_err(|| "Waiting for the ClickHouse container timed out.")
             );
@@ -181,7 +182,7 @@ async fn test_status_endpoint(port: u16) -> Result<()> {
 
 async fn create_table(port: u16, table: &str) -> Result<()> {
     let db_url = format!("tcp://{DB_HOST}:{port}/");
-    let request = format!("create table if not exists {table} ( age UInt8 ) Engine=Memory");
+    let request = format!("create table if not exists {table} ( age UInt64 ) Engine=Memory");
 
     let pool = Pool::new(db_url);
 
