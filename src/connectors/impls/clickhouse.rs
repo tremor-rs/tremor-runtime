@@ -244,12 +244,12 @@ fn clickhouse_value_of(
                 // The situation is quite sad. The problem is that
                 // clickhouse_rs::types::Value::Nullable wraps an Either [1],
                 // which defined in clickhouse itself and is not publicly
-                // available [2]. As an interim solution, we will panic. A
-                // solution could be to open a pull-request to clickhouse-rs,
-                // changing its visibility from pub(crate) to pub.
+                // available [2]. Once [3] is merged, Value should be fully
+                // constructible again!
                 //
                 // [1]: https://docs.rs/clickhouse-rs/1.0.0-alpha.1/clickhouse_rs/types/enum.Value.html#variant.Nullable
                 // [2]: https://docs.rs/clickhouse-rs/0.1.21/src/clickhouse_rs/types/either.rs.html#4
+                // [3]: https://github.com/suharev7/clickhouse-rs/pull/171
                 panic!("Null value can't be constructed for now :(");
             }
 
