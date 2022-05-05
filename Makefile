@@ -79,7 +79,7 @@ library-doc:
 	-TREMOR_PATH=./tremor-script/lib cargo run -p tremor-cli -- doc tremor-script/lib docs/library
 
 lalrpop-docgen:
-	-git clone https://github.com/darach/lalrpop lalrpop-docgen
+	-git clone https://github.com/licenser/lalrpop lalrpop-docgen
 	cd lalrpop-docgen && git checkout docgen
 
 lalrpop-doc: lalrpop-docgen
