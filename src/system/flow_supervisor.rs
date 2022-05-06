@@ -173,13 +173,10 @@ impl FlowSupervisor {
                 let rx_futures = std::iter::repeat_with(|| rx.recv()).take(alive_flows);
                 for result in futures::future::join_all(rx_futures).await {
                     match result {
-                        Err(_) => {
-                            error!("Error receiving from Draining process.");
-                        }
                         Ok(Err(e)) => {
                             error!("Error during Draining: {}", e);
                         }
-                        Ok(Ok(())) => {}
+                        Err(_) | Ok(Ok(())) => {}
                     }
                 }
                 info!("Flows drained.");
