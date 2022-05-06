@@ -2,12 +2,14 @@ use crate::connectors::google::AuthInterceptor;
 use crate::connectors::prelude::*;
 use dashmap::DashMap;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
-use googapis::google::pubsub::v1::{AcknowledgeRequest, PullRequest};
+use googapis::google::pubsub::v1::{AcknowledgeRequest, PubsubMessage, PullRequest, ReceivedMessage};
 use gouth::Token;
 use serde::Deserialize;
 use std::fmt::Debug;
-use std::sync::atomic::AtomicU64;
+use std::sync::Arc;
 use std::time::Duration;
+use async_std::channel::{Receiver, Sender};
+use async_std::sync::Mutex;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Status;
@@ -43,11 +45,13 @@ struct GSub {
     config: Config,
 }
 
+type PubSubClient = SubscriberClient<InterceptedService<Channel, AuthInterceptor>>;
+
 struct GSubSource {
     config: Config,
-    client: Option<SubscriberClient<InterceptedService<Channel, AuthInterceptor>>>,
-    ack_ids: DashMap<u64, String>,
-    ack_counter: AtomicU64,
+    client: Option<Arc<Mutex<PubSubClient>>>,
+    receiver: Option<Receiver<(u64, Vec<u8>)>>,
+    ack_ids: Arc<DashMap<u64, String>>,
 }
 
 impl GSubSource {
@@ -55,8 +59,37 @@ impl GSubSource {
         GSubSource {
             config,
             client: None,
-            ack_ids: DashMap::new(),
-            ack_counter: AtomicU64::new(0),
+            receiver: None,
+            ack_ids: Arc::new(DashMap::new()),
+        }
+    }
+}
+
+async fn consumer_task(client: Arc<Mutex<PubSubClient>>, sender:Sender<(u64, Vec<u8>)>, ack_ids:Arc<DashMap<u64, String>>, subscription_id:String) {
+    let mut ack_counter = 0;
+
+    loop {
+        let response = client
+            .lock()
+            .await
+            .pull(PullRequest {
+                subscription: subscription_id.clone(),
+                // fixme config?
+                max_messages: 100,
+                ..Default::default()
+            })
+            .await
+            .unwrap()// fixme
+            .into_inner();
+
+        for message in response.received_messages {
+            let ReceivedMessage { ack_id, message: msg, delivery_attempt, } = message;
+
+            if let Some(PubsubMessage { data, .. }) = msg {
+                ack_counter += 1;
+                ack_ids.insert(ack_counter, ack_id);
+                sender.send((ack_counter, data)).await.unwrap();
+            }
         }
     }
 }
@@ -84,8 +117,6 @@ impl Source for GSubSource {
                 token: Box::new(move || match token.header_value() {
                     Ok(val) => Ok(val),
                     Err(e) => {
-                        error!("Failed to get token for BigQuery: {}", e);
-
                         Err(Status::unavailable(
                             "Failed to retrieve authentication token.",
                         ))
@@ -94,54 +125,38 @@ impl Source for GSubSource {
             },
         );
 
+        let client = Arc::new(Mutex::new(client));
+
+        let (tx, rx) = async_std::channel::bounded(QSIZE.load(Ordering::Relaxed));
+
+        async_std::task::spawn(consumer_task(client.clone(), tx, self.ack_ids.clone(), self.config.subscription_id.clone()));
+
+        self.receiver = Some(rx);
         self.client = Some(client);
 
         Ok(true)
     }
 
-    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
-        let client = self
-            .client
+    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+        let receiver = self
+            .receiver
             .as_mut()
             .ok_or(ErrorKind::BigQueryClientNotAvailable(
                 // fixme use an error for GPubSub
-                "The client is not connected",
+                "The receiver is not connected",
             ))?;
 
-        let response = client
-            .pull(PullRequest {
-                subscription: self.config.subscription_id.clone(),
-                // fixme config?
-                max_messages: 1,
-                ..Default::default()
-            })
-            .await?
-            .into_inner();
+        let (ack_id, data) = receiver.recv().await?;
 
-        if response.received_messages.len() == 0 {
-            return self.pull_data(pull_id, ctx).await;
-        }
+        *pull_id = ack_id;
 
-        *pull_id = self.ack_counter.fetch_add(1, Ordering::AcqRel);
-        self.ack_ids
-            .insert(*pull_id, response.received_messages[0].ack_id.clone());
-
-        Ok(SourceReply::Structured {
+        Ok(SourceReply::Data {
             origin_uri: Default::default(),
-            payload: EventPayload::new(vec![], |_| {
-                let message = response.received_messages[0].message.as_ref().unwrap();
-
-                ValueAndMeta::from_parts(
-                    Value::String(
-                        String::from_utf8_lossy(&message.data[..])
-                            .to_string()
-                            .into(),
-                    ),
-                    Value::null(),
-                )
-            }),
-            stream: 0,
+            data,
+            meta: None,
+            stream: None,
             port: None,
+            codec_overwrite: None,
         })
     }
 
@@ -163,6 +178,8 @@ impl Source for GSubSource {
             ))?;
 
         client
+            .lock()
+            .await
             .acknowledge(AcknowledgeRequest {
                 subscription: self.config.subscription_id.clone(),
                 ack_ids: vec![self.ack_ids.remove(&pull_id).unwrap().1],
@@ -185,6 +202,6 @@ impl Connector for GSub {
     }
 
     fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Structured
+        CodecReq::Required
     }
 }
