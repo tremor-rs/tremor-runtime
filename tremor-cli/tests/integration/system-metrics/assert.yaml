@@ -4,7 +4,7 @@ asserts:
   - source: events.log
     contains:
       - |
-        {"id":10,"ingest_ns":null,"onramp":"metronome"}
+        {"id":10,"ingest_ns":null,"connector":"metronome"}
   - source: fg.out.log
     contains:
       - |
