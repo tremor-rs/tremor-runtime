@@ -35,8 +35,14 @@ const CONNECTOR_TYPE: &str = "http_client";
 const DEFAULT_CODEC: &str = "json";
 
 #[derive(Deserialize, Debug, Clone)]
+#[serde(transparent)]
+pub(super) struct Header(
+    #[serde(with = "either::serde_untagged")] pub(super) Either<Vec<String>, String>,
+);
+
+#[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     /// Target URL
     #[serde(default = "Default::default")]
     pub(super) url: Url,
@@ -48,7 +54,7 @@ pub struct Config {
     pub(super) concurrency: usize,
     /// Default HTTP headers
     #[serde(default = "Default::default")]
-    pub(super) headers: HashMap<String, Either<Vec<String>, String>>,
+    pub(super) headers: HashMap<String, Header>,
     /// Default HTTP method
     #[serde(default = "default_method")]
     pub(super) method: Method,
