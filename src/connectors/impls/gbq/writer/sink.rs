@@ -448,43 +448,6 @@ mod test {
     use value_trait::StaticNode;
 
     #[test]
-    fn interceptor_can_add_the_auth_header() {
-        let mut interceptor = AuthInterceptor {
-            token: Box::new(|| Ok(Arc::new("test".into()))),
-        };
-        let request = Request::new(());
-
-        let result = interceptor.call(request).unwrap();
-
-        assert_eq!(result.metadata().get("authorization").unwrap(), "test");
-    }
-
-    #[test]
-    fn interceptor_will_pass_token_error() {
-        let mut interceptor = AuthInterceptor {
-            token: Box::new(|| Err(Status::unavailable("boo"))),
-        };
-        let request = Request::new(());
-
-        let result = interceptor.call(request);
-
-        assert_eq!(result.unwrap_err().message(), "boo");
-    }
-
-    #[test]
-    fn interceptor_fails_on_invalid_token_value() {
-        let mut interceptor = AuthInterceptor {
-            // control characters (ASCII < 32) are not allowed
-            token: Box::new(|| Ok(Arc::new("\r\n".into()))),
-        };
-        let request = Request::new(());
-
-        let result = interceptor.call(request);
-
-        assert!(result.is_err());
-    }
-
-    #[test]
     fn skips_unknown_field_types() {
         let (rx, _tx) = async_std::channel::unbounded();
 
