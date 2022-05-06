@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::connectors::google::AuthInterceptor;
 use crate::connectors::impls::gbq::writer::Config;
 use crate::connectors::prelude::*;
 use async_std::prelude::{FutureExt, StreamExt};
@@ -27,44 +28,16 @@ use gouth::Token;
 use prost::encoding::WireType;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
-use tonic::metadata::MetadataValue;
-use tonic::service::Interceptor;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
-use tonic::{Request, Status};
+use tonic::Status;
 
 pub(crate) struct GbqSink {
     client: Option<BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor>>>,
     write_stream: Option<WriteStream>,
     mapping: Option<JsonToProtobufMapping>,
     config: Config,
-}
-
-pub(crate) struct AuthInterceptor {
-    token: Box<dyn Fn() -> ::std::result::Result<Arc<String>, Status> + Send>,
-}
-
-impl Interceptor for AuthInterceptor {
-    fn call(&mut self, mut request: Request<()>) -> ::std::result::Result<Request<()>, Status> {
-        let header_value = (self.token)()?;
-        let metadata_value = match MetadataValue::from_str(header_value.as_str()) {
-            Ok(val) => val,
-            Err(e) => {
-                error!("Failed to get token for BigQuery: {}", e);
-
-                return Err(Status::unavailable(
-                    "Failed to retrieve authentication token.",
-                ));
-            }
-        };
-        request
-            .metadata_mut()
-            .insert("authorization", metadata_value);
-
-        Ok(request)
-    }
 }
 
 struct Field {
