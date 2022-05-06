@@ -30,6 +30,7 @@ pub(crate) mod exit;
 pub(crate) mod file;
 /// Google Big Query
 pub(crate) mod gbq;
+pub(crate) mod gpubsub;
 /// HTTP
 pub(crate) mod http;
 /// Kafka consumer and producer
