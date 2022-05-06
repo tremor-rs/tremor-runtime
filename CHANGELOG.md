@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+- http headers to allow strings and arrays
+
 ## [0.12.0-rc.2]
 
 ### New features

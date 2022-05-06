@@ -76,7 +76,7 @@ impl HttpRequestBuilder {
 
         // first insert config headers
         for (config_header_name, config_header_values) in &config.headers {
-            match config_header_values {
+            match &config_header_values.0 {
                 Either::Left(config_header_values) => {
                     for header_value in config_header_values {
                         request.append_header(config_header_name.as_str(), header_value.as_str());
