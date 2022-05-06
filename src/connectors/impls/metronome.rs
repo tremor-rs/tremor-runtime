@@ -35,7 +35,7 @@ impl ConnectorBuilder for Builder {
         "metronome".into()
     }
 
-    async fn build(&self, _id: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+    async fn build(&self, id: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
         if let Some(raw) = &raw_config.config {
             let config = Config::new(raw)?;
             let origin_uri = EventOriginUri {
@@ -50,7 +50,7 @@ impl ConnectorBuilder for Builder {
                 origin_uri,
             }))
         } else {
-            Err(ErrorKind::MissingConfiguration(String::from("metronome")).into())
+            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
     }
 }
@@ -101,7 +101,7 @@ impl Source for MetronomeSource {
         self.next = nanotime() + self.interval_ns;
         Ok(true)
     }
-    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
         let now = nanotime();
         // we need to wait here before we continue to fulfill the interval conditions
         if now < self.next {
@@ -111,7 +111,7 @@ impl Source for MetronomeSource {
         *pull_id = self.id;
         self.id += 1;
         let data = literal!({
-            "onramp": "metronome",
+            "connector": "metronome",
             "ingest_ns": now,
             "id": *pull_id
         });
