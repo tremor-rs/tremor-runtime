@@ -16,6 +16,7 @@ use tremor_pipeline::ConfigImpl;
 #[derive(Deserialize, Clone)]
 struct Config {
     pub connect_timeout: u64,
+    pub subscription_id: String,
 }
 impl ConfigImpl for Config {}
 
@@ -109,8 +110,7 @@ impl Source for GSubSource {
 
         let response = client
             .pull(PullRequest {
-                subscription: "projects/wf-gcp-us-tremor-sbx/subscriptions/test-subscription-a"
-                    .to_string(),
+                subscription: self.config.subscription_id.clone(),
                 // fixme config?
                 max_messages: 1,
                 ..Default::default()
@@ -164,8 +164,7 @@ impl Source for GSubSource {
 
         client
             .acknowledge(AcknowledgeRequest {
-                subscription: "projects/wf-gcp-us-tremor-sbx/subscriptions/test-subscription-a"
-                    .to_string(),
+                subscription: self.config.subscription_id.clone(),
                 ack_ids: vec![self.ack_ids.remove(&pull_id).unwrap().1],
             })
             .await?;
