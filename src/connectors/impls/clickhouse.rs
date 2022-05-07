@@ -20,6 +20,7 @@ use std::{
 use crate::connectors::{prelude::*, utils::url::ClickHouseDefaults};
 
 use clickhouse_rs::{types::SqlType, Block, Pool};
+use either::Either;
 use simd_json::StaticNode;
 
 #[derive(Default, Debug)]
@@ -205,10 +206,6 @@ impl ClickhouseSink {
 
 // This is just a subset of the types actually supported by clickhouse_rs.
 // It targets only the types that can be emitted by Tremor.
-//
-// Note: null is in a weird half-supported/half-unsupported on the clickhouse_rs
-// crate. Due to its special properties, it has nonetheless been added here, so
-// that most of the logic is already written once it is available.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 enum DummySqlType {
     Array(Box<DummySqlType>),
@@ -229,7 +226,9 @@ impl DummySqlType {
 
     fn wrap_if_nullable(&self, value: clickhouse_rs::types::Value) -> clickhouse_rs::types::Value {
         match self {
-            DummySqlType::Nullable(_) => panic!("Nullable values can not be constructed :("),
+            DummySqlType::Nullable(_) => {
+                clickhouse_rs::types::Value::Nullable(Either::Right(Box::new(value)))
+            }
             _ => value,
         }
     }
@@ -243,23 +242,13 @@ fn clickhouse_value_of(
 
     match (cell, expected_type) {
         (Value::Static(value), _) => {
-            if matches!(
-                (value, expected_type),
-                (StaticNode::Null, DummySqlType::Nullable(_))
-            ) {
+            if let (StaticNode::Null, DummySqlType::Nullable(inner_type)) = (value, expected_type) {
                 // Null can be of any type, as long as it is allowed by the
                 // schema.
 
-                // The situation is quite sad. The problem is that
-                // clickhouse_rs::types::Value::Nullable wraps an Either [1],
-                // which defined in clickhouse itself and is not publicly
-                // available [2]. Once [3] is merged, Value should be fully
-                // constructible again!
-                //
-                // [1]: https://docs.rs/clickhouse-rs/1.0.0-alpha.1/clickhouse_rs/types/enum.Value.html#variant.Nullable
-                // [2]: https://docs.rs/clickhouse-rs/0.1.21/src/clickhouse_rs/types/either.rs.html#4
-                // [3]: https://github.com/suharev7/clickhouse-rs/pull/171
-                panic!("Null value can't be constructed for now :(");
+                return Ok(types::Value::Nullable(Either::Left(
+                    inner_type.as_ref().into(),
+                )));
             }
 
             let value_as_non_null = match (value, expected_type.as_non_nullable()) {
