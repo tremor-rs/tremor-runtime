@@ -32,7 +32,6 @@ impl ConnectorBuilder for Builder {
     }
 
     async fn build(&self, alias: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        // So something bad happens here and nobody know what or why.
         let config = raw_config
             .config
             .as_ref()
