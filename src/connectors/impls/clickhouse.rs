@@ -12,11 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fmt::{self, Display, Formatter};
+use std::{
+    fmt::{self, Display, Formatter},
+    sync::Arc,
+};
 
 use crate::connectors::{prelude::*, utils::url::ClickHouseDefaults};
 
-use clickhouse_rs::{Block, Pool};
+use clickhouse_rs::{types::SqlType, Block, Pool};
 use simd_json::StaticNode;
 
 #[derive(Default, Debug)]
@@ -232,8 +235,8 @@ fn clickhouse_value_of(
 ) -> Result<clickhouse_rs::types::Value> {
     use clickhouse_rs::types;
 
-    match cell {
-        Value::Static(value) => {
+    match (cell, expected_type) {
+        (Value::Static(value), _) => {
             if matches!(
                 (value, expected_type),
                 (StaticNode::Null, DummySqlType::Nullable(_))
@@ -254,7 +257,14 @@ fn clickhouse_value_of(
             }
 
             let value_as_non_null = match (value, expected_type.as_non_nullable()) {
+                // These are the *obvious* translations. No cast is required,
+                // Not much to say here.
                 (StaticNode::U64(v), DummySqlType::UInt64) => types::Value::UInt64(*v),
+                (StaticNode::I64(v), DummySqlType::Int64) => types::Value::Int64(*v),
+
+                // Booleans can be converted to integers (true = 1, false = 0).
+                (StaticNode::Bool(b), DummySqlType::UInt64) => types::Value::UInt64(u64::from(*b)),
+                (StaticNode::Bool(b), DummySqlType::Int64) => types::Value::Int64(i64::from(*b)),
 
                 _ => todo!(),
             };
@@ -262,6 +272,37 @@ fn clickhouse_value_of(
             Ok(expected_type.wrap_if_nullable(value_as_non_null))
         }
 
+        (Value::Array(values), DummySqlType::Array(expected_inner_type)) => values
+            .iter()
+            .map(|value| clickhouse_value_of(value, expected_inner_type))
+            .collect::<Result<Vec<_>>>()
+            .map(|converted_array| {
+                types::Value::Array(
+                    expected_inner_type.as_ref().into(),
+                    Arc::new(converted_array),
+                )
+            }),
+
         _ => todo!(),
+    }
+}
+
+impl Into<&'static SqlType> for &DummySqlType {
+    fn into(self) -> &'static SqlType {
+        let non_static_type = match self {
+            DummySqlType::Array(inner) => SqlType::Array(inner.as_ref().into()),
+            DummySqlType::Nullable(inner) => SqlType::Nullable(inner.as_ref().into()),
+            DummySqlType::Int64 => SqlType::Int64,
+            DummySqlType::UInt64 => SqlType::UInt64,
+            DummySqlType::String => SqlType::String,
+        };
+
+        // This sounds like pure magic - and it actually is.
+        //
+        // There's an implementation of Into<&'static SqlType> for &SqlType.
+        // Under the hood, it returns either constant values for non-nested,
+        // or store them in a global type pool which lives for the whole program
+        // lifetime.
+        non_static_type.into()
     }
 }
