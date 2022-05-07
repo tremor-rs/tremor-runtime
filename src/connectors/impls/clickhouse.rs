@@ -158,8 +158,10 @@ impl Sink for ClickhouseSink {
             .get_handle()
             .await?;
 
-        // TODO: initialize with correct size to avoid reallocations.
-        let mut block = Block::new();
+        let (event_min_size, event_max_size) = event.value_iter().size_hint();
+        let block_size_estimate = event_max_size.unwrap_or(event_min_size);
+
+        let mut block = Block::with_capacity(block_size_estimate);
 
         for value in event.value_iter() {
             let row = self.clickhouse_row_of(value)?;

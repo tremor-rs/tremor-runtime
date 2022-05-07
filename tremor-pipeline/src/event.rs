@@ -457,6 +457,35 @@ impl<'value> Iterator for ValueIter<'value> {
             None
         }
     }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        if self.event.is_batch {
+            let upper = self
+                .event
+                .data
+                .suffix()
+                .value()
+                .as_array()
+                .map(Vec::len)
+                .map(|value_len| value_len - self.idx)
+                .unwrap_or_default();
+
+            // A few words about the `unwrap_or_default` above and why it is
+            // correct to use it.
+            //
+            // The implementation of Default for a usize is 0. 0 is still a
+            // correct upper bound (as defined in the `size_hint` contract)
+            // because in such cases, the `Value` wrapping all the events is not
+            // an array, which means that calling `next` will returns None (ie:
+            // the iterator is empty).
+
+            (0, Some(upper))
+        } else if self.idx == 0 {
+            (1, Some(1))
+        } else {
+            (0, Some(0))
+        }
+    }
 }
 
 #[cfg(test)]
