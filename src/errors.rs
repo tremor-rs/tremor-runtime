@@ -345,7 +345,7 @@ error_chain! {
 
         ExpectedObjectEvent(found_type: ValueType) {
             description("Expected object event")
-                display("Expected an object event, found a \"{found_type}\"")
+                display("Expected an object event, found a \"{found_type:?}\"")
         }
 
         MissingEventColumn(column: String) {
