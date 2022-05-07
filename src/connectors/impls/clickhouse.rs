@@ -185,10 +185,15 @@ impl ClickhouseSink {
     ) -> Result<Vec<(String, clickhouse_rs::types::Value)>> {
         let mut rslt = Vec::new();
 
-        let object = input.as_object().unwrap();
+        let object = input
+            .as_object()
+            .ok_or_else(|| Error::from(ErrorKind::ExpectedObjectEvent(input.value_type())))?;
 
         for (column_name, expected_type) in self.columns.iter() {
-            let cell = object.get(column_name.as_str()).unwrap();
+            let cell = object.get(column_name.as_str()).ok_or_else(|| {
+                Error::from(ErrorKind::MissingEventColumn(column_name.to_string()))
+            })?;
+
             let cell = clickhouse_value_of(cell, expected_type)?;
 
             rslt.push((column_name.clone(), cell));

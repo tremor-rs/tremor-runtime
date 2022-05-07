@@ -20,6 +20,7 @@
 use beef::Cow;
 use error_chain::error_chain;
 use hdrhistogram::{self, serialization as hdr_s};
+use simd_json::ValueType;
 
 use tremor_influx as influx;
 
@@ -214,11 +215,6 @@ error_chain! {
             display("The value {} cannot be serialized to CSV. Expected an array.", value)
         }
 
-        NoClickHouseClientAvailable {
-            description("The ClickHouse adapter has no client available")
-            display("The ClickHouse adapter has no client available")
-        }
-
         // TODO: Old errors, verify if needed
         BadOpConfig(e: String) {
             description("Operator config has a bad syntax")
@@ -340,6 +336,21 @@ error_chain! {
         BigQueryTypeMismatch(expected: &'static str, actual:value_trait::ValueType) {
             description("Type in the message does not match BigQuery type")
                 display("Type in the message does not match BigQuery type. Expected: {}, actual: {:?}", expected, actual)
+        }
+
+        NoClickHouseClientAvailable {
+            description("The ClickHouse adapter has no client available")
+            display("The ClickHouse adapter has no client available")
+        }
+
+        ExpectedObjectEvent(found_type: ValueType) {
+            description("Expected object event")
+                display("Expected an object event, found a \"{found_type}\"")
+        }
+
+        MissingEventColumn(column: String) {
+            description("Missing event column")
+                display("Column \"{column}\" is missing")
         }
     }
 }
