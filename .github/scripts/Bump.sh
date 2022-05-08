@@ -17,3 +17,9 @@ echo "."
 
 echo "Updating CHANGELOG.md"
 sed -e "s/^## Unreleased$/## [${new}]/" -i.release "CHANGELOG.md"
+
+echo "Updating tremor dependencies in tremor-script"
+cd tremor-script
+sed -e "s/^tremor-common = { version = \"${old}\"/tremor-common = { version = \"${new}\"/" -i.release "Cargo.toml"
+sed -e "s/^tremor-influx = { version = \"${old}\"/tremor-common = { version = \"${new}\"/" -i.release "Cargo.toml"
+sed -e "s/^tremor-value = { version = \"${old}\"/tremor-common = { version = \"${new}\"/" -i.release "Cargo.toml"
