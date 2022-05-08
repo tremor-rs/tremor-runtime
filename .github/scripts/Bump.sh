@@ -20,6 +20,9 @@ sed -e "s/^## Unreleased$/## [${new}]/" -i.release "CHANGELOG.md"
 
 echo "Updating tremor dependencies in tremor-script"
 cd tremor-script
+echo "Updating tremor-common"
 sed -e "s/^tremor-common = { version = \"${old}\"/tremor-common = { version = \"${new}\"/" -i.release "Cargo.toml"
+echo "Updating tremor-influx"
 sed -e "s/^tremor-influx = { version = \"${old}\"/tremor-common = { version = \"${new}\"/" -i.release "Cargo.toml"
+echo "Updating tremor-value"
 sed -e "s/^tremor-value = { version = \"${old}\"/tremor-common = { version = \"${new}\"/" -i.release "Cargo.toml"
