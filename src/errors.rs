@@ -327,6 +327,14 @@ error_chain! {
             description("BigQuery client not available")
                 display("BigQuery client not available: {}", msg)
         }
+        PubSubClientNotAvailable(msg: &'static str) {
+            description("PubSub client not available")
+                display("PubSub client not available: {}", msg)
+        }
+        PubSubError(msg: &'static str) {
+            description("PubSub error")
+                display("PubSub error: {}", msg)
+        }
         BigQueryTypeMismatch(expected: &'static str, actual:value_trait::ValueType) {
             description("Type in the message does not match BigQuery type")
                 display("Type in the message does not match BigQuery type. Expected: {}, actual: {:?}", expected, actual)
