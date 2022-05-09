@@ -1,4 +1,4 @@
-FROM rust:1.59-bullseye as builder
+FROM rust:1.60-bullseye as builder
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -48,7 +48,7 @@ FROM debian:bullseye-slim
 RUN useradd -ms /bin/bash tremor
 
 RUN apt-get update \
-    && apt-get install -y libssl1.1 libcurl4 libatomic1 tini curl \
+    && apt-get install -y libatomic1 tini curl \
     #
     # Clean up
     && apt-get autoremove -y \
