@@ -23,6 +23,7 @@ flow
 
     define connector metronome from metronome
     with
+        metrics_interval_s = 5,
         config = {
             "interval": nanos::from_seconds(1)
         }

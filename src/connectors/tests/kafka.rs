@@ -22,7 +22,7 @@ use testcontainers::{
 };
 
 const IMAGE: &str = "docker.vectorized.io/vectorized/redpanda";
-const VERSION: &str = "v21.11.10";
+const VERSION: &str = "v21.11.15";
 
 async fn redpanda_container<'d>(docker: &'d DockerCli) -> Result<Container<'d, GenericImage>> {
     let kafka_port = find_free_tcp_port().await?;

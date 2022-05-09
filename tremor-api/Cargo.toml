@@ -22,11 +22,11 @@ serde_yaml = "0.8"
 simd-json = "0.4"
 # we don't need sessions or cookies or shitty logging middleware
 tide = { version = "0.16", default-features = false, features = ["h1-server"] }
-tremor-pipeline = { path = "../tremor-pipeline" }
-tremor-runtime = { path = "../" }
-tremor-script = { path = "../tremor-script" }
-tremor-value = { path = "../tremor-value" }
-tremor-common = { path = "../tremor-common" }
+tremor-pipeline = {version = "0.12.0-rc.2", path = "../tremor-pipeline" }
+tremor-runtime = {version = "0.12.0-rc.2", path = "../" }
+tremor-script = {version = "0.12.0-rc.2", path = "../tremor-script" }
+tremor-value = {version = "0.12.0-rc.2", path = "../tremor-value" }
+tremor-common = {version = "0.12.0-rc.2", path = "../tremor-common" }
 # value-trait = "0.2"
 
 [dev-dependencies]

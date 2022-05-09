@@ -35,7 +35,7 @@ impl ConnectorBuilder for Builder {
         "metronome".into()
     }
 
-    async fn build(&self, _id: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+    async fn build(&self, id: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
         if let Some(raw) = &raw_config.config {
             let config = Config::new(raw)?;
             let origin_uri = EventOriginUri {
@@ -50,7 +50,7 @@ impl ConnectorBuilder for Builder {
                 origin_uri,
             }))
         } else {
-            Err(ErrorKind::MissingConfiguration(String::from("metronome")).into())
+            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
     }
 }
@@ -111,7 +111,7 @@ impl Source for MetronomeSource {
         *pull_id = self.id;
         self.id += 1;
         let data = literal!({
-            "onramp": "metronome",
+            "connector": "metronome",
             "ingest_ns": now,
             "id": *pull_id
         });
@@ -129,5 +129,37 @@ impl Source for MetronomeSource {
 
     fn asynchronous(&self) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::{
+        config::Reconnect,
+        connectors::ConnectorBuilder,
+        errors::{Error, Kind as ErrorKind, Result},
+    };
+    #[async_std::test]
+    async fn missing_config() -> Result<()> {
+        let builder = super::Builder::default();
+        let connector_config = super::ConnectorConfig {
+            connector_type: builder.connector_type(),
+            codec: None,
+            config: None,
+            preprocessors: None,
+            postprocessors: None,
+            reconnect: Reconnect::None,
+            metrics_interval_s: Some(5),
+        };
+        assert!(matches!(
+            builder
+                .build("snot", &connector_config)
+                .await
+                .err()
+                .unwrap(),
+            Error(ErrorKind::MissingConfiguration(_), _)
+        ));
+        Ok(())
     }
 }
