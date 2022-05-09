@@ -352,6 +352,11 @@ error_chain! {
             description("Missing event column")
                 display("Column \"{column}\" is missing")
         }
+
+        UnexpectedEventFormat(column_name: String, expected_type: String, found_type: ValueType) {
+            description("Unexpected event format")
+                display("Field \"{column_name}\" is of type \'{found_type:?}\" while it should have type \"{expected_type}\"")
+        }
     }
 }
 
