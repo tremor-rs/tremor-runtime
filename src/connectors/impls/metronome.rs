@@ -131,3 +131,35 @@ impl Source for MetronomeSource {
         false
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use crate::{
+        config::Reconnect,
+        connectors::ConnectorBuilder,
+        errors::{Error, Kind as ErrorKind, Result},
+    };
+    #[async_std::test]
+    async fn missing_config() -> Result<()> {
+        let builder = super::Builder::default();
+        let connector_config = super::ConnectorConfig {
+            connector_type: builder.connector_type(),
+            codec: None,
+            config: None,
+            preprocessors: None,
+            postprocessors: None,
+            reconnect: Reconnect::None,
+            metrics_interval_s: Some(5),
+        };
+        assert!(matches!(
+            builder
+                .build("snot", &connector_config)
+                .await
+                .err()
+                .unwrap(),
+            Error(ErrorKind::MissingConfiguration(_), _)
+        ));
+        Ok(())
+    }
+}
