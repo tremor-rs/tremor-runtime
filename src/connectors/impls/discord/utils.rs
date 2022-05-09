@@ -58,6 +58,10 @@ pub enum Intents {
     DirectMessageReactions,
     /// DirectMessageTyping
     DirectMessageTyping,
+    /// MessageContent
+    MessageContent,
+    /// ScheduledEvents
+    ScheduledEvents,
     /// All intents
     All,
     /// All non privileged details
@@ -82,6 +86,8 @@ impl From<Intents> for GatewayIntents {
             Intents::DirectMessages => GatewayIntents::DIRECT_MESSAGES,
             Intents::DirectMessageReactions => GatewayIntents::DIRECT_MESSAGE_REACTIONS,
             Intents::DirectMessageTyping => GatewayIntents::DIRECT_MESSAGE_TYPING,
+            Intents::MessageContent => GatewayIntents::MESSAGE_CONTENT,
+            Intents::ScheduledEvents => GatewayIntents::GUILD_SCHEDULED_EVENTS,
             Intents::All => GatewayIntents::all(),
             Intents::NonPrivileged => GatewayIntents::non_privileged(),
         }
@@ -204,4 +210,85 @@ fn to_reaction(v: &Value) -> Option<ReactionType> {
 pub(crate) fn to_reactions(v: &Value) -> Option<Vec<ReactionType>> {
     v.as_array()
         .map(|a| a.iter().filter_map(to_reaction).collect::<Vec<_>>())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn intents() {
+        assert_eq!(
+            GatewayIntents::from(Intents::Guilds),
+            GatewayIntents::GUILDS
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::GuildMembers),
+            GatewayIntents::GUILD_MEMBERS
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::GuildBans),
+            GatewayIntents::GUILD_BANS
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::GuildEmojis),
+            GatewayIntents::GUILD_EMOJIS_AND_STICKERS
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::GuildIntegrations),
+            GatewayIntents::GUILD_INTEGRATIONS
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::GuildWebHooks),
+            GatewayIntents::GUILD_WEBHOOKS
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::GuildInvites),
+            GatewayIntents::GUILD_INVITES
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::GuildVoiceStates),
+            GatewayIntents::GUILD_VOICE_STATES
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::GuildPresence),
+            GatewayIntents::GUILD_PRESENCES
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::GuildMessages),
+            GatewayIntents::GUILD_MESSAGES
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::GuildMessageReactions),
+            GatewayIntents::GUILD_MESSAGE_REACTIONS
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::GuildMessageTyping),
+            GatewayIntents::GUILD_MESSAGE_TYPING
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::DirectMessages),
+            GatewayIntents::DIRECT_MESSAGES
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::DirectMessageReactions),
+            GatewayIntents::DIRECT_MESSAGE_REACTIONS
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::DirectMessageTyping),
+            GatewayIntents::DIRECT_MESSAGE_TYPING
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::MessageContent),
+            GatewayIntents::MESSAGE_CONTENT
+        );
+        assert_eq!(
+            GatewayIntents::from(Intents::ScheduledEvents),
+            GatewayIntents::GUILD_SCHEDULED_EVENTS
+        );
+        assert_eq!(GatewayIntents::from(Intents::All), GatewayIntents::all());
+        assert_eq!(
+            GatewayIntents::from(Intents::NonPrivileged),
+            GatewayIntents::non_privileged()
+        );
+    }
 }
