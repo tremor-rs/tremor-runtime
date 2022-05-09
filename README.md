@@ -9,36 +9,29 @@
 <hr>
 
 [![Build Status]][actions-tests]
-[![ARM Builds]][drone.io]
 [![Quality Checks]][actions-checks]
 [![License Checks]][actions-license-audit]
 [![Security Checks]][actions-security-audit]
 [![Coverage]][coveralls.io]
 [![codecov]][codecov report]
-[![Dependabot Status]][dependabot.com]
+[![Dependabot Status]][dependabot status]
 [![CII Best Practices]][bestpractices]
 [![GitHub]](LICENSE)
 [![Discord]][discord-invite]
 
 [build status]: https://github.com/tremor-rs/tremor-runtime/workflows/Tests/badge.svg
 [actions-tests]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3ATests
-[quality checks]: https://github.com/tremor-rs/tremor-runtime/workflows/Checks/badge.svg
 [actions-checks]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3AChecks
-[license checks]: https://github.com/tremor-rs/tremor-runtime/workflows/License%20audit/badge.svg
 [actions-license-audit]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3A%22License+audit%22
-[security checks]: https://github.com/tremor-rs/tremor-runtime/workflows/Security%20audit/badge.svg
 [actions-security-audit]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3A%22Security+audit%22
 [coverage]: https://coveralls.io/repos/github/tremor-rs/tremor-runtime/badge.svg?branch=main
 [coveralls.io]: https://coveralls.io/github/tremor-rs/tremor-runtime?branch=main
-[dependabot status]: https://api.dependabot.com/badges/status?host=github&repo=tremor-rs/tremor-runtime
-[dependabot.com]: https://dependabot.com
+[dependabot status]: https://flat.badgen.net/github/dependabot/tremor-rs/tremor-runtime
 [cii best practices]: https://bestpractices.coreinfrastructure.org/projects/4356/badge
 [bestpractices]: https://bestpractices.coreinfrastructure.org/projects/4356
 [github]: https://img.shields.io/github/license/tremor-rs/tremor-runtime
 [discord]: https://img.shields.io/discord/752801695066488843.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2
 [discord-invite]: https://bit.ly/tremor-discord
-[arm builds]: https://cloud.drone.io/api/badges/tremor-rs/tremor-runtime/status.svg
-[drone.io]: https://cloud.drone.io/tremor-rs/tremor-runtime
 [gitpod]: https://gitpod.io/button/open-in-gitpod.svg
 [gitpod-hook]: https://gitpod.io/#https://github.com/tremor-rs/tremor-runtime
 [codecov]: https://codecov.io/gh/tremor-rs/tremor-runtime/branch/main/graph/badge.svg?token=d1bhuZGcOK
@@ -46,9 +39,17 @@
 
 ---
 
-In short, Tremor is an event processing system. It was originally designed as a replacement for software such as [Logstash](https://www.elastic.co/products/logstash) or [Telegraf](https://www.influxdata.com/time-series-platform/telegraf/). However tremor has outgrown this singular use case by supporting more complex workflows such as aggregation, rollups, an ETL language, and a query language.
+In short, Tremor is an event- or stream-processing system. It is designed to perform well for high-volumetric data both in terms of consumption of memory and CPU resources and in terms of latency. The goal of Tremor is to be a convenient tool for the operator at the time of configuring Tremor and at runtime in a production setup. We provide our own LSP for Tremor configurations and take great care of providing insightful metrics and helpful error messages at runtime. All this while keeping the hot data-path as performant as possible.
 
-More about the [history](https://www.tremor.rs/docs/history) and [architecture](https://www.tremor.rs/docs/overview) can be found in [the documentation](https://www.tremor.rs/docs/index).
+Tremor is well suited for ETL workloads on structured and binary data (both schemaless and strictly schematic), aggregations, traffic shaping and routing purposes. 
+
+Tremor speaks various protocols (TCP, UDP, HTTP, Websockets, DNS) and can connect to various external systems such as Kafka, Influx compatible stores, syslog, Open telemetry, Google Pubsub, Google BigQuery, S3 and many more.
+
+* [Documentation v0.12](https://tremor.rs/docs/0.12/index)
+* [Install instructions](https://tremor.rs/docs/0.12/getting-started/install)
+* [Guides](https://tremor.rs/docs/0.12/guides/overview)
+* [Reference](https://tremor.rs/docs/0.12/reference/index)
+* [Architecture overview](https://tremor.rs/docs/0.12/about/architecture)
 
 ## Audience
 
@@ -76,21 +77,44 @@ We currently do not recommend tremor where:
 
 We accept and encourage contributions no matter how small so if tremor is compelling for your use case or project, then please get in touch, reach out, raise a ticket and we're happy to collaborate and guide contributions and contributors.
 
-### Examples
+## Examples
 
 See our [Demo](demo/README.md) for a complex Tremor setup that can easily be run locally by using docker compose.
 
 Checkout the [Recipes](https://www.tremor.rs/docs/recipes/README) on our website. Each comes with a docker compose file to run and play with without requiring lots of dependencies.
 
-## Building
+## Packages
 
-### Docker
+We do provide RPM, DEB and pre-compiled binaries (`x86_64` only) for each release.
 
-Tremor runs in a docker image. If you wish to build a local image, clone this repository, and either run `make image` or run `docker-compose build`. Both will create an image called `tremor-runtime:latest`.
+Check out our [Releases Page](https://github.com/tremor-rs/tremor-runtime/releases).
+
+## Docker
+
+Docker images are published to both [Docker Hub](https://hub.docker.com/r/tremorproject/tremor) and [Github Packages Container Registry](https://ghcr.io).
+
+| Container registry | Image name                        |
+| ------------------ | --------------------------------- |
+| docker.io          | `tremorproject/tremor`            |
+| ghcr.io            | `tremor-rs/tremor-runtime/tremor` |
+
+We publish our images with a set of different tags as explained below
+
+| Image tags | Explanation                         | Example   |
+| ---------- | ----------------------------------- | --------- |
+| `edge`     | Tracking the `main` branch          |           |
+| `latest`   | The latest release                  |           |
+| `0.X.Y`    | The exact release                   | `0.11.12` |
+| `0.X`      | The latest bugfix release for `0.X` | `0.12`    |
+| `0`        | The latest minor release for `0`    | `0`       |
+
+### Building the Docker Image
+
+Tremor runs in a docker image. If you wish to build a local image, clone this repository, and either run `make image` or run `docker-compose build`. Both will create an image called `tremorproject/tremor:latest`.
 
 Note that since the image is building tremor in release mode it requires some serious resources. We recommend allowing docker to use at least **12 but better 16 gigabytes of memory** and as many cores as there are to spare. Depending on the system building, the image can take up to an hour.
 
-Providing too little resources to the docker machine can destabalize the docker build process. If you're encountering logs/errors like:
+Providing too little resources to the docker machine can destabilize the docker build process. If you're encountering logs/errors like:
 
 ```
 (signal: 9, SIGKILL: kill)
@@ -100,15 +124,7 @@ ERROR: Service 'tremor' failed to build : The command '/bin/sh -c cargo build --
 
 It is likely that your docker resources are starved. Consider increasing your resources ([Windows](https://docs.docker.com/docker-for-windows/#resources)/[Mac](https://docs.docker.com/docker-for-mac/#resources)) before trying again, posting in Discord, or raising an issue.
 
-### Local builds
-
-If you are not comfortable with managing library packages on your system or don't have experience with, please use the Docker image provided above. Local builds are not supported and purely at your own risk.
-
-For local builds, tremor requires rust 2018 (version `1.31` or later), along with all the tools needed to build rust programs. Eg: for CentOS, the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required. For different distributions or operating systems, please install the packages accordingly.
-**NOTE** AVX2, SSE4.2 or NEON are needed to build [simd-json](https://github.com/simd-lite/simd-json#cpu-target) used by tremor. So if you are building in vm, check which processor instruction are passed to it. Like `lscpu | grep Flags`
-For a more detailed guide on local builds, please refer to the [tremor development docs](https://www.tremor.rs/community/development/quick-start).
-
-## Running locally
+### Running
 
 To run `tremor` locally and introspect its docker environment, do the following:
 
@@ -117,7 +133,7 @@ make image
 docker run tremorproject/tremor:latest
 ```
 
-A local shell can be gotten by finding the container id of the running docker container and using that to attach a shell to the image.
+A local shell can be acquired by finding the container id of the running docker container and using that to attach a shell to the image.
 
 ```bash
 docker ps
@@ -126,56 +142,87 @@ docker ps
 This returns:
 
 ```text
-CONTAINER ID        IMAGE               COMMAND                CREATED             STATUS              PORTS               NAMES
-fa7e3b4cec86        tremor-runtime      "/tremor-runtime.sh"   43 seconds ago      Up 42 seconds                           gracious_shannon
+CONTAINER ID        IMAGE                            COMMAND                CREATED             STATUS              PORTS               NAMES
+fa7e3b4cec86        tremorproject/tremor:latest      "/tremor-runtime.sh"   43 seconds ago      Up 42 seconds                           gracious_shannon
 ```
 
 Executing a shell on that container will then give you local access:
 
 ```bash
-docker exec -it 838f22d9cb98 sh
+docker exec -it fa7e3b4cec86 sh
 ```
 
-## Configuration file
+## Building From Source
 
-Tremor uses YAML, or [tremor-query](https://www.tremor.rs/docs/tremor-query/index) to configure pipelines. For use in docker those should be mounted to `/etc/tremor/config`.
+> :warning: Local builds are not supported and purely at your own risk.
 
-Custom [tremor-script](https://www.tremor.rs/docs/tremor-script/index) and [tremor-query](https://www.tremor.rs/docs/tremor-query/index) modules and libraries should be mounted to `/usr/local/share/tremor`.
+If you are not comfortable with managing library packages on your system or don't have experience with, please use the Docker image provided above. 
 
-### Operations
+For local builds, tremor requires rust 2021 (version `1.60` or later), along with all the tools needed to build rust programs. Eg: for CentOS, the packages `gcc`, `make`, `cmake`, `clang`, `openssl`, and `libstdc++` are required. For different distributions or operating systems, please install the packages accordingly.
+**NOTE** AVX2, SSE4.2 or NEON are needed to build [simd-json](https://github.com/simd-lite/simd-json#cpu-target) used by tremor. So if you are building in vm, check which processor instruction are passed to it. Like `lscpu | grep Flags`
+For a more detailed guide on local builds, please refer to the [tremor development docs](https://www.tremor.rs/community/development/quick-start).
 
-Tremor works by chaining operations that have inputs, outputs, and additional configuration. OnRamps - the operations that ingest data - take a unique role in this.
+### ARM/aarch64/NEON
 
-The documentation for different operations can found in the [docs](https://www.tremor.rs/docs/operations/cli). The `onramps` and `op` modules hold the relevant information.
+To run and compile with neon use:
 
-For each operation, the `Config` struct defines the parameters that can be passed to configure it, and the description holds additional details and examples.
-
-### file sections
-
-#### `onramps`
-
-A list that defines the OnRamps started in tremor. Each onramp lives in a separate thread. Along with its configuration, it has the key `pipeline` that defines the pipeline data from that onramp is sent to. At least one needs to be present.
-
-```yaml
-onramps:
-  - onramp::file:
-      file: my-file.json
-      pipeline: main
+```bash
+RUSTCFLAGS="-C cpu-target=native" cargo +nightly build --features neon --all
 ```
 
+
+## Configuration
+
+Tremor is configured using `.troy` files written in our own [Troy](https://tremor.rs/docs/0.12/language/troy/) language.
+
+Custom [Troy](https://tremor.rs/docs/0.12/language/troy/) modules can be loaded from any directory pointed to by the environment variable `TREMOR_PATH`.
+Directory entries need to be separated by a colon `:`.
+
+### Docker
+
+For use in docker [Troy](https://tremor.rs/docs/0.12/language/troy/) files should be mounted to `/etc/tremor/config`.
+
+Custom [Troy](https://tremor.rs/docs/0.12/language/troy/) modules and libraries should be mounted to `/usr/local/share/tremor`.
 ### Example
 
-Please look at the [demo](demo/configs/tremor) for a fully documented example
+This very simple example will consume lines from stdin and send them to stdout.
 
-### Configuration file usage in the docker container
+```troy
+define flow example
+flow
+  # import some common pre-defined pipeline and connector definitions
+  # to use here and save some typing
+  use troy::pipelines;
+  use troy::connectors;
 
-To use the configuration file as part of the Docker container mount the configuration files to `/etc/tremor/config`.
+  # create instances of the connectors and pipelines we need
+  create connector console from connectors::console;
+  create pipeline pass from pipelines::passthrough;
 
-## Local demo mode
+  # connect everything to form an event flow
+  connect /connector/console to /pipeline/pass;
+  connect /pipeline/pass to /connector/console;
+end;
+
+deploy flow example;
+```
+
+Run this example in file `example.troy` with docker:
+
+```console
+$ docker run -i -v"$PWD:/etc/tremor/config" tremorproject/tremor:0.12.0-rc.2
+```
+
+Please also look at the [demo](demo/configs/tremor/config) for a fully documented example.
+
+For more involved examples check out our [Recipes](https://tremor.rs/docs/0.12/recipes/index).
+
+
+## Local Demo
 
 **Note**: Docker should run with at least 4GB of memory!
 
-To demo run `make demo`, this requires the tremor-runtime image to exist on your machine.
+To demo run `make demo`, this requires the `tremorproject/tremor` image to exist on your machine.
 
 ### Design
 
@@ -212,32 +259,4 @@ The demo mode logically follows the flow outlined below. It reads the data from 
 
 #### Config file
 
-The demo can be configured in (for example) the `demo/configs/tremor/config/config.yaml` file.
-
-#### Tremor
-
-Configuration lives in `demo/configs`.
-
-#### Test data
-
-The test data is read from the `demo/data/data.json.xz` file. This file needs to contain 1 event (in this case, a valid JSON object) per line and be compressed with `xz`.
-
-#### Benchmark Framework
-
-The tremor-runtime supports a micro-benchmarking framework via specialized on-ramp ( blaster ) and off-ramp ( blackhole )
-Tremor input and output adapters. Benchmarks ( via blackhole ) output high dynamic range histogram latency reports to
-standard output that is compatible with HDR Histogram's plot files [service](https://hdrhistogram.github.io/HdrHistogram/plotFiles.html)
-
-To execute a benchmark, build tremor in **release** mode and run the examples from the tremor repo base directory:
-
-```bash
-./bench/run <name>
-```
-
-### ARM/aarch64/NEON
-
-to run and compile with neon use:
-
-```bash
-RUSTCFLAGS="-C cpu-target=native" cargo +nightly build --features neon --all
-```
+The demo configuration can be inspected and changed in the `demo/configs/tremor/config/main.troy` file.
