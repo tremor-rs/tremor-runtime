@@ -2,7 +2,6 @@ use crate::connectors::google::AuthInterceptor;
 use crate::connectors::prelude::*;
 use async_std::channel::{Receiver, Sender};
 use async_std::prelude::FutureExt;
-use async_std::sync::Mutex;
 use dashmap::DashMap;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use googapis::google::pubsub::v1::{
@@ -13,6 +12,7 @@ use serde::Deserialize;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
+use async_std::task::JoinHandle;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Status;
@@ -53,9 +53,10 @@ type AsyncTaskMessage = Result<(u64, Vec<u8>)>;
 
 struct GSubSource {
     config: Config,
-    client: Option<Arc<Mutex<PubSubClient>>>,
+    client: Option<PubSubClient>,
     receiver: Option<Receiver<AsyncTaskMessage>>,
     ack_ids: Arc<DashMap<u64, String>>,
+    task_handle: Option<JoinHandle<()>>
 }
 
 impl GSubSource {
@@ -65,12 +66,13 @@ impl GSubSource {
             client: None,
             receiver: None,
             ack_ids: Arc::new(DashMap::new()),
+            task_handle: None
         }
     }
 }
 
 async fn consumer_task(
-    client: Arc<Mutex<PubSubClient>>,
+    mut client: PubSubClient,
     sender: Sender<AsyncTaskMessage>,
     ack_ids: Arc<DashMap<u64, String>>,
     subscription_id: String,
@@ -79,16 +81,15 @@ async fn consumer_task(
     let mut ack_counter = 0;
 
     loop {
-        let response_with_potential_timeout = client
-            .lock()
-            .await
-            .pull(PullRequest {
-                subscription: subscription_id.clone(),
-                max_messages: 1000,
-                ..PullRequest::default()
-            })
-            .timeout(request_timeout)
-            .await;
+        let response_with_potential_timeout =
+            client
+                .pull(PullRequest {
+                    subscription: subscription_id.clone(),
+                    max_messages: QSIZE.load(Ordering::Relaxed) as i32,
+                    ..PullRequest::default()
+                })
+                .timeout(request_timeout)
+                .await;
 
         let response = match response_with_potential_timeout {
             Ok(response) => match response {
@@ -146,8 +147,6 @@ async fn consumer_task(
 #[async_trait::async_trait]
 impl Source for GSubSource {
     async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
-        let token = Token::new()?;
-
         let tls_config = ClientTlsConfig::new()
             .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
             .domain_name("pubsub.googleapis.com");
@@ -156,28 +155,38 @@ impl Source for GSubSource {
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout))
             .tls_config(tls_config)?
             .connect()
-            .await;
+            .await?;
 
-        let channel = dbg!(channel)?;
+        let connect_to_pubsub = move || -> Result<PubSubClient> {
+            let token = Token::new()?;
 
-        let client = SubscriberClient::with_interceptor(
-            channel,
-            AuthInterceptor {
-                token: Box::new(move || match token.header_value() {
-                    Ok(val) => Ok(val),
-                    Err(_) => Err(Status::unavailable(
-                        "Failed to retrieve authentication token.",
-                    )),
-                }),
-            },
-        );
+            Ok(
+                SubscriberClient::with_interceptor(
+                channel.clone(),
+                AuthInterceptor {
+                    token: Box::new(move || match token.header_value() {
+                        Ok(val) => Ok(val),
+                        Err(_) => Err(Status::unavailable(
+                            "Failed to retrieve authentication token.",
+                        )),
+                    }),
+                },
+            )
+            )
+        };
 
-        let client = Arc::new(Mutex::new(client));
+        if let Some(task_handle) = self.task_handle.take() {
+            task_handle.cancel().await;
+        }
+
+        let client = connect_to_pubsub()?;
+
+        let client_background = connect_to_pubsub()?;
 
         let (tx, rx) = async_std::channel::bounded(QSIZE.load(Ordering::Relaxed));
 
-        async_std::task::spawn(consumer_task(
-            client.clone(),
+        let join_handle = async_std::task::spawn(consumer_task(
+            client_background,
             tx,
             self.ack_ids.clone(),
             self.config.subscription_id.clone(),
@@ -186,6 +195,7 @@ impl Source for GSubSource {
 
         self.receiver = Some(rx);
         self.client = Some(client);
+        self.task_handle = Some(join_handle);
 
         Ok(true)
     }
@@ -210,7 +220,7 @@ impl Source for GSubSource {
                     );
 
                     // fixme use the actual stream id
-                    Ok(SourceReply::StreamFail(0))
+                    Ok(SourceReply::StreamFail(DEFAULT_STREAM_ID))
                 } else {
                     Err(error)
                 };
@@ -223,7 +233,7 @@ impl Source for GSubSource {
             origin_uri: EventOriginUri::default(),
             data,
             meta: None,
-            stream: None,
+            stream: Some(DEFAULT_STREAM_ID),
             port: None,
             codec_overwrite: None,
         })
@@ -250,8 +260,6 @@ impl Source for GSubSource {
         ))?;
 
         client
-            .lock()
-            .await
             .acknowledge(AcknowledgeRequest {
                 subscription: self.config.subscription_id.clone(),
                 ack_ids: vec![ack_id],
