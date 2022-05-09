@@ -1,15 +1,18 @@
 use crate::connectors::google::AuthInterceptor;
 use crate::connectors::prelude::*;
+use async_std::channel::{Receiver, Sender};
+use async_std::prelude::FutureExt;
+use async_std::sync::Mutex;
 use dashmap::DashMap;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
-use googapis::google::pubsub::v1::{AcknowledgeRequest, PubsubMessage, PullRequest, ReceivedMessage};
+use googapis::google::pubsub::v1::{
+    AcknowledgeRequest, PubsubMessage, PullRequest, ReceivedMessage,
+};
 use gouth::Token;
 use serde::Deserialize;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
-use async_std::channel::{Receiver, Sender};
-use async_std::sync::Mutex;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Status;
@@ -46,11 +49,12 @@ struct GSub {
 }
 
 type PubSubClient = SubscriberClient<InterceptedService<Channel, AuthInterceptor>>;
+type AsyncTaskMessage = Result<(u64, Vec<u8>)>;
 
 struct GSubSource {
     config: Config,
     client: Option<Arc<Mutex<PubSubClient>>>,
-    receiver: Option<Receiver<(u64, Vec<u8>)>>,
+    receiver: Option<Receiver<AsyncTaskMessage>>,
     ack_ids: Arc<DashMap<u64, String>>,
 }
 
@@ -65,30 +69,75 @@ impl GSubSource {
     }
 }
 
-async fn consumer_task(client: Arc<Mutex<PubSubClient>>, sender:Sender<(u64, Vec<u8>)>, ack_ids:Arc<DashMap<u64, String>>, subscription_id:String) {
+async fn consumer_task(
+    client: Arc<Mutex<PubSubClient>>,
+    sender: Sender<AsyncTaskMessage>,
+    ack_ids: Arc<DashMap<u64, String>>,
+    subscription_id: String,
+    request_timeout: Duration,
+) {
     let mut ack_counter = 0;
 
     loop {
-        let response = client
+        let response_with_potential_timeout = client
             .lock()
             .await
             .pull(PullRequest {
                 subscription: subscription_id.clone(),
-                // fixme config?
-                max_messages: 100,
-                ..Default::default()
+                max_messages: 1000,
+                ..PullRequest::default()
             })
-            .await
-            .unwrap()// fixme
-            .into_inner();
+            .timeout(request_timeout)
+            .await;
+
+        let response = match response_with_potential_timeout {
+            Ok(response) => match response {
+                Ok(response) => response.into_inner(),
+                Err(error) => {
+                    if let Err(e) = sender.send(Err(error.into())).await {
+                        error!("Failed to send a PubSub error to the main task: {}", e);
+
+                        // If we can't send errors to the main task, disconnect and let it restart
+                        return;
+                    }
+
+                    // There was an error other than timeout, let the main task handle the failure, but
+                    // do not drop the connection.
+                    continue;
+                }
+            },
+            Err(timeout_error) => {
+                if let Err(e) = sender.send(Err(timeout_error.into())).await {
+                    error!(
+                        "Failed to send a PubSub timeout error to the main task: {}",
+                        e
+                    );
+
+                    // If we can't send errors to the main task, disconnect and let it restart
+                    return;
+                }
+
+                // If we have a timeout, exit the task and let the main task handle reconnection
+                return;
+            }
+        };
 
         for message in response.received_messages {
-            let ReceivedMessage { ack_id, message: msg, delivery_attempt, } = message;
+            let ReceivedMessage {
+                ack_id,
+                message: msg,
+                ..
+            } = message;
 
             if let Some(PubsubMessage { data, .. }) = msg {
                 ack_counter += 1;
                 ack_ids.insert(ack_counter, ack_id);
-                sender.send((ack_counter, data)).await.unwrap();
+                if let Err(e) = sender.send(Ok((ack_counter, data))).await {
+                    error!("Failed to send a PubSub message to the main task: {}", e);
+
+                    // If we can't send to the main task, disconnect and let it restart
+                    return;
+                }
             }
         }
     }
@@ -116,11 +165,9 @@ impl Source for GSubSource {
             AuthInterceptor {
                 token: Box::new(move || match token.header_value() {
                     Ok(val) => Ok(val),
-                    Err(e) => {
-                        Err(Status::unavailable(
-                            "Failed to retrieve authentication token.",
-                        ))
-                    }
+                    Err(_) => Err(Status::unavailable(
+                        "Failed to retrieve authentication token.",
+                    )),
                 }),
             },
         );
@@ -129,7 +176,13 @@ impl Source for GSubSource {
 
         let (tx, rx) = async_std::channel::bounded(QSIZE.load(Ordering::Relaxed));
 
-        async_std::task::spawn(consumer_task(client.clone(), tx, self.ack_ids.clone(), self.config.subscription_id.clone()));
+        async_std::task::spawn(consumer_task(
+            client.clone(),
+            tx,
+            self.ack_ids.clone(),
+            self.config.subscription_id.clone(),
+            Duration::from_secs(10), // fixme get this from the config
+        ));
 
         self.receiver = Some(rx);
         self.client = Some(client);
@@ -137,7 +190,7 @@ impl Source for GSubSource {
         Ok(true)
     }
 
-    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
         let receiver = self
             .receiver
             .as_mut()
@@ -146,12 +199,28 @@ impl Source for GSubSource {
                 "The receiver is not connected",
             ))?;
 
-        let (ack_id, data) = receiver.recv().await?;
+        let (ack_id, data) = match receiver.recv().await? {
+            Ok(response) => response,
+            Err(error) => {
+                let error_kind = error.kind();
+                return if let ErrorKind::Timeout(_) = error_kind {
+                    ctx.swallow_err(
+                        ctx.notifier.connection_lost().await,
+                        "Failed to notify about PubSub connection loss",
+                    );
+
+                    // fixme use the actual stream id
+                    Ok(SourceReply::StreamFail(0))
+                } else {
+                    Err(error)
+                };
+            }
+        };
 
         *pull_id = ack_id;
 
         Ok(SourceReply::Data {
-            origin_uri: Default::default(),
+            origin_uri: EventOriginUri::default(),
             data,
             meta: None,
             stream: None,
@@ -172,17 +241,20 @@ impl Source for GSubSource {
         let client = self
             .client
             .as_mut()
-            .ok_or(ErrorKind::BigQueryClientNotAvailable(
-                // fixme use an error for GPubSub
+            .ok_or(ErrorKind::PubSubClientNotAvailable(
                 "The client is not connected",
             ))?;
+
+        let (_, ack_id) = self.ack_ids.remove(&pull_id).ok_or(ErrorKind::PubSubError(
+            "Received an ACK for a message that does not exist",
+        ))?;
 
         client
             .lock()
             .await
             .acknowledge(AcknowledgeRequest {
                 subscription: self.config.subscription_id.clone(),
-                ack_ids: vec![self.ack_ids.remove(&pull_id).unwrap().1],
+                ack_ids: vec![ack_id],
             })
             .await?;
 
