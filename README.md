@@ -105,6 +105,7 @@ We publish our images with a set of different tags as explained below
 | `edge`     | Tracking the `main` branch          |           |
 | `latest`   | The latest release                  |           |
 | `0.X.Y`    | The exact release                   | `0.11.12` |
+| `0.X.Y`    | The exact release                   | `0.12.1` |
 | `0.X`      | The latest bugfix release for `0.X` | `0.12`    |
 | `0`        | The latest minor release for `0`    | `0`       |
 
