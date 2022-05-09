@@ -92,10 +92,6 @@ struct ClickhouseConfig {
     columns: Vec<Column>,
 }
 
-impl ClickhouseConfig {
-    const DEFAULT_PORT: u16 = 9000;
-}
-
 impl ConfigImpl for ClickhouseConfig {}
 
 #[derive(Clone, Copy, Deserialize)]
@@ -195,7 +191,7 @@ impl ClickhouseSink {
                 Error::from(ErrorKind::MissingEventColumn(column_name.to_string()))
             })?;
 
-            let cell = clickhouse_value_of(cell, expected_type)?;
+            let cell = clickhouse_value_of(column_name.as_str(), cell, expected_type)?;
 
             rslt.push((column_name.clone(), cell));
         }
@@ -214,6 +210,18 @@ enum DummySqlType {
     Int64,
     UInt64,
     String,
+}
+
+impl fmt::Display for DummySqlType {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            DummySqlType::Array(inner) => write!(f, "Array({inner})"),
+            DummySqlType::Nullable(inner) => write!(f, "Nullable({inner})"),
+            DummySqlType::Int64 => write!(f, "Int64"),
+            DummySqlType::UInt64 => write!(f, "UInt64"),
+            DummySqlType::String => write!(f, "String"),
+        }
+    }
 }
 
 impl DummySqlType {
@@ -235,6 +243,7 @@ impl DummySqlType {
 }
 
 fn clickhouse_value_of(
+    column_name: &str,
     cell: &Value,
     expected_type: &DummySqlType,
 ) -> Result<clickhouse_rs::types::Value> {
@@ -261,7 +270,13 @@ fn clickhouse_value_of(
                 (StaticNode::Bool(b), DummySqlType::UInt64) => types::Value::UInt64(u64::from(*b)),
                 (StaticNode::Bool(b), DummySqlType::Int64) => types::Value::Int64(i64::from(*b)),
 
-                _ => todo!(),
+                (other, _) => {
+                    return Err(Error::from(ErrorKind::UnexpectedEventFormat(
+                        column_name.to_string(),
+                        expected_type.to_string(),
+                        other.value_type(),
+                    )))
+                }
             };
 
             Ok(expected_type.wrap_if_nullable(value_as_non_null))
@@ -269,7 +284,7 @@ fn clickhouse_value_of(
 
         (Value::Array(values), DummySqlType::Array(expected_inner_type)) => values
             .iter()
-            .map(|value| clickhouse_value_of(value, expected_inner_type))
+            .map(|value| clickhouse_value_of(column_name, value, expected_inner_type))
             .collect::<Result<Vec<_>>>()
             .map(|converted_array| {
                 types::Value::Array(
@@ -278,7 +293,11 @@ fn clickhouse_value_of(
                 )
             }),
 
-        _ => todo!(),
+        (other, _) => Err(Error::from(ErrorKind::UnexpectedEventFormat(
+            column_name.to_string(),
+            expected_type.to_string(),
+            other.value_type(),
+        ))),
     }
 }
 
