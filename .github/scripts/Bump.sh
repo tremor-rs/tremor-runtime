@@ -41,6 +41,7 @@ sed -e "s/^tremor-script = { version = \"${old}\"/tremor-common = { version = \"
 sed -e "s/^tremor-pipeline = { version = \"${old}\"/tremor-common = { version = \"${new}\"/" -i.release "Cargo.toml"
 sed -e "s/^tremor-api = { version = \"${old}\"/tremor-common = { version = \"${new}\"/" -i.release "Cargo.toml"
 cd ..
+cd tremor-pipeline
 echo "Updating tremor dependencies in tremor-pipeline"
 sed -e "s/^tremor-common = { version = \"${old}\"/tremor-common = { version = \"${new}\"/" -i.release "Cargo.toml"
 sed -e "s/^tremor-value = { version = \"${old}\"/tremor-common = { version = \"${new}\"/" -i.release "Cargo.toml"
