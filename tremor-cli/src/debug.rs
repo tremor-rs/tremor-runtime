@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::env;
+use crate::errors::Result;
 use crate::{
     cli::{Dbg, DbgAst, DbgCommand, DbgDot, DbgOpts, DbgSrc},
     util::{get_source_kind, SourceKind},
 };
-use crate::{env, errors::Result};
 use io::BufReader;
 use lexer::Lexer;
 use std::io::Write;

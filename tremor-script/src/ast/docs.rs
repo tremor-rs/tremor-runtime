@@ -124,7 +124,7 @@ impl ToString for QueryDoc {
 pub struct FlowDoc {
     /// Statment name
     pub name: String,
-    /// Statment documentation
+    /// Statement documentation
     pub doc: Option<String>,
 }
 

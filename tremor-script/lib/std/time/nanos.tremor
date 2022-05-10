@@ -1,4 +1,4 @@
-### # Utilities for dealing with nanoseconds
+### Utilities for dealing with nanoseconds
 
 ## The amount of nanoseconds in a microsecond
 const NANOS_PER_MICROSECOND = 1_000;

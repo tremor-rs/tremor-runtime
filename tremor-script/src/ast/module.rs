@@ -16,6 +16,7 @@
 
 use super::{
     deploy::raw::{ConnectorDefinitionRaw, FlowDefinitionRaw},
+    docs::{Docs, ModDoc},
     helper::raw::{
         OperatorDefinitionRaw, PipelineDefinitionRaw, ScriptDefinitionRaw, WindowDefinitionRaw,
     },
@@ -210,11 +211,17 @@ impl<'script> Content<'script> {
 }
 
 // This is a self referential struct, beware
+/// Tremor `use`-able module representation
 #[derive(Debug, Clone)]
-pub(crate) struct Module {
-    pub(crate) id: Id,
-    pub(crate) content: Content<'static>,
-    pub(crate) modules: HashMap<String, Index>,
+pub struct Module {
+    /// module identifier
+    pub id: Id,
+    /// module documentation
+    pub docs: Docs,
+    /// module contents
+    pub content: Content<'static>,
+    /// additionally loaded modules
+    pub modules: HashMap<String, Index>,
 }
 
 impl From<&[u8]> for Id {
@@ -228,6 +235,9 @@ impl From<&[u8]> for Id {
 pub struct Index(usize);
 
 impl Module {
+    /// Load a module
+    ///
+    /// this happens when a module is `use`d
     pub fn load(
         id: Id,
         ids: &mut Vec<(Id, String)>,
@@ -295,10 +305,21 @@ impl Module {
                 }
             }
         }
+        let module_docs = raw
+            .doc
+            .map(|docs| docs.into_iter().map(Cow::into_owned).collect::<Vec<_>>());
+        let Helper {
+            scope, mut docs, ..
+        } = helper;
+        docs.module = Some(ModDoc {
+            name: raw.name.id.to_string(),
+            doc: module_docs.map(|lines| lines.join("\n")),
+        });
         Ok(Module {
             id,
-            content: helper.scope.content,
-            modules: helper.scope.modules,
+            docs,
+            content: scope.content,
+            modules: scope.modules,
         })
     }
 }

@@ -14,7 +14,7 @@
 
 use crate::{
     arena::{self, Arena},
-    ast::{self, helper::Warning, DeployStmt},
+    ast::{self, docs::Docs, helper::Warning, DeployStmt},
     errors::{Error, Result},
     highlighter::Highlighter,
     lexer::{self, Lexer},
@@ -70,6 +70,12 @@ where
     #[must_use]
     pub fn dot(&self) -> String {
         self.deploy.dot()
+    }
+
+    /// Returns the documentation for the Deployment
+    #[must_use]
+    pub fn docs(&self) -> &Docs {
+        &self.deploy.docs
     }
 
     /// Parses a string into a deployment
