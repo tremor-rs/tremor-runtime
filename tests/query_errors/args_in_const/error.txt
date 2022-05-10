@@ -1,0 +1,3 @@
+Error: 
+    6 |   const some_const = args.some_arg;
+      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ The expression isn't constant and can't be evaluated at compile time
