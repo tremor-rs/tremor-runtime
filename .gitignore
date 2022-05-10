@@ -21,6 +21,7 @@ flamegraph.svg
 out.stacks
 coyote.html
 static/openapi.json
+static/library
 __pycache__
 tremor-script/_build
 tremor-script/c_src/*.o

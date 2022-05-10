@@ -81,6 +81,16 @@ fn gen_doc(
     let mut dest_file = PathBuf::new();
     dest_file.push(dest_path);
     dest_file.push(&rel_path);
+    let mut src_path = path.to_path_buf();
+    src_path.set_extension("");
+    if src_path.exists() && src_path.is_dir() {
+        // create an index file for module level docs
+        // this works best with our current docusaurus based setup
+        //
+        // Example: aggr.md -> aggr/index.md
+        dest_file.set_extension("");
+        dest_file.push("index");
+    }
     dest_file.set_extension("md");
     let parent = dest_file.parent().and_then(Path::to_str).ok_or_else(|| {
         Error::from(format!(
