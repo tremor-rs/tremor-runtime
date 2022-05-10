@@ -210,7 +210,7 @@ deploy flow example;
 Run this example in file `example.troy` with docker:
 
 ```console
-$ docker run -i -v"$PWD:/etc/tremor/config" tremorproject/tremor:0.12.0-rc.2
+$ docker run -i -v"$PWD:/etc/tremor/config" tremorproject/tremor:latest
 ```
 
 Please also look at the [demo](demo/configs/tremor/config) for a fully documented example.
