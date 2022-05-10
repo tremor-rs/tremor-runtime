@@ -75,7 +75,7 @@ docs: library-doc lalrpop-doc
 
 library-doc:
 	-rm -rf docs
-	-mkdir -p docs/library/stdlib
+	-mkdir -p docs/library
 	-TREMOR_PATH=./tremor-script/lib cargo run -p tremor-cli -- doc tremor-script/lib docs/library
 
 lalrpop-docgen:
