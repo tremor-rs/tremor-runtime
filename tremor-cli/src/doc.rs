@@ -15,6 +15,7 @@
 use crate::cli::Doc;
 use crate::errors::{Error, Result};
 use crate::util::visit_path_str;
+use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 use tremor_script::arena::Arena;
@@ -26,6 +27,7 @@ fn push_line(line: &str, buf: &mut String) {
         buf.push('\n');
     }
 }
+#[allow(clippy::too_many_lines)]
 fn gen_doc(
     is_interactive: bool,
     rel_path: Option<&Path>,
@@ -36,7 +38,7 @@ fn gen_doc(
         .ok_or_else(|| Error::from(format!("Bad relative path: {}", path.to_string_lossy())))?;
     let dest_path = dest_path.ok_or_else(|| Error::from("Bad destination path"))?;
 
-    let module = match path.extension().and_then(|ext| ext.to_str()) {
+    let module = match path.extension().and_then(OsStr::to_str) {
         Some("tremor" | "troy") => {
             let mut raw = String::new();
             let mut input = crate::open_file(path, None)?;
@@ -139,7 +141,7 @@ fn gen_doc(
         for (flow_id, defn) in &module.content.flows {
             push_line(&format!("### {flow_id}"), &mut gen);
             if let Some(doc) = defn.docs.as_ref() {
-                push_line(&doc, &mut gen);
+                push_line(doc, &mut gen);
             } else {
                 // at least list undocumented flow
                 // TODO: add derive docs from `FlowDefinition`
