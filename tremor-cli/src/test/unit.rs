@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::env;
 use crate::errors::{Error, Result};
-use crate::report;
 use crate::test;
 use crate::test::stats;
 use crate::test::status;
+use crate::{env, report};
 use report::TestSuite;
 use std::io::Read;
 use std::{collections::HashMap, path::Path};

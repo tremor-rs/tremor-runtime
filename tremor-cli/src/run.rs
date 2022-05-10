@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::cli::Run;
+use crate::env;
 use crate::errors::Result;
 use crate::util::{get_source_kind, highlight, slurp_string, SourceKind};
-use crate::{cli::Run, env};
 use std::io::prelude::*;
 use std::io::{self, BufReader, BufWriter, Read, Write};
 use tremor_common::{file, ids::OperatorIdGen, time::nanotime};

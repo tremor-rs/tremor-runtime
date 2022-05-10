@@ -94,27 +94,15 @@ impl<'script> ScriptRaw<'script> {
                     let alias = alias.unwrap_or_else(|| module.id.clone());
                     helper.scope().add_module_alias(alias, mid);
                 }
-                TopLevelExprRaw::Const(ConstRaw {
-                    name,
-                    expr,
-                    mid,
-                    comment,
-                }) => {
-                    let expr = expr.up(helper)?;
-                    let value = expr.try_into_value(helper)?;
-                    let value_type = value.value_type();
-                    let mid = mid.box_with_name(&name);
-                    let c = Const {
-                        mid: mid.clone(),
-                        id: name.to_string(),
-                        value: value.clone(),
-                    };
+                TopLevelExprRaw::Const(const_raw) => {
+                    let c = const_raw.up(helper)?;
+                    exprs.push(Expr::Imut(ImutExpr::literal(
+                        c.mid.clone(),
+                        c.value.clone(),
+                    )));
                     helper.scope.insert_const(c)?;
-                    exprs.push(Expr::Imut(ImutExpr::literal(mid, value)));
-                    helper.add_const_doc(&name, comment, value_type);
                 }
                 TopLevelExprRaw::FnDefn(f) => {
-                    helper.docs.fns.push(f.doc());
                     let mut f = f.up(helper)?;
                     ExprWalker::walk_fn_defn(&mut ConstFolder::new(helper), &mut f)?;
                     helper.scope.insert_function(f)?;
@@ -455,6 +443,7 @@ pub struct ConstRaw<'script> {
     pub name: Cow<'script, str>,
     pub expr: ImutExprRaw<'script>,
     pub(crate) mid: Box<NodeMeta>,
+    /// doc comment - is put into the helper
     pub comment: Option<Vec<Cow<'script, str>>>,
 }
 impl_expr!(ConstRaw);
@@ -465,6 +454,7 @@ impl<'script> Upable<'script> for ConstRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let expr = self.expr.up(helper)?;
         let value = expr.try_into_value(helper)?;
+        helper.add_const_doc(&self.name, self.comment.clone(), value.value_type());
         Ok(Const {
             mid: self.mid.box_with_name(&self.name),
             id: self.name.to_string(),
@@ -626,6 +616,9 @@ impl<'script> Upable<'script> for FnDefnRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         let can_emit = helper.can_emit;
         let mut aggrs = Vec::new();
+        // register documentation
+        helper.docs.fns.push(self.doc());
+
         let mut locals: HashMap<_, _> = self
             .args
             .iter()
@@ -662,14 +655,6 @@ pub enum AnyFnRaw<'script> {
     Match(MatchFnDefnRaw<'script>),
     /// we're forced to make this pub because of lalrpop
     Normal(FnDefnRaw<'script>),
-}
-impl<'script> AnyFnRaw<'script> {
-    pub(crate) fn doc(&self) -> FnDoc {
-        match self {
-            AnyFnRaw::Match(f) => f.doc(),
-            AnyFnRaw::Normal(f) => f.doc(),
-        }
-    }
 }
 
 impl<'script> Upable<'script> for AnyFnRaw<'script> {
@@ -715,6 +700,8 @@ impl<'script> Upable<'script> for MatchFnDefnRaw<'script> {
         let can_emit = helper.can_emit;
         let mut aggrs = Vec::new();
         let mut locals = HashMap::new();
+
+        helper.docs.fns.push(self.doc());
 
         for (i, a) in self.args.iter().enumerate() {
             locals.insert(a.to_string(), i);

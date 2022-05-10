@@ -1,3 +1,7 @@
+### Predefined pipeline definitions for use within your troy flow
+
+## The passthrough pipeline, 
+## passing the event as is through from its `in` port to its `out` port.
 define pipeline passthrough
 pipeline
   select event from in into out;
