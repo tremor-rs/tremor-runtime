@@ -238,6 +238,9 @@ impl Module {
     /// Load a module
     ///
     /// this happens when a module is `use`d
+    ///
+    /// # Errors
+    /// If parsing the module fails.
     pub fn load(
         id: Id,
         ids: &mut Vec<(Id, String)>,
