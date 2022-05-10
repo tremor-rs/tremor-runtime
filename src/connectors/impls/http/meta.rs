@@ -50,7 +50,7 @@ impl HttpRequestBuilder {
         meta: Option<&Value>,
         codec_map: &MimeCodecMap,
         config: &client::Config,
-        configured_codec: &String,
+        configured_codec: &str,
     ) -> Result<Self> {
         let request_meta = meta.get("request");
         let method = if let Some(method_v) = request_meta.get("method") {
@@ -319,4 +319,36 @@ pub(super) fn extract_response_meta(response: &Response) -> Value<'static> {
         .version()
         .map(|version| meta.try_insert("version", version.to_string()));
     meta
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[async_std::test]
+    async fn builder() -> Result<()> {
+        let request_id = RequestId::new(42);
+        let meta = None;
+        let codec_map = MimeCodecMap::default();
+        let c = literal!({"headers": {
+            "cake": ["black forst", "cheese"],
+            "pie": "key lime"
+        }});
+        let mut s = EventSerializer::new(
+            None,
+            CodecReq::Optional("json"),
+            vec![],
+            &ConnectorType("http".into()),
+            "http",
+        )?;
+        let config = client::Config::new(&c)?;
+        let configured_codec = "json";
+
+        let mut b =
+            HttpRequestBuilder::new(request_id, meta, &codec_map, &config, configured_codec)?;
+
+        let r = b.finalize(&mut s).await?.unwrap();
+        assert_eq!(r.header("pie").unwrap().iter().count(), 1);
+        assert_eq!(r.header("cake").unwrap().iter().count(), 2);
+        Ok(())
+    }
 }

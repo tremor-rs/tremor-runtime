@@ -404,7 +404,7 @@ pub(crate) fn builder(
 ) -> Result<SinkManagerBuilder> {
     // resolve codec and processors
     let postprocessor_configs = config.postprocessors.clone().unwrap_or_default();
-    let serializer = EventSerializer::build(
+    let serializer = EventSerializer::new(
         config.codec.clone(),
         connector_codec_requirement,
         postprocessor_configs,
@@ -440,7 +440,7 @@ pub(crate) struct EventSerializer {
 }
 
 impl EventSerializer {
-    fn build(
+    pub(crate) fn new(
         codec_config: Option<CodecConfig>,
         default_codec: CodecReq,
         postprocessor_configs: Vec<PostprocessorConfig>,
