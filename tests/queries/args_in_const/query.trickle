@@ -1,0 +1,16 @@
+
+define script with_args
+args
+  some_arg
+script
+  const some_const = args.some_arg;
+  some_const
+end;
+
+create script with_args
+with
+  some_arg = 42
+end;
+
+select event from in into with_args;
+select event from with_args into out;
