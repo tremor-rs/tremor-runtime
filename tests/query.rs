@@ -122,6 +122,7 @@ test_cases!(
     pp_alias_operator,
     pp_config_directive,
     // INSERT
+    args_in_const,
     route_emit,
     drop_event,
     pipeline_group_by_size,
