@@ -154,7 +154,7 @@ docker exec -it fa7e3b4cec86 sh
 
 ## Building From Source
 
-> :warning: Local builds are not supported and purely at your own risk.
+> :warning: Local builds are not supported and purely at your own risk. For contributing to Tremor please checkout our [Development Quick Start Guide](https://tremor.rs/docs/0.12/development/quick-start)
 
 If you are not comfortable with managing library packages on your system or don't have experience with, please use the Docker image provided above. 
 
