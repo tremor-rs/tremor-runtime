@@ -13,28 +13,21 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use tremor_script::path::load as load_module_path;
-use tremor_script::{path::ModulePath, registry, registry::Aggr, Registry};
+use tremor_script::{registry, registry::Aggr, Registry};
 
 /// Encapsulates state in a tremor runtime environment
 pub(crate) struct TremorCliEnv {
-    pub(crate) module_path: ModulePath,
     pub(crate) fun: Registry,
     pub(crate) aggr: Aggr,
 }
 
 /// Setup the tremor runtime environment
 pub(crate) fn setup() -> Result<TremorCliEnv> {
-    let module_path = load_module_path();
     let mut fun: Registry = registry::registry();
     let aggr = registry::aggr();
 
     // Install runtime extensions from a single source of truth
     tremor_runtime::functions::install(&mut fun)?;
 
-    Ok(TremorCliEnv {
-        module_path,
-        fun,
-        aggr,
-    })
+    Ok(TremorCliEnv { fun, aggr })
 }

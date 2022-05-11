@@ -16,6 +16,7 @@ use super::client;
 use super::utils::{FixedBodyReader, RequestId, StreamingBodyReader};
 use crate::connectors::{prelude::*, utils::mime::MimeCodecMap};
 use async_std::channel::{unbounded, Sender};
+use either::Either;
 use http_types::headers::HeaderValues;
 use http_types::Response;
 use http_types::{
@@ -49,7 +50,7 @@ impl HttpRequestBuilder {
         meta: Option<&Value>,
         codec_map: &MimeCodecMap,
         config: &client::Config,
-        configured_codec: &String,
+        configured_codec: &str,
     ) -> Result<Self> {
         let request_meta = meta.get("request");
         let method = if let Some(method_v) = request_meta.get("method") {
@@ -75,8 +76,15 @@ impl HttpRequestBuilder {
 
         // first insert config headers
         for (config_header_name, config_header_values) in &config.headers {
-            for header_value in config_header_values {
-                request.append_header(config_header_name.as_str(), header_value.as_str());
+            match &config_header_values.0 {
+                Either::Left(config_header_values) => {
+                    for header_value in config_header_values {
+                        request.append_header(config_header_name.as_str(), header_value.as_str());
+                    }
+                }
+                Either::Right(header_value) => {
+                    request.append_header(config_header_name.as_str(), header_value.as_str());
+                }
             }
         }
         // build headers
@@ -311,4 +319,36 @@ pub(super) fn extract_response_meta(response: &Response) -> Value<'static> {
         .version()
         .map(|version| meta.try_insert("version", version.to_string()));
     meta
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[async_std::test]
+    async fn builder() -> Result<()> {
+        let request_id = RequestId::new(42);
+        let meta = None;
+        let codec_map = MimeCodecMap::default();
+        let c = literal!({"headers": {
+            "cake": ["black forst", "cheese"],
+            "pie": "key lime"
+        }});
+        let mut s = EventSerializer::new(
+            None,
+            CodecReq::Optional("json"),
+            vec![],
+            &ConnectorType("http".into()),
+            "http",
+        )?;
+        let config = client::Config::new(&c)?;
+        let configured_codec = "json";
+
+        let mut b =
+            HttpRequestBuilder::new(request_id, meta, &codec_map, &config, configured_codec)?;
+
+        let r = b.finalize(&mut s).await?.unwrap();
+        assert_eq!(r.header("pie").unwrap().iter().count(), 1);
+        assert_eq!(r.header("cake").unwrap().iter().count(), 2);
+        Ok(())
+    }
 }

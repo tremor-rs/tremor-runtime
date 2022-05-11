@@ -14,14 +14,13 @@
 
 use crate::{
     arena::{self, Arena},
-    ast::{self, helper::Warning, DeployStmt},
-    errors::{Error, Result},
+    ast::{self, docs::Docs, helper::Warning, DeployStmt},
+    errors::Result,
     highlighter::Highlighter,
     lexer::{self, Lexer},
     prelude::*,
 };
 use std::collections::BTreeSet;
-use std::io::Write;
 
 /// A tremor deployment ( troy)
 #[derive(Debug, Clone)]
@@ -70,6 +69,12 @@ where
     #[must_use]
     pub fn dot(&self) -> String {
         self.deploy.dot()
+    }
+
+    /// Returns the documentation for the Deployment
+    #[must_use]
+    pub fn docs(&self) -> &Docs {
+        &self.deploy.docs
     }
 
     /// Parses a string into a deployment
@@ -131,28 +136,6 @@ where
     {
         let (aid, src) = Arena::insert(src)?;
         Self::parse_(aid, src, reg, aggr_reg)
-    }
-
-    /// Format an error given a script source.
-    /// # Errors
-    /// on io errors
-    pub fn format_error_with<H: Highlighter>(h: &mut H, e: &Error) -> std::io::Result<()> {
-        let aid = e.aid();
-
-        let tokens: Vec<_> = lexer::Lexer::new(Arena::io_get(aid)?, aid)
-            .tokenize_until_err()
-            .collect();
-        match e.context() {
-            (Some(r), _) => {
-                h.highlight_error(None, &tokens, "", true, Some(r), Some(e.into()))?;
-                h.finalize()
-            }
-
-            _other => {
-                write!(h.get_writer(), "Error: {}", e)?;
-                h.finalize()
-            }
-        }
     }
 
     /// Format an error given a script source.

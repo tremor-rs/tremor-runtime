@@ -8,7 +8,7 @@
 ###
 ### It provides the following modules for cloud native computing:
 ###
-### * [otel](cncf/otel.md) - functionality related to `CNCF OpenTelemetry`
+### * [otel](otel/index.md) - functionality related to `CNCF OpenTelemetry`
 ###
 
 use cncf::otel;

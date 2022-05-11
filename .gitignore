@@ -21,6 +21,7 @@ flamegraph.svg
 out.stacks
 coyote.html
 static/openapi.json
+static/library
 __pycache__
 tremor-script/_build
 tremor-script/c_src/*.o
@@ -49,5 +50,6 @@ tremor-value/proptest-regressions/
 *.release
 tremor-script/current_counterexample.eqc
 /docs
-/tremor-script/docs
 lalrpop-docgen
+.vscode/configurationCache.log
+.vscode/dryrun.log

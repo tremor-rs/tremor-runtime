@@ -789,7 +789,7 @@ where
                 Control::Continue
             }
             CbAction::Open => {
-                debug!("{ctx} Circuit Breaker: Open.");
+                info!("{ctx} Circuit Breaker: Open.");
                 self.cb_open_received += 1;
                 ctx.swallow_err(self.source.on_cb_open(ctx).await, "on_cb_open failed");
                 // avoid a race condition where the necessary start routine wasnt executed

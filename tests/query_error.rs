@@ -131,6 +131,7 @@ test_cases!(
     double_query,
     pipeline_name_overlap,
     non_const_in_args,
+    args_in_const,
     pipeline_unknown_port,
     pipeline_duplicate_streams_inside,
     pipeline_select_bad_stream,

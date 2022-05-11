@@ -64,6 +64,6 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
           files: ./lcov.txt # optional
-          flags: CLI${{ matrix.kind }} # optional
+          flags: cli${{ matrix.kind }} # optional
           fail_ci_if_error: true # optional (default = false)
           verbose: true # optional (default = false)      

@@ -29,9 +29,9 @@ pub(crate) struct ConcurrencyCap {
 }
 
 impl ConcurrencyCap {
-    pub(crate) fn new(max: usize, reply_tx: Sender<AsyncSinkReply>) -> Self {
+    pub(crate) fn new(cap: usize, reply_tx: Sender<AsyncSinkReply>) -> Self {
         Self {
-            cap: max,
+            cap,
             reply_tx,
             counter: Arc::new(AtomicUsize::new(0)),
         }

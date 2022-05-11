@@ -1,7 +1,7 @@
 ### CNCF OpenTelemetry Trace event utilities
 ###
-### * [spankind](trace/spankind.md) - Trace span kind
-### * [status](trace/status.md) - Trace status
+### * [spankind](spankind.md) - Trace span kind
+### * [status](status/index.md) - Trace status
 
 use cncf::otel::trace::spankind;
 use cncf::otel::trace::status;

@@ -502,7 +502,8 @@ impl_expr!(Literal);
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct FnDefn<'script> {
     pub(crate) mid: Box<NodeMeta>,
-    pub(crate) name: String,
+    /// name of the function
+    pub name: String,
     pub(crate) args: Vec<Ident<'script>>,
     pub(crate) body: Exprs<'script>,
     pub(crate) locals: usize,
@@ -514,9 +515,12 @@ impl_expr!(FnDefn);
 /// A Constant
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Const<'script> {
-    pub(crate) mid: Box<NodeMeta>,
-    pub(crate) value: Value<'script>,
-    pub(crate) id: String,
+    /// the ast node identifier
+    pub mid: Box<NodeMeta>,
+    /// the constant value
+    pub value: Value<'script>,
+    /// id of the constant
+    pub id: String,
 }
 impl_expr!(Const);
 

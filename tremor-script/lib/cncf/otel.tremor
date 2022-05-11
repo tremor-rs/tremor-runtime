@@ -8,11 +8,11 @@
 ###
 ###
 ###
-### * [span_id](otel/span_id.md) - OpenTelemetry Span Id utilities
-### * [trace_id](otel/trace_id.md) - OpenTelemetry Trace Id utilities
-### * [logs](otel/logs.md) - OpenTelemetry log event utilities
-### * [metrics](otel/metrics.md) - OpenTelemetry metrics event utilities
-### * [trace](otel/trace.md) - OpenTelemetry trace event utilities
+### * [span_id](span_id.md) - OpenTelemetry Span Id utilities
+### * [trace_id](trace_id.md) - OpenTelemetry Trace Id utilities
+### * [logs](logs/index.md) - OpenTelemetry log event utilities
+### * [metrics](metrics/index.md) - OpenTelemetry metrics event utilities
+### * [trace](trace/index.md) - OpenTelemetry trace event utilities
 
 use cncf::otel::span_id;
 use cncf::otel::trace_id;

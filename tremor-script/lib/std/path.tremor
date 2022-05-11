@@ -1,7 +1,5 @@
 ### The path module contains utility functions for path handling
 
-use std::type;
-
 ## Determine if a base value matches an segment index array.
 ## Returns the value under the match on a hit.
 ## Returns a default user provided value on no match.
