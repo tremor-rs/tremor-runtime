@@ -44,7 +44,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
       - name: Trigger publish crates workflow
         uses: benc-uk/workflow-dispatch@v1
-         with:
+        with:
           workflow: Publish crates
           token: ${{ secrets.PAT_TOKEN }}
 

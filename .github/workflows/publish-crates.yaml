@@ -3,8 +3,8 @@ name: "Publish crates"
 on: workflow_dispatch 
 
 jobs:
-  draft-new-release:
-    name: "Publish crat"es
+  publish-crates:
+    name: "Publish crates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
