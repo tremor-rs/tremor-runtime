@@ -7,7 +7,7 @@ on:
       - main
 
 jobs:
-  tests-linux:
+  tests-linux:Ferror_to_string
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -26,11 +26,6 @@ jobs:
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
           RUST_BACKTRACE: 1
         run: cargo llvm-cov --workspace --lcov --output-path lcov.txt --features integration
-      - name: Upload to Coveralls
-        uses: coverallsapp/github-action@master
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: ./lcov.txt
       - uses: codecov/codecov-action@v2
         with:
           token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
