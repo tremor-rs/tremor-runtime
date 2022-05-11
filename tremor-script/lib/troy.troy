@@ -1,7 +1,7 @@
 ### Troy reusable logic
 ###
-### * [connectors](troy/connectors.md) - default connectors
-### * [pipelines](troy/pipelines.md) - default pipelines
+### * [connectors](connectors.md) - default connectors
+### * [pipelines](pipelines.md) - default pipelines
 
 use troy::connectors;
 use troy::pipelines;
