@@ -18,6 +18,7 @@ criterion = "0.3"
 float-cmp = "0.9"
 matches = "0.1"
 pretty_assertions = "1.2.0"
+tempfile = { version = "3.2" }
 
 [dependencies]
 anyhow = "1"
@@ -69,7 +70,6 @@ termcolor = "1.1"
 [[bin]]
 name = "tremor"
 path = "src/main.rs"
-test = false
 
 [features]
 #
