@@ -71,7 +71,7 @@ force:
 ###############################################################################
 
 docs: library-doc lalrpop-doc
-	-cp tremor-script/docs/library/overview.md docs/library
+	-cp tremor-script/docs/library/index.md docs/library
 
 library-doc:
 	-rm -rf docs
