@@ -58,7 +58,7 @@ jobs:
             dry-run: true 
 
   publish-tremor-script:
-      name: Publish tremor influx
+      name: Publish tremor script
       runs-on: ubuntu-latest
       steps:
         - uses: actions/checkout@v2
@@ -71,9 +71,6 @@ jobs:
         - name: Publish tremor-script to crates.io
           uses: Wandalen/wretry.action@v1.0.11
           with:
-          action: katyo/publish-crates@v1
-          with: |
-            path: './tremor-script'
-            registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-          attempt_limit: 6
-          attempt_delay: 10000
+            command: cargo publish --dry-run
+            attempt_limit: 6
+            attempt_delay: 10000
