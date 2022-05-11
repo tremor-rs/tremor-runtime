@@ -7,7 +7,7 @@ on:
       - main
 
 jobs:
-  tests-linux:Ferror_to_string
+  tests-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
