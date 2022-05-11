@@ -53,7 +53,9 @@ macro_rules! test_cases {
 
                 match parse(&contents) {
                     Err(e) => {
-                        let got = Dumb::error_to_string(&e)?;
+                        let mut highlighter = Dumb::default();
+                        Deploy::format_error_with(&mut highlighter, &e)?;//Dumb::error_to_string(&e)?;
+                        let got = highlighter.to_string();
                         assert_eq!(err.trim(), got.trim());
                     }
                     _ =>{

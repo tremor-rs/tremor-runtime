@@ -139,7 +139,7 @@ where
         Self::parse_(aid, src, reg, aggr_reg)
     }
 
-    /// Format an error given a script source.
+    /// Format an error for a deploy instance
     /// # Errors
     /// on io errors
     pub fn format_error_with<H: Highlighter>(h: &mut H, e: &Error) -> std::io::Result<()> {
