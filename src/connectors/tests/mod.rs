@@ -26,6 +26,7 @@ mod file;
 mod file_non_existent;
 #[cfg(feature = "file-integration")]
 mod file_xz;
+mod gpubsub;
 #[cfg(feature = "http-integration")]
 mod http;
 #[cfg(feature = "kafka-integration")]
