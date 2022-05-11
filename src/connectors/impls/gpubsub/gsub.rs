@@ -1,5 +1,6 @@
 use crate::connectors::google::AuthInterceptor;
 use crate::connectors::prelude::*;
+use crate::connectors::utils::url::HttpsDefaults;
 use async_std::channel::{Receiver, Sender};
 use async_std::prelude::FutureExt;
 use async_std::task::JoinHandle;
@@ -22,8 +23,14 @@ use tremor_pipeline::ConfigImpl;
 struct Config {
     pub connect_timeout: u64,
     pub subscription_id: String,
+    #[serde(default = "default_endpoint")]
+    pub endpoint: String,
 }
 impl ConfigImpl for Config {}
+
+fn default_endpoint() -> String {
+    "https://pubsub.googleapis.com".into()
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -146,15 +153,23 @@ async fn consumer_task(
 #[async_trait::async_trait]
 impl Source for GSubSource {
     async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
-        let tls_config = ClientTlsConfig::new()
-            .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
-            .domain_name("pubsub.googleapis.com");
+        let url = Url::<HttpsDefaults>::parse(self.config.endpoint.as_str())?;
 
-        let channel = Channel::from_static("https://pubsub.googleapis.com")
-            .connect_timeout(Duration::from_nanos(self.config.connect_timeout))
-            .tls_config(tls_config)?
-            .connect()
-            .await?;
+        let mut channel = Channel::from_shared(self.config.endpoint.clone())?
+            .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
+        if url.scheme() == "https" {
+            let tls_config = ClientTlsConfig::new()
+                .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
+                .domain_name(
+                    url.host_str()
+                        .ok_or_else(|| Status::unavailable("The endpoint is missing a hostname"))?
+                        .to_string(),
+                );
+
+            channel = channel.tls_config(tls_config)?;
+        }
+
+        let channel = channel.connect().await?;
 
         let connect_to_pubsub = move || -> Result<PubSubClient> {
             let token = Token::new()?;
