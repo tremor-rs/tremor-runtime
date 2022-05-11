@@ -108,10 +108,12 @@ impl Source for StdStreamSource {
         })
     }
 
+    #[cfg_attr(coverage, no_coverage)]
     fn is_transactional(&self) -> bool {
         false
     }
 
+    #[cfg_attr(coverage, no_coverage)]
     fn asynchronous(&self) -> bool {
         true
     }
