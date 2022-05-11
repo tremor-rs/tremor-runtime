@@ -4,7 +4,7 @@ on: workflow_dispatch
 
 jobs:
   publish-crates:
-    name: "Publish crates
+    name: Publish crates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
