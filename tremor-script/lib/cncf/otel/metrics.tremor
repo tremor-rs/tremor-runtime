@@ -1,5 +1,5 @@
 ### CNCF OpenTelemetry Metrics event utilities
 ###
-### * [temporality](metrics/temporality.md) - Metrics aggregation temporality
+### * [temporality](temporality.md) - Metrics aggregation temporality
 
 use cncf::otel::metrics::temporality;
