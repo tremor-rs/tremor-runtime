@@ -2,6 +2,7 @@ use crate::connectors::google::AuthInterceptor;
 use crate::connectors::prelude::*;
 use async_std::channel::{Receiver, Sender};
 use async_std::prelude::FutureExt;
+use async_std::task::JoinHandle;
 use dashmap::DashMap;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use googapis::google::pubsub::v1::{
@@ -12,7 +13,6 @@ use serde::Deserialize;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
-use async_std::task::JoinHandle;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Status;
@@ -56,7 +56,7 @@ struct GSubSource {
     client: Option<PubSubClient>,
     receiver: Option<Receiver<AsyncTaskMessage>>,
     ack_ids: Arc<DashMap<u64, String>>,
-    task_handle: Option<JoinHandle<()>>
+    task_handle: Option<JoinHandle<()>>,
 }
 
 impl GSubSource {
@@ -66,7 +66,7 @@ impl GSubSource {
             client: None,
             receiver: None,
             ack_ids: Arc::new(DashMap::new()),
-            task_handle: None
+            task_handle: None,
         }
     }
 }
@@ -81,15 +81,14 @@ async fn consumer_task(
     let mut ack_counter = 0;
 
     loop {
-        let response_with_potential_timeout =
-            client
-                .pull(PullRequest {
-                    subscription: subscription_id.clone(),
-                    max_messages: QSIZE.load(Ordering::Relaxed) as i32,
-                    ..PullRequest::default()
-                })
-                .timeout(request_timeout)
-                .await;
+        let response_with_potential_timeout = client
+            .pull(PullRequest {
+                subscription: subscription_id.clone(),
+                max_messages: i32::try_from(QSIZE.load(Ordering::Relaxed)).unwrap_or(128),
+                ..PullRequest::default()
+            })
+            .timeout(request_timeout)
+            .await;
 
         let response = match response_with_potential_timeout {
             Ok(response) => match response {
@@ -160,8 +159,7 @@ impl Source for GSubSource {
         let connect_to_pubsub = move || -> Result<PubSubClient> {
             let token = Token::new()?;
 
-            Ok(
-                SubscriberClient::with_interceptor(
+            Ok(SubscriberClient::with_interceptor(
                 channel.clone(),
                 AuthInterceptor {
                     token: Box::new(move || match token.header_value() {
@@ -171,8 +169,7 @@ impl Source for GSubSource {
                         )),
                     }),
                 },
-            )
-            )
+            ))
         };
 
         if let Some(task_handle) = self.task_handle.take() {
