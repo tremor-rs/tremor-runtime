@@ -442,3 +442,27 @@ impl Run {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use async_std::prelude::FutureExt;
+    use std::time::Duration;
+
+    use super::*;
+    #[async_std::test]
+    async fn run_troy_source() -> Result<()> {
+        let r = Run {
+            script: "tests/fixtures/exit.troy".into(),
+            interactive: false,
+            pretty: false,
+            encoder: "json".into(),
+            decoder: "json".into(),
+            infile: "-".into(),
+            outfile: "-".into(),
+            preprocessor: String::new(),
+            postprocessor: String::new(),
+            port: None,
+        };
+        r.run().timeout(Duration::from_secs(1)).await?
+    }
+}
