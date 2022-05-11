@@ -53,7 +53,7 @@ macro_rules! test_cases {
 
                 match parse(&contents) {
                     Err(e) => {
-                        let got = Dumb::format_error(&e)?;
+                        let got = Dumb::error_to_string(&e)?;
                         assert_eq!(err.trim(), got.trim());
                     }
                     _ =>{
