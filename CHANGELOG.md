@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.12.0-rc.6]
 
 ### Fixes
 - http headers to allow strings and arrays
