@@ -34,6 +34,7 @@ lazy_static! {
             let mut stream = stdin();
             let mut buffer = [0_u8; INPUT_SIZE_BYTES];
             while let Ok(len) = stream.read(&mut buffer).await {
+                dbg!(len);
                 if len == 0 {
                     error!("STDIN empty?!?");
                     break;

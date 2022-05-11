@@ -47,6 +47,7 @@ pub(crate) mod otel;
 /// AWS S3 connectors
 pub(crate) mod s3;
 /// std streams connector (stdout, stderr, stdin)
+#[cfg_attr(coverage, no_coverage)]
 pub(crate) mod stdio;
 /// tcp server and client connector impls
 pub(crate) mod tcp;
