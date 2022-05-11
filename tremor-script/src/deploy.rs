@@ -139,28 +139,6 @@ where
         Self::parse_(aid, src, reg, aggr_reg)
     }
 
-    /// Format an error for a deploy instance
-    /// # Errors
-    /// on io errors
-    pub fn format_error_with<H: Highlighter>(h: &mut H, e: &Error) -> std::io::Result<()> {
-        let aid = e.aid();
-
-        let tokens: Vec<_> = lexer::Lexer::new(Arena::io_get(aid)?, aid)
-            .tokenize_until_err()
-            .collect();
-        match e.context() {
-            (Some(r), _) => {
-                h.highlight_error(None, &tokens, "", true, Some(r), Some(e.into()))?;
-                h.finalize()
-            }
-
-            _other => {
-                write!(h.get_writer(), "Error: {}", e)?;
-                h.finalize()
-            }
-        }
-    }
-
     /// Format an error given a script source.
     /// # Errors
     /// on io errors

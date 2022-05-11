@@ -113,10 +113,13 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
     let aggr_reg = tremor_script::registry::aggr();
 
     let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg);
+    let mut h = TermHighlighter::stderr();
     let deployable = match deployable {
-        Ok(deployable) => deployable,
+        Ok(deployable) => {
+            deployable.format_warnings_with(&mut h)?;
+            deployable
+        }
         Err(e) => {
-            let mut h = TermHighlighter::stderr();
             log_error!(h.format_error(&e), "Error: {e}");
 
             return Err(format!("failed to load troy file: {}", file_name).into());
