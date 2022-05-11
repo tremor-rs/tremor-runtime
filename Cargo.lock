@@ -1194,9 +1194,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.1.17"
+version = "3.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47582c09be7c8b32c0ab3a6181825ababb713fde6fff20fc573a3870dd45c6a0"
+checksum = "d2dbdf4bdacb33466e854ce889eee8dfd5729abf7ccd7664d0a2d60cd384440b"
 dependencies = [
  "atty",
  "bitflags",
@@ -1215,14 +1215,14 @@ version = "3.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da92e6facd8d73c22745a5d3cbb59bdf8e46e3235c923e516527d8e81eec14a4"
 dependencies = [
- "clap 3.1.17",
+ "clap 3.1.18",
 ]
 
 [[package]]
 name = "clap_derive"
-version = "3.1.7"
+version = "3.1.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3aab4734e083b809aaf5794e14e756d1c798d2c69c7f7de7a09a2f5214993c1"
+checksum = "25320346e922cffe59c0bbc5410c8d8784509efb321488971081313cb1e1a33c"
 dependencies = [
  "heck 0.4.0",
  "proc-macro-error",
@@ -5795,7 +5795,7 @@ checksum = "efd1f82c56340fdf16f2a953d7bda4f8fdffba13d93b00844c25572110b26079"
 
 [[package]]
 name = "tremor-api"
-version = "0.12.0-rc.4"
+version = "0.12.0-rc.5"
 dependencies = [
  "async-std",
  "env_logger 0.9.0",
@@ -5817,11 +5817,11 @@ dependencies = [
 
 [[package]]
 name = "tremor-cli"
-version = "0.12.0-rc.4"
+version = "0.12.0-rc.5"
 dependencies = [
  "anyhow",
  "async-std",
- "clap 3.1.17",
+ "clap 3.1.18",
  "clap_complete",
  "criterion",
  "difference",
@@ -5861,7 +5861,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-common"
-version = "0.12.0-rc.4"
+version = "0.12.0-rc.5"
 dependencies = [
  "async-std",
  "beef",
@@ -5873,7 +5873,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-influx"
-version = "0.12.0-rc.4"
+version = "0.12.0-rc.5"
 dependencies = [
  "criterion",
  "lexical",
@@ -5907,7 +5907,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-pipeline"
-version = "0.12.0-rc.4"
+version = "0.12.0-rc.5"
 dependencies = [
  "async-broadcast",
  "async-std",
@@ -5942,7 +5942,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-runtime"
-version = "0.12.0-rc.4"
+version = "0.12.0-rc.5"
 dependencies = [
  "anyhow",
  "async-broadcast",
@@ -6045,7 +6045,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-script"
-version = "0.12.0-rc.4"
+version = "0.12.0-rc.5"
 dependencies = [
  "atty",
  "base64 0.13.0",
@@ -6097,7 +6097,7 @@ dependencies = [
 
 [[package]]
 name = "tremor-value"
-version = "0.12.0-rc.4"
+version = "0.12.0-rc.5"
 dependencies = [
  "base64 0.13.0",
  "beef",
