@@ -15,13 +15,12 @@
 use crate::{
     arena::{self, Arena},
     ast::{self, docs::Docs, helper::Warning, DeployStmt},
-    errors::{Error, Result},
+    errors::Result,
     highlighter::Highlighter,
     lexer::{self, Lexer},
     prelude::*,
 };
 use std::collections::BTreeSet;
-use std::io::Write;
 
 /// A tremor deployment ( troy)
 #[derive(Debug, Clone)]

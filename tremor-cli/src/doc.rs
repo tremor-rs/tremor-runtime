@@ -27,41 +27,11 @@ fn push_line(line: &str, buf: &mut String) {
         buf.push('\n');
     }
 }
-#[allow(clippy::too_many_lines)]
-fn gen_doc(
-    is_interactive: bool,
-    rel_path: Option<&Path>,
-    dest_path: Option<&str>,
-    path: &Path,
-) -> Result<()> {
-    let rel_path = rel_path
-        .ok_or_else(|| Error::from(format!("Bad relative path: {}", path.to_string_lossy())))?;
-    let dest_path = dest_path.ok_or_else(|| Error::from("Bad destination path"))?;
 
-    let module = match path.extension().and_then(OsStr::to_str) {
-        Some("tremor" | "troy") => {
-            let mut raw = String::new();
-            let mut input = crate::open_file(path, None)?;
-            input.read_to_string(&mut raw)?;
-            let module_id = Id::from(raw.as_bytes());
-            let mut ids = Vec::new();
-            let (aid, raw) = Arena::insert(&raw)?;
-            Module::load(module_id, &mut ids, aid, raw)?
-        }
-        Some(_) | None => return Ok(()),
-    };
-
-    let file_path_str = rel_path.to_string_lossy().to_string();
-    let name = file_path_str
-        .rsplit('/')
-        .next()
-        .ok_or_else(|| Error::from("Could not isolate relative path"))?
-        .replace(".tremor", "")
-        .replace(".troy", "");
-
+fn gen_module_docs(module: &Module, module_name: &str) -> String {
     let mut gen = String::new();
-    if let Some(mod_doc) = module.docs.module {
-        gen.push_str(&mod_doc.print_with_name(&name));
+    if let Some(mod_doc) = module.docs.module.as_ref() {
+        gen.push_str(&mod_doc.print_with_name(module_name));
     }
     if !module.content.connectors.is_empty() {
         push_line("## Connectors", &mut gen);
@@ -175,6 +145,40 @@ fn gen_doc(
             }
         }
     }
+    gen
+}
+
+fn gen_doc(
+    is_interactive: bool,
+    rel_path: Option<&Path>,
+    dest_path: Option<&str>,
+    path: &Path,
+) -> Result<()> {
+    let rel_path = rel_path
+        .ok_or_else(|| Error::from(format!("Bad relative path: {}", path.to_string_lossy())))?;
+    let dest_path = dest_path.ok_or_else(|| Error::from("Bad destination path"))?;
+
+    let module = match path.extension().and_then(OsStr::to_str) {
+        Some("tremor" | "troy") => {
+            let mut raw = String::new();
+            let mut input = crate::open_file(path, None)?;
+            input.read_to_string(&mut raw)?;
+            let module_id = Id::from(raw.as_bytes());
+            let mut ids = Vec::new();
+            let (aid, raw) = Arena::insert(&raw)?;
+            Module::load(module_id, &mut ids, aid, raw)?
+        }
+        Some(_) | None => return Ok(()),
+    };
+
+    let file_path_str = rel_path.to_string_lossy().to_string();
+    let module_name = file_path_str
+        .rsplit('/')
+        .next()
+        .ok_or_else(|| Error::from("Could not isolate relative path"))?
+        .replace(".tremor", "")
+        .replace(".troy", "");
+    let gen = gen_module_docs(&module, module_name.as_str());
 
     if is_interactive {
         println!("{}", &gen);
