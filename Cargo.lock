@@ -5849,7 +5849,6 @@ dependencies = [
  "snmalloc-sys",
  "surf",
  "tch",
- "tempfile",
  "termcolor",
  "tremor-api",
  "tremor-common",
