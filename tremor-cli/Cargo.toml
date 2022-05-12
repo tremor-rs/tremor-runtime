@@ -69,6 +69,7 @@ termcolor = "1.1"
 [[bin]]
 name = "tremor"
 path = "src/main.rs"
+test = false
 
 [features]
 #
