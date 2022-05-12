@@ -39,7 +39,6 @@ async fn simple_subscribe() -> Result<()> {
     let runnable_image = RunnableImage::from((pubsub, pubsub_args));
     let container = runner.run(runnable_image);
 
-    // let hostname = container.get_bridge_ip_address();
     let port =
         container.get_host_port(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
     let endpoint = format!("http://localhost:{}", port);
@@ -49,7 +48,7 @@ async fn simple_subscribe() -> Result<()> {
         "codec": "binary",
         "config":{
             "endpoint": endpoint,
-            "connect_timeout": 10000000000u64,
+            "connect_timeout": 30000000000u64,
             "subscription_id": "projects/test/subscriptions/test-subscription-a"
         }
     });
