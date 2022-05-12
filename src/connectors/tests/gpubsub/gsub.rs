@@ -49,7 +49,8 @@ async fn simple_subscribe() -> Result<()> {
         "config":{
             "endpoint": endpoint,
             "connect_timeout": 30000000000u64,
-            "subscription_id": "projects/test/subscriptions/test-subscription-a"
+            "subscription_id": "projects/test/subscriptions/test-subscription-a",
+            "skip_authentication": true
         }
     });
 

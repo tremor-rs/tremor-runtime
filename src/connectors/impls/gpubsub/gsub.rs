@@ -25,11 +25,17 @@ struct Config {
     pub subscription_id: String,
     #[serde(default = "default_endpoint")]
     pub endpoint: String,
+    #[serde(default = "default_skip_authentication")]
+    pub skip_authentication: bool,
 }
 impl ConfigImpl for Config {}
 
 fn default_endpoint() -> String {
     "https://pubsub.googleapis.com".into()
+}
+
+fn default_skip_authentication() -> bool {
+    false
 }
 
 #[derive(Debug, Default)]
@@ -170,8 +176,18 @@ impl Source for GSubSource {
         }
 
         let channel = channel.connect().await?;
+        let skip_authentication = self.config.skip_authentication;
 
         let connect_to_pubsub = move || -> Result<PubSubClient> {
+            if skip_authentication {
+                return Ok(SubscriberClient::with_interceptor(
+                    channel.clone(),
+                    AuthInterceptor {
+                        token: Box::new(|| Ok(Arc::new(String::new()))),
+                    },
+                ));
+            }
+
             let token = Token::new()?;
 
             Ok(SubscriberClient::with_interceptor(
