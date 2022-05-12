@@ -12,18 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{
-    fmt::{self, Display, Formatter},
-    net::{Ipv4Addr, Ipv6Addr},
-    str::FromStr,
-    sync::Arc,
-};
+mod conversion;
+
+use std::fmt::{self, Display, Formatter};
 
 use crate::connectors::{prelude::*, utils::url::ClickHouseDefaults};
 
 use clickhouse_rs::{types::SqlType, Block, Pool};
 use either::Either;
-use simd_json::StaticNode;
 
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
@@ -193,7 +189,7 @@ impl ClickhouseSink {
                 Error::from(ErrorKind::MissingEventColumn(column_name.to_string()))
             })?;
 
-            let cell = clickhouse_value_of(column_name.as_str(), cell, expected_type)?;
+            let cell = conversion::convert_value(column_name.as_str(), cell, expected_type)?;
 
             rslt.push((column_name.clone(), cell));
         }
@@ -246,113 +242,6 @@ impl DummySqlType {
             }
             _ => value,
         }
-    }
-}
-
-fn clickhouse_value_of(
-    column_name: &str,
-    cell: &Value,
-    expected_type: &DummySqlType,
-) -> Result<clickhouse_rs::types::Value> {
-    use clickhouse_rs::types;
-    // TODO: move this 100 line code into separate functions, perhaps in a
-    // submodule.
-
-    match (cell, expected_type) {
-        (Value::Static(value), _) => {
-            if let (StaticNode::Null, DummySqlType::Nullable(inner_type)) = (value, expected_type) {
-                // Null can be of any type, as long as it is allowed by the
-                // schema.
-
-                return Ok(types::Value::Nullable(Either::Left(
-                    inner_type.as_ref().into(),
-                )));
-            }
-
-            let value_as_non_null = match (value, expected_type.as_non_nullable()) {
-                // These are the *obvious* translations. No cast is required,
-                // Not much to say here.
-                (StaticNode::U64(v), DummySqlType::UInt64) => types::Value::UInt64(*v),
-                (StaticNode::I64(v), DummySqlType::Int64) => types::Value::Int64(*v),
-
-                // Booleans can be converted to integers (true = 1, false = 0).
-                (StaticNode::Bool(b), DummySqlType::UInt64) => types::Value::UInt64(u64::from(*b)),
-                (StaticNode::Bool(b), DummySqlType::Int64) => types::Value::Int64(i64::from(*b)),
-
-                (other, _) => {
-                    return Err(Error::from(ErrorKind::UnexpectedEventFormat(
-                        column_name.to_string(),
-                        expected_type.to_string(),
-                        other.value_type(),
-                    )))
-                }
-            };
-
-            Ok(expected_type.wrap_if_nullable(value_as_non_null))
-        }
-
-        // String -> String
-        (Value::String(string), DummySqlType::String) => {
-            let content = string.as_bytes().to_vec();
-            Ok(types::Value::String(Arc::new(content)))
-        }
-
-        // String -> Ipv4 (parsed using std's Ipv4Addr::from_str implementation)
-        (Value::String(string), DummySqlType::IPv4) => Ipv4Addr::from_str(string.as_ref())
-            .map(|addr| addr.octets())
-            .map(types::Value::Ipv4)
-            .map_err(|_| Error::from(ErrorKind::MalformedIpAddr)),
-
-        // String -> Ipv6 (parsed using std's Ipv6Addr::from_str implementation)
-        (Value::String(string), DummySqlType::IPv6) => Ipv6Addr::from_str(string.as_ref())
-            .map(|addr| addr.octets())
-            .map(types::Value::Ipv6)
-            .map_err(|_| Error::from(ErrorKind::MalformedIpAddr)),
-
-        (Value::Array(values), DummySqlType::Array(expected_inner_type)) => values
-            .iter()
-            .map(|value| clickhouse_value_of(column_name, value, expected_inner_type))
-            .collect::<Result<Vec<_>>>()
-            .map(|converted_array| {
-                types::Value::Array(
-                    expected_inner_type.as_ref().into(),
-                    Arc::new(converted_array),
-                )
-            }),
-
-        // TODO: there's *a lot* of duplication to remove here.
-        (Value::Array(values), DummySqlType::IPv4) => values
-            .iter()
-            .map(|value| value.as_u8().ok_or(()))
-            .collect::<std::result::Result<Vec<u8>, ()>>()
-            .and_then(|octets| <[u8; 4]>::try_from(octets).map_err(drop))
-            .map(|slice| Ipv4Addr::from(slice))
-            .map(|addr| addr.octets())
-            .map(types::Value::Ipv4)
-            .map_err(|()| Error::from(ErrorKind::MalformedIpAddr)),
-
-        (Value::Array(values), DummySqlType::IPv6) => values
-            .iter()
-            .map(|value| value.as_u8().ok_or(()))
-            .collect::<std::result::Result<Vec<u8>, ()>>()
-            .and_then(|octets| <[u8; 16]>::try_from(octets).map_err(drop))
-            .map(|slice| Ipv6Addr::from(slice))
-            .map(|addr| addr.octets())
-            .map(types::Value::Ipv6)
-            .map_err(|()| Error::from(ErrorKind::MalformedIpAddr)),
-
-        // We don't support the Map datatype on the clickhouse side. There's a
-        // PR for that, but it's not yet merged. As a result, we can't handle
-        // Tremor Objects.
-        // https://github.com/suharev7/clickhouse-rs/pull/170
-
-        // TODO: I don't remember. Is there a way to store binary data in
-        // clickhouse?
-        (other, _) => Err(Error::from(ErrorKind::UnexpectedEventFormat(
-            column_name.to_string(),
-            expected_type.to_string(),
-            other.value_type(),
-        ))),
     }
 }
 
