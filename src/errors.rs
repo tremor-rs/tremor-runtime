@@ -357,6 +357,11 @@ error_chain! {
             description("Unexpected event format")
                 display("Field \"{column_name}\" is of type \'{found_type:?}\" while it should have type \"{expected_type}\"")
         }
+
+        MalformedIpAddr {
+            description("Malformed IP address")
+                display("Malformed IP address")
+        }
     }
 }
 

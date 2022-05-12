@@ -14,6 +14,8 @@
 
 use std::{
     fmt::{self, Display, Formatter},
+    net::{Ipv4Addr, Ipv6Addr},
+    str::FromStr,
     sync::Arc,
 };
 
@@ -210,6 +212,9 @@ enum DummySqlType {
     Int64,
     UInt64,
     String,
+
+    IPv4,
+    IPv6,
 }
 
 impl fmt::Display for DummySqlType {
@@ -220,6 +225,8 @@ impl fmt::Display for DummySqlType {
             DummySqlType::Int64 => write!(f, "Int64"),
             DummySqlType::UInt64 => write!(f, "UInt64"),
             DummySqlType::String => write!(f, "String"),
+            DummySqlType::IPv4 => write!(f, "IPv4"),
+            DummySqlType::IPv6 => write!(f, "IPv6"),
         }
     }
 }
@@ -248,6 +255,8 @@ fn clickhouse_value_of(
     expected_type: &DummySqlType,
 ) -> Result<clickhouse_rs::types::Value> {
     use clickhouse_rs::types;
+    // TODO: move this 100 line code into separate functions, perhaps in a
+    // submodule.
 
     match (cell, expected_type) {
         (Value::Static(value), _) => {
@@ -282,6 +291,24 @@ fn clickhouse_value_of(
             Ok(expected_type.wrap_if_nullable(value_as_non_null))
         }
 
+        // String -> String
+        (Value::String(string), DummySqlType::String) => {
+            let content = string.as_bytes().to_vec();
+            Ok(types::Value::String(Arc::new(content)))
+        }
+
+        // String -> Ipv4 (parsed using std's Ipv4Addr::from_str implementation)
+        (Value::String(string), DummySqlType::IPv4) => Ipv4Addr::from_str(string.as_ref())
+            .map(|addr| addr.octets())
+            .map(types::Value::Ipv4)
+            .map_err(|_| Error::from(ErrorKind::MalformedIpAddr)),
+
+        // String -> Ipv6 (parsed using std's Ipv6Addr::from_str implementation)
+        (Value::String(string), DummySqlType::IPv6) => Ipv6Addr::from_str(string.as_ref())
+            .map(|addr| addr.octets())
+            .map(types::Value::Ipv6)
+            .map_err(|_| Error::from(ErrorKind::MalformedIpAddr)),
+
         (Value::Array(values), DummySqlType::Array(expected_inner_type)) => values
             .iter()
             .map(|value| clickhouse_value_of(column_name, value, expected_inner_type))
@@ -292,6 +319,27 @@ fn clickhouse_value_of(
                     Arc::new(converted_array),
                 )
             }),
+
+        // TODO: there's *a lot* of duplication to remove here.
+        (Value::Array(values), DummySqlType::IPv4) => values
+            .iter()
+            .map(|value| value.as_u8().ok_or(()))
+            .collect::<std::result::Result<Vec<u8>, ()>>()
+            .and_then(|octets| <[u8; 4]>::try_from(octets).map_err(drop))
+            .map(|slice| Ipv4Addr::from(slice))
+            .map(|addr| addr.octets())
+            .map(types::Value::Ipv4)
+            .map_err(|()| Error::from(ErrorKind::MalformedIpAddr)),
+
+        (Value::Array(values), DummySqlType::IPv6) => values
+            .iter()
+            .map(|value| value.as_u8().ok_or(()))
+            .collect::<std::result::Result<Vec<u8>, ()>>()
+            .and_then(|octets| <[u8; 16]>::try_from(octets).map_err(drop))
+            .map(|slice| Ipv6Addr::from(slice))
+            .map(|addr| addr.octets())
+            .map(types::Value::Ipv6)
+            .map_err(|()| Error::from(ErrorKind::MalformedIpAddr)),
 
         // We don't support the Map datatype on the clickhouse side. There's a
         // PR for that, but it's not yet merged. As a result, we can't handle
@@ -316,6 +364,8 @@ impl Into<&'static SqlType> for &DummySqlType {
             DummySqlType::Int64 => SqlType::Int64,
             DummySqlType::UInt64 => SqlType::UInt64,
             DummySqlType::String => SqlType::String,
+            DummySqlType::IPv4 => SqlType::Ipv4,
+            DummySqlType::IPv6 => SqlType::Ipv6,
         };
 
         // This sounds like pure magic - and it actually is.
