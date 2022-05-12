@@ -49,7 +49,7 @@ async fn simple_subscribe() -> Result<()> {
         "codec": "binary",
         "config":{
             "endpoint": endpoint,
-            "connect_timeout": 100000000,
+            "connect_timeout": 10000000000,
             "subscription_id": "projects/test/subscriptions/test-subscription-a"
         }
     });
