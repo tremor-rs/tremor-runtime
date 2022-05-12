@@ -50,13 +50,6 @@ jobs:
         run: docker-compose --version
 
       - name: run ${{ matrix.kind }} tests
-        if: matrix.kind == 'integration'
-        env:
-          TREMOR_BIN: "${{ github.workspace }}/.github/scripts/lcov-wrap.sh"
-        run: cargo llvm-cov run -p tremor-cli --no-report -- test ${{ matrix.kind }} tremor-cli/tests ${{ matrix.exclude_tests }}
-
-      - name: run ${{ matrix.kind }} tests
-        if: matrix.kind != 'integration'
         run: cargo llvm-cov run -p tremor-cli --no-report -- test ${{ matrix.kind }} tremor-cli/tests ${{ matrix.exclude_tests }}
 
       - name: prepare coverage file
