@@ -209,8 +209,11 @@ enum DummySqlType {
     UInt64,
     String,
 
+    // TODO: rename to Ipv4 (considered as Rust idiomatic) and use
+    // #[serde(rename(...))]
     IPv4,
     IPv6,
+    UUID,
 }
 
 impl fmt::Display for DummySqlType {
@@ -223,6 +226,7 @@ impl fmt::Display for DummySqlType {
             DummySqlType::String => write!(f, "String"),
             DummySqlType::IPv4 => write!(f, "IPv4"),
             DummySqlType::IPv6 => write!(f, "IPv6"),
+            DummySqlType::UUID => write!(f, "UUID"),
         }
     }
 }
@@ -255,6 +259,7 @@ impl Into<&'static SqlType> for &DummySqlType {
             DummySqlType::String => SqlType::String,
             DummySqlType::IPv4 => SqlType::Ipv4,
             DummySqlType::IPv6 => SqlType::Ipv6,
+            DummySqlType::UUID => SqlType::Uuid,
         };
 
         // This sounds like pure magic - and it actually is.
