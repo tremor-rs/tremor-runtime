@@ -293,6 +293,13 @@ fn clickhouse_value_of(
                 )
             }),
 
+        // We don't support the Map datatype on the clickhouse side. There's a
+        // PR for that, but it's not yet merged. As a result, we can't handle
+        // Tremor Objects.
+        // https://github.com/suharev7/clickhouse-rs/pull/170
+
+        // TODO: I don't remember. Is there a way to store binary data in
+        // clickhouse?
         (other, _) => Err(Error::from(ErrorKind::UnexpectedEventFormat(
             column_name.to_string(),
             expected_type.to_string(),
