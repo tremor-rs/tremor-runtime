@@ -35,7 +35,7 @@ jobs:
         id: extract-release-notes
         uses: ffurrer2/extract-release-notes@v1
       - name: Create pre-release
-        if: ${{ env.RC }} == 'rc'
+        if: env.RC == 'rc'
         uses: actions/create-release@v1
         with:
           tag_name: v${{ env.RELEASE_VERSION }}
@@ -46,7 +46,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
       - name: Create release
-        if: ${{ env.RC }} != 'rc'
+        if: env.RC != 'rc'
         uses: actions/create-release@v1
         with:
           tag_name: v${{ env.RELEASE_VERSION }}
