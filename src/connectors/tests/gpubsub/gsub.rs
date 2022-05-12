@@ -7,6 +7,7 @@ use serial_test::serial;
 use testcontainers::clients::Cli;
 use testcontainers::RunnableImage;
 use tonic::transport::Channel;
+use tremor_pipeline::CbAction;
 use tremor_value::{literal, Value};
 
 #[async_std::test]
@@ -17,6 +18,7 @@ async fn no_connection() -> Result<()> {
         "codec": "binary",
         "config":{
             "endpoint": "http://localhost:9090",
+            "request_timeout": 30000000000u64,
             "connect_timeout": 100000000,
             "subscription_id": "projects/wf-gcp-us-tremor-sbx/subscriptions/test-subscription-a"
         }
@@ -48,6 +50,7 @@ async fn simple_subscribe() -> Result<()> {
         "codec": "binary",
         "config":{
             "endpoint": endpoint,
+            "request_timeout": 30000000000u64,
             "connect_timeout": 30000000000u64,
             "subscription_id": "projects/test/subscriptions/test-subscription-a",
             "skip_authentication": true
@@ -114,6 +117,8 @@ async fn simple_subscribe() -> Result<()> {
         Some(Vec::from("abc1".as_bytes())),
         event.data.parts().0.as_bytes().map(|x| Vec::from(x))
     );
+
+    harness.send_contraflow(CbAction::Ack, event.id).await?;
 
     return Ok(());
 }
