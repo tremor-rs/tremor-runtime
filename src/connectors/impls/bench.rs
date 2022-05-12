@@ -134,7 +134,7 @@ impl ConnectorBuilder for Builder {
                 seconds: stop_after_secs,
             };
             if stop_after.events.is_none() && stop_after.seconds.is_none() {
-                warn!("[Connector::{id}] No stop condition is specified. This connector will emit events infinitely.")
+                warn!("[Connector::{id}] No stop condition is specified. This connector will emit events infinitely.");
             }
 
             Ok(Box::new(Bench {
@@ -192,7 +192,7 @@ impl Connector for Bench {
             acc: self.acc.clone(),
             origin_uri: self.origin_uri.clone(),
             is_transactional: self.config.is_transactional,
-            stop_after: self.stop_after.clone(),
+            stop_after: self.stop_after,
             interval_ns: self.config.interval.map(Duration::from_nanos),
             finished: false,
         };
@@ -206,7 +206,7 @@ impl Connector for Bench {
     ) -> Result<Option<SinkAddr>> {
         builder
             .spawn(
-                Blackhole::new(&self.config, &self.stop_after, self.world.clone()),
+                Blackhole::new(&self.config, self.stop_after, self.world.clone()),
                 sink_context,
             )
             .map(Some)
@@ -271,7 +271,7 @@ impl Source for Blaster {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 struct StopAfter {
     events: Option<usize>,
     seconds: Option<u64>,
@@ -295,7 +295,7 @@ struct Blackhole {
 
 impl Blackhole {
     #[allow(clippy::cast_precision_loss, clippy::unwrap_used)]
-    fn new(c: &Config, stop_after: &StopAfter, world: World) -> Self {
+    fn new(c: &Config, stop_after: StopAfter, world: World) -> Self {
         let now_ns = nanotime();
         let sigfig = min(c.significant_figures, 5);
         // ALLOW: this is a debug connector and the values are validated ahead of time
@@ -303,7 +303,7 @@ impl Blackhole {
         Blackhole {
             // config: config.clone(),
             run_secs: c.stop_after_secs as f64,
-            stop_after: stop_after.clone(),
+            stop_after,
             stop_at: stop_after.seconds.map(|stop_after_secs| {
                 now_ns + ((stop_after_secs + c.warmup_secs) * 1_000_000_000)
             }),
@@ -333,7 +333,6 @@ impl Sink for Blackhole {
         _start: u64,
     ) -> Result<SinkReply> {
         let now_ns = nanotime();
-        dbg!(&self.count);
 
         for value in event.value_iter() {
             if now_ns > self.warmup {
