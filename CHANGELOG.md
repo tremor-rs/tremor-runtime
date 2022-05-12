@@ -1,10 +1,9 @@
 # Changelog
 
-# Unreleased
-
 ### Fixes
 
 - Properly terminate after `tremor run ...`
+- Fix the `bench` connector to actually stop after the given amount of events when `iters` is configured.
 
 ## [0.12.0-rc.6]
 

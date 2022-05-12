@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::ConnectorHarness;
-use crate::errors::Result;
+use crate::{connectors::impls::metronome, errors::Result};
 use std::time::Duration;
 use tremor_value::prelude::*;
 
@@ -28,7 +28,8 @@ async fn connector_metronome_routing() -> Result<()> {
     });
     let epoch = tremor_common::time::nanotime();
 
-    let harness = ConnectorHarness::new(function_name!(), "metronome", &defn).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), &metronome::Builder::default(), &defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'in' port of ws_server connector");

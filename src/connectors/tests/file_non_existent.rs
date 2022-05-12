@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::ConnectorHarness;
-use crate::errors::Result;
+use crate::{connectors::impls::file, errors::Result};
 use async_std::path::Path;
 use tremor_value::prelude::*;
 
@@ -35,7 +35,7 @@ async fn file_connector() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), "file", &defn).await?;
+    let harness = ConnectorHarness::new(function_name!(), &file::Builder::default(), &defn).await?;
     assert!(harness.start().await.is_err());
 
     let (out_events, err_events) = harness.stop().await?;

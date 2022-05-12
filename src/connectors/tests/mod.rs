@@ -44,6 +44,8 @@ mod wal;
 #[cfg(feature = "ws-integration")]
 mod ws;
 
+mod bench;
+
 // some tests don't use everything and this would generate warnings for those
 // which it shouldn't
 
@@ -79,7 +81,7 @@ pub(crate) struct ConnectorHarness {
 impl ConnectorHarness {
     pub(crate) async fn new_with_ports(
         id: &str,
-        connector_type: impl ToString,
+        builder: &dyn connectors::ConnectorBuilder,
         defn: &Value<'static>,
         input_ports: Vec<Cow<'static, str>>,
         output_ports: Vec<Cow<'static, str>>,
@@ -90,12 +92,9 @@ impl ConnectorHarness {
         for builder in builtin_connector_types() {
             known_connectors.insert(builder.connector_type(), builder);
         }
-
-        let connector_type = connector_type.to_string();
-
-        let raw_config = config::Connector::from_config(id, connector_type.into(), defn)?;
+        let raw_config = config::Connector::from_config(id, builder.connector_type(), defn)?;
         let connector_addr =
-            connectors::spawn(id, &mut connector_id_gen, &known_connectors, raw_config).await?;
+            connectors::spawn(id, &mut connector_id_gen, builder, raw_config).await?;
         let mut pipes = HashMap::new();
 
         let (link_tx, link_rx) = async_std::channel::unbounded();
@@ -149,12 +148,13 @@ impl ConnectorHarness {
             pipes,
         })
     }
+
     pub(crate) async fn new(
         id: &str,
-        connector_type: impl ToString,
+        builder: &dyn connectors::ConnectorBuilder,
         defn: &Value<'static>,
     ) -> Result<Self> {
-        Self::new_with_ports(id, connector_type, defn, vec![IN], vec![OUT, ERR]).await
+        Self::new_with_ports(id, builder, defn, vec![IN], vec![OUT, ERR]).await
     }
 
     pub(crate) async fn start(&self) -> Result<()> {

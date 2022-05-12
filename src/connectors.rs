@@ -397,13 +397,10 @@ pub(crate) type Known =
 pub(crate) async fn spawn(
     alias: &str,
     connector_id_gen: &mut ConnectorIdGen,
-    known_connectors: &Known,
+    builder: &dyn ConnectorBuilder,
     config: ConnectorConfig,
 ) -> Result<Addr> {
-    // lookup and instantiate connector
-    let builder = known_connectors
-        .get(&config.connector_type)
-        .ok_or_else(|| ErrorKind::UnknownConnectorType(config.connector_type.to_string()))?;
+    // instantiate connector
     let connector = builder.build(alias, &config).await?;
     let r = connector_task(
         alias.to_string(),
@@ -1188,7 +1185,7 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
 pub(crate) fn debug_connector_types(world: &World) -> Vec<Box<dyn ConnectorBuilder + 'static>> {
     vec![
         Box::new(impls::cb::Builder::new(world.clone())),
-        Box::new(impls::bench::Builder::default()),
+        Box::new(impls::bench::Builder::new(world.clone())),
         Box::new(impls::null::Builder::default()),
     ]
 }

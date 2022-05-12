@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::ConnectorHarness;
-use crate::errors::Result;
+use crate::{connectors::impls::file, errors::Result};
 use async_std::path::Path;
 use tremor_value::literal;
 use value_trait::ValueAccess;
@@ -38,7 +38,7 @@ async fn file_connector_xz() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), "file", &defn).await?;
+    let harness = ConnectorHarness::new(function_name!(), &file::Builder::default(), &defn).await?;
     let out = harness.out().expect("No out pipeline");
     harness.start().await?;
     harness.wait_for_connected().await?;

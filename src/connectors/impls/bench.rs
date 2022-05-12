@@ -15,16 +15,15 @@
 // #![cfg_attr(coverage, no_coverage)] // This is for benchmarking and testing
 
 use crate::connectors::prelude::*;
+use crate::errors::Kind as ErrorKind;
+use crate::system::{ShutdownMode, World};
 use hdrhistogram::Histogram;
+use std::io::{stdout, Write};
 use std::{
     cmp::min,
     fmt::Display,
     io::{BufRead as StdBufRead, BufReader, Read},
     time::Duration,
-};
-use std::{
-    io::{stdout, Write},
-    process,
 };
 use tremor_common::{file, time::nanotime};
 use xz2::read::XzDecoder;
@@ -69,12 +68,20 @@ fn default_significant_figures() -> u8 {
 
 impl ConfigImpl for Config {}
 
-#[derive(Debug, Default)]
-pub(crate) struct Builder {}
+#[derive(Debug)]
+pub(crate) struct Builder {
+    world: World,
+}
+
+impl Builder {
+    pub(crate) fn new(world: World) -> Self {
+        Self { world }
+    }
+}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
-    async fn build(&self, _id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+    async fn build(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
         if let Some(config) = &config.config {
             let config: Config = Config::new(config)?;
             let mut source_data_file = file::open(&config.source)?;
@@ -115,17 +122,30 @@ impl ConnectorBuilder for Builder {
                     })
                     .collect::<Result<_>>()?
             };
+            let num_elements = elements.len();
+            let stop_after_events = config.iters.map(|i| i * num_elements);
+            let stop_after_secs = if config.stop_after_secs == 0 {
+                None
+            } else {
+                Some(config.stop_after_secs)
+            };
+            let stop_after = StopAfter {
+                events: stop_after_events,
+                seconds: stop_after_secs,
+            };
+            if stop_after.events.is_none() && stop_after.seconds.is_none() {
+                warn!("[Connector::{id}] No stop condition is specified. This connector will emit events infinitely.")
+            }
+
             Ok(Box::new(Bench {
                 config,
-                acc: Acc {
-                    elements,
-                    count: 0,
-                    iterations: 0,
-                },
+                acc: Acc { elements, count: 0 },
                 origin_uri,
+                stop_after,
+                world: self.world.clone(),
             }))
         } else {
-            Err("Missing config for blaster onramp".into())
+            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
         }
     }
 
@@ -138,7 +158,6 @@ impl ConnectorBuilder for Builder {
 struct Acc {
     elements: Vec<Vec<u8>>,
     count: usize,
-    iterations: usize,
 }
 impl Acc {
     fn next(&mut self) -> Vec<u8> {
@@ -149,16 +168,17 @@ impl Acc {
                 .clone()
         };
         self.count += 1;
-        self.iterations = self.count / self.elements.len();
         next
     }
 }
 
 #[derive(Clone)]
 pub struct Bench {
-    pub config: Config,
+    config: Config,
     acc: Acc,
     origin_uri: EventOriginUri,
+    stop_after: StopAfter,
+    world: World,
 }
 
 #[async_trait::async_trait]
@@ -172,10 +192,9 @@ impl Connector for Bench {
             acc: self.acc.clone(),
             origin_uri: self.origin_uri.clone(),
             is_transactional: self.config.is_transactional,
-            iterations: self.config.iters,
+            stop_after: self.stop_after.clone(),
             interval_ns: self.config.interval.map(Duration::from_nanos),
             finished: false,
-            did_sleep: false,
         };
         builder.spawn(s, source_context).map(Some)
     }
@@ -186,7 +205,10 @@ impl Connector for Bench {
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         builder
-            .spawn(Blackhole::from_config(&self.config), sink_context)
+            .spawn(
+                Blackhole::new(&self.config, &self.stop_after, self.world.clone()),
+                sink_context,
+            )
             .map(Some)
     }
 
@@ -199,10 +221,9 @@ struct Blaster {
     acc: Acc,
     origin_uri: EventOriginUri,
     is_transactional: bool,
-    iterations: Option<usize>,
+    stop_after: StopAfter,
     interval_ns: Option<Duration>,
     finished: bool,
-    did_sleep: bool,
 }
 
 #[async_trait::async_trait]
@@ -212,30 +233,33 @@ impl Source for Blaster {
         if self.finished {
             return Ok(SourceReply::Finished);
         }
-        if !self.did_sleep {
-            // TODO better sleep perhaps
-            if let Some(interval) = self.interval_ns {
-                async_std::task::sleep(interval).await;
-            }
+        if let Some(interval) = self.interval_ns {
+            async_std::task::sleep(interval).await;
         }
-        self.did_sleep = false;
-        if Some(self.acc.iterations) == self.iterations {
+        let res = if self
+            .stop_after
+            .events
+            .iter()
+            .any(|stop_after_events| self.acc.count > *stop_after_events)
+        {
             self.finished = true;
-            return Ok(SourceReply::EndStream {
+            SourceReply::EndStream {
                 origin_uri: self.origin_uri.clone(),
                 stream: DEFAULT_STREAM_ID,
                 meta: None,
-            });
+            }
+        } else {
+            let data = self.acc.next();
+            SourceReply::Data {
+                origin_uri: self.origin_uri.clone(),
+                data,
+                meta: None,
+                stream: Some(DEFAULT_STREAM_ID),
+                port: None,
+                codec_overwrite: None,
+            }
         };
-
-        Ok(SourceReply::Data {
-            origin_uri: self.origin_uri.clone(),
-            data: self.acc.next(),
-            meta: None,
-            stream: Some(DEFAULT_STREAM_ID),
-            port: None,
-            codec_overwrite: None,
-        })
+        Ok(res)
     }
 
     fn is_transactional(&self) -> bool {
@@ -247,23 +271,31 @@ impl Source for Blaster {
     }
 }
 
+#[derive(Clone, Debug)]
+struct StopAfter {
+    events: Option<usize>,
+    seconds: Option<u64>,
+}
+
 /// A null offramp that records histograms
 struct Blackhole {
     // config: Config,
-    stop_after: u64,
+    stop_after: StopAfter,
+    stop_at: Option<u64>,
     warmup: u64,
-    has_stop_limit: bool,
     delivered: Histogram<u64>,
     run_secs: f64,
     bytes: usize,
-    count: u64,
+    count: usize,
     structured: bool,
     buf: Vec<u8>,
+    world: World,
+    finished: bool,
 }
 
 impl Blackhole {
     #[allow(clippy::cast_precision_loss, clippy::unwrap_used)]
-    fn from_config(c: &Config) -> Self {
+    fn new(c: &Config, stop_after: &StopAfter, world: World) -> Self {
         let now_ns = nanotime();
         let sigfig = min(c.significant_figures, 5);
         // ALLOW: this is a debug connector and the values are validated ahead of time
@@ -271,14 +303,18 @@ impl Blackhole {
         Blackhole {
             // config: config.clone(),
             run_secs: c.stop_after_secs as f64,
-            stop_after: now_ns + ((c.stop_after_secs + c.warmup_secs) * 1_000_000_000),
+            stop_after: stop_after.clone(),
+            stop_at: stop_after.seconds.map(|stop_after_secs| {
+                now_ns + ((stop_after_secs + c.warmup_secs) * 1_000_000_000)
+            }),
             warmup: now_ns + (c.warmup_secs * 1_000_000_000),
-            has_stop_limit: c.stop_after_secs != 0,
             structured: c.structured,
             delivered,
             bytes: 0,
             count: 0,
             buf: Vec::with_capacity(1024),
+            world,
+            finished: false,
         }
     }
 }
@@ -292,21 +328,13 @@ impl Sink for Blackhole {
         &mut self,
         _input: &str,
         event: tremor_pipeline::Event,
-        _ctx: &SinkContext,
+        ctx: &SinkContext,
         event_serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
         let now_ns = nanotime();
-        if self.has_stop_limit && now_ns > self.stop_after {
-            if self.structured {
-                let v = self.to_value(2);
-                v.write(&mut stdout())?;
-            } else {
-                self.write_text(stdout(), 5, 2)?;
-            }
-            // ALLOW: This is on purpose, we use blackhole for benchmarking, so we want it to terminate the process when done
-            process::exit(0);
-        };
+        dbg!(&self.count);
+
         for value in event.value_iter() {
             if now_ns > self.warmup {
                 let delta_ns = now_ns - event.ingest_ns;
@@ -320,6 +348,37 @@ impl Sink for Blackhole {
                 self.delivered.record(delta_ns)?;
             }
         }
+
+        if !self.finished
+            && (self.stop_at.iter().any(|stop_at| now_ns >= *stop_at)
+                || self
+                    .stop_after
+                    .events
+                    .iter()
+                    .any(|stop_after_events| self.count >= *stop_after_events))
+        {
+            info!("{ctx} Bench done.");
+            self.finished = true;
+            if self.structured {
+                let v = self.to_value(2);
+                v.write(&mut stdout())?;
+            } else {
+                self.write_text(stdout(), 5, 2)?;
+            }
+            let world = self.world.clone();
+            let stop_ctx = ctx.clone();
+
+            // this should stop the whole server process
+            // we spawn this out into another task, so we don't block the sink loop handling control plane messages
+            async_std::task::spawn(async move {
+                info!("{stop_ctx} Exiting...");
+                stop_ctx.swallow_err(
+                    world.stop(ShutdownMode::Forceful).await,
+                    "Error stopping the world",
+                );
+            });
+        };
+
         Ok(SinkReply::default())
     }
 }
