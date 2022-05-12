@@ -362,6 +362,11 @@ error_chain! {
             description("Malformed IP address")
                 display("Malformed IP address")
         }
+
+        MalformedUuid {
+            description("Malformed UUID")
+                display("Malformed UUID")
+        }
     }
 }
 
