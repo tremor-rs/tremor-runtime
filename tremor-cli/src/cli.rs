@@ -45,8 +45,6 @@ pub(crate) enum Command {
     Run(Run),
     /// Generates documention from tremor script files
     Doc(Doc),
-    /// Tremor API client
-    Api(Api),
 }
 
 /// Shell type
