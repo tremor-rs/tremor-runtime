@@ -17,6 +17,7 @@ use std::io::Read;
 use super::super::{ConnectorHarness, TestPipeline};
 use super::{get_client, random_bucket_name, spawn_docker, wait_for_s3mock, EnvHelper, IMAGE, TAG};
 use crate::errors::Result;
+use crate::connectors::impls::s3;
 use aws_sdk_s3::Client;
 use bytes::Buf;
 use rand::{distributions::Alphanumeric, Rng};
@@ -44,7 +45,7 @@ async fn connector_s3_no_connection() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), "s3_writer", &connector_yaml).await?;
+    let harness = ConnectorHarness::new(function_name!(), &s3::writer::Builder::default(), &connector_yaml).await?;
     assert!(harness.start().await.is_err());
     Ok(())
 }
@@ -74,7 +75,7 @@ async fn connector_s3_no_credentials() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), "s3_writer", &connector_yaml).await?;
+    let harness = ConnectorHarness::new(function_name!(), &s3::writer::Builder::default(), &connector_yaml).await?;
     assert!(harness.start().await.is_err());
 
     Ok(())
@@ -107,7 +108,7 @@ async fn connector_s3_no_region() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), "s3_writer", &connector_yaml).await?;
+    let harness = ConnectorHarness::new(function_name!(), &s3::writer::Builder::default(), &connector_yaml).await?;
     assert!(harness.start().await.is_err());
 
     Ok(())
@@ -137,7 +138,7 @@ async fn connector_s3_no_bucket() -> Result<()> {
             "endpoint": endpoint
         }
     });
-    let harness = ConnectorHarness::new(function_name!(), "s3_writer", &connector_yaml).await?;
+    let harness = ConnectorHarness::new(function_name!(), &s3::writer::Builder::default(), &connector_yaml).await?;
     assert!(harness.start().await.is_err());
 
     Ok(())
@@ -174,7 +175,7 @@ async fn connector_s3() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), "s3_writer", &connector_yaml).await?;
+    let harness = ConnectorHarness::new(function_name!(), &s3::writer::Builder::default(), &connector_yaml).await?;
     let in_pipe = harness
         .get_pipe(IN)
         .expect("No pipe connectored to port IN");

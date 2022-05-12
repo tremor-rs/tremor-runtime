@@ -15,7 +15,10 @@
 use std::time::Duration;
 
 use crate::{
-    connectors::tests::{free_port, setup_for_tls, tcp::EchoServer, ConnectorHarness},
+    connectors::{
+        impls::tcp,
+        tests::{free_port, setup_for_tls, tcp::EchoServer, ConnectorHarness},
+    },
     errors::Result,
 };
 use tremor_common::ports::IN;
@@ -71,7 +74,8 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
             "tls": tls_config
         }
     });
-    let connector = ConnectorHarness::new(function_name!(), "tcp_client", &config).await?;
+    let connector =
+        ConnectorHarness::new(function_name!(), &tcp::client::Builder::default(), &config).await?;
     let out = connector
         .out()
         .expect("No pipeline connected to tcp_client OUT port.");

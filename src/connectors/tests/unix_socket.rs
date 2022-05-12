@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::ConnectorHarness;
-use crate::errors::Result;
+use crate::{connectors::impls::unix_socket, errors::Result};
 use async_std::os::unix::net::UnixStream;
 use async_std::prelude::*;
 use tremor_common::ports::IN;
@@ -50,16 +50,24 @@ async fn unix_socket() -> Result<()> {
       }
     });
 
-    let server_harness =
-        ConnectorHarness::new("unix_socket_server", "unix_socket_server", &server_defn).await?;
+    let server_harness = ConnectorHarness::new(
+        "unix_socket_server",
+        &unix_socket::server::Builder::default(),
+        &server_defn,
+    )
+    .await?;
     let server_out = server_harness
         .out()
         .expect("No pipeline connected to 'out' port of unix_socket_server connector");
     server_harness.start().await?;
     server_harness.wait_for_connected().await?;
 
-    let client_harness =
-        ConnectorHarness::new("unix_socket_client", "unix_socket_client", &client_defn).await?;
+    let client_harness = ConnectorHarness::new(
+        "unix_socket_client",
+        &unix_socket::client::Builder::default(),
+        &client_defn,
+    )
+    .await?;
     let client_out = client_harness
         .out()
         .expect("No pipeline connected to 'out' port of unix_socket_server connector");

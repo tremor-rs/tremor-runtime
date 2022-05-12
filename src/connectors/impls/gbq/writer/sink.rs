@@ -468,6 +468,7 @@ impl Sink for GbqSink {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::connectors::impls::gbq;
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use crate::connectors::tests::ConnectorHarness;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
@@ -1109,7 +1110,9 @@ mod test {
             "config": {}
         });
 
-        let result = ConnectorHarness::new(function_name!(), "gbq", &config).await;
+        let result =
+            ConnectorHarness::new(function_name!(), &gbq::writer::Builder::default(), &config)
+                .await;
 
         assert!(result.is_err());
 

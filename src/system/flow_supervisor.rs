@@ -71,7 +71,7 @@ impl FlowSupervisor {
         }
     }
 
-    fn handle_register_connecor_type(
+    fn handle_register_connector_type(
         &mut self,
         connector_type: ConnectorType,
         builder: Box<dyn ConnectorBuilder>,
@@ -195,7 +195,7 @@ impl FlowSupervisor {
                         connector_type,
                         builder,
                         ..
-                    } => self.handle_register_connecor_type(connector_type, builder),
+                    } => self.handle_register_connector_type(connector_type, builder),
                     Msg::StartDeploy { flow, sender } => {
                         self.handle_start_deploy(*flow, sender).await;
                     }

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use super::ConnectorHarness;
-use crate::errors::Result;
+use crate::{connectors::impls::wal, errors::Result};
 use std::time::Duration;
 use tremor_common::{
     ids::{Id, SourceId},
@@ -34,7 +34,8 @@ async fn wal() -> Result<()> {
             "max_chunks": 100
         }
     });
-    let harness = ConnectorHarness::new(function_name!(), "wal", &config).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), &wal::Builder::default(), &config).await?;
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
@@ -96,7 +97,8 @@ async fn wal() -> Result<()> {
     assert!(err.is_empty());
 
     // start harness again with same config, expect the second event to be re-emitted
-    let harness = ConnectorHarness::new(function_name!(), "wal", &config).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), &wal::Builder::default(), &config).await?;
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
