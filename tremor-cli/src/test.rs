@@ -86,7 +86,7 @@ async fn run_bench(
         if tags_file.exists() {
             status::h1("Benchmark", &format!("Running {}", &basename(&bench_root)))?;
             let cwd = std::env::current_dir()?;
-            std::env::set_current_dir(Path::new(&root))?;
+            file::set_current_dir(&root)?;
             status::tags(&tags, Some(&matched), Some(&config.excludes))?;
             let test_report = process::run_process(
                 "bench",
@@ -174,7 +174,7 @@ async fn run_integration(
         )?;
         // Set cwd to test root
         let cwd = std::env::current_dir()?;
-        std::env::set_current_dir(&root)?;
+        file::set_current_dir(&root)?;
         status::tags(&tags, Some(&matched), Some(&config.excludes))?;
 
         // Run integration tests

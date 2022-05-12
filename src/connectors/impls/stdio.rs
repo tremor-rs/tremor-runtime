@@ -112,7 +112,7 @@ impl Source for StdStreamSource {
     }
 
     fn asynchronous(&self) -> bool {
-        true
+        false
     }
 }
 
@@ -193,5 +193,33 @@ impl Connector for StdStreamConnector {
 
     fn codec_requirements(&self) -> CodecReq {
         CodecReq::Required
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn source_consts() {
+        let source = StdStreamSource {
+            stdin: None,
+            origin_uri: EventOriginUri::default(),
+        };
+        assert!(!source.asynchronous());
+        assert!(!source.is_transactional());
+    }
+    #[test]
+    fn sink_consts() {
+        let sink = StdStreamSink {
+            stdout: stdout(),
+            stderr: stderr(),
+        };
+        assert!(sink.auto_ack());
+    }
+    #[test]
+    fn connector_consts() {
+        let connector = StdStreamConnector {};
+        assert_eq!(connector.codec_requirements(), CodecReq::Required);
+        assert_eq!(connector.input_ports(), ["in", "stdout", "stderr"]);
     }
 }
