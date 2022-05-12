@@ -1,5 +1,11 @@
 # Changelog
 
+# Unreleased
+
+### Fixes
+
+- Properly terminate after `tremor run ...`
+
 ## [0.12.0-rc.6]
 
 ### Fixes

@@ -1085,7 +1085,7 @@ pub(crate) trait Connector: Send {
 }
 
 /// Specifeis if a connector requires a codec
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum CodecReq {
     /// No codec can be provided for this connector it always returns structured data
     Structured,

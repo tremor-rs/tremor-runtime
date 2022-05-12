@@ -50,10 +50,7 @@ jobs:
         run: docker-compose --version
 
       - name: run ${{ matrix.kind }} tests
-        run: cargo llvm-cov run -p tremor-cli --no-report -- test ${{ matrix.kind }} tremor-cli/tests ${{ matrix.exclude_tests }}
-
-      - name: prepare coverage file
-        run: cargo llvm-cov --no-run --lcov --output-path lcov.txt 
+        run: cargo llvm-cov run -p tremor-cli --output-path lcov.txt -- test ${{ matrix.kind }} tremor-cli/tests ${{ matrix.exclude_tests }}
 
       - name: Upload error logs
         uses: actions/upload-artifact@v2
