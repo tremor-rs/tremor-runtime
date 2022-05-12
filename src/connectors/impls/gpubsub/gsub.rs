@@ -22,6 +22,7 @@ use tremor_pipeline::ConfigImpl;
 #[derive(Deserialize, Clone)]
 struct Config {
     pub connect_timeout: u64,
+    pub request_timeout: u64,
     pub subscription_id: String,
     #[serde(default = "default_endpoint")]
     pub endpoint: String,
@@ -218,7 +219,7 @@ impl Source for GSubSource {
             tx,
             self.ack_ids.clone(),
             self.config.subscription_id.clone(),
-            Duration::from_secs(10), // fixme get this from the config
+            Duration::from_nanos(self.config.request_timeout),
         ));
 
         self.receiver = Some(rx);
