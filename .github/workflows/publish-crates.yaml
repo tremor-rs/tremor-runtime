@@ -18,8 +18,7 @@ jobs:
         uses: katyo/publish-crates@v1
         with:
           path: './tremor-common'
-          args: --no-verify
-          dry-run: true
+          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   publish-tremor-value:
     name: Publish tremor value
@@ -36,8 +35,7 @@ jobs:
         uses: katyo/publish-crates@v1
         with:
           path: './tremor-value'
-          args: --no-verify
-          dry-run: true
+          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   publish-tremor-influx:
       name: Publish tremor influx
@@ -54,8 +52,7 @@ jobs:
           uses: katyo/publish-crates@v1
           with:
             path: './tremor-value'
-            args: --no-verify
-            dry-run: true 
+            registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   publish-tremor-script:
       name: Publish tremor script
@@ -71,6 +68,6 @@ jobs:
         - name: Publish tremor-script to crates.io
           uses: Wandalen/wretry.action@v1.0.11
           with:
-            command: cargo publish --dry-run
+            command: cd tremor-script && cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
             attempt_limit: 6
             attempt_delay: 10000
