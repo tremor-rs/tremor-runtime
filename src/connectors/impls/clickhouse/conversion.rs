@@ -18,7 +18,7 @@ use std::{
     sync::Arc,
 };
 
-pub(crate) use clickhouse_rs::types::Value as CValue;
+pub(super) use clickhouse_rs::types::Value as CValue;
 use either::Either;
 use simd_json::{StaticNode, Value, ValueAccess};
 use tremor_value::Value as TValue;
@@ -118,9 +118,6 @@ pub(super) fn convert_value(
         // PR for that, but it's not yet merged. As a result, we can't handle
         // Tremor Objects.
         // https://github.com/suharev7/clickhouse-rs/pull/170
-
-        // TODO: I don't remember. Is there a way to store binary data in
-        // clickhouse?
         (other, _) => Err(Error::from(ErrorKind::UnexpectedEventFormat(
             column_name.to_string(),
             expected_type.to_string(),
@@ -135,4 +132,113 @@ fn coerce_octet_sequence<const N: usize>(values: &[TValue]) -> std::result::Resu
         .map(|value| value.as_u8().ok_or(()))
         .collect::<std::result::Result<Vec<_>, _>>()
         .and_then(|octets| <[u8; N]>::try_from(octets).map_err(drop))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use clickhouse_rs::types::SqlType;
+    use tremor_value::{json, StaticNode};
+
+    // A simple macro which will help us to test the conversion stuff in this
+    // module.
+    macro_rules! test_value_conversion {
+        ($test_name:ident {
+            $input:expr, $ty:expr => $output:expr $(,)?
+        }) => {
+            #[test]
+            fn $test_name() {
+                let input_value = TValue::from($input);
+                let output_type: DummySqlType = $ty;
+                let column_name = "test_column_name";
+
+                let left = convert_value(column_name, &input_value, &output_type).unwrap();
+                let right = $output;
+
+                assert_eq!(left, right);
+            }
+        };
+    }
+
+    test_value_conversion! {
+        u64_conversion {
+            json! { 42u64 }, DummySqlType::UInt64 => CValue::UInt64(42),
+        }
+    }
+
+    test_value_conversion! {
+        i64_conversion {
+            json! { 101i64 }, DummySqlType::Int64 => CValue::Int64(101),
+        }
+    }
+
+    test_value_conversion! {
+        string_conversion {
+            json! { "foo" }, DummySqlType::String => clickhouse_string_value("foo"),
+        }
+    }
+
+    test_value_conversion! {
+        array_conversion_1 {
+            json! { [ "foo" ]}, DummySqlType::Array(Box::new(DummySqlType::String))
+            =>
+            clickhouse_array_value(
+                SqlType::String,
+                [clickhouse_string_value("foo")]
+            )
+        }
+    }
+
+    test_value_conversion! {
+        array_conversion_2 {
+            json! { [ "foo", "bar", "baz" ]},
+            DummySqlType::Array(Box::new(DummySqlType::String))
+            =>
+            clickhouse_array_value(
+                SqlType::String,
+                [clickhouse_string_value("foo"), clickhouse_string_value("bar"), clickhouse_string_value("baz")]
+            )
+        }
+    }
+
+    test_value_conversion! {
+        nullable_null_1 {
+            StaticNode::Null, DummySqlType::Nullable(Box::new(DummySqlType::String))
+            =>
+            CValue::Nullable(Either::Left(SqlType::String.into()))
+        }
+    }
+
+    test_value_conversion! {
+        nullable_null_2 {
+            StaticNode::Null, DummySqlType::Nullable(Box::new(DummySqlType::UInt64))
+            =>
+            CValue::Nullable(Either::Left(SqlType::UInt64.into()))
+        }
+    }
+
+    test_value_conversion! {
+        nullable_non_null_1 {
+            json! { 101u64 }, DummySqlType::Nullable(Box::new(DummySqlType::UInt64))
+            =>
+            CValue::Nullable(Either::Right(Box::new(CValue::UInt64(101))))
+        }
+    }
+
+    test_value_conversion! {
+        nullable_non_null_2 {
+            json! { "tira-misu" }, DummySqlType::Nullable(Box::new(DummySqlType::String))
+            =>
+            CValue::Nullable(Either::Right(Box::new(clickhouse_string_value("tira-misu"))))
+        }
+    }
+
+    fn clickhouse_string_value(input: &str) -> CValue {
+        CValue::String(Arc::new(input.to_string().into_bytes()))
+    }
+
+    fn clickhouse_array_value<const N: usize>(ty: SqlType, values: [CValue; N]) -> CValue {
+        CValue::Array(ty.into(), Arc::new(values.to_vec()))
+    }
 }
