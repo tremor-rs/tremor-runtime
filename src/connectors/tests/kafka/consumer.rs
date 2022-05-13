@@ -14,7 +14,10 @@
 
 use super::super::ConnectorHarness;
 use super::redpanda_container;
-use crate::{connectors::{impls::kafka, tests::free_port}, errors::Result};
+use crate::{
+    connectors::{impls::kafka, tests::free_port},
+    errors::Result,
+};
 use async_std::task;
 use beef::Cow;
 use rdkafka::{
@@ -93,8 +96,12 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
             }
         }
     });
-    let harness =
-        ConnectorHarness::new(function_name!(), &kafka::consumer::Builder::default(), &connector_config).await?;
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &kafka::consumer::Builder::default(),
+        &connector_config,
+    )
+    .await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
@@ -326,8 +333,12 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
             }
         }
     });
-    let harness =
-        ConnectorHarness::new(function_name!(), &kafka::consumer::Builder::default(), &connector_config).await?;
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &kafka::consumer::Builder::default(),
+        &connector_config,
+    )
+    .await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
@@ -547,8 +558,12 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
             }
         }
     });
-    let harness =
-        ConnectorHarness::new(function_name!(), &kafka::consumer::Builder::default(), &connector_config).await?;
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &kafka::consumer::Builder::default(),
+        &connector_config,
+    )
+    .await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
@@ -739,8 +754,12 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
             }
         }
     });
-    let harness =
-        ConnectorHarness::new(function_name!(), &kafka::consumer::Builder::default(), &connector_config).await?;
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &kafka::consumer::Builder::default(),
+        &connector_config,
+    )
+    .await?;
     assert!(harness.start().await.is_err());
 
     let (out_events, err_events) = harness.stop().await?;
@@ -805,8 +824,12 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
             }
         }
     });
-    let harness =
-        ConnectorHarness::new(function_name!(), &kafka::consumer::Builder::default(), &connector_config).await?;
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &kafka::consumer::Builder::default(),
+        &connector_config,
+    )
+    .await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     harness.start().await?;
     harness.wait_for_connected().await?;

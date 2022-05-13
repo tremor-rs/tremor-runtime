@@ -41,7 +41,12 @@ async fn connector_s3_no_connection() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), &s3::reader::Builder::default(), &connector_yaml).await?;
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &s3::reader::Builder::default(),
+        &connector_yaml,
+    )
+    .await?;
     assert!(harness.start().await.is_err());
     Ok(())
 }
@@ -71,7 +76,12 @@ async fn connector_s3_no_credentials() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), &s3::reader::Builder::default(), &connector_yaml).await?;
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &s3::reader::Builder::default(),
+        &connector_yaml,
+    )
+    .await?;
     assert!(harness.start().await.is_err());
 
     Ok(())
@@ -104,7 +114,12 @@ async fn connector_s3_no_region() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), &s3::reader::Builder::default(), &connector_yaml).await?;
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &s3::reader::Builder::default(),
+        &connector_yaml,
+    )
+    .await?;
     assert!(harness.start().await.is_err());
 
     Ok(())
@@ -134,7 +149,12 @@ async fn connector_s3_no_bucket() -> Result<()> {
             "endpoint": endpoint
         }
     });
-    let harness = ConnectorHarness::new(function_name!(), &s3::reader::Builder::default(), &connector_yaml).await?;
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &s3::reader::Builder::default(),
+        &connector_yaml,
+    )
+    .await?;
     assert!(harness.start().await.is_err());
 
     Ok(())

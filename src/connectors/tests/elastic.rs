@@ -77,7 +77,12 @@ async fn connector_elastic() -> Result<()> {
             ]
         }
     });
-    let harness = ConnectorHarness::new(function_name!(), &elastic::Builder::default(), &connector_config).await?;
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &elastic::Builder::default(),
+        &connector_config,
+    )
+    .await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
