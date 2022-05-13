@@ -2,18 +2,17 @@ use crate::connectors::google::AuthInterceptor;
 use crate::connectors::prelude::*;
 use crate::connectors::utils::url::HttpsDefaults;
 use async_std::channel::{Receiver, Sender};
-use async_std::prelude::FutureExt;
 use async_std::task::JoinHandle;
 use dashmap::DashMap;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
-use googapis::google::pubsub::v1::{
-    AcknowledgeRequest, PubsubMessage, PullRequest, ReceivedMessage,
-};
+use googapis::google::pubsub::v1::{AcknowledgeRequest, PubsubMessage, ReceivedMessage, StreamingPullRequest};
 use gouth::Token;
 use serde::Deserialize;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
+use async_std::stream::StreamExt;
+use async_std::prelude::FutureExt;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Status;
@@ -94,47 +93,33 @@ async fn consumer_task(
 ) {
     let mut ack_counter = 0;
 
-    loop {
-        let response_with_potential_timeout = client
-            .pull(PullRequest {
-                subscription: subscription_id.clone(),
-                max_messages: i32::try_from(QSIZE.load(Ordering::Relaxed)).unwrap_or(128),
-                ..PullRequest::default()
+    let request = StreamingPullRequest {
+        subscription: subscription_id.clone(),
+        ack_ids: vec![],
+        modify_deadline_seconds: vec![],
+        modify_deadline_ack_ids: vec![],
+        stream_ack_deadline_seconds: 0,
+        client_id: "".to_string(),
+        max_outstanding_messages: i64::try_from(QSIZE.load(Ordering::Relaxed)).unwrap_or(128),
+        max_outstanding_bytes: 0
+    };
+    let mut stream = client
+        // fixme there should be more responses here, each with its own ACKs
+        .streaming_pull(async_stream::stream! {
+                yield request;
             })
-            .timeout(request_timeout)
-            .await;
+        .await
+        .unwrap()
+        .into_inner();
 
-        let response = match response_with_potential_timeout {
-            Ok(response) => match response {
-                Ok(response) => response.into_inner(),
-                Err(error) => {
-                    if let Err(e) = sender.send(Err(error.into())).await {
-                        error!("Failed to send a PubSub error to the main task: {}", e);
-
-                        // If we can't send errors to the main task, disconnect and let it restart
-                        return;
-                    }
-
-                    // There was an error other than timeout, let the main task handle the failure, but
-                    // do not drop the connection.
-                    continue;
-                }
-            },
-            Err(timeout_error) => {
-                if let Err(e) = sender.send(Err(timeout_error.into())).await {
-                    error!(
-                        "Failed to send a PubSub timeout error to the main task: {}",
-                        e
-                    );
-
-                    // If we can't send errors to the main task, disconnect and let it restart
-                    return;
-                }
-
-                // If we have a timeout, exit the task and let the main task handle reconnection
-                return;
+    while let Some(response) = stream.next().timeout(request_timeout).await.unwrap() {
+        let response = match response {
+            Ok(x) => x,
+            Err(e) => {
+                dbg!(e);
+                panic!("x");
             }
-        };
+        }; // fixme proper error handlding, exit the task, etc.
 
         for message in response.received_messages {
             let ReceivedMessage {
@@ -154,7 +139,7 @@ async fn consumer_task(
                 }
             }
         }
-    }
+    };
 }
 
 #[async_trait::async_trait]
@@ -181,6 +166,7 @@ impl Source for GSubSource {
 
         let connect_to_pubsub = move || -> Result<PubSubClient> {
             if skip_authentication {
+                dbg!("Skipping auth...");
                 return Ok(SubscriberClient::with_interceptor(
                     channel.clone(),
                     AuthInterceptor {
@@ -238,6 +224,11 @@ impl Source for GSubSource {
                 "The receiver is not connected",
             ))?;
 
+        if receiver.is_closed() {
+            dbg!("The receiever is closed");
+            panic!("Receiver closed");
+        }
+
         let (ack_id, data) = match receiver.recv().await? {
             Ok(response) => response,
             Err(error) => {
@@ -248,7 +239,6 @@ impl Source for GSubSource {
                         "Failed to notify about PubSub connection loss",
                     );
 
-                    // fixme use the actual stream id
                     Ok(SourceReply::StreamFail(DEFAULT_STREAM_ID))
                 } else {
                     Err(error)

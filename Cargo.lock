@@ -5934,6 +5934,7 @@ dependencies = [
  "async-compression",
  "async-std",
  "async-std-resolver",
+ "async-stream",
  "async-tls 0.11.0",
  "async-trait",
  "async-tungstenite",
