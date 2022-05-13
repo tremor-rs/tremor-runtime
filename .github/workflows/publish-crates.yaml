@@ -48,7 +48,7 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
-      - name: Publish tremor-value to crates.io
+      - name: Publish tremor-influx to crates.io
         uses: katyo/publish-crates@v1
         with:
           path: './tremor-influx'
