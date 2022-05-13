@@ -14,7 +14,7 @@
 
 use super::super::ConnectorHarness;
 use super::redpanda_container;
-use crate::{errors::Result, Event, connectors::impls::kafka};
+use crate::{connectors::impls::kafka, errors::Result, Event};
 use async_std::prelude::FutureExt;
 use futures::StreamExt;
 use rdkafka::{
@@ -89,8 +89,12 @@ async fn connector_kafka_producer() -> Result<()> {
             }
         }
     });
-    let harness =
-        ConnectorHarness::new(function_name!(), &kafka::producer::Builder::default(), &connector_config).await?;
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &kafka::producer::Builder::default(),
+        &connector_config,
+    )
+    .await?;
     let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
     harness.start().await?;
     harness.wait_for_connected().await?;
