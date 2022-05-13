@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.12.0-rc.7]
 
 ### Fixes
 
