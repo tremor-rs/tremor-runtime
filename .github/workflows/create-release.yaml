@@ -27,6 +27,8 @@ jobs:
           git config user.email noreply@github.com
       - name: Pushing tags
         run: |
+          VER=$(echo v${{ env.RELEASE_VERSION }} | sed 's/.*rc.*/rc/')
+          echo "RC=$VER" >> $GITHUB_ENV
           git tag -a -m "Release v${{ env.RELEASE_VERSION }}" "v${{ env.RELEASE_VERSION }}"
           git push origin v${{ env.RELEASE_VERSION }}
       - name: Extract release notes
@@ -38,7 +40,7 @@ jobs:
           tag_name: v${{ env.RELEASE_VERSION }}
           release_name: Release v${{ env.RELEASE_VERSION }}
           draft: false
-          prerelease: false
+          prerelease: ${{env.RC == 'rc'}}
           body: ${{ steps.extract-release-notes.outputs.release_notes }}
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
