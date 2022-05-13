@@ -32,35 +32,32 @@ pub(super) fn convert_value(
     value: &TValue,
     expected_type: &DummySqlType,
 ) -> Result<CValue> {
-    match (value, expected_type) {
-        (TValue::Static(value), _) => {
-            if let (StaticNode::Null, DummySqlType::Nullable(inner_type)) = (value, expected_type) {
-                // Null can be of any type, as long as it is allowed by the
-                // schema.
+    if let (TValue::Static(StaticNode::Null), DummySqlType::Nullable(inner_type)) =
+        (value, expected_type)
+    {
+        // Null can be of any type, as long as it is allowed by the
+        // schema.
+        return Ok(CValue::Nullable(Either::Left(inner_type.as_ref().into())));
+    }
 
-                return Ok(CValue::Nullable(Either::Left(inner_type.as_ref().into())));
-            }
-
-            let value_as_non_null = match (value, expected_type.as_non_nullable()) {
+    match (value, expected_type.as_non_nullable()) {
+        (TValue::Static(value), inner_type) => {
+            match (value, inner_type) {
                 // These are the *obvious* translations. No cast is required,
                 // Not much to say here.
-                (StaticNode::U64(v), DummySqlType::UInt64) => CValue::UInt64(*v),
-                (StaticNode::I64(v), DummySqlType::Int64) => CValue::Int64(*v),
+                (StaticNode::U64(v), DummySqlType::UInt64) => Ok(CValue::UInt64(*v)),
+                (StaticNode::I64(v), DummySqlType::Int64) => Ok(CValue::Int64(*v)),
 
                 // Booleans can be converted to integers (true = 1, false = 0).
-                (StaticNode::Bool(b), DummySqlType::UInt64) => CValue::UInt64(u64::from(*b)),
-                (StaticNode::Bool(b), DummySqlType::Int64) => CValue::Int64(i64::from(*b)),
+                (StaticNode::Bool(b), DummySqlType::UInt64) => Ok(CValue::UInt64(u64::from(*b))),
+                (StaticNode::Bool(b), DummySqlType::Int64) => Ok(CValue::Int64(i64::from(*b))),
 
-                (other, _) => {
-                    return Err(Error::from(ErrorKind::UnexpectedEventFormat(
-                        column_name.to_string(),
-                        expected_type.to_string(),
-                        other.value_type(),
-                    )))
-                }
-            };
-
-            Ok(expected_type.wrap_if_nullable(value_as_non_null))
+                (other, _) => Err(Error::from(ErrorKind::UnexpectedEventFormat(
+                    column_name.to_string(),
+                    expected_type.to_string(),
+                    other.value_type(),
+                ))),
+            }
         }
 
         // String -> String
@@ -124,6 +121,7 @@ pub(super) fn convert_value(
             other.value_type(),
         ))),
     }
+    .map(|value| expected_type.wrap_if_nullable(value))
 }
 
 fn coerce_octet_sequence<const N: usize>(values: &[TValue]) -> std::result::Result<[u8; N], ()> {
