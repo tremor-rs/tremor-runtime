@@ -41,6 +41,7 @@ extern crate pretty_assertions;
 
 #[cfg(test)]
 extern crate test_case;
+extern crate core;
 
 #[macro_use]
 pub(crate) mod macros;

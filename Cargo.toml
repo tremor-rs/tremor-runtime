@@ -43,6 +43,7 @@ async-std = { version = "1.11.0", features = [
   "tokio03",
   "tokio1",
 ] }
+async-stream = "0.3"
 async-trait = "0.1"
 base64 = "0.13"
 beef = { version = "0.5", features = ["impl_serde"] }
