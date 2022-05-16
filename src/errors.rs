@@ -166,6 +166,7 @@ error_chain! {
         //Postgres(postgres::Error);
         RegexError(regex::Error);
         ReqwestError(reqwest::Error);
+        InvalidHeaderName(reqwest::header::InvalidHeaderName);
         RustlsError(rustls::TLSError);
         Sled(sled::Error);
         SnappyError(snap::Error);

@@ -13,38 +13,66 @@
 // limitations under the License.
 
 use std::fmt::Display;
+use std::time::Duration;
 
-use crate::connectors::prelude::*;
-use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
-use crate::errors::{Error, Kind as ErrorKind, Result};
+use crate::{
+    connectors::{
+        impls::http::utils::Header, prelude::*, sink::concurrency_cap::ConcurrencyCap,
+        utils::tls::TLSClientConfig,
+    },
+    errors::{Error, Kind as ErrorKind, Result},
+};
 use async_std::channel::{bounded, Receiver, Sender};
-use elasticsearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
-use elasticsearch::http::Url;
-use elasticsearch::params::Refresh;
-use elasticsearch::{cluster::ClusterHealthParts, BulkDeleteOperation};
-use elasticsearch::{http::response::Response, Bulk};
-use elasticsearch::{BulkOperation, BulkOperations, BulkParts, Elasticsearch};
+use either::Either;
+use elasticsearch::{
+    cert::{Certificate, CertificateValidation},
+    cluster::ClusterHealthParts,
+    http::{
+        response::Response,
+        transport::{SingleNodeConnectionPool, TransportBuilder},
+        Url,
+    },
+    params::Refresh,
+    Bulk, BulkDeleteOperation, BulkOperation, BulkOperations, BulkParts, Elasticsearch,
+};
+use halfbrown::HashMap;
 use tremor_common::time::nanotime;
 use tremor_script::utils::sorted_serialize;
 use tremor_value::value::StaticValue;
 use value_trait::Mutable;
 
+use super::http::auth::Auth;
+
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     /// list of elasticsearch cluster nodes
-    pub nodes: Vec<String>,
+    nodes: Vec<String>,
 
     /// index to write events to, can be overwritten by metadata `$elastic["_index"]`
-    pub index: Option<String>,
+    index: Option<String>,
 
     /// maximum number of parallel in-flight requests before this connector is considered fully saturated
     #[serde(default = "default_concurrency")]
-    pub concurrency: usize,
+    concurrency: usize,
 
     /// if true, ES success and error responses will contain the whole event payload they are based upon
     #[serde(default = "default_false")]
-    pub include_payload_in_response: bool,
+    include_payload_in_response: bool,
+
+    #[serde(default = "Default::default")]
+    /// custom headers to add to each request to elastic
+    headers: HashMap<String, Header>,
+
+    /// means for authenticating towards elastic
+    #[serde(default = "default_auth")]
+    auth: Auth,
+
+    tls: Option<TLSClientConfig>,
+
+    /// request timeout in nanoseconds for each request against elasticsearch
+    #[serde(default = "Default::default")]
+    timeout: Option<u64>,
 }
 impl ConfigImpl for Config {}
 
@@ -52,6 +80,10 @@ const DEFAULT_CONCURRENCY: usize = 4;
 
 fn default_concurrency() -> usize {
     DEFAULT_CONCURRENCY
+}
+
+fn default_auth() -> Auth {
+    Auth::None
 }
 
 #[derive(Default, Debug)]
@@ -194,8 +226,7 @@ struct ElasticSink {
     response_tx: Sender<SourceReply>,
     reply_tx: Sender<AsyncSinkReply>,
     concurrency_cap: ConcurrencyCap,
-    include_payload: bool,
-    default_index: Option<String>,
+    config: Config,
     origin_uri: EventOriginUri,
 }
 
@@ -212,8 +243,7 @@ impl ElasticSink {
             response_tx,
             reply_tx: reply_tx.clone(),
             concurrency_cap: ConcurrencyCap::new(config.concurrency, reply_tx),
-            include_payload: config.include_payload_in_response,
-            default_index: config.index.clone(),
+            config: config.clone(),
             origin_uri: EventOriginUri {
                 scheme: String::from("elastic"),
                 host: String::from("dummy"), // will be replaced in `on_event`
@@ -230,8 +260,53 @@ impl Sink for ElasticSink {
         let mut clients = Vec::with_capacity(self.node_urls.len());
         for node in &self.node_urls {
             let conn_pool = SingleNodeConnectionPool::new(node.clone());
-            let transport = TransportBuilder::new(conn_pool).build()?;
-            let client = Elasticsearch::new(transport);
+            let mut transport_builder = TransportBuilder::new(conn_pool).enable_meta_header(false); // no meta header, that's just overhead
+            if let Some(timeout_ns) = self.config.timeout.as_ref() {
+                let duration = Duration::from_nanos(*timeout_ns);
+                transport_builder = transport_builder.timeout(duration);
+            }
+            if !self.config.headers.is_empty() {
+                let mut headermap = reqwest::header::HeaderMap::new();
+                for (k, v) in &self.config.headers {
+                    match v {
+                        Header(Either::Left(values)) => {
+                            for value in values {
+                                headermap.append(
+                                    reqwest::header::HeaderName::from_bytes(k.as_bytes())?,
+                                    reqwest::header::HeaderValue::from_str(value.as_str())?,
+                                );
+                            }
+                        }
+                        Header(Either::Right(value)) => {
+                            headermap.append(
+                                reqwest::header::HeaderName::from_bytes(k.as_bytes())?,
+                                reqwest::header::HeaderValue::from_str(value.as_str())?,
+                            );
+                        }
+                    }
+                }
+                transport_builder = transport_builder.headers(headermap);
+            }
+
+            if let Ok(Some(credentials)) = self.config.auth.as_elastic_credentials() {
+                transport_builder = transport_builder.auth(credentials);
+            }
+            let cert_validation = if let Some(cafile) = self
+                .config
+                .tls
+                .as_ref()
+                .and_then(|tls_config| tls_config.cafile.as_ref())
+            {
+                let file = async_std::fs::read(cafile).await?;
+                let cert = Certificate::from_pem(file.as_slice())
+                    .or_else(|_| Certificate::from_der(file.as_slice()))?;
+                CertificateValidation::Full(cert)
+            } else {
+                CertificateValidation::Default
+            };
+            transport_builder = transport_builder.cert_validation(cert_validation);
+
+            let client = Elasticsearch::new(transport_builder.build()?);
             // we use the cluster health endpoint, as the ping endpoint is not reliable
             let res = client
                 .cluster()
@@ -278,10 +353,10 @@ impl Sink for ElasticSink {
             // create task for awaiting the sending and handling the response
             let response_tx = self.response_tx.clone();
             let reply_tx = self.reply_tx.clone();
-            let include_payload = self.include_payload;
+            let include_payload = self.config.include_payload_in_response;
             let mut origin_uri = self.origin_uri.clone();
             origin_uri.host = client.cluster_name;
-            let default_index = self.default_index.clone();
+            let default_index = self.config.index.clone();
             let task_ctx = ctx.clone();
             async_std::task::Builder::new()
                 .name(format!(
@@ -357,7 +432,7 @@ impl Sink for ElasticSink {
                 &self.origin_uri,
                 &self.response_tx,
                 &self.reply_tx,
-                self.include_payload,
+                self.config.include_payload_in_response,
             )
             .await?;
         }
