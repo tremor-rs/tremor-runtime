@@ -240,7 +240,7 @@ impl Source for Blaster {
             .stop_after
             .events
             .iter()
-            .any(|stop_after_events| self.acc.count > *stop_after_events)
+            .any(|stop_after_events| self.acc.count >= *stop_after_events)
         {
             self.finished = true;
             SourceReply::EndStream {
@@ -332,51 +332,51 @@ impl Sink for Blackhole {
         event_serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        let now_ns = nanotime();
+        if !self.finished {
+            let now_ns = nanotime();
 
-        for value in event.value_iter() {
-            if now_ns > self.warmup {
-                let delta_ns = now_ns - event.ingest_ns;
-                if let Ok(bufs) = event_serializer.serialize(value, event.ingest_ns) {
-                    self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
-                } else {
-                    error!("failed to encode");
-                };
-                self.count += 1;
-                self.buf.clear();
-                self.delivered.record(delta_ns)?;
+            for value in event.value_iter() {
+                if now_ns > self.warmup {
+                    let delta_ns = now_ns - event.ingest_ns;
+                    if let Ok(bufs) = event_serializer.serialize(value, event.ingest_ns) {
+                        self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
+                    } else {
+                        error!("failed to encode");
+                    };
+                    self.count += 1;
+                    self.buf.clear();
+                    self.delivered.record(delta_ns)?;
+                }
             }
-        }
 
-        if !self.finished
-            && (self.stop_at.iter().any(|stop_at| now_ns >= *stop_at)
+            if self.stop_at.iter().any(|stop_at| now_ns >= *stop_at)
                 || self
                     .stop_after
                     .events
                     .iter()
-                    .any(|stop_after_events| self.count >= *stop_after_events))
-        {
-            info!("{ctx} Bench done.");
-            self.finished = true;
-            if self.structured {
-                let v = self.to_value(2);
-                v.write(&mut stdout())?;
-            } else {
-                self.write_text(stdout(), 5, 2)?;
-            }
-            let world = self.world.clone();
-            let stop_ctx = ctx.clone();
+                    .any(|stop_after_events| self.count >= *stop_after_events)
+            {
+                self.finished = true;
+                if self.structured {
+                    let v = self.to_value(2);
+                    v.write(&mut stdout())?;
+                } else {
+                    self.write_text(stdout(), 5, 2)?;
+                }
+                let world = self.world.clone();
+                let stop_ctx = ctx.clone();
 
-            // this should stop the whole server process
-            // we spawn this out into another task, so we don't block the sink loop handling control plane messages
-            async_std::task::spawn(async move {
-                info!("{stop_ctx} Exiting...");
-                stop_ctx.swallow_err(
-                    world.stop(ShutdownMode::Forceful).await,
-                    "Error stopping the world",
-                );
-            });
-        };
+                // this should stop the whole server process
+                // we spawn this out into another task, so we don't block the sink loop handling control plane messages
+                async_std::task::spawn(async move {
+                    info!("{stop_ctx} Exiting...");
+                    stop_ctx.swallow_err(
+                        world.stop(ShutdownMode::Forceful).await,
+                        "Error stopping the world",
+                    );
+                });
+            };
+        }
 
         Ok(SinkReply::default())
     }
