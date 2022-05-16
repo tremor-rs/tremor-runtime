@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use async_std::channel::Receiver;
+use either::Either;
 use futures::{ready, Stream};
 use std::io::{Cursor, Read};
 use std::pin::Pin;
@@ -25,6 +26,10 @@ pub use surf::{
 
 // We use tide for http servers
 pub use tide::{Request as TideRequest, Response as TideResponse, Result as TideResult};
+
+#[derive(Deserialize, Debug, Clone)]
+#[serde(transparent)]
+pub struct Header(#[serde(with = "either::serde_untagged")] pub(crate) Either<Vec<String>, String>);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct RequestId(u64);

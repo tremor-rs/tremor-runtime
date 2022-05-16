@@ -25,7 +25,7 @@ use tremor_common::time::nanotime;
 
 use super::auth::Auth;
 use super::meta::{extract_request_meta, extract_response_meta, HttpRequestBuilder};
-use super::utils::RequestId;
+use super::utils::{Header, RequestId};
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
 use crate::connectors::utils::mime::MimeCodecMap;
@@ -33,12 +33,6 @@ use crate::connectors::utils::tls::{tls_client_config, TLSClientConfig};
 
 const CONNECTOR_TYPE: &str = "http_client";
 const DEFAULT_CODEC: &str = "json";
-
-#[derive(Deserialize, Debug, Clone)]
-#[serde(transparent)]
-pub(super) struct Header(
-    #[serde(with = "either::serde_untagged")] pub(super) Either<Vec<String>, String>,
-);
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]

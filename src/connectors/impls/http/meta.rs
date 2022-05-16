@@ -142,7 +142,7 @@ impl HttpRequestBuilder {
             }
         }
         // handle AUTH
-        if let Some(auth_header) = config.auth.header_value()? {
+        if let Some(auth_header) = config.auth.as_header_value()? {
             request.insert_header(headers::AUTHORIZATION, auth_header);
         }
 
