@@ -39,9 +39,9 @@ extern crate lazy_static;
 #[macro_use]
 extern crate pretty_assertions;
 
+extern crate core;
 #[cfg(test)]
 extern crate test_case;
-extern crate core;
 
 #[macro_use]
 pub(crate) mod macros;

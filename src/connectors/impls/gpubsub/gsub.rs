@@ -2,17 +2,16 @@ use crate::connectors::google::AuthInterceptor;
 use crate::connectors::prelude::*;
 use crate::connectors::utils::url::HttpsDefaults;
 use async_std::channel::{Receiver, Sender};
+use async_std::stream::StreamExt;
 use async_std::task::JoinHandle;
 use dashmap::DashMap;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
-use googapis::google::pubsub::v1::{AcknowledgeRequest, PubsubMessage, ReceivedMessage, StreamingPullRequest};
+use googapis::google::pubsub::v1::{PubsubMessage, ReceivedMessage, StreamingPullRequest};
 use gouth::Token;
 use serde::Deserialize;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
-use async_std::stream::StreamExt;
-use async_std::prelude::FutureExt;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Status;
@@ -68,6 +67,7 @@ struct GSubSource {
     config: Config,
     client: Option<PubSubClient>,
     receiver: Option<Receiver<AsyncTaskMessage>>,
+    ack_sender: Option<Sender<u64>>,
     ack_ids: Arc<DashMap<u64, String>>,
     task_handle: Option<JoinHandle<()>>,
 }
@@ -80,6 +80,7 @@ impl GSubSource {
             receiver: None,
             ack_ids: Arc::new(DashMap::new()),
             task_handle: None,
+            ack_sender: None,
         }
     }
 }
@@ -89,31 +90,48 @@ async fn consumer_task(
     sender: Sender<AsyncTaskMessage>,
     ack_ids: Arc<DashMap<u64, String>>,
     subscription_id: String,
-    request_timeout: Duration,
+    _request_timeout: Duration,
+    ack_receiver: Receiver<u64>,
 ) {
     let mut ack_counter = 0;
 
-    let request = StreamingPullRequest {
-        subscription: subscription_id.clone(),
-        ack_ids: vec![],
-        modify_deadline_seconds: vec![],
-        modify_deadline_ack_ids: vec![],
-        stream_ack_deadline_seconds: 0,
-        client_id: "".to_string(),
-        max_outstanding_messages: i64::try_from(QSIZE.load(Ordering::Relaxed)).unwrap_or(128),
-        max_outstanding_bytes: 0
+    let ack_ids_clone = ack_ids.clone();
+    let request_stream = async_stream::stream! {
+        yield StreamingPullRequest {
+            subscription: subscription_id.clone(),
+            ack_ids: vec![],
+            modify_deadline_seconds: vec![],
+            modify_deadline_ack_ids: vec![],
+            stream_ack_deadline_seconds: 10, // fixme make this configurable
+            client_id: "".to_string(),
+            max_outstanding_messages: i64::try_from(QSIZE.load(Ordering::Relaxed)).unwrap_or(128),
+            max_outstanding_bytes: 0
+        };
+
+        while let Ok(pull_id) = ack_receiver.recv().await {
+            if let (Some((_, ack_id))) = ack_ids_clone.remove(&pull_id) {
+                yield StreamingPullRequest {
+                    subscription: "".to_string(),
+                    ack_ids: vec![ack_id],
+                    modify_deadline_seconds: vec![],
+                    modify_deadline_ack_ids: vec![],
+                    stream_ack_deadline_seconds: 0,
+                    client_id: "".to_string(),
+                    max_outstanding_messages: 0,
+                    max_outstanding_bytes: 0
+                };
+            } // fixme else log error
+        }
     };
     let mut stream = client
         // fixme there should be more responses here, each with its own ACKs
-        .streaming_pull(async_stream::stream! {
-                yield request;
-            })
+        .streaming_pull(request_stream)
         .await
         .unwrap()
         .into_inner();
 
-    while let Some(response) = stream.next().timeout(request_timeout).await.unwrap() {
-        let response = match response {
+    while let Some(response) = stream.next().await {
+        let response = match dbg!(response) {
             Ok(x) => x,
             Err(e) => {
                 dbg!(e);
@@ -126,20 +144,23 @@ async fn consumer_task(
                 ack_id,
                 message: msg,
                 ..
-            } = message;
+            } = dbg!(message);
 
             if let Some(PubsubMessage { data, .. }) = msg {
                 ack_counter += 1;
                 ack_ids.insert(ack_counter, ack_id);
                 if let Err(e) = sender.send(Ok((ack_counter, data))).await {
                     error!("Failed to send a PubSub message to the main task: {}", e);
+                    dbg!("Failed to send... boo");
 
                     // If we can't send to the main task, disconnect and let it restart
                     return;
                 }
             }
         }
-    };
+    }
+
+    dbg!("Exiting consumer task...");
 }
 
 #[async_trait::async_trait]
@@ -199,6 +220,7 @@ impl Source for GSubSource {
         let client_background = connect_to_pubsub()?;
 
         let (tx, rx) = async_std::channel::bounded(QSIZE.load(Ordering::Relaxed));
+        let (ack_tx, ack_rx) = async_std::channel::bounded(QSIZE.load(Ordering::Relaxed));
 
         let join_handle = async_std::task::spawn(consumer_task(
             client_background,
@@ -206,9 +228,11 @@ impl Source for GSubSource {
             self.ack_ids.clone(),
             self.config.subscription_id.clone(),
             Duration::from_nanos(self.config.request_timeout),
+            ack_rx,
         ));
 
         self.receiver = Some(rx);
+        self.ack_sender = Some(ack_tx);
         self.client = Some(client);
         self.task_handle = Some(join_handle);
 
@@ -223,12 +247,6 @@ impl Source for GSubSource {
                 // fixme use an error for GPubSub
                 "The receiver is not connected",
             ))?;
-
-        if receiver.is_closed() {
-            dbg!("The receiever is closed");
-            panic!("Receiver closed");
-        }
-
         let (ack_id, data) = match receiver.recv().await? {
             Ok(response) => response,
             Err(error) => {
@@ -267,23 +285,13 @@ impl Source for GSubSource {
     }
 
     async fn ack(&mut self, _stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
-        let client = self
-            .client
+        let sender = self
+            .ack_sender
             .as_mut()
             .ok_or(ErrorKind::PubSubClientNotAvailable(
                 "The client is not connected",
             ))?;
-
-        let (_, ack_id) = self.ack_ids.remove(&pull_id).ok_or(ErrorKind::PubSubError(
-            "Received an ACK for a message that does not exist",
-        ))?;
-
-        client
-            .acknowledge(AcknowledgeRequest {
-                subscription: self.config.subscription_id.clone(),
-                ack_ids: vec![ack_id],
-            })
-            .await?;
+        sender.send(pull_id).await?;
 
         Ok(())
     }
