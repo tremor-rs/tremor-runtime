@@ -67,19 +67,19 @@ pub(super) fn convert_value(
         }
 
         // String -> Ipv4 (parsed using std's Ipv4Addr::from_str implementation)
-        (TValue::String(string), DummySqlType::IPv4) => Ipv4Addr::from_str(string.as_ref())
+        (TValue::String(string), DummySqlType::Ipv4) => Ipv4Addr::from_str(string.as_ref())
             .map(|addr| addr.octets())
             .map(CValue::Ipv4)
             .map_err(|_| Error::from(ErrorKind::MalformedIpAddr)),
 
         // String -> Ipv6 (parsed using std's Ipv6Addr::from_str implementation)
-        (TValue::String(string), DummySqlType::IPv6) => Ipv6Addr::from_str(string.as_ref())
+        (TValue::String(string), DummySqlType::Ipv6) => Ipv6Addr::from_str(string.as_ref())
             .map(|addr| addr.octets())
             .map(CValue::Ipv6)
             .map_err(|_| Error::from(ErrorKind::MalformedIpAddr)),
 
         // String -> UUID (parsed using uuid's from_str implementation)
-        (TValue::String(string), DummySqlType::UUID) => Uuid::from_str(string.as_ref())
+        (TValue::String(string), DummySqlType::Uuid) => Uuid::from_str(string.as_ref())
             .map(Uuid::into_bytes)
             .map(CValue::Uuid)
             .map_err(|_| Error::from(ErrorKind::MalformedUuid)),
@@ -101,17 +101,17 @@ pub(super) fn convert_value(
             }),
 
         // Array -> IPv4
-        (TValue::Array(values), DummySqlType::IPv4) => coerce_octet_sequence(values.as_slice())
+        (TValue::Array(values), DummySqlType::Ipv4) => coerce_octet_sequence(values.as_slice())
             .map(CValue::Ipv4)
             .map_err(|()| Error::from(ErrorKind::MalformedIpAddr)),
 
         // Array -> IPv6
-        (TValue::Array(values), DummySqlType::IPv6) => coerce_octet_sequence(values.as_slice())
+        (TValue::Array(values), DummySqlType::Ipv6) => coerce_octet_sequence(values.as_slice())
             .map(CValue::Ipv6)
             .map_err(|()| Error::from(ErrorKind::MalformedIpAddr)),
 
         // Array -> UUID
-        (TValue::Array(values), DummySqlType::UUID) => coerce_octet_sequence(values.as_slice())
+        (TValue::Array(values), DummySqlType::Uuid) => coerce_octet_sequence(values.as_slice())
             .map(CValue::Uuid)
             .map_err(|()| Error::from(ErrorKind::MalformedUuid)),
 
@@ -238,20 +238,20 @@ mod tests {
 
     test_value_conversion! {
         ipv4_from_string {
-            json! { "127.0.0.1" }, DummySqlType::IPv4 => CValue::Ipv4([127, 0, 0, 1]),
+            json! { "127.0.0.1" }, DummySqlType::Ipv4 => CValue::Ipv4([127, 0, 0, 1]),
         }
     }
 
     test_value_conversion! {
         ipv4_from_array {
-            json! { [1, 2, 3, 4] }, DummySqlType::IPv4 => CValue::Ipv4([1, 2, 3, 4]),
+            json! { [1, 2, 3, 4] }, DummySqlType::Ipv4 => CValue::Ipv4([1, 2, 3, 4]),
         }
     }
 
     test_value_conversion! {
         ipv6_from_string {
             json! { "0000:0000:0000:0000:0000:0000:0000:0001" },
-            DummySqlType::IPv6
+            DummySqlType::Ipv6
             =>
             CValue::Ipv6([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]),
         }
@@ -262,7 +262,7 @@ mod tests {
             json! {
                 [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
             },
-            DummySqlType::IPv6
+            DummySqlType::Ipv6
             =>
             CValue::Ipv6([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]),
         }
@@ -273,7 +273,7 @@ mod tests {
             json! {
                 "123e4567-e89b-12d3-a456-426614174000"
             },
-            DummySqlType::UUID
+            DummySqlType::Uuid
             =>
             CValue::Uuid([0x12,
                 0x3e,
