@@ -85,6 +85,10 @@ pub(super) fn convert_value(
             .map_err(|_| Error::from(ErrorKind::MalformedUuid)),
 
         // Array -> Array
+        //
+        // We don't check that all elements of the array have the same type.
+        // Instead, we check that every element can be converted to the expected
+        // array type.
         (TValue::Array(values), DummySqlType::Array(expected_inner_type)) => values
             .iter()
             .map(|value| convert_value(column_name, value, expected_inner_type))
