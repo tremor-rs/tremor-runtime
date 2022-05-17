@@ -782,6 +782,10 @@ async fn elastic_https() -> Result<()> {
                     "password": "snot"
                 }
             },
+            "timeout": Duration::from_secs(10).as_nanos() as u64,
+            "headers": {
+                "x-custom": ["schmonglefoobs"]
+            },
             "nodes": [
                 format!("https://localhost:{port}")
             ],
@@ -803,6 +807,33 @@ async fn elastic_https() -> Result<()> {
 
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
+    Ok(())
+}
+
+#[async_std::test]
+async fn elastic_https_invalid_url() -> Result<()> {
+    let connector_config = literal!({
+        "reconnect": {
+            "retry": {
+                "interval_ms": 1000,
+                "max_retries": 10
+            }
+        },
+        "config": {
+            "tls": true,
+            "nodes": [
+                format!("http://localhost:9200")
+            ],
+            "index": "schingelfrompf"
+        }
+    });
+    assert!(ConnectorHarness::new(
+        function_name!(),
+        &elastic::Builder::default(),
+        &connector_config,
+    )
+    .await
+    .is_err());
     Ok(())
 }
 

@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::io::Write;
+
 use crate::errors::Result;
 
 /// Authorization methods
@@ -48,9 +50,11 @@ impl Auth {
             Auth::Bearer(token) => Ok(Some(format!("Bearer {}", &token))),
             Auth::ElasticsearchApiKey { id, api_key } => {
                 let mut header_value = "ApiKey ".to_string();
-                base64::encode_config_buf(id, base64::STANDARD, &mut header_value);
-                base64::encode_config_buf(":", base64::STANDARD, &mut header_value);
-                base64::encode_config_buf(api_key, base64::STANDARD, &mut header_value);
+                let mut writer =
+                    base64::write::EncoderStringWriter::from(&mut header_value, base64::STANDARD);
+                write!(writer, "{}:", id)?;
+                write!(writer, "{}", api_key)?;
+                let _ = writer.into_inner(); // release the reference, so header-value is accessible again
                 Ok(Some(header_value))
             }
             Auth::None => Ok(None),
@@ -61,5 +65,43 @@ impl Auth {
 impl Default for Auth {
     fn default() -> Self {
         Self::None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn header_value_basic() -> Result<()> {
+        let auth = Auth::Basic {
+            username: "badger".to_string(),
+            password: "snot".to_string(),
+        };
+        assert_eq!(
+            Ok(Some("Basic YmFkZ2VyOnNub3Q=".to_string())),
+            auth.as_header_value()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn header_value_bearer() -> Result<()> {
+        let auth = Auth::Bearer("token".to_string());
+        assert_eq!(Ok(Some("Bearer token".to_string())), auth.as_header_value());
+        Ok(())
+    }
+
+    #[test]
+    fn header_value_elastic_api_key() -> Result<()> {
+        let auth = Auth::ElasticsearchApiKey {
+            id: "badger".to_string(),
+            api_key: "snot".to_string(),
+        };
+        assert_eq!(
+            Ok(Some("ApiKey YmFkZ2VyOnNub3Q=".to_string())),
+            auth.as_header_value()
+        );
+        Ok(())
     }
 }

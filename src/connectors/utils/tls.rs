@@ -160,3 +160,64 @@ pub(crate) async fn tls_client_config(tremor_config: &TLSClientConfig) -> Result
     }
     Ok(tls_config)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+
+    use crate::connectors::tests::setup_for_tls;
+
+    use super::*;
+
+    #[test]
+    fn load_certs_invalid() -> Result<()> {
+        let mut file = tempfile::NamedTempFile::new()?;
+        file.write_all(b"Brueghelflinsch\n")?;
+        let path = file.into_temp_path();
+        assert!(load_certs(&path).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn load_certs_empty() -> Result<()> {
+        let file = tempfile::NamedTempFile::new()?;
+        let path = file.into_temp_path();
+        assert!(load_certs(&path).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn load_keys_invalid() -> Result<()> {
+        let mut file = tempfile::NamedTempFile::new()?;
+        file.write_all(
+            b"-----BEGIN PRIVATE KEY-----\nStrumpfenpfart\n-----END PRIVATE KEY-----\n",
+        )?;
+        let path = file.into_temp_path();
+        assert!(load_keys(&path).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn load_keys_empty() -> Result<()> {
+        let file = tempfile::NamedTempFile::new()?;
+        let path = file.into_temp_path();
+        assert!(load_keys(&path).is_err());
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn client_config() -> Result<()> {
+        setup_for_tls();
+
+        let tls_config = TLSClientConfig {
+            cafile: Some(Path::new("./tests/localhost.cert").to_path_buf()),
+            domain: Some("hostenschmirtz".to_string()),
+            cert: Some(Path::new("./tests/localhost.cert").to_path_buf()),
+            key: Some(Path::new("./tests/localhost.key").to_path_buf()),
+        };
+        let client_config = tls_client_config(&tls_config).await?;
+        assert_eq!(1, client_config.root_store.roots.len());
+        assert_eq!(true, client_config.client_auth_cert_resolver.has_certs());
+        Ok(())
+    }
+}

@@ -480,7 +480,6 @@ mod free_port {
     }
 }
 
-#[cfg(any(feature = "http-integration", feature = "ws-integration",))]
 pub(crate) fn setup_for_tls() {
     use std::process::Command;
     use std::process::Stdio;
