@@ -602,7 +602,7 @@ async fn auth_client_cert() -> Result<()> {
 
     let container = docker.run(image);
     let port = container.get_host_port(9200);
-    let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
+    let conn_pool = SingleNodeConnectionPool::new(format!("https://127.0.0.1:{port}").parse()?);
     let ca = async_std::fs::read_to_string(&cafile).await?;
     let mut cert = async_std::fs::read(&cafile).await?;
     let mut key = async_std::fs::read(&keyfile).await?;
@@ -644,7 +644,7 @@ async fn auth_client_cert() -> Result<()> {
                 }
             },
             "nodes": [
-                format!("https://localhost:{port}")
+                format!("https://127.0.0.1:{port}")
             ],
             "index": index.to_string(),
             // this test cannot test full PKI auth
@@ -725,7 +725,7 @@ async fn elastic_https() -> Result<()> {
 
     let container = docker.run(image);
     let port = container.get_host_port(9200);
-    let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
+    let conn_pool = SingleNodeConnectionPool::new(format!("https://127.0.0.1:{port}").parse()?);
     let ca = async_std::fs::read_to_string(&cafile).await?;
     let transport = TransportBuilder::new(conn_pool).cert_validation(CertificateValidation::Full(
         Certificate::from_pem(ca.as_bytes())?,
@@ -753,7 +753,7 @@ async fn elastic_https() -> Result<()> {
                 }
             },
             "nodes": [
-                format!("https://localhost:{port}")
+                format!("https://127.0.0.1:{port}")
             ],
             "index": index.to_string()
         }
