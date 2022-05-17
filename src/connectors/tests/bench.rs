@@ -51,7 +51,7 @@ async fn stop_after_events() -> Result<()> {
 
     let bg_out = out.clone();
     let bg_addr = harness.addr.clone();
-    async_std::task::spawn::<_, Result<()>>(async move {
+    let handle = async_std::task::spawn::<_, Result<()>>(async move {
         // echo pipeline
         for _ in 0..6 {
             let event = bg_out.get_event().await?;
@@ -64,6 +64,7 @@ async fn stop_after_events() -> Result<()> {
 
     // the bench connector should shut the world down
     world_handle.await?;
+    handle.cancel().await;
     Ok(())
 }
 
@@ -96,14 +97,26 @@ async fn stop_after_secs() -> Result<()> {
     let one_sec = Duration::from_secs(1);
     let start = Instant::now();
     // echo pipeline
-    while start.elapsed() < one_sec {
-        let event = out.get_event().await?;
-        harness.send_to_sink(event, IN).await?;
-    }
+    let bg_out = out.clone();
+    let bg_addr = harness.addr.clone();
+    let handle = async_std::task::spawn::<_, Result<()>>(async move {
+        // echo pipeline
+        while start.elapsed() < one_sec {
+            let event = bg_out.get_event().await?;
+            bg_addr
+                .send_sink(SinkMsg::Event { event, port: IN })
+                .await?;
+        }
+        Ok(())
+    });
 
     // the bench connector should shut the world down
     world_handle.await?;
+    info!("Flow supervisor finished");
+    handle.cancel().await;
+    info!("Echo pipeline finished");
     let (_out, err) = harness.stop().await?;
+    info!("Harness stopped");
     assert!(err.is_empty());
 
     Ok(())

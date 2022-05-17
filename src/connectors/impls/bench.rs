@@ -127,7 +127,7 @@ impl ConnectorBuilder for Builder {
             let stop_after_secs = if config.stop_after_secs == 0 {
                 None
             } else {
-                Some(config.stop_after_secs)
+                Some(config.stop_after_secs + config.warmup_secs)
             };
             let stop_after = StopAfter {
                 events: stop_after_events,
@@ -193,6 +193,7 @@ impl Connector for Bench {
             origin_uri: self.origin_uri.clone(),
             is_transactional: self.config.is_transactional,
             stop_after: self.stop_after,
+            stop_at: None,
             interval_ns: self.config.interval.map(Duration::from_nanos),
             finished: false,
         };
@@ -222,12 +223,21 @@ struct Blaster {
     origin_uri: EventOriginUri,
     is_transactional: bool,
     stop_after: StopAfter,
+    stop_at: Option<u64>,
     interval_ns: Option<Duration>,
     finished: bool,
 }
 
 #[async_trait::async_trait]
 impl Source for Blaster {
+    async fn on_start(&mut self, _ctx: &SourceContext) -> Result<()> {
+        self.stop_at = self
+            .stop_after
+            .seconds
+            .map(|secs| nanotime() + (secs * 1_000_000_000));
+        Ok(())
+    }
+
     #[allow(clippy::cast_possible_truncation)]
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         if self.finished {
@@ -236,11 +246,12 @@ impl Source for Blaster {
         if let Some(interval) = self.interval_ns {
             async_std::task::sleep(interval).await;
         }
-        let res = if self
-            .stop_after
-            .events
-            .iter()
-            .any(|stop_after_events| self.acc.count > *stop_after_events)
+        let res = if self.stop_at.iter().any(|stop_at| nanotime() >= *stop_at)
+            || self
+                .stop_after
+                .events
+                .iter()
+                .any(|stop_after_events| self.acc.count >= *stop_after_events)
         {
             self.finished = true;
             SourceReply::EndStream {
@@ -304,9 +315,9 @@ impl Blackhole {
             // config: config.clone(),
             run_secs: c.stop_after_secs as f64,
             stop_after,
-            stop_at: stop_after.seconds.map(|stop_after_secs| {
-                now_ns + ((stop_after_secs + c.warmup_secs) * 1_000_000_000)
-            }),
+            stop_at: stop_after
+                .seconds
+                .map(|stop_after_secs| now_ns + (stop_after_secs * 1_000_000_000)),
             warmup: now_ns + (c.warmup_secs * 1_000_000_000),
             structured: c.structured,
             delivered,
@@ -332,51 +343,52 @@ impl Sink for Blackhole {
         event_serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        let now_ns = nanotime();
+        if !self.finished {
+            let now_ns = nanotime();
 
-        for value in event.value_iter() {
-            if now_ns > self.warmup {
-                let delta_ns = now_ns - event.ingest_ns;
-                if let Ok(bufs) = event_serializer.serialize(value, event.ingest_ns) {
-                    self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
-                } else {
-                    error!("failed to encode");
-                };
-                self.count += 1;
-                self.buf.clear();
-                self.delivered.record(delta_ns)?;
+            for value in event.value_iter() {
+                if now_ns > self.warmup {
+                    let delta_ns = now_ns - event.ingest_ns;
+                    if let Ok(bufs) = event_serializer.serialize(value, event.ingest_ns) {
+                        self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
+                    } else {
+                        error!("failed to encode");
+                    };
+                    self.count += 1;
+                    self.buf.clear();
+                    self.delivered.record(delta_ns)?;
+                }
             }
-        }
 
-        if !self.finished
-            && (self.stop_at.iter().any(|stop_at| now_ns >= *stop_at)
+            if self.stop_at.iter().any(|stop_at| now_ns >= *stop_at)
                 || self
                     .stop_after
                     .events
                     .iter()
-                    .any(|stop_after_events| self.count >= *stop_after_events))
-        {
-            info!("{ctx} Bench done.");
-            self.finished = true;
-            if self.structured {
-                let v = self.to_value(2);
-                v.write(&mut stdout())?;
-            } else {
-                self.write_text(stdout(), 5, 2)?;
-            }
-            let world = self.world.clone();
-            let stop_ctx = ctx.clone();
+                    .any(|stop_after_events| self.count >= *stop_after_events)
+            {
+                self.finished = true;
+                if self.structured {
+                    let v = self.to_value(2);
+                    v.write(&mut stdout())?;
+                } else {
+                    self.write_text(stdout(), 5, 2)?;
+                }
+                let world = self.world.clone();
+                let stop_ctx = ctx.clone();
+                info!("Bench done");
 
-            // this should stop the whole server process
-            // we spawn this out into another task, so we don't block the sink loop handling control plane messages
-            async_std::task::spawn(async move {
-                info!("{stop_ctx} Exiting...");
-                stop_ctx.swallow_err(
-                    world.stop(ShutdownMode::Forceful).await,
-                    "Error stopping the world",
-                );
-            });
-        };
+                // this should stop the whole server process
+                // we spawn this out into another task, so we don't block the sink loop handling control plane messages
+                async_std::task::spawn(async move {
+                    info!("{stop_ctx} Exiting...");
+                    stop_ctx.swallow_err(
+                        world.stop(ShutdownMode::Forceful).await,
+                        "Error stopping the world",
+                    );
+                });
+            };
+        }
 
         Ok(SinkReply::default())
     }
