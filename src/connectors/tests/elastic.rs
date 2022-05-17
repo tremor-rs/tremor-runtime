@@ -16,9 +16,10 @@ use std::time::{Duration, Instant};
 
 use super::{setup_for_tls, ConnectorHarness};
 use crate::connectors::impls::elastic;
+use crate::connectors::impls::http::auth::Auth;
 use crate::errors::{Error, Result};
 use async_std::path::Path;
-use elasticsearch::auth::Credentials;
+use elasticsearch::auth::{ClientCertificate, Credentials};
 use elasticsearch::cert::{Certificate, CertificateValidation};
 use elasticsearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
 use elasticsearch::{http::transport::Transport, Elasticsearch};
@@ -551,7 +552,127 @@ async fn auth_api_key() -> Result<()> {
 #[async_std::test]
 #[serial]
 async fn auth_client_cert() -> Result<()> {
-    todo!();
+    let _ = env_logger::try_init();
+    setup_for_tls();
+
+    let tests_dir = {
+        let mut tmp = Path::new(file!()).to_path_buf();
+        tmp.pop();
+        tmp.pop();
+        tmp.pop();
+        tmp.pop();
+        tmp.push("tests");
+        tmp.canonicalize().await?
+    };
+
+    let docker = clients::Cli::default();
+    let port = super::free_port::find_free_tcp_port().await?;
+    let password = "snot";
+    let image = RunnableImage::from(
+        GenericImage::new("elasticsearch", ELASTICSEARCH_VERSION)
+            .with_env_var("node.name", "snot")
+            .with_env_var("discovery.type", "single-node")
+            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
+            .with_env_var("ELASTIC_PASSWORD", password)
+            .with_env_var("xpack.security.enabled", "true")
+            .with_env_var("xpack.security.http.ssl.client_authentication", "required")
+            .with_env_var("xpack.security.http.ssl.enabled", "true")
+            .with_env_var(
+                "xpack.security.http.ssl.key",
+                "/usr/share/elasticsearch/config/certificates/localhost.key",
+            )
+            .with_env_var(
+                "xpack.security.http.ssl.certificate_authorities",
+                "/usr/share/elasticsearch/config/certificates/localhost.cert",
+            )
+            .with_env_var(
+                "xpack.security.http.ssl.certificate",
+                "/usr/share/elasticsearch/config/certificates/localhost.cert",
+            ),
+    )
+    .with_volume((
+        tests_dir.display().to_string(),
+        "/usr/share/elasticsearch/config/certificates",
+    ))
+    .with_mapped_port((port, 9200_u16));
+    let mut cafile = tests_dir.clone();
+    cafile.push("localhost.cert");
+    let mut keyfile = tests_dir.clone();
+    keyfile.push("localhost.key");
+
+    let container = docker.run(image);
+    let port = container.get_host_port(9200);
+    let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
+    let ca = async_std::fs::read_to_string(&cafile).await?;
+    let mut cert = async_std::fs::read(&cafile).await?;
+    let mut key = async_std::fs::read(&keyfile).await?;
+    key.append(&mut cert);
+    let transport = TransportBuilder::new(conn_pool)
+        .cert_validation(CertificateValidation::Full(Certificate::from_pem(
+            ca.as_bytes(),
+        )?))
+        .auth(Credentials::Certificate(ClientCertificate::Pem(key)));
+    let elastic = Elasticsearch::new(transport.build()?);
+    wait_for_es(&elastic).await?;
+
+    let index = "schmumbleglerp";
+
+    let auth_header = Auth::Basic {
+        username: "elastic".to_string(),
+        password: "snot".to_string(),
+    }
+    .as_header_value()?
+    .unwrap();
+
+    let connector_config = literal!({
+        "reconnect": {
+            "retry": {
+                "interval_ms": 1000,
+                "max_retries": 10
+            }
+        },
+        "config": {
+            "tls": {
+                "cafile": cafile.display().to_string(),
+                "cert": cafile.display().to_string(),
+                "key": keyfile.display().to_string()
+            },
+            "auth": {
+                "basic": {
+                    "username": "elastic",
+                    "password": "snot"
+                }
+            },
+            "nodes": [
+                format!("https://localhost:{port}")
+            ],
+            "index": index.to_string(),
+            // this test cannot test full PKI auth
+            // it still needs another way of authenticating the user
+            // as we don't have the required info in the certificates
+            // and enabling the PKI realm in ES requires a license :(
+            // but we can verify that if tls requires client certs, we do provide them
+            "headers": {
+                "Authorization": auth_header
+            }
+        }
+    });
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &elastic::Builder::default(),
+        &connector_config,
+    )
+    .await?;
+    let _out = harness.out().expect("No pipe connected to port OUT");
+    harness.start().await?;
+    harness.wait_for_connected().await?;
+    harness.consume_initial_sink_contraflow().await?;
+
+    send_one_event(&harness).await?;
+
+    let (_out, err) = harness.stop().await?;
+    assert!(err.is_empty());
+    Ok(())
 }
 
 #[async_std::test]

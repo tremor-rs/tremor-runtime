@@ -41,7 +41,7 @@ pub(crate) struct Config {
     #[serde(default = "Default::default")]
     pub(super) url: Url,
     /// Authorization method
-    #[serde(default = "default_auth")]
+    #[serde(default = "Default::default")]
     pub(super) auth: Auth,
     /// Concurrency capacity limits ( in flight requests )
     #[serde(default = "default_concurrency")]
@@ -71,10 +71,6 @@ fn default_concurrency() -> usize {
 
 fn default_method() -> Method {
     Method::Post
-}
-
-fn default_auth() -> Auth {
-    Auth::None
 }
 
 // for new
