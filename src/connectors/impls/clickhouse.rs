@@ -209,6 +209,12 @@ enum DummySqlType {
     UInt64,
     String,
 
+    #[serde(rename = "IPv4")]
+    Ipv4,
+    #[serde(rename = "IPv6")]
+    Ipv6,
+    #[serde(rename = "UUID")]
+    Uuid,
     // TODO: rename to Ipv4 (considered as Rust idiomatic) and use
     // #[serde(rename(...))]
     IPv4,
@@ -224,9 +230,9 @@ impl fmt::Display for DummySqlType {
             DummySqlType::Int64 => write!(f, "Int64"),
             DummySqlType::UInt64 => write!(f, "UInt64"),
             DummySqlType::String => write!(f, "String"),
-            DummySqlType::IPv4 => write!(f, "IPv4"),
-            DummySqlType::IPv6 => write!(f, "IPv6"),
-            DummySqlType::UUID => write!(f, "UUID"),
+            DummySqlType::Ipv4 => write!(f, "IPv4"),
+            DummySqlType::Ipv6 => write!(f, "IPv6"),
+            DummySqlType::Uuid => write!(f, "UUID"),
         }
     }
 }
@@ -257,9 +263,9 @@ impl Into<&'static SqlType> for &DummySqlType {
             DummySqlType::Int64 => SqlType::Int64,
             DummySqlType::UInt64 => SqlType::UInt64,
             DummySqlType::String => SqlType::String,
-            DummySqlType::IPv4 => SqlType::Ipv4,
-            DummySqlType::IPv6 => SqlType::Ipv6,
-            DummySqlType::UUID => SqlType::Uuid,
+            DummySqlType::Ipv4 => SqlType::Ipv4,
+            DummySqlType::Ipv6 => SqlType::Ipv6,
+            DummySqlType::Uuid => SqlType::Uuid,
         };
 
         // This sounds like pure magic - and it actually is.
