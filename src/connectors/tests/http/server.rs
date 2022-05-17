@@ -385,6 +385,8 @@ async fn https_server_test() -> Result<()> {
     let tls_config = tls_client_config(&TLSClientConfig {
         cafile: Some(PathBuf::from_str(cert_file).unwrap()),
         domain: Some("localhost".to_string()),
+        cert: None,
+        key: None,
     })
     .await?;
     config = config.set_tls_config(Some(Arc::new(tls_config)));
