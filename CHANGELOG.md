@@ -1,10 +1,21 @@
 # Changelog
 
-# Unreleased
+## Unreleased
+
+### Fixes
+
+- Fix a one-off error in the `bench` connector leading to it producing one event too much
+
+## [0.12.0-rc.7]
 
 ### Fixes
 
 - Properly terminate after `tremor run ...`
+- Fix the `bench` connector to actually stop after the given amount of events when `iters` is configured.
+
+### New features
+
+- Support `elastic.raw_payload` for `update`
 
 ## [0.12.0-rc.6]
 

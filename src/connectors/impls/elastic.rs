@@ -564,10 +564,13 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                 let mut op = self
                     .get_id()
                     .map(|id| {
-                        BulkOperation::update(
-                            id,
-                            literal!({ "doc": data.clone_static() }), // TODO: find a way to not .clone_static()
-                        )
+                        // TODO: find a way to not .clone_static()
+                        let src = if self.get_raw_payload() {
+                            data.clone_static()
+                        } else {
+                            literal!({ "doc": data.clone_static() })
+                        };
+                        BulkOperation::update(id, src)
                     })
                     .ok_or_else(|| Error::from(Self::MISSING_ID))?;
                 if let Some(index) = self.get_index() {
@@ -634,6 +637,10 @@ impl<'a, 'value> ESMeta<'a, 'value> {
 
     fn get_action(&self) -> Option<&str> {
         self.meta.get_str("action")
+    }
+
+    fn get_raw_payload(&self) -> bool {
+        self.meta.get_bool("raw_payload").unwrap_or_default()
     }
 
     /// supported values: `true`, `false`, `"wait_for"`

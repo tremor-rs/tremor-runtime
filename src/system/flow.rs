@@ -214,10 +214,16 @@ impl Flow {
                 ast::CreateTargetDefinition::Connector(defn) => {
                     let mut defn = defn.clone();
                     defn.params.ingest_creational_with(&create.with)?;
-                    let connector = crate::Connector::from_defn(&defn)?;
+                    let config = crate::Connector::from_defn(&defn)?;
+                    let builder =
+                        known_connectors
+                            .get(&config.connector_type)
+                            .ok_or_else(|| {
+                                ErrorKind::UnknownConnectorType(config.connector_type.to_string())
+                            })?;
                     connectors.insert(
                         ConnectorAlias::from(alias),
-                        connectors::spawn(alias, connector_id_gen, known_connectors, connector)
+                        connectors::spawn(alias, connector_id_gen, builder.as_ref(), config)
                             .await?,
                     );
                 }

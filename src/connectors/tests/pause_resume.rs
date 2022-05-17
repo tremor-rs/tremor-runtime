@@ -15,7 +15,14 @@
 use std::time::Duration;
 
 use super::ConnectorHarness;
-use crate::{connectors::source::SourceMsg, errors::Result, instance::State};
+use crate::{
+    connectors::{
+        impls::{tcp, udp},
+        source::SourceMsg,
+    },
+    errors::Result,
+    instance::State,
+};
 use async_std::{
     channel::bounded,
     io::WriteExt,
@@ -45,7 +52,8 @@ async fn udp_pause_resume() -> Result<()> {
       }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), "udp_server", &defn).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), &udp::server::Builder::default(), &defn).await?;
 
     let out_pipeline = harness
         .out()
@@ -143,7 +151,8 @@ async fn tcp_server_pause_resume() -> Result<()> {
           "buf_size": 4096
       }
     });
-    let harness = ConnectorHarness::new(function_name!(), "tcp_server", &defn).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), &tcp::server::Builder::default(), &defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of tcp_server connector");

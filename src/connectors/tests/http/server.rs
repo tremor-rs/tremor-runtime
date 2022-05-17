@@ -19,6 +19,7 @@ use std::{
 // limitations under the License.
 use crate::{
     connectors::{
+        impls::http::server,
         sink::SinkMsg,
         tests::{free_port, setup_for_tls, ConnectorHarness},
         utils::tls::{tls_client_config, TLSClientConfig},
@@ -87,7 +88,8 @@ async fn http_server_test() -> Result<()> {
             "url": url.clone()
         }
     });
-    let connector = ConnectorHarness::new(function_name!(), "http_server", &defn).await?;
+    let connector =
+        ConnectorHarness::new(function_name!(), &server::Builder::default(), &defn).await?;
     connector.start().await?;
     connector.wait_for_connected().await?;
 
@@ -339,7 +341,8 @@ async fn https_server_test() -> Result<()> {
             }
         }
     });
-    let connector = ConnectorHarness::new(function_name!(), "http_server", &defn).await?;
+    let connector =
+        ConnectorHarness::new(function_name!(), &server::Builder::default(), &defn).await?;
     connector.start().await?;
     connector.wait_for_connected().await?;
     let out = connector

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::ConnectorHarness;
-use crate::errors::Result;
+use crate::{connectors::impls::crononome, errors::Result};
 use tremor_value::prelude::*;
 
 #[async_std::test]
@@ -30,7 +30,8 @@ async fn connector_crononome_routing() -> Result<()> {
       },
     });
 
-    let harness = ConnectorHarness::new(function_name!(), "crononome", &defn).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), &crononome::Builder::default(), &defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'in' port of ws_server connector");

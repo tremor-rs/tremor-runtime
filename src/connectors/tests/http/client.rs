@@ -14,6 +14,7 @@
 
 use crate::{
     connectors::{
+        impls::http,
         prelude::Url,
         tests::{free_port::find_free_tcp_port, setup_for_tls, ConnectorHarness},
         utils::url::HttpDefaults,
@@ -141,7 +142,8 @@ async fn rtt(
 
     let mut fake = TestHttpServer::new(url.clone()).await?;
 
-    let harness = ConnectorHarness::new(function_name!(), "http_client", &defn).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), &http::client::Builder::default(), &defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of connector");
@@ -635,7 +637,7 @@ async fn missing_tls_config_https() -> Result<()> {
       "codec": "influx",
     });
     let id = function_name!();
-    let res = ConnectorHarness::new(id, "http_client", &defn)
+    let res = ConnectorHarness::new(id, &http::client::Builder::default(), &defn)
         .await
         .err()
         .unwrap();
@@ -651,7 +653,7 @@ async fn missing_config() -> Result<()> {
       "codec": "binflux",
     });
     let id = function_name!();
-    let res = ConnectorHarness::new(id, "http_client", &defn)
+    let res = ConnectorHarness::new(id, &http::client::Builder::default(), &defn)
         .await
         .err()
         .unwrap();

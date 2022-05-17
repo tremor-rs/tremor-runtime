@@ -14,6 +14,7 @@
 
 use std::time::Duration;
 
+use crate::connectors::impls::tcp;
 use crate::connectors::tests::{free_port, ConnectorHarness};
 use crate::errors::Result;
 use async_std::{io::WriteExt, net::TcpStream, prelude::*};
@@ -38,7 +39,8 @@ async fn server_event_routing() -> Result<()> {
         "buf_size": 4096
       }
     });
-    let harness = ConnectorHarness::new(function_name!(), "tcp_server", &defn).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), &tcp::server::Builder::default(), &defn).await?;
     let out_pipeline = harness
         .out()
         .expect("No pipeline connected to 'out' port of tcp_server connector");

@@ -15,6 +15,7 @@
 use std::time::{Duration, Instant};
 
 use super::ConnectorHarness;
+use crate::connectors::impls::elastic;
 use crate::errors::{Error, Result};
 use elasticsearch::{http::transport::Transport, Elasticsearch};
 use futures::TryFutureExt;
@@ -76,7 +77,12 @@ async fn connector_elastic() -> Result<()> {
             ]
         }
     });
-    let harness = ConnectorHarness::new(function_name!(), "elastic", &connector_config).await?;
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &elastic::Builder::default(),
+        &connector_config,
+    )
+    .await?;
     let out = harness.out().expect("No pipe connected to port OUT");
     let err = harness.err().expect("No pipe connected to port ERR");
     let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
@@ -142,6 +148,71 @@ async fn connector_elastic() -> Result<()> {
                 "result": "created",
                 "_id": "123",
                 "_seq_no": 0,
+                "status": 201,
+                "_version": 1
+            }
+        }),
+        event.data.suffix().value()
+    );
+
+    // upsert
+
+    let data = literal!({
+        "doc": {
+            "field1": 13.4,
+            "field2": "strong",
+            "field3": [false, true],
+            "field4": {
+                "nested": false
+            }
+        },
+        "doc_as_upsert": true,
+    });
+    let meta = literal!({
+        "elastic": {
+            "_index": "my_index",
+            "_id": "1234",
+            "action": "update",
+            "raw_payload": true
+        },
+    });
+    let event_not_batched = Event {
+        id: EventId::default(),
+        data: (data, meta).into(),
+        transactional: false,
+        ..Event::default()
+    };
+    harness.send_to_sink(event_not_batched, IN).await?;
+    let err_events = err.get_events()?;
+    assert!(err_events.is_empty(), "Received err msgs: {:?}", err_events);
+    let event = out.get_event().await?;
+    assert_eq!(
+        &literal!({
+            "elastic": {
+                "_id": "1234",
+                "_index": "my_index",
+                "_type": "_doc",
+                "version": 1,
+                "action": "update",
+                "success": true
+            },
+        }),
+        event.data.suffix().meta()
+    );
+    assert_eq!(
+        &literal!({
+            "update": {
+                "_primary_term": 1,
+                "_shards": {
+                    "total": 2,
+                    "successful": 1,
+                    "failed": 0,
+                },
+                "_type": "_doc",
+                "_index": "my_index",
+                "result": "created",
+                "_id": "1234",
+                "_seq_no": 1,
                 "status": 201,
                 "_version": 1
             }
@@ -238,7 +309,7 @@ async fn connector_elastic() -> Result<()> {
                 "_type": "_doc",
                 "_index": "my_index",
                 "result": "created",
-                "_seq_no": 1,
+                "_seq_no": 2,
                 "status": 201,
                 "_version": 1
             }
