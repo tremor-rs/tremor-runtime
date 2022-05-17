@@ -18,6 +18,7 @@ use std::{
     sync::Arc,
 };
 
+use chrono_tz::Tz;
 pub(super) use clickhouse_rs::types::Value as CValue;
 use either::Either;
 use simd_json::{StaticNode, Value, ValueAccess};
@@ -26,6 +27,8 @@ use uuid::Uuid;
 
 use super::DummySqlType;
 use crate::errors::{Error, ErrorKind, Result};
+
+const UTC: Tz = Tz::UTC;
 
 pub(super) fn convert_value(
     column_name: &str,
@@ -47,6 +50,28 @@ pub(super) fn convert_value(
                 // Not much to say here.
                 (StaticNode::U64(v), DummySqlType::UInt64) => Ok(CValue::UInt64(*v)),
                 (StaticNode::I64(v), DummySqlType::Int64) => Ok(CValue::Int64(*v)),
+
+                (StaticNode::U64(v), DummySqlType::DateTime) => {
+                    Ok(CValue::DateTime(u32::try_from(*v)?, UTC))
+                }
+
+                // TODO: this is slightly wrong
+                //
+                // (actually more than *slightly* but don't tell my boss)
+                // We should use `as_*` functions, which will attempt to cast
+                // things.
+                (StaticNode::U64(v), DummySqlType::DateTime64Secs) => {
+                    Ok(CValue::DateTime64(*v as i64, (0, UTC)))
+                }
+                (StaticNode::U64(v), DummySqlType::DateTime64Millis) => {
+                    Ok(CValue::DateTime64(*v as i64, (3, UTC)))
+                }
+                (StaticNode::U64(v), DummySqlType::DateTime64Micros) => {
+                    Ok(CValue::DateTime64(*v as i64, (6, UTC)))
+                }
+                (StaticNode::U64(v), DummySqlType::DateTime64Nanos) => {
+                    Ok(CValue::DateTime64(*v as i64, (9, UTC)))
+                }
 
                 // Booleans can be converted to integers (true = 1, false = 0).
                 (StaticNode::Bool(b), DummySqlType::UInt64) => Ok(CValue::UInt64(u64::from(*b))),
@@ -292,6 +317,40 @@ mod tests {
                 0x40,
                 0x00
             ])
+        }
+    }
+
+    const TIMESTAMP_32: u32 = 1652790383;
+    const TIMESTAMP_U64: u64 = 1652790383;
+    const TIMESTAMP_I64: i64 = 1652790383;
+
+    test_value_conversion! {
+        datetime32 {
+            json! { TIMESTAMP_32 }, DummySqlType::DateTime => CValue::DateTime(TIMESTAMP_32, UTC),
+        }
+    }
+
+    test_value_conversion! {
+        datetime64_secs {
+            json! { TIMESTAMP_U64 }, DummySqlType::DateTime64Secs => CValue::DateTime64(TIMESTAMP_I64, (0, UTC)),
+        }
+    }
+
+    test_value_conversion! {
+        datetime64_millis {
+            json! { TIMESTAMP_U64 }, DummySqlType::DateTime64Millis => CValue::DateTime64(TIMESTAMP_I64, (3, UTC)),
+        }
+    }
+
+    test_value_conversion! {
+        datetime64_micros {
+            json! { TIMESTAMP_U64 }, DummySqlType::DateTime64Micros => CValue::DateTime64(TIMESTAMP_I64, (6, UTC)),
+        }
+    }
+
+    test_value_conversion! {
+        datetime64_nanos {
+            json! { TIMESTAMP_U64 }, DummySqlType::DateTime64Nanos => CValue::DateTime64(TIMESTAMP_I64, (9, UTC)),
         }
     }
 

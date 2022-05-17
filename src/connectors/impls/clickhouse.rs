@@ -18,7 +18,10 @@ use std::fmt::{self, Display, Formatter};
 
 use crate::connectors::{prelude::*, utils::url::ClickHouseDefaults};
 
-use clickhouse_rs::{types::SqlType, Block, Pool};
+use clickhouse_rs::{
+    types::{DateTimeType, SqlType},
+    Block, Pool,
+};
 use either::Either;
 
 #[derive(Default, Debug)]
@@ -215,11 +218,19 @@ enum DummySqlType {
     Ipv6,
     #[serde(rename = "UUID")]
     Uuid,
-    // TODO: rename to Ipv4 (considered as Rust idiomatic) and use
-    // #[serde(rename(...))]
-    IPv4,
-    IPv6,
-    UUID,
+
+    DateTime,
+
+    // The following three variants allow us to get more control of how much
+    // precision is needed.
+    #[serde(rename = "DateTime64(0)")]
+    DateTime64Secs,
+    #[serde(rename = "DateTime64(3)")]
+    DateTime64Millis,
+    #[serde(rename = "DateTime64(6)")]
+    DateTime64Micros,
+    #[serde(rename = "DateTime64(9)")]
+    DateTime64Nanos,
 }
 
 impl fmt::Display for DummySqlType {
@@ -233,6 +244,11 @@ impl fmt::Display for DummySqlType {
             DummySqlType::Ipv4 => write!(f, "IPv4"),
             DummySqlType::Ipv6 => write!(f, "IPv6"),
             DummySqlType::Uuid => write!(f, "UUID"),
+            DummySqlType::DateTime => write!(f, "DateTime"),
+            DummySqlType::DateTime64Secs => write!(f, "DateTime64(0)"),
+            DummySqlType::DateTime64Millis => write!(f, "DateTime64(3)"),
+            DummySqlType::DateTime64Micros => write!(f, "DateTime64(6)"),
+            DummySqlType::DateTime64Nanos => write!(f, "DateTime64(9)"),
         }
     }
 }
@@ -266,6 +282,19 @@ impl Into<&'static SqlType> for &DummySqlType {
             DummySqlType::Ipv4 => SqlType::Ipv4,
             DummySqlType::Ipv6 => SqlType::Ipv6,
             DummySqlType::Uuid => SqlType::Uuid,
+            DummySqlType::DateTime => SqlType::DateTime(DateTimeType::DateTime32),
+            DummySqlType::DateTime64Secs => {
+                SqlType::DateTime(DateTimeType::DateTime64(0, chrono_tz::Tz::UTC))
+            }
+            DummySqlType::DateTime64Millis => {
+                SqlType::DateTime(DateTimeType::DateTime64(3, chrono_tz::Tz::UTC))
+            }
+            DummySqlType::DateTime64Micros => {
+                SqlType::DateTime(DateTimeType::DateTime64(6, chrono_tz::Tz::UTC))
+            }
+            DummySqlType::DateTime64Nanos => {
+                SqlType::DateTime(DateTimeType::DateTime64(9, chrono_tz::Tz::UTC))
+            }
         };
 
         // This sounds like pure magic - and it actually is.
