@@ -36,7 +36,7 @@
 - fix silent swallowing of unknown fields in connector definition.
 
 ### Breaking Changes
-
+- the `tremor api` sub command in the cli has been removed.
 - the `-` is no longer a valid part of identifiers.
 - binaries now use `_` to sepoerate type names as `-` is no longer a identifier.
 
