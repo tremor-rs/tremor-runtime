@@ -232,6 +232,65 @@ mod tests {
         }
     }
 
+    test_value_conversion! {
+        ipv4_from_string {
+            json! { "127.0.0.1" }, DummySqlType::IPv4 => CValue::Ipv4([127, 0, 0, 1]),
+        }
+    }
+
+    test_value_conversion! {
+        ipv4_from_array {
+            json! { [1, 2, 3, 4] }, DummySqlType::IPv4 => CValue::Ipv4([1, 2, 3, 4]),
+        }
+    }
+
+    test_value_conversion! {
+        ipv6_from_string {
+            json! { "0000:0000:0000:0000:0000:0000:0000:0001" },
+            DummySqlType::IPv6
+            =>
+            CValue::Ipv6([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]),
+        }
+    }
+
+    test_value_conversion! {
+        ipv6_from_array {
+            json! {
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+            },
+            DummySqlType::IPv6
+            =>
+            CValue::Ipv6([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]),
+        }
+    }
+
+    test_value_conversion! {
+        uuid_from_string {
+            json! {
+                "123e4567-e89b-12d3-a456-426614174000"
+            },
+            DummySqlType::UUID
+            =>
+            CValue::Uuid([0x12,
+                0x3e,
+                0x45,
+                0x67,
+                0xe8,
+                0x9b,
+                0x12,
+                0xd3,
+                0xa4,
+                0x56,
+                0x42,
+                0x66,
+                0x14,
+                0x17,
+                0x40,
+                0x00
+            ])
+        }
+    }
+
     fn clickhouse_string_value(input: &str) -> CValue {
         CValue::String(Arc::new(input.to_string().into_bytes()))
     }
