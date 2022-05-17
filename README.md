@@ -21,9 +21,12 @@
 
 [build status]: https://github.com/tremor-rs/tremor-runtime/workflows/Tests/badge.svg
 [actions-tests]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3ATests
+[Quality Checks]: https://github.com/tremor-rs/tremor-runtime/workflows/Checks/badge.svg
 [actions-checks]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3AChecks
 [actions-license-audit]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3A%22License+audit%22
+[License Checks]: https://github.com/tremor-rs/tremor-runtime/workflows/License%20audit/badge.svg
 [actions-security-audit]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3A%22Security+audit%22
+[Security Checks]: https://github.com/tremor-rs/tremor-runtime/workflows/Security%20audit/badge.svg
 [coverage]: https://coveralls.io/repos/github/tremor-rs/tremor-runtime/badge.svg?branch=main
 [coveralls.io]: https://coveralls.io/github/tremor-rs/tremor-runtime?branch=main
 [dependabot status]: https://flat.badgen.net/github/dependabot/tremor-rs/tremor-runtime
