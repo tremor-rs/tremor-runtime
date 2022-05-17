@@ -6,6 +6,7 @@
       "run",
       "-p",
       "../before.pid",
+      "--debug-connectors",
       "-n",
       "./config.troy"
     ],

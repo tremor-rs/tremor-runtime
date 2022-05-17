@@ -1203,10 +1203,10 @@ pub(crate) async fn register_builtin_connector_types(world: &World, debug: bool)
         for builder in debug_connector_types(world) {
             world.register_builtin_connector_type(builder).await?;
         }
+        world
+            .register_builtin_connector_type(Box::new(impls::exit::Builder::new(world)))
+            .await?;
     }
-    world
-        .register_builtin_connector_type(Box::new(impls::exit::Builder::new(world)))
-        .await?;
 
     Ok(())
 }

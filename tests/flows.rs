@@ -49,7 +49,11 @@ macro_rules! test_cases {
                     file.read_to_string(&mut contents)?;
                     match parse(&contents) {
                         Ok(deployable) => {
-                            let (world, h) = World::start(WorldConfig::default()).await?;
+                            let config = WorldConfig{
+                                debug_connectors: true,
+                                ..WorldConfig::default()
+                            };
+                            let (world, h) = World::start(config).await?;
                             for flow in deployable.iter_flows() {
                                 world.start_flow(flow).await?;
                             }
