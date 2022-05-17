@@ -7,6 +7,12 @@
 - Fix detection of `*.troy` files in entrypoint.sh causing duplicate configs to be loaded when using Kubernetes.
 - Fix a one-off error in the `bench` connector leading to it producing one event too much
 
+### New features
+
+- Add full TLS support for `elastic` connector (including client certificate auth)
+- Add several auth methods for `elastic` and `HTTP` connector (Basic Auth, Api-Key, Bearer Token, ...)
+- Add support for specifying client certificates with `tls` config for `http_client` and `tcp_client` connectors.
+
 ## [0.12.0-rc.7]
 
 ### Fixes
