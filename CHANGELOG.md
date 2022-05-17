@@ -8,6 +8,7 @@
 - Fix a one-off error in the `bench` connector leading to it producing one event too much
 - Avoid acking events that failed while preprocessing or decoding using a codec.
 - Remove acknowledging events when dropped or sent to a dead end (e.g. unconnected port) as this was causing confusing and unwanted behaviour with error events
+- move EXIT connector to debug connectors to avoid shutting down tremor
 
 ### New features
 
@@ -442,6 +443,9 @@
 - Allow using err for errors in tremor run [#592](https://github.com/tremor-rs/tremor-runtime/pull/592)
 - Update to rust toolchain 1.48
 
+[0.12.0-rc.7]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.0-rc.6...v0.12.0-rc.7
+[0.12.0-rc.6]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.0-rc.5...v0.12.0-rc.6
+[0.12.0-rc.2 - 0.12.0-rc.5]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.0-rc.1...v0.12.0-rc.5
 [0.12.0-rc.1]: https://github.com/tremor-rs/tremor-runtime/compare/v0.11.12...v0.12.0-rc.1
 [0.11.12]: https://github.com/tremor-rs/tremor-runtime/compare/v0.11.10...v0.11.12
 [0.11.10]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.9...v0.11.10
@@ -461,4 +465,3 @@
 [0.9.4]:https://github.com/tremor-rs/tremor-runtime/compare/v0.9.3...v0.9.4
 [0.9.3]:https://github.com/tremor-rs/tremor-runtime/compare/v0.9.2...v0.9.3
 [0.9.2]:https://github.com/tremor-rs/tremor-runtime/compare/v0.9.1...v0.9.2
-
