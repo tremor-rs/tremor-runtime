@@ -53,7 +53,6 @@ suites:
               - USAGE
               - OPTIONS
               - SUBCOMMANDS
-              - api
               - completions
               - dbg
               - doc
