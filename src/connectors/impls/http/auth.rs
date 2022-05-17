@@ -54,7 +54,7 @@ impl Auth {
                     base64::write::EncoderStringWriter::from(&mut header_value, base64::STANDARD);
                 write!(writer, "{}:", id)?;
                 write!(writer, "{}", api_key)?;
-                let _ = writer.into_inner(); // release the reference, so header-value is accessible again
+                writer.into_inner(); // release the reference, so header-value is accessible again
                 Ok(Some(header_value))
             }
             Auth::None => Ok(None),
