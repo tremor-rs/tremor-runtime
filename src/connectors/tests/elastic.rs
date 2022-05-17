@@ -25,6 +25,7 @@ use elasticsearch::http::transport::{SingleNodeConnectionPool, TransportBuilder}
 use elasticsearch::{http::transport::Transport, Elasticsearch};
 use futures::TryFutureExt;
 use serial_test::serial;
+use testcontainers::core::WaitFor;
 use testcontainers::{clients, images::generic::GenericImage, RunnableImage};
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
@@ -602,7 +603,7 @@ async fn auth_client_cert() -> Result<()> {
 
     let container = docker.run(image);
     let port = container.get_host_port(9200);
-    let conn_pool = SingleNodeConnectionPool::new(format!("https://127.0.0.1:{port}").parse()?);
+    let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
     let ca = async_std::fs::read_to_string(&cafile).await?;
     let mut cert = async_std::fs::read(&cafile).await?;
     let mut key = async_std::fs::read(&keyfile).await?;
@@ -613,7 +614,21 @@ async fn auth_client_cert() -> Result<()> {
         )?))
         .auth(Credentials::Certificate(ClientCertificate::Pem(key)));
     let elastic = Elasticsearch::new(transport.build()?);
-    wait_for_es(&elastic).await?;
+    if let Err(e) = wait_for_es(&elastic).await {
+        let output = async_std::process::Command::new("docker")
+            .args(&["logs", container.id()])
+            .output()
+            .await?;
+        error!(
+            "ELASTICSEARCH STDERR: {}",
+            String::from_utf8_lossy(output.stdout.as_slice())
+        );
+        error!(
+            "ELASTICSEARCH STDOUT: {}",
+            String::from_utf8_lossy(output.stderr.as_slice())
+        );
+        return Err(e);
+    }
 
     let index = "schmumbleglerp";
 
@@ -644,7 +659,7 @@ async fn auth_client_cert() -> Result<()> {
                 }
             },
             "nodes": [
-                format!("https://127.0.0.1:{port}")
+                format!("https://localhost:{port}")
             ],
             "index": index.to_string(),
             // this test cannot test full PKI auth
@@ -713,7 +728,8 @@ async fn elastic_https() -> Result<()> {
             .with_env_var(
                 "xpack.security.http.ssl.certificate",
                 "/usr/share/elasticsearch/config/certificates/localhost.cert",
-            ),
+            )
+            .with_wait_for(WaitFor::message_on_stdout("[YELLOW] to [GREEN]")),
     )
     .with_volume((
         tests_dir.display().to_string(),
@@ -725,13 +741,27 @@ async fn elastic_https() -> Result<()> {
 
     let container = docker.run(image);
     let port = container.get_host_port(9200);
-    let conn_pool = SingleNodeConnectionPool::new(format!("https://127.0.0.1:{port}").parse()?);
+    let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
     let ca = async_std::fs::read_to_string(&cafile).await?;
     let transport = TransportBuilder::new(conn_pool).cert_validation(CertificateValidation::Full(
         Certificate::from_pem(ca.as_bytes())?,
     ));
     let elastic = Elasticsearch::new(transport.build()?);
-    wait_for_es(&elastic).await?;
+    if let Err(e) = wait_for_es(&elastic).await {
+        let output = async_std::process::Command::new("docker")
+            .args(&["logs", container.id()])
+            .output()
+            .await?;
+        error!(
+            "ELASTICSEARCH STDERR: {}",
+            String::from_utf8_lossy(output.stdout.as_slice())
+        );
+        error!(
+            "ELASTICSEARCH STDOUT: {}",
+            String::from_utf8_lossy(output.stderr.as_slice())
+        );
+        return Err(e);
+    }
 
     let index = "schmumbleglerp";
 
@@ -753,7 +783,7 @@ async fn elastic_https() -> Result<()> {
                 }
             },
             "nodes": [
-                format!("https://127.0.0.1:{port}")
+                format!("https://localhost:{port}")
             ],
             "index": index.to_string()
         }
