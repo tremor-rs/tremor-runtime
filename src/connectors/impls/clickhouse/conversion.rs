@@ -35,122 +35,200 @@ pub(super) fn convert_value(
     value: &TValue,
     expected_type: &DummySqlType,
 ) -> Result<CValue> {
-    if let (TValue::Static(StaticNode::Null), DummySqlType::Nullable(inner_type)) =
-        (value, expected_type)
-    {
-        // Null can be of any type, as long as it is allowed by the
-        // schema.
-        return Ok(CValue::Nullable(Either::Left(inner_type.as_ref().into())));
-    }
+    match expected_type {
+        DummySqlType::Array(expected_inner_type) => {
+            // We don't check that all elements of the array have the same type.
+            // Instead, we check that every element can be converted to the expected
+            // array type.
+            wrap_getter_error(column_name, value, ValueAccess::as_array, expected_type)?
+                .iter()
+                .map(|value| convert_value(column_name, value, expected_inner_type))
+                .collect::<Result<Vec<_>>>()
+                .map(|converted_array| {
+                    CValue::Array(
+                        expected_inner_type.as_ref().into(),
+                        Arc::new(converted_array),
+                    )
+                })
+        }
 
-    match (value, expected_type.as_non_nullable()) {
-        (TValue::Static(value), inner_type) => {
-            match (value, inner_type) {
-                // These are the *obvious* translations. No cast is required,
-                // Not much to say here.
-                (StaticNode::U64(v), DummySqlType::UInt64) => Ok(CValue::UInt64(*v)),
-                (StaticNode::I64(v), DummySqlType::Int64) => Ok(CValue::Int64(*v)),
+        DummySqlType::Nullable(expected_inner_type) if value.is_null() => {
+            // Null value (when we expect it).
+            Ok(CValue::Nullable(Either::Left(
+                expected_inner_type.as_ref().into(),
+            )))
+        }
 
-                (StaticNode::U64(v), DummySqlType::DateTime) => {
-                    Ok(CValue::DateTime(u32::try_from(*v)?, UTC))
-                }
+        DummySqlType::Nullable(expected_inner_type) => {
+            // TODO: we don't want to `?` here because the expected type it
+            // provides is incorrect.
+            let inner_value = convert_value(column_name, value, expected_inner_type)?;
+            Ok(CValue::Nullable(Either::Right(Box::new(inner_value))))
+        }
 
-                // TODO: this is slightly wrong
-                //
-                // (actually more than *slightly* but don't tell my boss)
-                // We should use `as_*` functions, which will attempt to cast
-                // things.
-                (StaticNode::U64(v), DummySqlType::DateTime64Secs) => {
-                    Ok(CValue::DateTime64(*v as i64, (0, UTC)))
-                }
-                (StaticNode::U64(v), DummySqlType::DateTime64Millis) => {
-                    Ok(CValue::DateTime64(*v as i64, (3, UTC)))
-                }
-                (StaticNode::U64(v), DummySqlType::DateTime64Micros) => {
-                    Ok(CValue::DateTime64(*v as i64, (6, UTC)))
-                }
-                (StaticNode::U64(v), DummySqlType::DateTime64Nanos) => {
-                    Ok(CValue::DateTime64(*v as i64, (9, UTC)))
-                }
+        DummySqlType::Int64 => get_and_wrap(
+            column_name,
+            value,
+            ValueAccess::as_i64,
+            CValue::Int64,
+            expected_type,
+        ),
 
-                // Booleans can be converted to integers (true = 1, false = 0).
-                (StaticNode::Bool(b), DummySqlType::UInt64) => Ok(CValue::UInt64(u64::from(*b))),
-                (StaticNode::Bool(b), DummySqlType::Int64) => Ok(CValue::Int64(i64::from(*b))),
+        DummySqlType::UInt64 => get_and_wrap(
+            column_name,
+            value,
+            |value| value.as_u64(),
+            CValue::UInt64,
+            expected_type,
+        ),
 
-                (other, _) => Err(Error::from(ErrorKind::UnexpectedEventFormat(
+        DummySqlType::String => get_and_wrap(
+            column_name,
+            value,
+            ValueAccess::as_str,
+            |s| CValue::String(Arc::new(s.as_bytes().to_vec())),
+            expected_type,
+        ),
+
+        // TODO: there's quite much duplication between Ipv4, Ipv6 and Uuid:
+        // they can all be created either from a string or from a sequence of
+        // u8. It could be a good idea to merge them.
+        DummySqlType::Ipv4 => {
+            if let Some(octets) = value.as_array() {
+                // Array of values -> Ipv4
+                coerce_octet_sequence(octets.as_slice())
+                    .map(CValue::Ipv4)
+                    .map_err(|()| Error::from(ErrorKind::MalformedIpAddr))
+            } else if let Some(string) = value.as_str() {
+                // Conversion from String
+                Ipv4Addr::from_str(string.as_ref())
+                    .map(|addr| addr.octets())
+                    .map(CValue::Ipv4)
+                    .map_err(|_| Error::from(ErrorKind::MalformedIpAddr))
+            } else {
+                Err(Error::from(ErrorKind::UnexpectedEventFormat(
                     column_name.to_string(),
                     expected_type.to_string(),
-                    other.value_type(),
-                ))),
+                    value.value_type(),
+                )))
             }
         }
 
-        // String -> String
-        (TValue::String(string), DummySqlType::String) => {
-            let content = string.as_bytes().to_vec();
-            Ok(CValue::String(Arc::new(content)))
+        DummySqlType::Ipv6 => {
+            if let Some(octets) = value.as_array() {
+                // Array of values -> Ipv6
+                coerce_octet_sequence(octets.as_slice())
+                    .map(CValue::Ipv6)
+                    .map_err(|()| Error::from(ErrorKind::MalformedIpAddr))
+            } else if let Some(string) = value.as_str() {
+                // Conversion from String
+                Ipv6Addr::from_str(string.as_ref())
+                    .map(|addr| addr.octets())
+                    .map(CValue::Ipv6)
+                    .map_err(|_| Error::from(ErrorKind::MalformedIpAddr))
+            } else {
+                Err(Error::from(ErrorKind::UnexpectedEventFormat(
+                    column_name.to_string(),
+                    expected_type.to_string(),
+                    value.value_type(),
+                )))
+            }
+        }
+        DummySqlType::Uuid => {
+            if let Some(octets) = value.as_array() {
+                // Array of values -> Uuid
+                coerce_octet_sequence(octets.as_slice())
+                    .map(CValue::Uuid)
+                    .map_err(|()| Error::from(ErrorKind::MalformedUuid))
+            } else if let Some(string) = value.as_str() {
+                // Conversion from String
+                Uuid::from_str(string.as_ref())
+                    .map(|addr| addr.into_bytes())
+                    .map(CValue::Uuid)
+                    .map_err(|_| Error::from(ErrorKind::MalformedUuid))
+            } else {
+                Err(Error::from(ErrorKind::UnexpectedEventFormat(
+                    column_name.to_string(),
+                    expected_type.to_string(),
+                    value.value_type(),
+                )))
+            }
         }
 
-        // String -> Ipv4 (parsed using std's Ipv4Addr::from_str implementation)
-        (TValue::String(string), DummySqlType::Ipv4) => Ipv4Addr::from_str(string.as_ref())
-            .map(|addr| addr.octets())
-            .map(CValue::Ipv4)
-            .map_err(|_| Error::from(ErrorKind::MalformedIpAddr)),
+        DummySqlType::DateTime => get_and_wrap(
+            column_name,
+            value,
+            ValueAccess::as_u32,
+            |timestamp| CValue::DateTime(timestamp, UTC),
+            expected_type,
+        ),
 
-        // String -> Ipv6 (parsed using std's Ipv6Addr::from_str implementation)
-        (TValue::String(string), DummySqlType::Ipv6) => Ipv6Addr::from_str(string.as_ref())
-            .map(|addr| addr.octets())
-            .map(CValue::Ipv6)
-            .map_err(|_| Error::from(ErrorKind::MalformedIpAddr)),
+        DummySqlType::DateTime64Secs => get_and_wrap(
+            column_name,
+            value,
+            ValueAccess::as_i64,
+            |timestamp| CValue::DateTime64(timestamp, (0, UTC)),
+            expected_type,
+        ),
 
-        // String -> UUID (parsed using uuid's from_str implementation)
-        (TValue::String(string), DummySqlType::Uuid) => Uuid::from_str(string.as_ref())
-            .map(Uuid::into_bytes)
-            .map(CValue::Uuid)
-            .map_err(|_| Error::from(ErrorKind::MalformedUuid)),
+        DummySqlType::DateTime64Millis => get_and_wrap(
+            column_name,
+            value,
+            ValueAccess::as_i64,
+            |timestamp| CValue::DateTime64(timestamp, (3, UTC)),
+            expected_type,
+        ),
 
-        // Array -> Array
-        //
-        // We don't check that all elements of the array have the same type.
-        // Instead, we check that every element can be converted to the expected
-        // array type.
-        (TValue::Array(values), DummySqlType::Array(expected_inner_type)) => values
-            .iter()
-            .map(|value| convert_value(column_name, value, expected_inner_type))
-            .collect::<Result<Vec<_>>>()
-            .map(|converted_array| {
-                CValue::Array(
-                    expected_inner_type.as_ref().into(),
-                    Arc::new(converted_array),
-                )
-            }),
+        DummySqlType::DateTime64Micros => get_and_wrap(
+            column_name,
+            value,
+            ValueAccess::as_i64,
+            |timestamp| CValue::DateTime64(timestamp, (6, UTC)),
+            expected_type,
+        ),
 
-        // Array -> IPv4
-        (TValue::Array(values), DummySqlType::Ipv4) => coerce_octet_sequence(values.as_slice())
-            .map(CValue::Ipv4)
-            .map_err(|()| Error::from(ErrorKind::MalformedIpAddr)),
+        DummySqlType::DateTime64Nanos => get_and_wrap(
+            column_name,
+            value,
+            ValueAccess::as_i64,
+            |timestamp| CValue::DateTime64(timestamp, (9, UTC)),
+            expected_type,
+        ),
+    }
+}
 
-        // Array -> IPv6
-        (TValue::Array(values), DummySqlType::Ipv6) => coerce_octet_sequence(values.as_slice())
-            .map(CValue::Ipv6)
-            .map_err(|()| Error::from(ErrorKind::MalformedIpAddr)),
-
-        // Array -> UUID
-        (TValue::Array(values), DummySqlType::Uuid) => coerce_octet_sequence(values.as_slice())
-            .map(CValue::Uuid)
-            .map_err(|()| Error::from(ErrorKind::MalformedUuid)),
-
-        // We don't support the Map datatype on the clickhouse side. There's a
-        // PR for that, but it's not yet merged. As a result, we can't handle
-        // Tremor Objects.
-        // https://github.com/suharev7/clickhouse-rs/pull/170
-        (other, _) => Err(Error::from(ErrorKind::UnexpectedEventFormat(
+fn wrap_getter_error<'a, 'b, F, T>(
+    column_name: &str,
+    value: &'a TValue<'b>,
+    f: F,
+    expected_type: &DummySqlType,
+) -> Result<T>
+where
+    F: FnOnce(&'a TValue<'b>) -> Option<T>,
+    T: 'a,
+{
+    f(value).ok_or_else(|| {
+        Error::from(ErrorKind::UnexpectedEventFormat(
             column_name.to_string(),
             expected_type.to_string(),
-            other.value_type(),
-        ))),
-    }
-    .map(|value| expected_type.wrap_if_nullable(value))
+            value.value_type(),
+        ))
+    })
+}
+
+fn get_and_wrap<'a, 'b, F, G, T>(
+    column_name: &str,
+    value: &'a TValue<'b>,
+    getter: F,
+    wrapper: G,
+    expected_type: &DummySqlType,
+) -> Result<CValue>
+where
+    F: FnOnce(&'a TValue<'b>) -> Option<T>,
+    G: FnOnce(T) -> CValue,
+    T: 'a,
+{
+    wrap_getter_error(column_name, value, getter, expected_type).map(wrapper)
 }
 
 fn coerce_octet_sequence<const N: usize>(values: &[TValue]) -> std::result::Result<[u8; N], ()> {
@@ -180,7 +258,7 @@ mod tests {
                 let output_type: DummySqlType = $ty;
                 let column_name = "test_column_name";
 
-                let left = convert_value(column_name, &input_value, &output_type).unwrap();
+                let left = convert_value_2(column_name, &input_value, &output_type).unwrap();
                 let right = $output;
 
                 assert_eq!(left, right);
