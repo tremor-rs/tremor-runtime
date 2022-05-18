@@ -1,0 +1,9 @@
+## Defines the main pipeline
+define pipeline main
+pipeline
+  use lib::scripts;
+
+  create script main from scripts::main;
+  select event from in into main;
+  select event from main into out
+end;
