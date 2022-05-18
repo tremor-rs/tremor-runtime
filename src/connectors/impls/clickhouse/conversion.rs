@@ -21,7 +21,7 @@ use std::{
 use chrono_tz::Tz;
 pub(super) use clickhouse_rs::types::Value as CValue;
 use either::Either;
-use simd_json::{StaticNode, Value, ValueAccess};
+use simd_json::{Value, ValueAccess};
 use tremor_value::Value as TValue;
 use uuid::Uuid;
 
@@ -258,7 +258,7 @@ mod tests {
                 let output_type: DummySqlType = $ty;
                 let column_name = "test_column_name";
 
-                let left = convert_value_2(column_name, &input_value, &output_type).unwrap();
+                let left = convert_value(column_name, &input_value, &output_type).unwrap();
                 let right = $output;
 
                 assert_eq!(left, right);
