@@ -3,7 +3,9 @@ name: cb-drop-dead-ends
 asserts:
   - source: fg.err.log
     contains:
-      - All required CB events received.
+      - "Expected CB events up to id 6."
+      - "Got acks: [6]"
+      - "Got fails: []"
   - source: fg.out.log
     contains:
       - passthrough

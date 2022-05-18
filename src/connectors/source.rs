@@ -32,6 +32,9 @@ use tremor_common::{
 };
 use tremor_script::{ast::DeployEndpoint, prelude::BaseExpr, EventPayload, ValueAndMeta};
 
+use crate::config::{
+    self, Codec as CodecConfig, Connector as ConnectorConfig, Preprocessor as PreprocessorConfig,
+};
 use crate::connectors::{
     metrics::SourceReporter,
     utils::reconnect::{Attempt, ConnectionLostNotifier},
@@ -43,13 +46,6 @@ use crate::preprocessor::{finish, make_preprocessors, preprocess, Preprocessors}
 use crate::{
     codec::{self, Codec},
     pipeline::InputTarget,
-};
-use crate::{
-    config::{
-        self, Codec as CodecConfig, Connector as ConnectorConfig,
-        Preprocessor as PreprocessorConfig,
-    },
-    log_error,
 };
 use async_std::channel::{Receiver, Sender};
 use beef::Cow;
@@ -914,15 +910,8 @@ where
                     error!("{ctx} Failed to send event to pipeline {}: {e}", &last.0);
                     send_error = true;
                 }
-            } else if event.transactional {
-                // NO PIPELINES TO SEND THE EVENT TO
-                // handle with ack if event is transactional
-                let res = self
-                    .source
-                    .ack(event.id.stream_id(), event.id.pull_id(), ctx)
-                    .await;
-                log_error!(res, "Failed to ack:{e}");
             }
+            // transactional events going nowhere are neither acked nor failed
         }
         send_error
     }
