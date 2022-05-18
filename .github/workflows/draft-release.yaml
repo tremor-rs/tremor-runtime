@@ -67,17 +67,3 @@ jobs:
           gh pr create -B main --title "Release-v${{ env.NEW }}" --body "Yay release" --label "Release"
         env:
           GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
-      # - name: Invoke workflow in tremor-www
-      #   uses: benc-uk/workflow-dispatch@v1
-      #   with:
-      #     workflow: Draft new release
-      #     repo: tremor-rs/tremor-www
-      #     token: ${{ secrets.PAT_TOKEN }}
-      #     inputs: '{ "new-version": "${{ env.RELEASE_VERSION }}"}'
-      # - name: Invoke workflow in tremor-language-server
-      #   uses: benc-uk/workflow-dispatch@v1
-      #   with:
-      #     workflow: Draft new release
-      #     repo: tremor-rs/tremor-language-server
-      #     token: ${{ secrets.PAT_TOKEN }}
-      #     inputs: '{ "new-version": "${{ env.RELEASE_VERSION }}"}'
