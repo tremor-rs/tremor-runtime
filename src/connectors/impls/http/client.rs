@@ -25,7 +25,7 @@ use tremor_common::time::nanotime;
 
 use super::auth::Auth;
 use super::meta::{extract_request_meta, extract_response_meta, HttpRequestBuilder};
-use super::utils::RequestId;
+use super::utils::{Header, RequestId};
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
 use crate::connectors::utils::mime::MimeCodecMap;
@@ -35,19 +35,13 @@ const CONNECTOR_TYPE: &str = "http_client";
 const DEFAULT_CODEC: &str = "json";
 
 #[derive(Deserialize, Debug, Clone)]
-#[serde(transparent)]
-pub(super) struct Header(
-    #[serde(with = "either::serde_untagged")] pub(super) Either<Vec<String>, String>,
-);
-
-#[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     /// Target URL
     #[serde(default = "Default::default")]
     pub(super) url: Url,
     /// Authorization method
-    #[serde(default = "default_auth")]
+    #[serde(default = "Default::default")]
     pub(super) auth: Auth,
     /// Concurrency capacity limits ( in flight requests )
     #[serde(default = "default_concurrency")]
@@ -77,10 +71,6 @@ fn default_concurrency() -> usize {
 
 fn default_method() -> Method {
     Method::Post
-}
-
-fn default_auth() -> Auth {
-    Auth::None
 }
 
 // for new

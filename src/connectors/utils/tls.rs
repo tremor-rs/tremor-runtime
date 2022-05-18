@@ -1,4 +1,4 @@
-// Copyright 2021, The Tremor Team
+// Copyright 2022, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,20 +46,37 @@ pub struct TLSServerConfig {
 #[derive(Deserialize, Debug, Default, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct TLSClientConfig {
+    /// Path to the pem-encoded certificate file of the CA to use for verifying the servers certificate
     pub(crate) cafile: Option<PathBuf>,
+    /// The DNS domain used to verify the server's certificate. If not provided the domain from the connection URL will be used.
     pub(crate) domain: Option<String>,
+    /// Path to the pem-encoded certificate (-chain) to use for TLS with client-side certificate
+    pub(crate) cert: Option<PathBuf>,
+    /// Path to the private key to use for TLS with client-side certificate
+    pub(crate) key: Option<PathBuf>,
 }
 
 /// Load the passed certificates file
 pub(crate) fn load_certs(path: &Path) -> Result<Vec<Certificate>> {
     let certfile = tremor_common::file::open(path)?;
     let mut reader = BufReader::new(certfile);
-    certs(&mut reader).map_err(|_| {
-        Error::from(ErrorKind::TLSError(format!(
-            "Invalid certificate in {}",
-            path.display()
-        )))
-    })
+    certs(&mut reader)
+        .map_err(|_| {
+            Error::from(ErrorKind::TLSError(format!(
+                "Invalid certificate in {}",
+                path.display()
+            )))
+        })
+        .and_then(|certs| {
+            if certs.is_empty() {
+                Err(Error::from(ErrorKind::TLSError(format!(
+                    "No valid TLS certificates found in {}",
+                    path.display()
+                ))))
+            } else {
+                Ok(certs)
+            }
+        })
 }
 
 /// Load the passed private key file
@@ -102,9 +119,8 @@ pub(crate) fn load_keys(path: &Path) -> Result<PrivateKey> {
 
 pub(crate) fn load_server_config(config: &TLSServerConfig) -> Result<ServerConfig> {
     let certs = load_certs(&config.cert)?;
-    certs.len();
+
     let keys = load_keys(&config.key)?;
-    keys.0.len();
 
     let mut server_config = ServerConfig::new(NoClientAuth::new());
     server_config
@@ -123,6 +139,7 @@ pub(crate) async fn tls_client_connector(config: &TLSClientConfig) -> Result<Tls
 
 pub(crate) async fn tls_client_config(tremor_config: &TLSClientConfig) -> Result<ClientConfig> {
     let mut tls_config = ClientConfig::new();
+    // load server cert verification stuff
     if let Some(cafile) = tremor_config.cafile.as_ref() {
         let file = async_std::fs::read(cafile).await?;
         let mut pem = Cursor::new(file);
@@ -135,5 +152,72 @@ pub(crate) async fn tls_client_config(tremor_config: &TLSClientConfig) -> Result
     } else {
         tls_config.root_store = SYSTEM_ROOT_CERTS.clone();
     }
+    // load client certificate stuff
+    if let (Some(cert), Some(key)) = (tremor_config.cert.as_ref(), tremor_config.key.as_ref()) {
+        let cert = load_certs(cert)?;
+        let key = load_keys(key)?;
+        tls_config.set_single_client_cert(cert, key)?;
+    }
     Ok(tls_config)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::Write;
+
+    use crate::connectors::tests::setup_for_tls;
+
+    use super::*;
+
+    #[test]
+    fn load_certs_invalid() -> Result<()> {
+        let mut file = tempfile::NamedTempFile::new()?;
+        file.write_all(b"Brueghelflinsch\n")?;
+        let path = file.into_temp_path();
+        assert!(load_certs(&path).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn load_certs_empty() -> Result<()> {
+        let file = tempfile::NamedTempFile::new()?;
+        let path = file.into_temp_path();
+        assert!(load_certs(&path).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn load_keys_invalid() -> Result<()> {
+        let mut file = tempfile::NamedTempFile::new()?;
+        file.write_all(
+            b"-----BEGIN PRIVATE KEY-----\nStrumpfenpfart\n-----END PRIVATE KEY-----\n",
+        )?;
+        let path = file.into_temp_path();
+        assert!(load_keys(&path).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn load_keys_empty() -> Result<()> {
+        let file = tempfile::NamedTempFile::new()?;
+        let path = file.into_temp_path();
+        assert!(load_keys(&path).is_err());
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn client_config() -> Result<()> {
+        setup_for_tls();
+
+        let tls_config = TLSClientConfig {
+            cafile: Some(Path::new("./tests/localhost.cert").to_path_buf()),
+            domain: Some("hostenschmirtz".to_string()),
+            cert: Some(Path::new("./tests/localhost.cert").to_path_buf()),
+            key: Some(Path::new("./tests/localhost.key").to_path_buf()),
+        };
+        let client_config = tls_client_config(&tls_config).await?;
+        assert_eq!(1, client_config.root_store.roots.len());
+        assert_eq!(true, client_config.client_auth_cert_resolver.has_certs());
+        Ok(())
+    }
 }

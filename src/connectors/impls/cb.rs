@@ -119,22 +119,18 @@ impl Connector for Cb {
 
 struct CbSink {}
 
-impl CbSink {
-    const CB: &'static str = "cb";
-}
-
 #[async_trait::async_trait()]
 impl Sink for CbSink {
     async fn on_event(
         &mut self,
         _input: &str,
         event: Event,
-        _ctx: &SinkContext,
+        ctx: &SinkContext,
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
         for (value, meta) in event.value_meta_iter() {
-            if let Some(cb) = meta.get(Self::CB).or_else(|| value.get(Self::CB)) {
+            if let Some(cb) = ctx.extract_meta(meta).or_else(|| ctx.extract_meta(value)) {
                 let cb_cmds = if let Some(array) = cb.as_array() {
                     array
                         .iter()

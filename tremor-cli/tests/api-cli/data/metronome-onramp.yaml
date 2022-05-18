@@ -1,5 +1,0 @@
-# Simple onramp for generating messages
-id: metronome
-type: metronome
-config:
-  interval: 1000

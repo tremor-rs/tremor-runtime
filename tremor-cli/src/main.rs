@@ -38,7 +38,6 @@ use tremor_common::file;
 // use tremor_runtime::errors;
 
 mod alloc;
-// mod api;
 mod completions;
 mod debug;
 mod doc;
@@ -118,6 +117,5 @@ async fn run(cli: Cli) -> Result<()> {
         Command::Dbg(d) => d.run(),
         Command::Run(r) => r.run().await,
         Command::Doc(d) => d.run(),
-        Command::Api(_) => todo!(),
     }
 }

@@ -13,38 +13,69 @@
 // limitations under the License.
 
 use std::fmt::Display;
+use std::time::Duration;
 
-use crate::connectors::prelude::*;
-use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
-use crate::errors::{Error, Kind as ErrorKind, Result};
+use crate::{
+    connectors::{
+        impls::http::utils::Header, prelude::*, sink::concurrency_cap::ConcurrencyCap,
+        utils::tls::TLSClientConfig,
+    },
+    errors::{Error, Kind as ErrorKind, Result},
+};
 use async_std::channel::{bounded, Receiver, Sender};
-use elasticsearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
-use elasticsearch::http::Url;
-use elasticsearch::params::Refresh;
-use elasticsearch::{cluster::ClusterHealthParts, BulkDeleteOperation};
-use elasticsearch::{http::response::Response, Bulk};
-use elasticsearch::{BulkOperation, BulkOperations, BulkParts, Elasticsearch};
+use either::Either;
+use elasticsearch::{
+    auth::{ClientCertificate, Credentials},
+    cert::{Certificate, CertificateValidation},
+    cluster::ClusterHealthParts,
+    http::{
+        response::Response,
+        transport::{SingleNodeConnectionPool, TransportBuilder},
+        Url,
+    },
+    params::Refresh,
+    Bulk, BulkDeleteOperation, BulkOperation, BulkOperations, BulkParts, Elasticsearch,
+};
+use halfbrown::HashMap;
 use tremor_common::time::nanotime;
 use tremor_script::utils::sorted_serialize;
 use tremor_value::value::StaticValue;
 use value_trait::Mutable;
 
+use super::http::auth::Auth;
+
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     /// list of elasticsearch cluster nodes
-    pub nodes: Vec<String>,
+    nodes: Vec<String>,
 
     /// index to write events to, can be overwritten by metadata `$elastic["_index"]`
-    pub index: Option<String>,
+    index: Option<String>,
 
     /// maximum number of parallel in-flight requests before this connector is considered fully saturated
     #[serde(default = "default_concurrency")]
-    pub concurrency: usize,
+    concurrency: usize,
 
     /// if true, ES success and error responses will contain the whole event payload they are based upon
     #[serde(default = "default_false")]
-    pub include_payload_in_response: bool,
+    include_payload_in_response: bool,
+
+    #[serde(default = "Default::default")]
+    /// custom headers to add to each request to elastic
+    headers: HashMap<String, Header>,
+
+    /// means for authenticating towards elastic
+    #[serde(default = "Default::default")]
+    auth: Auth,
+
+    /// optional tls client config
+    #[serde(with = "either::serde_untagged_optional", default = "Default::default")]
+    tls: Option<Either<TLSClientConfig, bool>>,
+
+    /// request timeout in nanoseconds for each request against elasticsearch
+    #[serde(default = "Default::default")]
+    timeout: Option<u64>,
 }
 impl ConfigImpl for Config {}
 
@@ -82,10 +113,55 @@ impl ConnectorBuilder for Builder {
                         })
                     })
                     .collect::<Result<Vec<Url>>>()?;
+                let tls_config = match config.tls.as_ref() {
+                    Some(Either::Left(tls_config)) => Some(tls_config.clone()),
+                    Some(Either::Right(true)) => Some(TLSClientConfig::default()),
+                    Some(Either::Right(false)) | None => None,
+                };
+                if tls_config.is_some() {
+                    for node_url in &node_urls {
+                        if node_url.scheme() != "https" {
+                            return Err(ErrorKind::InvalidConnectorDefinition(id.to_string(), format!("Node URL '{node_url}' needs 'https' scheme if tls is configured.")).into());
+                        }
+                    }
+                }
+                let credentials = if let Some((certfile, keyfile)) = tls_config
+                    .as_ref()
+                    .and_then(|tls| tls.cert.as_ref().zip(tls.key.as_ref()))
+                {
+                    let mut cert_chain = async_std::fs::read(certfile).await?;
+                    let mut key = async_std::fs::read(keyfile).await?;
+                    key.append(&mut cert_chain);
+                    let client_certificate = ClientCertificate::Pem(key);
+                    Some(Credentials::Certificate(client_certificate))
+                } else {
+                    match &config.auth {
+                        Auth::Basic { username, password } => {
+                            Some(Credentials::Basic(username.clone(), password.clone()))
+                        }
+                        Auth::Bearer(token) => Some(Credentials::Bearer(token.clone())),
+                        Auth::ElasticsearchApiKey { id, api_key } => {
+                            Some(Credentials::ApiKey(id.clone(), api_key.clone()))
+                        }
+                        // Gcp Auth is handled in sink connect
+                        Auth::Gcp | Auth::None => None,
+                    }
+                };
+                let cert_validation =
+                    if let Some(cafile) = tls_config.as_ref().and_then(|tls| tls.cafile.as_ref()) {
+                        let file = async_std::fs::read(cafile).await?;
+                        CertValidation::Full(file)
+                    } else if tls_config.is_some() {
+                        CertValidation::Default
+                    } else {
+                        CertValidation::None
+                    };
                 let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
                 Ok(Box::new(Elastic {
                     node_urls,
                     config,
+                    cert_validation,
+                    credentials,
                     response_tx,
                     response_rx,
                 }))
@@ -100,6 +176,8 @@ impl ConnectorBuilder for Builder {
 struct Elastic {
     node_urls: Vec<Url>,
     config: Config,
+    cert_validation: CertValidation,
+    credentials: Option<Credentials>,
     response_tx: Sender<SourceReply>,
     response_rx: Receiver<SourceReply>,
 }
@@ -130,6 +208,8 @@ impl Connector for Elastic {
             self.response_tx.clone(),
             builder.reply_tx(),
             &self.config,
+            self.credentials.clone(),
+            self.cert_validation.clone(),
         );
         builder.spawn(sink, sink_context).map(Some)
     }
@@ -194,8 +274,9 @@ struct ElasticSink {
     response_tx: Sender<SourceReply>,
     reply_tx: Sender<AsyncSinkReply>,
     concurrency_cap: ConcurrencyCap,
-    include_payload: bool,
-    default_index: Option<String>,
+    config: Config,
+    es_credentials: Option<Credentials>,
+    cert_validation: CertValidation,
     origin_uri: EventOriginUri,
 }
 
@@ -205,6 +286,8 @@ impl ElasticSink {
         response_tx: Sender<SourceReply>,
         reply_tx: Sender<AsyncSinkReply>,
         config: &Config,
+        es_credentials: Option<Credentials>,
+        cert_validation: CertValidation,
     ) -> Self {
         Self {
             node_urls,
@@ -212,8 +295,9 @@ impl ElasticSink {
             response_tx,
             reply_tx: reply_tx.clone(),
             concurrency_cap: ConcurrencyCap::new(config.concurrency, reply_tx),
-            include_payload: config.include_payload_in_response,
-            default_index: config.index.clone(),
+            config: config.clone(),
+            es_credentials,
+            cert_validation,
             origin_uri: EventOriginUri {
                 scheme: String::from("elastic"),
                 host: String::from("dummy"), // will be replaced in `on_event`
@@ -230,8 +314,43 @@ impl Sink for ElasticSink {
         let mut clients = Vec::with_capacity(self.node_urls.len());
         for node in &self.node_urls {
             let conn_pool = SingleNodeConnectionPool::new(node.clone());
-            let transport = TransportBuilder::new(conn_pool).build()?;
-            let client = Elasticsearch::new(transport);
+            let mut transport_builder = TransportBuilder::new(conn_pool).enable_meta_header(false); // no meta header, that's just overhead
+            if let Some(timeout_ns) = self.config.timeout.as_ref() {
+                let duration = Duration::from_nanos(*timeout_ns);
+                transport_builder = transport_builder.timeout(duration);
+            }
+            if !self.config.headers.is_empty() {
+                let mut headermap = reqwest::header::HeaderMap::new();
+                for (k, v) in &self.config.headers {
+                    match v {
+                        Header(Either::Left(values)) => {
+                            for value in values {
+                                headermap.append(
+                                    reqwest::header::HeaderName::from_bytes(k.as_bytes())?,
+                                    reqwest::header::HeaderValue::from_str(value.as_str())?,
+                                );
+                            }
+                        }
+                        Header(Either::Right(value)) => {
+                            headermap.append(
+                                reqwest::header::HeaderName::from_bytes(k.as_bytes())?,
+                                reqwest::header::HeaderValue::from_str(value.as_str())?,
+                            );
+                        }
+                    }
+                }
+                transport_builder = transport_builder.headers(headermap);
+            }
+            // client auth credentials
+            if let Some(credentials) = self.es_credentials.as_ref() {
+                transport_builder = transport_builder.auth(credentials.clone());
+            }
+            // server certificate validation
+            if let Some(cert_validation) = self.cert_validation.as_certificate_validation()? {
+                transport_builder = transport_builder.cert_validation(cert_validation);
+            }
+
+            let client = Elasticsearch::new(transport_builder.build()?);
             // we use the cluster health endpoint, as the ping endpoint is not reliable
             let res = client
                 .cluster()
@@ -278,10 +397,10 @@ impl Sink for ElasticSink {
             // create task for awaiting the sending and handling the response
             let response_tx = self.response_tx.clone();
             let reply_tx = self.reply_tx.clone();
-            let include_payload = self.include_payload;
+            let include_payload = self.config.include_payload_in_response;
             let mut origin_uri = self.origin_uri.clone();
             origin_uri.host = client.cluster_name;
-            let default_index = self.default_index.clone();
+            let default_index = self.config.index.clone();
             let task_ctx = ctx.clone();
             async_std::task::Builder::new()
                 .name(format!(
@@ -357,7 +476,7 @@ impl Sink for ElasticSink {
                 &self.origin_uri,
                 &self.response_tx,
                 &self.reply_tx,
-                self.include_payload,
+                self.config.include_payload_in_response,
             )
             .await?;
         }
@@ -713,5 +832,28 @@ mod tests {
                 .to_string()
         );
         Ok(())
+    }
+}
+
+/// stupid hack around non-clonability of `CertificateValidation`
+#[derive(Debug, Clone)]
+enum CertValidation {
+    Default,
+    Full(Vec<u8>),
+    None,
+}
+
+impl CertValidation {
+    fn as_certificate_validation(&self) -> Result<Option<CertificateValidation>> {
+        let res = match self {
+            Self::Default => Some(CertificateValidation::Default),
+            Self::Full(data) => {
+                let cert = Certificate::from_pem(data.as_slice())
+                    .or_else(|_| Certificate::from_der(data.as_slice()))?;
+                Some(CertificateValidation::Full(cert))
+            }
+            Self::None => None,
+        };
+        Ok(res)
     }
 }

@@ -4,7 +4,14 @@
 
 ### Fixes
 
+- Fix detection of `*.troy` files in entrypoint.sh causing duplicate configs to be loaded when using Kubernetes.
 - Fix a one-off error in the `bench` connector leading to it producing one event too much
+
+### New features
+
+- Add full TLS support for `elastic` connector (including client certificate auth)
+- Add several auth methods for `elastic` and `HTTP` connector (Basic Auth, Api-Key, Bearer Token, ...)
+- Add support for specifying client certificates with `tls` config for `http_client` and `tcp_client` connectors.
 
 ## [0.12.0-rc.7]
 
@@ -35,7 +42,7 @@
 - fix silent swallowing of unknown fields in connector definition.
 
 ### Breaking Changes
-
+- the `tremor api` sub command in the cli has been removed.
 - the `-` is no longer a valid part of identifiers.
 - binaries now use `_` to sepoerate type names as `-` is no longer a identifier.
 

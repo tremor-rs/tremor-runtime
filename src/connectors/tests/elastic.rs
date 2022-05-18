@@ -1,4 +1,4 @@
-// Copyright 2021, The Tremor Team
+// Copyright 2022, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,20 +14,28 @@
 
 use std::time::{Duration, Instant};
 
-use super::ConnectorHarness;
+use super::{setup_for_tls, ConnectorHarness};
 use crate::connectors::impls::elastic;
+use crate::connectors::impls::http::auth::Auth;
 use crate::errors::{Error, Result};
+use async_std::path::Path;
+use elasticsearch::auth::{ClientCertificate, Credentials};
+use elasticsearch::cert::{Certificate, CertificateValidation};
+use elasticsearch::http::transport::{SingleNodeConnectionPool, TransportBuilder};
 use elasticsearch::{http::transport::Transport, Elasticsearch};
 use futures::TryFutureExt;
+use serial_test::serial;
+use testcontainers::core::WaitFor;
 use testcontainers::{clients, images::generic::GenericImage, RunnableImage};
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value::StaticValue};
 use value_trait::{Mutable, Value, ValueAccess};
 
-const ELASTICSEARCH_VERSION: &str = "7.17.2";
+const ELASTICSEARCH_VERSION: &str = "7.17.3";
 
 #[async_std::test]
+#[serial(elastic)]
 async fn connector_elastic() -> Result<()> {
     let _ = env_logger::try_init();
 
@@ -47,22 +55,7 @@ async fn connector_elastic() -> Result<()> {
     let elastic = Elasticsearch::new(Transport::single_node(
         format!("http://127.0.0.1:{port}").as_str(),
     )?);
-    let wait_for = Duration::from_secs(60); // that shit takes a while
-    let start = Instant::now();
-    while let Err(e) = elastic
-        .cluster()
-        .health(elasticsearch::cluster::ClusterHealthParts::None)
-        .send()
-        .and_then(|r| r.json::<StaticValue>())
-        .await
-    {
-        if start.elapsed() > wait_for {
-            return Err(
-                Error::from(e).chain_err(|| "Waiting for elasticsearch container timed out.")
-            );
-        }
-        async_std::task::sleep(Duration::from_secs(1)).await;
-    }
+    wait_for_es(&elastic).await?;
 
     let connector_config = literal!({
         "reconnect": {
@@ -413,5 +406,513 @@ async fn connector_elastic() -> Result<()> {
     // will rm the container
     drop(container);
 
+    Ok(())
+}
+
+#[async_std::test]
+#[serial]
+async fn auth_basic() -> Result<()> {
+    let _ = env_logger::try_init();
+    let docker = clients::Cli::default();
+    let port = super::free_port::find_free_tcp_port().await?;
+    let password = "snot";
+    let image = RunnableImage::from(
+        GenericImage::new("elasticsearch", ELASTICSEARCH_VERSION)
+            .with_env_var("discovery.type", "single-node")
+            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
+            .with_env_var("ELASTIC_PASSWORD", password)
+            .with_env_var("xpack.security.enabled", "true"),
+    )
+    .with_mapped_port((port, 9200_u16));
+
+    let container = docker.run(image);
+    let port = container.get_host_port(9200);
+    let conn_pool = SingleNodeConnectionPool::new(format!("http://127.0.0.1:{port}").parse()?);
+    let transport = TransportBuilder::new(conn_pool).auth(Credentials::Basic(
+        "elastic".to_string(),
+        password.to_string(),
+    ));
+    let elastic = Elasticsearch::new(transport.build()?);
+    wait_for_es(&elastic).await?;
+    let index = "burngrain";
+
+    let connector_config = literal!({
+        "reconnect": {
+            "retry": {
+                "interval_ms": 1000,
+                "max_retries": 10
+            }
+        },
+        "config": {
+            "auth": {
+                "basic": {
+                    "username": "elastic",
+                    "password": password.to_string()
+                }
+            },
+            "nodes": [
+                format!("http://127.0.0.1:{port}")
+            ],
+            "index": index.to_string()
+        }
+    });
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &elastic::Builder::default(),
+        &connector_config,
+    )
+    .await?;
+    harness.start().await?;
+    harness.wait_for_connected().await?;
+    harness.consume_initial_sink_contraflow().await?;
+
+    send_one_event(&harness).await?;
+
+    let (_out, err) = harness.stop().await?;
+    assert!(err.is_empty());
+    Ok(())
+}
+
+#[async_std::test]
+#[serial]
+async fn auth_api_key() -> Result<()> {
+    let _ = env_logger::try_init();
+    let docker = clients::Cli::default();
+    let port = super::free_port::find_free_tcp_port().await?;
+    let password = "snot";
+    let image = RunnableImage::from(
+        GenericImage::new("elasticsearch", ELASTICSEARCH_VERSION)
+            .with_env_var("discovery.type", "single-node")
+            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
+            .with_env_var("ELASTIC_PASSWORD", password)
+            .with_env_var("xpack.security.enabled", "true")
+            .with_env_var("xpack.security.authc.api_key.enabled", "true"),
+    )
+    .with_mapped_port((port, 9200_u16));
+
+    let container = docker.run(image);
+    let port = container.get_host_port(9200);
+    let conn_pool = SingleNodeConnectionPool::new(format!("http://127.0.0.1:{port}").parse()?);
+    let transport = TransportBuilder::new(conn_pool).auth(Credentials::Basic(
+        "elastic".to_string(),
+        password.to_string(),
+    ));
+    let elastic = Elasticsearch::new(transport.build()?);
+    wait_for_es(&elastic).await?;
+
+    let index = "badger";
+    let res = elastic
+        .security()
+        .create_api_key()
+        .body(literal!({
+            "name": "snot",
+            "expiration": "1d"
+        }))
+        .send()
+        .await?;
+    let json = res.json::<StaticValue>().await?.into_value();
+    let api_key_id = json.get_str("id").unwrap().to_string();
+    let api_key = json.get_str("api_key").unwrap().to_string();
+    let connector_config = literal!({
+        "reconnect": {
+            "retry": {
+                "interval_ms": 1000,
+                "max_retries": 10
+            }
+        },
+        "config": {
+            "auth": {
+                "elastic_api_key": {
+                    "id": api_key_id,
+                    "api_key": api_key
+                }
+            },
+            "nodes": [
+                format!("http://127.0.0.1:{port}")
+            ],
+            "index": index.to_string()
+        }
+    });
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &elastic::Builder::default(),
+        &connector_config,
+    )
+    .await?;
+    harness.start().await?;
+    harness.wait_for_connected().await?;
+    harness.consume_initial_sink_contraflow().await?;
+
+    send_one_event(&harness).await?;
+
+    let (_out, err) = harness.stop().await?;
+    assert!(err.is_empty());
+    Ok(())
+}
+
+#[async_std::test]
+#[serial]
+async fn auth_client_cert() -> Result<()> {
+    let _ = env_logger::try_init();
+    setup_for_tls();
+
+    let tests_dir = {
+        let mut tmp = Path::new(file!()).to_path_buf();
+        tmp.pop();
+        tmp.pop();
+        tmp.pop();
+        tmp.pop();
+        tmp.push("tests");
+        tmp.canonicalize().await?
+    };
+
+    let docker = clients::Cli::default();
+    let port = super::free_port::find_free_tcp_port().await?;
+    let password = "snot";
+    let image = RunnableImage::from(
+        GenericImage::new("elasticsearch", ELASTICSEARCH_VERSION)
+            .with_env_var("node.name", "snot")
+            .with_env_var("discovery.type", "single-node")
+            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
+            .with_env_var("ELASTIC_PASSWORD", password)
+            .with_env_var("xpack.security.enabled", "true")
+            .with_env_var("xpack.security.http.ssl.client_authentication", "required")
+            .with_env_var("xpack.security.http.ssl.enabled", "true")
+            .with_env_var(
+                "xpack.security.http.ssl.key",
+                "/usr/share/elasticsearch/config/certificates/localhost.key",
+            )
+            .with_env_var(
+                "xpack.security.http.ssl.certificate_authorities",
+                "/usr/share/elasticsearch/config/certificates/localhost.cert",
+            )
+            .with_env_var(
+                "xpack.security.http.ssl.certificate",
+                "/usr/share/elasticsearch/config/certificates/localhost.cert",
+            ),
+    )
+    .with_volume((
+        tests_dir.display().to_string(),
+        "/usr/share/elasticsearch/config/certificates",
+    ))
+    .with_mapped_port((port, 9200_u16));
+    let mut cafile = tests_dir.clone();
+    cafile.push("localhost.cert");
+    let mut keyfile = tests_dir.clone();
+    keyfile.push("localhost.key");
+
+    let container = docker.run(image);
+    let port = container.get_host_port(9200);
+    let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
+    let ca = async_std::fs::read_to_string(&cafile).await?;
+    let mut cert = async_std::fs::read(&cafile).await?;
+    let mut key = async_std::fs::read(&keyfile).await?;
+    key.append(&mut cert);
+    let transport = TransportBuilder::new(conn_pool)
+        .cert_validation(CertificateValidation::Full(Certificate::from_pem(
+            ca.as_bytes(),
+        )?))
+        .auth(Credentials::Certificate(ClientCertificate::Pem(key)));
+    let elastic = Elasticsearch::new(transport.build()?);
+    if let Err(e) = wait_for_es(&elastic).await {
+        let output = async_std::process::Command::new("docker")
+            .args(&["logs", container.id()])
+            .output()
+            .await?;
+        error!(
+            "ELASTICSEARCH STDERR: {}",
+            String::from_utf8_lossy(output.stdout.as_slice())
+        );
+        error!(
+            "ELASTICSEARCH STDOUT: {}",
+            String::from_utf8_lossy(output.stderr.as_slice())
+        );
+        return Err(e);
+    }
+
+    let index = "schmumbleglerp";
+
+    let auth_header = Auth::Basic {
+        username: "elastic".to_string(),
+        password: "snot".to_string(),
+    }
+    .as_header_value()?
+    .unwrap();
+
+    let connector_config = literal!({
+        "reconnect": {
+            "retry": {
+                "interval_ms": 1000,
+                "max_retries": 10
+            }
+        },
+        "config": {
+            "tls": {
+                "cafile": cafile.display().to_string(),
+                "cert": cafile.display().to_string(),
+                "key": keyfile.display().to_string()
+            },
+            "auth": {
+                "basic": {
+                    "username": "elastic",
+                    "password": "snot"
+                }
+            },
+            "nodes": [
+                format!("https://localhost:{port}")
+            ],
+            "index": index.to_string(),
+            // this test cannot test full PKI auth
+            // it still needs another way of authenticating the user
+            // as we don't have the required info in the certificates
+            // and enabling the PKI realm in ES requires a license :(
+            // but we can verify that if tls requires client certs, we do provide them
+            "headers": {
+                "Authorization": auth_header
+            }
+        }
+    });
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &elastic::Builder::default(),
+        &connector_config,
+    )
+    .await?;
+    let _out = harness.out().expect("No pipe connected to port OUT");
+    harness.start().await?;
+    harness.wait_for_connected().await?;
+    harness.consume_initial_sink_contraflow().await?;
+
+    send_one_event(&harness).await?;
+
+    let (_out, err) = harness.stop().await?;
+    assert!(err.is_empty());
+    Ok(())
+}
+
+#[async_std::test]
+#[serial]
+async fn elastic_https() -> Result<()> {
+    let _ = env_logger::try_init();
+    setup_for_tls();
+
+    let tests_dir = {
+        let mut tmp = Path::new(file!()).to_path_buf();
+        tmp.pop();
+        tmp.pop();
+        tmp.pop();
+        tmp.pop();
+        tmp.push("tests");
+        tmp.canonicalize().await?
+    };
+
+    let docker = clients::Cli::default();
+    let port = super::free_port::find_free_tcp_port().await?;
+    let password = "snot";
+    let image = RunnableImage::from(
+        GenericImage::new("elasticsearch", ELASTICSEARCH_VERSION)
+            .with_env_var("node.name", "snot")
+            .with_env_var("discovery.type", "single-node")
+            .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
+            .with_env_var("ELASTIC_PASSWORD", password)
+            .with_env_var("xpack.security.enabled", "true")
+            .with_env_var("xpack.security.http.ssl.enabled", "true")
+            .with_env_var(
+                "xpack.security.http.ssl.key",
+                "/usr/share/elasticsearch/config/certificates/localhost.key",
+            )
+            .with_env_var(
+                "xpack.security.http.ssl.certificate_authorities",
+                "/usr/share/elasticsearch/config/certificates/localhost.cert",
+            )
+            .with_env_var(
+                "xpack.security.http.ssl.certificate",
+                "/usr/share/elasticsearch/config/certificates/localhost.cert",
+            )
+            .with_wait_for(WaitFor::message_on_stdout("[YELLOW] to [GREEN]")),
+    )
+    .with_volume((
+        tests_dir.display().to_string(),
+        "/usr/share/elasticsearch/config/certificates",
+    ))
+    .with_mapped_port((port, 9200_u16));
+    let mut cafile = tests_dir.clone();
+    cafile.push("localhost.cert");
+
+    let container = docker.run(image);
+    let port = container.get_host_port(9200);
+    let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
+    let ca = async_std::fs::read_to_string(&cafile).await?;
+    let transport = TransportBuilder::new(conn_pool).cert_validation(CertificateValidation::Full(
+        Certificate::from_pem(ca.as_bytes())?,
+    ));
+    let elastic = Elasticsearch::new(transport.build()?);
+    if let Err(e) = wait_for_es(&elastic).await {
+        let output = async_std::process::Command::new("docker")
+            .args(&["logs", container.id()])
+            .output()
+            .await?;
+        error!(
+            "ELASTICSEARCH STDERR: {}",
+            String::from_utf8_lossy(output.stdout.as_slice())
+        );
+        error!(
+            "ELASTICSEARCH STDOUT: {}",
+            String::from_utf8_lossy(output.stderr.as_slice())
+        );
+        return Err(e);
+    }
+
+    let index = "schmumbleglerp";
+
+    let connector_config = literal!({
+        "reconnect": {
+            "retry": {
+                "interval_ms": 1000,
+                "max_retries": 10
+            }
+        },
+        "config": {
+            "tls": {
+                "cafile": cafile.display().to_string(),
+            },
+            "auth": {
+                "basic": {
+                    "username": "elastic",
+                    "password": "snot"
+                }
+            },
+            "timeout": Duration::from_secs(10).as_nanos() as u64,
+            "headers": {
+                "x-custom": ["schmonglefoobs"]
+            },
+            "nodes": [
+                format!("https://localhost:{port}")
+            ],
+            "index": index.to_string()
+        }
+    });
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &elastic::Builder::default(),
+        &connector_config,
+    )
+    .await?;
+    let _out = harness.out().expect("No pipe connected to port OUT");
+    harness.start().await?;
+    harness.wait_for_connected().await?;
+    harness.consume_initial_sink_contraflow().await?;
+
+    send_one_event(&harness).await?;
+
+    let (_out, err) = harness.stop().await?;
+    assert!(err.is_empty());
+    Ok(())
+}
+
+#[async_std::test]
+async fn elastic_https_invalid_url() -> Result<()> {
+    let connector_config = literal!({
+        "reconnect": {
+            "retry": {
+                "interval_ms": 1000,
+                "max_retries": 10
+            }
+        },
+        "config": {
+            "tls": true,
+            "nodes": [
+                format!("http://localhost:9200")
+            ],
+            "index": "schingelfrompf"
+        }
+    });
+    assert!(ConnectorHarness::new(
+        function_name!(),
+        &elastic::Builder::default(),
+        &connector_config,
+    )
+    .await
+    .is_err());
+    Ok(())
+}
+
+async fn wait_for_es(elastic: &Elasticsearch) -> Result<()> {
+    // wait for the image to be reachable
+
+    let wait_for = Duration::from_secs(60); // that shit takes a while
+    let start = Instant::now();
+    while let Err(e) = elastic
+        .cluster()
+        .health(elasticsearch::cluster::ClusterHealthParts::None)
+        .send()
+        .and_then(|r| r.json::<StaticValue>())
+        .await
+    {
+        if start.elapsed() > wait_for {
+            return Err(
+                Error::from(e).chain_err(|| "Waiting for elasticsearch container timed out.")
+            );
+        }
+        async_std::task::sleep(Duration::from_secs(1)).await;
+    }
+    Ok(())
+}
+
+async fn send_one_event(harness: &ConnectorHarness) -> Result<()> {
+    let index = "fumbleschlonz";
+    let data = literal!({"snot": "badger"});
+    let meta = literal!({
+        "elastic": {
+            "_index": index.to_string(),
+            "_id": "snot",
+            "action": "index"
+        },
+        "correlation": 42
+    });
+    let event = Event {
+        data: (data, meta).into(),
+        ..Event::default()
+    };
+    harness.send_to_sink(event, IN).await?;
+    let success_event = harness
+        .out()
+        .expect("NO pipeline connected to port OUT")
+        .get_event()
+        .await?;
+    assert_eq!(
+        &literal!({
+            "index": {
+                "_primary_term": 1,
+                "_shards": {
+                    "total": 2,
+                    "successful": 1,
+                    "failed": 0
+                },
+                "_type": "_doc",
+                "_index": index,
+                "result": "created",
+                "_id": "snot",
+                "_seq_no": 0,
+                "status": 201,
+                "_version": 1
+            }
+        }),
+        success_event.data.suffix().value()
+    );
+    assert_eq!(
+        &literal!({
+            "elastic": {
+                "_id": "snot",
+                "_index": index,
+                "_type": "_doc",
+                "version": 1,
+                "action": "index",
+                "success": true
+            },
+            "correlation": 42
+        }),
+        success_event.data.suffix().meta()
+    );
     Ok(())
 }

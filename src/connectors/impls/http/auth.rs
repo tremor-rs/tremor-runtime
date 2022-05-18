@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::io::Write;
+
 use crate::errors::Result;
 
 /// Authorization methods
@@ -20,6 +22,10 @@ use crate::errors::Result;
 pub enum Auth {
     #[serde(alias = "basic")]
     Basic { username: String, password: String },
+    #[serde(alias = "bearer")]
+    Bearer(String),
+    #[serde(alias = "elastic_api_key")]
+    ElasticsearchApiKey { id: String, api_key: String },
     #[serde(alias = "gcp")]
     Gcp,
     #[serde(alias = "none")]
@@ -28,8 +34,8 @@ pub enum Auth {
 
 impl Auth {
     /// Prepare a HTTP autheorization header value given the auth strategy
-    pub fn header_value(&self) -> Result<Option<String>> {
-        match *self {
+    pub fn as_header_value(&self) -> Result<Option<String>> {
+        match self {
             Auth::Gcp => {
                 let t = gouth::Token::new()?;
                 Ok(Some(t.header_value()?.to_string()))
@@ -41,7 +47,61 @@ impl Auth {
                 let encoded = base64::encode(&format!("{}:{}", username, password));
                 Ok(Some(format!("Basic {}", &encoded)))
             }
+            Auth::Bearer(token) => Ok(Some(format!("Bearer {}", &token))),
+            Auth::ElasticsearchApiKey { id, api_key } => {
+                let mut header_value = "ApiKey ".to_string();
+                let mut writer =
+                    base64::write::EncoderStringWriter::from(&mut header_value, base64::STANDARD);
+                write!(writer, "{}:", id)?;
+                write!(writer, "{}", api_key)?;
+                writer.into_inner(); // release the reference, so header-value is accessible again
+                Ok(Some(header_value))
+            }
             Auth::None => Ok(None),
         }
+    }
+}
+
+impl Default for Auth {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn header_value_basic() -> Result<()> {
+        let auth = Auth::Basic {
+            username: "badger".to_string(),
+            password: "snot".to_string(),
+        };
+        assert_eq!(
+            Ok(Some("Basic YmFkZ2VyOnNub3Q=".to_string())),
+            auth.as_header_value()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn header_value_bearer() -> Result<()> {
+        let auth = Auth::Bearer("token".to_string());
+        assert_eq!(Ok(Some("Bearer token".to_string())), auth.as_header_value());
+        Ok(())
+    }
+
+    #[test]
+    fn header_value_elastic_api_key() -> Result<()> {
+        let auth = Auth::ElasticsearchApiKey {
+            id: "badger".to_string(),
+            api_key: "snot".to_string(),
+        };
+        assert_eq!(
+            Ok(Some("ApiKey YmFkZ2VyOnNub3Q=".to_string())),
+            auth.as_header_value()
+        );
+        Ok(())
     }
 }
