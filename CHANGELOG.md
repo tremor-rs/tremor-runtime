@@ -6,6 +6,8 @@
 
 - Fix detection of `*.troy` files in entrypoint.sh causing duplicate configs to be loaded when using Kubernetes.
 - Fix a one-off error in the `bench` connector leading to it producing one event too much
+- Avoid acking events that failed while preprocessing or decoding using a codec.
+- Remove acknowledging events when dropped or sent to a dead end (e.g. unconnected port) as this was causing confusing and unwanted behaviour with error events
 
 ### New features
 
