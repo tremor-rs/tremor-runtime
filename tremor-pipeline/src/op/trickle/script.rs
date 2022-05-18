@@ -62,18 +62,6 @@ impl Operator for Script {
             }
         });
 
-        Ok(if let Some(port) = port {
-            EventAndInsights {
-                events: vec![(port, event)],
-                ..EventAndInsights::default()
-            }
-        } else if event.transactional {
-            EventAndInsights {
-                insights: vec![event.insight_ack()],
-                ..EventAndInsights::default()
-            }
-        } else {
-            EventAndInsights::default()
-        })
+        Ok(port.map_or_else(EventAndInsights::default, |port| vec![(port, event)].into()))
     }
 }

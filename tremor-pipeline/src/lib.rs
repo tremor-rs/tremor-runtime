@@ -65,7 +65,7 @@ pub(crate) mod op;
 /// Tools to turn tremor query into pipelines
 pub mod query;
 pub use crate::event::{Event, ValueIter, ValueMetaIter};
-pub use crate::executable_graph::{ExecutableGraph, OperatorNode, Returns as GraphReturns};
+pub use crate::executable_graph::{ExecutableGraph, OperatorNode};
 pub(crate) use crate::executable_graph::{NodeMetrics, State};
 pub use op::{ConfigImpl, InitializableOperator, Operator};
 pub use tremor_script::prelude::EventOriginUri;

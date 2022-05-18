@@ -262,13 +262,7 @@ pub struct ExecutableGraph {
 }
 
 /// The return of a graph execution
-#[derive(Default, Debug)]
-pub struct Returns {
-    /// Resulting events
-    pub output: Vec<(Cow<'static, str>, Event)>,
-    /// Dropped events
-    pub dead_ends: Vec<Event>,
-}
+pub type Returns = Vec<(Cow<'static, str>, Event)>;
 
 impl ExecutableGraph {
     /// Tries to optimise a pipeline
@@ -461,7 +455,7 @@ impl ExecutableGraph {
                 return Err(e);
             }
         } {}
-        returns.output.reverse();
+        returns.reverse();
         Ok(())
     }
 
@@ -471,12 +465,12 @@ impl ExecutableGraph {
             // If we have emitted a signal event we got to handle it as a signal flow
             // the signal flow will
             if event.kind.is_some() {
-                stry!(self.signalflow(event, returns));
+                stry!(self.signalflow(event));
             } else {
                 // count ingres
                 let node = unsafe { self.graph.get_unchecked_mut(idx) };
                 if let NodeKind::Output(port) = &node.kind {
-                    returns.output.push((port.clone(), event));
+                    returns.push((port.clone(), event));
                 } else {
                     // ALLOW: We know the state was initiated
                     let state = unsafe { self.state.ops.get_unchecked_mut(idx) };
@@ -489,7 +483,7 @@ impl ExecutableGraph {
                     for insight in insights {
                         self.insights.push((idx, insight));
                     }
-                    self.enqueue_events(idx, events, returns);
+                    self.enqueue_events(idx, events);
                 };
             }
             Ok(!self.stack.is_empty())
@@ -542,12 +536,7 @@ impl ExecutableGraph {
     // for the connected operators to pick up.
     // If the output is not connected we register this as a dropped event
     #[inline]
-    fn enqueue_events(
-        &mut self,
-        idx: usize,
-        events: Vec<(Cow<'static, str>, Event)>,
-        returns: &mut Returns,
-    ) {
+    fn enqueue_events(&mut self, idx: usize, events: Vec<(Cow<'static, str>, Event)>) {
         for (out_port, event) in events {
             if let Some((last, rest)) = self
                 .port_indexes
@@ -561,8 +550,6 @@ impl ExecutableGraph {
                 let (idx, in_port) = last;
                 unsafe { self.metrics.get_unchecked_mut(*idx) }.inc_input(in_port);
                 self.stack.push((*idx, in_port.clone(), event));
-            } else if event.transactional {
-                returns.dead_ends.push(event);
             }
         }
     }
@@ -584,13 +571,13 @@ impl ExecutableGraph {
     /// if the singal fails to be processed in the singal flow or if any forward going
     /// events spawned by this signal fail to be processed
     pub fn enqueue_signal(&mut self, signal: Event, returns: &mut Returns) -> Result<()> {
-        if stry!(self.signalflow(signal, returns)) {
+        if stry!(self.signalflow(signal)) {
             stry!(self.run(returns));
         }
         Ok(())
     }
 
-    fn signalflow(&mut self, mut signal: Event, returns: &mut Returns) -> Result<bool> {
+    fn signalflow(&mut self, mut signal: Event) -> Result<bool> {
         let mut has_events = false;
         // We can't use an iterator over signalfow here
         // rust refuses to let us use enqueue_events if we do
@@ -604,7 +591,7 @@ impl ExecutableGraph {
             };
             self.insights.extend(insights.into_iter().map(|cf| (i, cf)));
             has_events = has_events || !events.is_empty();
-            self.enqueue_events(i, events, returns);
+            self.enqueue_events(i, events);
         }
         Ok(has_events)
     }
@@ -615,7 +602,7 @@ mod test {
     use super::*;
     use crate::{
         op::{identity::PassthroughFactory, prelude::OUT},
-        GraphReturns, METRICS_CHANNEL,
+        METRICS_CHANNEL,
     };
     use tremor_common::ids::Id;
     use tremor_script::prelude::*;
@@ -837,11 +824,10 @@ mod test {
 
         // Test with one event
         let e = Event::default();
-        let mut returns = GraphReturns::default();
+        let mut returns = vec![];
         g.enqueue("in", e, &mut returns).await.unwrap();
-        assert_eq!(returns.output.len(), 1);
-        assert_eq!(returns.dead_ends.len(), 0);
-        returns.output.clear();
+        assert_eq!(returns.len(), 1);
+        returns.clear();
 
         g.send_metrics("test-metric", HashMap::new(), 123).await;
         let mut metrics = Vec::new();
@@ -852,18 +838,16 @@ mod test {
 
         // Test with two events
         let e = Event::default();
-        let mut returns = GraphReturns::default();
+        let mut returns = vec![];
         g.enqueue("in", e, &mut returns).await.unwrap();
-        assert_eq!(returns.output.len(), 1);
-        assert_eq!(returns.dead_ends.len(), 0);
-        returns.output.clear();
+        assert_eq!(returns.len(), 1);
+        returns.clear();
 
         let e = Event::default();
-        let mut returns = GraphReturns::default();
+        let mut returns = vec![];
         g.enqueue("in", e, &mut returns).await.unwrap();
-        assert_eq!(returns.output.len(), 1);
-        assert_eq!(returns.dead_ends.len(), 0);
-        returns.output.clear();
+        assert_eq!(returns.len(), 1);
+        returns.clear();
 
         g.send_metrics("test-metric", HashMap::new(), 123).await;
         let mut metrics = Vec::new();
@@ -937,11 +921,10 @@ mod test {
         assert!(g.optimize().is_some());
         // Test with one event
         let e = Event::default();
-        let mut returns = GraphReturns::default();
+        let mut returns = vec![];
         g.enqueue("in", e, &mut returns).await.unwrap();
-        assert_eq!(returns.output.len(), 1);
-        assert_eq!(returns.dead_ends.len(), 0);
-        returns.output.clear();
+        assert_eq!(returns.len(), 1);
+        returns.clear();
 
         // check that the Input was moved from 0 to 1, skipping the input
         assert_eq!(g.inputs.len(), 1);
