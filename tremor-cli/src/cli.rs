@@ -45,6 +45,8 @@ pub(crate) enum Command {
     Run(Run),
     /// Generates documention from tremor script files
     Doc(Doc),
+    /// Creates a template tremor project
+    New { name: String },
 }
 
 /// Shell type

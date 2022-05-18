@@ -1,0 +1,2 @@
+use lib::flows;
+deploy flow main from flows::main;
