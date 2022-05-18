@@ -253,24 +253,6 @@ impl fmt::Display for DummySqlType {
     }
 }
 
-impl DummySqlType {
-    fn as_non_nullable(&self) -> &DummySqlType {
-        match self {
-            DummySqlType::Nullable(inner_type) => inner_type.as_ref(),
-            non_nullable => non_nullable,
-        }
-    }
-
-    fn wrap_if_nullable(&self, value: clickhouse_rs::types::Value) -> clickhouse_rs::types::Value {
-        match self {
-            DummySqlType::Nullable(_) => {
-                clickhouse_rs::types::Value::Nullable(Either::Right(Box::new(value)))
-            }
-            _ => value,
-        }
-    }
-}
-
 impl Into<&'static SqlType> for &DummySqlType {
     fn into(self) -> &'static SqlType {
         let non_static_type = match self {
