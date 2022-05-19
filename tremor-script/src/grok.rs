@@ -15,9 +15,12 @@
 use crate::errors::Result;
 use crate::Value;
 use grok::Grok;
-use std::io::{BufRead, BufReader};
+use std::path::Path;
 use std::str;
-use std::{collections::HashMap, path::Path};
+use std::{
+    io::{BufRead, BufReader},
+    sync::Arc,
+};
 use tremor_common::file;
 use value_trait::{Builder, Mutable};
 
@@ -25,10 +28,9 @@ const PATTERNS_FILE_TUPLE: &str = "%{NOTSPACE:alias} %{GREEDYDATA:pattern}";
 pub(crate) const PATTERNS_FILE_DEFAULT_PATH: &str = "/etc/tremor/grok.patterns";
 
 /// A GROK pattern
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Pattern {
-    pub(crate) definition: String,
-    pub(crate) pattern: grok::Pattern,
+    pub(crate) pattern: Arc<grok::Pattern>,
 }
 
 impl Pattern {
@@ -71,10 +73,8 @@ impl Pattern {
             }
         }
 
-        let p: &Path = file_path.as_ref();
         Ok(Self {
-            definition: format!("file://{}", p.as_os_str().to_string_lossy()),
-            pattern: result.compile(definition, true)?,
+            pattern: Arc::new(result.compile(definition, true)?),
         })
     }
 
@@ -82,16 +82,11 @@ impl Pattern {
     ///
     /// # Errors
     /// if the pattern can not be compiled
-    pub fn new<D>(definition: &D) -> Result<Self>
-    where
-        D: ToString,
-    {
-        let mut grok = Grok::default();
-        let definition = definition.to_string();
-        if let Ok(pattern) = grok.compile(&definition, true) {
+    pub fn new(definition: &str) -> Result<Self> {
+        let mut grok = Grok::with_patterns();
+        if let Ok(pattern) = grok.compile(definition, true) {
             Ok(Self {
-                definition,
-                pattern,
+                pattern: Arc::new(pattern),
             })
         } else {
             Err(format!("Failed to compile logstash grok pattern `{}`", definition).into())
@@ -115,17 +110,6 @@ impl Pattern {
                 Ok(o)
             }
             None => Err(format!("No match for log text: {}", &text).into()),
-        }
-    }
-}
-
-impl std::clone::Clone for Pattern {
-    fn clone(&self) -> Self {
-        #[allow(clippy::unwrap_used)]
-        Self {
-            definition: self.definition.clone(),
-            //ALLOW: since we clone we know this exists
-            pattern: grok::Pattern::new(&self.definition, &HashMap::new()).unwrap(),
         }
     }
 }
