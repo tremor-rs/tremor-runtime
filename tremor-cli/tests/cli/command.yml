@@ -199,4 +199,15 @@ suites:
               - "Error:"
               - "3 |   emit event.baz"
               - "  |              ^^^ Trying to access a non existing event key `baz`\n\n"
+      - name: tremor new creates 
+        command: tremor new test
+        tags:
+          - run
+          - new
+        status: 0
+        expects:
+          - source: stdout
+            contains:
+              - "test/main.troy"
+
 

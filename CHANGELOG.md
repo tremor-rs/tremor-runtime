@@ -15,6 +15,7 @@
 - Add full TLS support for `elastic` connector (including client certificate auth)
 - Add several auth methods for `elastic` and `HTTP` connector (Basic Auth, Api-Key, Bearer Token, ...)
 - Add support for specifying client certificates with `tls` config for `http_client` and `tcp_client` connectors.
+- Add `tremor new` to create new template projects.
 
 ## [0.12.0-rc.7]
 

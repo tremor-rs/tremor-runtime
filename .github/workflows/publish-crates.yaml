@@ -72,3 +72,28 @@ jobs:
           command: cd tremor-script && cargo publish --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
           attempt_limit: 6
           attempt_delay: 10000
+  
+  invoke-tremor-language-server:
+    needs: [publish-tremor-script]
+    name: Trigger Tremor LS release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+      - name: Find updated version
+        run: |
+          VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+          
+          echo "VER=$VERSION" >> $GITHUB_ENV 
+      - name: Invoke workflow in tremor-language-server
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: Draft new release
+          repo: tremor-rs/tremor-language-server
+          token: ${{ secrets.PAT_TOKEN }}
+          inputs: '{ "version": "${{ env.VER }}"}'

@@ -32,7 +32,7 @@ extern crate log;
 use crate::errors::Result;
 use clap::Parser;
 use cli::{Cli, Command};
-use std::fs::File;
+use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use tremor_common::file;
 // use tremor_runtime::errors;
@@ -117,5 +117,83 @@ async fn run(cli: Cli) -> Result<()> {
         Command::Dbg(d) => d.run(),
         Command::Run(r) => r.run().await,
         Command::Doc(d) => d.run(),
+        Command::New { name } => create_template(std::env::current_dir()?, &name),
+    }
+}
+
+fn create_template(mut path: PathBuf, name: &str) -> Result<()> {
+    const MAIN_TROY: &str = include_str!("_template/main.troy");
+    const FLOWS: &str = include_str!("_template/lib/flows.tremor");
+    const PIPELINES: &str = include_str!("_template/lib/pipelines.tremor");
+    const SCRIPTS: &str = include_str!("_template/lib/scripts.tremor");
+
+    print!("Creating new tremor project: `{name}`");
+    path.push(name);
+    let mut lib_path = path.clone();
+    lib_path.push("lib");
+    print!(".");
+    fs::create_dir(&path)?;
+    print!(".");
+    fs::create_dir(&lib_path)?;
+
+    let mut file_path = path.clone();
+    file_path.push("main.troy");
+    print!(".");
+    fs::write(&file_path, MAIN_TROY)?;
+
+    let mut file_path = lib_path.clone();
+    file_path.push("flows.tremor");
+    print!(".");
+    fs::write(&file_path, FLOWS)?;
+
+    let mut file_path = lib_path.clone();
+    file_path.push("pipelines.tremor");
+    print!(".");
+    fs::write(&file_path, PIPELINES)?;
+
+    let mut file_path = lib_path.clone();
+    file_path.push("scripts.tremor");
+    print!(".");
+    fs::write(&file_path, SCRIPTS)?;
+
+    println!("done.\n");
+    println!(
+        "To run:\n TREMOR_PATH=\"${{TREMOR_PATH}}:${{PWD}}/{name}\" tremor run {name}/main.troy"
+    );
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use temp_dir::TempDir;
+    #[test]
+    fn test_template() -> Result<()> {
+        let d = TempDir::new().unwrap();
+        dbg!(&d);
+        let name = "template";
+        create_template(PathBuf::from(d.path()), name)?;
+        let mut template_root = d.child(name);
+
+        let mut main = template_root.clone();
+        main.push("main.troy");
+        assert!(main.is_file());
+
+        template_root.push("lib");
+
+        let mut flows = template_root.clone();
+        flows.push("flows.tremor");
+        assert!(flows.is_file());
+
+        let mut pipelines = template_root.clone();
+        pipelines.push("pipelines.tremor");
+        assert!(pipelines.is_file());
+
+        let mut scripts = template_root.clone();
+        scripts.push("scripts.tremor");
+        assert!(scripts.is_file());
+
+        Ok(())
     }
 }

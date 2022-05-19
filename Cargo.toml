@@ -234,7 +234,7 @@ serial_test = "0.6"
 signal-hook = "0.3"
 signal-hook-async-std = "0.2"
 tempfile = { version = "3.2" }
-test-case = "2.0"
+test-case = "2.1"
 testcontainers = "0.13"
 num_cpus = "*"
 
