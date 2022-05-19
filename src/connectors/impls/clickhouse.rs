@@ -20,9 +20,8 @@ use crate::connectors::{prelude::*, utils::url::ClickHouseDefaults};
 
 use clickhouse_rs::{
     types::{DateTimeType, SqlType},
-    Block, Pool,
+    Block, ClientHandle, Pool,
 };
-use either::Either;
 
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
@@ -66,7 +65,7 @@ impl Connector for Clickhouse {
 
         let sink = ClickhouseSink {
             db_url,
-            pool: None,
+            handle: None,
             columns,
         };
         builder.spawn(sink, sink_context).map(Some)
@@ -127,7 +126,7 @@ struct Column {
 
 pub(crate) struct ClickhouseSink {
     db_url: String,
-    pool: Option<Pool>,
+    handle: Option<ClientHandle>,
     columns: Vec<(String, DummySqlType)>,
 }
 
@@ -135,7 +134,9 @@ pub(crate) struct ClickhouseSink {
 impl Sink for ClickhouseSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let pool = Pool::new(self.db_url.as_str());
-        self.pool = Some(pool);
+        let handle = pool.get_handle().await?;
+
+        self.handle = Some(handle);
 
         Ok(true)
     }
@@ -148,12 +149,10 @@ impl Sink for ClickhouseSink {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        let mut client = self
-            .pool
-            .as_ref()
-            .ok_or_else(|| Error::from(ErrorKind::NoClickHouseClientAvailable))?
-            .get_handle()
-            .await?;
+        let handle = self
+            .handle
+            .as_mut()
+            .ok_or_else(|| Error::from(ErrorKind::NoClickHouseClientAvailable))?;
 
         let (event_min_size, event_max_size) = event.value_iter().size_hint();
         let block_size_estimate = event_max_size.unwrap_or(event_min_size);
@@ -161,12 +160,12 @@ impl Sink for ClickhouseSink {
         let mut block = Block::with_capacity(block_size_estimate);
 
         for value in event.value_iter() {
-            let row = self.clickhouse_row_of(value)?;
+            let row = Self::clickhouse_row_of(&self.columns, value)?;
             block.push(row)?;
         }
 
         debug!("Inserting block:{:#?}", block);
-        client.insert("people", block).await?;
+        handle.insert("people", block).await?;
 
         Ok(SinkReply::NONE)
     }
@@ -178,7 +177,7 @@ impl Sink for ClickhouseSink {
 
 impl ClickhouseSink {
     fn clickhouse_row_of(
-        &self,
+        columns: &[(String, DummySqlType)],
         input: &tremor_value::Value,
     ) -> Result<Vec<(String, clickhouse_rs::types::Value)>> {
         let mut rslt = Vec::new();
@@ -187,7 +186,7 @@ impl ClickhouseSink {
             .as_object()
             .ok_or_else(|| Error::from(ErrorKind::ExpectedObjectEvent(input.value_type())))?;
 
-        for (column_name, expected_type) in self.columns.iter() {
+        for (column_name, expected_type) in columns.iter() {
             let cell = object.get(column_name.as_str()).ok_or_else(|| {
                 Error::from(ErrorKind::MissingEventColumn(column_name.to_string()))
             })?;
