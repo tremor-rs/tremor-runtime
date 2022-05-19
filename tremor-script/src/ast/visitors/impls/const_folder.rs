@@ -53,7 +53,7 @@ impl<'run, 'script: 'run> QueryVisitor<'script> for ConstFolder<'run, 'script> {
 impl<'run, 'script: 'run> ExprVisitor<'script> for ConstFolder<'run, 'script> {}
 
 impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script> {
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::match_same_arms)]
     fn leave_expr(&mut self, e: &mut ImutExpr<'script>) -> Result<()> {
         use ImutExpr::Literal as Lit;
         let mut buf = Lit(Literal {

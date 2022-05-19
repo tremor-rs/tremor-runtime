@@ -669,7 +669,7 @@ error_chain! {
             description("Module not found")
                 display("Module `{}` not found or not readable error in module path: {}",
                 resolved_relative_file_path.trim(),
-                expected.iter().map(|x| format!("\n                         - {}", x)).collect::<Vec<String>>().join(""))
+                expected.iter().map(|x| format!("\n                         - {}", x)).collect::<String>())
         }
 
 
