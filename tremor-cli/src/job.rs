@@ -135,8 +135,7 @@ impl TargetProcess {
             "{}{} {}",
             env.iter()
                 .map(|(k, v)| format!("{}={} ", k, v))
-                .collect::<Vec<_>>()
-                .join(""),
+                .collect::<String>(),
             cmd.to_string_lossy(),
             args.join(" ")
         );
