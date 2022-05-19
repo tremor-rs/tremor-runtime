@@ -12,7 +12,6 @@
 [![Quality Checks]][actions-checks]
 [![License Checks]][actions-license-audit]
 [![Security Checks]][actions-security-audit]
-[![Coverage]][coveralls.io]
 [![codecov]][codecov report]
 [![Dependabot Status]][dependabot status]
 [![CII Best Practices]][bestpractices]
@@ -27,8 +26,6 @@
 [License Checks]: https://github.com/tremor-rs/tremor-runtime/workflows/License%20audit/badge.svg
 [actions-security-audit]: https://github.com/tremor-rs/tremor-runtime/actions?query=workflow%3A%22Security+audit%22
 [Security Checks]: https://github.com/tremor-rs/tremor-runtime/workflows/Security%20audit/badge.svg
-[coverage]: https://coveralls.io/repos/github/tremor-rs/tremor-runtime/badge.svg?branch=main
-[coveralls.io]: https://coveralls.io/github/tremor-rs/tremor-runtime?branch=main
 [dependabot status]: https://flat.badgen.net/github/dependabot/tremor-rs/tremor-runtime
 [cii best practices]: https://bestpractices.coreinfrastructure.org/projects/4356/badge
 [bestpractices]: https://bestpractices.coreinfrastructure.org/projects/4356
