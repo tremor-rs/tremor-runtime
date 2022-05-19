@@ -16,7 +16,7 @@
 // will eventually follow a structure similar to the s3 connector.
 
 use crate::{
-    connectors::{tests::free_port, impls::clickhouse},
+    connectors::{impls::clickhouse, tests::free_port},
     errors::{Error, Result},
 };
 
@@ -55,8 +55,7 @@ async fn simple_insertion() -> Result<()> {
     };
     let image = RunnableImage::from(image).with_mapped_port(port_to_expose);
 
-    let container =
-        docker.run(image);
+    let container = docker.run(image);
 
     let container_id = container.id().to_string();
     let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
@@ -80,7 +79,8 @@ async fn simple_insertion() -> Result<()> {
         },
     });
 
-    let harness = ConnectorHarness::new("clickhouse", &clickhouse::Builder {}, &connector_config).await?;
+    let harness =
+        ConnectorHarness::new("clickhouse", &clickhouse::Builder {}, &connector_config).await?;
 
     let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
 
