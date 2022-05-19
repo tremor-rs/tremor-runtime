@@ -25,8 +25,8 @@
 //  '{blarg' -> json|| =>
 use halfbrown::{hashmap, HashMap};
 
-use crate::prelude::*;
 use crate::{datetime, grok::Pattern as GrokPattern, EventContext, Object, Value};
+use crate::{grok::PATTERNS_FILE_DEFAULT_PATH, prelude::*};
 use beef::Cow;
 use cidr_utils::{
     cidr::{IpCidr, Ipv4Cidr},
@@ -387,23 +387,11 @@ impl Extractor {
                     .map_err(|e| ExtractorError { msg: e.to_string() })?,
             },
             "grok" => {
-                if let Ok(pat) =
-                    GrokPattern::from_file(crate::grok::PATTERNS_FILE_DEFAULT_PATH, rule_text)
+                let rule = rule_text.to_string();
+                let compiled = GrokPattern::from_file(PATTERNS_FILE_DEFAULT_PATH, rule_text)
+                    .or_else(|_| GrokPattern::new(rule_text))?;
                 {
-                    Extractor::Grok {
-                        rule: rule_text.to_string(),
-                        compiled: pat,
-                    }
-                } else {
-                    let mut grok = grok::Grok::default();
-                    let pat = grok.compile(rule_text, true)?;
-                    Extractor::Grok {
-                        rule: rule_text.to_string(),
-                        compiled: GrokPattern {
-                            definition: rule_text.to_string(),
-                            pattern: pat,
-                        },
-                    }
+                    Extractor::Grok { rule, compiled }
                 }
             }
             "cidr" => {

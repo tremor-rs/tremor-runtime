@@ -9,6 +9,7 @@
 - Avoid acking events that failed while preprocessing or decoding using a codec.
 - Remove acknowledging events when dropped or sent to a dead end (e.g. unconnected port) as this was causing confusing and unwanted behaviour with error events
 - move EXIT connector to debug connectors to avoid shutting down tremor
+- Fix bug in grok extractor that would never return good matches
 
 ### New features
 
