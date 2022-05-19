@@ -16,7 +16,7 @@
 // will eventually follow a structure similar to the s3 connector.
 
 use crate::{
-    connectors::tests::free_port,
+    connectors::{tests::free_port, impls::clickhouse},
     errors::{Error, Result},
 };
 
@@ -26,7 +26,7 @@ use async_std::stream::StreamExt;
 use clickhouse_rs::Pool;
 use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook_async_std::Signals;
-use testcontainers::{clients, core::Port, images::generic::GenericImage, Docker, RunArgs};
+use testcontainers::{clients, core::Port, images::generic::GenericImage, RunnableImage};
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_script::literal;
@@ -43,8 +43,8 @@ const DB_HOST: &str = "127.0.0.1";
 async fn simple_insertion() -> Result<()> {
     let _ = env_logger::try_init();
 
-    let docker = clients::Cli::default();
-    let image = GenericImage::new(format!("{CONTAINER_NAME}:{CONTAINER_VERSION}"));
+    let docker = clients::Cli::docker();
+    let image = GenericImage::new(CONTAINER_NAME, CONTAINER_VERSION);
 
     // We want to access the container from the host, so we need to make the
     // corresponding port available.
@@ -53,20 +53,14 @@ async fn simple_insertion() -> Result<()> {
         internal: SERVER_PORT,
         local,
     };
+    let image = RunnableImage::from(image).with_mapped_port(port_to_expose);
+
     let container =
-        docker.run_with_args(image, RunArgs::default().with_mapped_port(port_to_expose));
+        docker.run(image);
 
     let container_id = container.id().to_string();
     let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
-    let signal_handle = signals.handle();
-    let signal_handler_task = async_std::task::spawn(async move {
-        let signal_docker = clients::Cli::default();
-        while let Some(_signal) = signals.next().await {
-            signal_docker.stop(container_id.as_str());
-            signal_docker.rm(container_id.as_str());
-        }
-    });
-    let port = container.get_host_port(9000).unwrap();
+    let port = container.get_host_port(9000);
 
     wait_for_ok(port).await.unwrap();
 
@@ -86,7 +80,7 @@ async fn simple_insertion() -> Result<()> {
         },
     });
 
-    let harness = ConnectorHarness::new(function_name!(), "clickhouse", &connector_config).await?;
+    let harness = ConnectorHarness::new("clickhouse", &clickhouse::Builder {}, &connector_config).await?;
 
     let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
 
