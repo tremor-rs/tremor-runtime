@@ -154,10 +154,7 @@ impl Sink for ClickhouseSink {
             .as_mut()
             .ok_or_else(|| Error::from(ErrorKind::NoClickHouseClientAvailable))?;
 
-        let (event_min_size, event_max_size) = event.value_iter().size_hint();
-        let block_size_estimate = event_max_size.unwrap_or(event_min_size);
-
-        let mut block = Block::with_capacity(block_size_estimate);
+        let mut block = Block::with_capacity(event.len());
 
         for value in event.value_iter() {
             let row = Self::clickhouse_row_of(&self.columns, value)?;
