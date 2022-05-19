@@ -96,4 +96,3 @@ jobs:
           workflow: Draft new release
           repo: tremor-rs/tremor-language-server
           token: ${{ secrets.PAT_TOKEN }}
-          inputs: '{ "version": "${{ env.VER }}"}'
