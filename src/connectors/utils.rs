@@ -83,13 +83,6 @@ pub(crate) mod url {
         const PORT: u16 = 443;
     }
 
-    pub(crate) struct ClickHouseDefaults;
-    impl Defaults for ClickHouseDefaults {
-        const SCHEME: &'static str = "tcp";
-        const HOST: &'static str = "localhost";
-        const PORT: u16 = 9000;
-    }
-
     /// Endpoint URL
     #[derive(Serialize)]
     pub(crate) struct Url<D: Defaults = HttpDefaults> {

@@ -16,7 +16,7 @@ mod conversion;
 
 use std::fmt::{self, Display, Formatter};
 
-use crate::connectors::{prelude::*, utils::url::ClickHouseDefaults};
+use crate::connectors::prelude::*;
 
 use clickhouse_rs::{
     types::{DateTimeType, SqlType},
@@ -90,6 +90,13 @@ struct ClickhouseConfig {
     url: Url<ClickHouseDefaults>,
     compression: Option<Compression>,
     columns: Vec<Column>,
+}
+
+pub(crate) struct ClickHouseDefaults;
+impl Defaults for ClickHouseDefaults {
+    const SCHEME: &'static str = "tcp";
+    const HOST: &'static str = "localhost";
+    const PORT: u16 = 9000;
 }
 
 impl ConfigImpl for ClickhouseConfig {}
