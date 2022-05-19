@@ -22,6 +22,7 @@ use clickhouse_rs::{
     types::{DateTimeType, SqlType},
     Block, ClientHandle, Pool,
 };
+use simd_json::StaticNode;
 
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
@@ -191,9 +192,9 @@ impl ClickhouseSink {
             .ok_or_else(|| Error::from(ErrorKind::ExpectedObjectEvent(input.value_type())))?;
 
         for (column_name, expected_type) in columns.iter() {
-            let cell = object.get(column_name.as_str()).ok_or_else(|| {
-                Error::from(ErrorKind::MissingEventColumn(column_name.to_string()))
-            })?;
+            // If the value is not present, then we can replace it by null.
+            const NULL: Value = Value::Static(StaticNode::Null);
+            let cell = object.get(column_name.as_str()).unwrap_or(&NULL);
 
             let cell = conversion::convert_value(column_name.as_str(), cell, expected_type)?;
 
