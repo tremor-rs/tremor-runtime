@@ -22,13 +22,10 @@ use crate::{
 
 use std::time::{Duration, Instant};
 
-use async_std::stream::StreamExt;
 use clickhouse_rs::Pool;
-use signal_hook::consts::{SIGINT, SIGQUIT, SIGTERM};
-use signal_hook_async_std::Signals;
 use testcontainers::{clients, core::Port, images::generic::GenericImage, RunnableImage};
 use tremor_common::ports::IN;
-use tremor_pipeline::{Event, EventId};
+use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_script::literal;
 
 use super::ConnectorHarness;
@@ -57,10 +54,7 @@ async fn simple_insertion() -> Result<()> {
 
     let container = docker.run(image);
 
-    let container_id = container.id().to_string();
-    let mut signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
     let port = container.get_host_port(9000);
-
     wait_for_ok(port).await.unwrap();
 
     create_table(port, "people").await.unwrap();
@@ -107,8 +101,9 @@ async fn simple_insertion() -> Result<()> {
 
     let batched_meta = literal!({});
 
+    let batched_id = EventId::new(0, 0, 1, 1);
     let event = Event {
-        id: EventId::new(0, 0, 1, 1),
+        id: batched_id.clone(),
         is_batch: true,
         transactional: true,
         data: (batched_data, batched_meta).into(),
@@ -116,7 +111,10 @@ async fn simple_insertion() -> Result<()> {
     };
 
     harness.send_to_sink(event, IN).await?;
-    // TODO: check for some kind of ack or something i guess?
+
+    let cf = in_pipe.get_contraflow().await.unwrap();
+    assert_eq!(CbAction::Ack, cf.cb);
+    assert_eq!(batched_id, cf.id);
 
     // Now that we have sent some events to the sink, let's check that
     // everything was properly inserted in the database.
