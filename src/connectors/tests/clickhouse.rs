@@ -36,13 +36,20 @@ const SERVER_PORT: u16 = 9000;
 
 const DB_HOST: &str = "127.0.0.1";
 
+// In this test, we spin up an empty ClickHouse container, plug it to the
+// ClickHouse sink and use that sink to save a bunch of super simple events.
+// Once all these events are inserted, we use the regular ClickHouse client to
+// ensure that all the data was actually written.
 #[async_std::test]
 async fn simple_insertion() -> Result<()> {
     let _ = env_logger::try_init();
 
     let docker = clients::Cli::docker();
-    let image = GenericImage::new(CONTAINER_NAME, CONTAINER_VERSION);
 
+    // The following lines spin up a regular ClickHouse container and wait for
+    // the database to be up and running.
+
+    let image = GenericImage::new(CONTAINER_NAME, CONTAINER_VERSION);
     // We want to access the container from the host, so we need to make the
     // corresponding port available.
     let local = free_port::find_free_tcp_port().await?;
@@ -51,13 +58,17 @@ async fn simple_insertion() -> Result<()> {
         local,
     };
     let image = RunnableImage::from(image).with_mapped_port(port_to_expose);
-
     let container = docker.run(image);
-
     let port = container.get_host_port(9000);
     wait_for_ok(port).await.unwrap();
 
+    // Once the database is available, we use the regular client to create the
+    // database we're going to use
+
     create_table(port, "people").await.unwrap();
+
+    // Once the database side is ready, we can spin up our system and plug to
+    // our database.
 
     let connector_config = literal!({
         "config": {
@@ -72,15 +83,15 @@ async fn simple_insertion() -> Result<()> {
             ]
         },
     });
-
     let harness =
         ConnectorHarness::new("clickhouse", &clickhouse::Builder {}, &connector_config).await?;
-
     let in_pipe = harness.get_pipe(IN).expect("No pipe connected to port IN");
-
     harness.start().await?;
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
+
+    // Once everything is up and running, we can finally feed our system with
+    // data that will be inserted in the database.
 
     let batched_data = literal!([
         {
@@ -112,12 +123,14 @@ async fn simple_insertion() -> Result<()> {
 
     harness.send_to_sink(event, IN).await?;
 
+    // Once the data has been inserted, we wait for the "I handled everything"
+    // signal and check its properties.
+
     let cf = in_pipe.get_contraflow().await.unwrap();
     assert_eq!(CbAction::Ack, cf.cb);
     assert_eq!(batched_id, cf.id);
 
-    // Now that we have sent some events to the sink, let's check that
-    // everything was properly inserted in the database.
+    // TODO: continue commenting from here
 
     harness.stop().await?;
 
