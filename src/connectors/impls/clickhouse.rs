@@ -212,8 +212,16 @@ enum DummySqlType {
     Array(Box<DummySqlType>),
     Nullable(Box<DummySqlType>),
 
-    Int64,
+    UInt8,
+    UInt16,
+    UInt32,
     UInt64,
+
+    Int8,
+    Int16,
+    Int32,
+    Int64,
+
     String,
 
     #[serde(rename = "IPv4")]
@@ -242,13 +250,23 @@ impl fmt::Display for DummySqlType {
         match self {
             DummySqlType::Array(inner) => write!(f, "Array({inner})"),
             DummySqlType::Nullable(inner) => write!(f, "Nullable({inner})"),
-            DummySqlType::Int64 => write!(f, "Int64"),
+
+            DummySqlType::UInt8 => write!(f, "UInt8"),
+            DummySqlType::UInt16 => write!(f, "UInt16"),
+            DummySqlType::UInt32 => write!(f, "UInt32"),
             DummySqlType::UInt64 => write!(f, "UInt64"),
+
+            DummySqlType::Int8 => write!(f, "Int8"),
+            DummySqlType::Int16 => write!(f, "Int16"),
+            DummySqlType::Int32 => write!(f, "Int32"),
+            DummySqlType::Int64 => write!(f, "Int64"),
+
             DummySqlType::String => write!(f, "String"),
             DummySqlType::Ipv4 => write!(f, "IPv4"),
             DummySqlType::Ipv6 => write!(f, "IPv6"),
             DummySqlType::Uuid => write!(f, "UUID"),
             DummySqlType::DateTime => write!(f, "DateTime"),
+
             DummySqlType::DateTime64Secs => write!(f, "DateTime64(0)"),
             DummySqlType::DateTime64Millis => write!(f, "DateTime64(3)"),
             DummySqlType::DateTime64Micros => write!(f, "DateTime64(6)"),
@@ -262,8 +280,17 @@ impl Into<&'static SqlType> for &DummySqlType {
         let non_static_type = match self {
             DummySqlType::Array(inner) => SqlType::Array(inner.as_ref().into()),
             DummySqlType::Nullable(inner) => SqlType::Nullable(inner.as_ref().into()),
-            DummySqlType::Int64 => SqlType::Int64,
+
+            DummySqlType::UInt8 => SqlType::UInt8,
+            DummySqlType::UInt16 => SqlType::UInt16,
+            DummySqlType::UInt32 => SqlType::UInt32,
             DummySqlType::UInt64 => SqlType::UInt64,
+
+            DummySqlType::Int8 => SqlType::Int8,
+            DummySqlType::Int16 => SqlType::Int16,
+            DummySqlType::Int32 => SqlType::Int32,
+            DummySqlType::Int64 => SqlType::Int64,
+
             DummySqlType::String => SqlType::String,
             DummySqlType::Ipv4 => SqlType::Ipv4,
             DummySqlType::Ipv6 => SqlType::Ipv6,

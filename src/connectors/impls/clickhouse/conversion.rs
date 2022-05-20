@@ -66,19 +66,67 @@ pub(super) fn convert_value(
             Ok(CValue::Nullable(Either::Right(Box::new(inner_value))))
         }
 
-        DummySqlType::Int64 => get_and_wrap(
+        DummySqlType::UInt8 => get_and_wrap(
             column_name,
             value,
-            ValueAccess::as_i64,
-            CValue::Int64,
+            ValueAccess::as_u8,
+            CValue::UInt8,
+            expected_type,
+        ),
+
+        DummySqlType::UInt16 => get_and_wrap(
+            column_name,
+            value,
+            ValueAccess::as_u16,
+            CValue::UInt16,
+            expected_type,
+        ),
+
+        DummySqlType::UInt32 => get_and_wrap(
+            column_name,
+            value,
+            ValueAccess::as_u32,
+            CValue::UInt32,
             expected_type,
         ),
 
         DummySqlType::UInt64 => get_and_wrap(
             column_name,
             value,
-            |value| value.as_u64(),
+            ValueAccess::as_u64,
             CValue::UInt64,
+            expected_type,
+        ),
+
+        DummySqlType::Int8 => get_and_wrap(
+            column_name,
+            value,
+            ValueAccess::as_i8,
+            CValue::Int8,
+            expected_type,
+        ),
+
+        DummySqlType::Int16 => get_and_wrap(
+            column_name,
+            value,
+            ValueAccess::as_i16,
+            CValue::Int16,
+            expected_type,
+        ),
+
+        DummySqlType::Int32 => get_and_wrap(
+            column_name,
+            value,
+            ValueAccess::as_i32,
+            CValue::Int32,
+            expected_type,
+        ),
+
+        DummySqlType::Int64 => get_and_wrap(
+            column_name,
+            value,
+            ValueAccess::as_i64,
+            CValue::Int64,
             expected_type,
         ),
 
@@ -267,14 +315,50 @@ mod tests {
     }
 
     test_value_conversion! {
+        u8_conversion {
+            json! { 42 }, DummySqlType::UInt8 => CValue::UInt8(42),
+        }
+    }
+
+    test_value_conversion! {
+        u16_conversion {
+            json! { 42 }, DummySqlType::UInt16 => CValue::UInt16(42),
+        }
+    }
+
+    test_value_conversion! {
+        u32_conversion {
+            json! { 42 }, DummySqlType::UInt32 => CValue::UInt32(42),
+        }
+    }
+
+    test_value_conversion! {
         u64_conversion {
-            json! { 42u64 }, DummySqlType::UInt64 => CValue::UInt64(42),
+            json! { 42 }, DummySqlType::UInt64 => CValue::UInt64(42),
+        }
+    }
+
+    test_value_conversion! {
+        i8_conversion {
+            json! { 101 }, DummySqlType::Int8 => CValue::Int8(101),
+        }
+    }
+
+    test_value_conversion! {
+        i16_conversion {
+            json! { 101 }, DummySqlType::Int16 => CValue::Int16(101),
+        }
+    }
+
+    test_value_conversion! {
+        i32_conversion {
+            json! { 101 }, DummySqlType::Int32 => CValue::Int32(101),
         }
     }
 
     test_value_conversion! {
         i64_conversion {
-            json! { 101i64 }, DummySqlType::Int64 => CValue::Int64(101),
+            json! { 101 }, DummySqlType::Int64 => CValue::Int64(101),
         }
     }
 
