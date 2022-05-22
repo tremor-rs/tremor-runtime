@@ -63,10 +63,12 @@ impl Connector for Clickhouse {
             .iter()
             .map(|Column { name, type_ }| (name.clone(), type_.clone()))
             .collect();
+        let table = self.config.table.clone();
 
         let sink = ClickhouseSink {
             db_url,
             handle: None,
+            table,
             columns,
         };
         builder.spawn(sink, sink_context).map(Some)
@@ -79,10 +81,18 @@ impl Connector for Clickhouse {
 
 impl Clickhouse {
     fn connection_url(&self) -> String {
-        let url = self.config.url.as_str();
+        let host = self.config.url.as_str();
+
+        let path = self
+            .config
+            .database
+            .as_ref()
+            .map(String::as_str)
+            .unwrap_or_default();
+
         let compression = self.config.compression.unwrap_or_default();
 
-        format!("{url}?compression={compression}")
+        format!("{host}/{path}?compression={compression}")
     }
 }
 
@@ -90,6 +100,8 @@ impl Clickhouse {
 struct ClickhouseConfig {
     url: Url<ClickHouseDefaults>,
     compression: Option<Compression>,
+    database: Option<String>,
+    table: String,
     columns: Vec<Column>,
 }
 
@@ -135,6 +147,7 @@ struct Column {
 pub(crate) struct ClickhouseSink {
     db_url: String,
     handle: Option<ClientHandle>,
+    table: String,
     columns: Vec<(String, DummySqlType)>,
 }
 
@@ -170,7 +183,7 @@ impl Sink for ClickhouseSink {
         }
 
         debug!("Inserting block:{:#?}", block);
-        handle.insert("people", block).await?;
+        handle.insert(&self.table, block).await?;
 
         Ok(SinkReply::NONE)
     }
