@@ -130,20 +130,52 @@ async fn simple_insertion() -> Result<()> {
     assert_eq!(CbAction::Ack, cf.cb);
     assert_eq!(batched_id, cf.id);
 
-    // TODO: continue commenting from here
+    // Now that we finished everything on the Tremor side, we can just stop
+    // the testing harness.
 
     harness.stop().await?;
 
-    // Please don't judge me too much - this is a yolo test.
-    async_std::task::sleep(Duration::from_secs(5)).await;
+    // We can now connect to the database on our own, and ensure that it has
+    // all the data we expect it to have.
 
+    // There are plenty of processes asynchronously running here. We need to
+    // ensure that all the data has been inserted in the database before
+    // checking its value.
+    //
+    // A good way to do that is to continuously fetch data from the database,
+    // until we get the correct amount of data (or timeout with an error),
+    // and then check that the data contains the correct values.
     let mut client = Pool::new(format!("tcp://{DB_HOST}:{port}/"))
         .get_handle()
         .await?;
-
     let request = "select * from people";
+    let delay = Duration::from_secs(1);
+    let start = Instant::now();
+    let wait_for = Duration::from_secs(60);
 
-    let block = client.query(request).fetch_all().await?;
+    // This is the wait loop we were talking about earlier.
+    let block = loop {
+        let block = client.query(request).fetch_all().await?;
+
+        // Test if we have all the data we need.
+        if block.row_count() == 2 {
+            break block;
+        }
+
+        // Test for timeout.
+        if start.elapsed() > wait_for {
+            let max_time = wait_for.as_secs();
+            error!("We waited for more than {max_time}");
+            return Err(Error::from(
+                "Timeout while waiting for all the data to be available",
+            ));
+        }
+
+        async_std::task::sleep(delay).await;
+    };
+
+    // Now that we fetched everything we want, we can extract the meaningful
+    // data.
 
     let ages = block
         .rows()
