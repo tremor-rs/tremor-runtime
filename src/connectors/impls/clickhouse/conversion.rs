@@ -138,70 +138,32 @@ pub(super) fn convert_value(
             expected_type,
         ),
 
-        // TODO: there's quite much duplication between Ipv4, Ipv6 and Uuid:
-        // they can all be created either from a string or from a sequence of
-        // u8. It could be a good idea to merge them.
-        DummySqlType::Ipv4 => {
-            if let Some(octets) = value.as_array() {
-                // Array of values -> Ipv4
-                coerce_octet_sequence(octets.as_slice())
-                    .map(CValue::Ipv4)
-                    .map_err(|()| Error::from(ErrorKind::MalformedIpAddr))
-            } else if let Some(string) = value.as_str() {
-                // Conversion from String
-                Ipv4Addr::from_str(string.as_ref())
-                    .map(|addr| addr.octets())
-                    .map(CValue::Ipv4)
-                    .map_err(|_| Error::from(ErrorKind::MalformedIpAddr))
-            } else {
-                Err(Error::from(ErrorKind::UnexpectedEventFormat(
-                    column_name.to_string(),
-                    expected_type.to_string(),
-                    value.value_type(),
-                )))
-            }
-        }
+        DummySqlType::Ipv4 => convert_string_or_array(
+            column_name,
+            value,
+            |ip: Ipv4Addr| ip.octets(),
+            CValue::Ipv4,
+            ErrorKind::MalformedIpAddr,
+            expected_type,
+        ),
 
-        DummySqlType::Ipv6 => {
-            if let Some(octets) = value.as_array() {
-                // Array of values -> Ipv6
-                coerce_octet_sequence(octets.as_slice())
-                    .map(CValue::Ipv6)
-                    .map_err(|()| Error::from(ErrorKind::MalformedIpAddr))
-            } else if let Some(string) = value.as_str() {
-                // Conversion from String
-                Ipv6Addr::from_str(string.as_ref())
-                    .map(|addr| addr.octets())
-                    .map(CValue::Ipv6)
-                    .map_err(|_| Error::from(ErrorKind::MalformedIpAddr))
-            } else {
-                Err(Error::from(ErrorKind::UnexpectedEventFormat(
-                    column_name.to_string(),
-                    expected_type.to_string(),
-                    value.value_type(),
-                )))
-            }
-        }
-        DummySqlType::Uuid => {
-            if let Some(octets) = value.as_array() {
-                // Array of values -> Uuid
-                coerce_octet_sequence(octets.as_slice())
-                    .map(CValue::Uuid)
-                    .map_err(|()| Error::from(ErrorKind::MalformedUuid))
-            } else if let Some(string) = value.as_str() {
-                // Conversion from String
-                Uuid::from_str(string.as_ref())
-                    .map(|addr| addr.into_bytes())
-                    .map(CValue::Uuid)
-                    .map_err(|_| Error::from(ErrorKind::MalformedUuid))
-            } else {
-                Err(Error::from(ErrorKind::UnexpectedEventFormat(
-                    column_name.to_string(),
-                    expected_type.to_string(),
-                    value.value_type(),
-                )))
-            }
-        }
+        DummySqlType::Ipv6 => convert_string_or_array(
+            column_name,
+            value,
+            |ip: Ipv6Addr| ip.octets(),
+            CValue::Ipv6,
+            ErrorKind::MalformedIpAddr,
+            expected_type,
+        ),
+
+        DummySqlType::Uuid => convert_string_or_array(
+            column_name,
+            value,
+            Uuid::into_bytes,
+            CValue::Uuid,
+            ErrorKind::MalformedUuid,
+            expected_type,
+        ),
 
         DummySqlType::DateTime => get_and_wrap(
             column_name,
@@ -277,6 +239,46 @@ where
     T: 'a,
 {
     wrap_getter_error(column_name, value, getter, expected_type).map(wrapper)
+}
+
+fn convert_string_or_array<T, E, V, const N: usize>(
+    column_name: &str,
+    value: &TValue,
+    extractor: E,
+    variant: V,
+    error: ErrorKind,
+    expected_type: &DummySqlType,
+) -> Result<CValue>
+where
+    T: FromStr,
+    E: FnOnce(T) -> [u8; N],
+    V: FnOnce([u8; N]) -> CValue,
+{
+    // Before everyone gets lost, let's briefly describe the generic types of
+    // this function.
+    //
+    // When a String is passed, we must have a parsing function and an
+    // extracting function. The types involved are the following:
+    //
+    //          T::from_str       extractor             variant
+    // String --------------> T ------------> [u8; N] ----------> CValue
+
+    if let Some(octets) = value.as_array() {
+        coerce_octet_sequence(octets.as_slice())
+            .map(variant)
+            .map_err(|()| Error::from(error))
+    } else if let Some(string) = value.as_str() {
+        T::from_str(string.as_ref())
+            .map(extractor)
+            .map(variant)
+            .map_err(|_| Error::from(error))
+    } else {
+        Err(Error::from(ErrorKind::UnexpectedEventFormat(
+            column_name.to_string(),
+            expected_type.to_string(),
+            value.value_type(),
+        )))
+    }
 }
 
 fn coerce_octet_sequence<const N: usize>(values: &[TValue]) -> std::result::Result<[u8; N], ()> {
