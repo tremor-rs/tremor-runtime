@@ -251,8 +251,6 @@ impl TestConfig {
 impl Test {
     #[allow(clippy::too_many_lines)]
     pub(crate) async fn run(&self) -> Result<()> {
-        env_logger::init();
-
         let base_directory = tremor_common::file::canonicalize(&self.path)?;
         let mut config = TestConfig {
             verbose: self.verbose,
