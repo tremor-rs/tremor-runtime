@@ -165,7 +165,7 @@ async fn consumer_task(
                 ack_id,
                 message: msg,
                 ..
-            } = dbg!(message);
+            } = message;
 
             if let Some(PubsubMessage { data, .. }) = msg {
                 ack_counter += 1;
@@ -180,7 +180,7 @@ async fn consumer_task(
         }
     }
 
-    dbg!("Exiting consumer task...");
+    debug!("Exiting consumer task...");
 }
 
 #[async_trait::async_trait]
@@ -207,7 +207,7 @@ impl Source for GSubSource {
 
         let connect_to_pubsub = move || -> Result<PubSubClient> {
             if skip_authentication {
-                dbg!("Skipping auth...");
+                info!("Skipping auth...");
                 return Ok(SubscriberClient::with_interceptor(
                     channel.clone(),
                     AuthInterceptor {
