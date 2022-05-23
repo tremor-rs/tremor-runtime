@@ -419,8 +419,6 @@ impl Run {
     }
 
     async fn run_troy_source(&self) -> Result<()> {
-        env_logger::init();
-
         let config = WorldConfig {
             debug_connectors: true,
             ..WorldConfig::default()

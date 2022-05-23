@@ -17,7 +17,6 @@ use crate::{
     cli::{ServerCommand, ServerRun},
     errors::{Error, ErrorKind, Result},
 };
-use anyhow::Context;
 use async_std::stream::StreamExt;
 use futures::future;
 use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
@@ -75,19 +74,6 @@ impl ServerRun {
 
         let mut result = 0;
 
-        // Logging
-        if let Some(logger_config) = &self.logger_config {
-            if let Err(e) =
-                log4rs::init_file(logger_config, log4rs::config::Deserializers::default())
-                    .with_context(|| {
-                        format!("Error loading logger-config from '{}'", logger_config)
-                    })
-            {
-                return Err(e.into());
-            }
-        } else {
-            env_logger::init();
-        }
         version::log();
         eprintln!("allocator: {}", crate::alloc::get_allocator_name());
 

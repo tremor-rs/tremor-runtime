@@ -30,6 +30,7 @@ extern crate serde_derive;
 extern crate log;
 
 use crate::errors::Result;
+use anyhow::Context;
 use clap::Parser;
 use cli::{Cli, Command};
 use std::fs::{self, File};
@@ -107,6 +108,14 @@ async fn main() -> Result<()> {
 }
 
 async fn run(cli: Cli) -> Result<()> {
+    // Logging
+    if let Some(logger_config) = &cli.logger_config {
+        log4rs::init_file(logger_config, Default::default())
+            .with_context(|| format!("Error loading logger-config from '{}'", logger_config))?
+    } else {
+        env_logger::init();
+    }
+
     match cli.command {
         Command::Completions { shell } => completions::run_cmd(shell),
         Command::Server { command } => {

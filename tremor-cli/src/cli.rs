@@ -20,6 +20,9 @@ pub(crate) struct Cli {
     /// Instance identifier
     #[clap(short, long, default_value = "tremor")]
     pub(crate) instance: String,
+    /// Configuration for Log4RS
+    #[clap(short, long)]
+    pub(crate) logger_config: Option<String>,
     #[clap(subcommand)]
     pub(crate) command: Command,
 }
@@ -243,9 +246,6 @@ pub(crate) struct ServerRun {
     /// The `host:port` to listen for the API
     #[clap(short, long, default_value = "0.0.0.0:9898")]
     pub(crate) api_host: String,
-    /// Configuration for Log4RS
-    #[clap(short, long)]
-    pub(crate) logger_config: Option<String>,
     /// function tail-recursion stack depth limit
     #[clap(short, long, default_value = "1024")]
     pub(crate) recursion_limit: u32,
