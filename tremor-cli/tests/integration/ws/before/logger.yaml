@@ -1,0 +1,24 @@
+# Scan this file for changes every 30 seconds
+refresh_rate: 30 seconds
+
+appenders:
+  # An appender named "stdout" that writes to stdout
+  stdout:
+    kind: console
+
+root:
+  level: warn
+  appenders:
+    - stdout
+
+loggers:
+  tremor_runtime:
+    level: debug
+    appenders:
+      - stdout
+    additive: false
+  tremor:
+    level: debug
+    appenders:
+      - stdout
+    additive: false

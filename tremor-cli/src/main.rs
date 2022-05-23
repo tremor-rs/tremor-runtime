@@ -110,8 +110,8 @@ async fn main() -> Result<()> {
 async fn run(cli: Cli) -> Result<()> {
     // Logging
     if let Some(logger_config) = &cli.logger_config {
-        log4rs::init_file(logger_config, Default::default())
-            .with_context(|| format!("Error loading logger-config from '{}'", logger_config))?
+        log4rs::init_file(logger_config, log4rs::config::Deserializers::default())
+            .with_context(|| format!("Error loading logger-config from '{}'", logger_config))?;
     } else {
         env_logger::init();
     }
