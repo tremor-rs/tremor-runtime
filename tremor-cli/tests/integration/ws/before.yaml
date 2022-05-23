@@ -2,6 +2,8 @@
     "dir": "./before",
     "cmd": "tremor",
     "args": [
+      "-l",
+      "logger.yaml",
       "server",
       "run",
       "-p",
