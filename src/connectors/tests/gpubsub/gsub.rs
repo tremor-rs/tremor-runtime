@@ -18,7 +18,7 @@ async fn no_connection() -> Result<()> {
         "codec": "binary",
         "config":{
             "endpoint": "http://localhost:9090",
-            "request_timeout": 30000000000u64,
+            "ack_deadline": 30000000000u64,
             "connect_timeout": 100000000,
             "subscription_id": "projects/wf-gcp-us-tremor-sbx/subscriptions/test-subscription-a"
         }
@@ -50,7 +50,7 @@ async fn simple_subscribe() -> Result<()> {
         "codec": "binary",
         "config":{
             "endpoint": endpoint,
-            "request_timeout": 30000000000u64,
+            "ack_deadline": 30000000000u64,
             "connect_timeout": 30000000000u64,
             "subscription_id": "projects/test/subscriptions/test-subscription-a",
             "skip_authentication": true

@@ -20,7 +20,7 @@ use tremor_pipeline::ConfigImpl;
 #[derive(Deserialize, Clone)]
 struct Config {
     pub connect_timeout: u64,
-    pub request_timeout: u64,
+    pub ack_deadline: u64,
     pub subscription_id: String,
     #[serde(default = "default_endpoint")]
     pub endpoint: String,
@@ -90,7 +90,7 @@ async fn consumer_task(
     sender: Sender<AsyncTaskMessage>,
     ack_ids: Arc<DashMap<u64, String>>,
     subscription_id: String,
-    _request_timeout: Duration,
+    ack_deadline: Duration,
     ack_receiver: Receiver<u64>,
 ) {
     let mut ack_counter = 0;
@@ -102,7 +102,7 @@ async fn consumer_task(
             ack_ids: vec![],
             modify_deadline_seconds: vec![],
             modify_deadline_ack_ids: vec![],
-            stream_ack_deadline_seconds: 10, // fixme make this configurable
+            stream_ack_deadline_seconds: i32::try_from(ack_deadline.as_secs()).unwrap_or(10),
             client_id: "".to_string(),
             max_outstanding_messages: i64::try_from(QSIZE.load(Ordering::Relaxed)).unwrap_or(128),
             max_outstanding_bytes: 0
@@ -120,24 +120,31 @@ async fn consumer_task(
                     max_outstanding_messages: 0,
                     max_outstanding_bytes: 0
                 };
-            } // fixme else log error
+            } else {
+                warn!("Did not find an ACK ID for pull_id: {}", pull_id);
+            }
         }
     };
-    let mut stream = client
-        // fixme there should be more responses here, each with its own ACKs
-        .streaming_pull(request_stream)
-        .await
-        .unwrap()
-        .into_inner();
+    let stream = client.streaming_pull(request_stream).await;
+
+    let mut stream = match stream {
+        Ok(stream) => stream.into_inner(),
+        Err(e) => {
+            error!("Failed to send a streaming pull request: {}", e);
+            return;
+        }
+    };
 
     while let Some(response) = stream.next().await {
-        let response = match dbg!(response) {
+        let response = match response {
             Ok(x) => x,
             Err(e) => {
-                dbg!(e);
-                panic!("x");
+                // We can't receive from the stream, exit the task, so the main task can reconnect
+                warn!("Failed to read from stream, exiting client task... {}", e);
+
+                return;
             }
-        }; // fixme proper error handlding, exit the task, etc.
+        };
 
         for message in response.received_messages {
             let ReceivedMessage {
@@ -151,7 +158,6 @@ async fn consumer_task(
                 ack_ids.insert(ack_counter, ack_id);
                 if let Err(e) = sender.send(Ok((ack_counter, data))).await {
                     error!("Failed to send a PubSub message to the main task: {}", e);
-                    dbg!("Failed to send... boo");
 
                     // If we can't send to the main task, disconnect and let it restart
                     return;
@@ -227,7 +233,7 @@ impl Source for GSubSource {
             tx,
             self.ack_ids.clone(),
             self.config.subscription_id.clone(),
-            Duration::from_nanos(self.config.request_timeout),
+            Duration::from_nanos(self.config.ack_deadline),
             ack_rx,
         ));
 
@@ -243,8 +249,7 @@ impl Source for GSubSource {
         let receiver = self
             .receiver
             .as_mut()
-            .ok_or(ErrorKind::BigQueryClientNotAvailable(
-                // fixme use an error for GPubSub
+            .ok_or(ErrorKind::PubSubClientNotAvailable(
                 "The receiver is not connected",
             ))?;
         let (ack_id, data) = match receiver.recv().await? {
