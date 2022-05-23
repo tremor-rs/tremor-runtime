@@ -179,8 +179,6 @@ async fn consumer_task(
             }
         }
     }
-
-    debug!("Exiting consumer task...");
 }
 
 #[async_trait::async_trait]

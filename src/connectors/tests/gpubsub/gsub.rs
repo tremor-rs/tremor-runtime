@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::connectors::impls::gpubsub::gsub::Builder;
 use crate::connectors::tests::ConnectorHarness;
 use crate::errors::Result;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
@@ -31,14 +32,15 @@ async fn no_connection() -> Result<()> {
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
-            "endpoint": "http://localhost:9090",
+            "endpoint": "https://localhost:9090",
             "ack_deadline": 30000000000u64,
             "connect_timeout": 100000000,
             "subscription_id": "projects/wf-gcp-us-tremor-sbx/subscriptions/test-subscription-a"
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), "gsub", &connector_yaml).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await?;
     assert!(harness.start().await.is_err());
     Ok(())
 }
@@ -105,7 +107,8 @@ async fn simple_subscribe() -> Result<()> {
         })
         .await?;
 
-    let harness = ConnectorHarness::new(function_name!(), "gsub", &connector_yaml).await?;
+    let harness =
+        ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await?;
 
     let out_pipe = harness
         .out()
