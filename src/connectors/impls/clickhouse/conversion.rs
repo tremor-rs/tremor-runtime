@@ -35,12 +35,18 @@ pub(super) fn convert_value(
     value: &TValue,
     expected_type: &DummySqlType,
 ) -> Result<CValue> {
+    let context = ConversionContext {
+        column_name,
+        value,
+        expected_type,
+    };
+
     match expected_type {
         DummySqlType::Array(expected_inner_type) => {
             // We don't check that all elements of the array have the same type.
             // Instead, we check that every element can be converted to the expected
             // array type.
-            wrap_getter_error(column_name, value, ValueAccess::as_array, expected_type)?
+            wrap_getter_error(context, ValueAccess::as_array)?
                 .iter()
                 .map(|value| convert_value(column_name, value, expected_inner_type))
                 .collect::<Result<Vec<_>>>()
@@ -66,188 +72,108 @@ pub(super) fn convert_value(
             Ok(CValue::Nullable(Either::Right(Box::new(inner_value))))
         }
 
-        DummySqlType::UInt8 => get_and_wrap(
-            column_name,
-            value,
-            ValueAccess::as_u8,
-            CValue::UInt8,
-            expected_type,
-        ),
+        DummySqlType::UInt8 => get_and_wrap(context, ValueAccess::as_u8, CValue::UInt8),
 
-        DummySqlType::UInt16 => get_and_wrap(
-            column_name,
-            value,
-            ValueAccess::as_u16,
-            CValue::UInt16,
-            expected_type,
-        ),
+        DummySqlType::UInt16 => get_and_wrap(context, ValueAccess::as_u16, CValue::UInt16),
 
-        DummySqlType::UInt32 => get_and_wrap(
-            column_name,
-            value,
-            ValueAccess::as_u32,
-            CValue::UInt32,
-            expected_type,
-        ),
+        DummySqlType::UInt32 => get_and_wrap(context, ValueAccess::as_u32, CValue::UInt32),
 
-        DummySqlType::UInt64 => get_and_wrap(
-            column_name,
-            value,
-            ValueAccess::as_u64,
-            CValue::UInt64,
-            expected_type,
-        ),
+        DummySqlType::UInt64 => get_and_wrap(context, ValueAccess::as_u64, CValue::UInt64),
 
-        DummySqlType::Int8 => get_and_wrap(
-            column_name,
-            value,
-            ValueAccess::as_i8,
-            CValue::Int8,
-            expected_type,
-        ),
+        DummySqlType::Int8 => get_and_wrap(context, ValueAccess::as_i8, CValue::Int8),
 
-        DummySqlType::Int16 => get_and_wrap(
-            column_name,
-            value,
-            ValueAccess::as_i16,
-            CValue::Int16,
-            expected_type,
-        ),
+        DummySqlType::Int16 => get_and_wrap(context, ValueAccess::as_i16, CValue::Int16),
 
-        DummySqlType::Int32 => get_and_wrap(
-            column_name,
-            value,
-            ValueAccess::as_i32,
-            CValue::Int32,
-            expected_type,
-        ),
+        DummySqlType::Int32 => get_and_wrap(context, ValueAccess::as_i32, CValue::Int32),
 
-        DummySqlType::Int64 => get_and_wrap(
-            column_name,
-            value,
-            ValueAccess::as_i64,
-            CValue::Int64,
-            expected_type,
-        ),
+        DummySqlType::Int64 => get_and_wrap(context, ValueAccess::as_i64, CValue::Int64),
 
-        DummySqlType::String => get_and_wrap(
-            column_name,
-            value,
-            ValueAccess::as_str,
-            |s| CValue::String(Arc::new(s.as_bytes().to_vec())),
-            expected_type,
-        ),
+        DummySqlType::String => get_and_wrap(context, ValueAccess::as_str, |s| {
+            CValue::String(Arc::new(s.as_bytes().to_vec()))
+        }),
 
         DummySqlType::Ipv4 => convert_string_or_array(
-            column_name,
-            value,
+            context,
             |ip: Ipv4Addr| ip.octets(),
             CValue::Ipv4,
             ErrorKind::MalformedIpAddr,
-            expected_type,
         ),
 
         DummySqlType::Ipv6 => convert_string_or_array(
-            column_name,
-            value,
+            context,
             |ip: Ipv6Addr| ip.octets(),
             CValue::Ipv6,
             ErrorKind::MalformedIpAddr,
-            expected_type,
         ),
 
         DummySqlType::Uuid => convert_string_or_array(
-            column_name,
-            value,
+            context,
             Uuid::into_bytes,
             CValue::Uuid,
             ErrorKind::MalformedUuid,
-            expected_type,
         ),
 
-        DummySqlType::DateTime => get_and_wrap(
-            column_name,
-            value,
-            ValueAccess::as_u32,
-            |timestamp| CValue::DateTime(timestamp, UTC),
-            expected_type,
-        ),
+        DummySqlType::DateTime => get_and_wrap(context, ValueAccess::as_u32, |timestamp| {
+            CValue::DateTime(timestamp, UTC)
+        }),
 
-        DummySqlType::DateTime64Secs => get_and_wrap(
-            column_name,
-            value,
-            ValueAccess::as_i64,
-            |timestamp| CValue::DateTime64(timestamp, (0, UTC)),
-            expected_type,
-        ),
+        DummySqlType::DateTime64Secs => get_and_wrap(context, ValueAccess::as_i64, |timestamp| {
+            CValue::DateTime64(timestamp, (0, UTC))
+        }),
 
-        DummySqlType::DateTime64Millis => get_and_wrap(
-            column_name,
-            value,
-            ValueAccess::as_i64,
-            |timestamp| CValue::DateTime64(timestamp, (3, UTC)),
-            expected_type,
-        ),
+        DummySqlType::DateTime64Millis => get_and_wrap(context, ValueAccess::as_i64, |timestamp| {
+            CValue::DateTime64(timestamp, (3, UTC))
+        }),
 
-        DummySqlType::DateTime64Micros => get_and_wrap(
-            column_name,
-            value,
-            ValueAccess::as_i64,
-            |timestamp| CValue::DateTime64(timestamp, (6, UTC)),
-            expected_type,
-        ),
+        DummySqlType::DateTime64Micros => get_and_wrap(context, ValueAccess::as_i64, |timestamp| {
+            CValue::DateTime64(timestamp, (6, UTC))
+        }),
 
-        DummySqlType::DateTime64Nanos => get_and_wrap(
-            column_name,
-            value,
-            ValueAccess::as_i64,
-            |timestamp| CValue::DateTime64(timestamp, (9, UTC)),
-            expected_type,
-        ),
+        DummySqlType::DateTime64Nanos => get_and_wrap(context, ValueAccess::as_i64, |timestamp| {
+            CValue::DateTime64(timestamp, (9, UTC))
+        }),
     }
 }
 
-fn wrap_getter_error<'a, 'b, F, T>(
-    column_name: &str,
-    value: &'a TValue<'b>,
-    f: F,
-    expected_type: &DummySqlType,
-) -> Result<T>
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ConversionContext<'a, 'b, 'c, 'd> {
+    column_name: &'a str,
+    value: &'b TValue<'c>,
+    expected_type: &'d DummySqlType,
+}
+
+fn wrap_getter_error<'a, 'b, F, T>(context: ConversionContext<'_, 'a, 'b, '_>, f: F) -> Result<T>
 where
     F: FnOnce(&'a TValue<'b>) -> Option<T>,
     T: 'a,
 {
-    f(value).ok_or_else(|| {
+    f(context.value).ok_or_else(|| {
         Error::from(ErrorKind::UnexpectedEventFormat(
-            column_name.to_string(),
-            expected_type.to_string(),
-            value.value_type(),
+            context.column_name.to_string(),
+            context.expected_type.to_string(),
+            context.value.value_type(),
         ))
     })
 }
 
 fn get_and_wrap<'a, 'b, F, G, T>(
-    column_name: &str,
-    value: &'a TValue<'b>,
+    context: ConversionContext<'_, 'a, 'b, '_>,
     getter: F,
     wrapper: G,
-    expected_type: &DummySqlType,
 ) -> Result<CValue>
 where
     F: FnOnce(&'a TValue<'b>) -> Option<T>,
     G: FnOnce(T) -> CValue,
     T: 'a,
 {
-    wrap_getter_error(column_name, value, getter, expected_type).map(wrapper)
+    wrap_getter_error(context, getter).map(wrapper)
 }
 
 fn convert_string_or_array<T, E, V, const N: usize>(
-    column_name: &str,
-    value: &TValue,
+    context: ConversionContext<'_, '_, '_, '_>,
     extractor: E,
     variant: V,
     error: ErrorKind,
-    expected_type: &DummySqlType,
 ) -> Result<CValue>
 where
     T: FromStr,
@@ -263,20 +189,20 @@ where
     //          T::from_str       extractor             variant
     // String --------------> T ------------> [u8; N] ----------> CValue
 
-    if let Some(octets) = value.as_array() {
+    if let Some(octets) = context.value.as_array() {
         coerce_octet_sequence(octets.as_slice())
             .map(variant)
             .map_err(|()| Error::from(error))
-    } else if let Some(string) = value.as_str() {
+    } else if let Some(string) = context.value.as_str() {
         T::from_str(string.as_ref())
             .map(extractor)
             .map(variant)
             .map_err(|_| Error::from(error))
     } else {
         Err(Error::from(ErrorKind::UnexpectedEventFormat(
-            column_name.to_string(),
-            expected_type.to_string(),
-            value.value_type(),
+            context.column_name.to_string(),
+            context.expected_type.to_string(),
+            context.value.value_type(),
         )))
     }
 }
