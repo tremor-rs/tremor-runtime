@@ -3,8 +3,11 @@
 ### * [chash](chash.md) - functions dealing with consistent hasing
 ### * [origin](origin.md) - functions providing access to onramp origin data
 ### * [system](system.md) - functions related to the running system
+### * [connectors](connectors.md) - default connectors
+### * [pipelines](pipelines.md) - default pipelines
 
 use tremor::chash;
 use tremor::origin;
 use tremor::system;
-
+use tremor::connectors;
+use tremor::pipelines;

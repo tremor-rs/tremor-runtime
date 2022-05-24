@@ -2,7 +2,7 @@
 define flow main
 flow
   use integration;
-  use troy::connectors;
+  use tremor::connectors;
 
   # we need our own here, as args in queries is not supported
   define pipeline out_or_exit

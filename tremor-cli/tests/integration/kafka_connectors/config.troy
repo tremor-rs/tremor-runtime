@@ -1,8 +1,8 @@
 define flow kafka_produce
 flow
 
-    use troy::connectors;
-    use troy::pipelines;
+    use tremor::connectors;
+    use tremor::pipelines;
     use integration;
 
     define connector producer from kafka_producer
@@ -83,8 +83,8 @@ end;
 
 define flow kafka_consume
 flow
-    use troy::connectors;
-    use troy::pipelines;
+    use tremor::connectors;
+    use tremor::pipelines;
     use integration;
 
     define connector consumer from kafka_consumer

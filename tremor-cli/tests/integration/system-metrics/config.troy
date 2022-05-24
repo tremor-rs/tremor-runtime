@@ -8,7 +8,7 @@ define flow main
 flow
   use integration;
   use std::time::nanos;
-  use troy::connectors;
+  use tremor::connectors;
 
   # connector definitions
   define connector in from metronome

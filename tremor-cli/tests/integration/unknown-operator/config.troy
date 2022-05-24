@@ -1,6 +1,6 @@
 define flow main
 flow
-  use troy::connectors;
+  use tremor::connectors;
 
   define pipeline main
   into out, exit

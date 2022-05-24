@@ -1,6 +1,6 @@
 define flow main
 flow
-  use troy::pipelines;
+  use tremor::pipelines;
   use bench;
   create connector bench1 from bench::bench;
   create connector bench2 from bench::bench;

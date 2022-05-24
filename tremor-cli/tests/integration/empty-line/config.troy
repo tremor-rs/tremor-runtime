@@ -1,8 +1,8 @@
 
 define flow main
 flow
-  use troy::connectors;
-  use troy::pipelines;
+  use tremor::connectors;
+  use tremor::pipelines;
   use integration;
 
   define pipeline main

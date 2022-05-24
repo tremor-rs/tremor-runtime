@@ -1,7 +1,7 @@
 define flow flow_01
 flow
-    use troy::connectors;
-    use troy::pipelines;
+    use tremor::connectors;
+    use tremor::pipelines;
 
     # not connected to anything on purpose
     define connector outfile from file
@@ -27,8 +27,8 @@ end;
 define flow flow_02
 flow
 
-    use troy::connectors;
-    use troy::pipelines;
+    use tremor::connectors;
+    use tremor::pipelines;
 
     define connector infile from file
     with

@@ -1,7 +1,7 @@
 
 define flow main
 flow
-  use troy::connectors;
+  use tremor::connectors;
   use integration;
 
 

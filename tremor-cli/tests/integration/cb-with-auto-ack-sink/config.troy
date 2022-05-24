@@ -1,7 +1,7 @@
 define flow main
 flow
-  use troy::pipelines;
-  use troy::connectors;
+  use tremor::pipelines;
+  use tremor::connectors;
   use std::time::nanos;
   
   define connector cb_in from cb
