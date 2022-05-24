@@ -35,7 +35,28 @@ async fn no_connection() -> Result<()> {
             "endpoint": "https://localhost:9090",
             "ack_deadline": 30000000000u64,
             "connect_timeout": 100000000,
-            "subscription_id": "projects/wf-gcp-us-tremor-sbx/subscriptions/test-subscription-a"
+            "subscription_id": "projects/xxx/subscriptions/test-subscription-a"
+        }
+    });
+
+    let harness =
+        ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await?;
+    assert!(harness.start().await.is_err());
+    Ok(())
+}
+
+#[async_std::test]
+#[serial(gpubsub)]
+async fn no_token() -> Result<()> {
+    let _ = env_logger::try_init();
+    let mut env = crate::connectors::tests::s3::EnvHelper::new();
+    env.remove_var("GOOGLE_APPLICATION_CREDENTIALS");
+    let connector_yaml = literal!({
+        "codec": "binary",
+        "config":{
+            "ack_deadline": 30000000000u64,
+            "connect_timeout": 100000000,
+            "subscription_id": "projects/xxx/subscriptions/test-subscription-a"
         }
     });
 
