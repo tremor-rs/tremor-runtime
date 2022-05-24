@@ -1,5 +1,5 @@
 
-```trickle
+```tremor
 
 # Define a round robin operator with 3 slots
 define operator roundrobin from qos::roundrobin

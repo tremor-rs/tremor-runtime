@@ -1,5 +1,5 @@
 
-```troy
+```tremor
 define connector metronome from metronome
   with
     config = {
@@ -11,7 +11,7 @@ end;
 Define user defind connector `metronome` from the builtin `metronome` connector
 using a 1 second periodicity interval.
 
-```troy
+```tremor
 define connector exit from exit;
 ```
 

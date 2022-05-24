@@ -5,7 +5,7 @@
 ## statement. When used without a group by it will
 ## return zero (0).
 ##
-## > ```trickle
+## > ```tremor
 ## > use std::win;
 ## > 
 ## > select { "group#{group[0]}": win::cardinality() }

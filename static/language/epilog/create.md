@@ -1,13 +1,13 @@
 
 ### Create a connector
 
-```troy
+```tremor
 create connector foo from snot::foo end;
 ```
 
 ### Create a pipeline
 
-```troy
+```tremor
 create pipeline bar from badger::bar end;
 ```
 

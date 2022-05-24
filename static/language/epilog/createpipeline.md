@@ -1,5 +1,5 @@
 
-```trickle
+```tremor
 
 # Define a pipeline called `identity`
 define pipeline identity

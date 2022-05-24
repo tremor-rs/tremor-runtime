@@ -187,7 +187,7 @@ Custom [Troy](https://tremor.rs/docs/0.12/language/troy/) modules and libraries 
 
 This very simple example will consume lines from stdin and send them to stdout.
 
-```troy
+```tremor
 define flow example
 flow
   # import some common pre-defined pipeline and connector definitions

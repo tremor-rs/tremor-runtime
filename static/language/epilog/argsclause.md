@@ -1,5 +1,5 @@
 
-```troy
+```tremor
 args
   x = y
 ```

@@ -3,7 +3,7 @@
 
 Given
 
-```troy
+```tremor
 create connector ingest;
 create connector egress;
 create pipeline logic;

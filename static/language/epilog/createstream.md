@@ -1,5 +1,5 @@
 
-```trickle
+```tremor
 create stream ctrl;
 ```
 

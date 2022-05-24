@@ -1,5 +1,5 @@
 
-```trickle
+```tremor
 define pipeline subq
 pipeline
   define operator counter from generic::counter;
