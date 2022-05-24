@@ -13,9 +13,10 @@
 // limitations under the License.
 
 use super::super::ConnectorHarness;
-use super::{random_bucket_name, spawn_docker, wait_for_s3mock, EnvHelper, IMAGE, TAG};
+use super::{random_bucket_name, spawn_docker, wait_for_s3mock, IMAGE, TAG};
 use crate::connectors::impls::s3;
 use crate::connectors::tests::s3::get_client;
+use crate::connectors::utils::EnvHelper;
 use crate::errors::Result;
 use aws_sdk_s3::types::ByteStream;
 use aws_sdk_s3::Client;

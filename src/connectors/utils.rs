@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 
 /// Metrics facilities
@@ -210,6 +211,45 @@ pub(crate) mod url {
             let serialized = url.to_string();
             assert_eq!(expected, &serialized);
             Ok(())
+        }
+    }
+}
+
+/// Keeps track of process env manipulations and restores previous values upon drop
+#[allow(unused)]
+pub(crate) struct EnvHelper {
+    restore: HashMap<String, String>,
+}
+
+impl EnvHelper {
+    #[allow(unused)]
+    pub(crate) fn new() -> Self {
+        Self {
+            restore: HashMap::new(),
+        }
+    }
+
+    #[allow(unused)]
+    pub(crate) fn set_var(&mut self, key: &str, value: &str) {
+        if let Ok(old_value) = std::env::var(key) {
+            self.restore.insert(key.to_string(), old_value);
+        }
+        std::env::set_var(key, value);
+    }
+
+    #[allow(unused)]
+    pub(crate) fn remove_var(&mut self, key: &str) {
+        if let Ok(old_value) = std::env::var(key) {
+            self.restore.insert(key.to_string(), old_value);
+        }
+        std::env::remove_var(key);
+    }
+}
+
+impl Drop for EnvHelper {
+    fn drop(&mut self) {
+        for (k, v) in &self.restore {
+            std::env::set_var(k, v);
         }
     }
 }

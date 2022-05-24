@@ -12,18 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::impls::gpubsub::gsub::Builder;
+use crate::connectors::impls::gpubsub::consumer::Builder;
 use crate::connectors::tests::ConnectorHarness;
+use crate::connectors::utils::EnvHelper;
 use crate::errors::Result;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage, Subscription, Topic};
 use serial_test::serial;
+use std::collections::HashMap;
 use testcontainers::clients::Cli;
 use testcontainers::RunnableImage;
 use tonic::transport::Channel;
 use tremor_pipeline::CbAction;
 use tremor_value::{literal, Value};
+use value_trait::ValueAccess;
 
 #[async_std::test]
 #[serial(gpubsub)]
@@ -49,7 +52,7 @@ async fn no_connection() -> Result<()> {
 #[serial(gpubsub)]
 async fn no_token() -> Result<()> {
     let _ = env_logger::try_init();
-    let mut env = crate::connectors::tests::s3::EnvHelper::new();
+    let mut env = EnvHelper::new();
     env.remove_var("GOOGLE_APPLICATION_CREDENTIALS");
     let connector_yaml = literal!({
         "codec": "binary",
@@ -138,15 +141,18 @@ async fn simple_subscribe() -> Result<()> {
     harness.wait_for_connected().await?;
     harness.consume_initial_sink_contraflow().await?;
 
+    let mut attributes = HashMap::new();
+    attributes.insert("a".to_string(), "b".to_string());
+
     publisher
         .publish(PublishRequest {
             topic: "projects/test/topics/test".to_string(),
             messages: vec![PubsubMessage {
                 data: Vec::from("abc1".as_bytes()),
-                attributes: Default::default(),
+                attributes,
                 message_id: "".to_string(),
                 publish_time: None,
-                ordering_key: "".to_string(),
+                ordering_key: "test".to_string(),
             }],
         })
         .await?;
@@ -156,9 +162,26 @@ async fn simple_subscribe() -> Result<()> {
     let (_out, err) = harness.stop().await?;
     assert!(err.is_empty());
 
+    let (value, meta) = event.data.parts();
+
     assert_eq!(
         Some(Vec::from("abc1".as_bytes())),
-        event.data.parts().0.as_bytes().map(|x| Vec::from(x))
+        value.as_bytes().map(|x| Vec::from(x))
+    );
+
+    assert_eq!(
+        Some(&Value::from("b")),
+        meta.as_object()
+            .unwrap()
+            .get("pubsub_consumer")
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .get("attributes")
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .get("a")
     );
 
     return Ok(());

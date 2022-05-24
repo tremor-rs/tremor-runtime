@@ -323,13 +323,9 @@ error_chain! {
             description("GBQ Sink failed")
                 display("GBQ Sink failed: {}", msg)
         }
-        BigQueryClientNotAvailable(msg: &'static str) {
-            description("BigQuery client not available")
-                display("BigQuery client not available: {}", msg)
-        }
-        PubSubClientNotAvailable(msg: &'static str) {
-            description("PubSub client not available")
-                display("PubSub client not available: {}", msg)
+        ClientNotAvailable(name: &'static str, msg: &'static str) {
+            description("Client not available")
+                display("{} client not available: {}", name, msg)
         }
         PubSubError(msg: &'static str) {
             description("PubSub error")
