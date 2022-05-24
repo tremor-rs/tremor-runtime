@@ -161,6 +161,5 @@ async fn simple_subscribe() -> Result<()> {
         event.data.parts().0.as_bytes().map(|x| Vec::from(x))
     );
 
-
     return Ok(());
 }
