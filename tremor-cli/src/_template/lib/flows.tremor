@@ -1,7 +1,7 @@
 define flow main
 flow
   use lib::pipelines;
-  use troy::connectors;
+  use tremor::connectors;
 
   create connector console from connectors::console;
   create pipeline main from pipelines::main;

@@ -1,7 +1,7 @@
 define flow loadgen
 flow
     use std::time::nanos;
-    use troy::connectors;
+    use tremor::connectors;
 
     define pipeline loadgen
     into out, info, err, error
@@ -99,7 +99,7 @@ end;
 define flow demo
 flow
 
-    use troy::connectors;
+    use tremor::connectors;
 
     define pipeline demo
     pipeline
@@ -208,8 +208,8 @@ end;
 
 define flow metrics
 flow
-    use troy::connectors;
-    use troy::pipelines;
+    use tremor::connectors;
+    use tremor::pipelines;
 
     define pipeline enrich
     pipeline

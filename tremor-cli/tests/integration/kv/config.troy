@@ -2,7 +2,7 @@ define flow main
 flow
   use integration;
   use pipelines;
-  use troy::connectors;
+  use tremor::connectors;
 
   define connector kv from kv
   with

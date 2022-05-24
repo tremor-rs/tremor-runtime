@@ -192,8 +192,8 @@ define flow example
 flow
   # import some common pre-defined pipeline and connector definitions
   # to use here and save some typing
-  use troy::pipelines;
-  use troy::connectors;
+  use tremor::pipelines;
+  use tremor::connectors;
 
   # create instances of the connectors and pipelines we need
   create connector console from connectors::console;

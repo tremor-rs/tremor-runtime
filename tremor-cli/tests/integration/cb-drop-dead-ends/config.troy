@@ -1,6 +1,6 @@
 define flow main
 flow
-  use troy::connectors;
+  use tremor::connectors;
   use std::time::nanos;
   define connector cb_check from cb
   with

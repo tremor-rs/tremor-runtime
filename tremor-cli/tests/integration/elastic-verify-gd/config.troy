@@ -2,8 +2,8 @@ define flow main
 flow
   use std::time::nanos;
   use integration;
-  use troy::pipelines;
-  use troy::connectors;
+  use tremor::pipelines;
+  use tremor::connectors;
 
   define pipeline main
   pipeline

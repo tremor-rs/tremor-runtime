@@ -1,7 +1,7 @@
 define flow main
 flow
   use integration;
-  use troy::pipelines;
+  use tremor::pipelines;
 
   create connector in from integration::read_file;
   create connector out from integration::write_file;

@@ -1,7 +1,7 @@
 define flow docker
 flow
-    use troy::connectors;
-    use troy::pipelines;
+    use tremor::connectors;
+    use tremor::pipelines;
     use std::time::nanos;
 
     define pipeline main
