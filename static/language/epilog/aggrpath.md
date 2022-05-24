@@ -1,7 +1,7 @@
 
 ### How do I reference the computed group dimension?
 
-```trickle
+```tremor
 use std::record;
 define window by_2 from tumbling
 with

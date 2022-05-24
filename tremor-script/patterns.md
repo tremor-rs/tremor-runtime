@@ -23,7 +23,7 @@ A general pattern that repeats in troy/trickle/tremor-script is:
 
 ### Definitional statements
     
-```troy
+```tremor
 define connector <my_alias> from <build_in_connector>;
 define window <my_alias> from <window_type>;
 define operator <my_alias> from <operator_type>;
@@ -44,7 +44,7 @@ define <operator_type> operator <my_alias>;
 
 ### Creational statements
 
-```troy
+```tremor
 create stream <my_alias>
 create script <my_definition>;
 create script <my_alias> from <my_definition>;
@@ -71,19 +71,19 @@ end
 ## in the script syntax
 
 ### let
-```troy
+```tremor
 let <target> = <srouce>;
 ```
 
 ### merge and patch
-```troy
+```tremor
 merge <target> from <source> end;
 patch <target> from <source> end;
 ```
 
 ### records
 
-```troy
+```tremor
 {
     "<name>": <source-data>
 }
@@ -94,7 +94,7 @@ patch <target> from <source> end;
 
 `connect` switches target and source, while it would be possible to swap those around to follow the same `target` first `source` second pattern, it is counter-intuitive to the fact that tremor uses the English language and pipelining here is commonly thought of as something going from left to right.
 
-```troy
+```tremor
 connect <source> to <target>;
 ```
 
@@ -104,11 +104,11 @@ connect <source> to <target>;
 
 The second factor is that we have multiple possible targets, and moving them upfront would lead to a very hard-to-read construct.
 
-```troy
+```tremor
 match <source> of case <target> => ... end;
 ```
 
-```troy
+```tremor
 for <source> in
   case <target> => ...
 end;
@@ -122,13 +122,13 @@ end;
 The non-conforming part is the `from` / `to` section. The reasoning here follows the same reasoning in `connect` we have a dataflow, and in the English language, this typically moves left to right.
 
 
-```troy
+```tremor
 ... from <source> to <target>
 ```
 
 The conforming part is the `select` / `from` section. Here we have the target (`script`) on the left and the source (`from`) on the right.  We choose This to conform with SQL.
 
 
-```troy
+```tremor
 select <target> from <source> ...
 ```

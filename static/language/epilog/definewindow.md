@@ -1,6 +1,6 @@
 
 
-```trickle
+```tremor
 define window four from tumbling
 with
   size = 4

@@ -1,5 +1,5 @@
 
-```trickle
+```tremor
 define script route
 script
   emit => "not_out"

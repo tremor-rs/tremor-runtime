@@ -1,5 +1,5 @@
 
-```troy
+```tremor
 define flow test
 flow
   define connector metronome from metronome

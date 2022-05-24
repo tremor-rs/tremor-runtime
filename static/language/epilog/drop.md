@@ -1,5 +1,5 @@
 
-```trickle
+```tremor
 define script boring
 script
   drop

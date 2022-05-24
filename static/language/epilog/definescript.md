@@ -1,6 +1,6 @@
 
 
-```trickle
+```tremor
 define operator bucket from grouper::bucket;
 
 define script categorize
