@@ -17,52 +17,12 @@ mod writer;
 use crate::errors::{Error, Result};
 use aws_sdk_s3::{Client, Config, Credentials, Endpoint, Region};
 use rand::{distributions::Alphanumeric, Rng};
-use std::{
-    collections::HashMap,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 use testcontainers::{clients::Cli, images::generic::GenericImage, Container, RunnableImage};
 
 use super::free_port::find_free_tcp_port;
 const IMAGE: &str = "adobe/s3mock";
 const TAG: &str = "2.4.9";
-
-/// Keeps track of process env manipulations and restores previous values upon drop
-pub(crate) struct EnvHelper {
-    restore: HashMap<String, String>,
-}
-
-impl EnvHelper {
-    pub(crate) fn new() -> Self {
-        Self {
-            restore: HashMap::new(),
-        }
-    }
-
-    #[cfg(feature = "s3-integration")]
-    pub(crate) fn set_var(&mut self, key: &str, value: &str) {
-        if let Ok(old_value) = std::env::var(key) {
-            self.restore.insert(key.to_string(), old_value);
-        }
-        std::env::set_var(key, value);
-    }
-
-    #[cfg(feature = "s3-integration")]
-    pub(crate) fn remove_var(&mut self, key: &str) {
-        if let Ok(old_value) = std::env::var(key) {
-            self.restore.insert(key.to_string(), old_value);
-        }
-        std::env::remove_var(key);
-    }
-}
-
-impl Drop for EnvHelper {
-    fn drop(&mut self) {
-        for (k, v) in &self.restore {
-            std::env::set_var(k, v);
-        }
-    }
-}
 
 async fn wait_for_s3mock(port: u16) -> Result<()> {
     let s3_client: Client = get_client(port);

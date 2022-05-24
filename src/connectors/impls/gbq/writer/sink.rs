@@ -299,24 +299,21 @@ impl Sink for GbqSink {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        let client = self
-            .client
-            .as_mut()
-            .ok_or(ErrorKind::BigQueryClientNotAvailable(
-                "The client is not connected",
+        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
+            "BigQuery",
+            "The client is not connected",
+        ))?;
+        let write_stream = self
+            .write_stream
+            .as_ref()
+            .ok_or(ErrorKind::ClientNotAvailable(
+                "BigQuery",
+                "The write stream is not available",
             ))?;
-        let write_stream =
-            self.write_stream
-                .as_ref()
-                .ok_or(ErrorKind::BigQueryClientNotAvailable(
-                    "The write stream is not available",
-                ))?;
-        let mapping = self
-            .mapping
-            .as_mut()
-            .ok_or(ErrorKind::BigQueryClientNotAvailable(
-                "The mapping is not available",
-            ))?;
+        let mapping = self.mapping.as_mut().ok_or(ErrorKind::ClientNotAvailable(
+            "BigQuery",
+            "The mapping is not available",
+        ))?;
 
         let mut serialized_rows = Vec::with_capacity(event.len());
 

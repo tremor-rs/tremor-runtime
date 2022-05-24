@@ -15,8 +15,9 @@
 use std::io::Read;
 
 use super::super::{ConnectorHarness, TestPipeline};
-use super::{get_client, random_bucket_name, spawn_docker, wait_for_s3mock, EnvHelper, IMAGE, TAG};
+use super::{get_client, random_bucket_name, spawn_docker, wait_for_s3mock, IMAGE, TAG};
 use crate::connectors::impls::s3;
+use crate::connectors::utils::EnvHelper;
 use crate::errors::Result;
 use aws_sdk_s3::Client;
 use bytes::Buf;

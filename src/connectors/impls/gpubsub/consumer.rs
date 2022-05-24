@@ -17,12 +17,15 @@ use crate::connectors::prelude::*;
 use crate::connectors::utils::url::HttpsDefaults;
 use async_std::channel::{Receiver, Sender};
 use async_std::stream::StreamExt;
+use async_std::task;
 use async_std::task::JoinHandle;
+use beef::generic::Cow;
 use dashmap::DashMap;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use googapis::google::pubsub::v1::{PubsubMessage, ReceivedMessage, StreamingPullRequest};
 use gouth::Token;
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::time::Duration;
@@ -33,11 +36,14 @@ use tremor_pipeline::ConfigImpl;
 
 #[derive(Deserialize, Clone)]
 struct Config {
+    #[serde(default = "default_connect_timeout")]
     pub connect_timeout: u64,
+    #[serde(default = "default_ack_deadline")]
     pub ack_deadline: u64,
     pub subscription_id: String,
     #[serde(default = "default_endpoint")]
     pub endpoint: String,
+    #[cfg(test)]
     #[serde(default = "default_skip_authentication")]
     pub skip_authentication: bool,
 }
@@ -47,8 +53,17 @@ fn default_endpoint() -> String {
     "https://pubsub.googleapis.com".into()
 }
 
+#[cfg(test)]
 fn default_skip_authentication() -> bool {
     false
+}
+
+fn default_connect_timeout() -> u64 {
+    1_000_000_000u64 // 1 second
+}
+
+fn default_ack_deadline() -> u64 {
+    10_000_000_000u64 // 10 seconds
 }
 
 #[derive(Debug, Default)]
@@ -57,13 +72,21 @@ pub(crate) struct Builder {}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
-        "gsub".into()
+        "gpubsub-consumer".into()
     }
 
     async fn build(&self, alias: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+        let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, task::current().id());
+
         if let Some(raw) = &raw_config.config {
             let config = Config::new(raw)?;
-            Ok(Box::new(GSub { config }))
+            let url = Url::<HttpsDefaults>::parse(config.endpoint.as_str())?;
+
+            Ok(Box::new(GSub {
+                config,
+                url,
+                client_id,
+            }))
         } else {
             Err(ErrorKind::MissingConfiguration(alias.to_string()).into())
         }
@@ -72,10 +95,12 @@ impl ConnectorBuilder for Builder {
 
 struct GSub {
     config: Config,
+    url: Url<HttpsDefaults>,
+    client_id: String,
 }
 
 type PubSubClient = SubscriberClient<InterceptedService<Channel, AuthInterceptor>>;
-type AsyncTaskMessage = Result<(u64, Vec<u8>)>;
+type AsyncTaskMessage = Result<(u64, PubsubMessage)>;
 
 struct GSubSource {
     config: Config,
@@ -84,12 +109,16 @@ struct GSubSource {
     ack_sender: Option<Sender<u64>>,
     ack_ids: Arc<DashMap<u64, String>>,
     task_handle: Option<JoinHandle<()>>,
+    url: Url<HttpsDefaults>,
+    client_id: String,
 }
 
 impl GSubSource {
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: Config, url: Url<HttpsDefaults>, client_id: String) -> Self {
         GSubSource {
             config,
+            url,
+            client_id,
             client: None,
             receiver: None,
             ack_ids: Arc::new(DashMap::new()),
@@ -101,6 +130,7 @@ impl GSubSource {
 
 async fn consumer_task(
     mut client: PubSubClient,
+    client_id: String,
     sender: Sender<AsyncTaskMessage>,
     ack_ids: Arc<DashMap<u64, String>>,
     subscription_id: String,
@@ -117,7 +147,7 @@ async fn consumer_task(
             modify_deadline_seconds: vec![],
             modify_deadline_ack_ids: vec![],
             stream_ack_deadline_seconds: i32::try_from(ack_deadline.as_secs()).unwrap_or(10),
-            client_id: "".to_string(),
+            client_id: client_id.clone(),
             max_outstanding_messages: i64::try_from(QSIZE.load(Ordering::Relaxed)).unwrap_or(128),
             max_outstanding_bytes: 0
         };
@@ -130,7 +160,7 @@ async fn consumer_task(
                     modify_deadline_seconds: vec![],
                     modify_deadline_ack_ids: vec![],
                     stream_ack_deadline_seconds: 0,
-                    client_id: "".to_string(),
+                    client_id: client_id.clone(),
                     max_outstanding_messages: 0,
                     max_outstanding_bytes: 0
                 };
@@ -167,10 +197,10 @@ async fn consumer_task(
                 ..
             } = message;
 
-            if let Some(PubsubMessage { data, .. }) = msg {
+            if let Some(pubsub_message) = msg {
                 ack_counter += 1;
                 ack_ids.insert(ack_counter, ack_id);
-                if let Err(e) = sender.send(Ok((ack_counter, data))).await {
+                if let Err(e) = sender.send(Ok((ack_counter, pubsub_message))).await {
                     error!("Failed to send a PubSub message to the main task: {}", e);
 
                     // If we can't send to the main task, disconnect and let it restart
@@ -181,18 +211,39 @@ async fn consumer_task(
     }
 }
 
+fn pubsub_metadata(
+    id: String,
+    ordering_key: String,
+    publish_time: Option<Duration>,
+    attributes: HashMap<String, String>,
+) -> Value<'static> {
+    let mut attributes_value = Value::object_with_capacity(attributes.len());
+    for attr in attributes {
+        attributes_value
+            .as_object_mut()
+            .map(|x| x.insert(Cow::from(attr.0), Value::from(attr.1)));
+    }
+    literal!({
+        "pubsub_consumer": {
+            "messasge_id": id,
+            "ordering_key": ordering_key,
+            "publish_time": publish_time.map(|x| u64::try_from(x.as_nanos()).unwrap_or(0)),
+            "attributes": attributes_value
+        }
+    })
+}
+
 #[async_trait::async_trait]
 impl Source for GSubSource {
     async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
-        let url = Url::<HttpsDefaults>::parse(self.config.endpoint.as_str())?;
-
         let mut channel = Channel::from_shared(self.config.endpoint.clone())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
-        if url.scheme() == "https" {
+        if self.url.scheme() == "https" {
             let tls_config = ClientTlsConfig::new()
                 .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
                 .domain_name(
-                    url.host_str()
+                    self.url
+                        .host_str()
                         .ok_or_else(|| Status::unavailable("The endpoint is missing a hostname"))?
                         .to_string(),
                 );
@@ -201,9 +252,12 @@ impl Source for GSubSource {
         }
 
         let channel = channel.connect().await?;
+
+        #[cfg(test)]
         let skip_authentication = self.config.skip_authentication;
 
         let connect_to_pubsub = move || -> Result<PubSubClient> {
+            #[cfg(test)]
             if skip_authentication {
                 info!("Skipping auth...");
                 return Ok(SubscriberClient::with_interceptor(
@@ -242,6 +296,7 @@ impl Source for GSubSource {
 
         let join_handle = async_std::task::spawn(consumer_task(
             client_background,
+            self.client_id.clone(),
             tx,
             self.ack_ids.clone(),
             self.config.subscription_id.clone(),
@@ -258,13 +313,11 @@ impl Source for GSubSource {
     }
 
     async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
-        let receiver = self
-            .receiver
-            .as_mut()
-            .ok_or(ErrorKind::PubSubClientNotAvailable(
-                "The receiver is not connected",
-            ))?;
-        let (ack_id, data) = match receiver.recv().await? {
+        let receiver = self.receiver.as_mut().ok_or(ErrorKind::ClientNotAvailable(
+            "PubSub",
+            "The receiver is not connected",
+        ))?;
+        let (ack_id, pubsub_message) = match receiver.recv().await? {
             Ok(response) => response,
             Err(error) => {
                 let error_kind = error.kind();
@@ -285,8 +338,18 @@ impl Source for GSubSource {
 
         Ok(SourceReply::Data {
             origin_uri: EventOriginUri::default(),
-            data,
-            meta: None,
+            data: pubsub_message.data,
+            meta: Some(pubsub_metadata(
+                pubsub_message.message_id,
+                pubsub_message.ordering_key,
+                pubsub_message.publish_time.map(|x| {
+                    Duration::from_nanos(
+                        u64::try_from(x.seconds).unwrap_or(0) * 1_000_000_000u64
+                            + u64::try_from(x.nanos).unwrap_or(0),
+                    )
+                }),
+                pubsub_message.attributes,
+            )),
             stream: Some(DEFAULT_STREAM_ID),
             port: None,
             codec_overwrite: None,
@@ -305,7 +368,8 @@ impl Source for GSubSource {
         let sender = self
             .ack_sender
             .as_mut()
-            .ok_or(ErrorKind::PubSubClientNotAvailable(
+            .ok_or(ErrorKind::ClientNotAvailable(
+                "PubSub",
                 "The client is not connected",
             ))?;
         sender.send(pull_id).await?;
@@ -321,7 +385,11 @@ impl Connector for GSub {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = GSubSource::new(self.config.clone());
+        let source = GSubSource::new(
+            self.config.clone(),
+            self.url.clone(),
+            self.client_id.clone(),
+        );
         builder.spawn(source, source_context).map(Some)
     }
 
