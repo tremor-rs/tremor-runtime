@@ -114,6 +114,8 @@ async fn simple_subscribe() -> Result<()> {
         .out()
         .expect("No pipelines connected to out port of s3-reader");
     harness.start().await?;
+    harness.wait_for_connected().await?;
+    harness.consume_initial_sink_contraflow().await?;
 
     publisher
         .publish(PublishRequest {
@@ -129,13 +131,15 @@ async fn simple_subscribe() -> Result<()> {
         .await?;
 
     let event = out_pipe.get_event().await?;
+    harness.send_contraflow(CbAction::Ack, event.id).await?;
+    let (_out, err) = harness.stop().await?;
+    assert!(err.is_empty());
 
     assert_eq!(
         Some(Vec::from("abc1".as_bytes())),
         event.data.parts().0.as_bytes().map(|x| Vec::from(x))
     );
 
-    harness.send_contraflow(CbAction::Ack, event.id).await?;
 
     return Ok(());
 }
