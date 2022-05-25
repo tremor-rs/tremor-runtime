@@ -35,16 +35,12 @@ pub(crate) ModuleFile: ModuleRaw<'input> = {
 }
 
 ModuleBody: ModuleRaw<'input> = {
-    <start:@L> <doc:ModComment> <stmts:ModuleStmts> <end:@L> => ModuleRaw{name: IdentRaw::none(NodeMeta::new_box(start, end)), mid: NodeMeta::new_box(start, end), stmts, doc},
+    <start:@L> <doc:(ModComment)?> <stmts:ModuleStmts> <end:@L> => ModuleRaw{name: IdentRaw::none(NodeMeta::new_box(start, end)), mid: NodeMeta::new_box(start, end), stmts, doc},
 }
 
-ModComment: Option<Vec<Cow<'input, str>>> = {
-    (<ModComment_>)? => <>
-}
-  
-ModComment_: Vec<Cow<'input, str>> = {
+ModComment: Vec<Cow<'input, str>> = {
     <c:"<mod-comment>"> => vec![c.into()],
-    <v:ModComment_> <c:"<mod-comment>"> => {
+    <v:ModComment> <c:"<mod-comment>"> => {
         let mut v = v;
         v.push(c.into());
         v
@@ -52,12 +48,9 @@ ModComment_: Vec<Cow<'input, str>> = {
 }
 
 /// Comments
-DocComment: Option<Vec<Cow<'input, str>>> = {
-    (<DocComment_>)? => <>
-}
-DocComment_: Vec<Cow<'input, str>> = {
+DocComment: Vec<Cow<'input, str>> = {
     <c:"<doc-comment>"> => vec![c.into()],
-    <v:DocComment_> <c:"<doc-comment>"> => {
+    <v:DocComment> <c:"<doc-comment>"> => {
         let mut v = v;
         v.push(c.into());
         v
@@ -201,8 +194,8 @@ ModularTarget: NodeId = {
 
 /// Root
 pub(crate) Deploy : DeployRaw<'input> = {
-    <config:ConfigDirectives> <doc:ModComment> <stmts:DeployStmts> => DeployRaw{config, stmts, doc},
-    <doc:ModComment> <stmts:DeployStmts>=> DeployRaw{config: vec![], stmts, doc},
+    <config:ConfigDirectives> <doc:(ModComment)?> <stmts:DeployStmts> => DeployRaw{config, stmts, doc},
+    <doc:(ModComment)?> <stmts:DeployStmts>=> DeployRaw{config: vec![], stmts, doc},
 }
 
 DeployStmts: DeployStmtsRaw<'input> = {
@@ -222,8 +215,8 @@ DeployStmt: DeployStmtRaw<'input> = {
 }
 
 DeployFlowStmt: DeployFlowRaw<'input> = {
-    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployFlowRaw { mid: NodeMeta::new_box(start, end), id, target, params, docs },
-    <start:@L> <docs:DocComment> "deploy" "flow" <id:Ident> <params:CreationWithEnd> <end:@L> => DeployFlowRaw { mid: NodeMeta::new_box(start, end), id: id.clone(), target: id.into(), params, docs },
+    <start:@L> <docs:(DocComment)?> "deploy" "flow" <id:Ident> "from" <target:ModularTarget> <params:CreationWithEnd> <end:@L> => DeployFlowRaw { mid: NodeMeta::new_box(start, end), id, target, params, docs },
+    <start:@L> <docs:(DocComment)?> "deploy" "flow" <id:Ident> <params:CreationWithEnd> <end:@L> => DeployFlowRaw { mid: NodeMeta::new_box(start, end), id: id.clone(), target: id.into(), params, docs },
 }
 
 ConnectorKind: IdentRaw<'input> = {
@@ -288,12 +281,12 @@ ConnectToConnector: DeployEndpointRaw<'input> = {
 
 DefineConnector: ConnectorDefinitionRaw<'input> =  {
     // Connectors - these define connectors for deployment
-    <start:@L> <docs:DocComment> "define" "connector" <id:Ident> "from" <kind:ConnectorKind> <params:ArgsWithEnd> <end:@L> => ConnectorDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), kind, params, docs },
+    <start:@L> <docs:(DocComment)?> "define" "connector" <id:Ident> "from" <kind:ConnectorKind> <params:ArgsWithEnd> <end:@L> => ConnectorDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), kind, params, docs },
 }
 
 DefineFlow: FlowDefinitionRaw<'input> = {
     // Flow - these define how pipelines and connectors are interconnected to form a unit deployment graph
-    <start:@L> <doc:DocComment> "define" "flow" <id:Ident> <params:DefinitionArgs> "flow" <stmts:FlowStmts> "end" <end:@L> => FlowDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), params, stmts, doc },
+    <start:@L> <doc:(DocComment)?> "define" "flow" <id:Ident> <params:DefinitionArgs> "flow" <stmts:FlowStmts> "end" <end:@L> => FlowDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), params, stmts, doc },
 }
 
 ////////////////////////////// Trickle statements //////////////////////////////
@@ -334,25 +327,25 @@ Stmt: StmtRaw<'input> = {
 //// DEFINEs
 
 DefineWindow: WindowDefinitionRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" "window" <id:Ident> "from"  <kind:WindowKind> <params:CreationWith> <script:EmbeddedScriptImut> "end" <end:@L> => {
+    <doc:(DocComment)?> <start:@L> "define" "window" <id:Ident> "from"  <kind:WindowKind> <params:CreationWith> <script:(EmbeddedScriptImut)?> "end" <end:@L> => {
         WindowDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), kind, params, script, doc }
     }
 }
 
 DefineOperator: OperatorDefinitionRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" "operator" <id:Ident> "from" <kind:OperatorKind> <params:ArgsWithEnd> <end:@L> =>  {
+    <doc:(DocComment)?> <start:@L> "define" "operator" <id:Ident> "from" <kind:OperatorKind> <params:ArgsWithEnd> <end:@L> =>  {
         OperatorDefinitionRaw { mid: NodeMeta::new_box(start, end), kind, id: id.to_string(), params: params, doc }
     }
 }
 
 DefineScript: ScriptDefinitionRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" "script" <id:Ident> <params:DefinitionArgs> <script:EmbeddedScript> <end:@L> => {
+    <doc:(DocComment)?> <start:@L> "define" "script" <id:Ident> <params:DefinitionArgs> <script:EmbeddedScript> <end:@L> => {
         ScriptDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), script, params, doc }
     }
 }
 
 DefinePipeline: PipelineDefinitionRaw<'input> = {
-    <doc:DocComment> <start:@L> "define" "pipeline" <id:Ident> <from:("from" <Ports>)?> <into:("into" <Ports>)?> <params:DefinitionArgs> <pipeline:Pipeline> <end:@L> => {
+    <doc:(DocComment)?> <start:@L> "define" "pipeline" <id:Ident> <from:("from" <Ports>)?> <into:("into" <Ports>)?> <params:DefinitionArgs> <pipeline:Pipeline> <end:@L> => {
         PipelineDefinitionRaw { mid: NodeMeta::new_box(start, end), id: id.to_string(), pipeline: pipeline.1, config: pipeline.0, params, from, into, doc }
     }
 }
@@ -360,7 +353,7 @@ DefinePipeline: PipelineDefinitionRaw<'input> = {
 //// BUILTIN OPERATORS
 
 OperatorSelect: StmtRaw<'input> = {
-    <start:@L> "select" <target:ComplexExprImut> "from" <from:StreamPort> <windows:WindowClause> <maybe_where:WhereClause> <maybe_group_by:GroupByClause> "into" <into:StreamPort> <maybe_having:HavingClause> <end:@L> => StmtRaw::SelectStmt(Box::new(SelectRaw { mid: NodeMeta::new_box(start, end), from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
+    <start:@L> "select" <target:ComplexExprImut> "from" <from:StreamPort> <windows:(WindowClause)?> <maybe_where:(WhereClause)?> <maybe_group_by:(GroupByClause)?> "into" <into:StreamPort> <maybe_having:(HavingClause)?> <end:@L> => StmtRaw::SelectStmt(Box::new(SelectRaw { mid: NodeMeta::new_box(start, end), from, into, target, maybe_where, maybe_having, windows, maybe_group_by})),
 }
 
 //// CREATEs
@@ -415,8 +408,8 @@ WindowKind: WindowKind = {
     "tumbling" => WindowKind::Tumbling,
 }
     
-WindowClause: Option<Vec<WindowName>> = {
-    (<WindowDefn>)? => <>,
+WindowClause: Vec<WindowName> = {
+    <WindowDefn> => <>,
 }
 
 Windows: Vec<WindowName> = {
@@ -439,16 +432,16 @@ WindowDefn: Vec<WindowName>  = {
     "[" <windows:Windows> "]" => windows
 }
 
-WhereClause: Option<ImutExprRaw<'input>> = {
-    ("where" <ComplexExprImut>)? => <>,
+WhereClause: ImutExprRaw<'input> = {
+    "where" <ComplexExprImut> => <>,
 }
 
-HavingClause: Option<ImutExprRaw<'input>> = {
-    ("having" <ComplexExprImut>)? => <>,
+HavingClause: ImutExprRaw<'input> = {
+    "having" <ComplexExprImut> => <>,
 }
 
-GroupByClause: Option<GroupByRaw<'input>> = {
-    ("group" "by" <GroupDef>)? => <>
+GroupByClause: GroupByRaw<'input> = {
+    "group" "by" <GroupDef> => <>
 }
 
 GroupDef: GroupByRaw<'input> = {
@@ -469,12 +462,12 @@ GroupDefs_: Vec<GroupByRaw<'input>> = {
     <Sep<GroupDefs_, GroupDef, ",">> => <>
 }
 
-EmbeddedScriptImut: Option<ScriptRaw<'input>> = {
-    ("script" <EmbeddedScriptContent>)? => <>?,
+EmbeddedScriptImut: ScriptRaw<'input> = {
+    "script" <EmbeddedScriptContent> => <>,
 }
 
-EmbeddedScriptContent: Option<ScriptRaw<'input>> = {
-    <start:@L> <expr:ExprImut> <end:@L> => Some(ScriptRaw::new(NodeMeta::new_box(start, end), vec![TopLevelExprRaw::Expr(ExprRaw::Imut(expr))], None)),
+EmbeddedScriptContent: ScriptRaw<'input> = {
+    <start:@L> <expr:ExprImut> <end:@L> => ScriptRaw::new(NodeMeta::new_box(start, end), vec![TopLevelExprRaw::Expr(ExprRaw::Imut(expr))], None),
 }
 
 
@@ -510,7 +503,7 @@ PipelineCreateInner : StmtsRaw<'input> = {
 // These statements for the root of the language.
 
 pub(crate) Script : ScriptRaw<'input> = {
-    <start:@L> <doc:ModComment> <exprs:TopLevelExprs> <end:@L>  => ScriptRaw::new(NodeMeta::new_box(start, end), exprs, doc),
+    <start:@L> <doc:(ModComment)?> <exprs:TopLevelExprs> <end:@L>  => ScriptRaw::new(NodeMeta::new_box(start, end), exprs, doc),
 }
 
 /// List of expressions at the root of the script
@@ -544,7 +537,7 @@ TopLevelExpr: TopLevelExprRaw<'input> = {
 
 /// A const expressions (this gets compiled out during the 2nd phase)
 Const: ConstRaw<'input> = {
-    <comment:DocComment> <start:@L> "const" <name:Ident> @L "=" @R <expr:ComplexExprImut> <end:@L> => ConstRaw{name: name.id, expr: expr, mid: NodeMeta::new_box(start, end), comment},
+    <comment:(DocComment)?> <start:@L> "const" <name:Ident> @L "=" @R <expr:ComplexExprImut> <end:@L> => ConstRaw{name: name.id, expr: expr, mid: NodeMeta::new_box(start, end), comment},
 }
 
 
@@ -697,7 +690,7 @@ ComplexExprImut: ImutExprRaw<'input> = {
 }
 
 Intrinsic: AnyFnRaw<'input> = {
-    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "("  ")" "as" <imod:ModularTarget>  <end:@L> => {
+    <doc:(DocComment)?> <start:@L> "intrinsic" "fn" <name:Ident> "("  ")" "as" <imod:ModularTarget>  <end:@L> => {
         let invoce_args = vec![];
         let mut imod = imod;
         let mut module = vec!["core".to_string()];
@@ -711,7 +704,7 @@ Intrinsic: AnyFnRaw<'input> = {
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
         AnyFnRaw::Normal(FnDefnRaw{name, args: vec![], body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: true})
     },
-    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> ")" "as" <imod:ModularTarget><end:@L> => {
+    <doc:(DocComment)?> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> ")" "as" <imod:ModularTarget><end:@L> => {
         let invoce_args = args.iter().map(|root|
             ImutExprRaw::Path(
                 PathRaw::Local(
@@ -730,7 +723,7 @@ Intrinsic: AnyFnRaw<'input> = {
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
         AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: true})
     },
-    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> "," "." "." "." ")" "as" <imod:ModularTarget> <end:@L> => {
+    <doc:(DocComment)?> <start:@L> "intrinsic" "fn" <name:Ident> "(" <args:FnArgs> "," "." "." "." ")" "as" <imod:ModularTarget> <end:@L> => {
         let invoce_args = args.iter().map(|root|
             ImutExprRaw::Path(
                 PathRaw::Local(
@@ -748,7 +741,7 @@ Intrinsic: AnyFnRaw<'input> = {
         let body = vec![ExprRaw::Imut(ImutExprRaw::Invoke(invoke))];
         AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: true})
     },
-    <doc:DocComment> <start:@L> "intrinsic" "fn" <name:Ident> "(" "." "." "." ")" "as" <imod:ModularTarget> <end:@L> => {
+    <doc:(DocComment)?> <start:@L> "intrinsic" "fn" <name:Ident> "(" "." "." "." ")" "as" <imod:ModularTarget> <end:@L> => {
         let args = vec![];
         let invoce_args = vec![];
         let mut imod = imod;
@@ -766,14 +759,14 @@ Intrinsic: AnyFnRaw<'input> = {
 }
 
 FnDefn: AnyFnRaw<'input> = {
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" "." "." "." ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args: vec![], body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: false}),
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs>  "," "." "." "." ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: false}),
+  <doc:(DocComment)?> <start:@L> "fn" <name:Ident> "(" "." "." "." ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args: vec![], body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: false}),
+  <doc:(DocComment)?> <start:@L> "fn" <name:Ident> "(" <args:FnArgs>  "," "." "." "." ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: true, inline: false}),
 
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "("  ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args: vec![], body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: false}),
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: false}),
+  <doc:(DocComment)?> <start:@L> "fn" <name:Ident> "("  ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args: vec![], body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: false}),
+  <doc:(DocComment)?> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "with" <body:InnerExprs> "end" <end:@L> => AnyFnRaw::Normal(FnDefnRaw{name, args, body, mid: NodeMeta::new_box(start, end), doc, open: false, inline: false}),
 
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "("  ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDefnRaw{name, args: vec![], mid: NodeMeta::new_box(start, end), cases, doc, open: false, inline: false}),
-  <doc:DocComment> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDefnRaw{name, args, mid: NodeMeta::new_box(start, end), cases, doc, open: false, inline: false}),
+  <doc:(DocComment)?> <start:@L> "fn" <name:Ident> "("  ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDefnRaw{name, args: vec![], mid: NodeMeta::new_box(start, end), cases, doc, open: false, inline: false}),
+  <doc:(DocComment)?> <start:@L> "fn" <name:Ident> "(" <args:FnArgs> ")" "of" <cases:FnCases> "end" <end:@L> => AnyFnRaw::Match(MatchFnDefnRaw{name, args, mid: NodeMeta::new_box(start, end), cases, doc, open: false, inline: false}),
 }
 
 FnCases: Vec<PredicateClauseRaw<'input, ExprRaw<'input>>> = {
