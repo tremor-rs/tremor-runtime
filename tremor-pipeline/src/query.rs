@@ -732,7 +732,7 @@ fn select(
                         .get::<WindowDefinition>(&w.id)?
                         .ok_or_else(|| {
                             Error::from(ErrorKind::BadOpConfig(format!(
-                                "Unknown window: {} available",
+                                "Unknown window: {}",
                                 &w.id,
                             )))
                         })
