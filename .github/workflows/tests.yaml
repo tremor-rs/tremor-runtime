@@ -26,9 +26,9 @@ jobs:
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
           RUST_BACKTRACE: 1
         run: cargo llvm-cov --workspace --lcov --output-path lcov.txt --features integration
-      - uses: codecov/codecov-action@v2
+      - uses: codecov/codecov-action@v3
         with:
-          token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+          #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
           files: ./lcov.txt # optional
           flags: unittests # optional
           fail_ci_if_error: true # optional (default = false)
