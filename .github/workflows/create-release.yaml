@@ -49,4 +49,3 @@ jobs:
         with:
           workflow: Publish crates
           token: ${{ secrets.PAT_TOKEN }}
-          inputs: '{ "version": "${{ env.RELEASE_VERSION }}"}'
