@@ -1,15 +1,6 @@
 # Changelog
 
-## [0.12.0-rc.9]
-
-### Fixes
-
-- Fix detection of `*.troy` files in entrypoint.sh causing duplicate configs to be loaded when using Kubernetes.
-- Fix a one-off error in the `bench` connector leading to it producing one event too much
-- Avoid acking events that failed while preprocessing or decoding using a codec.
-- Remove acknowledging events when dropped or sent to a dead end (e.g. unconnected port) as this was causing confusing and unwanted behaviour with error events
-- move EXIT connector to debug connectors to avoid shutting down tremor
-- Fix bug in grok extractor that would never return good matches
+## [0.12.0]
 
 ### New features
 
@@ -17,44 +8,9 @@
 - Add several auth methods for `elastic` and `HTTP` connector (Basic Auth, Api-Key, Bearer Token, ...)
 - Add support for specifying client certificates with `tls` config for `http_client` and `tcp_client` connectors.
 - Add `tremor new` to create new template projects.
-
-## [0.12.0-rc.7]
-
-### Fixes
-
-- Properly terminate after `tremor run ...`
-- Fix the `bench` connector to actually stop after the given amount of events when `iters` is configured.
-
-### New features
-
 - Support `elastic.raw_payload` for `update`
-
-## [0.12.0-rc.6]
-
-### Fixes
-- http headers to allow strings and arrays
-
-## [0.12.0-rc.2 - 0.12.0-rc.5]
-
-### New features
-
 - Add support for `chunked` requests and responses for the HTTP connectors
 - Add the `gbq` connector for Google BigQuery
-
-### Fixes
-
-- fix the use of `args` in the with part of a `create` insode of a `flow`.
-- fix silent swallowing of unknown fields in connector definition.
-
-### Breaking Changes
-- the `tremor api` sub command in the cli has been removed.
-- the `-` is no longer a valid part of identifiers.
-- binaries now use `_` to sepoerate type names as `-` is no longer a identifier.
-
-## [0.12.0-rc.1]
-
-### New featues
-
 - Add support for `tuple patterns` inside of record patterns.
 - Refactor visitors to seperate walker and visitor and visit all nodes.
 - Add support for modular subqueries in Trickle
@@ -98,8 +54,36 @@
 - Integration test names are added as a tag so they can be run by name
 - integration tests low log stdout/stderr for before and after
 
+### Breaking Changes
+
+- the `tremor api` sub command in the cli has been removed.
+- the `-` is no longer a valid part of identifiers.
+- binaries now use `_` to sepoerate type names as `-` is no longer a identifier.
+- changed naming for `record` object to avoid keywords like `select` and `merge`. New names are `record.extract` and `record.combine`.
+- command separators are now unified, both `patch`, `match` and `for` now use `;` the same way the rest of the language does
+- in all definitional statements `args` now specifies interface arguments that are overwritable in the correspanding `create` statement, while `with` specifies non-overwritable configuration in both `define` and `create` statements - this unifies the use of `with`  and `args` between trickle and troy
+- file connector no longer splits by lines - it now requires a preconnector
+- define for both troy and trickle now follow the same principle of `define <type> <alias> from <source>`
+- `wal` is no longer an operator but a connector
+- for the elastic connector indexes have not to be set on the batch not the individual event so one batch can only be to a single index.
+- metronome interval is now in nanoseconds (as all other timings)
+- Most connectors require a specified codec now instead of using JSON as a default
+- `merge` no longer treats `null` in the spec as a delete option but rather as a normal value
+- Combine all compression and decompression pre/postprocessors.
+
 ### Fixes
 
+- Fix detection of `*.troy` files in entrypoint.sh causing duplicate configs to be loaded when using Kubernetes.
+- Fix a one-off error in the `bench` connector leading to it producing one event too much
+- Avoid acking events that failed while preprocessing or decoding using a codec.
+- Remove acknowledging events when dropped or sent to a dead end (e.g. unconnected port) as this was causing confusing and unwanted behaviour with error events
+- move EXIT connector to debug connectors to avoid shutting down tremor
+- Fix bug in grok extractor that would never return good matches
+- Properly terminate after `tremor run ...`
+- Fix the `bench` connector to actually stop after the given amount of events when `iters` is configured.
+- http headers to allow strings and arrays
+- fix the use of `args` in the with part of a `create` insode of a `flow`.
+- fix silent swallowing of unknown fields in connector definition.
 - Make otel severity_number optional: #1248
 - Don't allow duplicate stream names: #1212
 - Fix memory safety issue when using `merge` or `patch` with `state` as target and reassigning the resulting value to `state` [#1217](https://github.com/tremor-rs/tremor-runtime/pull/1217)
@@ -130,20 +114,6 @@
 - tremor-script: Add more details about Unicode in the documentation of the `string` module
 - Fix `hdr` and `dds` aggregation function losing events when aggregating > 8192 events
 - Ensure merge can only happen on objects
-
-### Breaking Changes
-
-- changed naming for `record` object to avoid keywords like `select` and `merge`. New names are `record.extract` and `record.combine`.
-- command separators are now unified, both `patch`, `match` and `for` now use `;` the same way the rest of the language does
-- in all definitional statements `args` now specifies interface arguments that are overwritable in the correspanding `create` statement, while `with` specifies non-overwritable configuration in both `define` and `create` statements - this unifies the use of `with`  and `args` between trickle and troy
-- file connector no longer splits by lines - it now requires a preconnector
-- define for both troy and trickle now follow the same principle of `define <type> <alias> from <source>`
-- `wal` is no longer an operator but a connector
-- for the elastic connector indexes have not to be set on the batch not the individual event so one batch can only be to a single index.
-- metronome interval is now in nanoseconds (as all other timings)
-- Most connectors require a specified codec now instead of using JSON as a default
-- `merge` no longer treats `null` in the spec as a delete option but rather as a normal value
-- Combine all compression and decompression pre/postprocessors.
 
 ## [0.11.12]
 
@@ -444,10 +414,7 @@
 - Allow using err for errors in tremor run [#592](https://github.com/tremor-rs/tremor-runtime/pull/592)
 - Update to rust toolchain 1.48
 
-[0.12.0-rc.7]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.0-rc.6...v0.12.0-rc.7
-[0.12.0-rc.6]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.0-rc.5...v0.12.0-rc.6
-[0.12.0-rc.2 - 0.12.0-rc.5]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.0-rc.1...v0.12.0-rc.5
-[0.12.0-rc.1]: https://github.com/tremor-rs/tremor-runtime/compare/v0.11.12...v0.12.0-rc.1
+[0.12.0]: https://github.com/tremor-rs/tremor-runtime/compare/v0.11.12...v0.12.0
 [0.11.12]: https://github.com/tremor-rs/tremor-runtime/compare/v0.11.10...v0.11.12
 [0.11.10]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.9...v0.11.10
 [0.11.9]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.8...v0.11.9
