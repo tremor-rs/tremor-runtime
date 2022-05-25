@@ -113,6 +113,7 @@ impl ServerRun {
         let signal_handler_task = async_std::task::spawn(handle_signals(signals, world.clone()));
 
         let mut troy_files = Vec::with_capacity(16);
+        // We process trickle files first
         for config_file in &self.artefacts {
             let kind = get_source_kind(config_file);
             if kind == SourceKind::Troy {
