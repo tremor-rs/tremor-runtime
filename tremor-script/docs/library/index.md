@@ -1,4 +1,4 @@
-# Tremor Standard Library
+# Standard Library
 
 Tremor is shipped with a standard library that contains as set of functions, constants and definitions to be used within Troy, Tremor Pipeline or Tremor Script code.
 
