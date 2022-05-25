@@ -1051,4 +1051,43 @@ mod test {
 
         Ok(())
     }
+
+    #[async_std::test]
+    async fn on_event_fails_if_client_is_not_conected() -> Result<()> {
+        let (rx, _tx) = async_std::channel::unbounded();
+        let config = Config::new(&literal!({
+            "table_id": "doesnotmatter",
+            "connect_timeout": 1000000,
+            "request_timeout": 1000000
+        }))
+        .unwrap();
+
+        let mut sink = GbqSink::new(config);
+
+        let result = sink
+            .on_event(
+                "",
+                Event::signal_tick(),
+                &SinkContext {
+                    uid: Default::default(),
+                    alias: "".to_string(),
+                    connector_type: Default::default(),
+                    quiescence_beacon: Default::default(),
+                    notifier: ConnectionLostNotifier::new(rx),
+                },
+                &mut EventSerializer::new(
+                    None,
+                    CodecReq::Structured,
+                    vec![],
+                    &ConnectorType::from(""),
+                    "",
+                )
+                .unwrap(),
+                0,
+            )
+            .await;
+
+        assert!(result.is_err());
+        Ok(())
+    }
 }
