@@ -287,6 +287,14 @@ impl GbqSink {
             config,
         }
     }
+
+    #[cfg(test)]
+    pub fn set_client(
+        &mut self,
+        client: BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor>>,
+    ) {
+        self.client = Some(client);
+    }
 }
 
 #[async_trait::async_trait]
@@ -442,6 +450,7 @@ mod test {
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use crate::connectors::tests::ConnectorHarness;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
+    use std::sync::Arc;
     use value_trait::StaticNode;
 
     #[test]
@@ -1063,6 +1072,51 @@ mod test {
         .unwrap();
 
         let mut sink = GbqSink::new(config);
+
+        let result = sink
+            .on_event(
+                "",
+                Event::signal_tick(),
+                &SinkContext {
+                    uid: Default::default(),
+                    alias: "".to_string(),
+                    connector_type: Default::default(),
+                    quiescence_beacon: Default::default(),
+                    notifier: ConnectionLostNotifier::new(rx),
+                },
+                &mut EventSerializer::new(
+                    None,
+                    CodecReq::Structured,
+                    vec![],
+                    &ConnectorType::from(""),
+                    "",
+                )
+                .unwrap(),
+                0,
+            )
+            .await;
+
+        assert!(result.is_err());
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn on_event_fails_if_write_stream_is_not_conected() -> Result<()> {
+        let (rx, _tx) = async_std::channel::unbounded();
+        let config = Config::new(&literal!({
+            "table_id": "doesnotmatter",
+            "connect_timeout": 1000000,
+            "request_timeout": 1000000
+        }))
+        .unwrap();
+
+        let mut sink = GbqSink::new(config);
+        sink.set_client(BigQueryWriteClient::with_interceptor(
+            Channel::from_static("http://example.com").connect_lazy(),
+            AuthInterceptor {
+                token: Box::new(|| Ok(Arc::new(String::new()))),
+            },
+        ));
 
         let result = sink
             .on_event(
