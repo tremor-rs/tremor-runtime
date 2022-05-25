@@ -734,7 +734,7 @@ dependencies = [
  "bytes 1.1.0",
  "fastrand",
  "http",
- "http-body 0.4.4",
+ "http-body 0.4.5",
  "hyper 0.14.18",
  "hyper-rustls 0.22.1",
  "lazy_static",
@@ -768,7 +768,7 @@ dependencies = [
  "bytes-utils",
  "futures-core",
  "http",
- "http-body 0.4.4",
+ "http-body 0.4.5",
  "hyper 0.14.18",
  "once_cell",
  "percent-encoding",
@@ -787,7 +787,7 @@ dependencies = [
  "aws-smithy-http",
  "bytes 1.1.0",
  "http",
- "http-body 0.4.4",
+ "http-body 0.4.5",
  "pin-project",
  "tower",
  "tracing",
@@ -1166,9 +1166,9 @@ dependencies = [
 
 [[package]]
 name = "clang-sys"
-version = "1.3.1"
+version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cc00842eed744b858222c4c9faf7243aafc6d33f92f96935263ef4d8a41ce21"
+checksum = "bf6b561dcf059c85bbe388e0a7b0a1469acb3934cc0cfa148613a830629e3049"
 dependencies = [
  "glob",
  "libc",
@@ -2478,9 +2478,9 @@ dependencies = [
 
 [[package]]
 name = "http-body"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ff4f84919677303da5f147645dbea6b1881f368d03ac84e1dc09031ebd7b2c6"
+checksum = "d5f38f16d184e36f2408a55281cd658ecbd3ca05cce6d6510a176eca393e26d1"
 dependencies = [
  "bytes 1.1.0",
  "http",
@@ -2607,7 +2607,7 @@ dependencies = [
  "futures-util",
  "h2 0.3.13",
  "http",
- "http-body 0.4.4",
+ "http-body 0.4.5",
  "httparse",
  "httpdate 1.0.2",
  "itoa 1.0.2",
@@ -2644,7 +2644,7 @@ checksum = "d87c48c02e0dc5e3b849a2041db3029fd066650f8f717c07bf8ed78ccb895cac"
 dependencies = [
  "http",
  "hyper 0.14.18",
- "rustls 0.20.5",
+ "rustls 0.20.6",
  "tokio 1.18.2",
  "tokio-rustls 0.23.4",
 ]
@@ -3469,9 +3469,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.10.0"
+version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87f3e037eac156d1775da914196f0f37741a274155e34a0b7e427c35d2a2ecb9"
+checksum = "7709cef83f0c1f58f666e746a08b21e0085f7440fa6a29cc194d68aac97a4225"
 
 [[package]]
 name = "onig"
@@ -4230,7 +4230,7 @@ dependencies = [
  "futures-util",
  "h2 0.3.13",
  "http",
- "http-body 0.4.4",
+ "http-body 0.4.5",
  "hyper 0.14.18",
  "hyper-rustls 0.23.0",
  "ipnet",
@@ -4241,7 +4241,7 @@ dependencies = [
  "mime_guess",
  "percent-encoding",
  "pin-project-lite 0.2.9",
- "rustls 0.20.5",
+ "rustls 0.20.6",
  "rustls-native-certs 0.6.2",
  "rustls-pemfile 0.3.0",
  "serde",
@@ -4412,9 +4412,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.20.5"
+version = "0.20.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a024a432ae760ab3bff924ad91ce1cfa52cb57ed16e1ef32d0d249cfee1a6c13"
+checksum = "5aab8ee6c7097ed6057f43c187a62418d0c05a4bd5f18b3571db50ee0f9ce033"
 dependencies = [
  "log",
  "ring",
@@ -4499,12 +4499,12 @@ dependencies = [
 
 [[package]]
 name = "schannel"
-version = "0.1.19"
+version = "0.1.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f05ba609c234e60bee0d547fe94a4c7e9da733d1c962cf6e59efa4cd9c8bc75"
+checksum = "88d6731146462ea25d9244b2ed5fd1d716d25c52e4d54aa4fb0f3c4e9854dbe2"
 dependencies = [
  "lazy_static",
- "winapi 0.3.9",
+ "windows-sys",
 ]
 
 [[package]]
@@ -5572,7 +5572,7 @@ version = "0.23.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c43ee83903113e03984cb9e5cebe6c04a5116269e900e3ddba8f068a62adda59"
 dependencies = [
- "rustls 0.20.5",
+ "rustls 0.20.6",
  "tokio 1.18.2",
  "webpki 0.22.0",
 ]
@@ -5663,7 +5663,7 @@ dependencies = [
  "futures-util",
  "h2 0.3.13",
  "http",
- "http-body 0.4.4",
+ "http-body 0.4.5",
  "hyper 0.14.18",
  "hyper-timeout",
  "percent-encoding",
@@ -6033,7 +6033,7 @@ dependencies = [
  "tremor-value",
  "tungstenite",
  "url",
- "uuid 1.0.0",
+ "uuid 1.1.0",
  "value-trait",
  "xz2",
  "zstd",
@@ -6170,7 +6170,7 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.8.5",
- "rustls 0.20.5",
+ "rustls 0.20.6",
  "sha-1",
  "thiserror",
  "url",
@@ -6323,9 +6323,9 @@ dependencies = [
 
 [[package]]
 name = "uuid"
-version = "1.0.0"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cfcd319456c4d6ea10087ed423473267e1a071f3bc0aa89f80d60997843c6f0"
+checksum = "93bbc61e655a4833cf400d0d15bf3649313422fa7572886ad6dab16d79886365"
 dependencies = [
  "getrandom 0.2.6",
 ]
