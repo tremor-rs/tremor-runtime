@@ -83,12 +83,7 @@ impl Clickhouse {
     fn connection_url(&self) -> String {
         let host = self.config.url.as_str();
 
-        let path = self
-            .config
-            .database
-            .as_ref()
-            .map(String::as_str)
-            .unwrap_or_default();
+        let path = self.config.database.as_deref().unwrap_or_default();
 
         let compression = self.config.compression.unwrap_or_default();
 
@@ -288,9 +283,9 @@ impl fmt::Display for DummySqlType {
     }
 }
 
-impl Into<&'static SqlType> for &DummySqlType {
-    fn into(self) -> &'static SqlType {
-        let non_static_type = match self {
+impl From<&DummySqlType> for &'static SqlType {
+    fn from(ty: &DummySqlType) -> &'static SqlType {
+        let non_static_type = match ty {
             DummySqlType::Array(inner) => SqlType::Array(inner.as_ref().into()),
             DummySqlType::Nullable(inner) => SqlType::Nullable(inner.as_ref().into()),
 
