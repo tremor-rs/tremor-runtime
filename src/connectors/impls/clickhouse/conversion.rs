@@ -194,7 +194,7 @@ where
             .map(variant)
             .map_err(|()| Error::from(error))
     } else if let Some(string) = context.value.as_str() {
-        T::from_str(string.as_ref())
+        T::from_str(string)
             .map(extractor)
             .map(variant)
             .map_err(|_| Error::from(error))
