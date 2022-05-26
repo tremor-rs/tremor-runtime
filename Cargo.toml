@@ -52,28 +52,18 @@ bytes = "1.1"
 chrono = "0.4"
 chrono-tz = "0.6"
 
-# The situation with clickhouse is a bit complicated.
-#
-# Once [1] is merged, we can use use the original `suharev7/clickhouse-rs`
-# repository. By replacing the clickhouse dependency with the following one:
-#
-# clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", branch = "async-await", default-features = false, features = [
-#   "async_std",
-# ] }
-#
-# Then, once a new version of clickhouse-rs is released, we can stop using a
-# git repository as a dependency. The declaration can then be replaced with the
+# Once a new version of clickhouse-rs is released, we can stop using a git
+# repository as a dependency. The declaration can then be replaced with the
 # following:
 #
 # clickhouse-rs = { version = "...", default-features = false, features = [
 #   "async_std",
 # ] }
 #
-# Releases can be tracked at [2].
+# Releases can be tracked at [1].
 #
-# [1]: https://github.com/suharev7/clickhouse-rs/pull/173
-# [2]: https://crates.io/crates/clickhouse-rs/versions
-clickhouse-rs = { git = "https://github.com/scrabsha/clickhouse-rs", rev = "3d821ce", default-features = false, features = [
+# [1]: https://crates.io/crates/clickhouse-rs/versions
+clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", branch = "async-await", default-features = false, features = [
   "async_std",
 ] }
 csv = "1.1"
