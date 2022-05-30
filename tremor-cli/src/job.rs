@@ -97,7 +97,7 @@ impl TargetProcess {
     where
         S: AsRef<OsStr>,
     {
-        TargetProcess::new(cmd, args, env, std::env::current_dir()?)
+        Self::new(cmd, args, env, std::env::current_dir()?)
     }
 
     /// create a process in the given directory via `cwd`
@@ -111,7 +111,7 @@ impl TargetProcess {
         S: AsRef<OsStr>,
         P: AsRef<Path>,
     {
-        TargetProcess::new(cmd, args, env, dir)
+        Self::new(cmd, args, env, dir)
     }
 
     /// Spawn target process and pipe IO
@@ -176,6 +176,18 @@ impl TargetProcess {
             }
             None => Err("Unable to create stdout and stderr streams from target process".into()),
         }
+    }
+
+    pub(crate) async fn write_to_stdin<R>(&mut self, content: R) -> Result<()>
+    where
+        R: async_std::io::Read + Unpin,
+    {
+        if let Some(mut stdin) = self.process.stdin.take() {
+            async_std::io::copy(content, &mut stdin).await?;
+            futures::AsyncWriteExt::flush(&mut stdin).await?;
+            futures::AsyncWriteExt::close(&mut stdin).await?;
+        }
+        Ok(())
     }
 
     pub(crate) async fn wait(&mut self) -> Result<ExitStatus> {

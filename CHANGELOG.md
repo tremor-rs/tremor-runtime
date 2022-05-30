@@ -4,6 +4,7 @@
 
 ### Fixes
 
+- Fix misbehaving stdio connector when stdio is a pipe
 - fix Docker entrypoint script argument ordering
 
 ## [0.12.0]
