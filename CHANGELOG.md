@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- fix Docker entrypoint script argument ordering
+
 ## [0.12.0]
 
 ### New features
