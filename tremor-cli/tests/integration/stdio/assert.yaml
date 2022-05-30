@@ -1,0 +1,9 @@
+name: stdio
+status: 0
+asserts:
+  - source: fg.out.log
+    contains: 
+    - "event for stdout"
+  - source: fg.err.log
+    containts: 
+    - "event for stdin"

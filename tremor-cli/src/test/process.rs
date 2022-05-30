@@ -140,6 +140,12 @@ pub(crate) async fn run_process(
     info!("Starting {} ...", &process);
     let fg_out_file = test_dir.join("fg.out.log");
     let fg_err_file = test_dir.join("fg.err.log");
+    let stdin_file = test_dir.join("stdin");
+    if stdin_file.is_file() {
+        info!("Writing `stdin` contents to Tremor's stdin.");
+        let stdin_f = tremor_common::asy::file::open(&stdin_file).await?;
+        process.write_to_stdin(stdin_f).await?;
+    }
     let fg = process.tail(&fg_out_file, &fg_err_file).await?;
     info!("Process exited with {}", fg);
 

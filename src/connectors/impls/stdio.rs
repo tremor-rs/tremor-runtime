@@ -35,7 +35,7 @@ lazy_static! {
             let mut buffer = [0_u8; INPUT_SIZE_BYTES];
             while let Ok(len) = stream.read(&mut buffer).await {
                 if len == 0 {
-                    error!("STDIN empty?!?");
+                    info!("STDIN done reading.");
                     break;
                     // ALLOW: we get len from read
                 } else if let Err(e) = tx.broadcast(buffer[0..len].to_vec()).await {
@@ -68,6 +68,7 @@ impl ConnectorBuilder for Builder {
 pub struct StdStreamSource {
     stdin: Option<Receiver<Vec<u8>>>,
     origin_uri: EventOriginUri,
+    done: bool,
 }
 
 impl StdStreamSource {
@@ -80,31 +81,40 @@ impl StdStreamSource {
                 port: None,
                 path: vec![],
             },
+            done: false,
         }
     }
 }
 
 #[async_trait::async_trait()]
 impl Source for StdStreamSource {
-    #[allow(clippy::option_if_let_else)]
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        let stdin = if let Some(stdin) = &mut self.stdin {
-            stdin
+        let reply = if self.done {
+            SourceReply::Finished
         } else {
-            self.stdin.insert(STDIN.clone())
+            let stdin = self.stdin.get_or_insert_with(|| STDIN.clone());
+            if let Ok(data) = stdin.recv().await {
+                SourceReply::Data {
+                    origin_uri: self.origin_uri.clone(),
+                    data,
+                    meta: None,
+                    stream: Some(DEFAULT_STREAM_ID),
+                    port: None,
+                    codec_overwrite: None,
+                }
+            } else {
+                // receive error from broadcast channel
+                // either the stream is done (in case of a pipe)
+                // or everything is very broken. Either way, ending the stream seems appropriate.
+                self.done = true;
+                SourceReply::EndStream {
+                    origin_uri: self.origin_uri.clone(),
+                    stream: DEFAULT_STREAM_ID,
+                    meta: None,
+                }
+            }
         };
-        let data = stdin
-            .recv()
-            .await
-            .map_err(|e| Error::from(format!("recv error: {e}")))?;
-        Ok(SourceReply::Data {
-            origin_uri: self.origin_uri.clone(),
-            data,
-            meta: None,
-            stream: Some(DEFAULT_STREAM_ID),
-            port: None,
-            codec_overwrite: None,
-        })
+        Ok(reply)
     }
 
     fn is_transactional(&self) -> bool {
@@ -112,6 +122,8 @@ impl Source for StdStreamSource {
     }
 
     fn asynchronous(&self) -> bool {
+        // if we would put true here, the runtime would pull until we are done/empty or finished.
+        // no such signal will arrive, so we instead say we are done immediately
         false
     }
 }
@@ -204,6 +216,7 @@ mod test {
         let source = StdStreamSource {
             stdin: None,
             origin_uri: EventOriginUri::default(),
+            done: false,
         };
         assert!(!source.asynchronous());
         assert!(!source.is_transactional());

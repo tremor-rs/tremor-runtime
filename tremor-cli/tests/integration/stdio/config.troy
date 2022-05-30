@@ -1,0 +1,43 @@
+define flow main
+flow
+  use integration;
+
+  define connector string_stdio from stdio
+  with
+    preprocessors = ["separate"],
+    codec = "string",
+    postprocessors = ["separate"]
+  end;
+  create connector string_stdio;
+
+  define pipeline main
+  into 
+    out, err, exit
+  pipeline
+    use std::string;
+
+    define script route
+    script
+      match event of
+        case "event for stderr" => emit event => "err"
+        case "exit" => emit event => "exit"
+        default => emit event => "out"
+      end;
+    end;
+    create script route;
+
+    select event from in into route;
+    select event from route/out into out;
+    select event from route/err into err;
+    select event from route/exit into exit;
+  end;
+  create pipeline main;
+
+  create connector exit from integration::exit;
+
+  connect /connector/string_stdio to /pipeline/main;
+  connect /pipeline/main/out to /connector/string_stdio/stdout;
+  connect /pipeline/main/err to /connector/string_stdio/stderr;
+  connect /pipeline/main/exit to /connector/exit;
+end;
+deploy flow main;
