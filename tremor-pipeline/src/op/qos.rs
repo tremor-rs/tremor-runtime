@@ -19,3 +19,24 @@ pub mod rr;
 pub use backpressure::BackpressureFactory;
 pub use percentile::PercentileFactory;
 pub use rr::RoundRobinFactory;
+
+use crate::op::prelude::*;
+use tremor_script::prelude::*;
+
+/// Returns true if the given `insight` signals a downstream error
+///
+/// This is the case when:
+/// * the event metadata has an `error` field OR
+/// * we have a event delivery failure OR
+/// * we have a message triggering a circuit breaker OR
+/// * the event metadata has a `time` field that exceeds the given `timeout`
+fn is_error_insight(insight: &Event, timeout: f64) -> bool {
+    let meta = insight.data.suffix().meta();
+    meta.get("error").is_some()
+        || insight.cb == CbAction::Fail
+        || insight.cb == CbAction::Trigger
+        || meta
+            .get("time")
+            .and_then(Value::cast_f64)
+            .map_or(false, |v| v > timeout)
+}

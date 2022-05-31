@@ -192,18 +192,10 @@ impl Operator for Backpressure {
         if !insight.op_meta.contains_key(uid) {
             return;
         }
-        let (_, meta) = insight.data.parts();
 
         let did_apply_backoff = self.has_backoff();
-        let timeout = self.config.timeout;
-        if meta.get("error").is_some()
-            || insight.cb == CbAction::Fail
-            || insight.cb == CbAction::Trigger
-            || meta
-                .get("time")
-                .and_then(Value::cast_f64)
-                .map_or(false, |v| v > timeout)
-        {
+        if super::is_error_insight(insight, self.config.timeout) {
+            // upon error we step up the backoff
             self.update_backoff(insight.ingest_ns);
         } else if insight.cb == CbAction::Ack {
             // downstream seems healthy again, reset backpressure
