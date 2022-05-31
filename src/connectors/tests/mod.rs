@@ -166,7 +166,7 @@ impl ConnectorHarness {
 
         // send a CBAction::open to the connector, so it starts pulling data
         self.addr
-            .send_source(SourceMsg::Cb(CbAction::Open, EventId::default()))
+            .send_source(SourceMsg::Cb(CbAction::Restore, EventId::default()))
             .await?;
 
         Ok(())
@@ -233,7 +233,7 @@ impl ConnectorHarness {
                 in_pipe.get_contraflow().await?,
             ] {
                 assert!(
-                    matches!(cf.cb, CbAction::SinkStart(_) | CbAction::Open),
+                    matches!(cf.cb, CbAction::SinkStart(_) | CbAction::Restore),
                     "Expected SinkStart or Open Contraflow message, got: {cf:?}"
                 );
             }

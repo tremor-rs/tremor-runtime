@@ -28,16 +28,14 @@ use tremor_script::{
 ///
 /// select event from in [where ...] into out [having ...]
 #[derive(Debug)]
-pub struct SimpleSelect {
-    pub id: String,
-    pub(crate) select: ast::SelectStmt<'static>,
+pub(crate) struct SimpleSelect {
+    select: ast::SelectStmt<'static>,
     recursion_limit: u32,
 }
 
 impl SimpleSelect {
-    pub fn with_stmt(id: String, stmt: &ast::SelectStmt<'static>) -> Self {
+    pub fn with_stmt(stmt: &ast::SelectStmt<'static>) -> Self {
         Self {
-            id,
             select: stmt.clone(),
             recursion_limit: tremor_script::recursion_limit(),
         }

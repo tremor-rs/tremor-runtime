@@ -55,7 +55,7 @@ pub struct Config {
     /// as the maximum timeout is exceeded
     ///
     /// default: `[50, 100, 250, 500, 1000, 5000, 10000]`
-    #[serde(default = "d_steps")]
+    #[serde(default = "default_steps")]
     pub steps: Vec<u64>,
 
     /// Defines the behaviour of the backpressure operator.
@@ -69,19 +69,16 @@ pub struct Config {
 
 impl ConfigImpl for Config {}
 
-#[derive(Debug, Clone)]
-pub struct Output {
-    backoff: u64,
-    next: u64,
-    output: Cow<'static, str>,
+fn default_steps() -> Vec<u64> {
+    vec![50, 100, 250, 500, 1000, 5000, 10000]
 }
 
 #[derive(Debug, Clone)]
-pub struct Backpressure {
-    pub config: Config,
-    pub output: Output,
-    pub steps: Vec<u64>,
-    pub next: usize,
+struct Backpressure {
+    config: Config,
+    backoff: u64,
+    next: u64,
+    steps: Vec<u64>,
 }
 
 impl From<Config> for Backpressure {
@@ -89,30 +86,41 @@ impl From<Config> for Backpressure {
         let steps = config.steps.iter().map(|v| *v * 1_000_000).collect();
         Self {
             config,
-            output: Output {
-                output: OUT,
-                next: 0,
-                backoff: 0,
-            },
-            steps,
+            backoff: 0,
             next: 0,
+            steps,
         }
     }
 }
 
-fn d_steps() -> Vec<u64> {
-    vec![50, 100, 250, 500, 1000, 5000, 10000]
-}
-
-pub fn next_backoff(steps: &[u64], current: u64) -> u64 {
-    let mut b = 0;
-    for backoff in steps {
-        b = *backoff;
-        if b > current {
-            break;
-        }
+impl Backpressure {
+    /// We detected an error case, so we update our backoff if necessary
+    fn update_backoff(&mut self, ingest_ns: u64) {
+        let backoff = Self::next_backoff(&self.steps, self.backoff);
+        self.backoff = backoff;
+        self.next = ingest_ns + backoff;
     }
-    b
+
+    /// We detected a healthy downstream, so we do not apply backpressure anymore, yay!
+    fn reset(&mut self) {
+        self.backoff = 0;
+        self.next = 0;
+    }
+
+    fn has_backoff(&self) -> bool {
+        self.backoff > 0
+    }
+
+    fn next_backoff(steps: &[u64], current: u64) -> u64 {
+        let mut b = 0;
+        for backoff in steps {
+            b = *backoff;
+            if b > current {
+                break;
+            }
+        }
+        b
+    }
 }
 
 op!(BackpressureFactory(_uid, node) {
@@ -137,11 +145,11 @@ impl Operator for Backpressure {
         // and thus do effective backpressure
         // if we don't and the events arent transactional themselves, we won't be notified, which would render this operator useless
         event.transactional = true;
-        let output = if self.output.next <= event.ingest_ns {
-            self.output.next = event.ingest_ns + self.output.backoff;
-            self.output.output.clone()
+        let output = if self.next <= event.ingest_ns {
+            self.next = event.ingest_ns + self.backoff;
+            OUT
         } else if self.config.method == Method::Pause {
-            self.output.output.clone()
+            OUT
         } else {
             OVERFLOW
         };
@@ -162,9 +170,8 @@ impl Operator for Backpressure {
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
-        let insights = if self.output.backoff > 0 && self.output.next <= signal.ingest_ns {
-            self.output.backoff = 0;
-            self.output.next = 0;
+        let insights = if self.backoff > 0 && self.next <= signal.ingest_ns {
+            self.reset();
             if self.config.method == Method::Pause {
                 vec![Event::cb_restore(signal.ingest_ns)]
             } else {
@@ -187,35 +194,32 @@ impl Operator for Backpressure {
         }
         let (_, meta) = insight.data.parts();
 
-        let Backpressure {
-            ref mut output,
-            ref steps,
-            ..
-        } = *self;
-        let was_open = output.backoff == 0;
+        let did_apply_backoff = self.has_backoff();
         let timeout = self.config.timeout;
         if meta.get("error").is_some()
             || insight.cb == CbAction::Fail
-            || insight.cb == CbAction::Close
+            || insight.cb == CbAction::Trigger
             || meta
                 .get("time")
                 .and_then(Value::cast_f64)
                 .map_or(false, |v| v > timeout)
         {
-            let backoff = next_backoff(steps, output.backoff);
-            output.backoff = backoff;
-            output.next = insight.ingest_ns + backoff;
-        } else {
-            output.backoff = 0;
-            output.next = 0;
+            self.update_backoff(insight.ingest_ns);
+        } else if insight.cb == CbAction::Ack {
+            // downstream seems healthy again, reset backpressure
+            // effectively closing the CB
+            self.reset();
         }
 
-        if self.config.method == Method::Pause && was_open && output.backoff > 0 {
-            insight.cb = CbAction::Close;
-        } else if self.config.method == Method::Pause && !was_open && output.backoff == 0 {
-            insight.cb = CbAction::Open;
-        } else if insight.cb == CbAction::Close {
-            insight.cb = CbAction::None;
+        let does_apply_backoff_now = self.has_backoff();
+        insight.cb = match self.config.method {
+            // we got our first error in pause-mode, so we got to trigger the circuit breaker
+            Method::Pause if !did_apply_backoff && does_apply_backoff_now => CbAction::Trigger,
+            // downstream seems healthy again, so we got to restore the circuit breaker
+            Method::Pause if did_apply_backoff && !does_apply_backoff_now => CbAction::Restore,
+            // stop the circuit breaker from propagating further upstream, we handle it from here, kiddos!
+            _ if insight.cb == CbAction::Trigger => CbAction::None,
+            _ => insight.cb,
         };
     }
 }
@@ -319,7 +323,7 @@ mod test {
 
         // Verify that we now have a backoff of 1ms
         op.on_contraflow(operator_id, &mut insight);
-        assert_eq!(op.output.backoff, 1_000_000);
+        assert_eq!(op.backoff, 1_000_000);
 
         // The first event was sent at exactly 1ms
         // our we should block all eventsup to
@@ -413,8 +417,8 @@ mod test {
 
         // Verify that we now have a backoff of 1ms
         op.on_contraflow(operator_id, &mut insight);
-        assert_eq!(insight.cb, CbAction::Close);
-        assert_eq!(op.output.backoff, 1_000_000);
+        assert_eq!(insight.cb, CbAction::Trigger);
+        assert_eq!(op.backoff, 1_000_000);
 
         // even if we have backoff we don't want to discard events so we
         // pass it.
@@ -426,7 +430,7 @@ mod test {
         let mut r = op.on_event(operator_id, "in", &mut state, event2)?.events;
         assert_eq!(r.len(), 1);
         let (out, _event) = r.pop().expect("no results");
-        // since we are in CB mode we will STILL pass an event even if we're closerd
+        // since we are in CB mode we will STILL pass an event even if we're triggered
         // that way we can handle in flight events w/o loss
         assert_eq!("out", out);
 
@@ -464,10 +468,10 @@ mod test {
         };
         let mut r = op.on_signal(operator_id, &mut state, &mut signal)?;
         let i = r.insights.pop().expect("No Insight received");
-        // We receive an open signal
-        assert_eq!(i.cb, CbAction::Open);
+        // We receive a restore signal
+        assert_eq!(i.cb, CbAction::Restore);
         // And reset our backoff
-        assert_eq!(op.output.backoff, 0);
+        assert_eq!(op.backoff, 0);
         Ok(())
     }
 
@@ -506,26 +510,27 @@ mod test {
             ingest_ns: 2,
             data: (Value::null(), m).into(),
             op_meta,
+            cb: CbAction::Ack,
             ..Event::default()
         };
 
         // Assert initial state
-        assert_eq!(op.output.backoff, 0);
+        assert_eq!(op.backoff, 0);
         // move one step up
         op.on_contraflow(operator_id, &mut insight);
-        assert_eq!(op.output.backoff, 1_000_000);
+        assert_eq!(op.backoff, 1_000_000);
         // move another step up
         op.on_contraflow(operator_id, &mut insight);
-        assert_eq!(op.output.backoff, 10_000_000);
+        assert_eq!(op.backoff, 10_000_000);
         // move another another step up
         op.on_contraflow(operator_id, &mut insight);
-        assert_eq!(op.output.backoff, 100_000_000);
+        assert_eq!(op.backoff, 100_000_000);
         // We are at the highest step everything
         // should stay  the same
         op.on_contraflow(operator_id, &mut insight);
-        assert_eq!(op.output.backoff, 100_000_000);
+        assert_eq!(op.backoff, 100_000_000);
         // Now we should reset
         op.on_contraflow(operator_id, &mut insight_reset);
-        assert_eq!(op.output.backoff, 0);
+        assert_eq!(op.backoff, 0);
     }
 }

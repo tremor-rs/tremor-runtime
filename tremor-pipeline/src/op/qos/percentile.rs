@@ -55,9 +55,9 @@ pub struct Config {
 impl ConfigImpl for Config {}
 
 #[derive(Debug, Clone)]
-pub struct Percentile {
-    pub config: Config,
-    pub perc: f64,
+struct Percentile {
+    config: Config,
+    perc: f64,
 }
 
 impl From<Config> for Percentile {
@@ -122,7 +122,7 @@ impl Operator for Percentile {
 
         if meta.get("error").is_some()
             || insight.cb == CbAction::Fail
-            || insight.cb == CbAction::Close
+            || insight.cb == CbAction::Trigger
             || meta
                 .get("time")
                 .and_then(Value::cast_f64)

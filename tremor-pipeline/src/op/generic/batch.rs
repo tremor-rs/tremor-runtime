@@ -29,13 +29,12 @@ pub struct Config {
 impl ConfigImpl for Config {}
 
 #[derive(Debug, Clone)]
-pub struct Batch {
-    pub config: Config,
-    pub data: EventPayload,
-    pub len: usize,
-    pub max_delay_ns: Option<u64>,
-    pub first_ns: u64,
-    pub id: String,
+struct Batch {
+    config: Config,
+    data: EventPayload,
+    len: usize,
+    max_delay_ns: Option<u64>,
+    first_ns: u64,
     /// event id for the resulting batched event
     /// the resulting id will be a new distinct id and will be tracking
     /// all event ids (min and max) in the batched event
@@ -44,7 +43,7 @@ pub struct Batch {
     event_id_gen: EventIdGenerator,
 }
 
-pub fn empty() -> EventPayload {
+fn empty_payload() -> EventPayload {
     EventPayload::new(vec![], |_| ValueAndMeta::from(Value::array()))
 }
 
@@ -54,12 +53,11 @@ if let Some(map) = &node.config {
     let max_delay_ns = config.timeout;
     let mut idgen = EventIdGenerator::for_operator(uid);
     Ok(Box::new(Batch {
-        data: empty(),
+        data: empty_payload(),
         len: 0,
         config,
         max_delay_ns,
         first_ns: 0,
-        id: node.id.clone(),
         batch_event_id: idgen.next_id(),
         is_transactional: false,
         event_id_gen: idgen,
@@ -119,7 +117,7 @@ impl Operator for Batch {
         };
         if flush {
             //TODO: This is ugly
-            let mut data = empty();
+            let mut data = empty_payload();
             swap(&mut data, &mut self.data);
             self.len = 0;
 
@@ -157,7 +155,7 @@ impl Operator for Batch {
                     // create a new event.
 
                     if self.len > 0 {
-                        let mut data = empty();
+                        let mut data = empty_payload();
                         swap(&mut data, &mut self.data);
 
                         self.len = 0; // reset len
@@ -200,9 +198,8 @@ mod test {
             },
             first_ns: 0,
             max_delay_ns: None,
-            data: empty(),
+            data: empty_payload(),
             len: 0,
-            id: "badger".into(),
             batch_event_id: idgen.next_id(),
             is_transactional: false,
             event_id_gen: idgen,
@@ -341,9 +338,8 @@ mod test {
             },
             first_ns: 0,
             max_delay_ns: Some(1_000_000),
-            data: empty(),
+            data: empty_payload(),
             len: 0,
-            id: "badger".into(),
             batch_event_id: idgen.next_id(),
             is_transactional: false,
             event_id_gen: idgen,
@@ -418,9 +414,8 @@ mod test {
             },
             first_ns: 0,
             max_delay_ns: Some(100_000),
-            data: empty(),
+            data: empty_payload(),
             len: 0,
-            id: "badger".into(),
             batch_event_id: idgen.next_id(),
             is_transactional: false,
             event_id_gen: idgen,

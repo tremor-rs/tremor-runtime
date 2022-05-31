@@ -152,7 +152,7 @@ impl Event {
     pub fn cb_restore(ingest_ns: u64) -> Self {
         Event {
             ingest_ns,
-            cb: CbAction::Open,
+            cb: CbAction::Restore,
             ..Event::default()
         }
     }
@@ -167,7 +167,7 @@ impl Event {
         Self {
             ingest_ns,
             op_meta,
-            cb: CbAction::Open,
+            cb: CbAction::Restore,
             ..Event::default()
         }
     }
@@ -182,7 +182,7 @@ impl Event {
         Self {
             ingest_ns,
             op_meta,
-            cb: CbAction::Close,
+            cb: CbAction::Trigger,
             ..Event::default()
         }
     }
@@ -192,7 +192,7 @@ impl Event {
     pub fn cb_trigger(ingest_ns: u64) -> Self {
         Event {
             ingest_ns,
-            cb: CbAction::Close,
+            cb: CbAction::Trigger,
             ..Event::default()
         }
     }
@@ -631,13 +631,13 @@ mod test {
     fn gd() {
         let mut e = Event::default();
 
-        assert_eq!(Event::restore_or_break(true, 0).cb, CbAction::Open);
-        assert_eq!(Event::cb_restore(0).cb, CbAction::Open);
-        assert_eq!(e.insight_restore().cb, CbAction::Open);
+        assert_eq!(Event::restore_or_break(true, 0).cb, CbAction::Restore);
+        assert_eq!(Event::cb_restore(0).cb, CbAction::Restore);
+        assert_eq!(e.insight_restore().cb, CbAction::Restore);
 
-        assert_eq!(Event::restore_or_break(false, 0).cb, CbAction::Close);
-        assert_eq!(Event::cb_trigger(0).cb, CbAction::Close);
-        assert_eq!(e.insight_trigger().cb, CbAction::Close);
+        assert_eq!(Event::restore_or_break(false, 0).cb, CbAction::Trigger);
+        assert_eq!(Event::cb_trigger(0).cb, CbAction::Trigger);
+        assert_eq!(e.insight_trigger().cb, CbAction::Trigger);
     }
 
     #[test]

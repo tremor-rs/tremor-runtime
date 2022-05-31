@@ -32,7 +32,7 @@ use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value::StaticValue};
 use value_trait::{Mutable, Value, ValueAccess};
 
-const ELASTICSEARCH_VERSION: &str = "7.17.3";
+const ELASTICSEARCH_VERSION: &str = "7.17.4";
 
 #[async_std::test]
 #[serial(elastic)]

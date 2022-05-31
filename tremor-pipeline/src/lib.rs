@@ -271,9 +271,9 @@ pub enum CbAction {
     /// Nothing of note
     None,
     /// The circuit breaker is triggerd and should break
-    Close,
+    Trigger,
     /// The circuit breaker is restored and should work again
-    Open,
+    Restore,
     // TODO: add stream based CbAction variants once their use manifests
     /// Acknowledge delivery of messages up to a given ID.
     /// All messages prior to and including  this will be considered delivered.
@@ -312,7 +312,7 @@ impl CbAction {
     /// This is a Circuit Breaker related message
     #[must_use]
     pub fn is_cb(self) -> bool {
-        matches!(self, CbAction::Close | CbAction::Open)
+        matches!(self, CbAction::Trigger | CbAction::Restore)
     }
     /// This is a Guaranteed Delivery related message
     #[must_use]
@@ -954,8 +954,8 @@ mod test {
         assert_eq!(CbAction::Fail.is_gd(), true);
         assert_eq!(CbAction::Ack.is_gd(), true);
 
-        assert_eq!(CbAction::Open.is_gd(), false);
-        assert_eq!(CbAction::Close.is_gd(), false);
+        assert_eq!(CbAction::Restore.is_gd(), false);
+        assert_eq!(CbAction::Trigger.is_gd(), false);
     }
 
     #[test]
@@ -965,8 +965,8 @@ mod test {
         assert_eq!(CbAction::Fail.is_cb(), false);
         assert_eq!(CbAction::Ack.is_cb(), false);
 
-        assert_eq!(CbAction::Open.is_cb(), true);
-        assert_eq!(CbAction::Close.is_cb(), true);
+        assert_eq!(CbAction::Restore.is_cb(), true);
+        assert_eq!(CbAction::Trigger.is_cb(), true);
     }
 
     #[test]

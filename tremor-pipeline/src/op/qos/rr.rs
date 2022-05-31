@@ -33,23 +33,26 @@ use tremor_script::prelude::*;
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// List of outputs to round robin over
-    #[serde(default = "d_outputs")]
+    #[serde(default = "default_outputs")]
     pub outputs: Vec<String>,
 }
 
 impl ConfigImpl for Config {}
 
+fn default_outputs() -> Vec<String> {
+    vec![OUT.to_string()]
+}
+
 #[derive(Debug, Clone)]
-pub struct Output {
+struct Output {
     open: bool,
     output: String,
 }
 
 #[derive(Debug, Clone)]
-pub struct RoundRobin {
-    pub config: Config,
-    pub outputs: Vec<Output>,
-    pub next: usize,
+struct RoundRobin {
+    outputs: Vec<Output>,
+    next: usize,
     first: bool,
 }
 
@@ -57,7 +60,6 @@ impl From<Config> for RoundRobin {
     fn from(config: Config) -> Self {
         let outputs = config.outputs.iter().cloned().map(Output::from).collect();
         Self {
-            config,
             outputs,
             next: 0,
             first: true,
@@ -69,10 +71,6 @@ impl From<String> for Output {
     fn from(output: String) -> Self {
         Self { output, open: true }
     }
-}
-
-fn d_outputs() -> Vec<String> {
-    vec![String::from("out")]
 }
 
 op!(RoundRobinFactory(_uid, node) {
@@ -158,19 +156,19 @@ impl Operator for RoundRobin {
             .and_then(OwnedValue::as_usize)
             .and_then(|id| outputs.get_mut(id))
         {
-            if insight.cb == CbAction::Close {
+            if insight.cb == CbAction::Trigger {
                 o.open = false;
-            } else if insight.cb == CbAction::Open {
+            } else if insight.cb == CbAction::Restore {
                 o.open = true;
             }
         }
         let any_available = outputs.iter().any(|o| o.open);
 
         if any_available && !any_were_available {
-            insight.cb = CbAction::Open;
+            insight.cb = CbAction::Restore;
             error!("Failed to restore circuit breaker");
         } else if any_were_available && !any_available {
-            insight.cb = CbAction::Close;
+            insight.cb = CbAction::Trigger;
             error!("Failed to trigger circuit breaker");
         } else if insight.cb.is_cb() {
             insight.cb = CbAction::None;
@@ -231,7 +229,7 @@ mod test {
         let mut insight = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 1_000_000,
-            cb: CbAction::Close,
+            cb: CbAction::Trigger,
             op_meta,
             ..Event::default()
         };
@@ -276,7 +274,7 @@ mod test {
         let mut insight = Event {
             id: (1, 1, 1).into(),
             ingest_ns: 1_000_000,
-            cb: CbAction::Open,
+            cb: CbAction::Restore,
             op_meta,
             ..Event::default()
         };

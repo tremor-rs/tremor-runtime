@@ -20,7 +20,7 @@ use tremor_script::{
 };
 #[derive(Debug)]
 pub(crate) struct TrickleOperator {
-    pub op: Box<dyn Operator>,
+    op: Box<dyn Operator>,
 }
 
 fn mk_node_config(id: String, op_type: String, config: Value) -> NodeConfig {
