@@ -81,7 +81,6 @@ op!(BucketGrouperFactory(_uid, node) {
     if node.config.is_none() {
         Ok(Box::new(Grouper {
             buckets: HashMap::new(),
-            _id: node.id.clone(),
         }))
     } else {
         Err(ErrorKind::ExtraOpConfig(node.id.clone()).into())
@@ -89,13 +88,13 @@ op!(BucketGrouperFactory(_uid, node) {
 });
 /// Single bucket specification
 #[derive(Debug)]
-pub struct Rate {
+struct Rate {
     /// the maximum number of events per time range
-    pub rate: u64,
+    rate: u64,
     /// time range in milliseconds, (default: 1000 - 1 second)
-    pub time_range: u64,
+    time_range: u64,
     /// numbers of window in the time_range (default: 100)
-    pub windows: usize,
+    windows: usize,
 }
 
 impl Rate {
@@ -112,7 +111,7 @@ impl Rate {
     }
 }
 
-pub struct Bucket {
+struct Bucket {
     cache: LruCache<String, TimeWindow>,
     pass: u64,
     overflow: u64,
@@ -127,9 +126,8 @@ impl Bucket {
     }
 }
 
-pub struct Grouper {
-    pub _id: String,
-    pub buckets: HashMap<String, Bucket>,
+pub(crate) struct Grouper {
+    buckets: HashMap<String, Bucket>,
 }
 
 // #[cfg_attr(coverage, no_coverage)]
@@ -229,8 +227,6 @@ mod test {
         let operator_id = OperatorId::new(0);
         let mut op = Grouper {
             buckets: HashMap::new(),
-
-            _id: "badger".into(),
         };
         let event1 = Event {
             id: (1, 1, 1).into(),

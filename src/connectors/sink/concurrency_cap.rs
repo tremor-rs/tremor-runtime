@@ -52,7 +52,7 @@ impl ConcurrencyCap {
             self.reply_tx
                 .send(AsyncSinkReply::CB(
                     ContraflowData::from(event),
-                    CbAction::Close,
+                    CbAction::Trigger,
                 ))
                 .await?;
         }
@@ -63,7 +63,7 @@ impl ConcurrencyCap {
         if self.counter.fetch_sub(1, Ordering::AcqRel) == self.cap {
             // we crossed max - send an open
             self.reply_tx
-                .send(AsyncSinkReply::CB(cf_data.clone(), CbAction::Open))
+                .send(AsyncSinkReply::CB(cf_data.clone(), CbAction::Restore))
                 .await?;
         }
         Ok(())
@@ -108,7 +108,7 @@ mod tests {
         let guard3 = cap.inc_for(&event1).await?;
         assert_eq!(3, cap.get_counter());
         let reply = rx.try_recv()?;
-        assert!(matches!(reply, AsyncSinkReply::CB(_, CbAction::Close)));
+        assert!(matches!(reply, AsyncSinkReply::CB(_, CbAction::Trigger)));
         // one more will not send another Close
         let guard4 = cap.inc_for(&event1).await?;
         assert_eq!(4, cap.get_counter());
@@ -125,7 +125,7 @@ mod tests {
         drop(guard2);
         assert_eq!(1, cap.get_counter());
         let reply = rx.try_recv()?;
-        assert!(matches!(reply, AsyncSinkReply::CB(_, CbAction::Open)));
+        assert!(matches!(reply, AsyncSinkReply::CB(_, CbAction::Restore)));
         drop(guard1);
         assert_eq!(0, cap.get_counter());
         assert!(rx.is_empty());

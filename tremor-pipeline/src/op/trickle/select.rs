@@ -38,12 +38,11 @@ use tremor_script::{
 };
 
 #[derive(Debug)]
-pub struct Select {
-    pub id: String,
-    pub(crate) select: ast::SelectStmt<'static>,
-    pub windows: Vec<Window>,
-    pub groups: HashMap<String, Group>,
-    pub event_id_gen: EventIdGenerator,
+pub(crate) struct Select {
+    select: ast::SelectStmt<'static>,
+    windows: Vec<Window>,
+    groups: HashMap<String, Group>,
+    event_id_gen: EventIdGenerator,
     recursion_limit: u32,
     dflt_group: Group,
     max_groups: usize,
@@ -52,7 +51,6 @@ pub struct Select {
 impl Select {
     pub fn from_stmt(
         operator_uid: OperatorId,
-        id: String,
         windows: Vec<(String, window::Impl)>,
         select: &ast::SelectStmt<'static>,
     ) -> Self {
@@ -76,7 +74,6 @@ impl Select {
             .min()
             .unwrap_or(0) as usize;
         Self {
-            id,
             windows,
             select: select.clone(),
             groups: HashMap::new(),

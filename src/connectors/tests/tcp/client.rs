@@ -137,7 +137,7 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
 
     // as the connection is closed we expect a CB close some time after the fail
     let cf = in_pipe.get_contraflow().await?;
-    assert_eq!(CbAction::Close, cf.cb);
+    assert_eq!(CbAction::Trigger, cf.cb);
 
     let (out, err) = connector.stop().await?;
     assert!(out.is_empty());

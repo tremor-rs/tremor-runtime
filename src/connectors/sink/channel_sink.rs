@@ -375,7 +375,7 @@ where
             // no streams available :sob:
             return Ok(SinkReply {
                 ack: SinkAck::Fail,
-                cb: CbAction::Close,
+                cb: CbAction::Trigger,
             });
         }
 
