@@ -193,12 +193,22 @@ pub(crate) enum DiscordMessage {
     GuildMembersChunk(GuildMembersChunkEvent),
     TypingStart(TypingStartEvent),
     PresenceReplace(Vec<Presence>),
+    PresenceUpdate(Presence),
+}
+
+pub(crate) fn as_snowflake(v: &Value) -> Option<u64> {
+    v.as_u64()
+        .or_else(|| v.as_str().and_then(|v| v.parse().ok()))
+}
+
+pub(crate) fn get_snowflake(v: &Value, k: &str) -> Option<u64> {
+    v.get(k).and_then(as_snowflake)
 }
 
 fn to_reaction(v: &Value) -> Option<ReactionType> {
     v.as_char().map_or_else(
         || {
-            v.get_u64("id").map(|id| ReactionType::Custom {
+            get_snowflake(v, "id").map(|id| ReactionType::Custom {
                 id: EmojiId(id),
                 animated: v.get_bool("animated").unwrap_or_default(),
                 name: v.get_str("name").map(ToString::to_string),
@@ -215,6 +225,70 @@ pub(crate) fn to_reactions(v: &Value) -> Option<Vec<ReactionType>> {
 #[cfg(test)]
 mod test {
     use super::*;
+    #[test]
+    fn to_reaction_test() {
+        let v = literal!("X");
+        assert!(to_reaction(&v).is_some());
+        let v = literal!("😀");
+        assert!(to_reaction(&v).is_some());
+        let v = literal!({"id": 42});
+        assert!(to_reaction(&v).is_some());
+        let v = literal!({"id": "42"});
+        assert!(to_reaction(&v).is_some());
+        let v = literal!({"id": "42", "animated": true});
+        assert!(to_reaction(&v).is_some());
+        let v = literal!({"id": "42", "animated": false, "name": "badger"});
+        assert!(to_reaction(&v).is_some());
+    }
+    #[test]
+    fn to_reactions_test() {
+        let v = literal!(["X"]);
+        assert!(to_reactions(&v).is_some());
+        let v = literal!(["😀"]);
+        assert!(to_reactions(&v).is_some());
+        let v = literal!([{"id": 42}]);
+        assert!(to_reactions(&v).is_some());
+        let v = literal!([{"id": "42"}]);
+        assert!(to_reactions(&v).is_some());
+        let v = literal!([{"id": "42", "animated": true}]);
+        assert!(to_reactions(&v).is_some());
+        let v = literal!([{"id": "42", "animated": false, "name": "badger"}]);
+        assert!(to_reactions(&v).is_some());
+        let v = literal!([{"id": "42", "animated": false, "name": "badger"}, "😀"]);
+        assert!(to_reactions(&v).is_some());
+    }
+    #[test]
+    fn as_snowflake_test() {
+        assert_eq!(as_snowflake(&Value::from("42")), Some(42));
+        assert_eq!(as_snowflake(&Value::from(42)), Some(42));
+        assert_eq!(as_snowflake(&Value::from("snot")), None);
+        assert_eq!(as_snowflake(&Value::from(42.0)), None);
+        assert_eq!(as_snowflake(&Value::from("42.0")), None);
+        assert_eq!(as_snowflake(&Value::from(vec![42])), None);
+        assert_eq!(as_snowflake(&Value::from("[42]")), None);
+    }
+
+    #[test]
+    fn get_snowflake_test() {
+        let v = literal!({"k": 42});
+        assert_eq!(get_snowflake(&v, "k"), Some(42));
+        let v = literal!({"k": "42"});
+        assert_eq!(get_snowflake(&v, "k"), Some(42));
+
+        let v = literal!({"k": "snot"});
+        assert_eq!(get_snowflake(&v, "k"), None);
+        let v = literal!({"k": 42.0});
+        assert_eq!(get_snowflake(&v, "k"), None);
+        let v = literal!({"k": "42.0"});
+        assert_eq!(get_snowflake(&v, "k"), None);
+        let v = literal!({"k": [42]});
+        assert_eq!(get_snowflake(&v, "k"), None);
+        let v = literal!(42);
+        assert_eq!(get_snowflake(&v, "k"), None);
+        let v = literal!({"k": 42});
+        assert_eq!(get_snowflake(&v, "x"), None);
+    }
+
     #[test]
     fn intents() {
         assert_eq!(

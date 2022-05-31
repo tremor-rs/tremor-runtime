@@ -13,7 +13,7 @@
 // limitations under the License.
 
 // #![cfg_attr(coverage, no_coverage)] // We need a life discord api for this
-use super::utils::{to_reactions, DiscordMessage};
+use super::utils::{as_snowflake, get_snowflake, to_reactions, DiscordMessage};
 use async_std::{
     channel::{Receiver, Sender},
     task,
@@ -132,13 +132,9 @@ impl EventHandler for Handler {
         self.forward(DiscordMessage::PresenceReplace(p)).await;
     }
 
-    // async fn presence_update(
-    //     &self,
-    //     _ctx: Context,
-    //     new_data: serenity::model::event::PresenceUpdateEvent,
-    // ) {
-    //     self.forward(new_data).await;
-    // }
+    async fn presence_update(&self, _ctx: Context, new_data: Presence) {
+        self.forward(DiscordMessage::PresenceUpdate(new_data)).await;
+    }
 
     async fn ready(&self, _: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
@@ -372,14 +368,15 @@ impl EventHandler for Handler {
 async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
     while let Ok(reply) = rx.recv().await {
         if let Some(reply) = reply.get("guild") {
-            let guild = if let Some(id) = reply.get_u64("id") {
+            let guild = if let Some(id) = get_snowflake(reply, "id") {
                 GuildId(id)
             } else {
+                error!("guild `id` missing");
                 continue;
             };
 
             if let Some(member) = reply.get("member") {
-                if let Some(id) = member.get_u64("id") {
+                if let Some(id) = get_snowflake(member, "id") {
                     let user = UserId(id);
                     let mut current_member = match guild.member(&ctx, user).await {
                         Ok(current_member) => current_member,
@@ -391,7 +388,7 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                     if let Some(to_remove) = member.get_array("remove_roles") {
                         let to_remove: Vec<_> = to_remove
                             .iter()
-                            .filter_map(|v| v.as_u64().map(RoleId))
+                            .filter_map(|v| as_snowflake(v).map(RoleId))
                             .collect();
                         if let Err(e) = current_member.remove_roles(&ctx, &to_remove).await {
                             error!("Role removal error: {}", e);
@@ -401,7 +398,7 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                     if let Some(to_roles) = member.get_array("add_roles") {
                         let to_roles: Vec<_> = to_roles
                             .iter()
-                            .filter_map(|v| v.as_u64().map(RoleId))
+                            .filter_map(|v| as_snowflake(v).map(RoleId))
                             .collect();
                         if let Err(e) = current_member.add_roles(&ctx, &to_roles).await {
                             error!("Role add error: {}", e);
@@ -426,14 +423,15 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
             }
         }
         if let Some(reply) = reply.get("message") {
-            let channel = if let Some(id) = reply.get_u64("channel_id") {
+            let channel = if let Some(id) = get_snowflake(reply, "channel_id") {
                 ChannelId(id)
             } else {
+                error!("channel_id missing");
                 continue;
             };
 
             if let Some(reply) = reply.get("update") {
-                if let Some(message_id) = reply.get_u64("message_id") {
+                if let Some(message_id) = get_snowflake(reply, "message_id") {
                     let message = match channel.message(&ctx, message_id).await {
                         Ok(message) => message,
                         Err(e) => {
@@ -460,9 +458,8 @@ async fn reply_loop(rx: Receiver<Value<'static>>, ctx: Context) {
                             m.content(content);
                         };
                         // Reference to another message
-                        if let Some(reference_message) = reply.get_u64("reference_message") {
-                            let reference_channel = reply
-                                .get_u64("reference_channel")
+                        if let Some(reference_message) = get_snowflake(reply, "reference_message") {
+                            let reference_channel = get_snowflake(reply, "reference_channel")
                                 .map_or(channel, ChannelId);
                             m.reference_message((reference_channel, MessageId(reference_message)));
                         };
