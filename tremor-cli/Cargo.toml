@@ -38,7 +38,7 @@ serde_derive = "1"
 serde_yaml = "0.8"
 signal-hook = "0.3"
 signal-hook-async-std = "0.2"
-simd-json = { version = "0.4", features = ["known-key"] }
+simd-json = { version = "0.5", features = ["known-key"] }
 # we need to stick with 0.2.26 as it includes its own libc
 # which allows us to build on older systems like centos 7
 # issues to track until we can loosen those restrictions:
