@@ -76,3 +76,4 @@ tempfile = "3"
 [features]
 erlang-float-testing = []
 arena-delete = []
+allow-non-simd = ["simd-json/allow-non-simd"]
