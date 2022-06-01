@@ -1738,9 +1738,9 @@ checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
 
 [[package]]
 name = "dissect"
-version = "0.2.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45855ef449fb68b70996fc6d97e02b7d84cd9d2ccefbde472a662a97406d9c5a"
+checksum = "36774f66ec318a73f43fb2939cac2e111570b6ff2487ebf948252451c4bcedaa"
 dependencies = [
  "halfbrown",
  "simd-json",
