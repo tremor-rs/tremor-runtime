@@ -27,6 +27,7 @@ use std::time::{Duration, SystemTime};
 /// will contain new items), which means the elements will have lived for a time in range
 /// (now-expiration*2, now-expiration], therefore satisfying the minimum expiration time.
 ///
+/// Also known as flip-flop data mop
 #[allow(unused)]
 pub struct BlueGreenDashMap<K: Send, V: Send> {
     expiration: Duration,
@@ -39,6 +40,9 @@ where
     K: Eq + Hash + Send,
     V: Send,
 {
+    /// Create a new instance. Items contained will leave for at least `expiration`.
+    /// `now` stands for current time, other methods take is an argument to do time-sensitive calculations
+    #[must_use]
     pub fn new(expiration: Duration, now: SystemTime) -> Self {
         Self {
             expiration,
@@ -47,10 +51,12 @@ where
         }
     }
 
+    /// insert a `value` at `key`
     pub fn insert(&mut self, key: K, value: V, now: SystemTime) {
         self.get_unexpired_hashmap(now).insert(key, value);
     }
 
+    /// remove the value at `key`
     pub fn remove(&self, key: &K) -> Option<V> {
         if let Some(x) = self.hashmap_blue.0.remove(key) {
             Some(x.1)
