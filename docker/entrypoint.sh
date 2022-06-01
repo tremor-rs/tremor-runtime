@@ -42,7 +42,7 @@ else
     TROYS=$(find /etc/tremor/config/ -not -path '*/.*' -type f,l -name '*.troy' -print 2>/dev/null | sort)
     [ ! -z "$TROYS" ] && ARTEFACTS="$ARTEFACTS $TROYS"
 
-    ARGS="server --logger-config ${LOGGER_FILE} run"
+    ARGS="--logger-config ${LOGGER_FILE} server run"
 
     if [ ! -z "${ARTEFACTS}" ]
     then
