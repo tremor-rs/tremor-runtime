@@ -17,9 +17,14 @@ use std::mem;
 use tremor_script::{highlighter, prelude::*};
 
 #[derive(Debug)]
-pub struct Script {
-    pub id: String,
-    pub script: tremor_script::Script,
+pub(crate) struct Script {
+    script: tremor_script::Script,
+}
+
+impl Script {
+    pub(crate) fn new(script: tremor_script::Script) -> Self {
+        Self { script }
+    }
 }
 
 impl Operator for Script {

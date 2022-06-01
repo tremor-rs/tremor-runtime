@@ -155,11 +155,11 @@ impl Sink for CbSink {
                 let cb = if cb_cmds.contains(&"close".to_string())
                     || cb_cmds.contains(&"trigger".to_string())
                 {
-                    CbAction::Close
+                    CbAction::Trigger
                 } else if cb_cmds.contains(&"open".to_string())
                     || cb_cmds.contains(&"restore".to_string())
                 {
-                    CbAction::Open
+                    CbAction::Restore
                 } else {
                     CbAction::None
                 };

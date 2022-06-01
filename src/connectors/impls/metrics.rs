@@ -209,7 +209,7 @@ impl Sink for MetricsSink {
                 // channel is closed
                 SinkReply {
                     ack: SinkAck::Fail,
-                    cb: CbAction::Close,
+                    cb: CbAction::Trigger,
                 }
             }
             Err(TrySendError::Full(_)) => SinkReply::FAIL,

@@ -32,7 +32,6 @@ if let Some(map) = &node.config {
     let config: Config = Config::new(map)?;
     Ok(Box::new(History {
         config,
-        id: node.id.clone(),
     }))
 } else {
     Err(ErrorKind::MissingOpConfig(node.id.clone()).into())
@@ -40,9 +39,8 @@ if let Some(map) = &node.config {
 }});
 
 #[derive(Debug, Clone)]
-pub struct History {
-    pub config: Config,
-    pub id: String,
+struct History {
+    config: Config,
 }
 
 impl Operator for History {
@@ -140,7 +138,6 @@ mod test {
                 op: "green".to_string(),
                 name: "snot".to_string(),
             },
-            id: "badger".into(),
         };
         let operator_id = OperatorId::new(0);
         let event = Event {

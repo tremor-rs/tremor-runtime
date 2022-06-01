@@ -12,19 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! # Incremental backoff limiter
-//!
-//! The Backoff limiter will start backing off based on the maximum allowed time for results
-//!
-//! ## Configuration
-//!
-//! See [Config](struct.Config.html) for details.
-//!
-//! ## Outputs
-//!
-//! The 1st additional output is used to route data that was decided to
-//! be discarded.
-
 use crate::errors::{ErrorKind, Result};
 use crate::op::prelude::*;
 use beef::Cow;
@@ -41,36 +28,35 @@ pub struct Config {
     /// and `0.0`.
     ///
     /// The default is 5% (`0.05`).
-    #[serde(default = "d_step_down")]
+    #[serde(default = "default_step_down")]
     pub step_down: f64,
 
     /// Percentage to increase on good feedback as a float betwen `1.0`
     /// and `0.0`.
     ///
     /// The default is 0.1% (`0.001`).
-    #[serde(default = "d_step_up")]
+    #[serde(default = "default_step_up")]
     pub step_up: f64,
 }
 
 impl ConfigImpl for Config {}
 
+fn default_step_up() -> f64 {
+    0.001
+}
+fn default_step_down() -> f64 {
+    0.05
+}
 #[derive(Debug, Clone)]
-pub struct Percentile {
-    pub config: Config,
-    pub perc: f64,
+struct Percentile {
+    config: Config,
+    perc: f64,
 }
 
 impl From<Config> for Percentile {
     fn from(config: Config) -> Self {
         Self { config, perc: 1.0 }
     }
-}
-
-fn d_step_up() -> f64 {
-    0.001
-}
-fn d_step_down() -> f64 {
-    0.05
 }
 
 op!(PercentileFactory(_uid, node) {
@@ -96,7 +82,7 @@ impl Operator for Percentile {
         // if we dont set this, and the event isnt transactional already, we would not receive any CB events,
         // and wouldnt be able to adapt the percentage
         event.transactional = true;
-        // We don't generate a real random number we use the last the 16 bit
+        // We don't generate a real random number we use the last 16 bit
         // of the nanosecond timestamp as a randum number.
         // This is both fairly random and completely deterministic.
         #[allow(clippy::cast_precision_loss)]
@@ -118,16 +104,7 @@ impl Operator for Percentile {
         if !insight.op_meta.contains_key(uid) {
             return;
         }
-        let (_, meta) = insight.data.parts();
-
-        if meta.get("error").is_some()
-            || insight.cb == CbAction::Fail
-            || insight.cb == CbAction::Close
-            || meta
-                .get("time")
-                .and_then(Value::cast_f64)
-                .map_or(false, |v| v > self.config.timeout)
-        {
+        if super::is_error_insight(insight, self.config.timeout) {
             self.perc -= self.config.step_down;
             if self.perc < 0.0 {
                 self.perc = 0.0;
@@ -152,8 +129,8 @@ mod test {
         let uid = OperatorId::new(0);
         let mut op: Percentile = Config {
             timeout: 100.0,
-            step_up: d_step_up(),
-            step_down: d_step_down(),
+            step_up: default_step_up(),
+            step_down: default_step_down(),
         }
         .into();
 
@@ -196,8 +173,8 @@ mod test {
     fn drop_on_timeout() {
         let mut op: Percentile = Config {
             timeout: 100.0,
-            step_down: d_step_down(),
-            step_up: d_step_up(),
+            step_down: default_step_down(),
+            step_up: default_step_up(),
         }
         .into();
         let uid = OperatorId::new(42);

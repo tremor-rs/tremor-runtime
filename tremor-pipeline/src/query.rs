@@ -721,7 +721,7 @@ fn select(
             let op = PassthroughFactory::new_boxed();
             op.node_to_operator(operator_uid, config)
         }
-        SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(config.id.clone(), node))),
+        SelectType::Simple => Ok(Box::new(SimpleSelect::with_stmt(node))),
         SelectType::Normal => {
             let windows: Result<Vec<(String, window::Impl)>> = node
                 .stmt
@@ -743,12 +743,7 @@ fn select(
                 })
                 .collect();
 
-            Ok(Box::new(Select::from_stmt(
-                operator_uid,
-                config.id.clone(),
-                windows?,
-                node,
-            )))
+            Ok(Box::new(Select::from_stmt(operator_uid, windows?, node)))
         }
     }
 }
@@ -772,14 +767,13 @@ pub(crate) fn supported_operators(
     helper: &mut Helper<'static, '_>,
 ) -> Result<OperatorNode> {
     let op: Box<dyn op::Operator> = match node {
-        Some(ast::Stmt::ScriptDefinition(script)) => Box::new(op::trickle::script::Script {
-            id: format!("script-{uid}"),
-            script: tremor_script::Script {
+        Some(ast::Stmt::ScriptDefinition(script)) => {
+            Box::new(op::trickle::script::Script::new(tremor_script::Script {
                 script: script.script.clone(),
                 aid: script.aid(),
                 warnings: BTreeSet::new(),
-            },
-        }),
+            }))
+        }
         Some(tremor_script::ast::Stmt::SelectStmt(s)) => select(uid, config, s, helper)?,
         Some(ast::Stmt::OperatorDefinition(o)) => operator(uid, o, helper)?,
         _ => crate::operator(uid, config)?,

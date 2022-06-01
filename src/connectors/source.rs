@@ -776,7 +776,7 @@ where
                 }
                 Control::Continue
             }
-            CbAction::Close => {
+            CbAction::Trigger => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
                 info!("{ctx} Circuit Breaker: Close.");
                 let res = self.source.on_cb_close(ctx).await;
@@ -784,7 +784,7 @@ where
                 self.state = SourceState::Paused;
                 Control::Continue
             }
-            CbAction::Open => {
+            CbAction::Restore => {
                 info!("{ctx} Circuit Breaker: Open.");
                 self.cb_open_received += 1;
                 ctx.swallow_err(self.source.on_cb_open(ctx).await, "on_cb_open failed");
