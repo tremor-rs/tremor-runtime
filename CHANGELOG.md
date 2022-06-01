@@ -5,7 +5,7 @@
 ### Fixes
 
 - Fix misbehaving stdio connector when stdio is a pipe
-- Fix Docker entrypoint script argument ordering
+- Fix^2 Docker entrypoint script argument ordering
 - Fix id encoding for discord connector
 
 ## [0.12.0]
