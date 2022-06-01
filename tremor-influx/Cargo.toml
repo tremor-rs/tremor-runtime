@@ -24,7 +24,7 @@ value-trait = "0.2"
 criterion = "0.3"
 pretty_assertions = "1.2"
 simd-json = "0.5"
-snmalloc-rs = "0.2"
+snmalloc-rs = "0.3"
 
 [[bench]]
 harness = false
