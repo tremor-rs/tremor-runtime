@@ -173,7 +173,7 @@ async fn simple_subscribe() -> Result<()> {
         Some(&Value::from("b")),
         meta.as_object()
             .unwrap()
-            .get("pubsub_consumer")
+            .get("gpubsub_consumer")
             .unwrap()
             .as_object()
             .unwrap()

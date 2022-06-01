@@ -13,14 +13,15 @@
 // limitations under the License.
 
 use crate::connectors::google::AuthInterceptor;
+use crate::connectors::impls::gpubsub::blue_green_hashmap::BlueGreenDashMap;
 use crate::connectors::prelude::*;
 use crate::connectors::utils::url::HttpsDefaults;
 use async_std::channel::{Receiver, Sender};
 use async_std::stream::StreamExt;
+use async_std::sync::RwLock;
 use async_std::task;
 use async_std::task::JoinHandle;
 use beef::generic::Cow;
-use dashmap::DashMap;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use googapis::google::pubsub::v1::{PubsubMessage, ReceivedMessage, StreamingPullRequest};
 use gouth::Token;
@@ -28,7 +29,7 @@ use serde::Deserialize;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Status;
@@ -107,7 +108,6 @@ struct GSubSource {
     client: Option<PubSubClient>,
     receiver: Option<Receiver<AsyncTaskMessage>>,
     ack_sender: Option<Sender<u64>>,
-    ack_ids: Arc<DashMap<u64, String>>,
     task_handle: Option<JoinHandle<()>>,
     url: Url<HttpsDefaults>,
     client_id: String,
@@ -121,7 +121,6 @@ impl GSubSource {
             client_id,
             client: None,
             receiver: None,
-            ack_ids: Arc::new(DashMap::new()),
             task_handle: None,
             ack_sender: None,
         }
@@ -132,14 +131,18 @@ async fn consumer_task(
     mut client: PubSubClient,
     client_id: String,
     sender: Sender<AsyncTaskMessage>,
-    ack_ids: Arc<DashMap<u64, String>>,
     subscription_id: String,
     ack_deadline: Duration,
     ack_receiver: Receiver<u64>,
 ) {
     let mut ack_counter = 0;
 
-    let ack_ids_clone = ack_ids.clone();
+    let ack_ids = Arc::new(RwLock::new(BlueGreenDashMap::new(
+        ack_deadline,
+        SystemTime::now(),
+    )));
+
+    let ack_ids_c = ack_ids.clone();
     let request_stream = async_stream::stream! {
         yield StreamingPullRequest {
             subscription: subscription_id.clone(),
@@ -153,7 +156,7 @@ async fn consumer_task(
         };
 
         while let Ok(pull_id) = ack_receiver.recv().await {
-            if let (Some((_, ack_id))) = ack_ids_clone.remove(&pull_id) {
+            if let (Some(ack_id)) = ack_ids_c.read().await.remove(&pull_id) {
                 yield StreamingPullRequest {
                     subscription: "".to_string(),
                     ack_ids: vec![ack_id],
@@ -199,7 +202,10 @@ async fn consumer_task(
 
             if let Some(pubsub_message) = msg {
                 ack_counter += 1;
-                ack_ids.insert(ack_counter, ack_id);
+                ack_ids
+                    .write()
+                    .await
+                    .insert(ack_counter, ack_id, SystemTime::now());
                 if let Err(e) = sender.send(Ok((ack_counter, pubsub_message))).await {
                     error!("Failed to send a PubSub message to the main task: {}", e);
 
@@ -224,8 +230,8 @@ fn pubsub_metadata(
             .map(|x| x.insert(Cow::from(attr.0), Value::from(attr.1)));
     }
     literal!({
-        "pubsub_consumer": {
-            "messasge_id": id,
+        "gpubsub_consumer": {
+            "message_id": id,
             "ordering_key": ordering_key,
             "publish_time": publish_time.map(|x| u64::try_from(x.as_nanos()).unwrap_or(0)),
             "attributes": attributes_value
@@ -298,7 +304,6 @@ impl Source for GSubSource {
             client_background,
             self.client_id.clone(),
             tx,
-            self.ack_ids.clone(),
             self.config.subscription_id.clone(),
             Duration::from_nanos(self.config.ack_deadline),
             ack_rx,

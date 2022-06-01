@@ -12,4 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod blue_green_hashmap;
 pub(crate) mod consumer;
