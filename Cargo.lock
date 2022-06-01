@@ -1738,9 +1738,9 @@ checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
 
 [[package]]
 name = "dissect"
-version = "0.2.1"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c5107454368528a09265e465267d7a7fa5cfb9efc932f9a4e65439633d3c7fa1"
+checksum = "45855ef449fb68b70996fc6d97e02b7d84cd9d2ccefbde472a662a97406d9c5a"
 dependencies = [
  "halfbrown",
  "simd-json",
@@ -3089,7 +3089,7 @@ dependencies = [
  "libc",
  "log",
  "log-mdc",
- "parking_lot 0.12.0",
+ "parking_lot 0.12.1",
  "serde",
  "serde-value",
  "serde_json",
@@ -3225,9 +3225,9 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "miniz_oxide"
-version = "0.5.1"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2b29bd4bc3f33391105ebee3589c19197c4271e3e5a9ec9bfe8127eeff8f082"
+checksum = "6f5c75688da582b8ffc1f1799e9db273f32133c49e048f614d22ec3256773ccc"
 dependencies = [
  "adler",
 ]
@@ -3585,9 +3585,9 @@ dependencies = [
 
 [[package]]
 name = "parking_lot"
-version = "0.12.0"
+version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87f5ec2493a61ac0506c0f4199f99070cbe83857b0337006a30f3e6719b8ef58"
+checksum = "3742b2c103b9f06bc9fff0a37ff4912935851bee6d36f3c02bcc755bcfec228f"
 dependencies = [
  "lock_api",
  "parking_lot_core 0.9.3",
@@ -4703,7 +4703,7 @@ dependencies = [
  "futures",
  "mime",
  "mime_guess",
- "parking_lot 0.12.0",
+ "parking_lot 0.12.1",
  "percent-encoding",
  "reqwest 0.11.10",
  "serde",
@@ -4835,9 +4835,9 @@ dependencies = [
 
 [[package]]
 name = "simd-json"
-version = "0.4.15"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0c3aaa7729b636ed4843efa96722f0d5823825b4f388d74c83757a3227f64d4"
+checksum = "3868f37d8473eb1410c71a8b88a5411778f72ae82bd72340b2355d1c133f2b6a"
 dependencies = [
  "halfbrown",
  "serde",
@@ -4848,9 +4848,9 @@ dependencies = [
 
 [[package]]
 name = "simd-json-derive"
-version = "0.2.2"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3221374cc85242d6da1fea48d5b6edb417cf79cf9f6d6c636cd8425161faa096"
+checksum = "23578cc01952bad471e9a6402b9e81392fdd69f3f0acc7844c2999597fcb7109"
 dependencies = [
  "chrono",
  "itoa 0.4.8",
@@ -4862,9 +4862,9 @@ dependencies = [
 
 [[package]]
 name = "simd-json-derive-int"
-version = "0.2.1"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "929b468389809e93768ab7962f21aad7911774d472aca6211e332f74824c4635"
+checksum = "cd11950c39dbc9c906d98a217d7fd6be29253145e5d50d45fa0ab0e3a73eb799"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5079,7 +5079,7 @@ checksum = "213494b7a2b503146286049378ce02b482200519accc31872ee8be91fa820a08"
 dependencies = [
  "new_debug_unreachable",
  "once_cell",
- "parking_lot 0.12.0",
+ "parking_lot 0.12.1",
  "phf_shared",
  "precomputed-hash",
 ]
@@ -5869,9 +5869,9 @@ dependencies = [
 
 [[package]]
 name = "tremor-kv"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e3865de0ff6397aefe564d36fd528c3ea0b96179ca019109e7fd0b7369d7fb0"
+checksum = "aff4ac7a401af12df1bbab69632bbe21f2323c620b85ada72b1601bc2db2e2ef"
 dependencies = [
  "serde",
  "simd-json",
@@ -6132,7 +6132,7 @@ dependencies = [
  "lazy_static",
  "log",
  "lru-cache",
- "parking_lot 0.12.0",
+ "parking_lot 0.12.1",
  "resolv-conf",
  "smallvec",
  "thiserror",
