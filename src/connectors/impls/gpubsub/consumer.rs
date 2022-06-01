@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::connectors::google::AuthInterceptor;
-use crate::connectors::impls::gpubsub::blue_green_hashmap::BlueGreenDashMap;
 use crate::connectors::prelude::*;
 use crate::connectors::utils::url::HttpsDefaults;
 use async_std::channel::{Receiver, Sender};
@@ -33,6 +32,7 @@ use std::time::{Duration, SystemTime};
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Status;
+use tremor_common::blue_green_dashmap::BlueGreenDashMap;
 use tremor_pipeline::ConfigImpl;
 
 #[derive(Deserialize, Clone)]
