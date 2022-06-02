@@ -224,10 +224,10 @@ fn pubsub_metadata(
     attributes: HashMap<String, String>,
 ) -> Value<'static> {
     let mut attributes_value = Value::object_with_capacity(attributes.len());
-    for attr in attributes {
+    for (name, value) in attributes {
         attributes_value
             .as_object_mut()
-            .map(|x| x.insert(Cow::from(attr.0), Value::from(attr.1)));
+            .map(|x| x.insert(Cow::from(name), Value::from(value)));
     }
     literal!({
         "gpubsub_consumer": {
@@ -279,11 +279,10 @@ impl Source for GSubSource {
             Ok(SubscriberClient::with_interceptor(
                 channel.clone(),
                 AuthInterceptor {
-                    token: Box::new(move || match token.header_value() {
-                        Ok(val) => Ok(val),
-                        Err(_) => Err(Status::unavailable(
-                            "Failed to retrieve authentication token.",
-                        )),
+                    token: Box::new(move || {
+                        token.header_value().map_err(|_| {
+                            Status::unavailable("Failed to retrieve authentication token.")
+                        })
                     }),
                 },
             ))
