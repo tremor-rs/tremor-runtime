@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+### New features
+- Added the `gpubsub-consumer` connector
+### Fixes
+
+
 ## [0.12.1]
 
 ### Fixes
