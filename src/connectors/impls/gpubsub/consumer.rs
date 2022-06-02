@@ -32,7 +32,7 @@ use std::time::{Duration, SystemTime};
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Status;
-use tremor_common::blue_green_dashmap::BlueGreenDashMap;
+use tremor_common::blue_green_hashmap::BlueGreenHashMap;
 use tremor_pipeline::ConfigImpl;
 
 #[derive(Deserialize, Clone)]
@@ -137,7 +137,7 @@ async fn consumer_task(
 ) {
     let mut ack_counter = 0;
 
-    let ack_ids = Arc::new(RwLock::new(BlueGreenDashMap::new(
+    let ack_ids = Arc::new(RwLock::new(BlueGreenHashMap::new(
         ack_deadline,
         SystemTime::now(),
     )));
@@ -156,7 +156,7 @@ async fn consumer_task(
         };
 
         while let Ok(pull_id) = ack_receiver.recv().await {
-            if let (Some(ack_id)) = ack_ids_c.read().await.remove(&pull_id) {
+            if let (Some(ack_id)) = ack_ids_c.write().await.remove(&pull_id) {
                 yield StreamingPullRequest {
                     subscription: "".to_string(),
                     ack_ids: vec![ack_id],

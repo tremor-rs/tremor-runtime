@@ -37,7 +37,7 @@ pub mod ids;
 pub mod rand;
 
 /// A dashmap with an expiration date for items
-pub mod blue_green_dashmap;
+pub mod blue_green_hashmap;
 /// Common ports
 pub mod ports;
 

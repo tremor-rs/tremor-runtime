@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use dashmap::DashMap;
+use std::collections::HashMap;
 use std::hash::Hash;
 use std::time::{Duration, SystemTime};
 
-/// The `BlueGreenDashmap` is a `DashMap`, where all items live for a specified duration (and never less)
+/// The `BlueGreenHashmap` is a `HashMap`, where all items live for a specified duration (and never less)
 ///
 /// This is achieved by internally keeping two `HashMap`s, each with a validity start time (from which
 /// the end of validity can be computed).
@@ -29,13 +29,13 @@ use std::time::{Duration, SystemTime};
 ///
 /// Also known as flip-flop data mop
 #[allow(unused)]
-pub struct BlueGreenDashMap<K: Send, V: Send> {
+pub struct BlueGreenHashMap<K: Send, V: Send> {
     expiration: Duration,
-    hashmap_blue: (DashMap<K, V>, SystemTime),
-    hashmap_green: (DashMap<K, V>, SystemTime),
+    hashmap_blue: (HashMap<K, V>, SystemTime),
+    hashmap_green: (HashMap<K, V>, SystemTime),
 }
 
-impl<K, V> BlueGreenDashMap<K, V>
+impl<K, V> BlueGreenHashMap<K, V>
 where
     K: Eq + Hash + Send,
     V: Send,
@@ -46,8 +46,8 @@ where
     pub fn new(expiration: Duration, now: SystemTime) -> Self {
         Self {
             expiration,
-            hashmap_blue: (DashMap::new(), now),
-            hashmap_green: (DashMap::new(), now - expiration),
+            hashmap_blue: (HashMap::new(), now),
+            hashmap_green: (HashMap::new(), now - expiration),
         }
     }
 
@@ -57,34 +57,32 @@ where
     }
 
     /// remove the value at `key`
-    pub fn remove(&self, key: &K) -> Option<V> {
+    pub fn remove(&mut self, key: &K) -> Option<V> {
         if let Some(x) = self.hashmap_blue.0.remove(key) {
-            Some(x.1)
-        } else if let Some(x) = self.hashmap_green.0.remove(key) {
-            Some(x.1)
+            Some(x)
         } else {
-            None
+            self.hashmap_green.0.remove(key)
         }
     }
 
-    fn get_unexpired_hashmap(&mut self, now: SystemTime) -> &DashMap<K, V> {
+    fn get_unexpired_hashmap(&mut self, now: SystemTime) -> &mut HashMap<K, V> {
         let blue_creation_time = self.hashmap_blue.1;
         let green_creation_time = self.hashmap_green.1;
 
         if blue_creation_time + self.expiration > now && blue_creation_time < green_creation_time {
-            return &self.hashmap_blue.0;
+            return &mut self.hashmap_blue.0;
         } else if green_creation_time + self.expiration > now {
-            return &self.hashmap_green.0;
+            return &mut self.hashmap_green.0;
         }
 
         if green_creation_time > blue_creation_time {
-            self.hashmap_blue = (DashMap::new(), now);
+            self.hashmap_blue = (HashMap::new(), now);
 
-            &self.hashmap_blue.0
+            &mut self.hashmap_blue.0
         } else {
-            self.hashmap_green = (DashMap::new(), now);
+            self.hashmap_green = (HashMap::new(), now);
 
-            &self.hashmap_green.0
+            &mut self.hashmap_green.0
         }
     }
 }
@@ -95,7 +93,7 @@ mod tests {
 
     #[test]
     pub fn can_access_after_writing() {
-        let mut hashmap = BlueGreenDashMap::new(Duration::from_secs(10), SystemTime::now());
+        let mut hashmap = BlueGreenHashMap::new(Duration::from_secs(10), SystemTime::now());
         hashmap.insert("a", 1234, SystemTime::now());
 
         assert_eq!(Some(1234), hashmap.remove(&"a"));
@@ -104,7 +102,7 @@ mod tests {
     #[test]
     pub fn removes_expired_entries() {
         let start_time = SystemTime::now();
-        let mut hashmap = BlueGreenDashMap::new(Duration::from_secs(10), start_time);
+        let mut hashmap = BlueGreenHashMap::new(Duration::from_secs(10), start_time);
         hashmap.insert("a".to_string(), "b", start_time.clone());
 
         // GC is performed on insertion of the next element
