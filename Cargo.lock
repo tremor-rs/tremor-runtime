@@ -5849,7 +5849,6 @@ version = "0.12.1"
 dependencies = [
  "async-std",
  "beef",
- "dashmap 5.3.4",
  "rand 0.8.5",
  "simd-json",
  "simd-json-derive",
