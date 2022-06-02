@@ -15,4 +15,3 @@ beef = { version = "0.5", features = ["impl_serde"] }
 url = "2.2"
 simd-json = { version = "0.5", features = ["known-key"] }
 simd-json-derive = "0.3"
-dashmap = "5.2.0"
