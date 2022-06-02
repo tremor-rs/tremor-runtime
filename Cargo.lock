@@ -1277,6 +1277,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "conquer-once"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c6d3a9775a69f6d1fe2cc888999b67ed30257d3da4d2af91984e722f2ec918a"
+dependencies = [
+ "conquer-util",
+]
+
+[[package]]
+name = "conquer-util"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e763eef8846b13b380f37dfecda401770b0ca4e56e95170237bd7c25c7db3582"
+
+[[package]]
 name = "console"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5275,11 +5290,12 @@ dependencies = [
 
 [[package]]
 name = "testcontainers"
-version = "0.13.0"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a84ae0aabaffcef7d052a366788ecdc6cc8190b49e629ed34a9c66637cadd70"
+checksum = "0e2b1567ca8a2b819ea7b28c92be35d9f76fb9edb214321dcc86eb96023d1f87"
 dependencies = [
  "bollard-stubs",
+ "conquer-once",
  "futures",
  "hex",
  "hmac 0.12.1",
@@ -5288,6 +5304,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.2",
+ "signal-hook",
 ]
 
 [[package]]

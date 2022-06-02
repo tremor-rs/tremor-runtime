@@ -49,7 +49,7 @@ async fn connector_elastic() -> Result<()> {
     .with_mapped_port((port, 9200_u16));
 
     let container = docker.run(image);
-    let port = container.get_host_port(9200);
+    let port = container.get_host_port_ipv4(9200);
 
     // wait for the image to be reachable
     let elastic = Elasticsearch::new(Transport::single_node(
@@ -426,7 +426,7 @@ async fn auth_basic() -> Result<()> {
     .with_mapped_port((port, 9200_u16));
 
     let container = docker.run(image);
-    let port = container.get_host_port(9200);
+    let port = container.get_host_port_ipv4(9200);
     let conn_pool = SingleNodeConnectionPool::new(format!("http://127.0.0.1:{port}").parse()?);
     let transport = TransportBuilder::new(conn_pool).auth(Credentials::Basic(
         "elastic".to_string(),
@@ -491,7 +491,7 @@ async fn auth_api_key() -> Result<()> {
     .with_mapped_port((port, 9200_u16));
 
     let container = docker.run(image);
-    let port = container.get_host_port(9200);
+    let port = container.get_host_port_ipv4(9200);
     let conn_pool = SingleNodeConnectionPool::new(format!("http://127.0.0.1:{port}").parse()?);
     let transport = TransportBuilder::new(conn_pool).auth(Credentials::Basic(
         "elastic".to_string(),
@@ -602,7 +602,7 @@ async fn auth_client_cert() -> Result<()> {
     keyfile.push("localhost.key");
 
     let container = docker.run(image);
-    let port = container.get_host_port(9200);
+    let port = container.get_host_port_ipv4(9200);
     let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
     let ca = async_std::fs::read_to_string(&cafile).await?;
     let mut cert = async_std::fs::read(&cafile).await?;
@@ -740,7 +740,7 @@ async fn elastic_https() -> Result<()> {
     cafile.push("localhost.cert");
 
     let container = docker.run(image);
-    let port = container.get_host_port(9200);
+    let port = container.get_host_port_ipv4(9200);
     let conn_pool = SingleNodeConnectionPool::new(format!("https://localhost:{port}").parse()?);
     let ca = async_std::fs::read_to_string(&cafile).await?;
     let transport = TransportBuilder::new(conn_pool).cert_validation(CertificateValidation::Full(

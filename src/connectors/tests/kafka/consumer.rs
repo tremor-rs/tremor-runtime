@@ -42,7 +42,7 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
 
-    let port = container.get_host_port(9092);
+    let port = container.get_host_port_ipv4(9092);
     let mut admin_config = ClientConfig::new();
     let broker = format!("127.0.0.1:{}", port);
     let topic = "tremor_test";
@@ -285,7 +285,7 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
 
-    let port = container.get_host_port(9092);
+    let port = container.get_host_port_ipv4(9092);
     let mut admin_config = ClientConfig::new();
     let broker = format!("127.0.0.1:{}", port);
     let topic = "tremor_test_no_retry";
@@ -510,7 +510,7 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
 
-    let port = container.get_host_port(9092);
+    let port = container.get_host_port_ipv4(9092);
     let mut admin_config = ClientConfig::new();
     let broker = format!("127.0.0.1:{}", port);
     let topic = "tremor_test_no_retry";
@@ -776,7 +776,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
 
-    let port = container.get_host_port(9092);
+    let port = container.get_host_port_ipv4(9092);
     let mut admin_config = ClientConfig::new();
 
     let broker = format!("127.0.0.1:{}", port);
