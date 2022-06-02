@@ -38,7 +38,7 @@ async fn connector_kafka_producer() -> Result<()> {
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
 
-    let port = container.get_host_port(9092);
+    let port = container.get_host_port_ipv4(9092);
     let mut admin_config = ClientConfig::new();
     let broker = format!("127.0.0.1:{}", port);
     let topic = "tremor_test";

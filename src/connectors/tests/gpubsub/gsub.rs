@@ -81,8 +81,8 @@ async fn simple_subscribe() -> Result<()> {
     let runnable_image = RunnableImage::from((pubsub, pubsub_args));
     let container = runner.run(runnable_image);
 
-    let port =
-        container.get_host_port(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
+    let port = container
+        .get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
     let endpoint = format!("http://localhost:{}", port);
     let endpoint_clone = endpoint.clone();
 
