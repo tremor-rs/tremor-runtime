@@ -30,6 +30,7 @@ jobs:
           password: ${{ secrets.GHCR_PAT }}
           tags: latest
           registry: docker.pkg.github.com
+          dockerfile: Dockerfile.learn
       - name: Publish Tremor Courseware to Docker Registry
         uses: elgohr/Publish-Docker-Github-Action@master
         with:
