@@ -198,7 +198,7 @@ impl Source for TcpServerSource {
             while ctx.quiescence_beacon().continue_reading().await {
                 match listener.accept().timeout(ACCEPT_TIMEOUT).await {
                     Ok(Ok((stream, peer_addr))) => {
-                        debug!("{} new connection from {}", &accept_ctx, peer_addr);
+                        debug!("{accept_ctx} new connection from {peer_addr}");
                         let stream_id: u64 = stream_id_gen.next_stream_id();
                         let connection_meta: ConnectionMeta = peer_addr.into();
                         // Async<T> allows us to read in one thread and write in another concurrently - see its documentation
@@ -271,9 +271,10 @@ impl Source for TcpServerSource {
                         }
                     }
                     Ok(Err(e)) => return Err(e.into()),
-                    Err(_) => continue,
+                    Err(_) => continue, // timeout accepting
                 };
             }
+            debug!("{accept_ctx} stopped accepting connections.");
             Ok(())
         }));
 

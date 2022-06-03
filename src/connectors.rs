@@ -1212,22 +1212,24 @@ pub(crate) async fn register_builtin_connector_types(world: &World, debug: bool)
     Ok(())
 }
 
-/// Function to spawn an acceptor task in the runtime, this forbids returning Result so
-/// that `?` can't be used in those tasks and silent errors with acceptor tasks dying
-/// are eliminated.
+/// Function to spawn a long-running task representing a connector connection
+/// and ensuring that upon error the runtime is notified about the lost connection, as the task is gone.
 pub(crate) fn spawn_task<F, C>(ctx: C, t: F) -> JoinHandle<()>
 where
     F: Future<Output = Result<()>> + Send + 'static,
     C: Context + Send + 'static,
 {
     task::spawn(async move {
-        log_error!(t.await, "{ctx} Connector loop error: {e}");
-        // notify connector task about disconnect
-        // of the listening socket
-        let n = ctx.notifier();
-        log_error!(
-            n.connection_lost().await,
-            "{ctx} Failed to notify on connection lost: {e}"
-        );
+        if let Err(e) = t.await {
+            error!("{ctx} Connector loop error: {e}");
+            // notify connector task about a terminated connection loop
+            let n = ctx.notifier();
+            log_error!(
+                n.connection_lost().await,
+                "{ctx} Failed to notify on connection lost: {e}"
+            );
+        } else {
+            debug!("{ctx} Connector loop finished.");
+        }
     })
 }
