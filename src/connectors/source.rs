@@ -424,7 +424,7 @@ pub(crate) fn builder(
             .clone()
             .unwrap_or_else(|| CodecConfig::from(opt)),
     };
-    let streams = Streams::new(source_uid, codec_config, preprocessor_configs)?;
+    let streams = Streams::new(source_uid, codec_config, preprocessor_configs);
 
     Ok(SourceManagerBuilder {
         qsize,
@@ -451,22 +451,16 @@ impl Streams {
         uid: SourceId,
         codec_config: config::Codec,
         preprocessor_configs: Vec<PreprocessorConfig>,
-    ) -> Result<Self> {
-        let default = Self::build_stream(
-            uid,
-            DEFAULT_STREAM_ID,
-            &codec_config,
-            None,
-            preprocessor_configs.as_slice(),
-        )?;
-        let mut states = BTreeMap::new();
-        states.insert(DEFAULT_STREAM_ID, default);
-        Ok(Self {
+    ) -> Self {
+        let states = BTreeMap::new();
+        // We used to initialize the default stream here,
+        // but this little optimization here might fuck up quiescence
+        Self {
             uid,
             codec_config,
             preprocessor_configs,
             states,
-        })
+        }
     }
 
     /// end a stream
@@ -584,7 +578,7 @@ where
     /// is counted up for each call to `pull_data` in order to identify the pull call
     /// an event is originating from. We can only ack or fail pulls.
     pull_counter: u64,
-    cb_open_received: u64,
+    cb_restore_received: u64,
 }
 
 /// control flow enum
@@ -624,7 +618,7 @@ where
             started_sinks: HashSet::new(),
             num_started_sinks: 0,
             pull_counter: 0,
-            cb_open_received: 0,
+            cb_restore_received: 0,
         }
     }
 
@@ -738,11 +732,17 @@ where
                     self.state = SourceState::Drained;
                 } else {
                     self.connector_channel = Some(drained_sender);
-                    if !self.is_asynchronous || self.connectivity == Connectivity::Disconnected {
+                    if !self.is_asynchronous
+                        || self.connectivity == Connectivity::Disconnected
+                        || self.streams.is_empty()
+                    {
                         info!("{} Source Drained.", self.ctx);
                         debug!(
-                            "{} (is_asynchronous={}, {:?})",
-                            self.ctx, self.is_asynchronous, self.connectivity
+                            "{} (is_asynchronous={}, {:?}, streams_empty={})",
+                            self.ctx,
+                            self.is_asynchronous,
+                            self.connectivity,
+                            self.streams.is_empty()
                         );
                         // non-asynchronous sources or disconnected sources are considered immediately drained
                         let res = self.on_fully_drained().await;
@@ -778,15 +778,15 @@ where
             }
             CbAction::Trigger => {
                 // TODO: execute pause strategy chosen by source / connector / configured by user
-                info!("{ctx} Circuit Breaker: Close.");
+                info!("{ctx} Circuit Breaker: Trigger.");
                 let res = self.source.on_cb_close(ctx).await;
                 ctx.swallow_err(res, "on_cb_close failed");
                 self.state = SourceState::Paused;
                 Control::Continue
             }
             CbAction::Restore => {
-                info!("{ctx} Circuit Breaker: Open.");
-                self.cb_open_received += 1;
+                info!("{ctx} Circuit Breaker: Restore.");
+                self.cb_restore_received += 1;
                 ctx.swallow_err(self.source.on_cb_open(ctx).await, "on_cb_open failed");
                 // avoid a race condition where the necessary start routine wasnt executed
                 // because a `CbAction::Open` was there first, and thus the `Start` msg was ignored
@@ -929,8 +929,8 @@ where
         state_should_pull
             && !self.pipelines_out.is_empty() // we have pipelines connected
             && self.connectivity == Connectivity::Connected // we are connected to our thingy
-            && self.cb_open_received >= self.num_started_sinks // we did receive a `CbAction::Open` from all connected sinks
-                                                               // so we know the downstream side is ready to receive something
+            && self.cb_restore_received >= self.num_started_sinks // we did receive a `CbAction::Restore` from all connected sinks
+                                                                  // so we know the downstream side is ready to receive something
     }
 
     /// handle data from the source

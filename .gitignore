@@ -50,6 +50,6 @@ tremor-value/proptest-regressions/
 *.release
 tremor-script/current_counterexample.eqc
 /docs
-lalrpop-docgen
+/lalrpop-docgen
 .vscode/configurationCache.log
 .vscode/dryrun.log
