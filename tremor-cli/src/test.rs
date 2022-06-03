@@ -43,8 +43,6 @@ pub mod stats;
 pub mod tag;
 mod unit;
 
-const INTEGRATION_TEST_TIMEOUT: Duration = Duration::from_secs(5);
-
 async fn suite_bench(
     root: &Path,
     config: &TestConfig,
@@ -183,32 +181,36 @@ async fn run_integration(
         status::tags(&tags, Some(&matched), Some(&config.excludes))?;
 
         // Run integration tests
-        let test_report = match process::run_process("integration", base, root, &tags)
-            .timeout(INTEGRATION_TEST_TIMEOUT)
-            .await
-        {
-            Err(_) => {
-                // timeout
-                // walk the entire dir and print all *.log files for debuggability
-                error!("Timeout running integration test {}", root.display());
-                let walker = GlobWalkerBuilder::new(root, "*.log")
-                    .file_type(FileType::FILE)
-                    .build()
-                    .map_err(|e| {
-                        format!("Unable to walk test path for printing log files: {}", e)
-                    })?;
-                let mut stderr = async_std::io::stderr();
-                for log_file in walker.filter_map(std::result::Result::ok) {
-                    let path = log_file.path();
-                    let mut log_fd = tremor_common::asy::file::open(path).await?;
-                    stderr
-                        .write_all(format!("\n\t{}\n", path.display()).as_bytes())
-                        .await?;
-                    async_std::io::copy(&mut log_fd, &mut stderr).await?;
+        let test_report = if let Some(timeout) = config.timeout {
+            match process::run_process("integration", base, root, &tags)
+                .timeout(timeout)
+                .await
+            {
+                Err(_) => {
+                    // timeout
+                    // walk the entire dir and print all *.log files for debuggability
+                    error!("Timeout running integration test {}", root.display());
+                    let walker = GlobWalkerBuilder::new(root, "*.log")
+                        .file_type(FileType::FILE)
+                        .build()
+                        .map_err(|e| {
+                            format!("Unable to walk test path for printing log files: {}", e)
+                        })?;
+                    let mut stderr = async_std::io::stderr();
+                    for log_file in walker.filter_map(std::result::Result::ok) {
+                        let path = log_file.path();
+                        let mut log_fd = tremor_common::asy::file::open(path).await?;
+                        stderr
+                            .write_all(format!("\n{}:\n", path.display()).as_bytes())
+                            .await?;
+                        async_std::io::copy(&mut log_fd, &mut stderr).await?;
+                    }
+                    return Err(format!("Timeout running test {}", root.display()).into());
                 }
-                return Err(format!("Timeout running test {}", root.display()).into());
+                Ok(res) => res?,
             }
-            Ok(res) => res?,
+        } else {
+            process::run_process("integration", base, root, &tags).await?
         };
 
         // Restore cwd
@@ -272,6 +274,7 @@ pub(crate) struct TestConfig {
     pub(crate) excludes: Vec<String>,
     pub(crate) meta: Meta,
     pub(crate) base_directory: PathBuf,
+    pub(crate) timeout: Option<Duration>,
 }
 impl TestConfig {
     fn matches(&self, filter: &TagFilter) -> (Vec<String>, bool) {
@@ -290,6 +293,7 @@ impl Test {
             sys_filter: &[],
             meta: Meta::default(),
             base_directory,
+            timeout: self.timeout.map(Duration::from_secs),
         };
 
         let found = GlobWalkerBuilder::new(&config.base_directory, "meta.yaml")
