@@ -13,3 +13,4 @@
 // limitations under the License.
 
 pub(crate) mod consumer;
+pub(crate) mod producer;
