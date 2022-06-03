@@ -1233,3 +1233,60 @@ where
         }
     })
 }
+
+#[cfg(test)]
+mod unit_tests {
+    use super::*;
+
+    #[derive(Clone)]
+    struct FakeContext {
+        t: ConnectorType,
+        notifier: reconnect::ConnectionLostNotifier,
+    }
+
+    impl FakeContext {
+        fn new(tx: Sender<Msg>) -> Self {
+            Self {
+                t: ConnectorType::from("snot"),
+                notifier: reconnect::ConnectionLostNotifier::new(tx),
+            }
+        }
+    }
+
+    impl Display for FakeContext {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "snot")
+        }
+    }
+
+    impl Context for FakeContext {
+        fn alias(&self) -> &str {
+            "snot"
+        }
+
+        fn quiescence_beacon(&self) -> &QuiescenceBeacon {
+            panic!("snot") // yolo
+        }
+
+        fn notifier(&self) -> &reconnect::ConnectionLostNotifier {
+            &self.notifier
+        }
+
+        fn connector_type(&self) -> &ConnectorType {
+            &self.t
+        }
+    }
+
+    #[async_std::test]
+    async fn spawn_task_error() -> Result<()> {
+        let (tx, rx) = bounded(1);
+        let ctx = FakeContext::new(tx);
+        spawn_task(ctx.clone(), async move { return Err("snot".into()) }).await;
+        assert!(matches!(rx.recv().await, Ok(Msg::ConnectionLost)));
+
+        spawn_task(ctx, async move { Ok(()) }).await;
+        assert!(rx.is_empty());
+
+        Ok(())
+    }
+}
