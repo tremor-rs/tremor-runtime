@@ -153,7 +153,7 @@ impl serde::Serializer for Serializer {
     }
 
     fn serialize_bytes(self, value: &[u8]) -> Result<Value<'static>> {
-        Ok(Value::Bytes(Bytes::Owned(RVec::from(value.to_vec()))))
+        Ok(Value::Bytes(Bytes::Owned(RVec::from(value))))
     }
 
     #[inline]
@@ -306,7 +306,7 @@ impl serde::ser::SerializeSeq for SerializeVec {
     }
 
     fn end(self) -> Result<Value<'static>> {
-        Ok(Value::Array(self.vec))
+        Ok(Value::Array(self.vec.into()))
     }
 }
 
@@ -357,7 +357,7 @@ impl serde::ser::SerializeTupleVariant for SerializeTupleVariant {
     fn end(self) -> Result<Value<'static>> {
         let mut object = Object::with_capacity(1);
 
-        object.insert(self.name.into(), Value::Array(self.vec));
+        object.insert(self.name.into(), Value::Array(self.vec.into()));
 
         Ok(Value::from(object))
     }
@@ -636,7 +636,8 @@ mod tests {
     use super::*;
     use crate::prelude::*;
 
-    use beef::Cow;
+    use abi_stable::{rslice, std_types::RCowStr};
+
     use serde_ext::Serialize;
     #[derive(Serialize)]
     enum Snot {
@@ -972,7 +973,7 @@ mod tests {
 
     #[test]
     fn serialize_value_bytes() -> Result<()> {
-        let bytes = Value::Bytes(Cow::borrowed(&[1, 2, 3]));
+        let bytes = Value::Bytes(RCowStr::Borrowed(rslice![1, 2, 3]));
         let serialized = bytes.serialize(Serializer::default());
         assert!(serialized.is_ok());
 

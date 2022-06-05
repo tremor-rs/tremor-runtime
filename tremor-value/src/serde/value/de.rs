@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::{Error, Object, Value};
-use beef::Cow;
 use serde::de::{EnumAccess, IntoDeserializer, VariantAccess};
 use serde_ext::de::{
     self, Deserialize, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor,
@@ -22,7 +21,7 @@ use serde_ext::forward_to_deserialize_any;
 use simd_json::StaticNode;
 use std::fmt;
 
-use abi_stable::std_types::{map::Iter, RBox, RCowStr, RVec, Tuple2};
+use abi_stable::std_types::{map::Iter, RCowStr, RVec, Tuple2};
 
 impl<'de> de::Deserializer<'de> for Value<'de> {
     type Error = Error;
@@ -44,12 +43,10 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
             #[cfg(feature = "128bit")]
             Self::Static(StaticNode::U128(n)) => visitor.visit_u128(n),
             Value::Static(StaticNode::F64(n)) => visitor.visit_f64(n),
-            Value::String(s) => {
-                match s {
-                    RCowStr::Borrowed(s) => visitor.visit_borrowed_str(s.into()),
-                    RCowStr::Owned(s) => visitor.visit_string(s.into())
-                }
-            }
+            Value::String(s) => match s {
+                RCowStr::Borrowed(s) => visitor.visit_borrowed_str(s.into()),
+                RCowStr::Owned(s) => visitor.visit_string(s.into()),
+            },
             Value::Array(a) => visitor.visit_seq(Array(a.iter())),
             Value::Object(o) => visitor.visit_map(ObjectAccess {
                 i: o.iter(),

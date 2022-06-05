@@ -21,8 +21,6 @@ mod serialize;
 pub mod r#static;
 
 use crate::{Error, Result};
-use beef::Cow;
-use halfbrown::HashMap;
 use simd_json::prelude::*;
 use simd_json::{AlignedBuf, Deserializer, Node, StaticNode};
 use std::{borrow::Borrow, convert::TryInto, fmt};
@@ -81,7 +79,8 @@ pub fn parse_to_value_with_buffers<'value>(
 
 /// Borrowed JSON-DOM Value, consider using the `ValueTrait`
 /// to access its content
-#[derive(Debug, Clone)]
+#[repr(C)]
+#[derive(Debug, Clone, StableAbi)]
 pub enum Value<'value> {
     /// Static values
     Static(StaticNode),
@@ -1289,7 +1288,7 @@ mod test {
             any::<u64>()
                 .prop_map(StaticNode::U64)
                 .prop_map(Value::Static),
-            any::<Vec<u8>>().prop_map(Cow::from).prop_map(Value::Bytes),
+            any::<Vec<u8>>().prop_map(RCow::from).prop_map(Value::Bytes),
             any::<f64>()
                 .prop_map(StaticNode::F64)
                 .prop_map(Value::Static),

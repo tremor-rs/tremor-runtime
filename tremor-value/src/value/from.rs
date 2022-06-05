@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::{Object, Value};
-use beef::Cow;
 use simd_json::{BorrowedValue, OwnedValue, StaticNode};
 use std::iter::FromIterator;
 
@@ -64,6 +63,7 @@ where
         s.map_or(Value::Static(StaticNode::Null), Value::from)
     }
 }
+
 impl<'value, T> From<ROption<T>> for Value<'value>
 where
     Value<'value>: From<T>,
@@ -105,6 +105,7 @@ impl<'value> From<beef::Cow<'value, str>> for Value<'value> {
         Self::String(beef_to_rcow_str(c))
     }
 }
+
 impl<'value> From<RCowStr<'value>> for Value<'value> {
     #[inline]
     #[must_use]
@@ -117,14 +118,15 @@ impl<'value> From<String> for Value<'value> {
     #[inline]
     #[must_use]
     fn from(s: String) -> Self {
-        Self::String(s.into())
+        Self::String(RCowStr::Owned(s.into()))
     }
 }
+
 impl<'value> From<RString> for Value<'value> {
     #[inline]
     #[must_use]
     fn from(s: RString) -> Self {
-        Self::String(s.into())
+        Self::String(RCowStr::Owned(s))
     }
 }
 

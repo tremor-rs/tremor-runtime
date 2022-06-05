@@ -290,6 +290,7 @@ flaky-test = []
 [patch.crates-io]
 # FIXME: update to crates.io when the new version is released
 abi_stable = { git = "https://github.com/rodrimati1992/abi_stable_crates.git", branch = "0_11" }
+# abi_stable = { git = "https://github.com/marioortizmanero/abi_stable_crates.git", branch = "halfbrown" }
 # FIXME: update to crates.io when the new version is released
 simd-json-derive = { git = "https://github.com/marioortizmanero/simd-json-derive.git", branch = "abi-stable" }
 

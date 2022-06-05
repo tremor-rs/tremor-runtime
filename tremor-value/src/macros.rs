@@ -21,7 +21,7 @@
 #[doc(hidden)]
 macro_rules! literal_internal_vec {
 ($($content:tt)*) => {
-    vec![$($content)*]
+    ::abi_stable::rvec![$($content)*]
 };
 }
 
@@ -342,6 +342,7 @@ macro_rules! literal_internal {
 #[cfg(test)]
 mod tests {
     use crate::Value;
+    use abi_stable::rvec;
 
     #[test]
     fn value_macro() {
@@ -351,11 +352,11 @@ mod tests {
 
     #[test]
     fn array() {
-        let v: Value = literal!(vec![1]);
-        assert_eq!(Value::from(vec![1_u64]), v);
+        let v: Value = literal!(rvec![1]);
+        assert_eq!(Value::from(rvec![1_u64]), v);
         let v: Value = literal!([1]);
-        assert_eq!(Value::from(vec![1_u64]), v);
+        assert_eq!(Value::from(rvec![1_u64]), v);
         let v: Value = literal!([]);
-        assert_eq!(Value::Array(vec![]), v);
+        assert_eq!(Value::Array(rvec![]), v);
     }
 }
