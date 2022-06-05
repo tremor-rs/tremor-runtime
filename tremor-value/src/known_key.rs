@@ -14,12 +14,11 @@
 
 use crate::Value;
 use beef::Cow;
-use halfbrown::RawEntryMut;
 use std::fmt;
 use std::hash::{BuildHasher, Hash, Hasher};
 use value_trait::{Mutable, Value as ValueTrait, ValueAccess, ValueType};
 
-use abi_stable::std_types::{RCowStr, RHashMap};
+use abi_stable::std_types::{map::RRawEntryMut, RCowStr, RHashMap};
 use tremor_common::pdk::beef_to_rcow_str;
 
 /// Well known key that can be looked up in a `Value` faster.
@@ -130,9 +129,13 @@ impl<'key> KnownKey<'key> {
     where
         'value: 'target,
     {
-        map.raw_entry()
-            .from_key_hashed_nocheck(self.hash, self.key())
+        map
+            // TODO: update to better ergonomics when available
+            // .raw_entry()
+            // .from_key_hashed_nocheck(self.hash, self.key())
+            .raw_entry_key_hashed_nocheck(self.hash, &self.key)
             .map(|kv| kv.1)
+            .into()
     }
 
     /// Looks up this key in a `Value`, returns None if the
@@ -197,11 +200,13 @@ impl<'key> KnownKey<'key> {
         'value: 'target,
     {
         match map
-            .raw_entry_mut()
-            .from_key_hashed_nocheck(self.hash, &self.key)
+            // TODO: update to better ergonomics when available
+            // .raw_entry_mut()
+            // .from_key_hashed_nocheck(self.hash, &self.key)
+            .raw_entry_mut_key_hashed_nocheck(self.hash, &self.key)
         {
-            RawEntryMut::Occupied(e) => Some(e.into_mut()),
-            RawEntryMut::Vacant(_e) => None,
+            RRawEntryMut::Occupied(e) => Some(e.into_mut()),
+            RRawEntryMut::Vacant(_e) => None,
         }
     }
 
@@ -295,9 +300,11 @@ impl<'key> KnownKey<'key> {
         'value: 'target,
         F: FnOnce() -> Value<'value>,
     {
-        let key: &str = &self.key;
-        map.raw_entry_mut()
-            .from_key_hashed_nocheck(self.hash, key)
+        map
+            // TODO: update to better ergonomics when available
+            // .raw_entry_mut()
+            // .from_key_hashed_nocheck(self.hash, key)
+            .raw_entry_mut_key_hashed_nocheck(self.hash, &self.key)
             .or_insert_with(|| (self.key.clone(), with()))
             .1
     }
@@ -383,11 +390,13 @@ impl<'key> KnownKey<'key> {
         'value: 'target,
     {
         match map
-            .raw_entry_mut()
-            .from_key_hashed_nocheck(self.hash, self.key())
+            // TODO: update to better ergonomics when available
+            // .raw_entry_mut()
+            // .from_key_hashed_nocheck(self.hash, self.key())
+            .raw_entry_mut_key_hashed_nocheck(self.hash, &self.key)
         {
-            RawEntryMut::Occupied(mut e) => Some(e.insert(value)),
-            RawEntryMut::Vacant(e) => {
+            RRawEntryMut::Occupied(mut e) => Some(e.insert(value)),
+            RRawEntryMut::Vacant(e) => {
                 e.insert_hashed_nocheck(self.hash, self.key.clone(), value);
                 None
             }
