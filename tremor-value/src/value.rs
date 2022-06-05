@@ -32,13 +32,18 @@ use std::{
     ops::{Index, IndexMut},
 };
 
+use abi_stable::{
+    std_types::{RCowSlice, RCowStr, RHashMap, RVec, Tuple2},
+    StableAbi,
+};
+
 pub use crate::serde::to_value;
 pub use r#static::StaticValue;
 
 /// Representation of a JSON object
-pub type Object<'value> = HashMap<Cow<'value, str>, Value<'value>>;
+pub type Object<'value> = RHashMap<RCowStr<'value>, Value<'value>>;
 /// Bytes
-pub type Bytes<'value> = Cow<'value, [u8]>;
+pub type Bytes<'value> = RCowSlice<'value, u8>;
 
 /// Parses a slice of bytes into a Value dom. This function will
 /// rewrite the slice to de-escape strings.
@@ -81,11 +86,11 @@ pub enum Value<'value> {
     /// Static values
     Static(StaticNode),
     /// string type
-    String(Cow<'value, str>),
+    String(RCowStr<'value>),
     /// array type
-    Array(Vec<Value<'value>>),
+    Array(RVec<Value<'value>>),
     /// object type
-    Object(Box<Object<'value>>),
+    Object(Object<'value>),
     /// A binary type
     Bytes(Bytes<'value>),
 }
@@ -96,7 +101,7 @@ impl<'value> Value<'value> {
     /// Creates an empty array value
     #[must_use]
     pub const fn array() -> Self {
-        Value::Array(vec![])
+        Value::Array(RVec::new())
     }
 
     /// Creates an empty array value
@@ -226,7 +231,7 @@ impl<'value> Ord for Value<'value> {
             (Value::Array(v1), Value::Array(v2)) => v1.cmp(v2),
             (Value::Array(_a), _) => Ordering::Greater,
             (_, Value::Array(_a)) => Ordering::Less,
-            (Value::Object(v1), Value::Object(v2)) => cmp_map(v1.as_ref(), v2.as_ref()),
+            (Value::Object(v1), Value::Object(v2)) => cmp_map(v1, v2),
         }
     }
 }
@@ -270,14 +275,14 @@ impl<'value> Value<'value> {
     #[must_use]
     pub fn into_static(self) -> Value<'static> {
         match self {
-            Self::String(s) => Value::String(Cow::owned(s.to_string())),
+            Self::String(s) => Value::String(RCowStr::Owned(s.to_string().into())),
             Self::Array(arr) => arr.into_iter().map(Value::into_static).collect(),
             Self::Object(obj) => obj
                 .into_iter()
-                .map(|(k, v)| (Cow::owned(k.to_string()), v.into_static()))
+                .map(|Tuple2(k, v)| Tuple2(RCowStr::Owned(k.to_string().into()), v.into_static()))
                 .collect(),
             Self::Static(s) => Value::Static(s),
-            Self::Bytes(b) => Value::Bytes(Cow::owned(b.to_vec())),
+            Self::Bytes(b) => Value::Bytes(RCowSlice::Owned(b.to_vec().into())),
         }
     }
 
@@ -287,14 +292,14 @@ impl<'value> Value<'value> {
     #[must_use]
     pub fn clone_static(&self) -> Value<'static> {
         match self {
-            Self::String(s) => Value::String(Cow::owned(s.to_string())),
+            Self::String(s) => Value::String(RCowStr::Owned(s.to_string().into())),
             Self::Array(arr) => arr.iter().map(Value::clone_static).collect(),
             Self::Object(obj) => obj
                 .iter()
-                .map(|(k, v)| (Cow::owned(k.to_string()), v.clone_static()))
+                .map(|Tuple2(k, v)| Tuple2(RCowStr::Owned(k.to_string().into()), v.clone_static()))
                 .collect(),
             Self::Static(s) => Value::Static(*s),
-            Self::Bytes(b) => Value::Bytes(Cow::owned(b.to_vec())),
+            Self::Bytes(b) => Value::Bytes(RCowSlice::Owned(b.to_vec().into())),
         }
     }
 
@@ -314,7 +319,7 @@ impl<'value> Value<'value> {
     #[must_use]
     pub fn get_bytes<Q: ?Sized>(&self, k: &Q) -> Option<&[u8]>
     where
-        Cow<'value, str>: Borrow<Q> + Hash + Eq,
+        RCowStr<'value>: Borrow<Q> + Hash + Eq,
         Q: Hash + Eq + Ord,
     {
         self.get(k).and_then(Self::as_bytes)
@@ -343,7 +348,7 @@ impl<'value> Value<'value> {
     #[must_use]
     pub fn get_char<Q: ?Sized>(&self, k: &Q) -> Option<char>
     where
-        Cow<'value, str>: Borrow<Q> + Hash + Eq,
+        RCowStr<'value>: Borrow<Q> + Hash + Eq,
         Q: Hash + Eq + Ord,
     {
         self.get(k).and_then(Self::as_char)
@@ -359,19 +364,19 @@ impl<'value> Builder<'value> for Value<'value> {
     #[inline]
     #[must_use]
     fn array_with_capacity(capacity: usize) -> Self {
-        Self::Array(Vec::with_capacity(capacity))
+        Self::Array(RVec::with_capacity(capacity))
     }
     #[inline]
     #[must_use]
     fn object_with_capacity(capacity: usize) -> Self {
-        Self::Object(Box::new(Object::with_capacity(capacity)))
+        Self::Object(Object::with_capacity(capacity))
     }
 }
 
 impl<'value> Mutable for Value<'value> {
     #[inline]
     #[must_use]
-    fn as_array_mut(&mut self) -> Option<&mut Vec<Value<'value>>> {
+    fn as_array_mut(&mut self) -> Option<&mut RVec<Value<'value>>> {
         match self {
             Self::Array(a) => Some(a),
             _ => None,
@@ -379,7 +384,7 @@ impl<'value> Mutable for Value<'value> {
     }
     #[inline]
     #[must_use]
-    fn as_object_mut(&mut self) -> Option<&mut HashMap<<Self as ValueAccess>::Key, Self>> {
+    fn as_object_mut(&mut self) -> Option<&mut RHashMap<<Self as ValueAccess>::Key, Self>> {
         match self {
             Self::Object(m) => Some(m),
             _ => None,
@@ -388,9 +393,9 @@ impl<'value> Mutable for Value<'value> {
 }
 impl<'value> ValueAccess for Value<'value> {
     type Target = Self;
-    type Key = Cow<'value, str>;
-    type Array = Vec<Self>;
-    type Object = HashMap<Self::Key, Self>;
+    type Key = RCowStr<'value>;
+    type Array = RVec<Self>;
+    type Object = RHashMap<Self::Key, Self>;
 
     #[inline]
     #[must_use]
@@ -459,7 +464,7 @@ impl<'value> ValueAccess for Value<'value> {
 
     #[inline]
     #[must_use]
-    fn as_array(&self) -> Option<&Vec<Value<'value>>> {
+    fn as_array(&self) -> Option<&RVec<Value<'value>>> {
         match self {
             Self::Array(a) => Some(a),
             _ => None,
@@ -468,7 +473,7 @@ impl<'value> ValueAccess for Value<'value> {
 
     #[inline]
     #[must_use]
-    fn as_object(&self) -> Option<&HashMap<Self::Key, Self>> {
+    fn as_object(&self) -> Option<&RHashMap<Self::Key, Self>> {
         match self {
             Self::Object(m) => Some(m),
             _ => None,
@@ -585,7 +590,7 @@ impl<'de> ValueDeserializer<'de> {
         // Rust doesn't optimize the normal loop away here
         // so we write our own avoiding the length
         // checks during push
-        let mut res = Vec::with_capacity(len);
+        let mut res = RVec::with_capacity(len);
         unsafe {
             res.set_len(len);
             for i in 0..len {

@@ -17,6 +17,9 @@ use beef::Cow;
 use simd_json::{BorrowedValue, OwnedValue, StaticNode};
 use std::iter::FromIterator;
 
+use abi_stable::std_types::{RBox, RCowStr, ROption, RStr, RString, RVec, Tuple2};
+use tremor_common::pdk::{beef_to_rcow_str, rcow_to_beef_str};
+
 impl<'value> From<OwnedValue> for Value<'value> {
     #[inline]
     #[must_use]
@@ -61,12 +64,29 @@ where
         s.map_or(Value::Static(StaticNode::Null), Value::from)
     }
 }
+impl<'value, T> From<ROption<T>> for Value<'value>
+where
+    Value<'value>: From<T>,
+{
+    #[inline]
+    #[must_use]
+    fn from(s: ROption<T>) -> Self {
+        s.map_or(Value::Static(StaticNode::Null), Value::from)
+    }
+}
 /********* str_ **********/
 impl<'value> From<&'value str> for Value<'value> {
     #[inline]
     #[must_use]
     fn from(s: &'value str) -> Self {
-        Self::String(Cow::from(s))
+        Self::String(RCowStr::from(s))
+    }
+}
+impl<'value> From<RStr<'value>> for Value<'value> {
+    #[inline]
+    #[must_use]
+    fn from(s: RStr<'value>) -> Self {
+        Self::String(RCowStr::Borrowed(s))
     }
 }
 
@@ -82,6 +102,13 @@ impl<'value> From<beef::Cow<'value, str>> for Value<'value> {
     #[inline]
     #[must_use]
     fn from(c: beef::Cow<'value, str>) -> Self {
+        Self::String(beef_to_rcow_str(c))
+    }
+}
+impl<'value> From<RCowStr<'value>> for Value<'value> {
+    #[inline]
+    #[must_use]
+    fn from(c: RCowStr<'value>) -> Self {
         Self::String(c)
     }
 }
@@ -90,6 +117,13 @@ impl<'value> From<String> for Value<'value> {
     #[inline]
     #[must_use]
     fn from(s: String) -> Self {
+        Self::String(s.into())
+    }
+}
+impl<'value> From<RString> for Value<'value> {
+    #[inline]
+    #[must_use]
+    fn from(s: RString) -> Self {
         Self::String(s.into())
     }
 }
@@ -211,6 +245,16 @@ where
         v.into_iter().collect()
     }
 }
+impl<'value, S> From<RVec<S>> for Value<'value>
+where
+    Value<'value>: From<S>,
+{
+    #[inline]
+    #[must_use]
+    fn from(v: RVec<S>) -> Self {
+        v.into_iter().collect()
+    }
+}
 
 impl<'value, V: Into<Value<'value>>> FromIterator<V> for Value<'value> {
     #[inline]
@@ -220,17 +264,31 @@ impl<'value, V: Into<Value<'value>>> FromIterator<V> for Value<'value> {
     }
 }
 
-impl<'value, K: Into<Cow<'value, str>>, V: Into<Value<'value>>> FromIterator<(K, V)>
+impl<'value, K: Into<beef::Cow<'value, str>>, V: Into<Value<'value>>> FromIterator<(K, V)>
     for Value<'value>
 {
     #[inline]
     #[must_use]
     fn from_iter<I: IntoIterator<Item = (K, V)>>(iter: I) -> Self {
-        Value::Object(Box::new(
+        Value::Object(
             iter.into_iter()
-                .map(|(k, v)| (Into::into(k), Into::into(v)))
+                .map(|(k, v)| (beef_to_rcow_str(Into::into(k)), Into::into(v)))
                 .collect(),
-        ))
+        )
+    }
+}
+
+impl<'value, K: Into<RCowStr<'value>>, V: Into<Value<'value>>> FromIterator<Tuple2<K, V>>
+    for Value<'value>
+{
+    #[inline]
+    #[must_use]
+    fn from_iter<I: IntoIterator<Item = Tuple2<K, V>>>(iter: I) -> Self {
+        Value::Object(
+            iter.into_iter()
+                .map(|Tuple2(k, v)| (Into::into(k), Into::into(v)))
+                .collect(),
+        )
     }
 }
 
@@ -238,7 +296,16 @@ impl<'value> From<Object<'value>> for Value<'value> {
     #[inline]
     #[must_use]
     fn from(v: Object<'value>) -> Self {
-        Self::Object(Box::new(v))
+        Self::Object(v)
+    }
+}
+impl<'value> From<halfbrown::HashMap<beef::Cow<'value, str>, Value<'value>>> for Value<'value> {
+    #[inline]
+    #[must_use]
+    fn from(v: halfbrown::HashMap<beef::Cow<'value, str>, Value<'value>>) -> Self {
+        v.into_iter()
+            .map(|(k, v)| Tuple2(beef_to_rcow_str(k), v))
+            .collect()
     }
 }
 

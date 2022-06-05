@@ -18,6 +18,8 @@ use serde_ext::ser::{
 };
 use simd_json::{stry, StaticNode};
 
+use abi_stable::std_types::{RVec, Tuple2};
+
 type Impossible<T> = ser::Impossible<T, Error>;
 
 impl<'value> Serialize for Value<'value> {
@@ -45,7 +47,7 @@ impl<'value> Serialize for Value<'value> {
             }
             Value::Object(m) => {
                 let mut map = serializer.serialize_map(Some(m.len()))?;
-                for (k, v) in m.iter() {
+                for Tuple2(k, v) in m.iter() {
                     let k: &str = k;
                     map.serialize_entry(k, v)?;
                 }
@@ -151,7 +153,7 @@ impl serde::Serializer for Serializer {
     }
 
     fn serialize_bytes(self, value: &[u8]) -> Result<Value<'static>> {
-        Ok(Value::Bytes(Bytes::owned(value.to_vec())))
+        Ok(Value::Bytes(Bytes::Owned(RVec::from(value.to_vec()))))
     }
 
     #[inline]
@@ -216,7 +218,7 @@ impl serde::Serializer for Serializer {
 
     fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq> {
         Ok(SerializeVec {
-            vec: Vec::with_capacity(len.unwrap_or(0)),
+            vec: RVec::with_capacity(len.unwrap_or(0)),
         })
     }
 
@@ -241,7 +243,7 @@ impl serde::Serializer for Serializer {
     ) -> Result<Self::SerializeTupleVariant> {
         Ok(SerializeTupleVariant {
             name: variant.to_owned(),
-            vec: Vec::with_capacity(len),
+            vec: RVec::with_capacity(len),
         })
     }
 
@@ -271,12 +273,12 @@ impl serde::Serializer for Serializer {
 }
 
 pub struct SerializeVec {
-    vec: Vec<Value<'static>>,
+    vec: RVec<Value<'static>>,
 }
 
 pub struct SerializeTupleVariant {
     name: String,
-    vec: Vec<Value<'static>>,
+    vec: RVec<Value<'static>>,
 }
 
 pub enum SerializeMap {

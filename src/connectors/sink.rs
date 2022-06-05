@@ -55,7 +55,8 @@ use tremor_value::Value;
 /// circuit breaker events, guaranteed delivery events, etc.
 ///
 /// A response is an event generated from the sink delivery.
-#[derive(Clone, Debug, Default, Copy, PartialEq)]
+#[repr(C)]
+#[derive(Clone, Debug, Default, Copy, PartialEq, StableAbi)]
 pub(crate) struct SinkReply {
     /// guaranteed delivery response - did we sent the event successfully `SinkAck::Ack` or did it fail `SinkAck::Fail`
     pub(crate) ack: SinkAck,
@@ -103,7 +104,8 @@ impl SinkReply {
 
 /// stuff a sink replies back upon an event or a signal
 /// to the calling sink/connector manager
-#[derive(Clone, Debug, Copy, PartialEq)]
+#[repr(C)]
+#[derive(Clone, Debug, Copy, PartialEq, StableAbi)]
 pub(crate) enum SinkAck {
     /// no reply - maybe no reply yet, maybe replies come asynchronously...
     None,
@@ -132,25 +134,25 @@ pub(crate) enum AsyncSinkReply {
 }
 
 /// connector sink - receiving events
-#[async_trait::async_trait]
-pub(crate) trait Sink: Send {
+#[abi_stable::sabi_trait]
+pub(crate) trait RawSink: Send {
     /// called when receiving an event
-    async fn on_event(
-        &mut self,
-        input: &str,
+    fn on_event<'a>(
+        &'a mut self,
+        input: &'a str,
         event: Event,
-        ctx: &SinkContext,
-        serializer: &mut EventSerializer,
+        ctx: &'a SinkContext,
+        serializer: &'a mut EventSerializer,
         start: u64,
-    ) -> Result<SinkReply>;
+    ) -> BorrowingFfiFuture<'a, RResult<SinkReply>>;
     /// called when receiving a signal
-    async fn on_signal(
-        &mut self,
+    fn on_signal<'a>(
+        &'a mut self,
         _signal: Event,
-        _ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
-        Ok(SinkReply::default())
+        _ctx: &'a SinkContext,
+        _serializer: &'a mut EventSerializer,
+    ) -> BorrowingFfiFuture<'a, RResult<SinkReply>> {
+        future::ready(ROk(SinkReply::default())).into_ffi()
     }
 
     /// Pull metrics from the sink
@@ -172,14 +174,18 @@ pub(crate) trait Sink: Send {
     /// }
     /// ```
     ///
-    async fn metrics(&mut self, _timestamp: u64, _ctx: &SinkContext) -> Vec<EventPayload> {
-        vec![]
+    fn metrics<'a>(
+        &'a mut self,
+        _timestamp: u64,
+        _ctx: &'a SinkContext,
+    ) -> BorrowingFfiFuture<'a, RVec<EventPayload>> {
+        rvec![]
     }
 
     // lifecycle stuff
     /// called when started
-    async fn on_start(&mut self, _ctx: &SinkContext) -> Result<()> {
-        Ok(())
+    fn on_start<'a>(&'a mut self, _ctx: &'a SinkContext) -> BorrowingFfiFuture<'a, RResult<()>> {
+        future::ready(ROk(())).into_ffi()
     }
 
     /// Connect to the external thingy.
@@ -189,31 +195,41 @@ pub(crate) trait Sink: Send {
     /// The intended result of this function is to re-establish a connection. It might reuse a working connection.
     ///
     /// Return `Ok(true)` if the connection could be successfully established.
-    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(true)
+    fn connect<'a>(
+        &'a mut self,
+        _ctx: &'a SinkContext,
+        _attempt: &'a Attempt,
+    ) -> BorrowingFfiFuture<'a, RResult<bool>> {
+        future::ready(ROk(true)).into_ffi()
     }
 
     /// called when paused
-    async fn on_pause(&mut self, _ctx: &SinkContext) -> Result<()> {
-        Ok(())
+    fn on_pause<'a>(&'a mut self, _ctx: &'a SinkContext) -> BorrowingFfiFuture<'a, RResult<()>> {
+        future::ready(ROk(())).into_ffi()
     }
     /// called when resumed
-    async fn on_resume(&mut self, _ctx: &SinkContext) -> Result<()> {
-        Ok(())
+    fn on_resume<'a>(&'a mut self, _ctx: &'a SinkContext) -> BorrowingFfiFuture<'a, RResult<()>> {
+        future::ready(ROk(())).into_ffi()
     }
     /// called when stopped
-    async fn on_stop(&mut self, _ctx: &SinkContext) -> Result<()> {
-        Ok(())
+    fn on_stop<'a>(&'a mut self, _ctx: &'a SinkContext) -> BorrowingFfiFuture<'a, RResult<()>> {
+        future::ready(ROk(())).into_ffi()
     }
 
     // connectivity stuff
     /// called when sink lost connectivity
-    async fn on_connection_lost(&mut self, _ctx: &SinkContext) -> Result<()> {
-        Ok(())
+    fn on_connection_lost<'a>(
+        &'a mut self,
+        _ctx: &'a SinkContext,
+    ) -> BorrowingFfiFuture<'a, RResult<()>> {
+        future::ready(ROk(())).into_ffi()
     }
     /// called when sink re-established connectivity
-    async fn on_connection_established(&mut self, _ctx: &SinkContext) -> Result<()> {
-        Ok(())
+    fn on_connection_established<'a>(
+        &'a mut self,
+        _ctx: &'a SinkContext,
+    ) -> BorrowingFfiFuture<'a, RResult<()>> {
+        future::ready(ROk(())).into_ffi()
     }
 
     /// if `true` events are acknowledged/failed automatically by the sink manager.
@@ -226,6 +242,124 @@ pub(crate) trait Sink: Send {
     /// if false events can be considered delivered once `on_event` returns.
     fn asynchronous(&self) -> bool {
         false
+    }
+}
+
+/// Alias for the FFI-safe dynamic source type
+pub type BoxedRawSink = RawSink_TO<'static, RBox<()>>;
+
+/// Sink part of a connector.
+///
+/// Just like `Connector`, this wraps the FFI dynamic sink with `abi_stable`
+/// types so that it's easier to use with `std`.
+pub(crate) struct Sink(BoxedRawSink);
+impl Sink {
+    #[inline]
+    pub async fn on_event(
+        &mut self,
+        input: &str,
+        event: Event,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+        start: u64,
+    ) -> Result<SinkReply> {
+        // TODO: this should take the boxed serializer instead for performance (?)
+        let mut serializer = MutEventSerializer::from_ptr(serializer, TD_Opaque);
+        self.0
+            .on_event(input.into(), event, ctx, &mut serializer, start)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+    #[inline]
+    pub async fn on_signal(
+        &mut self,
+        signal: Event,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+    ) -> Result<SinkReply> {
+        // TODO: this should take the boxed serializer instead for performance (?)
+        let mut serializer = MutEventSerializer::from_ptr(serializer, TD_Opaque);
+        self.0
+            .on_signal(signal, ctx, &mut serializer)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    #[inline]
+    pub async fn metrics(&mut self, timestamp: u64, ctx: &SinkContext) -> Vec<EventPayload> {
+        self.0.metrics(timestamp, ctx).await.into()
+    }
+
+    #[inline]
+    pub async fn on_start(&mut self, ctx: &SinkContext) -> Result<()> {
+        self.0
+            .on_start(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    #[inline]
+    pub async fn connect(&mut self, ctx: &SinkContext, attempt: &Attempt) -> Result<bool> {
+        self.0
+            .connect(ctx, attempt)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    #[inline]
+    pub async fn on_pause(&mut self, ctx: &SinkContext) -> Result<()> {
+        self.0
+            .on_pause(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+    #[inline]
+    pub async fn on_resume(&mut self, ctx: &SinkContext) -> Result<()> {
+        self.0
+            .on_resume(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+    #[inline]
+    pub async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
+        self.0
+            .on_stop(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    #[inline]
+    pub async fn on_connection_lost(&mut self, ctx: &SinkContext) -> Result<()> {
+        self.0
+            .on_connection_lost(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+    #[inline]
+    pub async fn on_connection_established(&mut self, ctx: &SinkContext) -> Result<()> {
+        self.0
+            .on_connection_established(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    #[inline]
+    pub fn auto_ack(&self) -> bool {
+        self.0.auto_ack()
+    }
+
+    #[inline]
+    pub fn asynchronous(&self) -> bool {
+        self.0.asynchronous()
     }
 }
 

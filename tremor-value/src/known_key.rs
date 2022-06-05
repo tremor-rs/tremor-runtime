@@ -19,11 +19,14 @@ use std::fmt;
 use std::hash::{BuildHasher, Hash, Hasher};
 use value_trait::{Mutable, Value as ValueTrait, ValueAccess, ValueType};
 
+use abi_stable::std_types::{RCowStr, RHashMap};
+use tremor_common::pdk::beef_to_rcow_str;
+
 /// Well known key that can be looked up in a `Value` faster.
 /// It achives this by memorizing the hash.
 #[derive(Debug, Clone, PartialEq)]
 pub struct KnownKey<'key> {
-    key: Cow<'key, str>,
+    key: RCowStr<'key>,
     hash: u64,
 }
 impl<'key> std::fmt::Display for KnownKey<'key> {
@@ -49,18 +52,25 @@ impl fmt::Display for Error {
 }
 impl std::error::Error for Error {}
 
-impl<'key, S> From<S> for KnownKey<'key>
-where
-    Cow<'key, str>: From<S>,
-{
-    fn from(key: S) -> Self {
-        let key = Cow::from(key);
+impl<'key> From<RCowStr<'key>> for KnownKey<'key> {
+    fn from(key: RCowStr<'key>) -> Self {
         let hash_builder = halfbrown::DefaultHashBuilder::default();
         let mut hasher = hash_builder.build_hasher();
         key.hash(&mut hasher);
         Self {
             hash: hasher.finish(),
             key,
+        }
+    }
+}
+impl<'key> From<beef::Cow<'key, str>> for KnownKey<'key> {
+    fn from(key: beef::Cow<'key, str>) -> Self {
+        let hash_builder = halfbrown::DefaultHashBuilder::default();
+        let mut hasher = hash_builder.build_hasher();
+        key.hash(&mut hasher);
+        Self {
+            hash: hasher.finish(),
+            key: beef_to_rcow_str(key),
         }
     }
 }
@@ -115,7 +125,7 @@ impl<'key> KnownKey<'key> {
     #[must_use]
     pub fn map_lookup<'target, 'value>(
         &self,
-        map: &'target halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target RHashMap<RCowStr<'value>, Value<'value>>,
     ) -> Option<&'target Value<'value>>
     where
         'value: 'target,
@@ -180,7 +190,7 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_lookup_mut<'target, 'value>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut RHashMap<RCowStr<'value>, Value<'value>>,
     ) -> Option<&'target mut Value<'value>>
     where
         'key: 'value,
@@ -277,7 +287,7 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_lookup_or_insert_mut<'target, 'value, F>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut RHashMap<RCowStr<'value>, Value<'value>>,
         with: F,
     ) -> &'target mut Value<'value>
     where
@@ -365,7 +375,7 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_insert<'target, 'value>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut RHashMap<RCowStr<'value>, Value<'value>>,
         value: Value<'value>,
     ) -> Option<Value<'value>>
     where
@@ -391,7 +401,7 @@ impl<'script> KnownKey<'script> {
     pub fn into_static(self) -> KnownKey<'static> {
         let KnownKey { key, hash } = self;
         KnownKey {
-            key: Cow::owned(key.to_string()),
+            key: RCowStr::Owned(key.to_string().into()),
             hash,
         }
     }

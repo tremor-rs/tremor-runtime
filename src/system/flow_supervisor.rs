@@ -26,6 +26,8 @@ use hashbrown::{hash_map::Entry, HashMap};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
 use tremor_script::ast::DeployFlow;
 
+use crate::pdk::connectors::ConnectorPlugin;
+
 pub(crate) type Channel = Sender<Msg>;
 
 /// This is control plane
@@ -41,7 +43,7 @@ pub(crate) enum Msg {
         /// the type of connector
         connector_type: ConnectorType,
         /// the builder
-        builder: Box<dyn ConnectorBuilder>,
+        builder: ConnectorPlugin,
     },
     GetFlows(Sender<Result<Vec<Flow>>>),
     GetFlow(Id, Sender<Result<Flow>>),

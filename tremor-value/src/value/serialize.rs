@@ -27,6 +27,8 @@ use value_trait::generator::{
     BaseGenerator, DumpGenerator, PrettyGenerator, PrettyWriterGenerator, WriterGenerator,
 };
 
+use abi_stable::std_types::Tuple2;
+
 //use util::print_dec;
 
 impl<'value> Writable for Value<'value> {
@@ -75,7 +77,7 @@ trait Generator: BaseGenerator {
             stry!(self.write(b"{"));
 
             // We know this exists since it's not empty
-            let (key, value) = if let Some(v) = iter.next() {
+            let Tuple2(key, value) = if let Some(v) = iter.next() {
                 v
             } else {
                 // ALLOW: We check against size
@@ -87,7 +89,7 @@ trait Generator: BaseGenerator {
             stry!(self.write_min(b": ", b':'));
             stry!(self.write_json(value));
 
-            for (key, value) in iter {
+            for Tuple2(key, value) in iter {
                 stry!(self.write(b","));
                 stry!(self.new_line());
                 stry!(self.write_simple_string(key));
@@ -170,7 +172,7 @@ trait FastGenerator: BaseGenerator {
             stry!(self.write(b"{\""));
 
             // We know this exists since it's not empty
-            let (key, value) = if let Some(v) = iter.next() {
+            let Tuple2(key, value) = if let Some(v) = iter.next() {
                 v
             } else {
                 // ALLOW: We check against size
@@ -180,7 +182,7 @@ trait FastGenerator: BaseGenerator {
             stry!(self.write(b"\":"));
             stry!(self.write_json(value));
 
-            for (key, value) in iter {
+            for Tuple2(key, value) in iter {
                 stry!(self.write(b",\""));
                 stry!(self.write_simple_str_content(key));
                 stry!(self.write(b"\":"));

@@ -22,6 +22,8 @@ use serde_ext::forward_to_deserialize_any;
 use simd_json::StaticNode;
 use std::fmt;
 
+use abi_stable::std_types::{map::Iter, RBox, RCowStr, RVec, Tuple2};
+
 impl<'de> de::Deserializer<'de> for Value<'de> {
     type Error = Error;
 
@@ -43,10 +45,9 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
             Self::Static(StaticNode::U128(n)) => visitor.visit_u128(n),
             Value::Static(StaticNode::F64(n)) => visitor.visit_f64(n),
             Value::String(s) => {
-                if s.is_borrowed() {
-                    visitor.visit_borrowed_str(s.unwrap_borrowed())
-                } else {
-                    visitor.visit_string(s.into_owned())
+                match s {
+                    RCowStr::Borrowed(s) => visitor.visit_borrowed_str(s.into()),
+                    RCowStr::Owned(s) => visitor.visit_string(s.into())
                 }
             }
             Value::Array(a) => visitor.visit_seq(Array(a.iter())),
@@ -104,11 +105,11 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
         let (variant, value) = match self {
             Value::Object(value) => {
                 let mut iter = value.into_iter();
-                let (variant, value) = iter.next().ok_or_else(|| {
+                let Tuple2(variant, value) = iter.next().ok_or_else(|| {
                     Error::Serde(format!("Missing enum type for variant in enum `{name}`"))
                 })?;
                 // enums are encoded in json as maps with a single key:value pair
-                if let Some((extra, _)) = iter.next() {
+                if let Some(Tuple2(extra, _)) = iter.next() {
                     return Err(Error::Serde(format!(
                         "extra values in enum `{name}`: `{variant}` .. `{extra}`"
                     )));
@@ -132,7 +133,7 @@ impl<'de> de::Deserializer<'de> for Value<'de> {
 }
 
 struct EnumDeserializer<'de> {
-    variant: Cow<'de, str>,
+    variant: RCowStr<'de>,
     value: Option<Value<'de>>,
 }
 
@@ -239,7 +240,7 @@ impl<'de, 'value> SeqAccess<'de> for Array<'value, 'de> {
 }
 
 struct ObjectAccess<'de, 'value: 'de> {
-    i: halfbrown::Iter<'de, Cow<'value, str>, Value<'value>>,
+    i: Iter<'de, RCowStr<'value>, Value<'value>>,
     v: &'de Value<'value>,
 }
 
@@ -252,7 +253,7 @@ impl<'de, 'value> MapAccess<'de> for ObjectAccess<'value, 'de> {
     where
         K: DeserializeSeed<'de>,
     {
-        if let Some((k, v)) = self.i.next() {
+        if let Some(Tuple2(k, v)) = self.i.next() {
             self.v = v;
             seed.deserialize(Value::String(k.clone())).map(Some)
         } else {
@@ -528,7 +529,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     {
         let size = seq.size_hint().unwrap_or_default();
 
-        let mut v = Vec::with_capacity(size);
+        let mut v = RVec::with_capacity(size);
         while let Some(e) = seq.next_element()? {
             v.push(e);
         }

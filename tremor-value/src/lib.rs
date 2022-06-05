@@ -1,3 +1,10 @@
+// TODO: disable and cleanup with `cargo fix` automatically once done
+#![allow(unused)]
+#![allow(dead_code)]
+/* TODO: restore
+#![deny(warnings)]
+#![deny(missing_docs)]
+*/
 #![warn(unused_extern_crates)]
 #![deny(
     clippy::all,
@@ -50,6 +57,8 @@ use simd_json::Node;
 use simd_json_derive::{Deserialize, Serialize, Tape};
 use value_trait::Writable;
 
+use abi_stable::std_types::RVec;
+
 impl<'value> Serialize for Value<'value> {
     fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>
     where
@@ -78,7 +87,7 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
         // Rust doesn't optimize the normal loop away here
         // so we write our own avoiding the length
         // checks during push
-        let mut res = Vec::with_capacity(len);
+        let mut res = RVec::with_capacity(len);
         unsafe {
             res.set_len(len);
             for i in 0..len {

@@ -224,6 +224,11 @@ uuid = { version = "1.1", features = ["v4"] }
 # wal
 qwal = { git = "https://github.com/tremor-rs/qwal" }
 
+# plugin system
+abi_stable = { version = "0.11.0", default_features = false, features = ["rust_latest_stable"] }
+async-ffi = { version = "0.4", features = ["abi_stable"] }
+walkdir = "2.3.2"
+
 [dev-dependencies]
 serial_test = { version = "=0.8", features = ["logging"] }
 # path = "../serial_test/serial_test" 
@@ -281,6 +286,12 @@ wal-integration = []
 tarpaulin-exclude = []
 # those are falky tests
 flaky-test = []
+
+[patch.crates-io]
+# FIXME: update to crates.io when the new version is released
+abi_stable = { git = "https://github.com/rodrimati1992/abi_stable_crates.git", branch = "0_11" }
+# FIXME: update to crates.io when the new version is released
+simd-json-derive = { git = "https://github.com/marioortizmanero/simd-json-derive.git", branch = "abi-stable" }
 
 # for use during debian packaging, via cargo-deb
 # https://github.com/mmstick/cargo-deb#packagemetadatadeb-options

@@ -264,8 +264,15 @@ impl Default for NodeKind {
 }
 
 /// A circuit breaker action
+#[repr(C)]
 #[derive(
-    Debug, Clone, Copy, PartialEq, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+    StableAbi,
 )]
 pub enum CbAction {
     /// Nothing of note

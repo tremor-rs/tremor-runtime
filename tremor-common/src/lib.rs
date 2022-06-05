@@ -41,6 +41,9 @@ pub mod blue_green_hashmap;
 /// Common ports
 pub mod ports;
 
+/// For the Plugin Development Kit
+pub mod pdk;
+
 pub use errors::Error;
 
 #[cfg(test)]

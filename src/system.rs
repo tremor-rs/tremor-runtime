@@ -26,6 +26,8 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_script::{ast, highlighter::Highlighter};
 
+use crate::pdk::{ArtefactPlugin, DEFAULT_PLUGIN_PATH};
+
 /// Configuration for the runtime
 pub struct WorldConfig {
     /// default size for queues
@@ -98,17 +100,39 @@ impl World {
         }
     }
 
+    /// Finds all the available plugins and loads them dynamically. For now,
+    /// plugins are loaded from the path defined by `TREMOR_PLUGIN_PATH`.
+    pub(crate) async fn register_plugin_types(&self) {
+        let plugin_path =
+            env::var("TREMOR_PLUGIN_PATH").unwrap_or_else(|_| String::from(DEFAULT_PLUGIN_PATH));
+        // TODO: print warning when no paths are configured?
+        for path in plugin_path.split(':') {
+            log::info!("Dynamically loading plugins in directory '{}'", path);
+
+            // TODO: this could be done in parallel
+            for plugin in pdk::find_recursively(&path) {
+                match plugin {
+                    // TODO: create a `register_plugin_connector_type` function?
+                    // Or rename this into `register_connector_type`?
+                    ArtefactPlugin::Connector(p) => {
+                        world.register_builtin_connector_type(p).await?
+                    }
+                }
+            }
+        }
+    }
+
     /// Registers the given connector type with `type_name` and the corresponding `builder`
     ///
     /// # Errors
     ///  * If the system is unavailable
     pub(crate) async fn register_builtin_connector_type(
         &self,
-        builder: Box<dyn connectors::ConnectorBuilder>,
+        builder: ConnectorMod_Ref,
     ) -> Result<()> {
         self.system
             .send(flow_supervisor::Msg::RegisterConnectorType {
-                connector_type: builder.connector_type(),
+                connector_type: builder.connector_type()(),
                 builder,
             })
             .await?;
@@ -152,6 +176,8 @@ impl World {
         let world = Self { system };
 
         connectors::register_builtin_connector_types(&world, config.debug_connectors).await?;
+        world.register_plugin_types().await?;
+
         Ok((world, system_h))
     }
 

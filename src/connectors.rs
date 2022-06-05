@@ -58,6 +58,21 @@ use tremor_value::Value;
 use utils::reconnect::{Attempt, ConnectionLostNotifier, ReconnectRuntime};
 use value_trait::{Builder, Mutable, ValueAccess};
 
+use crate::pdk::{self, RResult};
+use abi_stable::{
+    std_types::{
+        RBox, RCowStr,
+        ROption::{self, RNone, RSome},
+        RResult::{RErr, ROk},
+        RStr, RString, RVec,
+    },
+    type_level::downcasting::{TD_CanDowncast, TD_Opaque},
+    StableAbi,
+};
+use async_ffi::{BorrowingFfiFuture, FutureExt};
+use std::{env, future};
+use tremor_common::pdk::{beef_to_rcow_str, rcow_to_beef_str};
+
 /// quiescence stuff
 pub(crate) use utils::{metrics, reconnect};
 
@@ -975,20 +990,26 @@ const OUT_PORTS_REF: &[Cow<'static, str>; 2] = &OUT_PORTS;
 /// The connector has its own control plane and is an artefact in the tremor repository.
 /// It controls the sink and source parts which are connected to the rest of the runtime via links to pipelines.
 
-#[async_trait::async_trait]
-pub(crate) trait Connector: Send {
+#[abi_stable::sabi_trait]
+pub(crate) trait RawConnector: Send {
     /// Valid input ports for the connector, by default this is `in`
-    fn input_ports(&self) -> &[Cow<'static, str>] {
+    fn input_ports(&self) -> RVec<RCowStr<'static>> {
         IN_PORTS_REF
+            .into_iter()
+            .map(|port| conv_cow_str_inv(port.clone()))
+            .collect()
     }
     /// Valid output ports for the connector, by default this is `out` and `err`
-    fn output_ports(&self) -> &[Cow<'static, str>] {
+    fn output_ports(&self) -> RVec<RCowStr<'static>> {
         OUT_PORTS_REF
+            .into_iter()
+            .map(|port| conv_cow_str_inv(port.clone()))
+            .collect()
     }
 
     /// Tests if a input port is valid, by default does a case insensitive search against
     /// `self.input_ports()`
-    fn is_valid_input_port(&self, port: &str) -> bool {
+    fn is_valid_input_port(&self, port: RStr<'_>) -> bool {
         for valid in self.input_ports() {
             if port.eq_ignore_ascii_case(valid.as_ref()) {
                 return true;
@@ -999,7 +1020,7 @@ pub(crate) trait Connector: Send {
 
     /// Tests if a input port is valid, by default does a case insensitive search against
     /// `self.output_ports()`
-    fn is_valid_output_port(&self, port: &str) -> bool {
+    fn is_valid_output_port(&self, port: RStr<'_>) -> bool {
         for valid in self.output_ports() {
             if port.eq_ignore_ascii_case(valid.as_ref()) {
                 return true;
@@ -1012,24 +1033,26 @@ pub(crate) trait Connector: Send {
     ///
     /// This function is called exactly once upon connector creation.
     /// If this connector does not act as a source, return `Ok(None)`.
-    async fn create_source(
-        &mut self,
+    fn create_source<'a>(
+        &'a mut self,
         _source_context: SourceContext,
-        _builder: source::SourceManagerBuilder,
-    ) -> Result<Option<source::SourceAddr>> {
-        Ok(None)
+        _qsize: usize,
+    ) -> BorrowingFfiFuture<'a, RResult<ROption<BoxedRawSource>>> {
+        future::ready(ROk(RNone)).into_ffi()
     }
 
     /// Create a sink part for this connector if applicable
     ///
     /// This function is called exactly once upon connector creation.
     /// If this connector does not act as a sink, return `Ok(None)`.
-    async fn create_sink(
-        &mut self,
+    fn create_sink<'a>(
+        &'a mut self,
         _sink_context: SinkContext,
-        _builder: sink::SinkManagerBuilder,
-    ) -> Result<Option<sink::SinkAddr>> {
-        Ok(None)
+        _qsize: usize,
+        // TODO: this is not quite the same as in main
+        _reply_channel: BoxedContraflowSender,
+    ) -> BorrowingFfiFuture<'a, RResult<ROption<BoxedRawSink>>> {
+        future::ready(ROk(RNone)).into_ffi()
     }
 
     /// Attempt to connect to the outside world.
@@ -1046,44 +1069,202 @@ pub(crate) trait Connector: Send {
     ///
     /// To know when to stop reading new data from the external connection, the `quiescence` beacon
     /// can be used. Call `.reading()` and `.writing()` to see if you should continue doing so, if not, just stop and rest.
-    async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
-        Ok(true)
+    fn connect<'a>(
+        &'a mut self,
+        _ctx: &'a ConnectorContext,
+        _attempt: &'a Attempt,
+    ) -> BorrowingFfiFuture<'a, RResult<bool>> {
+        future::ready(ROk(true)).into_ffi()
     }
 
     /// called once when the connector is started
     /// `connect` will be called after this for the first time, leave connection attempts in `connect`.
-    async fn on_start(&mut self, _ctx: &ConnectorContext) -> Result<()> {
-        Ok(())
+    fn on_start<'a>(
+        &'a mut self,
+        _ctx: &'a ConnectorContext,
+    ) -> BorrowingFfiFuture<'a, RResult<()>> {
+        future::ready(ROk(())).into_ffi()
     }
 
     /// called when the connector pauses
-    async fn on_pause(&mut self, _ctx: &ConnectorContext) -> Result<()> {
-        Ok(())
+    fn on_pause<'a>(
+        &'a mut self,
+        _ctx: &'a ConnectorContext,
+    ) -> BorrowingFfiFuture<'a, RResult<()>> {
+        future::ready(ROk(())).into_ffi()
     }
     /// called when the connector resumes
-    async fn on_resume(&mut self, _ctx: &ConnectorContext) -> Result<()> {
-        Ok(())
+    fn on_resume<'a>(
+        &'a mut self,
+        _ctx: &'a ConnectorContext,
+    ) -> BorrowingFfiFuture<'a, RResult<()>> {
+        future::ready(ROk(())).into_ffi()
     }
 
     /// Drain
     ///
     /// Ensure no new events arrive at the source part of this connector when this function returns
     /// So we can safely send the `Drain` signal.
-    async fn on_drain(&mut self, _ctx: &ConnectorContext) -> Result<()> {
-        Ok(())
+    fn on_drain<'a>(
+        &'a mut self,
+        _ctx: &'a ConnectorContext,
+    ) -> BorrowingFfiFuture<'a, RResult<()>> {
+        future::ready(Ok(())).into_ffi()
     }
 
     /// called when the connector is stopped
-    async fn on_stop(&mut self, _ctx: &ConnectorContext) -> Result<()> {
-        Ok(())
+    fn on_stop<'a>(
+        &'a mut self,
+        _ctx: &'a ConnectorContext,
+    ) -> BorrowingFfiFuture<'a, RResult<()>> {
+        future::ready(Ok(())).into_ffi()
     }
 
     /// Returns the codec requirements for the connector
     fn codec_requirements(&self) -> CodecReq;
 }
 
+/// Alias for the FFI-safe dynamic connector type
+pub type BoxedRawConnector = RawConnector_TO<'static, RBox<()>>;
+
+/// The higher level connector interface, which wraps the raw connector from the
+/// plugin. This should always be used for maximum usability and readability,
+/// instead of the underlying `BoxedRawConnector`.
+///
+/// Note that it may hurt performance in some parts of the connector interface,
+/// so some of the functionality may not be fully wrapped.
+pub(crate) struct Connector(BoxedRawConnector);
+impl Connector {
+    #[inline]
+    pub fn input_ports(&self) -> Vec<Cow<'static, str>> {
+        self.0
+            .input_ports()
+            .into_iter()
+            .map(rcow_to_beef_str)
+            .collect()
+    }
+
+    #[inline]
+    pub fn output_ports(&self) -> Vec<Cow<'static, str>> {
+        self.0
+            .output_ports()
+            .into_iter()
+            .map(rcow_to_beef_str)
+            .collect()
+    }
+
+    #[inline]
+    pub fn is_valid_input_port(&self, port: &str) -> bool {
+        self.0.is_valid_input_port(port.into())
+    }
+
+    #[inline]
+    pub fn is_valid_output_port(&self, port: &str) -> bool {
+        self.0.is_valid_output_port(port.into())
+    }
+
+    #[inline]
+    pub async fn create_source(
+        &mut self,
+        source_context: SourceContext,
+        builder: source::SourceManagerBuilder,
+    ) -> Result<Option<source::SourceAddr>> {
+        match self
+            .0
+            .create_source(source_context.clone(), builder.qsize())
+            .await
+        {
+            ROk(RSome(source)) => builder.spawn(source, source_context).map(Some),
+            ROk(RNone) => Ok(None),
+            RErr(err) => Err(err.into()),
+        }
+    }
+
+    #[inline]
+    pub async fn create_sink(
+        &mut self,
+        sink_context: SinkContext,
+        builder: sink::SinkManagerBuilder,
+    ) -> Result<Option<sink::SinkAddr>> {
+        // TODO: this should take the boxed sender instead for performance (?)
+        // TODO: this should use `TD_Opaque`
+        // Note that we actually want to be able to downcast back to the
+        // original type here, so that it's easier to manage in the runtime.
+        let reply_tx = BoxedContraflowSender::from_value(builder.reply_tx(), TD_CanDowncast);
+        match self
+            .0
+            .create_sink(sink_context.clone(), builder.qsize(), reply_tx)
+            .await
+        {
+            ROk(RSome(sink)) => builder.spawn(sink, sink_context).map(Some),
+            ROk(RNone) => Ok(None),
+            RErr(err) => Err(err.into()),
+        }
+    }
+
+    #[inline]
+    pub async fn connect(&mut self, ctx: &ConnectorContext, attempt: &Attempt) -> Result<bool> {
+        self.0
+            .connect(ctx, attempt)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    #[inline]
+    pub async fn on_start(&mut self, ctx: &ConnectorContext) -> Result<()> {
+        self.0
+            .on_start(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    #[inline]
+    pub async fn on_pause(&mut self, ctx: &ConnectorContext) -> Result<()> {
+        self.0
+            .on_pause(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    #[inline]
+    pub async fn on_resume(&mut self, ctx: &ConnectorContext) -> Result<()> {
+        self.0
+            .on_resume(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    #[inline]
+    pub async fn on_drain(&mut self, ctx: &ConnectorContext) -> Result<()> {
+        self.0
+            .on_drain(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    #[inline]
+    pub async fn on_stop(&mut self, ctx: &ConnectorContext) -> Result<()> {
+        self.0
+            .on_stop(ctx)
+            .await
+            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .into() // RResult -> Result
+    }
+
+    #[inline]
+    pub fn codec_requirements(&self) -> CodecReq {
+        self.0.codec_requirements()
+    }
+}
+
 /// Specifeis if a connector requires a codec
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, StableAbi)]
 pub(crate) enum CodecReq {
     /// No codec can be provided for this connector it always returns structured data
     Structured,
@@ -1094,10 +1275,16 @@ pub(crate) enum CodecReq {
 }
 
 /// the type of a connector
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
-pub(crate) struct ConnectorType(String);
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default, StableAbi)]
+pub(crate) struct ConnectorType(RString);
 
 impl From<ConnectorType> for String {
+    fn from(ct: ConnectorType) -> Self {
+        ct.0.into()
+    }
+}
+
+impl From<ConnectorType> for RString {
     fn from(ct: ConnectorType) -> Self {
         ct.0
     }
@@ -1117,6 +1304,12 @@ impl Display for ConnectorType {
 
 impl From<String> for ConnectorType {
     fn from(s: String) -> Self {
+        Self(s.into())
+    }
+}
+
+impl From<RString> for ConnectorType {
+    fn from(s: RString) -> Self {
         Self(s)
     }
 }
@@ -1130,44 +1323,12 @@ where
     }
 }
 
-/// something that is able to create a connector instance
-#[async_trait::async_trait]
-pub(crate) trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
-    /// the type of the connector
-    fn connector_type(&self) -> ConnectorType;
-
-    /// create a connector from the given `id` and `config`, if a connector config is mandatory
-    /// implement `build_cfg` instead
-    ///
-    /// # Errors
-    ///  * If the config is invalid for the connector
-    async fn build(&self, alias: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        let cc = config
-            .config
-            .as_ref()
-            .ok_or_else(|| ErrorKind::MissingConfiguration(alias.to_string()))?;
-        self.build_cfg(alias, config, cc).await
-    }
-
-    /// create a connector from the given `alias`, outer `ConnectorConfig` and the connector-specific `connector_config`
-    ///
-    /// # Errors
-    ///  * If the config is invalid for the connector
-    async fn build_cfg(
-        &self,
-        _alias: &str,
-        _config: &ConnectorConfig,
-        _connector_config: &Value,
-    ) -> Result<Box<dyn Connector>> {
-        Err("build_cfg is unimplemented".into())
-    }
-}
-
 /// builtin connector types
 
 #[must_use]
-pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
+pub(crate) fn builtin_connector_types() -> Vec<ConnectorPlugin> {
     vec![
+        /*
         Box::new(impls::file::Builder::default()),
         Box::new(impls::metrics::Builder::default()),
         Box::new(impls::stdio::Builder::default()),
@@ -1199,17 +1360,20 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         Box::new(impls::gbq::writer::Builder::default()),
         Box::new(impls::gpubsub::consumer::Builder::default()),
         Box::new(impls::gpubsub::producer::Builder::default()),
+        */
     ]
 }
 
 /// debug connector types
 
 #[must_use]
-pub(crate) fn debug_connector_types(world: &World) -> Vec<Box<dyn ConnectorBuilder + 'static>> {
+pub(crate) fn debug_connector_types(world: &World) -> Vec<ConnectorPlugin> {
     vec![
+        /*
         Box::new(impls::cb::Builder::new(world.clone())),
         Box::new(impls::bench::Builder::new(world.clone())),
         Box::new(impls::null::Builder::default()),
+        */
     ]
 }
 
@@ -1229,6 +1393,12 @@ pub(crate) async fn register_builtin_connector_types(world: &World, debug: bool)
         let builder = Box::new(impls::exit::Builder::new(world));
         world.register_builtin_connector_type(builder).await?;
     }
+    /*
+     * TODO: why is this not in the builtin connectors?
+    world
+        .register_builtin_connector_type(Box::new(impls::exit::Builder::new(world)))
+        .await?;
+    */
 
     Ok(())
 }
