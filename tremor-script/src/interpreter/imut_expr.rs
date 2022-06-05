@@ -37,6 +37,9 @@ use std::{
     iter, mem,
 };
 
+use abi_stable::std_types::Tuple2;
+use tremor_common::pdk::beef_to_rcow_str;
+
 fn owned_val<'val, T>(v: T) -> Cow<'val, Value<'val>>
 where
     T: 'val,
@@ -184,7 +187,7 @@ impl<'script> ImutExpr<'script> {
                 for field in &record.fields {
                     let result = stry!(field.value.run(opts, env, event, state, meta, local));
                     let name = stry!(field.name.run(opts, env, event, state, meta, local));
-                    object.insert(name, result.into_owned());
+                    object.insert(beef_to_rcow_str(name), result.into_owned());
                 }
 
                 Ok(owned_val(object))
@@ -284,7 +287,7 @@ impl<'script> ImutExpr<'script> {
             |t| {
                 (
                     t.len(),
-                    Box::new(t.iter().map(|(k, v)| (k.clone().into(), v.clone()))),
+                    Box::new(t.iter().map(|Tuple2(k, v)| (k.clone().into(), v.clone()))),
                 )
             },
         );

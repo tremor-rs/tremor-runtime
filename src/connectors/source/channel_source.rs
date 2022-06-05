@@ -21,6 +21,12 @@ use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::*;
 use async_std::task;
 use std::time::Duration;
+
+use super::RawSource;
+use crate::{pdk::RResult, ttry};
+use abi_stable::std_types::ROk;
+use async_ffi::{BorrowingFfiFuture, FutureExt};
+
 /// A source that receives `SourceReply` messages via a channel.
 /// It does not handle acks/fails.
 ///
@@ -125,10 +131,13 @@ impl ChannelSourceRuntime {
     }
 }
 
-#[async_trait::async_trait()]
-impl Source for ChannelSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.rx.recv().await?)
+impl RawSource for ChannelSource {
+    fn pull_data<'a>(
+        &'a mut self,
+        _pull_id: &'a mut u64,
+        _ctx: &'a SourceContext,
+    ) -> BorrowingFfiFuture<'a, RResult<SourceReply>> {
+        async move { ROk(ttry!(self.rx.recv().await)) }.into_ffi()
     }
 
     /// this source is not handling acks/fails

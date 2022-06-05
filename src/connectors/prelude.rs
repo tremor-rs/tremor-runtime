@@ -14,12 +14,12 @@
 
 pub(crate) use crate::connectors::sink::{
     AsyncSinkReply, ChannelSink, ChannelSinkRuntime, ContraflowData, EventSerializer,
-    SingleStreamSink, SingleStreamSinkRuntime, Sink, SinkAck, SinkAddr, SinkContext,
-    SinkManagerBuilder, SinkMeta, SinkReply, SinkRuntime, StreamWriter,
+    SingleStreamSink, SingleStreamSinkRuntime, SinkAck, SinkAddr, SinkContext, SinkManagerBuilder,
+    SinkMeta, SinkReply, SinkRuntime, StreamWriter,
 };
 
 pub(crate) use crate::connectors::source::{
-    ChannelSource, ChannelSourceRuntime, Source, SourceAddr, SourceContext, SourceManagerBuilder,
+    ChannelSource, ChannelSourceRuntime, SourceAddr, SourceContext, SourceManagerBuilder,
     SourceReply, StreamReader,
 };
 pub(crate) use crate::connectors::utils::{
@@ -27,8 +27,8 @@ pub(crate) use crate::connectors::utils::{
     url::{Defaults, Url},
 };
 pub(crate) use crate::connectors::{
-    spawn_task, CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context,
-    StreamDone, StreamIdGen, ACCEPT_TIMEOUT,
+    spawn_task, CodecReq, ConnectorContext, ConnectorType, Context, StreamDone, StreamIdGen,
+    ACCEPT_TIMEOUT,
 };
 pub(crate) use crate::errors::{Error, Kind as ErrorKind, Result};
 pub(crate) use crate::utils::hostname;
@@ -58,3 +58,19 @@ pub(crate) fn default_true() -> bool {
 pub(crate) fn default_false() -> bool {
     false
 }
+
+// For the PDK
+pub(crate) use crate::connectors::{sink::Sink, source::Source, Connector};
+pub use crate::{
+    connectors::{
+        quiescence::BoxedQuiescenceBeacon,
+        sink::{
+            BoxedContraflowSender, BoxedEventSerializer, BoxedRawSink, ContraflowSenderOpaque,
+            EventSerializerOpaque, MutEventSerializer, RawSink,
+        },
+        source::{BoxedRawSource, RawSource},
+        utils::reconnect::BoxedConnectionLostNotifier,
+        BoxedRawConnector, RawConnector,
+    },
+    pdk::{ConnectorPlugin, ConnectorPlugin_Ref, RResult},
+};

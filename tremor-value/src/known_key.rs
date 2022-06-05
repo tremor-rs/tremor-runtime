@@ -105,6 +105,7 @@ impl<'key> KnownKey<'key> {
     {
         target.as_object().and_then(|m| self.map_lookup(m))
     }
+
     /// Looks up this key in a `HashMap<<Cow<'value, str>, Value<'value>>` the inner representation of an object `Value`, returns None if the
     /// key wasn't present.
     ///
@@ -119,7 +120,6 @@ impl<'key> KnownKey<'key> {
     ///   assert_eq!(known_key.map_lookup(inner).unwrap(), &42);
     /// }
     /// ```
-
     #[inline]
     #[must_use]
     pub fn map_lookup<'target, 'value>(
@@ -129,11 +129,12 @@ impl<'key> KnownKey<'key> {
     where
         'value: 'target,
     {
+        // map.get(self.key())
         map
             // TODO: update to better ergonomics when available
             // .raw_entry()
             // .from_key_hashed_nocheck(self.hash, self.key())
-            .raw_entry_key_hashed_nocheck(self.hash, &self.key)
+            .raw_entry_key_hashed_nocheck(self.hash, self.key())
             .map(|kv| kv.1)
             .into()
     }

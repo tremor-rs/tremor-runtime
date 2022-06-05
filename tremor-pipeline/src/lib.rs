@@ -36,9 +36,8 @@ use executable_graph::NodeConfig;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
 use petgraph::graph;
-use simd_json::OwnedValue;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::HashSet;
 use std::fmt;
 use std::fmt::Display;
 use std::iter::Iterator;
@@ -47,6 +46,11 @@ use tremor_common::ids::{Id, OperatorId, SinkId, SourceId};
 use tremor_script::{
     ast::{self, Helper},
     prelude::*,
+};
+
+use abi_stable::{
+    std_types::{RHashMap, ROption, RVec, Tuple2},
+    StableAbi,
 };
 
 /// Pipeline Errors
@@ -73,7 +77,7 @@ pub(crate) type ExecPortIndexMap =
     HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
 
 /// A configuration map
-pub type ConfigMap = Option<tremor_value::Value<'static>>;
+pub type ConfigMap = ROption<tremor_value::Value<'static>>;
 
 /// A lookup function to used to look up operators
 pub type NodeLookupFn = fn(
@@ -141,7 +145,10 @@ lazy_static! {
 
 /// Stringified numeric key
 /// from <https://github.com/serde-rs/json-benchmark/blob/master/src/prim_str.rs>
-#[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Debug)]
+#[repr(C)]
+// TODO: this used to not derive `Hash` before the `OpMeta` struct changed from
+// `BTreeMap` to `RHashMap`.
+#[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Debug, Hash, StableAbi)]
 pub struct PrimStr<T>(T)
 where
     T: Copy + Ord + Display + FromStr;
@@ -192,25 +199,41 @@ where
 }
 
 /// Operator metadata
-#[derive(
-    Clone, Debug, Default, PartialEq, simd_json_derive::Serialize, simd_json_derive::Deserialize,
-)]
+#[repr(C)]
+#[derive(Clone, Debug, Default, PartialEq, simd_json_derive::Serialize, StableAbi)]
 // TODO: optimization: - use two Vecs, one for operator ids, one for operator metadata (Values)
 //                     - make it possible to trace operators with and without metadata
 //                     - insert with bisect (numbers of operators tracked will be low single digit numbers most of the time)
-pub struct OpMeta(BTreeMap<PrimStr<OperatorId>, OwnedValue>);
+//
+// TODO: this used `BTreeMap` before, rather than a hash-based map. Maybe find
+// an FFI-safe tree-based map instead.
+pub struct OpMeta(RHashMap<PrimStr<OperatorId>, Value<'static>>);
+
+// TODO: avoid this custom implementation?
+impl<'input> simd_json_derive::Deserialize<'input> for OpMeta {
+    #[inline]
+    fn from_tape(tape: &mut simd_json_derive::Tape<'input>) -> simd_json::Result<Self> {
+        let x: RHashMap<PrimStr<OperatorId>, Value<'input>> =
+            simd_json_derive::Deserialize::from_tape(tape)?;
+        let x: RHashMap<PrimStr<OperatorId>, Value<'static>> = x
+            .into_iter()
+            .map(|Tuple2(k, v)| (k, v.into_static()))
+            .collect();
+        Ok(Self(x))
+    }
+}
 
 impl OpMeta {
     /// inserts a value
-    pub fn insert<V>(&mut self, key: OperatorId, value: V) -> Option<OwnedValue>
+    pub fn insert<V>(&mut self, key: OperatorId, value: V) -> Option<Value<'static>>
     where
-        OwnedValue: From<V>,
+        Value<'static>: From<V>,
     {
-        self.0.insert(PrimStr(key), OwnedValue::from(value))
+        self.0.insert(PrimStr(key), Value::from(value)).into()
     }
     /// reads a value
-    pub fn get(&mut self, key: OperatorId) -> Option<&OwnedValue> {
-        self.0.get(&PrimStr(key))
+    pub fn get(&mut self, key: OperatorId) -> Option<&Value<'static>> {
+        self.0.get(&PrimStr(key)).into()
     }
     /// checks existance of a key
     #[must_use]
@@ -219,8 +242,8 @@ impl OpMeta {
     }
 
     /// Merges two op meta maps, overwriting values with `other` on duplicates
-    pub fn merge(&mut self, mut other: Self) {
-        self.0.append(&mut other.0);
+    pub fn merge(&mut self, other: Self) {
+        self.0.extend(&mut other.0.into_iter());
     }
 }
 
@@ -336,8 +359,15 @@ impl CbAction {
 ///
 /// `EventId` also tracks min and max event ids for other events in order to support batched and grouped events
 /// and facilitate CB mechanics
+#[repr(C)]
 #[derive(
-    Debug, Clone, PartialEq, Default, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Debug,
+    Clone,
+    PartialEq,
+    Default,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+    StableAbi,
 )]
 pub struct EventId {
     /// can be a `SourceId` or an `OperatorId`
@@ -345,7 +375,7 @@ pub struct EventId {
     stream_id: u64,
     event_id: u64,
     pull_id: u64,
-    tracked_pull_ids: Vec<TrackedPullIds>,
+    tracked_pull_ids: RVec<TrackedPullIds>,
 }
 
 /// default stream id if streams dont make sense
@@ -362,7 +392,7 @@ impl EventId {
             stream_id,
             event_id,
             pull_id,
-            tracked_pull_ids: Vec::with_capacity(0),
+            tracked_pull_ids: RVec::with_capacity(0),
         }
     }
 
@@ -638,8 +668,15 @@ impl fmt::Display for EventId {
     }
 }
 
+#[repr(C)]
 #[derive(
-    Debug, Clone, PartialEq, Default, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Debug,
+    Clone,
+    PartialEq,
+    Default,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+    StableAbi,
 )]
 /// tracked min and max pull id for a given source and stream
 ///
@@ -824,8 +861,15 @@ impl EventIdGenerator {
 }
 
 /// The kind of signal this is
+#[repr(C)]
 #[derive(
-    Debug, Clone, Copy, PartialEq, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+    StableAbi,
 )]
 pub enum SignalKind {
     // Lifecycle

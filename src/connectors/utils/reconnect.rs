@@ -264,7 +264,7 @@ impl ReconnectRuntime {
     /// asynchronously and send a `connector::Msg::Reconnect` to the connector identified by `addr`.
     pub(crate) async fn attempt(
         &mut self,
-        connector: &mut dyn Connector,
+        connector: &mut Connector,
         ctx: &ConnectorContext,
     ) -> Result<(Connectivity, bool)> {
         let (tx, rx) = bounded(2);

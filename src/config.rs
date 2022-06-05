@@ -21,10 +21,19 @@ use tremor_script::{
 };
 use tremor_value::prelude::*;
 
+use abi_stable::{
+    std_types::{
+        ROption::{self, RNone},
+        RString, RVec,
+    },
+    StableAbi,
+};
+
 pub(crate) type Id = String;
 
 /// Reconnect strategies for controlling if and how to reconnect
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[repr(C)]
+#[derive(Clone, Debug, Serialize, Deserialize, StableAbi)]
 #[serde(rename_all = "lowercase", deny_unknown_fields)]
 pub enum Reconnect {
     /// No reconnection
@@ -37,7 +46,7 @@ pub enum Reconnect {
         #[serde(default = "default_growth_rate")]
         growth_rate: f64,
         /// maximum number of retries to execute
-        max_retries: Option<u64>,
+        max_retries: ROption<u64>,
         /// Randomize the growth rate
         #[serde(default = "default_true")]
         randomized: bool,
@@ -76,11 +85,12 @@ impl Default for PauseBehaviour {
 */
 
 /// Codec name and configuration
-#[derive(Clone, Debug, Default)]
+#[repr(C)]
+#[derive(Clone, Debug, Default, StableAbi)]
 #[allow(clippy::module_name_repetitions)]
 pub struct NameWithConfig {
-    pub(crate) name: String,
-    pub(crate) config: Option<Value<'static>>,
+    pub(crate) name: RString,
+    pub(crate) config: ROption<Value<'static>>,
 }
 
 impl<'v> TryFrom<&Value<'v>> for NameWithConfig {
@@ -103,16 +113,16 @@ impl<'v> TryFrom<&Value<'v>> for NameWithConfig {
 impl From<&str> for NameWithConfig {
     fn from(name: &str) -> Self {
         Self {
-            name: name.to_string(),
-            config: None,
+            name: RString::from(name),
+            config: RNone,
         }
     }
 }
 impl From<&String> for NameWithConfig {
     fn from(name: &String) -> Self {
         Self {
-            name: name.clone(),
-            config: None,
+            name: name.clone().into(),
+            config: RNone,
         }
     }
 }
@@ -126,29 +136,30 @@ pub(crate) type Postprocessor = NameWithConfig;
 
 /// Connector configuration - only the parts applicable to all connectors
 /// Specific parts are catched in the `config` map.
-#[derive(Clone, Debug, Default)]
+#[repr(C)]
+#[derive(Clone, Debug, Default, StableAbi)]
 pub(crate) struct Connector {
     /// Connector type
     pub connector_type: ConnectorType,
 
     /// Codec in force for connector
-    pub codec: Option<Codec>,
+    pub codec: ROption<Codec>,
 
     /// Configuration map
     pub config: tremor_pipeline::ConfigMap,
 
     // TODO: interceptors or configurable processors
     /// Preprocessor chain configuration
-    pub preprocessors: Option<Vec<Preprocessor>>,
+    pub preprocessors: ROption<RVec<Preprocessor>>,
 
     // TODO: interceptors or configurable processors
     /// Postprocessor chain configuration
-    pub postprocessors: Option<Vec<Postprocessor>>,
+    pub postprocessors: ROption<RVec<Postprocessor>>,
 
     pub(crate) reconnect: Reconnect,
 
     //pub(crate) on_pause: PauseBehaviour,
-    pub(crate) metrics_interval_s: Option<u64>,
+    pub(crate) metrics_interval_s: ROption<u64>,
 }
 
 impl Connector {

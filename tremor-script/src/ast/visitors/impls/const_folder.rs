@@ -27,6 +27,8 @@ use simd_json::prelude::*;
 use simd_json_derive::Serialize;
 use tremor_value::KnownKey;
 
+use tremor_common::pdk::{beef_to_rcow_str, rcow_to_beef_str};
+
 /// Walks a AST and performs constant folding on arguments
 pub struct ConstFolder<'run, 'script> {
     /// Function Registry
@@ -291,7 +293,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script
             StrLitElement::Expr(e) if e.is_lit() => {
                 let value = e.try_into_value(self.helper)?;
                 match value {
-                    Value::String(s) => *string = StrLitElement::Lit(s),
+                    Value::String(s) => *string = StrLitElement::Lit(rcow_to_beef_str(s)),
                     // TODO: The float scenario is different in erlang and rust
                     // We knowingly excluded float correctness in string interpolation
                     // as we don't want to over engineer and write own format functions.
@@ -346,7 +348,7 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script
                 Field { name, value, .. } if name.as_str().is_some() && value.is_lit() => {
                     let k = name.into_str().ok_or("unreachable error str and not str")?;
                     let v = value.try_into_value(self.helper)?;
-                    record.base.insert(k, v);
+                    record.base.insert(beef_to_rcow_str(k), v);
                 }
                 other => record.fields.push(other),
             }

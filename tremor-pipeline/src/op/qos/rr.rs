@@ -29,6 +29,8 @@ use crate::op::prelude::*;
 use beef::Cow;
 use tremor_script::prelude::*;
 
+use abi_stable::std_types::ROption::{RNone, RSome};
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -74,7 +76,7 @@ impl From<String> for Output {
 }
 
 op!(RoundRobinFactory(_uid, node) {
-if let Some(map) = &node.config {
+if let RSome(map) = &node.config {
     let config: Config = Config::new(map)?;
     if config.outputs.is_empty() {
         error!("No outputs supplied for round robin operators");
@@ -128,7 +130,7 @@ impl Operator for RoundRobin {
     ) -> Result<EventAndInsights> {
         if self.first && self.outputs.iter().any(|o| o.open) {
             let mut e = Event::cb_restore(signal.ingest_ns);
-            e.origin_uri = None;
+            e.origin_uri = RNone;
             self.first = false;
 
             Ok(EventAndInsights {
@@ -153,7 +155,7 @@ impl Operator for RoundRobin {
         if let Some(o) = insight
             .op_meta
             .get(uid)
-            .and_then(OwnedValue::as_usize)
+            .and_then(Value::as_usize)
             .and_then(|id| outputs.get_mut(id))
         {
             if insight.cb == CbAction::Trigger {

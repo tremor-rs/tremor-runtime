@@ -26,7 +26,8 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_script::{ast, highlighter::Highlighter};
 
-use crate::pdk::{ArtefactPlugin, DEFAULT_PLUGIN_PATH};
+use crate::pdk::{self, ConnectorPlugin_Ref, DEFAULT_PLUGIN_PATH};
+use std::env;
 
 /// Configuration for the runtime
 pub struct WorldConfig {
@@ -111,13 +112,14 @@ impl World {
 
             // TODO: this could be done in parallel
             for plugin in pdk::find_recursively(&path) {
-                match plugin {
-                    // TODO: create a `register_plugin_connector_type` function?
-                    // Or rename this into `register_connector_type`?
-                    ArtefactPlugin::Connector(p) => {
-                        world.register_builtin_connector_type(p).await?
-                    }
-                }
+                todo!()
+                // match plugin {
+                //     // TODO: create a `register_plugin_connector_type` function?
+                //     // Or rename this into `register_connector_type`?
+                //     ArtefactPlugin::Connector(p) => {
+                //         self.register_builtin_connector_type(p).await?
+                //     }
+                // }
             }
         }
     }
@@ -128,7 +130,7 @@ impl World {
     ///  * If the system is unavailable
     pub(crate) async fn register_builtin_connector_type(
         &self,
-        builder: ConnectorMod_Ref,
+        builder: ConnectorPlugin_Ref,
     ) -> Result<()> {
         self.system
             .send(flow_supervisor::Msg::RegisterConnectorType {

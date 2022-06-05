@@ -13,9 +13,13 @@
 // limitations under the License.
 
 use crate::prelude::*;
-use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
+use std::{fmt::Debug, mem, pin::Pin};
 
-use abi_stable::std_types::{RArc, RVec};
+use abi_stable::{
+    rvec,
+    std_types::{RArc, RVec},
+    StableAbi,
+};
 
 /*
 =========================================================================
@@ -82,12 +86,13 @@ impl EventPayload {
     where
         F: for<'head> FnOnce(&'head mut [u8]) -> ValueAndMeta<'head>,
     {
+        let raw = RVec::from(raw);
         let mut raw = Pin::new(raw);
         let data = f(raw.as_mut().get_mut());
         // This is where the magic happens
         // ALLOW: this is sound since we implement a self referential struct
         let structured = unsafe { mem::transmute::<ValueAndMeta<'_>, ValueAndMeta<'static>>(data) };
-        let raw = vec![Arc::new(raw)];
+        let raw = rvec![RArc::new(raw)];
         Self {
             raw,
             data: structured,
@@ -109,12 +114,13 @@ impl EventPayload {
     where
         F: for<'head> FnOnce(&'head mut [u8]) -> std::result::Result<ValueAndMeta<'head>, E>,
     {
+        let raw = RVec::from(raw);
         let mut raw = Pin::new(raw);
         let data = f(raw.as_mut().get_mut())?;
         // This is where the magic happens
         // ALLOW: this is sound since we implement a self referential struct
         let structured = unsafe { mem::transmute::<ValueAndMeta<'_>, ValueAndMeta<'static>>(data) };
-        let raw = vec![Arc::new(raw)];
+        let raw = rvec![RArc::new(raw)];
         Ok(Self {
             raw,
             data: structured,
@@ -265,7 +271,7 @@ where
 {
     fn from(vm: T) -> Self {
         Self {
-            raw: Vec::new(),
+            raw: RVec::new(),
             data: vm.into(),
         }
     }
@@ -304,8 +310,15 @@ impl<'input> simd_json_derive::Deserialize<'input> for EventPayload {
 */
 
 /// Combined struct for an event value and metadata
+#[repr(C)]
 #[derive(
-    Clone, Debug, PartialEq, Serialize, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Clone,
+    Debug,
+    PartialEq,
+    Serialize,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+    StableAbi,
 )]
 pub struct ValueAndMeta<'event> {
     v: Value<'event>,

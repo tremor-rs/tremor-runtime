@@ -64,7 +64,10 @@ impl Operator for SimpleSelect {
         // We can't have locals in the where and having clause
         let local_stack = LocalStack::with_size(0);
 
-        let ctx = EventContext::new(event.ingest_ns, event.origin_uri.as_ref());
+        // FIXME: avoid this?
+        let origin_uri = Option::from(event.origin_uri.as_ref());
+
+        let ctx = EventContext::new(event.ingest_ns, origin_uri);
 
         //
         // Before any select processing, we filter by where clause

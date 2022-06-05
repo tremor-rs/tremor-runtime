@@ -27,6 +27,20 @@ use std::{
 use tremor_common::{file, time::nanotime};
 use xz2::read::XzDecoder;
 
+use crate::{errors::Error, pdk::RError, ttry};
+use abi_stable::{
+    prefix_type::PrefixTypeTrait,
+    rstr, rvec, sabi_extern_fn,
+    std_types::{
+        ROption::{self, RNone, RSome},
+        RResult::{RErr, ROk},
+        RStr, RString, RVec,
+    },
+    type_level::downcasting::TD_Opaque,
+};
+use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt};
+use std::future;
+
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -67,88 +81,94 @@ fn default_significant_figures() -> u8 {
 
 impl ConfigImpl for Config {}
 
-#[derive(Debug)]
-pub(crate) struct Builder {
-    world: World,
+/// Note that since it's a built-in plugin, `#[export_root_module]` can't be
+/// used or it would conflict with other plugins.
+pub fn instantiate_root_module() -> ConnectorPlugin_Ref {
+    ConnectorPlugin {
+        connector_type,
+        from_config,
+    }
+    .leak_into_prefix()
 }
 
-impl Builder {
-    pub(crate) fn new(world: World) -> Self {
-        Self { world }
-    }
+#[sabi_extern_fn]
+fn connector_type() -> ConnectorType {
+    "bench".into()
 }
 
-fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> Result<Vec<u8>> {
-    if base64 {
-        Ok(base64::decode(data)?)
-    } else {
-        let d: &[u8] = data.as_ref();
-        Ok(d.to_vec())
-    }
-}
+#[sabi_extern_fn]
+pub fn from_config<'a>(
+    id: RStr<'a>,
+    _: &ConnectorConfig,
+    config: &'a Value<'static>,
+) -> FfiFuture<RResult<BoxedRawConnector>> {
+    async move {
+            let config: Config = ttry!(Config::new(&config.into()));
+            let mut source_data_file = ttry!(file::open(&config.source));
+            let mut data = vec![];
+            let ext = file::extension(&config.source);
+            if ext == Some("xz") {
+                ttry!(XzDecoder::new(source_data_file)
+                    .read_to_end(&mut data)
+                    .map_err(RError::new));
+            } else {
+                ttry!(source_data_file.read_to_end(&mut data).map_err(RError::new));
+            };
+            let origin_uri = EventOriginUri {
+                scheme: RString::from("tremor-blaster"),
+                host: RString::from(hostname()),
+                port: RNone,
+                path: rvec![RString::from(config.source.clone())],
+            };
+            let elements: RVec<RVec<u8>> = if let Some(chunk_size) = config.chunk_size {
+                // split into sized chunks
+                ttry!(data
+                    .chunks(chunk_size)
+                    .map(|e| -> Result<RVec<u8>> {
+                        if config.base64 {
+                            Ok(RVec::from(base64::decode(e)?))
+                        } else {
+                            Ok(RVec::from(e))
+                        }
+                    })
+                    .collect::<Result<_>>())
+            } else {
+                // split into lines
+                ttry!(BufReader::new(data.as_slice())
+                    .lines()
+                    .map(|e| -> Result<RVec<u8>> {
+                        if config.base64 {
+                            Ok(RVec::from(base64::decode(&e?.as_bytes())?))
+                        } else {
+                            Ok(RVec::from(e?.as_bytes()))
+                        }
+                    })
+                    .collect::<Result<_>>())
+            };
+            let num_elements = elements.len();
+            let stop_after_events = config.iters.map(|i| i * num_elements);
+            let stop_after_secs = if config.stop_after_secs == 0 {
+                None
+            } else {
+                Some(config.stop_after_secs + config.warmup_secs)
+            };
+            let stop_after = StopAfter {
+                events: stop_after_events,
+                seconds: stop_after_secs,
+            };
+            if stop_after.events.is_none() && stop_after.seconds.is_none() {
+                warn!("[Connector::{id}] No stop condition is specified. This connector will emit events infinitely.");
+            }
 
-#[async_trait::async_trait]
-impl ConnectorBuilder for Builder {
-    async fn build_cfg(
-        &self,
-        id: &str,
-        _: &ConnectorConfig,
-        config: &Value,
-    ) -> Result<Box<dyn Connector>> {
-        let config: Config = Config::new(config)?;
-        let mut source_data_file = file::open(&config.source)?;
-        let mut data = vec![];
-        let ext = file::extension(&config.source);
-        if ext == Some("xz") {
-            XzDecoder::new(source_data_file).read_to_end(&mut data)?;
-        } else {
-            source_data_file.read_to_end(&mut data)?;
-        };
-        let origin_uri = EventOriginUri {
-            scheme: "tremor-blaster".to_string(),
-            host: hostname(),
-            port: None,
-            path: vec![config.source.clone()],
-        };
-        let elements: Vec<Vec<u8>> = if let Some(chunk_size) = config.chunk_size {
-            // split into sized chunks
-            data.chunks(chunk_size)
-                .map(|e| decode(config.base64, e))
-                .collect::<Result<_>>()?
-        } else {
-            // split into lines
-            BufReader::new(data.as_slice())
-                .lines()
-                .map(|e| decode(config.base64, e?))
-                .collect::<Result<_>>()?
-        };
-        let num_elements = elements.len();
-        let stop_after_events = config.iters.map(|i| i * num_elements);
-        let stop_after_secs = if config.stop_after_secs == 0 {
-            None
-        } else {
-            Some(config.stop_after_secs + config.warmup_secs)
-        };
-        let stop_after = StopAfter {
-            events: stop_after_events,
-            seconds: stop_after_secs,
-        };
-        if stop_after.events.is_none() && stop_after.seconds.is_none() {
-            warn!("[Connector::{id}] No stop condition is specified. This connector will emit events infinitely.");
-        }
-
-        Ok(Box::new(Bench {
-            config,
-            acc: Acc { elements, count: 0 },
-            origin_uri,
-            stop_after,
-            world: self.world.clone(),
-        }))
+            ROk(BoxedRawConnector::from_value(Bench {
+                config,
+                acc: Acc { elements, count: 0 },
+                origin_uri,
+                stop_after,
+                world: self.world.clone(),
+            }, TD_Opaque))
     }
-
-    fn connector_type(&self) -> ConnectorType {
-        "bench".into()
-    }
+    .into_ffi()
 }
 
 #[derive(Clone, Default)]
@@ -178,13 +198,12 @@ pub struct Bench {
     world: World,
 }
 
-#[async_trait::async_trait]
-impl Connector for Bench {
-    async fn create_source(
+impl RawConnector for Bench {
+    fn create_source(
         &mut self,
-        source_context: SourceContext,
-        builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+        _source_context: SourceContext,
+        _qsize: usize,
+    ) -> BorrowingFfiFuture<'_, RResult<ROption<BoxedRawSource>>> {
         let s = Blaster {
             acc: self.acc.clone(),
             origin_uri: self.origin_uri.clone(),
@@ -194,20 +213,23 @@ impl Connector for Bench {
             interval_ns: self.config.interval.map(Duration::from_nanos),
             finished: false,
         };
-        builder.spawn(s, source_context).map(Some)
+        // We don't need to be able to downcast the connector back to the original
+        // type, so we just pass it as an opaque type.
+        let s = BoxedRawSource::from_value(s, TD_Opaque);
+        future::ready(ROk(RSome(s))).into_ffi()
     }
 
-    async fn create_sink(
+    fn create_sink(
         &mut self,
-        sink_context: SinkContext,
-        builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
-        builder
-            .spawn(
-                Blackhole::new(&self.config, self.stop_after, self.world.clone()),
-                sink_context,
-            )
-            .map(Some)
+        _sink_context: SinkContext,
+        _qsize: usize,
+        _reply_tx: BoxedContraflowSender,
+    ) -> BorrowingFfiFuture<'_, RResult<ROption<BoxedRawSink>>> {
+        let s = Blackhole::from_config(&self.config, self.stop_after, self.world.clone());
+        // We don't need to be able to downcast the connector back to the original
+        // type, so we just pass it as an opaque type.
+        let s = BoxedRawSink::from_value(s, TD_Opaque);
+        future::ready(ROk(RSome(s))).into_ffi()
     }
 
     fn codec_requirements(&self) -> CodecReq {
@@ -225,49 +247,57 @@ struct Blaster {
     finished: bool,
 }
 
-#[async_trait::async_trait]
-impl Source for Blaster {
-    async fn on_start(&mut self, _ctx: &SourceContext) -> Result<()> {
+impl RawSource for Blaster {
+    fn on_start<'a>(
+        &'a mut self,
+        _ctx: &'a ConnectorContext,
+    ) -> BorrowingFfiFuture<'a, RResult<()>> {
         self.stop_at = self
             .stop_after
             .seconds
             .map(|secs| nanotime() + (secs * 1_000_000_000));
-        Ok(())
+        future::ready(ROk(())).into_ffi()
     }
 
-    #[allow(clippy::cast_possible_truncation)]
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        if self.finished {
-            return Ok(SourceReply::Finished);
-        }
-        if let Some(interval) = self.interval_ns {
-            async_std::task::sleep(interval).await;
-        }
-        let res = if self.stop_at.iter().any(|stop_at| nanotime() >= *stop_at)
-            || self
-                .stop_after
-                .events
-                .iter()
-                .any(|stop_after_events| self.acc.count >= *stop_after_events)
-        {
-            self.finished = true;
-            SourceReply::EndStream {
-                origin_uri: self.origin_uri.clone(),
-                stream: DEFAULT_STREAM_ID,
-                meta: None,
+    fn pull_data<'a>(
+        &'a mut self,
+        _pull_id: &'a mut u64,
+        _ctx: &'a SourceContext,
+    ) -> BorrowingFfiFuture<'a, RResult<SourceReply>> {
+        async move {
+            if self.finished {
+                return Ok(SourceReply::Finished);
             }
-        } else {
-            let data = self.acc.next();
-            SourceReply::Data {
-                origin_uri: self.origin_uri.clone(),
-                data,
-                meta: None,
-                stream: Some(DEFAULT_STREAM_ID),
-                port: None,
-                codec_overwrite: None,
+            if let Some(interval) = self.interval_ns {
+                async_std::task::sleep(interval).await;
             }
-        };
-        Ok(res)
+            let res = if self.stop_at.iter().any(|stop_at| nanotime() >= *stop_at)
+                || self
+                    .stop_after
+                    .events
+                    .iter()
+                    .any(|stop_after_events| self.acc.count >= *stop_after_events)
+            {
+                self.finished = true;
+                SourceReply::EndStream {
+                    origin_uri: self.origin_uri.clone(),
+                    stream: DEFAULT_STREAM_ID,
+                    meta: RNone,
+                }
+            } else {
+                let data = self.acc.next();
+                SourceReply::Data {
+                    origin_uri: self.origin_uri.clone(),
+                    data,
+                    meta: RNone,
+                    stream: RSome(DEFAULT_STREAM_ID),
+                    port: RNone,
+                    codec_overwrite: RNone,
+                }
+            };
+            ROk(res)
+        }
+        .into_ffi()
     }
 
     fn is_transactional(&self) -> bool {
@@ -327,67 +357,68 @@ impl Blackhole {
     }
 }
 
-#[async_trait::async_trait]
-impl Sink for Blackhole {
+impl RawSink for Blackhole {
     fn auto_ack(&self) -> bool {
         true
     }
-    async fn on_event(
-        &mut self,
-        _input: &str,
-        event: tremor_pipeline::Event,
-        ctx: &SinkContext,
-        event_serializer: &mut EventSerializer,
+    fn on_event<'a>(
+        &'a mut self,
+        _input: RStr<'a>,
+        event: Event,
+        ctx: &'a SinkContext,
+        event_serializer: &'a mut MutEventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
-        if !self.finished {
-            let now_ns = nanotime();
+    ) -> BorrowingFfiFuture<'a, RResult<SinkReply>> {
+        async move {
+            if !self.finished {
+                let now_ns = nanotime();
 
-            for value in event.value_iter() {
-                if now_ns > self.warmup {
-                    let delta_ns = now_ns - event.ingest_ns;
-                    if let Ok(bufs) = event_serializer.serialize(value, event.ingest_ns) {
-                        self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
-                    } else {
-                        error!("failed to encode");
-                    };
-                    self.count += 1;
-                    self.buf.clear();
-                    self.delivered.record(delta_ns)?;
+                for value in event.value_iter() {
+                    if now_ns > self.warmup {
+                        let delta_ns = now_ns - event.ingest_ns;
+                        if let Ok(bufs) = event_serializer.serialize(value, event.ingest_ns) {
+                            self.bytes += bufs.iter().map(RVec::len).sum::<usize>();
+                        } else {
+                            error!("failed to encode");
+                        };
+                        self.count += 1;
+                        self.buf.clear();
+                        ttry!(self.delivered.record(delta_ns));
+                    }
                 }
+
+                if self.stop_at.iter().any(|stop_at| now_ns >= *stop_at)
+                    || self
+                        .stop_after
+                        .events
+                        .iter()
+                        .any(|stop_after_events| self.count >= *stop_after_events)
+                {
+                    self.finished = true;
+                    if self.structured {
+                        let v = self.to_value(2);
+                        ttry!(v.write(&mut stdout()));
+                    } else {
+                        ttry!(self.write_text(stdout(), 5, 2));
+                    }
+                    let world = self.world.clone();
+                    let stop_ctx = ctx.clone();
+                    info!("Bench done");
+
+                    // this should stop the whole server process
+                    // we spawn this out into another task, so we don't block the sink loop handling control plane messages
+                    async_std::task::spawn(async move {
+                        info!("{stop_ctx} Exiting...");
+                        stop_ctx.swallow_err(
+                            world.stop(ShutdownMode::Forceful).await,
+                            "Error stopping the world",
+                        );
+                    });
+                };
             }
 
-            if self.stop_at.iter().any(|stop_at| now_ns >= *stop_at)
-                || self
-                    .stop_after
-                    .events
-                    .iter()
-                    .any(|stop_after_events| self.count >= *stop_after_events)
-            {
-                self.finished = true;
-                if self.structured {
-                    let v = self.to_value(2);
-                    v.write(&mut stdout())?;
-                } else {
-                    self.write_text(stdout(), 5, 2)?;
-                }
-                let world = self.world.clone();
-                let stop_ctx = ctx.clone();
-                info!("Bench done");
-
-                // this should stop the whole server process
-                // we spawn this out into another task, so we don't block the sink loop handling control plane messages
-                async_std::task::spawn(async move {
-                    info!("{stop_ctx} Exiting...");
-                    stop_ctx.swallow_err(
-                        world.stop(ShutdownMode::Forceful).await,
-                        "Error stopping the world",
-                    );
-                });
-            };
+            ROk(SinkReply::default())
         }
-
-        Ok(SinkReply::default())
     }
 }
 

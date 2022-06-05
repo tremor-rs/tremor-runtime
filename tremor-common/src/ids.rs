@@ -19,6 +19,7 @@ use std::{marker::PhantomData, ops::Deref};
 use abi_stable::StableAbi;
 
 /// operator id
+#[repr(C)]
 #[derive(
     Debug,
     PartialEq,
@@ -31,6 +32,7 @@ use abi_stable::StableAbi;
     Default,
     simd_json_derive::Serialize,
     simd_json_derive::Deserialize,
+    StableAbi,
 )]
 pub struct OperatorId(u64);
 

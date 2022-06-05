@@ -58,6 +58,16 @@ use value_trait::Builder;
 
 use super::{CodecReq, Connectivity};
 
+use crate::connectors::prelude::*;
+use crate::pdk::RResult;
+use abi_stable::{
+    rvec,
+    std_types::{RBox, RCowStr, ROption, ROption::RSome, RResult::ROk, RString, RVec, Tuple2},
+    StableAbi,
+};
+use async_ffi::{BorrowingFfiFuture, FutureExt};
+use std::future;
+
 #[derive(Debug)]
 /// Messages a Source can receive
 pub(crate) enum SourceMsg {
@@ -111,7 +121,7 @@ pub enum SourceReply {
         port: ROption<Cow<'static, str>>,
         /// Overwrite the codec being used for deserializing this data.
         /// Should only be used when setting `stream` to `None`
-        codec_overwrite: Option<String>,
+        codec_overwrite: ROption<RString>,
     },
     /// an already structured event payload
     Structured {
@@ -148,7 +158,7 @@ pub type SourceReplySender = Sender<SourceReply>;
 
 /// source part of a connector
 #[abi_stable::sabi_trait]
-pub(crate) trait RawSource: Send {
+pub trait RawSource: Send {
     /// Pulls an event from the source if one exists
     /// the `pull_id` identifies the number of the call to `pull_data` and is passed in so
     /// sources can keep track of which event stems from which call of `pull_data` and so can
@@ -186,7 +196,7 @@ pub(crate) trait RawSource: Send {
 
     /// called when the source is started. This happens only once in the whole source lifecycle, before any other callbacks
     fn on_start<'a>(&'a mut self, _ctx: &'a SourceContext) -> BorrowingFfiFuture<'a, RResult<()>> {
-        Ok(())
+        future::ready(ROk(())).into_ffi()
     }
 
     /// Connect to the external thingy.
@@ -531,10 +541,7 @@ impl SourceManagerBuilder {
     /// spawn a Manager with the given source implementation
     /// # Errors
     /// if the source can not be spawned into a own process
-    pub(crate) fn spawn<S>(self, source: S, ctx: SourceContext) -> Result<SourceAddr>
-    where
-        S: Source + Send + 'static,
-    {
+    pub(crate) fn spawn(self, source: BoxedRawSource, ctx: SourceContext) -> Result<SourceAddr> {
         // We use a unbounded channel for counterflow, while an unbounded channel seems dangerous
         // there is soundness to this.
         // The unbounded channel ensures that on counterflow we never have to block, or in other
@@ -730,11 +737,8 @@ impl Display for SourceState {
 
 /// entity driving the source task
 /// and keeping the source state around
-pub(crate) struct SourceManager<S>
-where
-    S: Source,
-{
-    source: S,
+pub(crate) struct SourceManager {
+    source: Source,
     ctx: SourceContext,
     addr: SourceAddr,
     pipelines_out: Vec<(DeployEndpoint, pipeline::Addr)>,
@@ -767,12 +771,14 @@ enum Control {
     Terminate,
 }
 
-impl<S> SourceManager<S>
-where
-    S: Source,
-{
+impl SourceManager {
     /// constructor
-    fn new(source: S, ctx: SourceContext, builder: SourceManagerBuilder, addr: SourceAddr) -> Self {
+    fn new(
+        source: BoxedRawSource,
+        ctx: SourceContext,
+        builder: SourceManagerBuilder,
+        addr: SourceAddr,
+    ) -> Self {
         let SourceManagerBuilder {
             streams,
             source_metrics_reporter,
@@ -782,7 +788,7 @@ where
         let is_asynchronous = source.asynchronous();
 
         Self {
-            source,
+            source: Source(source),
             ctx,
             addr,
             streams,

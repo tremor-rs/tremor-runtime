@@ -16,7 +16,7 @@ use super::flow::{Flow, Id};
 use crate::errors::{Kind as ErrorKind, Result};
 use crate::system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
 use crate::{
-    connectors::{self, ConnectorBuilder, ConnectorType},
+    connectors::{self, ConnectorType},
     log_error,
 };
 use async_std::channel::{bounded, Sender};
@@ -26,7 +26,7 @@ use hashbrown::{hash_map::Entry, HashMap};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
 use tremor_script::ast::DeployFlow;
 
-use crate::pdk::connectors::ConnectorPlugin;
+use crate::pdk::ConnectorPlugin_Ref;
 
 pub(crate) type Channel = Sender<Msg>;
 
@@ -43,7 +43,7 @@ pub(crate) enum Msg {
         /// the type of connector
         connector_type: ConnectorType,
         /// the builder
-        builder: ConnectorPlugin,
+        builder: ConnectorPlugin_Ref,
     },
     GetFlows(Sender<Result<Vec<Flow>>>),
     GetFlow(Id, Sender<Result<Flow>>),
@@ -76,7 +76,7 @@ impl FlowSupervisor {
     fn handle_register_connector_type(
         &mut self,
         connector_type: ConnectorType,
-        builder: Box<dyn ConnectorBuilder>,
+        builder: ConnectorPlugin_Ref,
     ) {
         if let Some(old) = self.known_connectors.insert(connector_type, builder) {
             error!("Connector type {} already defined!", old.connector_type());

@@ -23,11 +23,10 @@
 //  '{}' -> json|| => Ok({})
 //  Predicate for json||: "is valid json"
 //  '{blarg' -> json|| =>
-use halfbrown::{hashmap, HashMap};
+use halfbrown::HashMap;
 
 use crate::{datetime, grok::Pattern as GrokPattern, EventContext, Object, Value};
 use crate::{grok::PATTERNS_FILE_DEFAULT_PATH, prelude::*};
-use beef::Cow;
 use cidr_utils::{
     cidr::{IpCidr, Ipv4Cidr},
     utils::IpCidrCombiner,
@@ -35,7 +34,6 @@ use cidr_utils::{
 use dissect::Pattern;
 use regex::Regex;
 use std::fmt;
-use std::hash::BuildHasherDefault;
 use std::iter::{Iterator, Peekable};
 use std::net::{IpAddr, Ipv4Addr};
 use std::slice::Iter;
@@ -668,19 +666,33 @@ impl std::ops::Deref for Cidr {
     }
 }
 
-impl<'cidr> From<Cidr>
-    for HashMap<Cow<'cidr, str>, Value<'cidr>, BuildHasherDefault<fxhash::FxHasher>>
-{
+impl<'cidr> From<Cidr> for tremor_value::value::Object<'cidr> {
     fn from(x: Cidr) -> Self {
         match x.0 {
-            IpCidr::V4(y) => hashmap!(
-                       "prefix".into() => Value::from(y.get_prefix_as_u8_array().to_vec()),
-                       "mask".into() => Value::from(y.get_mask_as_u8_array().to_vec()),
-            ),
-            IpCidr::V6(y) => hashmap!(
-                       "prefix".into() => Value::from(y.get_prefix_as_u16_array().to_vec()),
-                       "mask".into() => Value::from(y.get_mask_as_u16_array().to_vec()),
-            ),
+            IpCidr::V4(y) => {
+                let mut h = Object::with_capacity(2);
+                h.insert(
+                    "prefix".into(),
+                    Value::from(y.get_prefix_as_u8_array().to_vec()),
+                );
+                h.insert(
+                    "mask".into(),
+                    Value::from(y.get_mask_as_u8_array().to_vec()),
+                );
+                h
+            }
+            IpCidr::V6(y) => {
+                let mut h = Object::with_capacity(2);
+                h.insert(
+                    "prefix".into(),
+                    Value::from(y.get_prefix_as_u16_array().to_vec()),
+                );
+                h.insert(
+                    "mask".into(),
+                    Value::from(y.get_mask_as_u16_array().to_vec()),
+                );
+                h
+            }
         }
     }
 }

@@ -16,11 +16,17 @@ use beef::Cow;
 use halfbrown::HashMap;
 use tremor_value::{literal, Value};
 
-const COUNT: Cow<'static, str> = Cow::const_str("count");
-const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
-const TAGS: Cow<'static, str> = Cow::const_str("tags");
-const FIELDS: Cow<'static, str> = Cow::const_str("fields");
-const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
+use abi_stable::{
+    rstr,
+    std_types::{RCowStr, RHashMap},
+};
+use tremor_common::pdk::beef_to_rcow_str;
+
+const COUNT: RCowStr<'static> = RCowStr::Borrowed(rstr!("count"));
+const MEASUREMENT: RCowStr<'static> = RCowStr::Borrowed(rstr!("measurement"));
+const TAGS: RCowStr<'static> = RCowStr::Borrowed(rstr!("tags"));
+const FIELDS: RCowStr<'static> = RCowStr::Borrowed(rstr!("fields"));
+const TIMESTAMP: RCowStr<'static> = RCowStr::Borrowed(rstr!("timestamp"));
 
 /// Generate an influx-compatible metrics value based on a count
 #[must_use]
@@ -30,9 +36,10 @@ pub fn value_count(
     count: u64,
     timestamp: u64,
 ) -> Value<'static> {
+    // TODO: prettier conversions
     literal!({
-        MEASUREMENT: metric_name,
-        TAGS: tags,
+        MEASUREMENT: beef_to_rcow_str(metric_name),
+        TAGS: tags.into_iter().map(|(k, v)| (beef_to_rcow_str(k), v)).collect::<RHashMap<_, _>>(),
         FIELDS: {
             COUNT: count
         },
@@ -49,9 +56,10 @@ pub fn value_named(
     value: u64,
     timestamp: u64,
 ) -> Value<'static> {
+    // TODO: prettier conversions
     literal!({
-        MEASUREMENT: metric_name,
-        TAGS: tags,
+        MEASUREMENT: beef_to_rcow_str(metric_name),
+        TAGS: tags.into_iter().map(|(k, v)| (beef_to_rcow_str(k), v)).collect::<RHashMap<_, _>>(),
         FIELDS: {
             name: value
         },
@@ -67,10 +75,11 @@ pub fn value(
     fields: HashMap<Cow<'static, str>, Value<'static>>,
     timestamp: u64,
 ) -> Value<'static> {
+    // TODO: prettier conversions
     literal!({
-        MEASUREMENT: metric_name,
-        TAGS: tags,
-        FIELDS: fields,
+        MEASUREMENT: beef_to_rcow_str(metric_name),
+        TAGS: tags.into_iter().map(|(k, v)| (beef_to_rcow_str(k), v)).collect::<RHashMap<_, _>>(),
+        FIELDS: fields.into_iter().map(|(k, v)| (beef_to_rcow_str(k), v)).collect::<RHashMap<_, _>>(),
         TIMESTAMP: timestamp
     })
 }

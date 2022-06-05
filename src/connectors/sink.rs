@@ -48,6 +48,18 @@ use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STRE
 use tremor_script::{ast::DeployEndpoint, EventPayload};
 use tremor_value::Value;
 
+use crate::connectors::prelude::*;
+use crate::errors::Error;
+use crate::pdk::{RError, RResult};
+use abi_stable::{
+    rvec,
+    std_types::{RBox, ROption::RSome, RResult::ROk, RStr, RString, RVec, SendRBoxError},
+    type_level::downcasting::TD_Opaque,
+    RMut, StableAbi,
+};
+use async_ffi::{BorrowingFfiFuture, FutureExt};
+use std::future;
+
 /// Result for a sink function that may provide insights or response.
 ///
 ///
@@ -135,11 +147,11 @@ pub(crate) enum AsyncSinkReply {
 
 /// connector sink - receiving events
 #[abi_stable::sabi_trait]
-pub(crate) trait RawSink: Send {
+pub trait RawSink: Send {
     /// called when receiving an event
     fn on_event<'a>(
         &'a mut self,
-        input: &'a str,
+        input: RStr<'a>,
         event: Event,
         ctx: &'a SinkContext,
         serializer: &'a mut EventSerializer,
@@ -179,7 +191,7 @@ pub(crate) trait RawSink: Send {
         _timestamp: u64,
         _ctx: &'a SinkContext,
     ) -> BorrowingFfiFuture<'a, RVec<EventPayload>> {
-        rvec![]
+        future::ready(rvec![]).into_ffi()
     }
 
     // lifecycle stuff
@@ -381,20 +393,21 @@ pub(crate) trait SinkRuntime: Send + Sync {
     async fn unregister_stream_writer(&self, stream: u64) -> Result<()>;
 }
 /// context for the connector sink
-#[derive(Clone)]
+#[repr(C)]
+#[derive(Clone, StableAbi)]
 pub(crate) struct SinkContext {
     /// the connector unique identifier
     pub(crate) uid: SinkId,
     /// the connector url
-    pub(crate) alias: String,
+    pub(crate) alias: RString,
     /// the connector type
     pub(crate) connector_type: ConnectorType,
 
     /// check if we are paused or should stop reading/writing
-    pub(crate) quiescence_beacon: QuiescenceBeacon,
+    pub(crate) quiescence_beacon: BoxedQuiescenceBeacon,
 
     /// notifier the connector runtime if we lost a connection
-    pub(crate) notifier: ConnectionLostNotifier,
+    pub(crate) notifier: BoxedConnectionLostNotifier,
 }
 
 impl Display for SinkContext {
@@ -408,11 +421,11 @@ impl Context for SinkContext {
         &self.alias
     }
 
-    fn quiescence_beacon(&self) -> &QuiescenceBeacon {
+    fn quiescence_beacon(&self) -> &BoxedQuiescenceBeacon {
         &self.quiescence_beacon
     }
 
-    fn notifier(&self) -> &ConnectionLostNotifier {
+    fn notifier(&self) -> &BoxedConnectionLostNotifier {
         &self.notifier
     }
 
@@ -501,10 +514,7 @@ impl SinkManagerBuilder {
     }
 
     /// spawn your specific sink
-    pub(crate) fn spawn<S>(self, sink: S, ctx: SinkContext) -> Result<SinkAddr>
-    where
-        S: Sink + Send + 'static,
-    {
+    pub(crate) fn spawn(self, sink: BoxedRawSink, ctx: SinkContext) -> Result<SinkAddr> {
         let qsize = self.qsize;
         let name = format!("{}-sink", ctx.alias);
         let (sink_tx, sink_rx) = bounded(qsize);
@@ -699,11 +709,8 @@ impl std::fmt::Display for SinkState {
     }
 }
 
-pub(crate) struct SinkManager<S>
-where
-    S: Sink,
-{
-    sink: S,
+pub(crate) struct SinkManager {
+    sink: Sink,
     ctx: SinkContext,
     rx: Receiver<SinkMsg>,
     reply_rx: Receiver<AsyncSinkReply>,
@@ -721,11 +728,13 @@ where
     state: SinkState,
 }
 
-impl<S> SinkManager<S>
-where
-    S: Sink,
-{
-    fn new(sink: S, ctx: SinkContext, builder: SinkManagerBuilder, rx: Receiver<SinkMsg>) -> Self {
+impl SinkManager {
+    fn new(
+        sink: BoxedRawSink,
+        ctx: SinkContext,
+        builder: SinkManagerBuilder,
+        rx: Receiver<SinkMsg>,
+    ) -> Self {
         let SinkManagerBuilder {
             serializer,
             reply_channel,
@@ -733,7 +742,7 @@ where
             ..
         } = builder;
         Self {
-            sink,
+            sink: Sink(sink),
             ctx,
             rx,
             reply_rx: reply_channel.1,

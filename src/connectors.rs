@@ -58,7 +58,10 @@ use tremor_value::Value;
 use utils::reconnect::{Attempt, ConnectionLostNotifier, ReconnectRuntime};
 use value_trait::{Builder, Mutable, ValueAccess};
 
-use crate::pdk::{self, RResult};
+use crate::{
+    connectors::prelude::*,
+    pdk::{self, RResult},
+};
 use abi_stable::{
     std_types::{
         RBox, RCowStr,
@@ -403,8 +406,7 @@ pub(crate) enum StreamDone {
 }
 
 /// Lookup table for known connectors
-pub(crate) type Known =
-    std::collections::HashMap<ConnectorType, Box<dyn ConnectorBuilder + 'static>>;
+pub(crate) type Known = std::collections::HashMap<ConnectorType, ConnectorPlugin_Ref>;
 
 /// Spawns a connector
 ///
@@ -413,11 +415,11 @@ pub(crate) type Known =
 pub(crate) async fn spawn(
     alias: &str,
     connector_id_gen: &mut ConnectorIdGen,
-    builder: &dyn ConnectorBuilder,
+    builder: &ConnectorPlugin_Ref,
     config: ConnectorConfig,
 ) -> Result<Addr> {
     // instantiate connector
-    let connector = builder.build(alias, &config).await?;
+    let connector = builder.from_config()(alias.clone().into(), config).await?;
     let r = connector_task(
         alias.to_string(),
         connector,
@@ -433,7 +435,7 @@ pub(crate) async fn spawn(
 // instantiates the connector and starts listening for control plane messages
 async fn connector_task(
     alias: String,
-    mut connector: Box<dyn Connector>,
+    mut connector: ConnectorPlugin_Ref,
     config: ConnectorConfig,
     uid: ConnectorId,
 ) -> Result<Addr> {
@@ -991,19 +993,19 @@ const OUT_PORTS_REF: &[Cow<'static, str>; 2] = &OUT_PORTS;
 /// It controls the sink and source parts which are connected to the rest of the runtime via links to pipelines.
 
 #[abi_stable::sabi_trait]
-pub(crate) trait RawConnector: Send {
+pub trait RawConnector: Send {
     /// Valid input ports for the connector, by default this is `in`
     fn input_ports(&self) -> RVec<RCowStr<'static>> {
         IN_PORTS_REF
             .into_iter()
-            .map(|port| conv_cow_str_inv(port.clone()))
+            .map(|port| beef_to_rcow_str(port.clone()))
             .collect()
     }
     /// Valid output ports for the connector, by default this is `out` and `err`
     fn output_ports(&self) -> RVec<RCowStr<'static>> {
         OUT_PORTS_REF
             .into_iter()
-            .map(|port| conv_cow_str_inv(port.clone()))
+            .map(|port| beef_to_rcow_str(port.clone()))
             .collect()
     }
 
@@ -1271,10 +1273,11 @@ pub(crate) enum CodecReq {
     /// A codec must be provided for this connector
     Required,
     /// A codec can be provided for this connector otherwise the default is used
-    Optional(&'static str),
+    Optional(RStr<'static>),
 }
 
 /// the type of a connector
+#[repr(C)]
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default, StableAbi)]
 pub(crate) struct ConnectorType(RString);
 
@@ -1390,15 +1393,10 @@ pub(crate) async fn register_builtin_connector_types(world: &World, debug: bool)
         for builder in debug_connector_types(world) {
             world.register_builtin_connector_type(builder).await?;
         }
-        let builder = Box::new(impls::exit::Builder::new(world));
-        world.register_builtin_connector_type(builder).await?;
+        todo!()
+        // let builder = impls::exit::instantiate_root_module(world);
+        // world.register_builtin_connector_type(builder).await?;
     }
-    /*
-     * TODO: why is this not in the builtin connectors?
-    world
-        .register_builtin_connector_type(Box::new(impls::exit::Builder::new(world)))
-        .await?;
-    */
 
     Ok(())
 }
