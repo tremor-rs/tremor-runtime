@@ -95,7 +95,10 @@ pub(super) fn convert_value(
         DummySqlType::Ipv4 => convert_string_or_array(
             context,
             |ip: Ipv4Addr| ip.octets(),
-            CValue::Ipv4,
+            // This is slightly embarrassing...
+            //
+            // ... But it does work!
+            |[a, b, c, d]| CValue::Ipv4([d, c, b, a]),
             ErrorKind::MalformedIpAddr,
         ),
 
@@ -353,13 +356,13 @@ mod tests {
 
     test_value_conversion! {
         ipv4_from_string {
-            json! { "127.0.0.1" }, DummySqlType::Ipv4 => CValue::Ipv4([127, 0, 0, 1]),
+            json! { "127.0.0.1" }, DummySqlType::Ipv4 => CValue::Ipv4([1, 0, 0, 127]),
         }
     }
 
     test_value_conversion! {
         ipv4_from_array {
-            json! { [1, 2, 3, 4] }, DummySqlType::Ipv4 => CValue::Ipv4([1, 2, 3, 4]),
+            json! { [1, 2, 3, 4] }, DummySqlType::Ipv4 => CValue::Ipv4([4, 3, 2, 1]),
         }
     }
 

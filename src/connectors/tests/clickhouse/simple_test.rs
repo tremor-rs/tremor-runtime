@@ -16,7 +16,10 @@
 // will eventually follow a structure similar to the s3 connector.
 
 use crate::{
-    connectors::{impls::clickhouse, tests::free_port},
+    connectors::{
+        impls::clickhouse,
+        tests::{clickhouse::utils, free_port, ConnectorHarness},
+    },
     errors::{Error, Result},
 };
 
@@ -28,13 +31,9 @@ use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_script::literal;
 
-use super::ConnectorHarness;
-
 const CONTAINER_NAME: &str = "clickhouse/clickhouse-server";
 const CONTAINER_VERSION: &str = "22.3.3.44";
 const SERVER_PORT: u16 = 9000;
-
-const DB_HOST: &str = "127.0.0.1";
 
 // In this test, we spin up an empty ClickHouse container, plug it to the
 // ClickHouse sink and use that sink to save a bunch of super simple events.
@@ -60,19 +59,21 @@ async fn simple_insertion() -> Result<()> {
     let image = RunnableImage::from(image).with_mapped_port(port_to_expose);
     let container = docker.run(image);
     let port = container.get_host_port(9000);
-    wait_for_ok(port).await.unwrap();
+    utils::wait_for_ok(port).await?;
 
     // Once the database is available, we use the regular client to create the
     // database we're going to use
 
-    create_table(port, "people").await.unwrap();
+    create_table(port, "people").await?;
 
     // Once the database side is ready, we can spin up our system and plug to
     // our database.
 
+    let db_host = utils::DB_HOST;
+
     let connector_config = literal!({
         "config": {
-            "url": format!("{DB_HOST}:{port}"),
+            "url": format!("{db_host}:{port}"),
             "compression": "lz4",
             "table": "people",
             "columns": [
@@ -126,7 +127,7 @@ async fn simple_insertion() -> Result<()> {
     // Once the data has been inserted, we wait for the "I handled everything"
     // signal and check its properties.
 
-    let cf = in_pipe.get_contraflow().await.unwrap();
+    let cf = in_pipe.get_contraflow().await?;
     assert_eq!(CbAction::Ack, cf.cb);
     assert_eq!(batched_id, cf.id);
 
@@ -145,7 +146,7 @@ async fn simple_insertion() -> Result<()> {
     // A good way to do that is to continuously fetch data from the database,
     // until we get the correct amount of data (or timeout with an error),
     // and then check that the data contains the correct values.
-    let mut client = Pool::new(format!("tcp://{DB_HOST}:{port}/"))
+    let mut client = Pool::new(format!("tcp://{db_host}:{port}/"))
         .get_handle()
         .await?;
     let request = "select * from people";
@@ -189,36 +190,9 @@ async fn simple_insertion() -> Result<()> {
     Ok(())
 }
 
-// Blocks the task until calling GET on `url` returns an HTTP 200.
-async fn wait_for_ok(port: u16) -> Result<()> {
-    let wait_for = Duration::from_secs(60);
-    let start = Instant::now();
-
-    while let Err(e) = test_status_endpoint(port).await {
-        if start.elapsed() > wait_for {
-            let max_time = wait_for.as_secs();
-            error!("We waited for more than {max_time}");
-            return Err(
-                Error::from(e).chain_err(|| "Waiting for the ClickHouse container timed out.")
-            );
-        }
-
-        async_std::task::sleep(Duration::from_secs(1)).await;
-    }
-
-    Ok(())
-}
-
-async fn test_status_endpoint(port: u16) -> Result<()> {
-    Pool::new(format!("tcp://{DB_HOST}:{port}/?connection_timeout=100ms&send_retries=1&retry_timeout=1s&ping_timeout=100ms"))
-        .get_handle()
-        .await
-        .map(drop)
-        .map_err(Error::from)
-}
-
 async fn create_table(port: u16, table: &str) -> Result<()> {
-    let db_url = format!("tcp://{DB_HOST}:{port}/");
+    let db_host = utils::DB_HOST;
+    let db_url = format!("tcp://{db_host}:{port}/");
     let request = format!("create table if not exists {table} ( age UInt64 ) Engine=Memory");
 
     let pool = Pool::new(db_url);
