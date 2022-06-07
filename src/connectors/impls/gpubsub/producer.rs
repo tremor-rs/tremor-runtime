@@ -6,11 +6,14 @@ use crate::connectors::sink::Sink;
 use crate::connectors::utils::url::HttpsDefaults;
 use crate::connectors::{
     CodecReq, Connector, ConnectorBuilder, ConnectorConfig, ConnectorContext, ConnectorType,
+    Context,
 };
 use crate::errors::Result;
+use async_std::prelude::FutureExt;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage};
 use gouth::Token;
+use std::collections::HashMap;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
@@ -21,6 +24,8 @@ use tremor_pipeline::{ConfigImpl, Event};
 pub struct Config {
     #[serde(default = "default_connect_timeout")]
     pub connect_timeout: u64,
+    #[serde(default = "default_request_timeout")]
+    pub request_timeout: u64,
     #[serde(default = "default_endpoint")]
     pub endpoint: String,
     pub topic: String,
@@ -31,6 +36,9 @@ fn default_endpoint() -> String {
 }
 fn default_connect_timeout() -> u64 {
     1_000_000_000u64 // 1 second
+}
+fn default_request_timeout() -> u64 {
+    10_000_000_000u64 // 10 seconds
 }
 
 impl ConfigImpl for Config {}
@@ -112,7 +120,7 @@ impl Sink for GpubSink {
         let token = Token::new()?;
 
         let client = PublisherClient::with_interceptor(
-            channel.clone(),
+            channel,
             AuthInterceptor {
                 token: Box::new(move || {
                     token.header_value().map_err(|_| {
@@ -131,7 +139,7 @@ impl Sink for GpubSink {
         &mut self,
         _input: &str,
         event: Event,
-        _ctx: &SinkContext,
+        ctx: &SinkContext,
         serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
@@ -144,23 +152,41 @@ impl Sink for GpubSink {
 
         for e in event.value_iter() {
             messages.push(PubsubMessage {
-                data: serializer.serialize(e, event.ingest_ns).unwrap()[0].clone(),
-                attributes: Default::default(),
+                data: serializer.serialize(e, event.ingest_ns)?[0].clone(),
+                attributes: HashMap::new(),
                 message_id: "".to_string(),
                 publish_time: None,
                 ordering_key: "".to_string(),
             });
         }
 
-        client
+        if let Ok(inner_result) = client
             .publish(PublishRequest {
                 topic: self.config.topic.clone(),
                 messages,
             })
+            .timeout(Duration::from_nanos(self.config.request_timeout))
             .await
-            .unwrap();
+        {
+            if let Err(error) = inner_result {
+                error!("Failed to publish a message: {}", error);
+                ctx.swallow_err(
+                    ctx.notifier.connection_lost().await,
+                    "Failed to notify about PubSub connection loss",
+                );
 
-        Ok(SinkReply::ACK)
+                Ok(SinkReply::FAIL)
+            } else {
+                Ok(SinkReply::ACK)
+            }
+        } else {
+            ctx.swallow_err(
+                ctx.notifier.connection_lost().await,
+                "Failed to notify about PubSub connection loss",
+            );
+
+            Ok(SinkReply::FAIL)
+        }
     }
 
     fn auto_ack(&self) -> bool {
