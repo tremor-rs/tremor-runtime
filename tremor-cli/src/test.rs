@@ -160,6 +160,7 @@ async fn suite_integration(
     }
 }
 
+#[cfg_attr(coverage, no_coverage)]
 async fn run_integration(
     root: &Path,
     config: &TestConfig,

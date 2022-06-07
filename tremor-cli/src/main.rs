@@ -22,6 +22,7 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
+#![cfg_attr(coverage, feature(no_coverage))]
 
 #[macro_use]
 extern crate serde_derive;
