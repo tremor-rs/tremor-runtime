@@ -1284,8 +1284,13 @@ mod unit_tests {
         spawn_task(ctx.clone(), async move { return Err("snot".into()) }).await;
         assert!(matches!(rx.recv().await, Ok(Msg::ConnectionLost)));
 
-        spawn_task(ctx, async move { Ok(()) }).await;
+        spawn_task(ctx.clone(), async move { Ok(()) }).await;
         assert!(rx.is_empty());
+
+        rx.close();
+
+        // this one is just here for coverage for when the call to notify is failing
+        spawn_task(ctx, async move { return Err("snot 2".into()) }).await;
 
         Ok(())
     }
