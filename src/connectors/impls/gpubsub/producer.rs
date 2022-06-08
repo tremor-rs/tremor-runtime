@@ -34,28 +34,20 @@ use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Status;
 use tremor_pipeline::{ConfigImpl, Event};
+use value_trait::ValueAccess;
 
 #[derive(Deserialize, Clone)]
 pub struct Config {
-    #[serde(default = "default_connect_timeout")]
+    #[serde(default = "crate::connectors::impls::gpubsub::default_connect_timeout")]
     pub connect_timeout: u64,
-    #[serde(default = "default_request_timeout")]
+    #[serde(default = "crate::connectors::impls::gpubsub::default_request_timeout")]
     pub request_timeout: u64,
-    #[serde(default = "default_endpoint")]
+    #[serde(default = "crate::connectors::impls::gpubsub::default_endpoint")]
     pub endpoint: String,
     pub topic: String,
     #[cfg(test)]
+    #[serde(default = "crate::connectors::impls::gpubsub::default_skip_authentication")]
     pub skip_authentication: bool,
-}
-
-fn default_endpoint() -> String {
-    "https://pubsub.googleapis.com".into()
-}
-fn default_connect_timeout() -> u64 {
-    1_000_000_000u64 // 1 second
-}
-fn default_request_timeout() -> u64 {
-    10_000_000_000u64 // 10 seconds
 }
 
 impl ConfigImpl for Config {}
@@ -91,9 +83,19 @@ impl Connector for GpubConnector {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
+        let url = Url::parse(&self.config.endpoint)?;
         let sink = GpubSink {
             config: self.config.clone(),
-            url: Url::parse(&self.config.endpoint)?,
+            url: url.clone(),
+            hostname: url
+                .host_str()
+                .ok_or_else(|| {
+                    ErrorKind::InvalidConfiguration(
+                        "gpubsub-publisher".to_string(),
+                        "Missing hostname".to_string(),
+                    )
+                })?
+                .to_string(),
             client: None,
         };
         builder.spawn(sink, sink_context).map(Some)
@@ -111,6 +113,7 @@ impl Connector for GpubConnector {
 struct GpubSink {
     config: Config,
     url: Url<HttpsDefaults>,
+    hostname: String,
 
     client: Option<PublisherClient<InterceptedService<Channel, AuthInterceptor>>>,
 }
@@ -123,12 +126,7 @@ impl Sink for GpubSink {
         if self.url.scheme() == "https" {
             let tls_config = ClientTlsConfig::new()
                 .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
-                .domain_name(
-                    self.url
-                        .host_str()
-                        .ok_or_else(|| Status::unavailable("The endpoint is missing a hostname"))?
-                        .to_string(),
-                );
+                .domain_name(self.hostname.clone());
 
             channel = channel.tls_config(tls_config)?;
         }
@@ -183,16 +181,27 @@ impl Sink for GpubSink {
             "The publisher is not connected",
         ))?;
 
-        let mut messages = vec![];
+        let mut messages = Vec::with_capacity(event.len());
 
-        for e in event.value_iter() {
-            messages.push(PubsubMessage {
-                data: serializer.serialize(e, event.ingest_ns)?[0].clone(),
-                attributes: HashMap::new(),
-                message_id: "".to_string(),
-                publish_time: None,
-                ordering_key: "".to_string(),
-            });
+        for (value, meta) in event.value_meta_iter() {
+            for payload in serializer.serialize(value, event.ingest_ns)? {
+                let ordering_key = meta
+                    .get("gpubsub_producer")
+                    .get("ordering_key")
+                    .as_str()
+                    .map_or_else(|| "".to_string(), ToString::to_string);
+
+                messages.push(PubsubMessage {
+                    data: payload,
+                    attributes: HashMap::new(),
+                    // publish_time and message_id will be ignored in the request and set by server
+                    message_id: "".to_string(),
+                    publish_time: None,
+
+                    // fixme get from the metadata
+                    ordering_key,
+                });
+            }
         }
 
         if let Ok(inner_result) = client
