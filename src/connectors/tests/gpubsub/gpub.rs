@@ -14,6 +14,7 @@
 
 use crate::connectors::impls::gpubsub::producer::Builder;
 use crate::connectors::tests::ConnectorHarness;
+use crate::connectors::utils::EnvHelper;
 use crate::errors::Result;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
@@ -26,7 +27,6 @@ use tonic::transport::Channel;
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, Value};
-use crate::connectors::utils::EnvHelper;
 
 #[async_std::test]
 #[serial(gpubsub)]

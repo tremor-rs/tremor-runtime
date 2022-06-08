@@ -37,31 +37,18 @@ use tremor_pipeline::ConfigImpl;
 
 #[derive(Deserialize, Clone)]
 struct Config {
-    #[serde(default = "default_connect_timeout")]
+    #[serde(default = "crate::connectors::impls::gpubsub::default_connect_timeout")]
     pub connect_timeout: u64,
     #[serde(default = "default_ack_deadline")]
     pub ack_deadline: u64,
     pub subscription_id: String,
-    #[serde(default = "default_endpoint")]
+    #[serde(default = "crate::connectors::impls::gpubsub::default_endpoint")]
     pub endpoint: String,
     #[cfg(test)]
-    #[serde(default = "default_skip_authentication")]
+    #[serde(default = "crate::connectors::impls::gpubsub::default_skip_authentication")]
     pub skip_authentication: bool,
 }
 impl ConfigImpl for Config {}
-
-fn default_endpoint() -> String {
-    "https://pubsub.googleapis.com".into()
-}
-
-#[cfg(test)]
-fn default_skip_authentication() -> bool {
-    false
-}
-
-fn default_connect_timeout() -> u64 {
-    1_000_000_000u64 // 1 second
-}
 
 fn default_ack_deadline() -> u64 {
     10_000_000_000u64 // 10 seconds

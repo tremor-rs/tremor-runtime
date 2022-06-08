@@ -14,3 +14,18 @@
 
 pub(crate) mod consumer;
 pub(crate) mod producer;
+
+fn default_endpoint() -> String {
+    "https://pubsub.googleapis.com".into()
+}
+fn default_connect_timeout() -> u64 {
+    1_000_000_000u64 // 1 second
+}
+fn default_request_timeout() -> u64 {
+    10_000_000_000u64 // 10 seconds
+}
+
+#[cfg(test)]
+fn default_skip_authentication() -> bool {
+    false
+}
