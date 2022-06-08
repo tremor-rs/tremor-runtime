@@ -21,7 +21,6 @@ use crate::{
     errors::{Error, ErrorKind, Result},
 };
 use crate::{cli::TestMode, job};
-use async_std::io::WriteExt;
 use async_std::prelude::FutureExt;
 use globwalk::{FileType, GlobWalkerBuilder};
 use metadata::Meta;
@@ -188,23 +187,6 @@ async fn run_integration(
             {
                 Err(_) => {
                     // timeout
-                    // walk the entire dir and print all *.log files for debuggability
-                    error!("Timeout running integration test {}", root.display());
-                    let walker = GlobWalkerBuilder::new(root, "*.log")
-                        .file_type(FileType::FILE)
-                        .build()
-                        .map_err(|e| {
-                            format!("Unable to walk test path for printing log files: {}", e)
-                        })?;
-                    let mut stderr = async_std::io::stderr();
-                    for log_file in walker.filter_map(std::result::Result::ok) {
-                        let path = log_file.path();
-                        let mut log_fd = tremor_common::asy::file::open(path).await?;
-                        stderr
-                            .write_all(format!("\n{}:\n", path.display()).as_bytes())
-                            .await?;
-                        async_std::io::copy(&mut log_fd, &mut stderr).await?;
-                    }
                     return Err(format!("Timeout running test {}", root.display()).into());
                 }
                 Ok(res) => res?,
