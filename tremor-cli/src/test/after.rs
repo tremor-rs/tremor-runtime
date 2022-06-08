@@ -47,7 +47,25 @@ impl After {
         let err_file = base.join("after.err.log");
         process.stdio_tailer(&out_file, &err_file).await?;
 
+        debug!(
+            "Spawning after: {} in {}",
+            self.cmdline(),
+            current_dir.display()
+        );
+
         Ok(Some(process))
+    }
+
+    fn cmdline(&self) -> String {
+        format!(
+            "{}{} {}",
+            self.env
+                .iter()
+                .map(|(k, v)| format!("{}={} ", k, v))
+                .collect::<String>(),
+            self.cmd,
+            self.args.join(" ")
+        )
     }
 }
 

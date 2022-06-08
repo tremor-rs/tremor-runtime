@@ -89,6 +89,9 @@ pub(crate) struct Test {
     /// Sets the level of verbosity (does not apply to logging)
     #[clap(short, long)]
     pub(crate) verbose: bool,
+    /// Timeout in seconds for each test
+    #[clap(short, long)]
+    pub(crate) timeout: Option<u64>,
 }
 
 /// Shell type
