@@ -26,6 +26,49 @@ use tonic::transport::Channel;
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, Value};
+use crate::connectors::utils::EnvHelper;
+
+#[async_std::test]
+#[serial(gpubsub)]
+async fn no_connection() -> Result<()> {
+    let _ = env_logger::try_init();
+    let connector_yaml = literal!({
+        "codec": "binary",
+        "config":{
+            "endpoint": "https://localhost:9090",
+            "connect_timeout": 100000000,
+            "topic": "projects/xxx/topics/test-a",
+            "skip_authentication": false
+        }
+    });
+
+    let harness =
+        ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await?;
+    assert!(harness.start().await.is_err());
+    Ok(())
+}
+
+#[async_std::test]
+#[serial(gpubsub)]
+async fn no_token() -> Result<()> {
+    let _ = env_logger::try_init();
+    let mut env = EnvHelper::new();
+    env.remove_var("GOOGLE_APPLICATION_CREDENTIALS");
+    let connector_yaml = literal!({
+        "codec": "binary",
+        "config":{
+            "endpoint": "https://localhost:9090",
+            "connect_timeout": 100000000,
+            "topic": "projects/xxx/topics/test-a",
+            "skip_authentication": false
+        }
+    });
+
+    let harness =
+        ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await?;
+    assert!(harness.start().await.is_err());
+    Ok(())
+}
 
 #[async_std::test]
 #[serial(gpubsub)]
