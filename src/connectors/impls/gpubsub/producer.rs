@@ -28,6 +28,7 @@ use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage};
 use gouth::Token;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
@@ -43,6 +44,8 @@ pub struct Config {
     #[serde(default = "default_endpoint")]
     pub endpoint: String,
     pub topic: String,
+    #[cfg(test)]
+    pub skip_authentication: bool,
 }
 
 fn default_endpoint() -> String {
@@ -131,18 +134,36 @@ impl Sink for GpubSink {
         }
 
         let channel = channel.connect().await?;
-        let token = Token::new()?;
+        #[allow(unused_assignments, unused_mut)]
+        let mut skip_authentication = false;
+        #[cfg(test)]
+        {
+            skip_authentication = self.config.skip_authentication;
+        }
 
-        let client = PublisherClient::with_interceptor(
-            channel,
-            AuthInterceptor {
-                token: Box::new(move || {
-                    token.header_value().map_err(|_| {
-                        Status::unavailable("Failed to retrieve authentication token.")
-                    })
-                }),
-            },
-        );
+        let client = if skip_authentication {
+            info!("Skipping auth...");
+
+            PublisherClient::with_interceptor(
+                channel,
+                AuthInterceptor {
+                    token: Box::new(|| Ok(Arc::new(String::new()))),
+                },
+            )
+        } else {
+            let token = Token::new()?;
+
+            PublisherClient::with_interceptor(
+                channel,
+                AuthInterceptor {
+                    token: Box::new(move || {
+                        token.header_value().map_err(|_| {
+                            Status::unavailable("Failed to retrieve authentication token.")
+                        })
+                    }),
+                },
+            )
+        };
 
         self.client = Some(client);
 
