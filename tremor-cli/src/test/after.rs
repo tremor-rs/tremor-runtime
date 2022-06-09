@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::errors::{Error, Result};
-use crate::job;
-use crate::job::TargetProcess;
+use crate::target_process;
+use crate::target_process::TargetProcess;
 use crate::util::slurp_string;
 use std::path::PathBuf;
 use std::{collections::HashMap, fs, path::Path};
@@ -34,7 +34,7 @@ impl After {
         base: &Path,
         env: &HashMap<String, String>,
     ) -> Result<Option<TargetProcess>> {
-        let cmd = job::which(&self.cmd)?;
+        let cmd = target_process::which(&self.cmd)?;
         // interpret `dir` as relative to `base`
         let current_dir = base.join(&self.dir).canonicalize()?;
 
@@ -42,12 +42,31 @@ impl After {
         for (k, v) in &self.env {
             env.insert(k.clone(), v.clone());
         }
-        let mut process = job::TargetProcess::new_in_dir(&cmd, &self.args, &env, &current_dir)?;
+        let mut process =
+            target_process::TargetProcess::new_in_dir(&cmd, &self.args, &env, &current_dir)?;
         let out_file = base.join("after.out.log");
         let err_file = base.join("after.err.log");
         process.stdio_tailer(&out_file, &err_file).await?;
 
+        debug!(
+            "Spawning after: {} in {}",
+            self.cmdline(),
+            current_dir.display()
+        );
+
         Ok(Some(process))
+    }
+
+    fn cmdline(&self) -> String {
+        format!(
+            "{}{} {}",
+            self.env
+                .iter()
+                .map(|(k, v)| format!("{}={} ", k, v))
+                .collect::<String>(),
+            self.cmd,
+            self.args.join(" ")
+        )
     }
 }
 

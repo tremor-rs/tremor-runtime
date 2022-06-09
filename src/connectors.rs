@@ -1212,22 +1212,94 @@ pub(crate) async fn register_builtin_connector_types(world: &World, debug: bool)
     Ok(())
 }
 
-/// Function to spawn an acceptor task in the runtime, this forbids returning Result so
-/// that `?` can't be used in those tasks and silent errors with acceptor tasks dying
-/// are eliminated.
+/// Function to spawn a long-running task representing a connector connection
+/// and ensuring that upon error the runtime is notified about the lost connection, as the task is gone.
 pub(crate) fn spawn_task<F, C>(ctx: C, t: F) -> JoinHandle<()>
 where
     F: Future<Output = Result<()>> + Send + 'static,
     C: Context + Send + 'static,
 {
     task::spawn(async move {
-        log_error!(t.await, "{ctx} Connector loop error: {e}");
-        // notify connector task about disconnect
-        // of the listening socket
-        let n = ctx.notifier();
-        log_error!(
-            n.connection_lost().await,
-            "{ctx} Failed to notify on connection lost: {e}"
-        );
+        if let Err(e) = t.await {
+            error!("{ctx} Connector loop error: {e}");
+            // notify connector task about a terminated connection loop
+            let n = ctx.notifier();
+            log_error!(
+                n.connection_lost().await,
+                "{ctx} Failed to notify on connection lost: {e}"
+            );
+        } else {
+            debug!("{ctx} Connector loop finished.");
+        }
     })
+}
+
+#[cfg(test)]
+mod unit_tests {
+    use super::*;
+
+    #[derive(Clone)]
+    struct FakeContext {
+        t: ConnectorType,
+        notifier: reconnect::ConnectionLostNotifier,
+        beacon: QuiescenceBeacon,
+    }
+
+    impl FakeContext {
+        fn new(tx: Sender<Msg>) -> Self {
+            Self {
+                t: ConnectorType::from("snot"),
+                notifier: reconnect::ConnectionLostNotifier::new(tx),
+                beacon: QuiescenceBeacon::default(),
+            }
+        }
+    }
+
+    impl Display for FakeContext {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "snot")
+        }
+    }
+
+    impl Context for FakeContext {
+        fn alias(&self) -> &str {
+            "snot"
+        }
+
+        fn quiescence_beacon(&self) -> &QuiescenceBeacon {
+            &self.beacon
+        }
+
+        fn notifier(&self) -> &reconnect::ConnectionLostNotifier {
+            &self.notifier
+        }
+
+        fn connector_type(&self) -> &ConnectorType {
+            &self.t
+        }
+    }
+
+    #[async_std::test]
+    async fn spawn_task_error() -> Result<()> {
+        let (tx, rx) = bounded(1);
+        let ctx = FakeContext::new(tx);
+        // thanks coverage
+        ctx.quiescence_beacon();
+        ctx.notifier();
+        ctx.connector_type();
+        ctx.alias();
+        // end
+        spawn_task(ctx.clone(), async move { return Err("snot".into()) }).await;
+        assert!(matches!(rx.recv().await, Ok(Msg::ConnectionLost)));
+
+        spawn_task(ctx.clone(), async move { Ok(()) }).await;
+        assert!(rx.is_empty());
+
+        rx.close();
+
+        // this one is just here for coverage for when the call to notify is failing
+        spawn_task(ctx, async move { return Err("snot 2".into()) }).await;
+
+        Ok(())
+    }
 }

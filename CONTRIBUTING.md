@@ -101,7 +101,7 @@ For info on how to configure and build the project, please see [the tremor build
 This guide contains info for contributions to the project and the standard facilities. It also lists some
 really useful commands to the build system, which could save you a lot of time.
 
-[tremor-build-guide]: http://docs.tremor.rs/development/quick-start/
+[tremor-build-guide]: https://www.tremor.rs/docs/0.12/getting-started/install#build-from-source 
 
 ## Pull Requests
 

@@ -2,8 +2,12 @@
 
 ## Unreleased
 ### New features
+
 - Added the `gpubsub-consumer` connector
+
 ### Fixes
+
+- Fix race condition leading to quiescence timeout when shutting down Tremor
 
 
 ## [0.12.1]
