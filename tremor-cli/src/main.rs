@@ -45,11 +45,11 @@ mod env;
 mod errors;
 // mod explain;
 pub(crate) mod cli;
-mod job;
 mod report;
 mod run;
 mod server;
 pub(crate) mod status;
+mod target_process;
 mod test;
 mod util;
 
@@ -101,7 +101,7 @@ async fn main() -> Result<()> {
     if let Err(e) = run(cli).await {
         eprintln!("error: {}", e);
         // ALLOW: this is supposed to exit
-        std::process::exit(1);
+        async_std::process::exit(1);
     }
     Ok(())
 }
@@ -179,7 +179,6 @@ mod tests {
     #[test]
     fn test_template() -> Result<()> {
         let d = TempDir::new().unwrap();
-        dbg!(&d);
         let name = "template";
         create_template(PathBuf::from(d.path()), name)?;
         let mut template_root = d.child(name);

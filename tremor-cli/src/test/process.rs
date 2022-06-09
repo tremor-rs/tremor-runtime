@@ -16,9 +16,9 @@ use super::super::status;
 use super::after;
 use super::assert;
 use super::before;
-use super::job;
 use super::stats;
 use super::tag;
+use super::target_process;
 use crate::report;
 use crate::util::slurp_string;
 use crate::{
@@ -135,8 +135,8 @@ pub(crate) async fn run_process(
         run_after.clone(),
     ));
 
-    let binary = job::which("tremor")?;
-    let mut process = job::TargetProcess::new_in_dir(binary, &args, &env, test_dir)?;
+    let binary = target_process::which("tremor")?;
+    let mut process = target_process::TargetProcess::new_in_dir(binary, &args, &env, test_dir)?;
     info!("Starting {} ...", &process);
     let fg_out_file = test_dir.join("fg.out.log");
     let fg_err_file = test_dir.join("fg.err.log");

@@ -24,7 +24,7 @@
       - "9092"
     "http-ok":
       - "http://127.0.0.1:9644/v1/status/ready"
-  max-await-secs: 10
+  max-await-secs: 1
 - dir: "."
   cmd: "docker"
   args:
