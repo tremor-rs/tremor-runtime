@@ -241,3 +241,44 @@ impl Sink for GpubSink {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    pub fn is_not_auto_ack() {
+        let sink = GpubSink {
+            config: Config {
+                connect_timeout: 0,
+                request_timeout: 0,
+                endpoint: "".to_string(),
+                topic: "".to_string(),
+                skip_authentication: false,
+            },
+            url: Default::default(),
+            hostname: "".to_string(),
+            client: None,
+        };
+
+        assert!(!sink.auto_ack());
+    }
+
+    #[test]
+    pub fn is_async() {
+        let sink = GpubSink {
+            config: Config {
+                connect_timeout: 0,
+                request_timeout: 0,
+                endpoint: "".to_string(),
+                topic: "".to_string(),
+                skip_authentication: false,
+            },
+            url: Default::default(),
+            hostname: "".to_string(),
+            client: None,
+        };
+
+        assert!(sink.asynchronous());
+    }
+}
