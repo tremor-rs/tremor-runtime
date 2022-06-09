@@ -16,8 +16,8 @@
 
 use std::time::Duration;
 
-use crate::connectors::prelude::*;
 use crate::system::{ShutdownMode, World};
+use crate::{connectors::prelude::*, errors::err_conector_def};
 use async_std::io::prelude::BufReadExt;
 use async_std::stream::StreamExt;
 use async_std::{fs::File, io};
@@ -60,16 +60,17 @@ impl ConnectorBuilder for Builder {
         "cb".into()
     }
 
-    async fn build(&self, alias: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(raw) = &config.config {
-            let config = Config::new(raw)?;
-            Ok(Box::new(Cb {
-                config,
-                world: self.world.clone(),
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(alias.to_string()).into())
-        }
+    async fn build_cfg(
+        &self,
+        _: &str,
+        _: &ConnectorConfig,
+        raw: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = Config::new(raw)?;
+        Ok(Box::new(Cb {
+            config,
+            world: self.world.clone(),
+        }))
     }
 }
 
@@ -238,11 +239,7 @@ impl CbSource {
                 world,
             })
         } else {
-            Err(ErrorKind::InvalidConnectorDefinition(
-                alias.to_string(),
-                String::from("Missing path key."),
-            )
-            .into())
+            Err(err_conector_def(alias, "Missing path key."))
         }
     }
 }

@@ -19,6 +19,7 @@ use crate::{
         Codec,
     },
     connectors::prelude::*,
+    errors::err_conector_def,
 };
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::path::PathBuf;
@@ -170,27 +171,27 @@ impl ConfigImpl for Config {}
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
+impl Builder {
+    const INVALID_DIR: &'static str = "Invalid `dir`. Not a directory or not accessible.";
+}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "kv".into()
     }
-    async fn build(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(config) = &config.config {
-            let config: Config = Config::new(config)?;
-            if !PathBuf::from(&config.dir).is_dir().await {
-                return Err(ErrorKind::InvalidConnectorDefinition(
-                    id.to_string(),
-                    "Invalid `dir`. Not a directory or not accessible.".to_string(),
-                )
-                .into());
-            }
-
-            let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-            Ok(Box::new(Kv { config, rx, tx }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
+    async fn build_cfg(
+        &self,
+        id: &str,
+        _: &ConnectorConfig,
+        config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config: Config = Config::new(config)?;
+        if !PathBuf::from(&config.dir).is_dir().await {
+            return Err(err_conector_def(id, Builder::INVALID_DIR));
         }
+
+        let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        Ok(Box::new(Kv { config, rx, tx }))
     }
 }
 

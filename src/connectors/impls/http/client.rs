@@ -26,10 +26,10 @@ use tremor_common::time::nanotime;
 use super::auth::Auth;
 use super::meta::{extract_request_meta, extract_response_meta, HttpRequestBuilder};
 use super::utils::{Header, RequestId};
-use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
 use crate::connectors::utils::mime::MimeCodecMap;
 use crate::connectors::utils::tls::{tls_client_config, TLSClientConfig};
+use crate::{connectors::prelude::*, errors::err_conector_def};
 
 const CONNECTOR_TYPE: &str = "http_client";
 const DEFAULT_CODEC: &str = "json";
@@ -85,46 +85,43 @@ impl ConnectorBuilder for Builder {
         CONNECTOR_TYPE.into()
     }
 
-    async fn build(
+    async fn build_cfg(
         &self,
         id: &str,
         connector_config: &ConnectorConfig,
+        config: &Value,
     ) -> Result<Box<dyn Connector>> {
-        if let Some(config) = &connector_config.config {
-            let config = Config::new(config)?;
+        let config = Config::new(config)?;
 
-            let tls_client_config = match config.tls.as_ref() {
-                Some(Either::Right(true)) => {
-                    // default config
-                    Some(tls_client_config(&TLSClientConfig::default()).await?)
-                }
-                Some(Either::Left(tls_config)) => Some(tls_client_config(tls_config).await?),
-                Some(Either::Right(false)) | None => None,
-            };
-            if config.url.scheme() == "https" && tls_client_config.is_none() {
-                return Err(ErrorKind::InvalidConnectorDefinition(
-                    id.to_string(),
-                    format!("missing tls config for {id} with 'https' url. Set 'tls' to 'true' or provide a full tls config."),
-                ).into());
+        let tls_client_config = match config.tls.as_ref() {
+            Some(Either::Right(true)) => {
+                // default config
+                Some(tls_client_config(&TLSClientConfig::default()).await?)
             }
-            let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-            let mime_codec_map = Arc::new(MimeCodecMap::with_overwrites(&config.custom_codecs));
-
-            let configured_codec = connector_config
-                .codec
-                .as_ref()
-                .map_or_else(|| DEFAULT_CODEC.to_string(), |c| c.name.clone());
-            Ok(Box::new(Client {
-                response_tx,
-                response_rx,
-                config,
-                tls_client_config,
-                mime_codec_map,
-                configured_codec,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
+            Some(Either::Left(tls_config)) => Some(tls_client_config(tls_config).await?),
+            Some(Either::Right(false)) | None => None,
+        };
+        if config.url.scheme() == "https" && tls_client_config.is_none() {
+            return Err(err_conector_def(
+                    id,
+                    &format!("missing tls config for {id} with 'https' url. Set 'tls' to 'true' or provide a full tls config."),
+                ));
         }
+        let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        let mime_codec_map = Arc::new(MimeCodecMap::with_overwrites(&config.custom_codecs));
+
+        let configured_codec = connector_config
+            .codec
+            .as_ref()
+            .map_or_else(|| DEFAULT_CODEC.to_string(), |c| c.name.clone());
+        Ok(Box::new(Client {
+            response_tx,
+            response_rx,
+            config,
+            tls_client_config,
+            mime_codec_map,
+            configured_codec,
+        }))
     }
 }
 

@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::errors::{Error, Result};
-use crate::job;
 use crate::status;
+use crate::target_process;
 use crate::test::after;
 use crate::test::assert;
 use crate::test::before;
@@ -131,11 +131,14 @@ pub(crate) async fn suite_command(
                     let args = shell_words::split(&case.command).unwrap_or_default();
 
                     if let Some((cmd, args)) = args.split_first() {
-                        let resolved_cmd = job::which(cmd)?;
+                        let resolved_cmd = target_process::which(cmd)?;
 
                         // TODO wintel
-                        let mut fg_process =
-                            job::TargetProcess::new_in_current_dir(resolved_cmd, args, &case.env)?;
+                        let mut fg_process = target_process::TargetProcess::new_in_current_dir(
+                            resolved_cmd,
+                            args,
+                            &case.env,
+                        )?;
 
                         let fg_out_file = suite_root.join(&format!("fg.{}.out.log", counter));
                         let fg_err_file = suite_root.join(&format!("fg.{}.err.log", counter));

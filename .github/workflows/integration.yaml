@@ -28,6 +28,7 @@ jobs:
     env:
       TREMOR_PATH: "${{ github.workspace }}/tremor-script/lib:${{ github.workspace }}/tremor-cli/tests/lib"
       RUSTFLAGS: -D warnings -C target-feature=${{ matrix.target_feature }}
+      RUST_LOG: debug
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -50,7 +51,7 @@ jobs:
         run: docker-compose --version
 
       - name: run ${{ matrix.kind }} tests
-        run: cargo llvm-cov run -p tremor-cli --lcov --output-path lcov.txt -- test ${{ matrix.kind }} tremor-cli/tests ${{ matrix.exclude_tests }}
+        run: cargo llvm-cov run -p tremor-cli --lcov --output-path lcov.txt -- test --timeout 300 ${{ matrix.kind }} tremor-cli/tests ${{ matrix.exclude_tests }}
 
       - name: Upload error logs
         uses: actions/upload-artifact@v2
@@ -62,7 +63,7 @@ jobs:
       - name: Upload coverage
         uses: codecov/codecov-action@v2
         with:
-          token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+          #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
           files: ./lcov.txt # optional
           flags: cli${{ matrix.kind }} # optional
           fail_ci_if_error: true # optional (default = false)

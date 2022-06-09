@@ -14,7 +14,7 @@
 pub(crate) mod consumer;
 pub(crate) mod producer;
 
-use crate::errors::{Error, Kind as ErrorKind, Result};
+use crate::errors::{err_conector_def, Result};
 use core::future::Future;
 use futures::future;
 use rdkafka::{error::KafkaError, util::AsyncRuntime};
@@ -51,26 +51,18 @@ fn verify_brokers(id: &str, brokers: &[String]) -> Result<(String, Option<u16>)>
                 first_broker.get_or_insert_with(|| ((*host).to_string(), None));
             }
             [host, port] => {
-                let port: u16 = port.parse().map_err(|_| {
-                    Error::from(ErrorKind::InvalidConnectorDefinition(
-                        id.to_string(),
-                        format!("Invalid broker: {}:{}", host, port),
-                    ))
-                })?;
+                let port: u16 = port
+                    .parse()
+                    .map_err(|_| err_conector_def(id, &format!("Invalid broker: {host}:{port}")))?;
                 first_broker.get_or_insert_with(|| ((*host).to_string(), Some(port)));
             }
             b => {
-                return Err(ErrorKind::InvalidConnectorDefinition(
-                    id.to_string(),
-                    format!("Invalid broker: {}", b.join(":")),
-                )
-                .into())
+                let e = format!("Invalid broker: {}", b.join(":"));
+                return Err(err_conector_def(id, &e));
             }
         }
     }
-    first_broker.ok_or_else(|| {
-        ErrorKind::InvalidConnectorDefinition(id.to_string(), "Missing brokers.".to_string()).into()
-    })
+    first_broker.ok_or_else(|| err_conector_def(id, "Missing brokers."))
 }
 
 /// Returns `true` if the error denotes a failed connect attempt

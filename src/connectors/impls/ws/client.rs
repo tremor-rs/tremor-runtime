@@ -16,8 +16,8 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::{WsReader, WsWriter};
-use crate::connectors::prelude::*;
 use crate::connectors::utils::tls::{tls_client_connector, TLSClientConfig};
+use crate::{connectors::prelude::*, errors::err_conector_def};
 use async_std::net::TcpStream;
 use async_tls::TlsConnector;
 use async_tungstenite::client_async;
@@ -42,6 +42,11 @@ impl ConfigImpl for Config {}
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
+impl Builder {
+    const MISSING_HOST: &'static str = "Invalid `url` - host missing";
+    const MISSING_PORT: &'static str = "Not a valid WS type url - port specification missing";
+}
+
 fn condition_tcp_stream(config: &Config, stream: &TcpStream) -> Result<(SocketAddr, SocketAddr)> {
     // this is known to fail on macOS for IPv6.
     // See: https://github.com/rust-lang/rust/issues/95541
@@ -57,50 +62,42 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "ws_client".into()
     }
-    async fn build(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(raw_config) = &config.config {
-            let config = Config::new(raw_config)?;
-            let host = match config.url.host() {
-                Some(host) => host.to_string(),
-                None => {
-                    return Err(ErrorKind::InvalidConnectorDefinition(
-                        id.to_string(),
-                        "Invalid `url` - host missing".to_string(),
-                    )
-                    .into())
-                }
-            };
-            // TODO: do we really need to make the port required when we have a default defined on the URL?
-            if config.url.port().is_none() {
-                return Err(ErrorKind::InvalidConnectorDefinition(
-                    id.to_string(),
-                    "Not a valid WS type url - port specification missing".to_string(),
-                )
-                .into());
-            };
+    async fn build_cfg(
+        &self,
+        id: &str,
+        _: &ConnectorConfig,
+        config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = Config::new(config)?;
+        let host = config
+            .url
+            .host()
+            .ok_or_else(|| err_conector_def(id, Self::MISSING_HOST))?
+            .to_string();
+        // TODO: do we really need to make the port required when we have a default defined on the URL?
+        if config.url.port().is_none() {
+            return Err(err_conector_def(id, Self::MISSING_PORT));
+        };
 
-            let (tls_connector, tls_domain) = match config.tls.as_ref() {
-                Some(Either::Right(true)) => (
-                    Some(tls_client_connector(&TLSClientConfig::default()).await?),
-                    host,
-                ),
-                Some(Either::Left(tls_config)) => (
-                    Some(tls_client_connector(tls_config).await?),
-                    tls_config.domain.clone().unwrap_or(host),
-                ),
-                Some(Either::Right(false)) | None => (None, host),
-            };
+        let (tls_connector, tls_domain) = match config.tls.as_ref() {
+            Some(Either::Right(true)) => (
+                Some(tls_client_connector(&TLSClientConfig::default()).await?),
+                host,
+            ),
+            Some(Either::Left(tls_config)) => (
+                Some(tls_client_connector(tls_config).await?),
+                tls_config.domain.clone().unwrap_or(host),
+            ),
+            Some(Either::Right(false)) | None => (None, host),
+        };
 
-            Ok(Box::new(WsClient {
-                config,
-                tls_connector,
-                tls_domain,
-                source_runtime: None,
-                sink_runtime: None,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
-        }
+        Ok(Box::new(WsClient {
+            config,
+            tls_connector,
+            tls_domain,
+            source_runtime: None,
+            sink_runtime: None,
+        }))
     }
 }
 

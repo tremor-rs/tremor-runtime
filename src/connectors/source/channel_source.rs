@@ -80,6 +80,7 @@ impl ChannelSourceRuntime {
         task::spawn(async move {
             loop {
                 if !ctx.quiescence_beacon().continue_reading().await {
+                    debug!("{ctx} quiescing stream {stream}");
                     if let Some(sc_data) = reader.quiesce(stream).await {
                         ctx.swallow_err(tx.send(sc_data).await, "Error Sending StreamFail Message");
                         break;
@@ -88,10 +89,12 @@ impl ChannelSourceRuntime {
                 let sc_data = reader.read(stream).timeout(Self::READ_TIMEOUT_MS).await;
 
                 let sc_data = match sc_data {
-                    Err(_) => continue,
+                    Err(_) => {
+                        continue; // timeout
+                    }
                     Ok(Ok(d)) => d,
                     Ok(Err(e)) => {
-                        error!("{} Stream {} error: {}", &ctx, &stream, e);
+                        error!("{ctx} Stream {stream} error: {e}");
                         ctx.swallow_err(
                             tx.send(SourceReply::StreamFail(stream)).await,
                             "Error Sending StreamFail Message",

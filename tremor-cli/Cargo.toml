@@ -45,7 +45,7 @@ simd-json = { version = "0.5", features = ["known-key"] }
 #   - https://github.com/microsoft/snmalloc/issues/328
 #   - https://github.com/SchrodingerZhu/snmalloc-rs/issues/145
 snmalloc-rs = { version = "=0.3.0", optional = false }
-snmalloc-sys = { version = "=0.3.0", optional = false }
+snmalloc-sys = { version = "=0.3.1", optional = false }
 surf = { version = "=2.3.2", default-features = false, features = [
     "encoding",
     "h1-client-rustls",

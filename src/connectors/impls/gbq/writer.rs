@@ -58,12 +58,13 @@ impl ConnectorBuilder for Builder {
         "gbq".into()
     }
 
-    async fn build(&self, alias: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(raw_config) = &config.config {
-            let config = Config::new(raw_config)?;
-            Ok(Box::new(Gbq { config }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(alias.to_string()).into())
-        }
+    async fn build_cfg(
+        &self,
+        _: &str,
+        _: &ConnectorConfig,
+        config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = Config::new(config)?;
+        Ok(Box::new(Gbq { config }))
     }
 }

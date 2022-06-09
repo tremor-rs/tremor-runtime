@@ -21,7 +21,7 @@ use crate::{
             ConnectionMeta,
         },
     },
-    errors::Kind as ErrorKind,
+    errors::err_conector_def,
 };
 use async_std::{
     channel::{bounded, Receiver, Sender},
@@ -65,31 +65,28 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "tcp_server".into()
     }
-    async fn build(
+    async fn build_cfg(
         &self,
         id: &str,
-        raw_config: &ConnectorConfig,
+        _: &ConnectorConfig,
+        config: &Value,
     ) -> crate::errors::Result<Box<dyn Connector>> {
-        if let Some(raw_config) = &raw_config.config {
-            let config = Config::new(raw_config)?;
-            if config.url.port().is_none() {
-                return Err("Missing port for TCP server".into());
-            }
-            let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
-                Some(load_server_config(tls_config)?)
-            } else {
-                None
-            };
-            let (sink_tx, sink_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-            Ok(Box::new(TcpServer {
-                config,
-                tls_server_config,
-                sink_tx,
-                sink_rx,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
+        let config = Config::new(config)?;
+        if config.url.port().is_none() {
+            return Err(err_conector_def(id, "Missing port for TCP server"));
         }
+        let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
+            Some(load_server_config(tls_config)?)
+        } else {
+            None
+        };
+        let (sink_tx, sink_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        Ok(Box::new(TcpServer {
+            config,
+            tls_server_config,
+            sink_tx,
+            sink_rx,
+        }))
     }
 }
 
@@ -198,7 +195,7 @@ impl Source for TcpServerSource {
             while ctx.quiescence_beacon().continue_reading().await {
                 match listener.accept().timeout(ACCEPT_TIMEOUT).await {
                     Ok(Ok((stream, peer_addr))) => {
-                        debug!("{} new connection from {}", &accept_ctx, peer_addr);
+                        debug!("{accept_ctx} new connection from {peer_addr}");
                         let stream_id: u64 = stream_id_gen.next_stream_id();
                         let connection_meta: ConnectionMeta = peer_addr.into();
                         // Async<T> allows us to read in one thread and write in another concurrently - see its documentation
@@ -271,9 +268,10 @@ impl Source for TcpServerSource {
                         }
                     }
                     Ok(Err(e)) => return Err(e.into()),
-                    Err(_) => continue,
+                    Err(_) => continue, // timeout accepting
                 };
             }
+            debug!("{accept_ctx} stopped accepting connections.");
             Ok(())
         }));
 

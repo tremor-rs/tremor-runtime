@@ -23,8 +23,8 @@
     "port-open":
       - "9092"
     "http-ok":
-      - "http://localhost:9644/v1/status/ready"
-  max-await-secs: 10
+      - "http://127.0.0.1:9644/v1/status/ready"
+  max-await-secs: 30
 - dir: "."
   cmd: "docker"
   args:

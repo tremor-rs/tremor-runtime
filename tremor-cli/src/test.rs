@@ -20,12 +20,14 @@ use crate::{
     cli::Test,
     errors::{Error, ErrorKind, Result},
 };
-use crate::{cli::TestMode, job};
+use crate::{cli::TestMode, target_process};
+use async_std::prelude::FutureExt;
 use globwalk::{FileType, GlobWalkerBuilder};
 use metadata::Meta;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tag::TagFilter;
 use tremor_common::file;
 use tremor_common::time::nanotime;
@@ -178,7 +180,20 @@ async fn run_integration(
         status::tags(&tags, Some(&matched), Some(&config.excludes))?;
 
         // Run integration tests
-        let test_report = process::run_process("integration", base, root, &tags).await?;
+        let test_report = if let Some(timeout) = config.timeout {
+            match process::run_process("integration", base, root, &tags)
+                .timeout(timeout)
+                .await
+            {
+                Err(_) => {
+                    // timeout
+                    return Err(format!("Timeout running test {}", root.display()).into());
+                }
+                Ok(res) => res?,
+            }
+        } else {
+            process::run_process("integration", base, root, &tags).await?
+        };
 
         // Restore cwd
         file::set_current_dir(&cwd)?;
@@ -241,6 +256,7 @@ pub(crate) struct TestConfig {
     pub(crate) excludes: Vec<String>,
     pub(crate) meta: Meta,
     pub(crate) base_directory: PathBuf,
+    pub(crate) timeout: Option<Duration>,
 }
 impl TestConfig {
     fn matches(&self, filter: &TagFilter) -> (Vec<String>, bool) {
@@ -259,6 +275,7 @@ impl Test {
             sys_filter: &[],
             meta: Meta::default(),
             base_directory,
+            timeout: self.timeout.map(Duration::from_secs),
         };
 
         let found = GlobWalkerBuilder::new(&config.base_directory, "meta.yaml")
@@ -369,7 +386,8 @@ impl Test {
                             t
                         }
                         TestMode::Integration => {
-                            let (s, t) = suite_integration(root, &config).await?;
+                            let res = suite_integration(root, &config).await;
+                            let (s, t) = res?;
                             integration_stats.merge(&s);
                             t
                         }

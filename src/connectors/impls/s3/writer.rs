@@ -11,8 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::connectors::prelude::*;
 use crate::Event;
+use crate::{connectors::prelude::*, errors::err_conector_def};
 use std::mem;
 use value_trait::ValueAccess;
 
@@ -47,26 +47,29 @@ impl ConfigImpl for S3Config {}
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
+impl Builder {
+    const PART_SIZE: &'static str = "S3 doesn't allow `min_part_size` smaller than 5MB.";
+}
+
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         ConnectorType::from(CONNECTOR_TYPE)
     }
 
-    async fn build(&self, id: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(config) = &raw_config.config {
-            let config = S3Config::new(config)?;
+    async fn build_cfg(
+        &self,
+        id: &str,
+        _: &ConnectorConfig,
+        config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = S3Config::new(config)?;
 
-            // Maintain the minimum size of 5 MBs.
-            if config.min_part_size < MORE_THEN_FIVEMBS {
-                let e = format!("[Connector::{id}] Setting 'min_part_size' to 5MB, as S3 doesn't allow smaller parts.");
-                return Err(e.into());
-            }
-
-            Ok(Box::new(S3Connector { config }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
+        // Maintain the minimum size of 5 MBs.
+        if config.min_part_size < MORE_THEN_FIVEMBS {
+            return Err(err_conector_def(id, Self::PART_SIZE));
         }
+        Ok(Box::new(S3Connector { config }))
     }
 }
 

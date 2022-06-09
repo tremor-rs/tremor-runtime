@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use async_std::prelude::FutureExt;
 use time::Instant;
 
 use crate::errors::{Error, ErrorKind, Result};
 use crate::util::slurp_string;
-use crate::{job, job::TargetProcess};
-use async_std::future::timeout;
+use crate::{target_process, target_process::TargetProcess};
 use std::{
     collections::HashMap,
     fs,
@@ -55,15 +55,19 @@ impl Before {
         env: &HashMap<String, String>,
         num: usize,
     ) -> Result<TargetProcess> {
-        let cmd = job::which(&self.cmd)?;
+        let cmd = target_process::which(&self.cmd)?;
         // interpret `dir` as relative to `base`
         let current_working_dir = base.join(&self.dir).canonicalize()?;
         let mut env = env.clone();
         for (k, v) in &self.env {
             env.insert(k.clone(), v.clone());
         }
-        let mut process =
-            job::TargetProcess::new_in_dir(&cmd, &self.args, &env, &current_working_dir)?;
+        let mut process = target_process::TargetProcess::new_in_dir(
+            &cmd,
+            &self.args,
+            &env,
+            &current_working_dir,
+        )?;
 
         let fg_out_file = base.join(format!("before.out.{num}.log"));
         let fg_err_file = base.join(format!("before.err.{num}.log"));
@@ -94,7 +98,7 @@ impl Before {
 
     pub(crate) async fn wait_for(
         &self,
-        process: &mut job::TargetProcess,
+        process: &mut target_process::TargetProcess,
         base: &Path,
     ) -> Result<()> {
         let start = Instant::now();
@@ -103,13 +107,14 @@ impl Before {
                 let mut success = true;
 
                 if start.elapsed() > Duration::from_secs(self.until) {
-                    return Err(format!(
+                    let msg = format!(
                         "Before command: {} did not fulfil conditions {:?} and timed out after {}s",
                         self.cmdline(),
                         self.conditionals,
                         self.until
-                    )
-                    .into());
+                    );
+                    let err = Error::from(msg);
+                    return Err(err);
                 }
                 for (k, v) in conditions.iter() {
                     match k.as_str() {
@@ -129,11 +134,10 @@ impl Before {
                         }
                         "http-ok" => {
                             for endpoint in v {
-                                let res = timeout(
-                                    Duration::from_secs(self.until.min(5)),
-                                    surf::get(endpoint).send(),
-                                )
-                                .await?;
+                                let res = surf::get(endpoint)
+                                    .send()
+                                    .timeout(Duration::from_secs(self.until.min(5)))
+                                    .await?;
                                 success &= match res {
                                     Ok(res) => res.status().is_success(),
                                     Err(_) => false,
@@ -167,7 +171,11 @@ impl Before {
                 async_std::task::sleep(Duration::from_millis(100)).await;
             }
         }
-        async_std::task::sleep(Duration::from_secs(self.before_start_delay)).await;
+        if self.before_start_delay > 0 {
+            let dur = Duration::from_secs(self.before_start_delay);
+            debug!("Sleeping for {}s ...", self.before_start_delay);
+            async_std::task::sleep(dur).await;
+        }
         Ok(())
     }
 }
