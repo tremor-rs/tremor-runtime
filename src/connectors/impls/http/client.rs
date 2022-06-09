@@ -104,7 +104,7 @@ impl ConnectorBuilder for Builder {
         if config.url.scheme() == "https" && tls_client_config.is_none() {
             return Err(err_conector_def(
                     id,
-                    format!("missing tls config for {id} with 'https' url. Set 'tls' to 'true' or provide a full tls config."),
+                    &format!("missing tls config for {id} with 'https' url. Set 'tls' to 'true' or provide a full tls config."),
                 ));
         }
         let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
