@@ -50,6 +50,25 @@ async fn no_connection() -> Result<()> {
 
 #[async_std::test]
 #[serial(gpubsub)]
+async fn no_hostname() -> Result<()> {
+    let _ = env_logger::try_init();
+    let connector_yaml = literal!({
+        "codec": "binary",
+        "config":{
+            "endpoint": "https://:9090",
+            "connect_timeout": 100000000,
+            "topic": "projects/xxx/topics/test-a",
+            "skip_authentication": false
+        }
+    });
+
+    let harness = ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await;
+    assert!(harness.is_err());
+    Ok(())
+}
+
+#[async_std::test]
+#[serial(gpubsub)]
 async fn no_token() -> Result<()> {
     let _ = env_logger::try_init();
 
