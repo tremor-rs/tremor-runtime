@@ -30,7 +30,6 @@
 //! We try to route the event to the connection with `stream_id` `123`.
 use crate::connectors::prelude::*;
 use crate::connectors::sink::channel_sink::ChannelSinkMsg;
-use crate::errors::{Kind as ErrorKind, Result};
 use async_std::os::unix::net::UnixListener;
 use async_std::path::PathBuf;
 use async_std::task::JoinHandle;
@@ -65,18 +64,19 @@ impl ConnectorBuilder for Builder {
         "unix_socket_server".into()
     }
 
-    async fn build(&self, alias: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(raw_config) = &config.config {
-            let config = Config::new(raw_config)?;
-            let (sink_tx, sink_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-            Ok(Box::new(UnixSocketServer {
-                config,
-                sink_tx,
-                sink_rx,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(alias.to_string()).into())
-        }
+    async fn build_cfg(
+        &self,
+        _: &str,
+        _: &ConnectorConfig,
+        config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = Config::new(config)?;
+        let (sink_tx, sink_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        Ok(Box::new(UnixSocketServer {
+            config,
+            sink_tx,
+            sink_rx,
+        }))
     }
 }
 

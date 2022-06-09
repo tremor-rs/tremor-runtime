@@ -93,81 +93,87 @@ impl ConnectorBuilder for Builder {
         "elastic".into()
     }
 
-    async fn build(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(raw_config) = &config.config {
-            let config = Config::new(raw_config)?;
-            if config.nodes.is_empty() {
-                Err(ErrorKind::InvalidConnectorDefinition(
-                    id.to_string(),
-                    "empty nodes provided".into(),
-                )
-                .into())
-            } else {
-                let node_urls = config
-                    .nodes
-                    .iter()
-                    .map(|s| {
-                        Url::parse(s.as_str()).map_err(|e| {
-                            ErrorKind::InvalidConnectorDefinition(id.to_string(), e.to_string())
-                                .into()
-                        })
+    async fn build_cfg(
+        &self,
+        id: &str,
+        _: &ConnectorConfig,
+        raw_config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = Config::new(raw_config)?;
+        if config.nodes.is_empty() {
+            Err(ErrorKind::InvalidConnectorDefinition(
+                id.to_string(),
+                "empty nodes provided".into(),
+            )
+            .into())
+        } else {
+            let node_urls = config
+                .nodes
+                .iter()
+                .map(|s| {
+                    Url::parse(s.as_str()).map_err(|e| {
+                        ErrorKind::InvalidConnectorDefinition(id.to_string(), e.to_string()).into()
                     })
-                    .collect::<Result<Vec<Url>>>()?;
-                let tls_config = match config.tls.as_ref() {
-                    Some(Either::Left(tls_config)) => Some(tls_config.clone()),
-                    Some(Either::Right(true)) => Some(TLSClientConfig::default()),
-                    Some(Either::Right(false)) | None => None,
-                };
-                if tls_config.is_some() {
-                    for node_url in &node_urls {
-                        if node_url.scheme() != "https" {
-                            return Err(ErrorKind::InvalidConnectorDefinition(id.to_string(), format!("Node URL '{node_url}' needs 'https' scheme if tls is configured.")).into());
-                        }
+                })
+                .collect::<Result<Vec<Url>>>()?;
+            let tls_config = match config.tls.as_ref() {
+                Some(Either::Left(tls_config)) => Some(tls_config.clone()),
+                Some(Either::Right(true)) => Some(TLSClientConfig::default()),
+                Some(Either::Right(false)) | None => None,
+            };
+            if tls_config.is_some() {
+                for node_url in &node_urls {
+                    if node_url.scheme() != "https" {
+                        return Err(ErrorKind::InvalidConnectorDefinition(
+                            id.to_string(),
+                            format!(
+                                "Node URL '{node_url}' needs 'https' scheme if tls is configured."
+                            ),
+                        )
+                        .into());
                     }
                 }
-                let credentials = if let Some((certfile, keyfile)) = tls_config
-                    .as_ref()
-                    .and_then(|tls| tls.cert.as_ref().zip(tls.key.as_ref()))
-                {
-                    let mut cert_chain = async_std::fs::read(certfile).await?;
-                    let mut key = async_std::fs::read(keyfile).await?;
-                    key.append(&mut cert_chain);
-                    let client_certificate = ClientCertificate::Pem(key);
-                    Some(Credentials::Certificate(client_certificate))
-                } else {
-                    match &config.auth {
-                        Auth::Basic { username, password } => {
-                            Some(Credentials::Basic(username.clone(), password.clone()))
-                        }
-                        Auth::Bearer(token) => Some(Credentials::Bearer(token.clone())),
-                        Auth::ElasticsearchApiKey { id, api_key } => {
-                            Some(Credentials::ApiKey(id.clone(), api_key.clone()))
-                        }
-                        // Gcp Auth is handled in sink connect
-                        Auth::Gcp | Auth::None => None,
-                    }
-                };
-                let cert_validation =
-                    if let Some(cafile) = tls_config.as_ref().and_then(|tls| tls.cafile.as_ref()) {
-                        let file = async_std::fs::read(cafile).await?;
-                        CertValidation::Full(file)
-                    } else if tls_config.is_some() {
-                        CertValidation::Default
-                    } else {
-                        CertValidation::None
-                    };
-                let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-                Ok(Box::new(Elastic {
-                    node_urls,
-                    config,
-                    cert_validation,
-                    credentials,
-                    response_tx,
-                    response_rx,
-                }))
             }
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
+            let credentials = if let Some((certfile, keyfile)) = tls_config
+                .as_ref()
+                .and_then(|tls| tls.cert.as_ref().zip(tls.key.as_ref()))
+            {
+                let mut cert_chain = async_std::fs::read(certfile).await?;
+                let mut key = async_std::fs::read(keyfile).await?;
+                key.append(&mut cert_chain);
+                let client_certificate = ClientCertificate::Pem(key);
+                Some(Credentials::Certificate(client_certificate))
+            } else {
+                match &config.auth {
+                    Auth::Basic { username, password } => {
+                        Some(Credentials::Basic(username.clone(), password.clone()))
+                    }
+                    Auth::Bearer(token) => Some(Credentials::Bearer(token.clone())),
+                    Auth::ElasticsearchApiKey { id, api_key } => {
+                        Some(Credentials::ApiKey(id.clone(), api_key.clone()))
+                    }
+                    // Gcp Auth is handled in sink connect
+                    Auth::Gcp | Auth::None => None,
+                }
+            };
+            let cert_validation =
+                if let Some(cafile) = tls_config.as_ref().and_then(|tls| tls.cafile.as_ref()) {
+                    let file = async_std::fs::read(cafile).await?;
+                    CertValidation::Full(file)
+                } else if tls_config.is_some() {
+                    CertValidation::Default
+                } else {
+                    CertValidation::None
+                };
+            let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+            Ok(Box::new(Elastic {
+                node_urls,
+                config,
+                cert_validation,
+                credentials,
+                response_tx,
+                response_rx,
+            }))
         }
     }
 }

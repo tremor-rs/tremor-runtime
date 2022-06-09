@@ -64,43 +64,44 @@ impl ConnectorBuilder for Builder {
         "http_server".into()
     }
 
-    async fn build(&self, id: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(config) = &raw_config.config {
-            let config = Config::new(config)?;
-            let tls_server_config = config.tls.clone();
+    async fn build_cfg(
+        &self,
+        id: &str,
+        raw_config: &ConnectorConfig,
+        config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = Config::new(config)?;
+        let tls_server_config = config.tls.clone();
 
-            if tls_server_config.is_some() && config.url.scheme() != "https" {
-                return Err(ErrorKind::InvalidConnectorDefinition(
-                    id.to_string(),
-                    "Using SSL certificates requires setting up a https endpoint".into(),
-                )
-                .into());
-            }
-            let origin_uri = EventOriginUri {
-                scheme: "http-server".to_string(),
-                host: "localhost".to_string(),
-                port: None,
-                path: vec![],
-            };
-            // extract expected content types from configured codec
-            let configured_codec = raw_config
-                .codec
-                .as_ref()
-                .map_or_else(|| HttpServer::DEFAULT_CODEC.to_string(), |c| c.name.clone());
-            let inflight = Arc::default();
-            let codec_map = MimeCodecMap::with_overwrites(&config.custom_codecs);
-
-            Ok(Box::new(HttpServer {
-                config,
-                origin_uri,
-                tls_server_config,
-                inflight,
-                configured_codec,
-                codec_map,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
+        if tls_server_config.is_some() && config.url.scheme() != "https" {
+            return Err(ErrorKind::InvalidConnectorDefinition(
+                id.to_string(),
+                "Using SSL certificates requires setting up a https endpoint".into(),
+            )
+            .into());
         }
+        let origin_uri = EventOriginUri {
+            scheme: "http-server".to_string(),
+            host: "localhost".to_string(),
+            port: None,
+            path: vec![],
+        };
+        // extract expected content types from configured codec
+        let configured_codec = raw_config
+            .codec
+            .as_ref()
+            .map_or_else(|| HttpServer::DEFAULT_CODEC.to_string(), |c| c.name.clone());
+        let inflight = Arc::default();
+        let codec_map = MimeCodecMap::with_overwrites(&config.custom_codecs);
+
+        Ok(Box::new(HttpServer {
+            config,
+            origin_uri,
+            tls_server_config,
+            inflight,
+            configured_codec,
+            codec_map,
+        }))
     }
 }
 

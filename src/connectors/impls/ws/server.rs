@@ -54,30 +54,27 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "ws_server".into()
     }
-    async fn build(
+    async fn build_cfg(
         &self,
         _id: &str,
-        raw_config: &ConnectorConfig,
+        _: &ConnectorConfig,
+        raw_config: &Value,
     ) -> crate::errors::Result<Box<dyn Connector>> {
-        if let Some(raw_config) = &raw_config.config {
-            let config = Config::new(raw_config)?;
+        let config = Config::new(raw_config)?;
 
-            let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
-                Some(load_server_config(tls_config)?)
-            } else {
-                None
-            };
-
-            Ok(Box::new(WsServer {
-                config,
-                accept_task: None,  // not yet started
-                sink_runtime: None, // replaced in create_sink()
-                source_runtime: None,
-                tls_server_config,
-            }))
+        let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
+            Some(load_server_config(tls_config)?)
         } else {
-            Err(crate::errors::ErrorKind::MissingConfiguration(String::from("WsServer")).into())
-        }
+            None
+        };
+
+        Ok(Box::new(WsServer {
+            config,
+            accept_task: None,  // not yet started
+            sink_runtime: None, // replaced in create_sink()
+            source_runtime: None,
+            tls_server_config,
+        }))
     }
 }
 

@@ -41,18 +41,19 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "unix_socket_client".into()
     }
-    async fn build(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(raw_config) = &config.config {
-            let config = Config::new(raw_config)?;
-            let (source_tx, source_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-            Ok(Box::new(Client {
-                config,
-                source_tx,
-                source_rx,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
-        }
+    async fn build_cfg(
+        &self,
+        _: &str,
+        _: &ConnectorConfig,
+        conf: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = Config::new(conf)?;
+        let (source_tx, source_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        Ok(Box::new(Client {
+            config,
+            source_tx,
+            source_rx,
+        }))
     }
 }
 

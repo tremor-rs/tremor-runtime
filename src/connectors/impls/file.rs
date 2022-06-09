@@ -94,13 +94,14 @@ impl ConnectorBuilder for Builder {
         "file".into()
     }
 
-    async fn build(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(raw_config) = &config.config {
-            let config = Config::new(raw_config)?;
-            Ok(Box::new(File { config }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
-        }
+    async fn build_cfg(
+        &self,
+        _: &str,
+        _: &ConnectorConfig,
+        config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = Config::new(config)?;
+        Ok(Box::new(File { config }))
     }
 }
 

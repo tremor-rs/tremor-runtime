@@ -62,50 +62,51 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "tcp_client".into()
     }
-    async fn build(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(raw_config) = &config.config {
-            let config = Config::new(raw_config)?;
-            if config.url.port().is_none() {
-                return Err(ErrorKind::InvalidConnectorDefinition(
-                    id.to_string(),
-                    "Missing port for TCP client".to_string(),
-                )
-                .into());
-            }
-            let host = match config.url.host_str() {
-                Some(host) => host.to_string(),
-                None => {
-                    return Err(Error::from(ErrorKind::InvalidConnectorDefinition(
-                        id.to_string(),
-                        "missing host for TCP client".to_string(),
-                    )))
-                }
-            };
-            let (tls_connector, tls_domain) = match config.tls.as_ref() {
-                Some(Either::Right(true)) => {
-                    // default config
-                    (
-                        Some(tls_client_connector(&TLSClientConfig::default()).await?),
-                        Some(host),
-                    )
-                }
-                Some(Either::Left(tls_config)) => (
-                    Some(tls_client_connector(tls_config).await?),
-                    tls_config.domain.clone(),
-                ),
-                Some(Either::Right(false)) | None => (None, None),
-            };
-            let (source_tx, source_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-            Ok(Box::new(TcpClient {
-                config,
-                tls_connector,
-                tls_domain,
-                source_tx,
-                source_rx,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
+    async fn build_cfg(
+        &self,
+        id: &str,
+        _: &ConnectorConfig,
+        config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = Config::new(config)?;
+        if config.url.port().is_none() {
+            return Err(ErrorKind::InvalidConnectorDefinition(
+                id.to_string(),
+                "Missing port for TCP client".to_string(),
+            )
+            .into());
         }
+        let host = match config.url.host_str() {
+            Some(host) => host.to_string(),
+            None => {
+                return Err(Error::from(ErrorKind::InvalidConnectorDefinition(
+                    id.to_string(),
+                    "missing host for TCP client".to_string(),
+                )))
+            }
+        };
+        let (tls_connector, tls_domain) = match config.tls.as_ref() {
+            Some(Either::Right(true)) => {
+                // default config
+                (
+                    Some(tls_client_connector(&TLSClientConfig::default()).await?),
+                    Some(host),
+                )
+            }
+            Some(Either::Left(tls_config)) => (
+                Some(tls_client_connector(tls_config).await?),
+                tls_config.domain.clone(),
+            ),
+            Some(Either::Right(false)) | None => (None, None),
+        };
+        let (source_tx, source_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        Ok(Box::new(TcpClient {
+            config,
+            tls_connector,
+            tls_domain,
+            source_tx,
+            source_rx,
+        }))
     }
 }
 
