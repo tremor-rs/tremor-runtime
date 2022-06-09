@@ -180,7 +180,7 @@ smol = "1.2.5"
 cron = "0.11.0"
 
 # logstash grok patterns
-grok = "1"
+grok = "2"
 
 # rest onramp
 tide = { version = "0.16", default-features = false, features = [

@@ -1,4 +1,9 @@
 # Changelog
+## 0.13 UNRELEASED 
+
+### Breaking Changes
+
+- update grok to 0.2, optional patterns are now omitted no longer ""
 
 ### New features
 - Add `gcl_writer` Google Cloud Platform Cloud Logging connector for writing log entries
