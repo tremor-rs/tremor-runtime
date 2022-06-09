@@ -1242,6 +1242,7 @@ mod unit_tests {
     struct FakeContext {
         t: ConnectorType,
         notifier: reconnect::ConnectionLostNotifier,
+        beacon: QuiescenceBeacon,
     }
 
     impl FakeContext {
@@ -1249,6 +1250,7 @@ mod unit_tests {
             Self {
                 t: ConnectorType::from("snot"),
                 notifier: reconnect::ConnectionLostNotifier::new(tx),
+                beacon: QuiescenceBeacon::default(),
             }
         }
     }
@@ -1265,7 +1267,7 @@ mod unit_tests {
         }
 
         fn quiescence_beacon(&self) -> &QuiescenceBeacon {
-            panic!("snot") // yolo
+            &self.beacon
         }
 
         fn notifier(&self) -> &reconnect::ConnectionLostNotifier {
@@ -1281,6 +1283,12 @@ mod unit_tests {
     async fn spawn_task_error() -> Result<()> {
         let (tx, rx) = bounded(1);
         let ctx = FakeContext::new(tx);
+        // thanks coverage
+        ctx.quiescence_beacon();
+        ctx.notifier();
+        ctx.connector_type();
+        ctx.alias();
+        // end
         spawn_task(ctx.clone(), async move { return Err("snot".into()) }).await;
         assert!(matches!(rx.recv().await, Ok(Msg::ConnectionLost)));
 
