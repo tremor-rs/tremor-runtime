@@ -55,7 +55,7 @@ async fn no_hostname() -> Result<()> {
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
-            "endpoint": "https://:9090",
+            "endpoint": "file:///etc/passwd",
             "connect_timeout": 100000000,
             "topic": "projects/xxx/topics/test-a",
             "skip_authentication": false
@@ -64,7 +64,9 @@ async fn no_hostname() -> Result<()> {
 
     let harness =
         ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await;
+
     assert!(harness.is_err());
+
     Ok(())
 }
 
