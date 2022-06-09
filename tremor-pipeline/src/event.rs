@@ -114,7 +114,7 @@ impl Event {
         Event::cb_ack(self.ingest_ns, self.id.clone(), self.op_meta.clone())
     }
 
-    /// produce a `CBAction::Ack` insight event with the given time (in ms) in the metadata
+    /// produce a `CBAction::Ack` insight event with the given time (in nanoseconds) in the metadata
     #[must_use]
     pub fn insight_ack_with_timing(&mut self, processing_time: u64) -> Event {
         let mut e = self.insight_ack();
