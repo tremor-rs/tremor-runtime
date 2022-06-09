@@ -69,7 +69,6 @@ impl ConnectorBuilder for Builder {
         if config.min_part_size < MORE_THEN_FIVEMBS {
             return Err(err_conector_def(id, Self::PART_SIZE));
         }
-
         Ok(Box::new(S3Connector { config }))
     }
 }
