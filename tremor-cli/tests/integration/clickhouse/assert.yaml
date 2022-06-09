@@ -1,0 +1,5 @@
+name: clickhouse
+status: 0
+asserts:
+  - source: clickhouse_result.log
+    equals_file: expected_clickhouse_result.txt
