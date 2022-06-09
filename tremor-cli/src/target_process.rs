@@ -255,17 +255,14 @@ impl Display for TargetProcess {
 impl Drop for TargetProcess {
     fn drop(&mut self) {
         if let Some(handle) = self.stdout_handle.take() {
-            if let Err(e) = async_std::task::block_on(handle) {
-                eprintln!("target process drop error: {:?}", e);
-            }
+            async_std::task::block_on(handle.cancel());
         }
 
         if let Some(handle) = self.stderr_handle.take() {
-            if let Err(e) = async_std::task::block_on(handle) {
-                eprintln!("target process drop error: {:?}", e);
-            }
+            async_std::task::block_on(handle.cancel());
         }
-
+        // this errors if the process is already killed, but this is fine for us
+        let _ = self.process.kill().is_err();
         if let Err(e) = async_std::task::block_on(self.process.status()) {
             eprintln!("target process drop error: {:?}", e);
         }

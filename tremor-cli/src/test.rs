@@ -20,7 +20,7 @@ use crate::{
     cli::Test,
     errors::{Error, ErrorKind, Result},
 };
-use crate::{cli::TestMode, job};
+use crate::{cli::TestMode, target_process};
 use async_std::prelude::FutureExt;
 use globwalk::{FileType, GlobWalkerBuilder};
 use metadata::Meta;
@@ -386,7 +386,8 @@ impl Test {
                             t
                         }
                         TestMode::Integration => {
-                            let (s, t) = suite_integration(root, &config).await?;
+                            let res = suite_integration(root, &config).await;
+                            let (s, t) = res?;
                             integration_stats.merge(&s);
                             t
                         }
