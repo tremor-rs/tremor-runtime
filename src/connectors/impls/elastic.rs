@@ -20,7 +20,7 @@ use crate::{
         impls::http::utils::Header, prelude::*, sink::concurrency_cap::ConcurrencyCap,
         utils::tls::TLSClientConfig,
     },
-    errors::{Error, Kind as ErrorKind, Result},
+    errors::{err_conector_def, Error, Result},
 };
 use async_std::channel::{bounded, Receiver, Sender};
 use either::Either;
@@ -101,20 +101,12 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
         if config.nodes.is_empty() {
-            Err(ErrorKind::InvalidConnectorDefinition(
-                id.to_string(),
-                "empty nodes provided".into(),
-            )
-            .into())
+            Err(err_conector_def(id, "empty nodes provided"))
         } else {
             let node_urls = config
                 .nodes
                 .iter()
-                .map(|s| {
-                    Url::parse(s.as_str()).map_err(|e| {
-                        ErrorKind::InvalidConnectorDefinition(id.to_string(), e.to_string()).into()
-                    })
-                })
+                .map(|s| Url::parse(s.as_str()).map_err(|e| err_conector_def(id, e.to_string())))
                 .collect::<Result<Vec<Url>>>()?;
             let tls_config = match config.tls.as_ref() {
                 Some(Either::Left(tls_config)) => Some(tls_config.clone()),
@@ -124,13 +116,12 @@ impl ConnectorBuilder for Builder {
             if tls_config.is_some() {
                 for node_url in &node_urls {
                     if node_url.scheme() != "https" {
-                        return Err(ErrorKind::InvalidConnectorDefinition(
-                            id.to_string(),
+                        return Err(err_conector_def(
+                            id,
                             format!(
                                 "Node URL '{node_url}' needs 'https' scheme if tls is configured."
                             ),
-                        )
-                        .into());
+                        ));
                     }
                 }
             }

@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use super::{TcpDefaults, TcpReader, TcpWriter};
-use crate::connectors::{
-    prelude::*,
-    sink::channel_sink::ChannelSinkMsg,
-    utils::{
-        tls::{load_server_config, TLSServerConfig},
-        ConnectionMeta,
+use crate::{
+    connectors::{
+        prelude::*,
+        sink::channel_sink::ChannelSinkMsg,
+        utils::{
+            tls::{load_server_config, TLSServerConfig},
+            ConnectionMeta,
+        },
     },
+    errors::err_conector_def,
 };
 use async_std::{
     channel::{bounded, Receiver, Sender},
@@ -64,13 +67,13 @@ impl ConnectorBuilder for Builder {
     }
     async fn build_cfg(
         &self,
-        _: &str,
+        id: &str,
         _: &ConnectorConfig,
         config: &Value,
     ) -> crate::errors::Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         if config.url.port().is_none() {
-            return Err("Missing port for TCP server".into());
+            return Err(err_conector_def(id, "Missing port for TCP server"));
         }
         let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
             Some(load_server_config(tls_config)?)

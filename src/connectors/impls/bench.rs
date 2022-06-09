@@ -78,6 +78,15 @@ impl Builder {
     }
 }
 
+fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> Result<Vec<u8>> {
+    if base64 {
+        Ok(base64::decode(data)?)
+    } else {
+        let d: &[u8] = data.as_ref();
+        Ok(d.to_vec())
+    }
+}
+
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     async fn build_cfg(
@@ -104,25 +113,13 @@ impl ConnectorBuilder for Builder {
         let elements: Vec<Vec<u8>> = if let Some(chunk_size) = config.chunk_size {
             // split into sized chunks
             data.chunks(chunk_size)
-                .map(|e| -> Result<Vec<u8>> {
-                    if config.base64 {
-                        Ok(base64::decode(e)?)
-                    } else {
-                        Ok(e.to_vec())
-                    }
-                })
+                .map(|e| decode(config.base64, e))
                 .collect::<Result<_>>()?
         } else {
             // split into lines
             BufReader::new(data.as_slice())
                 .lines()
-                .map(|e| -> Result<Vec<u8>> {
-                    if config.base64 {
-                        Ok(base64::decode(&e?.as_bytes())?)
-                    } else {
-                        Ok(e?.as_bytes().to_vec())
-                    }
-                })
+                .map(|e| decode(config.base64, e?))
                 .collect::<Result<_>>()?
         };
         let num_elements = elements.len();

@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::spawn_task;
 use crate::connectors::{
     prelude::*,
     utils::{mime::MimeCodecMap, tls::TLSServerConfig},
 };
-use crate::errors::{Kind as ErrorKind, Result};
+use crate::{connectors::spawn_task, errors::err_conector_def};
 use async_std::channel::unbounded;
 use async_std::{
     channel::{bounded, Receiver, Sender},
@@ -58,6 +57,11 @@ impl ConfigImpl for Config {}
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
+impl Builder {
+    const HTTPS_REQUIRED: &'static str =
+        "Using SSL certificates requires setting up a https endpoint";
+}
+
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -74,11 +78,7 @@ impl ConnectorBuilder for Builder {
         let tls_server_config = config.tls.clone();
 
         if tls_server_config.is_some() && config.url.scheme() != "https" {
-            return Err(ErrorKind::InvalidConnectorDefinition(
-                id.to_string(),
-                "Using SSL certificates requires setting up a https endpoint".into(),
-            )
-            .into());
+            return Err(err_conector_def(id, Self::HTTPS_REQUIRED));
         }
         let origin_uri = EventOriginUri {
             scheme: "http-server".to_string(),

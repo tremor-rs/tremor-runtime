@@ -19,8 +19,8 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::TcpReader;
-use crate::connectors::prelude::*;
 use crate::connectors::utils::tls::{tls_client_connector, TLSClientConfig};
+use crate::{connectors::prelude::*, errors::err_conector_def};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::net::TcpStream;
 use async_std::prelude::*;
@@ -57,6 +57,10 @@ pub struct TcpClient {
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
+impl Builder {
+    const MISSING_PORT: &'static str = "Missing port for TCP client";
+    const MISSING_HOST: &'static str = "missing host for TCP client";
+}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -70,20 +74,11 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         if config.url.port().is_none() {
-            return Err(ErrorKind::InvalidConnectorDefinition(
-                id.to_string(),
-                "Missing port for TCP client".to_string(),
-            )
-            .into());
+            return Err(err_conector_def(id, Self::MISSING_PORT));
         }
         let host = match config.url.host_str() {
             Some(host) => host.to_string(),
-            None => {
-                return Err(Error::from(ErrorKind::InvalidConnectorDefinition(
-                    id.to_string(),
-                    "missing host for TCP client".to_string(),
-                )))
-            }
+            None => return Err(err_conector_def(id, Self::MISSING_HOST)),
         };
         let (tls_connector, tls_domain) = match config.tls.as_ref() {
             Some(Either::Right(true)) => {

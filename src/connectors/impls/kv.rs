@@ -19,6 +19,7 @@ use crate::{
         Codec,
     },
     connectors::prelude::*,
+    errors::err_conector_def,
 };
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::path::PathBuf;
@@ -170,6 +171,9 @@ impl ConfigImpl for Config {}
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
+impl Builder {
+    const INVALID_DIR: &'static str = "Invalid `dir`. Not a directory or not accessible.";
+}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -183,11 +187,7 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
         if !PathBuf::from(&config.dir).is_dir().await {
-            return Err(ErrorKind::InvalidConnectorDefinition(
-                id.to_string(),
-                "Invalid `dir`. Not a directory or not accessible.".to_string(),
-            )
-            .into());
+            return Err(err_conector_def(id, Builder::INVALID_DIR));
         }
 
         let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
