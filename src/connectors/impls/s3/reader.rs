@@ -82,19 +82,20 @@ impl ConnectorBuilder for Builder {
         ConnectorType::from(CONNECTOR_TYPE)
     }
 
-    async fn build(&self, id: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(config) = &raw_config.config {
-            let config = S3SourceConfig::new(config)?;
+    async fn build_cfg(
+        &self,
+        _: &str,
+        _: &ConnectorConfig,
+        config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = S3SourceConfig::new(config)?;
 
-            // TODO: display a warning if chunksize lesser than some quantity
-            Ok(Box::new(S3SourceConnector {
-                handles: Vec::with_capacity(config.max_connections),
-                config,
-                tx: None,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
-        }
+        // TODO: display a warning if chunksize lesser than some quantity
+        Ok(Box::new(S3SourceConnector {
+            handles: Vec::with_capacity(config.max_connections),
+            config,
+            tx: None,
+        }))
     }
 }
 

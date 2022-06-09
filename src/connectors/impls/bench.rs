@@ -15,7 +15,6 @@
 // #![cfg_attr(coverage, no_coverage)] // This is for benchmarking and testing
 
 use crate::connectors::prelude::*;
-use crate::errors::Kind as ErrorKind;
 use crate::system::{ShutdownMode, World};
 use hdrhistogram::Histogram;
 use std::io::{stdout, Write};
@@ -81,72 +80,73 @@ impl Builder {
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
-    async fn build(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(config) = &config.config {
-            let config: Config = Config::new(config)?;
-            let mut source_data_file = file::open(&config.source)?;
-            let mut data = vec![];
-            let ext = file::extension(&config.source);
-            if ext == Some("xz") {
-                XzDecoder::new(source_data_file).read_to_end(&mut data)?;
-            } else {
-                source_data_file.read_to_end(&mut data)?;
-            };
-            let origin_uri = EventOriginUri {
-                scheme: "tremor-blaster".to_string(),
-                host: hostname(),
-                port: None,
-                path: vec![config.source.clone()],
-            };
-            let elements: Vec<Vec<u8>> = if let Some(chunk_size) = config.chunk_size {
-                // split into sized chunks
-                data.chunks(chunk_size)
-                    .map(|e| -> Result<Vec<u8>> {
-                        if config.base64 {
-                            Ok(base64::decode(e)?)
-                        } else {
-                            Ok(e.to_vec())
-                        }
-                    })
-                    .collect::<Result<_>>()?
-            } else {
-                // split into lines
-                BufReader::new(data.as_slice())
-                    .lines()
-                    .map(|e| -> Result<Vec<u8>> {
-                        if config.base64 {
-                            Ok(base64::decode(&e?.as_bytes())?)
-                        } else {
-                            Ok(e?.as_bytes().to_vec())
-                        }
-                    })
-                    .collect::<Result<_>>()?
-            };
-            let num_elements = elements.len();
-            let stop_after_events = config.iters.map(|i| i * num_elements);
-            let stop_after_secs = if config.stop_after_secs == 0 {
-                None
-            } else {
-                Some(config.stop_after_secs + config.warmup_secs)
-            };
-            let stop_after = StopAfter {
-                events: stop_after_events,
-                seconds: stop_after_secs,
-            };
-            if stop_after.events.is_none() && stop_after.seconds.is_none() {
-                warn!("[Connector::{id}] No stop condition is specified. This connector will emit events infinitely.");
-            }
-
-            Ok(Box::new(Bench {
-                config,
-                acc: Acc { elements, count: 0 },
-                origin_uri,
-                stop_after,
-                world: self.world.clone(),
-            }))
+    async fn build_cfg(
+        &self,
+        id: &str,
+        _: &ConnectorConfig,
+        config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config: Config = Config::new(config)?;
+        let mut source_data_file = file::open(&config.source)?;
+        let mut data = vec![];
+        let ext = file::extension(&config.source);
+        if ext == Some("xz") {
+            XzDecoder::new(source_data_file).read_to_end(&mut data)?;
         } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
+            source_data_file.read_to_end(&mut data)?;
+        };
+        let origin_uri = EventOriginUri {
+            scheme: "tremor-blaster".to_string(),
+            host: hostname(),
+            port: None,
+            path: vec![config.source.clone()],
+        };
+        let elements: Vec<Vec<u8>> = if let Some(chunk_size) = config.chunk_size {
+            // split into sized chunks
+            data.chunks(chunk_size)
+                .map(|e| -> Result<Vec<u8>> {
+                    if config.base64 {
+                        Ok(base64::decode(e)?)
+                    } else {
+                        Ok(e.to_vec())
+                    }
+                })
+                .collect::<Result<_>>()?
+        } else {
+            // split into lines
+            BufReader::new(data.as_slice())
+                .lines()
+                .map(|e| -> Result<Vec<u8>> {
+                    if config.base64 {
+                        Ok(base64::decode(&e?.as_bytes())?)
+                    } else {
+                        Ok(e?.as_bytes().to_vec())
+                    }
+                })
+                .collect::<Result<_>>()?
+        };
+        let num_elements = elements.len();
+        let stop_after_events = config.iters.map(|i| i * num_elements);
+        let stop_after_secs = if config.stop_after_secs == 0 {
+            None
+        } else {
+            Some(config.stop_after_secs + config.warmup_secs)
+        };
+        let stop_after = StopAfter {
+            events: stop_after_events,
+            seconds: stop_after_secs,
+        };
+        if stop_after.events.is_none() && stop_after.seconds.is_none() {
+            warn!("[Connector::{id}] No stop condition is specified. This connector will emit events infinitely.");
         }
+
+        Ok(Box::new(Bench {
+            config,
+            acc: Acc { elements, count: 0 },
+            origin_uri,
+            stop_after,
+            world: self.world.clone(),
+        }))
     }
 
     fn connector_type(&self) -> ConnectorType {

@@ -40,13 +40,14 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "udp_server".into()
     }
-    async fn build(&self, id: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(raw) = &raw_config.config {
-            let config = Config::new(raw)?;
-            Ok(Box::new(UdpServer { config }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
-        }
+    async fn build_cfg(
+        &self,
+        _: &str,
+        _: &ConnectorConfig,
+        raw: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = Config::new(raw)?;
+        Ok(Box::new(UdpServer { config }))
     }
 }
 

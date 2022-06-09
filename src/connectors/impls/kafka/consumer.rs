@@ -75,60 +75,61 @@ impl ConnectorBuilder for Builder {
         "kafka_consumer".into()
     }
 
-    async fn build(&self, alias: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+    async fn build_cfg(
+        &self,
+        alias: &str,
+        config: &ConnectorConfig,
+        raw_config: &Value,
+    ) -> Result<Box<dyn Connector>> {
         let metrics_interval_s = config.metrics_interval_s;
-        if let Some(raw_config) = &config.config {
-            let config = Config::new(raw_config)?;
-            // returns the first broker if all are valid
-            let (host, port) = super::verify_brokers(alias, &config.brokers)?;
-            let origin_uri = EventOriginUri {
-                scheme: "tremor-kafka".to_string(),
-                host,
-                port,
-                path: vec![],
-            };
+        let config = Config::new(raw_config)?;
+        // returns the first broker if all are valid
+        let (host, port) = super::verify_brokers(alias, &config.brokers)?;
+        let origin_uri = EventOriginUri {
+            scheme: "tremor-kafka".to_string(),
+            host,
+            port,
+            path: vec![],
+        };
 
-            let tid = task::current().id();
-            let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, tid);
-            let mut client_config = ClientConfig::new();
-            client_config
-                .set("group.id", config.group_id.clone())
-                .set("client.id", &client_id)
-                .set("bootstrap.servers", &config.brokers.join(","));
-            // .set("enable.partition.eof", "false")
-            // .set("session.timeout.ms", "6000")
-            // .set("enable.auto.commit", "true")
-            // .set("auto.commit.interval.ms", "5000")
-            // .set("enable.auto.offset.store", "true");
+        let tid = task::current().id();
+        let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, tid);
+        let mut client_config = ClientConfig::new();
+        client_config
+            .set("group.id", config.group_id.clone())
+            .set("client.id", &client_id)
+            .set("bootstrap.servers", &config.brokers.join(","));
+        // .set("enable.partition.eof", "false")
+        // .set("session.timeout.ms", "6000")
+        // .set("enable.auto.commit", "true")
+        // .set("auto.commit.interval.ms", "5000")
+        // .set("enable.auto.offset.store", "true");
 
-            if let Some(metrics_interval_s) = metrics_interval_s {
-                // enable stats collection
-                client_config.set(
-                    "statistics.interval.ms",
-                    format!("{}", metrics_interval_s * 1000),
-                );
-            }
-            config
-                .rdkafka_options
-                .iter()
-                .flat_map(halfbrown::HashMap::iter)
-                .for_each(|(k, v)| {
-                    client_config.set(k, v);
-                });
-
-            debug!(
-                "[Connector::{}] Kafka Consumer Config: {:?}",
-                alias, &client_config
+        if let Some(metrics_interval_s) = metrics_interval_s {
+            // enable stats collection
+            client_config.set(
+                "statistics.interval.ms",
+                format!("{}", metrics_interval_s * 1000),
             );
-
-            Ok(Box::new(KafkaConsumerConnector {
-                config,
-                client_config,
-                origin_uri,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(alias.to_string()).into())
         }
+        config
+            .rdkafka_options
+            .iter()
+            .flat_map(halfbrown::HashMap::iter)
+            .for_each(|(k, v)| {
+                client_config.set(k, v);
+            });
+
+        debug!(
+            "[Connector::{}] Kafka Consumer Config: {:?}",
+            alias, &client_config
+        );
+
+        Ok(Box::new(KafkaConsumerConnector {
+            config,
+            client_config,
+            origin_uri,
+        }))
     }
 }
 

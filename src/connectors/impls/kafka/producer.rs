@@ -73,45 +73,46 @@ impl ConnectorBuilder for Builder {
         "kafka_producer".into()
     }
 
-    async fn build(&self, alias: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+    async fn build_cfg(
+        &self,
+        alias: &str,
+        config: &ConnectorConfig,
+        raw_config: &Value,
+    ) -> Result<Box<dyn Connector>> {
         let metrics_interval_s = config.metrics_interval_s;
-        if let Some(raw_config) = &config.config {
-            let config = Config::new(raw_config)?;
+        let config = Config::new(raw_config)?;
 
-            super::verify_brokers(alias, &config.brokers)?;
-            let mut producer_config = ClientConfig::new();
+        super::verify_brokers(alias, &config.brokers)?;
+        let mut producer_config = ClientConfig::new();
 
-            // ENABLE LIBRDKAFKA DEBUGGING:
-            // - set librdkafka logger to debug in logger.yaml
-            // - configure: debug: "all" for this onramp
-            let tid = task::current().id();
-            let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, tid);
-            producer_config
-                .set("client.id", &client_id)
-                .set("bootstrap.servers", config.brokers.join(","));
-            // .set("message.timeout.ms", "5000")
-            // .set("queue.buffering.max.ms", "0"); // set to 0 for sending each message out immediately without kafka client internal batching --> low latency, busy network
-            if let Some(metrics_interval_s) = metrics_interval_s {
-                // enable stats collection
-                producer_config.set(
-                    "statistics.interval.ms",
-                    format!("{}", metrics_interval_s * 1000),
-                );
-            }
-            config
-                .rdkafka_options
-                .iter()
-                .flat_map(halfbrown::HashMap::iter)
-                .for_each(|(k, v)| {
-                    producer_config.set(k, v);
-                });
-            Ok(Box::new(KafkaProducerConnector {
-                config,
-                producer_config,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(alias.to_string()).into())
+        // ENABLE LIBRDKAFKA DEBUGGING:
+        // - set librdkafka logger to debug in logger.yaml
+        // - configure: debug: "all" for this onramp
+        let tid = task::current().id();
+        let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, tid);
+        producer_config
+            .set("client.id", &client_id)
+            .set("bootstrap.servers", config.brokers.join(","));
+        // .set("message.timeout.ms", "5000")
+        // .set("queue.buffering.max.ms", "0"); // set to 0 for sending each message out immediately without kafka client internal batching --> low latency, busy network
+        if let Some(metrics_interval_s) = metrics_interval_s {
+            // enable stats collection
+            producer_config.set(
+                "statistics.interval.ms",
+                format!("{}", metrics_interval_s * 1000),
+            );
         }
+        config
+            .rdkafka_options
+            .iter()
+            .flat_map(halfbrown::HashMap::iter)
+            .for_each(|(k, v)| {
+                producer_config.set(k, v);
+            });
+        Ok(Box::new(KafkaProducerConnector {
+            config,
+            producer_config,
+        }))
     }
 }
 

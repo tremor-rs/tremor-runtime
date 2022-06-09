@@ -65,24 +65,21 @@ impl ConnectorBuilder for Builder {
         CONNECTOR_TYPE.into()
     }
 
-    async fn build(
+    async fn build_cfg(
         &self,
         _id: &str,
-        connector_config: &ConnectorConfig,
+        _: &ConnectorConfig,
+        config: &Value,
     ) -> Result<Box<dyn Connector>> {
-        if let Some(config) = &connector_config.config {
-            let config = Config::new(config)?;
-            let origin_uri = EventOriginUri {
-                scheme: "tremor-otel-client".to_string(),
-                host: config.url.host_or_local().to_string(),
-                port: config.url.port(),
-                path: vec![],
-            };
+        let config = Config::new(config)?;
+        let origin_uri = EventOriginUri {
+            scheme: "tremor-otel-client".to_string(),
+            host: config.url.host_or_local().to_string(),
+            port: config.url.port(),
+            path: vec![],
+        };
 
-            Ok(Box::new(Client { config, origin_uri }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(String::from("OtelClient")).into())
-        }
+        Ok(Box::new(Client { config, origin_uri }))
     }
 }
 

@@ -12,16 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use super::{TcpDefaults, TcpReader, TcpWriter};
-use crate::{
-    connectors::{
-        prelude::*,
-        sink::channel_sink::ChannelSinkMsg,
-        utils::{
-            tls::{load_server_config, TLSServerConfig},
-            ConnectionMeta,
-        },
+use crate::connectors::{
+    prelude::*,
+    sink::channel_sink::ChannelSinkMsg,
+    utils::{
+        tls::{load_server_config, TLSServerConfig},
+        ConnectionMeta,
     },
-    errors::Kind as ErrorKind,
 };
 use async_std::{
     channel::{bounded, Receiver, Sender},
@@ -65,31 +62,28 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "tcp_server".into()
     }
-    async fn build(
+    async fn build_cfg(
         &self,
-        id: &str,
-        raw_config: &ConnectorConfig,
+        _: &str,
+        _: &ConnectorConfig,
+        config: &Value,
     ) -> crate::errors::Result<Box<dyn Connector>> {
-        if let Some(raw_config) = &raw_config.config {
-            let config = Config::new(raw_config)?;
-            if config.url.port().is_none() {
-                return Err("Missing port for TCP server".into());
-            }
-            let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
-                Some(load_server_config(tls_config)?)
-            } else {
-                None
-            };
-            let (sink_tx, sink_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-            Ok(Box::new(TcpServer {
-                config,
-                tls_server_config,
-                sink_tx,
-                sink_rx,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
+        let config = Config::new(config)?;
+        if config.url.port().is_none() {
+            return Err("Missing port for TCP server".into());
         }
+        let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
+            Some(load_server_config(tls_config)?)
+        } else {
+            None
+        };
+        let (sink_tx, sink_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        Ok(Box::new(TcpServer {
+            config,
+            tls_server_config,
+            sink_tx,
+            sink_rx,
+        }))
     }
 }
 

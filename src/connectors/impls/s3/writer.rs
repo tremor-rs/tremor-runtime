@@ -53,20 +53,21 @@ impl ConnectorBuilder for Builder {
         ConnectorType::from(CONNECTOR_TYPE)
     }
 
-    async fn build(&self, id: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(config) = &raw_config.config {
-            let config = S3Config::new(config)?;
+    async fn build_cfg(
+        &self,
+        id: &str,
+        _: &ConnectorConfig,
+        config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = S3Config::new(config)?;
 
-            // Maintain the minimum size of 5 MBs.
-            if config.min_part_size < MORE_THEN_FIVEMBS {
-                let e = format!("[Connector::{id}] Setting 'min_part_size' to 5MB, as S3 doesn't allow smaller parts.");
-                return Err(e.into());
-            }
-
-            Ok(Box::new(S3Connector { config }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
+        // Maintain the minimum size of 5 MBs.
+        if config.min_part_size < MORE_THEN_FIVEMBS {
+            let e = format!("[Connector::{id}] Setting 'min_part_size' to 5MB, as S3 doesn't allow smaller parts.");
+            return Err(e.into());
         }
+
+        Ok(Box::new(S3Connector { config }))
     }
 }
 

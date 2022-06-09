@@ -35,23 +35,24 @@ impl ConnectorBuilder for Builder {
         "metronome".into()
     }
 
-    async fn build(&self, id: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(raw) = &raw_config.config {
-            let config = Config::new(raw)?;
-            let origin_uri = EventOriginUri {
-                scheme: "tremor-metronome".to_string(),
-                host: hostname(),
-                port: None,
-                path: vec![config.interval.to_string()],
-            };
+    async fn build_cfg(
+        &self,
+        _: &str,
+        _: &ConnectorConfig,
+        raw: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = Config::new(raw)?;
+        let origin_uri = EventOriginUri {
+            scheme: "tremor-metronome".to_string(),
+            host: hostname(),
+            port: None,
+            path: vec![config.interval.to_string()],
+        };
 
-            Ok(Box::new(Metronome {
-                interval: config.interval,
-                origin_uri,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
-        }
+        Ok(Box::new(Metronome {
+            interval: config.interval,
+            origin_uri,
+        }))
     }
 }
 

@@ -76,21 +76,21 @@ impl ConnectorBuilder for Builder {
         "gpubsub_consumer".into()
     }
 
-    async fn build(&self, alias: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+    async fn build_cfg(
+        &self,
+        alias: &str,
+        _: &ConnectorConfig,
+        raw: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = Config::new(raw)?;
+        let url = Url::<HttpsDefaults>::parse(config.endpoint.as_str())?;
         let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, task::current().id());
 
-        if let Some(raw) = &raw_config.config {
-            let config = Config::new(raw)?;
-            let url = Url::<HttpsDefaults>::parse(config.endpoint.as_str())?;
-
-            Ok(Box::new(GSub {
-                config,
-                url,
-                client_id,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(alias.to_string()).into())
-        }
+        Ok(Box::new(GSub {
+            config,
+            url,
+            client_id,
+        }))
     }
 }
 

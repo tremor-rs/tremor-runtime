@@ -41,17 +41,18 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "udp_client".into()
     }
-    async fn build(&self, _id: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(config) = &raw_config.config {
-            let config: Config = Config::new(config)?;
-            if config.url.port().is_none() {
-                return Err("Missing port for UDP client".into());
-            }
-
-            Ok(Box::new(UdpClient { config }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(String::from("udp_client")).into())
+    async fn build_cfg(
+        &self,
+        _id: &str,
+        _: &ConnectorConfig,
+        config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config: Config = Config::new(config)?;
+        if config.url.port().is_none() {
+            return Err("Missing port for UDP client".into());
         }
+
+        Ok(Box::new(UdpClient { config }))
     }
 }
 

@@ -43,25 +43,26 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "wal".into()
     }
-    async fn build(&self, _id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(config) = &config.config {
-            let config: Config = Config::new(config)?;
+    async fn build_cfg(
+        &self,
+        _: &str,
+        _: &ConnectorConfig,
+        config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config: Config = Config::new(config)?;
 
-            let event_origin_uri = EventOriginUri {
-                scheme: "tremor-kv".to_string(),
-                host: "localhost".to_string(),
-                port: None,
-                path: config.dir.split('/').map(ToString::to_string).collect(),
-            };
-            let wal = qwal::Wal::open(&config.dir, config.chunk_size, config.max_chunks).await?;
+        let event_origin_uri = EventOriginUri {
+            scheme: "tremor-kv".to_string(),
+            host: "localhost".to_string(),
+            port: None,
+            path: config.dir.split('/').map(ToString::to_string).collect(),
+        };
+        let wal = qwal::Wal::open(&config.dir, config.chunk_size, config.max_chunks).await?;
 
-            Ok(Box::new(Wal {
-                event_origin_uri,
-                wal: Arc::new(Mutex::new(wal)),
-            }))
-        } else {
-            Err("[WAL Offramp] Offramp requires a config".into())
-        }
+        Ok(Box::new(Wal {
+            event_origin_uri,
+            wal: Arc::new(Mutex::new(wal)),
+        }))
     }
 }
 

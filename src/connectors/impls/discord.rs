@@ -44,28 +44,29 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "discord".into()
     }
-    async fn build(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(config) = &config.config {
-            let config: Config = Config::new(config)?;
+    async fn build_cfg(
+        &self,
+        _: &str,
+        _: &ConnectorConfig,
+        config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config: Config = Config::new(config)?;
 
-            let origin_uri = EventOriginUri {
-                scheme: "tremor-discord".to_string(),
-                host: "localhost".to_string(),
-                port: None,
-                path: vec![],
-            };
-            let message_channel = bounded(crate::QSIZE.load(Ordering::Relaxed));
-            let reply_channel = bounded(crate::QSIZE.load(Ordering::Relaxed));
-            Ok(Box::new(Discord {
-                config,
-                origin_uri,
-                client_task: None,
-                message_channel,
-                reply_channel,
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
-        }
+        let origin_uri = EventOriginUri {
+            scheme: "tremor-discord".to_string(),
+            host: "localhost".to_string(),
+            port: None,
+            path: vec![],
+        };
+        let message_channel = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        let reply_channel = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        Ok(Box::new(Discord {
+            config,
+            origin_uri,
+            client_task: None,
+            message_channel,
+            reply_channel,
+        }))
     }
 }
 

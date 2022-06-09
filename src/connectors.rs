@@ -1136,11 +1136,32 @@ pub(crate) trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
     /// the type of the connector
     fn connector_type(&self) -> ConnectorType;
 
-    /// create a connector from the given `id` and `config`
+    /// create a connector from the given `id` and `config`, if a connector config is mandatory
+    /// implement `build_cfg` instead
     ///
     /// # Errors
     ///  * If the config is invalid for the connector
-    async fn build(&self, alias: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>>;
+    async fn build(&self, alias: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+        let cc = config
+            .config
+            .as_ref()
+            .ok_or_else(|| ErrorKind::MissingConfiguration(alias.to_string()))?;
+        self.build_cfg(alias, config, cc).await
+    }
+
+    /// create a connector from the given `id` and `config`, if a connector config is mandatory
+    /// implement `build_cfg` instead
+    ///
+    /// # Errors
+    ///  * If the config is invalid for the connector
+    async fn build_cfg(
+        &self,
+        _alias: &str,
+        _config: &ConnectorConfig,
+        _connector_config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        Err("build_cfg is unimplemented".into())
+    }
 }
 
 /// builtin connector types

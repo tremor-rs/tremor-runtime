@@ -60,16 +60,17 @@ impl ConnectorBuilder for Builder {
         "cb".into()
     }
 
-    async fn build(&self, alias: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(raw) = &config.config {
-            let config = Config::new(raw)?;
-            Ok(Box::new(Cb {
-                config,
-                world: self.world.clone(),
-            }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(alias.to_string()).into())
-        }
+    async fn build_cfg(
+        &self,
+        _: &str,
+        _: &ConnectorConfig,
+        raw: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = Config::new(raw)?;
+        Ok(Box::new(Cb {
+            config,
+            world: self.world.clone(),
+        }))
     }
 }
 

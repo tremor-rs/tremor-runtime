@@ -36,35 +36,36 @@ impl ConnectorBuilder for Builder {
         "crononome".into()
     }
 
-    async fn build(&self, id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(raw) = &config.config {
-            let raw = Config::new(raw)?;
-            let payload = if let Some(yaml_entries) = raw.entries {
-                let mut entries = simd_json::to_vec(&yaml_entries)?;
-                let tremor_entries = tremor_value::parse_to_value(&mut entries)?;
-                Some(tremor_entries.into_static())
-            } else {
-                None
-            };
-
-            let entries = if let Some(Value::Array(entries)) = &payload {
-                entries
-                    .iter()
-                    .cloned()
-                    .map(CronEntryInt::try_from)
-                    .collect::<Result<Vec<CronEntryInt>>>()?
-            } else {
-                return Err(ErrorKind::InvalidConnectorDefinition(
-                    id.to_string(),
-                    "missing `entries` array".to_string(),
-                )
-                .into());
-            };
-
-            Ok(Box::new(Crononome { entries }))
+    async fn build_cfg(
+        &self,
+        id: &str,
+        _: &ConnectorConfig,
+        raw: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let raw = Config::new(raw)?;
+        let payload = if let Some(yaml_entries) = raw.entries {
+            let mut entries = simd_json::to_vec(&yaml_entries)?;
+            let tremor_entries = tremor_value::parse_to_value(&mut entries)?;
+            Some(tremor_entries.into_static())
         } else {
-            Err(ErrorKind::MissingConfiguration(id.to_string()).into())
-        }
+            None
+        };
+
+        let entries = if let Some(Value::Array(entries)) = &payload {
+            entries
+                .iter()
+                .cloned()
+                .map(CronEntryInt::try_from)
+                .collect::<Result<Vec<CronEntryInt>>>()?
+        } else {
+            return Err(ErrorKind::InvalidConnectorDefinition(
+                id.to_string(),
+                "missing `entries` array".to_string(),
+            )
+            .into());
+        };
+
+        Ok(Box::new(Crononome { entries }))
     }
 }
 
