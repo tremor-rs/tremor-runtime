@@ -64,7 +64,7 @@ impl Pattern {
                     .get("alias")
                     .and_then(|alias| Some((alias, m.get("pattern")?)))
                 {
-                    result.insert_definition(alias.to_string(), pattern.to_string());
+                    result.add_pattern(alias.to_string(), pattern.to_string());
                 } else {
                     return Err(format!("{}: {:?}", "Expected a non-NONE value", (num, &l)).into());
                 }
@@ -83,7 +83,7 @@ impl Pattern {
     /// # Errors
     /// if the pattern can not be compiled
     pub fn new(definition: &str) -> Result<Self> {
-        let mut grok = Grok::with_patterns();
+        let mut grok = Grok::with_default_patterns();
         if let Ok(pattern) = grok.compile(definition, true) {
             Ok(Self {
                 pattern: Arc::new(pattern),
@@ -216,7 +216,6 @@ mod tests {
            "wf_pod": "pod",
            "syslog_timestamp1": "Jul   7 10:51:24",
            "syslog_message": "foo bar baz",
-           "syslog_timestamp": "",
            "syslog_pri": "1",
            "syslog_hostname": "hostname",
            "wf_datacenter": "dc",
@@ -235,7 +234,6 @@ mod tests {
             pattern,
             "<%1>123 Jul   7 10:51:24 hostname 2019-04-01T09:59:19+0010 pod dc foo bar baz",
             literal!({
-               "syslog_timestamp1": "",
                "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
                "wf_datacenter": "dc",
                "syslog_hostname": "hostname",
@@ -259,7 +257,6 @@ mod tests {
                "syslog_version": "123",
                "syslog_message": "foo bar baz",
                "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
-               "syslog_timestamp": "",
                "syslog_pri": "1",
                "wf_pod": "pod",
                "wf_datacenter": "dc",
@@ -315,7 +312,6 @@ mod tests {
                "wf_pod": "pod",
                "syslog_pri": "1",
                "wf_datacenter": "dc",
-               "syslog_version": "",
                "syslog_message": "foo bar baz",
                "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010"
             }),
@@ -329,16 +325,9 @@ mod tests {
             pattern,
             "<invld>x>hostname.com bar baz",
             literal!({
-               "pid": "",
-               "syslog_program": "",
-               "syslog_timestamp": "",
                "syslog_message": "bar baz",
-               "wf_datacenter": "",
                "syslog_hostname": "hostname.com",
-               "syslog_error_prefix": "x",
-               "wf_pod": "",
-               "syslog_ingest_timestamp": "",
-               "program": ""
+               "syslog_error_prefix": "x"
             }),
         );
 
@@ -348,14 +337,9 @@ mod tests {
             literal!({
                "syslog_timestamp": "2019-04-01T09:59:19+0010",
                "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
-               "wf_datacenter": "",
-               "wf_pod": "",
                "syslog_hostname": "hostname.com",
-               "syslog_program": "",
                "syslog_message": "bar baz",
-               "pid": "",
                "syslog_error_prefix": "x y z",
-               "program": ""
             }),
         );
 
@@ -364,15 +348,9 @@ mod tests {
             "<invld>x y z>2019-04-01T09:59:19+0010 hostname.com bar baz",
             literal!({
                "syslog_timestamp": "2019-04-01T09:59:19+0010",
-               "syslog_ingest_timestamp": "",
-               "wf_datacenter": "",
-               "wf_pod": "",
                "syslog_hostname": "hostname.com",
-               "syslog_program": "",
                "syslog_message": "bar baz",
-               "pid": "",
                "syslog_error_prefix": "x y z",
-               "program": ""
             }),
         );
 
@@ -381,15 +359,11 @@ mod tests {
             "<invld>x y z>2019-04-01T09:59:19+0010 pod dc hostname.com bar baz",
             literal!({
                "syslog_timestamp": "2019-04-01T09:59:19+0010",
-               "syslog_ingest_timestamp": "",
                "wf_datacenter": "dc",
                "wf_pod": "pod",
                "syslog_hostname": "hostname.com",
-               "syslog_program": "",
                "syslog_message": "bar baz",
-               "pid": "",
                "syslog_error_prefix": "x y z",
-               "program": ""
             }),
         );
 
@@ -397,16 +371,11 @@ mod tests {
             pattern,
             "<invld>x y z>pod dc hostname.com bar baz",
             literal!({
-               "syslog_timestamp": "",
-               "syslog_ingest_timestamp": "",
                "wf_datacenter": "dc",
                "wf_pod": "pod",
                "syslog_hostname": "hostname.com",
-               "syslog_program": "",
                "syslog_message": "bar baz",
-               "pid": "",
                "syslog_error_prefix": "x y z",
-               "program": ""
             }),
         );
 
@@ -417,13 +386,9 @@ mod tests {
             literal!({
                "pid": "1234",
                "syslog_program": "program_name[1234]",
-               "syslog_timestamp": "",
                "syslog_message": " bar baz",
-               "wf_datacenter": "",
                "syslog_hostname": "hostname.com",
                "syslog_error_prefix": "x",
-               "wf_pod": "",
-               "syslog_ingest_timestamp": "",
                "program": "program_name"
             }),
         );
@@ -431,12 +396,9 @@ mod tests {
         assert_grok_ok(pattern, "<invld>x y z>2019-04-01T09:59:19+0010 2019-04-01T09:59:19+0010 hostname.com program_name: bar baz", literal!({
            "syslog_timestamp": "2019-04-01T09:59:19+0010",
            "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
-           "wf_datacenter": "",
-           "wf_pod": "",
            "syslog_hostname": "hostname.com",
            "syslog_program": "program_name",
            "syslog_message": " bar baz",
-           "pid": "",
            "syslog_error_prefix": "x y z",
            "program": "program_name"
         }));
@@ -446,9 +408,6 @@ mod tests {
             "<invld>x y z>2019-04-01T09:59:19+0010 hostname.com program_name[1234]: bar baz",
             literal!({
                "syslog_timestamp": "2019-04-01T09:59:19+0010",
-               "syslog_ingest_timestamp": "",
-               "wf_datacenter": "",
-               "wf_pod": "",
                "syslog_hostname": "hostname.com",
                "syslog_program": "program_name[1234]",
                "syslog_message": " bar baz",
@@ -463,13 +422,11 @@ mod tests {
             "<invld>x y z>2019-04-01T09:59:19+0010 pod dc hostname.com program_name: bar baz",
             literal!({
                "syslog_timestamp": "2019-04-01T09:59:19+0010",
-               "syslog_ingest_timestamp": "",
                "wf_datacenter": "dc",
                "wf_pod": "pod",
                "syslog_hostname": "hostname.com",
                "syslog_program": "program_name",
                "syslog_message": " bar baz",
-               "pid": "",
                "syslog_error_prefix": "x y z",
                "program": "program_name"
             }),
@@ -479,8 +436,6 @@ mod tests {
             pattern,
             "<invld>x y z>pod dc hostname.com program_name[1234]:bar baz",
             literal!({
-               "syslog_timestamp": "",
-               "syslog_ingest_timestamp": "",
                "wf_datacenter": "dc",
                "wf_pod": "pod",
                "syslog_hostname": "hostname.com",
