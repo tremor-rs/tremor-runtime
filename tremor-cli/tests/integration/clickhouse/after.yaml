@@ -1,0 +1,15 @@
+- dir: "."
+  cmd: "curl"
+  args:
+    - "-sv"
+    - "http://127.0.0.1:18123/"
+    - "--data-binary"
+    - "SELECT name, nickname FROM tremor ORDER BY name FORMAT JSONEachRow;"
+    - "-o"
+    - "clickhouse_result.log"
+- dir: "."
+  cmd: "docker"
+  args:
+    - "rm"
+    - "-f"
+    - "tremor-clickhouse-integration-blabla-unique"

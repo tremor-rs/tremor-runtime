@@ -48,6 +48,14 @@ fn default_dir() -> String {
     String::from(".")
 }
 
+fn default_max_await_secs() -> u64 {
+    0 // No delay by default as many tests won't depend on conditional resource allocation
+}
+
+fn default_min_await_secs() -> u64 {
+    0 // Wait for at least 1 seconds before starting tests that depend on background process
+}
+
 impl Before {
     pub(crate) async fn spawn(
         &self,
@@ -178,14 +186,6 @@ impl Before {
         }
         Ok(())
     }
-}
-
-fn default_max_await_secs() -> u64 {
-    0 // No delay by default as many tests won't depend on conditional resource allocation
-}
-
-fn default_min_await_secs() -> u64 {
-    0 // Wait for at least 1 seconds before starting tests that depend on background process
 }
 
 // load all the before definitions from before.yaml files

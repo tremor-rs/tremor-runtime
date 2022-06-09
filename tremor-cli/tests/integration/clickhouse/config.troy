@@ -1,0 +1,48 @@
+define flow clickhouse
+flow
+
+  use integration;
+  use std::time::nanos;
+
+  define connector clickhouse from clickhouse
+  with
+    config = {
+      # The hostname of the database node
+      "url": "127.0.0.1:19000",
+      # Compression
+      "compression": "lz4",
+      # The table to write data to
+      "table": "tremor",
+      "columns": [
+        # All the table's columns
+        {
+          # The column name
+          "name": "name",
+          # Its type
+          "type": "String",
+        },
+        {
+          "name": "nickname",
+          "type": "String",
+        },
+      ]
+    }
+  end;
+  create connector clickhouse;
+
+  create connector input from integration::read_file;
+  create pipeline main from integration::out_or_exit
+  with
+    delay = nanos::from_seconds(2)
+  end;
+
+  define connector exit from exit;
+  create connector exit;
+
+  connect /connector/input to /pipeline/main;
+  connect /pipeline/main/out to /connector/clickhouse;
+  connect /pipeline/main/exit to /connector/exit;
+
+end;
+
+deploy flow clickhouse;

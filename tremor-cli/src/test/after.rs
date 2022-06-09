@@ -70,14 +70,17 @@ impl After {
     }
 }
 
-pub(crate) fn load_after(path: &Path) -> Result<After> {
-    let tags_data = slurp_string(path)?;
-    match serde_yaml::from_str(&tags_data) {
-        Ok(s) => Ok(s),
-        Err(_not_well_formed) => Err(Error::from(format!(
-            "Unable to load `after.yaml` from path: {}",
-            path.display()
-        ))),
+pub(crate) fn load_after_defs(path: &Path) -> Result<Vec<After>> {
+    let after_data = slurp_string(path)?;
+    match serde_yaml::from_str::<Vec<After>>(&after_data) {
+        Ok(afters) => Ok(afters),
+        Err(_no_vec) => match serde_yaml::from_str::<After>(&after_data) {
+            Ok(after) => Ok(vec![after]),
+            Err(_e) => Err(Error::from(format!(
+                "Unable to load `after.yaml` from path: {}",
+                path.display()
+            ))),
+        },
     }
 }
 
@@ -99,18 +102,20 @@ impl AfterController {
         let after_path = root.join("after.yaml");
         // This is optional
         if (&after_path).is_file() {
-            let after_json = load_after(&after_path)?;
-            let after_process = after_json.spawn(root, &self.env).await?;
-            if let Some(mut process) = after_process {
-                let after_out_file = root.join("after.out.log");
-                let after_err_file = root.join("after.err.log");
-                let after_process = async_std::task::spawn(async move {
-                    if let Err(e) = process.tail(&after_out_file, &after_err_file).await {
-                        eprintln!("failed to tail tremor process: {}", e);
-                    }
-                });
+            let after_jsons = load_after_defs(&after_path)?;
+            for (i, after_json) in after_jsons.into_iter().enumerate() {
+                let after_process = after_json.spawn(root, &self.env).await?;
+                if let Some(mut process) = after_process {
+                    let after_out_file = root.join(format!("after.out.{i}.log"));
+                    let after_err_file = root.join(format!("after.err.{i}.log"));
+                    let after_process = async_std::task::spawn(async move {
+                        if let Err(e) = process.tail(&after_out_file, &after_err_file).await {
+                            eprintln!("failed to tail tremor process: {}", e);
+                        }
+                    });
 
-                after_process.await;
+                    after_process.await;
+                }
             }
         }
         Ok(())
