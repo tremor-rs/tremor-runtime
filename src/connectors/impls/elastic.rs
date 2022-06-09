@@ -106,7 +106,7 @@ impl ConnectorBuilder for Builder {
             let node_urls = config
                 .nodes
                 .iter()
-                .map(|s| Url::parse(s.as_str()).map_err(|e| err_conector_def(id, e.to_string())))
+                .map(|s| Url::parse(s.as_str()).map_err(|e| err_conector_def(id, &e)))
                 .collect::<Result<Vec<Url>>>()?;
             let tls_config = match config.tls.as_ref() {
                 Some(Either::Left(tls_config)) => Some(tls_config.clone()),
@@ -116,12 +116,8 @@ impl ConnectorBuilder for Builder {
             if tls_config.is_some() {
                 for node_url in &node_urls {
                     if node_url.scheme() != "https" {
-                        return Err(err_conector_def(
-                            id,
-                            format!(
-                                "Node URL '{node_url}' needs 'https' scheme if tls is configured."
-                            ),
-                        ));
+                        let e = format!("Node URL '{node_url}' needs 'https' scheme with tls.");
+                        return Err(err_conector_def(id, &e));
                     }
                 }
             }

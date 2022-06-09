@@ -53,14 +53,12 @@ fn verify_brokers(id: &str, brokers: &[String]) -> Result<(String, Option<u16>)>
             [host, port] => {
                 let port: u16 = port
                     .parse()
-                    .map_err(|_| err_conector_def(id, format!("Invalid broker: {host}:{port}")))?;
+                    .map_err(|_| err_conector_def(id, &format!("Invalid broker: {host}:{port}")))?;
                 first_broker.get_or_insert_with(|| ((*host).to_string(), Some(port)));
             }
             b => {
-                return Err(err_conector_def(
-                    id,
-                    format!("Invalid broker: {}", b.join(":")),
-                ))
+                let e = format!("Invalid broker: {}", b.join(":"));
+                return Err(err_conector_def(id, &e));
             }
         }
     }
