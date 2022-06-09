@@ -22,8 +22,8 @@ const OVERFLOW: Cow<'static, str> = Cow::const_str("overflow");
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    /// The maximum allowed timeout before backoff is applied
-    pub timeout: f64,
+    /// The maximum allowed timeout before backoff is applied in nanoseconds
+    pub timeout: u64,
     /// Percentage to drecrease on bad feedback as a float betwen `1.0`
     /// and `0.0`.
     ///
@@ -128,7 +128,7 @@ mod test {
     fn pass_wo_error() {
         let uid = OperatorId::new(0);
         let mut op: Percentile = Config {
-            timeout: 100.0,
+            timeout: 100_000_000,
             step_up: default_step_up(),
             step_down: default_step_down(),
         }
@@ -172,7 +172,7 @@ mod test {
     #[test]
     fn drop_on_timeout() {
         let mut op: Percentile = Config {
-            timeout: 100.0,
+            timeout: 100_000_000,
             step_down: default_step_down(),
             step_up: default_step_up(),
         }
@@ -201,10 +201,10 @@ mod test {
         // this is over our limit of `100` so we syould move
         // one up the backup steps
         let mut m = Object::with_capacity(1);
-        m.insert("time".into(), 200.0.into());
+        m.insert("time".into(), 200_000_000.into());
 
         // this will use the right op_meta
-        let mut insight = event.insight_ack_with_timing(101);
+        let mut insight = event.insight_ack_with_timing(100_000_001);
 
         // Verify that we increased our percentage
         op.on_contraflow(uid, &mut insight);
@@ -235,7 +235,7 @@ mod test {
     #[test]
     fn drop_on_error() {
         let mut op: Percentile = Config {
-            timeout: 100.0,
+            timeout: 100_000_000,
             step_down: 0.25,
             step_up: 0.1,
         }
@@ -243,7 +243,7 @@ mod test {
         let uid = OperatorId::new(123);
         // An contraflow that fails the timeout
         let mut m = Object::new();
-        m.insert("time".into(), 200.0.into());
+        m.insert("time".into(), 200_000_000.into());
 
         let mut op_meta = OpMeta::default();
         op_meta.insert(uid, OwnedValue::null());

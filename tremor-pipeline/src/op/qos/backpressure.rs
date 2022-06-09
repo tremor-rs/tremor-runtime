@@ -49,8 +49,8 @@ impl Default for Method {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
-    /// The maximum allowed timeout before backoff is applied in ms
-    pub timeout: f64,
+    /// The maximum allowed timeout before backoff is applied in nanoseconds
+    pub timeout: u64,
     /// A list of backoff steps in ms, wich are progressed through as long
     /// as the maximum timeout is exceeded
     ///
@@ -228,7 +228,7 @@ mod test {
     fn pass_wo_error() {
         let operator_id = OperatorId::new(0);
         let mut op: Backpressure = Config {
-            timeout: 100.0,
+            timeout: 100_000_000,
             steps: vec![1, 10, 100],
             method: Method::Discard,
         }
@@ -273,7 +273,7 @@ mod test {
     fn halt_on_error() {
         let operator_id = OperatorId::new(0);
         let mut op: Backpressure = Config {
-            timeout: 100.0,
+            timeout: 100_000_000,
             steps: vec![1, 10, 100],
             method: Method::Discard,
         }
@@ -301,7 +301,7 @@ mod test {
         // this is over our limit of `100` so we syould move
         // one up the backup steps
         let mut m = Object::new();
-        m.insert("time".into(), 200.0.into());
+        m.insert("time".into(), 200_000_000.into());
 
         let mut op_meta = OpMeta::default();
         op_meta.insert(operator_id, OwnedValue::null());
@@ -370,7 +370,7 @@ mod test {
     fn halt_on_error_cb() -> Result<()> {
         let operator_id = OperatorId::new(0);
         let mut op: Backpressure = Config {
-            timeout: 100.0,
+            timeout: 100_000_000,
             steps: vec![1, 10, 100],
             method: Method::Pause,
         }
@@ -395,7 +395,7 @@ mod test {
         // this is over our limit of `100` so we syould move
         // one up the backup steps
         let mut m = Object::new();
-        m.insert("time".into(), 200.0.into());
+        m.insert("time".into(), 200_000_000.into());
 
         let mut op_meta = OpMeta::default();
         op_meta.insert(operator_id, OwnedValue::null());
@@ -471,14 +471,14 @@ mod test {
     fn walk_backoff() {
         let operator_id = OperatorId::new(0);
         let mut op: Backpressure = Config {
-            timeout: 100.0,
+            timeout: 100_000_000,
             steps: vec![1, 10, 100],
             method: Method::Discard,
         }
         .into();
         // An contraflow that fails the timeout
         let mut m = Object::new();
-        m.insert("time".into(), 200.0.into());
+        m.insert("time".into(), 200_000_000.into());
         let mut op_meta = OpMeta::default();
         op_meta.insert(operator_id, OwnedValue::null());
 
@@ -492,7 +492,7 @@ mod test {
 
         // A contraflow that passes the timeout
         let m = literal!({
-            "time": 99.0
+            "time": 99_000_000
         });
         let mut op_meta = OpMeta::default();
         op_meta.insert(operator_id, OwnedValue::null());

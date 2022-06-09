@@ -3,11 +3,12 @@
 ## Unreleased
 ### New features
 
-- Added the `gpubsub-consumer` connector
+- Added the `gpubsub_consumer` connector
 
 ### Fixes
 
 - Fix race condition leading to quiescence timeout when shutting down Tremor
+- Fix `timeout` config unit mismatch in `qos::backpressure` and `qos::percentile` operators. Changed to nanoseconds precision. 
 
 
 ## [0.12.1]
