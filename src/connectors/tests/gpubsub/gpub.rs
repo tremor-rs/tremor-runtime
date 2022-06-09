@@ -62,7 +62,8 @@ async fn no_hostname() -> Result<()> {
         }
     });
 
-    let harness = ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await;
+    let harness =
+        ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await;
     assert!(harness.is_err());
     Ok(())
 }
