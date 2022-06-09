@@ -1149,8 +1149,7 @@ pub(crate) trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
         self.build_cfg(alias, config, cc).await
     }
 
-    /// create a connector from the given `id` and `config`, if a connector config is mandatory
-    /// implement `build_cfg` instead
+    /// create a connector from the given `alias`, outer `ConnectorConfig` and the connector-specific `connector_config`
     ///
     /// # Errors
     ///  * If the config is invalid for the connector
