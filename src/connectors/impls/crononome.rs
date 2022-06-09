@@ -13,7 +13,7 @@
 // limitations under the License.
 mod handler;
 
-use crate::connectors::prelude::*;
+use crate::{connectors::prelude::*, errors::err_conector_def};
 use handler::{ChronomicQueue, CronEntryInt};
 use serde_yaml::Value as YamlValue;
 use tremor_common::time::nanotime;
@@ -58,11 +58,7 @@ impl ConnectorBuilder for Builder {
                 .map(CronEntryInt::try_from)
                 .collect::<Result<Vec<CronEntryInt>>>()?
         } else {
-            return Err(ErrorKind::InvalidConnectorDefinition(
-                id.to_string(),
-                "missing `entries` array".to_string(),
-            )
-            .into());
+            return Err(err_conector_def(id, "missing `entries` array"));
         };
 
         Ok(Box::new(Crononome { entries }))

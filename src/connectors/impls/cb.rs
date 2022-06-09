@@ -16,8 +16,8 @@
 
 use std::time::Duration;
 
-use crate::connectors::prelude::*;
 use crate::system::{ShutdownMode, World};
+use crate::{connectors::prelude::*, errors::err_conector_def};
 use async_std::io::prelude::BufReadExt;
 use async_std::stream::StreamExt;
 use async_std::{fs::File, io};
@@ -239,11 +239,7 @@ impl CbSource {
                 world,
             })
         } else {
-            Err(ErrorKind::InvalidConnectorDefinition(
-                alias.to_string(),
-                String::from("Missing path key."),
-            )
-            .into())
+            Err(err_conector_def(alias, "Missing path key."))
         }
     }
 }
