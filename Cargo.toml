@@ -202,10 +202,10 @@ prost-types = "0.9.0"
 tremor-otelapis = { version = "0.2.4" }
 
 # aws-s3
-aws-sdk-s3 = "0.12"
-aws-types = "0.12"
-aws-config = "0.12"
-aws-smithy-http = "0.42"
+aws-sdk-s3 = "0.13"
+aws-types = "0.13"
+aws-config = "0.13"
+aws-smithy-http = "0.43"
 
 # gcp
 googapis = { version = "0.6", default-features = false, features = [
