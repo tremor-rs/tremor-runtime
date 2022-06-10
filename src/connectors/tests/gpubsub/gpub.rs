@@ -209,6 +209,8 @@ async fn simple_publish() -> Result<()> {
         );
     }
 
+    harness.stop().await?;
+
     Ok(())
 }
 
@@ -291,6 +293,8 @@ async fn simple_publish_with_timeout() -> Result<()> {
         .timeout(Duration::from_secs(10))
         .await?
         .unwrap();
+
+    harness.stop().await?;
 
     Ok(())
 }
