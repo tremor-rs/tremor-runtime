@@ -220,7 +220,13 @@ async fn connector_elastic() -> Result<()> {
                     "field2": "another_string",
                     "field3": [],
                 },
-                "meta": {}
+                "meta": {
+                    "elastic": {
+                        "_id": "versioned_id_001",
+                        "version": 42,
+                        "version_type": "external"
+                    }
+                }
             }
         },
         {
@@ -278,7 +284,7 @@ async fn connector_elastic() -> Result<()> {
             "elastic": {
                 "_index": "my_index",
                 "_type": "_doc",
-                "version": 1,
+                "version": 42,
                 "action": "index",
                 "success": true
             }
@@ -304,7 +310,7 @@ async fn connector_elastic() -> Result<()> {
                 "result": "created",
                 "_seq_no": 2,
                 "status": 201,
-                "_version": 1
+                "_version": 42
             }
         }),
         data
@@ -356,6 +362,60 @@ async fn connector_elastic() -> Result<()> {
     let cf = in_pipe.get_contraflow().await?;
     assert_eq!(CbAction::Ack, cf.cb);
     assert_eq!(batched_id, cf.id);
+
+    // try an update with all da options
+    let update_data = literal!({
+        "snot": "badger"
+    });
+    let update_meta = literal!({
+        "elastic": {
+            "action": "update",
+            "_id": "1234",
+            "_index": "my_index",
+            "if_seq_no": 1,
+            "if_primary_term": 1,
+            //"retry_on_conflict": 3
+        }
+    });
+    let update_id = EventId::new(0, 0, 2, 2);
+    let update_event = Event {
+        id: update_id.clone(),
+        is_batch: false,
+        transactional: false,
+        data: (update_data, update_meta).into(),
+        ..Event::default()
+    };
+    harness.send_to_sink(update_event, IN).await?;
+    let out_event = out.get_event().await?;
+    let meta = out_event.data.suffix().meta();
+    assert_eq!(literal!({
+        "elastic": {
+            "_id": "1234",
+            "_index": "my_index",
+            "_type": "_doc",
+            "version": 2,
+            "action": "update",
+            "success": true
+        }
+    }), meta);
+    assert_eq!(literal!({
+        "update": {
+            "_primary_term": 1,
+            "_shards": {
+                "total": 2,
+                "successful": 1,
+                "failed": 0
+            },
+            "_type": "_doc",
+            "_index": "my_index",
+            "result": "updated",
+            "_id": "1234",
+            "_seq_no": 4,
+            "status": 200,
+            "_version": 2
+        }
+    }), out_event.data.suffix().value());
+
 
     // check what happens when ES isnt reachable
     container.stop();
