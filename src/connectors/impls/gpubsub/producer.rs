@@ -32,7 +32,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
-use tonic::Status;
+use tonic::{Code, Status};
 use tremor_pipeline::{ConfigImpl, Event};
 use value_trait::ValueAccess;
 
@@ -185,8 +185,8 @@ impl Sink for GpubSink {
 
         for (value, meta) in event.value_meta_iter() {
             for payload in serializer.serialize(value, event.ingest_ns)? {
-                let ordering_key = meta
-                    .get("gpubsub_producer")
+
+                let ordering_key = ctx.extract_meta(meta)
                     .get("ordering_key")
                     .as_str()
                     .map_or_else(|| "".to_string(), ToString::to_string);
@@ -198,7 +198,7 @@ impl Sink for GpubSink {
                     message_id: "".to_string(),
                     publish_time: None,
 
-                    // fixme get from the metadata
+                    // from the metadata
                     ordering_key,
                 });
             }
@@ -214,10 +214,24 @@ impl Sink for GpubSink {
         {
             if let Err(error) = inner_result {
                 error!("Failed to publish a message: {}", error);
-                ctx.swallow_err(
-                    ctx.notifier.connection_lost().await,
-                    "Failed to notify about PubSub connection loss",
-                );
+
+                if [
+                    Code::Aborted,
+                    Code::Cancelled,
+                    Code::DataLoss,
+                    Code::DeadlineExceeded,
+                    Code::Internal,
+                    Code::ResourceExhausted,
+                    Code::Unavailable,
+                    Code::Unknown,
+                ]
+                .contains(&error.code())
+                {
+                    ctx.swallow_err(
+                        ctx.notifier.connection_lost().await,
+                        "Failed to notify about PubSub connection loss",
+                    );
+                }
 
                 Ok(SinkReply::FAIL)
             } else {
