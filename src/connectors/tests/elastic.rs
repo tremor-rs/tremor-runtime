@@ -388,34 +388,39 @@ async fn connector_elastic() -> Result<()> {
     harness.send_to_sink(update_event, IN).await?;
     let out_event = out.get_event().await?;
     let meta = out_event.data.suffix().meta();
-    assert_eq!(literal!({
-        "elastic": {
-            "_id": "1234",
-            "_index": "my_index",
-            "_type": "_doc",
-            "version": 2,
-            "action": "update",
-            "success": true
-        }
-    }), meta);
-    assert_eq!(literal!({
-        "update": {
-            "_primary_term": 1,
-            "_shards": {
-                "total": 2,
-                "successful": 1,
-                "failed": 0
-            },
-            "_type": "_doc",
-            "_index": "my_index",
-            "result": "updated",
-            "_id": "1234",
-            "_seq_no": 4,
-            "status": 200,
-            "_version": 2
-        }
-    }), out_event.data.suffix().value());
-
+    assert_eq!(
+        literal!({
+            "elastic": {
+                "_id": "1234",
+                "_index": "my_index",
+                "_type": "_doc",
+                "version": 2,
+                "action": "update",
+                "success": true
+            }
+        }),
+        meta
+    );
+    assert_eq!(
+        literal!({
+            "update": {
+                "_primary_term": 1,
+                "_shards": {
+                    "total": 2,
+                    "successful": 1,
+                    "failed": 0
+                },
+                "_type": "_doc",
+                "_index": "my_index",
+                "result": "updated",
+                "_id": "1234",
+                "_seq_no": 4,
+                "status": 200,
+                "_version": 2
+            }
+        }),
+        out_event.data.suffix().value()
+    );
 
     // check what happens when ES isnt reachable
     container.stop();
