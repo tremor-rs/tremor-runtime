@@ -29,3 +29,16 @@ fn default_request_timeout() -> u64 {
 fn default_skip_authentication() -> bool {
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::connectors::impls::gpubsub::default_connect_timeout;
+    use std::time::Duration;
+
+    #[test]
+    pub fn default_connect_timeout_is_1s() {
+        let actual = Duration::from_nanos(default_connect_timeout());
+
+        assert_eq!(actual, Duration::from_secs(1));
+    }
+}

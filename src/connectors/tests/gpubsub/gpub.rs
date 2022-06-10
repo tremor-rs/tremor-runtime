@@ -16,20 +16,20 @@ use crate::connectors::impls::gpubsub::producer::Builder;
 use crate::connectors::tests::ConnectorHarness;
 use crate::connectors::utils::EnvHelper;
 use crate::errors::Result;
+use crate::instance::State;
+use async_std::prelude::FutureExt;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use googapis::google::pubsub::v1::{PullRequest, Subscription, Topic};
 use serial_test::serial;
 use std::collections::HashSet;
 use std::time::Duration;
-use async_std::prelude::FutureExt;
 use testcontainers::clients::Cli;
 use testcontainers::RunnableImage;
 use tonic::transport::Channel;
 use tremor_common::ports::IN;
 use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, Value};
-use crate::instance::State;
 
 #[async_std::test]
 #[serial(gpubsub)]
@@ -85,8 +85,8 @@ async fn no_token() -> Result<()> {
     let runnable_image = RunnableImage::from((pubsub, pubsub_args));
     let container = runner.run(runnable_image);
 
-    let port =
-        container.get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
+    let port = container
+        .get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
     let endpoint = format!("http://localhost:{}", port);
 
     let mut env = EnvHelper::new();
@@ -119,8 +119,8 @@ async fn simple_publish() -> Result<()> {
     let runnable_image = RunnableImage::from((pubsub, pubsub_args));
     let container = runner.run(runnable_image);
 
-    let port =
-        container.get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
+    let port = container
+        .get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
     let endpoint = format!("http://localhost:{}", port);
     let endpoint_clone = endpoint.clone();
 
@@ -224,8 +224,8 @@ async fn simple_publish_with_timeout() -> Result<()> {
     let runnable_image = RunnableImage::from((pubsub, pubsub_args));
     let container = runner.run(runnable_image);
 
-    let port =
-        container.get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
+    let port = container
+        .get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
     let endpoint = format!("http://localhost:{}", port);
     let endpoint_clone = endpoint.clone();
 
@@ -286,7 +286,11 @@ async fn simple_publish_with_timeout() -> Result<()> {
         ..Event::default()
     };
     harness.send_to_sink(event, IN).await?;
-    harness.wait_for_state(State::Failed).timeout(Duration::from_secs(10)).await?.unwrap();
+    harness
+        .wait_for_state(State::Failed)
+        .timeout(Duration::from_secs(10))
+        .await?
+        .unwrap();
 
     Ok(())
 }
