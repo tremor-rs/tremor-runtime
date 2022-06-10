@@ -185,8 +185,8 @@ impl Sink for GpubSink {
 
         for (value, meta) in event.value_meta_iter() {
             for payload in serializer.serialize(value, event.ingest_ns)? {
-
-                let ordering_key = ctx.extract_meta(meta)
+                let ordering_key = ctx
+                    .extract_meta(meta)
                     .get("ordering_key")
                     .as_str()
                     .map_or_else(|| "".to_string(), ToString::to_string);
