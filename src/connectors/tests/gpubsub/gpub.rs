@@ -86,7 +86,7 @@ async fn no_token() -> Result<()> {
     let container = runner.run(runnable_image);
 
     let port =
-        container.get_host_port(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
+        container.get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
     let endpoint = format!("http://localhost:{}", port);
 
     let mut env = EnvHelper::new();
@@ -120,7 +120,7 @@ async fn simple_publish() -> Result<()> {
     let container = runner.run(runnable_image);
 
     let port =
-        container.get_host_port(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
+        container.get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
     let endpoint = format!("http://localhost:{}", port);
     let endpoint_clone = endpoint.clone();
 
@@ -225,7 +225,7 @@ async fn simple_publish_with_timeout() -> Result<()> {
     let container = runner.run(runnable_image);
 
     let port =
-        container.get_host_port(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
+        container.get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
     let endpoint = format!("http://localhost:{}", port);
     let endpoint_clone = endpoint.clone();
 
