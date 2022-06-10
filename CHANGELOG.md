@@ -4,6 +4,7 @@
 ### New features
 
 - Added the `gpubsub_consumer` connector
+- Added new metadata options to `elastic` connector: `version`, `version_type`, `retry_on_conflict`, `if_primary_term`, `if_seq_no`
 
 ### Fixes
 
