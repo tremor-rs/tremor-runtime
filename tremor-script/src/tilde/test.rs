@@ -156,7 +156,6 @@ fn test_grok_extractor() {
             assert_eq!(
                 output,
                 Match(literal!({
-                          "syslog_timestamp1": "",
                           "syslog_ingest_timestamp": "2019-04-01T09:59:19+0010",
                           "wf_datacenter": "dc",
                           "syslog_hostname": "hostname",
