@@ -33,7 +33,7 @@ use elasticsearch::{
         transport::{SingleNodeConnectionPool, TransportBuilder},
         Url,
     },
-    params::Refresh,
+    params::{Refresh, VersionType},
     Bulk, BulkDeleteOperation, BulkOperation, BulkOperations, BulkParts, Elasticsearch,
 };
 use halfbrown::HashMap;
@@ -413,9 +413,10 @@ impl Sink for ElasticSink {
                         }
 
                         let parts = event_es_meta.parts(default_index.as_deref());
+
+                        // apply request scoped options
                         let bulk =
                             event_es_meta.apply_to(client.client.bulk(parts).body(vec![ops]))?;
-                        // apply request scoped options
 
                         let response = bulk
                             .send()
@@ -646,6 +647,18 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                 if let Some(index) = self.get_index() {
                     op = op.index(index);
                 }
+                if let Some(version_type) = self.get_version_type() {
+                    op = op.version_type(version_type);
+                }
+                if let Some(version) = self.get_version() {
+                    op = op.version(version);
+                }
+                if let Some(if_primary_term) = self.get_if_primary_term() {
+                    op = op.if_primary_term(if_primary_term);
+                }
+                if let Some(if_seq_no) = self.get_if_seq_no() {
+                    op = op.if_seq_no(if_seq_no);
+                }
                 ops.push(op).map_err(Into::into)
             }
             "delete" => {
@@ -655,6 +668,18 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                     .ok_or_else(|| Error::from(Self::MISSING_ID))?;
                 if let Some(index) = self.get_index() {
                     op = op.index(index);
+                }
+                if let Some(version_type) = self.get_version_type() {
+                    op = op.version_type(version_type);
+                }
+                if let Some(version) = self.get_version() {
+                    op = op.version(version);
+                }
+                if let Some(if_primary_term) = self.get_if_primary_term() {
+                    op = op.if_primary_term(if_primary_term);
+                }
+                if let Some(if_seq_no) = self.get_if_seq_no() {
+                    op = op.if_seq_no(if_seq_no);
                 }
                 ops.push(op).map_err(Into::into)
             }
@@ -687,6 +712,21 @@ impl<'a, 'value> ESMeta<'a, 'value> {
                     .ok_or_else(|| Error::from(Self::MISSING_ID))?;
                 if let Some(index) = self.get_index() {
                     op = op.index(index);
+                }
+                if let Some(version_type) = self.get_version_type() {
+                    op = op.version_type(version_type);
+                }
+                if let Some(version) = self.get_version() {
+                    op = op.version(version);
+                }
+                if let Some(if_primary_term) = self.get_if_primary_term() {
+                    op = op.if_primary_term(if_primary_term);
+                }
+                if let Some(if_seq_no) = self.get_if_seq_no() {
+                    op = op.if_seq_no(if_seq_no);
+                }
+                if let Some(retry_on_conflict) = self.get_retry_on_conflict() {
+                    op = op.retry_on_conflict(retry_on_conflict);
                 }
                 ops.push(op).map_err(Into::into)
             }
@@ -755,6 +795,30 @@ impl<'a, 'value> ESMeta<'a, 'value> {
         self.meta.get_bool("raw_payload").unwrap_or_default()
     }
 
+    fn get_version(&self) -> Option<i64> {
+        self.meta.get_i64("version")
+    }
+
+    fn get_version_type(&self) -> Option<VersionType> {
+        self.meta
+            .get_str("version_type")
+            // didn't want to manually match on the `VersionType` enum
+            // maybe there is a better way (without including serde_yaml)
+            .and_then(|s| serde_yaml::from_str::<VersionType>(s).ok())
+    }
+
+    fn get_if_primary_term(&self) -> Option<i64> {
+        self.meta.get_i64("if_primary_term")
+    }
+
+    fn get_if_seq_no(&self) -> Option<i64> {
+        self.meta.get_i64("if_seq_no")
+    }
+
+    fn get_retry_on_conflict(&self) -> Option<i32> {
+        self.meta.get_i32("retry_on_conflict")
+    }
+
     /// supported values: `true`, `false`, `"wait_for"`
     fn get_refresh(&self) -> Result<Option<Refresh>> {
         let refresh = self.meta.get("refresh");
@@ -773,8 +837,32 @@ impl<'a, 'value> ESMeta<'a, 'value> {
     }
 }
 
+/// stupid hack around non-clonability of `CertificateValidation`
+#[derive(Debug, Clone)]
+enum CertValidation {
+    Default,
+    Full(Vec<u8>),
+    None,
+}
+
+impl CertValidation {
+    fn as_certificate_validation(&self) -> Result<Option<CertificateValidation>> {
+        let res = match self {
+            Self::Default => Some(CertificateValidation::Default),
+            Self::Full(data) => {
+                let cert = Certificate::from_pem(data.as_slice())
+                    .or_else(|_| Certificate::from_der(data.as_slice()))?;
+                Some(CertificateValidation::Full(cert))
+            }
+            Self::None => None,
+        };
+        Ok(res)
+    }
+}
 #[cfg(test)]
 mod tests {
+    use elasticsearch::http::request::Body;
+
     use super::*;
     use crate::config::Connector as ConnectorConfig;
 
@@ -826,27 +914,76 @@ mod tests {
         );
         Ok(())
     }
-}
 
-/// stupid hack around non-clonability of `CertificateValidation`
-#[derive(Debug, Clone)]
-enum CertValidation {
-    Default,
-    Full(Vec<u8>),
-    None,
-}
-
-impl CertValidation {
-    fn as_certificate_validation(&self) -> Result<Option<CertificateValidation>> {
-        let res = match self {
-            Self::Default => Some(CertificateValidation::Default),
-            Self::Full(data) => {
-                let cert = Certificate::from_pem(data.as_slice())
-                    .or_else(|_| Certificate::from_der(data.as_slice()))?;
-                Some(CertificateValidation::Full(cert))
+    #[test]
+    fn es_meta() -> Result<()> {
+        let meta = literal!({
+            "elastic": {
+                "action": "index",
+                "_id": "abcdef",
+                "_index": "snot",
+                "pipeline": "pipeline",
+                "refresh": "wait_for",
+                "routing": "routing",
+                "timeout": "10s",
+                "_type": "ttt",
+                "version": 12,
+                "version_type": "external"
             }
-            Self::None => None,
-        };
-        Ok(res)
+        });
+        let es_meta = ESMeta::new(&meta);
+        assert_eq!(Some("index"), es_meta.get_action());
+        assert_eq!(None, es_meta.get_retry_on_conflict());
+        assert_eq!(Some("abcdef"), es_meta.get_id());
+        assert_eq!(Some("snot"), es_meta.get_index());
+        assert_eq!(Some("pipeline"), es_meta.get_pipeline());
+        assert_eq!(false, es_meta.get_raw_payload());
+        assert_eq!(None, es_meta.get_if_primary_term());
+        assert_eq!(None, es_meta.get_if_seq_no());
+        assert_eq!(Ok(Some(Refresh::WaitFor)), es_meta.get_refresh());
+        assert_eq!(Some("routing"), es_meta.get_routing());
+        assert_eq!(Some("10s"), es_meta.get_timeout());
+        assert_eq!(Some("ttt"), es_meta.get_type());
+        assert_eq!(Some(12), es_meta.get_version());
+        assert_eq!(Some(VersionType::External), es_meta.get_version_type());
+        let data = literal!({});
+        let mut ops = BulkOperations::new();
+        es_meta.insert_op(&data, &mut ops)?;
+        assert_eq!(
+            Some(String::from(
+                r#"{"index":{"_index":"snot","_id":"abcdef","version":12,"version_type":"external"}}
+{}
+"#
+            )),
+            ops.bytes()
+                .map(|b| String::from_utf8_lossy(&b.to_vec()).to_string())
+        );
+
+        let meta = literal!({
+            "elastic": {
+                "action": "update",
+                "_id": "1234",
+                "retry_on_conflict": 42,
+                "if_seq_no": 123,
+                "if_primary_term": 456
+            }
+        });
+        let es_meta = ESMeta::new(&meta);
+        assert_eq!(Some(42), es_meta.get_retry_on_conflict());
+        assert_eq!(Some(123), es_meta.get_if_seq_no());
+        assert_eq!(Some(456), es_meta.get_if_primary_term());
+        let data = literal!({});
+        let mut ops = BulkOperations::new();
+        es_meta.insert_op(&data, &mut ops)?;
+        assert_eq!(
+            Some(String::from(
+                r#"{"update":{"_id":"1234","if_seq_no":123,"if_primary_term":456,"retry_on_conflict":42}}
+{"doc":{}}
+"#
+            )),
+            ops.bytes()
+                .map(|b| String::from_utf8_lossy(&b.to_vec()).to_string())
+        );
+        Ok(())
     }
 }
