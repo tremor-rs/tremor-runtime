@@ -15,8 +15,69 @@
 use super::Postprocessor;
 use crate::errors::Result;
 use simd_json::ValueAccess;
-use std::{io::Write, str};
+use std::{
+    io::Write,
+    str::{self, FromStr},
+};
 use tremor_script::Value;
+
+enum Algorithm {
+    Gzip,
+    Zlib,
+    Xz2,
+    Zstd,
+    Snappy,
+    Lz4,
+}
+
+impl FromStr for Algorithm {
+    type Err = crate::errors::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "gzip" => Ok(Algorithm::Gzip),
+            "zlib" => Ok(Algorithm::Zlib),
+            "xz2" => Ok(Algorithm::Xz2),
+            "snappy" => Ok(Algorithm::Snappy),
+            "lz4" => Ok(Algorithm::Lz4),
+            "zstd" => Ok(Algorithm::Zstd),
+            other => return Err(format!("Unknown compression algorithm: {other}").into()),
+        }
+    }
+}
+
+impl Algorithm {
+    pub fn into_postprocessor(self, config: Option<&Value>) -> Result<Box<dyn Postprocessor>> {
+        match config.get_i64("level") {
+            Some(compression_level) => match self {
+                Algorithm::Xz2 => match Xz2::with_config(compression_level) {
+                    Ok(codec) => Ok(codec),
+                    Err(msg) => Err(msg),
+                },
+                Algorithm::Zstd => match Zstd::with_config(compression_level) {
+                    Ok(codec) => Ok(codec),
+                    Err(msg) => Err(msg),
+                },
+                Algorithm::Lz4 => match Lz4::with_config(compression_level) {
+                    Ok(codec) => Ok(codec),
+                    Err(msg) => Err(msg),
+                },
+                _ => Err("compression level not supported for given algorithm".into()),
+            },
+            None => {
+                let codec: Box<dyn Postprocessor> = match self {
+                    Algorithm::Gzip => Box::new(Gzip::default()),
+                    Algorithm::Zlib => Box::new(Zlib::default()),
+                    Algorithm::Xz2 => Box::new(Xz2::default()),
+                    Algorithm::Zstd => Box::new(Zstd::default()),
+                    Algorithm::Snappy => Box::new(Snappy::default()),
+                    Algorithm::Lz4 => Box::new(Lz4::default()),
+                };
+                Ok(codec)
+            }
+        }
+    }
+}
 
 #[derive(Default)]
 struct Gzip {}
@@ -49,8 +110,23 @@ impl Postprocessor for Zlib {
     }
 }
 
-#[derive(Default)]
-struct Xz2 {}
+struct Xz2 {
+    compression_level: u32,
+}
+impl Xz2 {
+    fn with_config(level: i64) -> Result<Box<Self>> {
+        if !(0..=9).contains(&level) {
+            return Err(format!(
+                "Xz2 supports compression level between 0 and 9 but {level} was given"
+            )
+            .into());
+        }
+
+        Ok(Box::new(Self {
+            compression_level: level.try_into()?,
+        }))
+    }
+}
 impl Postprocessor for Xz2 {
     fn name(&self) -> &str {
         "xz2"
@@ -58,9 +134,16 @@ impl Postprocessor for Xz2 {
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use xz2::write::XzEncoder as Encoder;
-        let mut encoder = Encoder::new(Vec::new(), 9);
+        let mut encoder = Encoder::new(Vec::new(), self.compression_level);
         encoder.write_all(data)?;
         Ok(vec![encoder.finish()?])
+    }
+}
+impl Default for Xz2 {
+    fn default() -> Self {
+        Self {
+            compression_level: 9,
+        }
     }
 }
 
@@ -82,8 +165,20 @@ impl Postprocessor for Snappy {
     }
 }
 
-#[derive(Default)]
-struct Lz4 {}
+struct Lz4 {
+    compression_level: u32,
+}
+impl Lz4 {
+    pub fn with_config(level: i64) -> Result<Box<Self>> {
+        if level < 0 {
+            return Err("Lz4 compression level cannot be less than 0".into());
+        }
+
+        Ok(Box::new(Self {
+            compression_level: level.try_into()?,
+        }))
+    }
+}
 impl Postprocessor for Lz4 {
     fn name(&self) -> &str {
         "lz4"
@@ -92,14 +187,39 @@ impl Postprocessor for Lz4 {
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         use lz4::EncoderBuilder;
         let buffer = Vec::<u8>::new();
-        let mut encoder = EncoderBuilder::new().level(4).build(buffer)?;
+        let mut encoder = EncoderBuilder::new()
+            .level(self.compression_level)
+            .build(buffer)?;
         encoder.write_all(data)?;
         Ok(vec![encoder.finish().0])
     }
 }
+impl Default for Lz4 {
+    fn default() -> Self {
+        Self {
+            compression_level: 4,
+        }
+    }
+}
 
-#[derive(Clone, Default, Debug)]
-struct Zstd {}
+#[derive(Clone, Debug, Default)]
+struct Zstd {
+    compression_level: i32,
+}
+impl Zstd {
+    pub fn with_config(level: i64) -> Result<Box<Self>> {
+        if !(-7..=22).contains(&level) {
+            return Err(format!(
+                "Xz2 supports compression level between 0 and 9 but {level} was given"
+            )
+            .into());
+        }
+
+        Ok(Box::new(Self {
+            compression_level: level.try_into()?,
+        }))
+    }
+}
 impl Postprocessor for Zstd {
     fn name(&self) -> &str {
         "zstd"
@@ -107,27 +227,23 @@ impl Postprocessor for Zstd {
 
     fn process(&mut self, _ingres_ns: u64, _egress_ns: u64, data: &[u8]) -> Result<Vec<Vec<u8>>> {
         // Value of 0 indicates default level for encode.
-        let compressed = zstd::encode_all(data, 0)?;
+        let compressed = zstd::encode_all(data, self.compression_level)?;
         Ok(vec![compressed])
     }
 }
-
 pub(crate) struct Compress {
     codec: Box<dyn Postprocessor>,
 }
 impl Compress {
     pub(crate) fn from_config(config: Option<&Value>) -> Result<Self> {
-        let codec: Box<dyn Postprocessor> =
-            match config.get_str("algorithm").ok_or("Missing algorithm")? {
-                "gzip" => Box::new(Gzip::default()),
-                "zlib" => Box::new(Zlib::default()),
-                "xz2" => Box::new(Xz2::default()),
-                "snappy" => Box::new(Snappy::default()),
-                "lz4" => Box::new(Lz4::default()),
-                "zstd" => Box::new(Zstd::default()),
-                other => return Err(format!("Unknown compression algorithm: {other}").into()),
-            };
-        Ok(Compress { codec })
+        let algorithm_str = config.get_str("algorithm").ok_or("Missing algorithm")?;
+        match Algorithm::from_str(algorithm_str) {
+            Ok(algorithm) => match algorithm.into_postprocessor(config) {
+                Ok(codec) => Ok(Compress { codec }),
+                Err(msg) => Err(msg),
+            },
+            Err(msg) => Err(msg),
+        }
     }
 }
 impl Postprocessor for Compress {
