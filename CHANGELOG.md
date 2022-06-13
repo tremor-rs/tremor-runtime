@@ -3,6 +3,7 @@
 ## Unreleased
 ### New features
 
+- Added the `gpubsub_publisher` connector
 - Added the `gpubsub_consumer` connector
 - Added new metadata options to `elastic` connector: `version`, `version_type`, `retry_on_conflict`, `if_primary_term`, `if_seq_no`
 
@@ -10,7 +11,6 @@
 
 - Fix race condition leading to quiescence timeout when shutting down Tremor
 - Fix `timeout` config unit mismatch in `qos::backpressure` and `qos::percentile` operators. Changed to nanoseconds precision. 
-
 
 ## [0.12.1]
 

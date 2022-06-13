@@ -34,6 +34,7 @@ use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::{Code, Status};
 use tremor_pipeline::{ConfigImpl, Event};
+use tremor_value::Value;
 use value_trait::ValueAccess;
 
 #[derive(Deserialize, Clone)]
@@ -61,14 +62,15 @@ impl ConnectorBuilder for Builder {
         ConnectorType("gpubsub_producer".to_string())
     }
 
-    async fn build(&self, alias: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
-        if let Some(raw_config) = &config.config {
-            let config = Config::new(raw_config)?;
+    async fn build_cfg(
+        &self,
+        _alias: &str,
+        _config: &ConnectorConfig,
+        raw_config: &Value,
+    ) -> Result<Box<dyn Connector>> {
+        let config = Config::new(raw_config)?;
 
-            Ok(Box::new(GpubConnector { config }))
-        } else {
-            Err(ErrorKind::MissingConfiguration(alias.to_string()).into())
-        }
+        Ok(Box::new(GpubConnector { config }))
     }
 }
 
