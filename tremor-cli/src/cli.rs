@@ -18,10 +18,10 @@ use clap::{ArgEnum, Parser};
 #[clap(name = "tremor", author, version)]
 pub(crate) struct Cli {
     /// Instance identifier
-    #[clap(short, long, default_value = "tremor")]
+    #[clap(short, long, default_value = "tremor", value_parser = clap::value_parser!(String))]
     pub(crate) instance: String,
     /// Configuration for Log4RS
-    #[clap(short, long)]
+    #[clap(short, long, value_parser = clap::value_parser!(String))]
     pub(crate) logger_config: Option<String>,
     #[clap(subcommand)]
     pub(crate) command: Command,
@@ -31,7 +31,7 @@ pub(crate) struct Cli {
 pub(crate) enum Command {
     /// Generate shell completions to stdout. Tries to guess the shell if no subcommand is given.
     Completions {
-        #[clap(arg_enum)]
+        #[clap(arg_enum, value_parser = clap::value_parser!(clap_complete::shells::Shell))]
         shell: Option<clap_complete::shells::Shell>,
     },
     /// Tremor server
@@ -49,7 +49,10 @@ pub(crate) enum Command {
     /// Generates documention from tremor script files
     Doc(Doc),
     /// Creates a template tremor project
-    New { name: String },
+    New {
+        #[clap( value_parser = clap::value_parser!(String))]
+        name: String,
+    },
 }
 
 /// Shell type
@@ -72,25 +75,25 @@ pub(crate) enum Shell {
 #[derive(Parser, Debug)]
 pub(crate) struct Test {
     /// Specifies what to test
-    #[clap(arg_enum, default_value_t)]
+    #[clap(arg_enum, default_value_t, value_parser = clap::value_parser!(TestMode))]
     pub(crate) mode: TestMode,
     /// The root test path
-    #[clap(default_value = "tests")]
+    #[clap(default_value = "tests", value_parser = clap::value_parser!(String))]
     pub(crate) path: String,
     /// Should generate a test report to specified path
-    #[clap(short = 'o', long)]
+    #[clap(short = 'o', long, value_parser = clap::value_parser!(String))]
     pub(crate) report: Option<String>,
     /// Optional tags to filter test incusions by
-    #[clap(short, long)]
+    #[clap(short, long, value_parser = clap::value_parser!(String))]
     pub(crate) includes: Vec<String>,
     /// Optional tags to filter test incusions by
-    #[clap(short, long)]
+    #[clap(short, long, value_parser = clap::value_parser!(String))]
     pub(crate) excludes: Vec<String>,
     /// Sets the level of verbosity (does not apply to logging)
-    #[clap(short, long)]
+    #[clap(short, long, action = clap::ArgAction::Set)]
     pub(crate) verbose: bool,
     /// Timeout in seconds for each test
-    #[clap(short, long)]
+    #[clap(short, long, value_parser = clap::value_parser!(u64))]
     pub(crate) timeout: Option<u64>,
 }
 
@@ -129,68 +132,72 @@ impl Default for TestMode {
 #[derive(Parser, Debug)]
 pub(crate) struct Doc {
     /// Generates and prints to standard output
-    #[clap(short, long)]
+    #[clap(short, long, action = clap::ArgAction::Set)]
     pub(crate) interactive: bool,
+    #[clap(value_parser = clap::value_parser!(String))]
     /// Directory or source to generate documents for
     pub(crate) dir: String,
-    #[clap(default_value = "docs")]
+    #[clap(default_value = "docs", value_parser = clap::value_parser!(String))]
     pub(crate) outdir: String,
 }
 
 #[derive(Parser, Debug)]
 pub(crate) struct Run {
+    #[clap(value_parser = clap::value_parser!(String))]
     /// filename to run the data through
     pub(crate) script: String,
     /// Should not output to consumed source / produced synthetic data or errors
-    #[clap(long)]
+    #[clap(long, action = clap::ArgAction::Set)]
     pub(crate) interactive: bool,
     /// Should not pretty print data [ when in interactive mode ]
-    #[clap(long)]
+    #[clap(long, action = clap::ArgAction::Set)]
     pub(crate) pretty: bool,
     /// The codec to use for encoding the data
-    #[clap(short, long, default_value = "json")]
+    #[clap(short, long, default_value = "json", value_parser = clap::value_parser!(String))]
     pub(crate) encoder: String,
     /// The codec to use for decoding the data
-    #[clap(short, long, default_value = "json")]
+    #[clap(short, long, default_value = "json", value_parser = clap::value_parser!(String))]
     pub(crate) decoder: String,
     /// Input file
-    #[clap(short, long, default_value = "-")]
+    #[clap(short, long, default_value = "-", value_parser = clap::value_parser!(String))]
     pub(crate) infile: String,
     /// Output file
-    #[clap(short, long, default_value = "-")]
+    #[clap(short, long, default_value = "-", value_parser = clap::value_parser!(String))]
     pub(crate) outfile: String,
     /// Preprocessors to pass data through before decoding
-    #[clap(long, default_value = "separate")]
+    #[clap(long, default_value = "separate", value_parser = clap::value_parser!(String))]
     pub(crate) preprocessor: String,
     /// Postprocessor to pass data through after encoding
-    #[clap(long, default_value = "separate")]
+    #[clap(long, default_value = "separate", value_parser = clap::value_parser!(String))]
     pub(crate) postprocessor: String,
     /// Specifies the port that is printed to the output
-
-    #[clap(short, long)]
+    #[clap(short, long, value_parser = clap::value_parser!(String))]
     pub(crate) port: Option<String>,
 }
 
 #[derive(Parser, Debug)]
 pub(crate) struct DbgSrc {
     /// output the pre-processed source
-    #[clap(short, long)]
+    #[clap(short, long, action = clap::ArgAction::Set)]
     pub(crate) preprocess: bool,
     /// tremor/json/trickle/troy File
+    #[clap(value_parser = clap::value_parser!(String))]
     pub(crate) script: String,
 }
 
 #[derive(Parser, Debug)]
 pub(crate) struct DbgAst {
     /// only prints the expressions
-    #[clap(short = 'x', long)]
+    #[clap(short = 'x', long, action = clap::ArgAction::Set)]
     pub(crate) exprs_only: bool,
+    #[clap(value_parser = clap::value_parser!(String))]
     /// tremor/json/trickle/troy File
     pub(crate) script: String,
 }
 
 #[derive(Parser, Debug)]
 pub(crate) struct DbgDot {
+    #[clap(value_parser = clap::value_parser!(String))]
     /// tremor/json/trickle/troy File
     pub(crate) script: String,
 }
@@ -209,13 +216,13 @@ pub(crate) enum DbgCommand {
 #[derive(Parser, Debug, Clone, Copy)]
 pub(crate) struct DbgOpts {
     /// Do not print the banner
-    #[clap(short = 'b', long)]
+    #[clap(short = 'b', long, action = clap::ArgAction::Set)]
     pub(crate) no_banner: bool,
     /// Do not highlight output
-    #[clap(short = 'n', long)]
+    #[clap(short = 'n', long, action = clap::ArgAction::Set)]
     pub(crate) no_highlight: bool,
     /// Do not output any formatting. Disables highlight, banner, line numbers.
-    #[clap(short, long)]
+    #[clap(short, long, action = clap::ArgAction::Set)]
     pub(crate) raw: bool,
 }
 
@@ -235,22 +242,23 @@ pub(crate) enum ServerCommand {
 
 #[derive(Parser, Debug)]
 pub(crate) struct ServerRun {
+    #[clap(value_parser = clap::value_parser!(String))]
     /// Paths to files containing pipelines, onramps, offramps to provision
     pub(crate) artefacts: Vec<String>,
     /// Captures process id if set and stores in a file
-    #[clap(short, long)]
+    #[clap(short, long, value_parser = clap::value_parser!(String))]
     pub(crate) pid: Option<String>,
     /// Disable the API
-    #[clap(short, long)]
+    #[clap(short, long, action = clap::ArgAction::Set)]
     pub(crate) no_api: bool,
     /// Loads the debug connectors
-    #[clap(short, long)]
+    #[clap(short, long, action = clap::ArgAction::Set)]
     pub(crate) debug_connectors: bool,
     /// The `host:port` to listen for the API
-    #[clap(short, long, default_value = "0.0.0.0:9898")]
+    #[clap(short, long, default_value = "0.0.0.0:9898", value_parser = clap::value_parser!(String))]
     pub(crate) api_host: String,
     /// function tail-recursion stack depth limit
-    #[clap(short, long, default_value = "1024")]
+    #[clap(short, long, default_value = "1024", value_parser = clap::value_parser!(u32))]
     pub(crate) recursion_limit: u32,
 }
 
