@@ -248,7 +248,12 @@ default = ["integration-local"]
 bert = ["tremor-pipeline/bert"]
 
 integration = ["integration-docker", "integration-local"]
-integration-docker = ["es-integration", "s3-integration", "kafka-integration"]
+integration-docker = [
+  "es-integration",
+  "s3-integration",
+  "kafka-integration",
+  "gcp-integration",
+]
 integration-local = [
   "ws-integration",
   "http-integration",
@@ -259,6 +264,7 @@ integration-local = [
   "tcp-integration",
   "wal-integration",
 ]
+gcp-integration = []
 es-integration = []
 s3-integration = []
 kafka-integration = []
