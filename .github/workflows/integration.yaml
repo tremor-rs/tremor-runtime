@@ -22,7 +22,7 @@ jobs:
           - os: macos-11.0
             target_feature: "+sse4.2"
           - os: ubuntu-20.04
-            #exclude_tests: "--excludes postgres"
+            exclude_tests: "--excludes postgres"
             target_feature: "+avx,+avx2,+sse4.2"
 
     env:
