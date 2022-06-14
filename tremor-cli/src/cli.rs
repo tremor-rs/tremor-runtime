@@ -90,7 +90,7 @@ pub(crate) struct Test {
     #[clap(short, long, value_parser = clap::value_parser!(String))]
     pub(crate) excludes: Vec<String>,
     /// Sets the level of verbosity (does not apply to logging)
-    #[clap(short, long, action = clap::ArgAction::Set)]
+    #[clap(short, long, action = clap::ArgAction::SetTrue)]
     pub(crate) verbose: bool,
     /// Timeout in seconds for each test
     #[clap(short, long, value_parser = clap::value_parser!(u64))]
@@ -132,7 +132,7 @@ impl Default for TestMode {
 #[derive(Parser, Debug)]
 pub(crate) struct Doc {
     /// Generates and prints to standard output
-    #[clap(short, long, action = clap::ArgAction::Set)]
+    #[clap(short, long, action = clap::ArgAction::SetTrue)]
     pub(crate) interactive: bool,
     #[clap(value_parser = clap::value_parser!(String))]
     /// Directory or source to generate documents for
@@ -147,10 +147,10 @@ pub(crate) struct Run {
     /// filename to run the data through
     pub(crate) script: String,
     /// Should not output to consumed source / produced synthetic data or errors
-    #[clap(long, action = clap::ArgAction::Set)]
+    #[clap(long, action = clap::ArgAction::SetTrue)]
     pub(crate) interactive: bool,
     /// Should not pretty print data [ when in interactive mode ]
-    #[clap(long, action = clap::ArgAction::Set)]
+    #[clap(long, action = clap::ArgAction::SetTrue)]
     pub(crate) pretty: bool,
     /// The codec to use for encoding the data
     #[clap(short, long, default_value = "json", value_parser = clap::value_parser!(String))]
@@ -178,7 +178,7 @@ pub(crate) struct Run {
 #[derive(Parser, Debug)]
 pub(crate) struct DbgSrc {
     /// output the pre-processed source
-    #[clap(short, long, action = clap::ArgAction::Set)]
+    #[clap(short, long, action = clap::ArgAction::SetTrue)]
     pub(crate) preprocess: bool,
     /// tremor/json/trickle/troy File
     #[clap(value_parser = clap::value_parser!(String))]
@@ -188,7 +188,7 @@ pub(crate) struct DbgSrc {
 #[derive(Parser, Debug)]
 pub(crate) struct DbgAst {
     /// only prints the expressions
-    #[clap(short = 'x', long, action = clap::ArgAction::Set)]
+    #[clap(short = 'x', long, action = clap::ArgAction::SetTrue)]
     pub(crate) exprs_only: bool,
     #[clap(value_parser = clap::value_parser!(String))]
     /// tremor/json/trickle/troy File
@@ -216,13 +216,13 @@ pub(crate) enum DbgCommand {
 #[derive(Parser, Debug, Clone, Copy)]
 pub(crate) struct DbgOpts {
     /// Do not print the banner
-    #[clap(short = 'b', long, action = clap::ArgAction::Set)]
+    #[clap(short = 'b', long, action = clap::ArgAction::SetTrue)]
     pub(crate) no_banner: bool,
     /// Do not highlight output
-    #[clap(short = 'n', long, action = clap::ArgAction::Set)]
+    #[clap(short = 'n', long, action = clap::ArgAction::SetTrue)]
     pub(crate) no_highlight: bool,
     /// Do not output any formatting. Disables highlight, banner, line numbers.
-    #[clap(short, long, action = clap::ArgAction::Set)]
+    #[clap(short, long, action = clap::ArgAction::SetTrue)]
     pub(crate) raw: bool,
 }
 
@@ -249,10 +249,10 @@ pub(crate) struct ServerRun {
     #[clap(short, long, value_parser = clap::value_parser!(String))]
     pub(crate) pid: Option<String>,
     /// Disable the API
-    #[clap(short, long, action = clap::ArgAction::Set)]
+    #[clap(short, long, action = clap::ArgAction::SetTrue)]
     pub(crate) no_api: bool,
     /// Loads the debug connectors
-    #[clap(short, long, action = clap::ArgAction::Set)]
+    #[clap(short, long, action = clap::ArgAction::SetTrue)]
     pub(crate) debug_connectors: bool,
     /// The `host:port` to listen for the API
     #[clap(short, long, default_value = "0.0.0.0:9898", value_parser = clap::value_parser!(String))]
