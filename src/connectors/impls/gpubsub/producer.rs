@@ -30,7 +30,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
-use tonic::{Code};
+use tonic::Code;
 use tremor_pipeline::{ConfigImpl, Event};
 use tremor_value::Value;
 use value_trait::ValueAccess;
