@@ -10,7 +10,8 @@
 ### Fixes
 
 - Fix race condition leading to quiescence timeout when shutting down Tremor
-- Fix `timeout` config unit mismatch in `qos::backpressure` and `qos::percentile` operators. Changed to nanoseconds precision. 
+- Fix `timeout` config unit mismatch in `qos::backpressure` and `qos::percentile` operators. Changed to nanoseconds precision.
+- Update WAL operator to fix issue with overwriting first entries.
 
 ## [0.12.1]
 
