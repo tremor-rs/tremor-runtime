@@ -263,11 +263,6 @@ impl Sink for GpubSink {
                 Ok(SinkReply::ACK)
             }
         } else {
-            ctx.swallow_err(
-                ctx.notifier.connection_lost().await,
-                "Failed to notify about PubSub connection loss",
-            );
-
             Ok(SinkReply::FAIL)
         }
     }
