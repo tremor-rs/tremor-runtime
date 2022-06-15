@@ -1,0 +1,17 @@
+name: Validate package creation
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Build releases
+        run: make builds
+      - name: Creating release packages
+        run: make packages
+      - name: List files
+        run: ls packaging/out/*

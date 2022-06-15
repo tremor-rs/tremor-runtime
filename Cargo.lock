@@ -5842,7 +5842,6 @@ dependencies = [
  "signal-hook-async-std",
  "simd-json",
  "snmalloc-rs",
- "snmalloc-sys",
  "surf",
  "tch",
  "temp-dir",
