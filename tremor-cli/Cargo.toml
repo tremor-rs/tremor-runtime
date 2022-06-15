@@ -39,10 +39,7 @@ serde_yaml = "0.8"
 signal-hook = "0.3"
 signal-hook-async-std = "0.2"
 simd-json = { version = "0.5", features = ["known-key"] }
-snmalloc-rs = { version = "=0.3.1", optional = false, feature = [
-    "qemu",
-    "usecxx17",
-] }
+snmalloc-rs = { version = "0.2" }
 surf = { version = "=2.3.2", default-features = false, features = [
     "encoding",
     "h1-client-rustls",
