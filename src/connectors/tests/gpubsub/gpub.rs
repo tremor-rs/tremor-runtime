@@ -14,7 +14,6 @@
 
 use crate::connectors::impls::gpubsub::producer::Builder;
 use crate::connectors::tests::ConnectorHarness;
-use crate::connectors::utils::EnvHelper;
 use crate::errors::Result;
 use crate::instance::State;
 use async_std::prelude::FutureExt;
