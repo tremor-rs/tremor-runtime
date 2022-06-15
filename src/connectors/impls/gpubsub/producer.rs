@@ -28,7 +28,6 @@ use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage};
 use gouth::Token;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
@@ -120,6 +119,61 @@ struct GpubSink {
     client: Option<PublisherClient<InterceptedService<Channel, AuthInterceptor>>>,
 }
 
+#[cfg(not(test))]
+fn create_publisher_client(
+    channel: Channel,
+    _config: &Config,
+) -> Result<PublisherClient<InterceptedService<Channel, AuthInterceptor>>> {
+    let token = Token::new()?;
+
+    Ok(PublisherClient::with_interceptor(
+        channel,
+        AuthInterceptor {
+            token: Box::new(move || {
+                token
+                    .header_value()
+                    .map_err(|_| Status::unavailable("Failed to retrieve authentication token."))
+            }),
+        },
+    ))
+}
+
+#[cfg(test)]
+fn create_publisher_client(
+    channel: Channel,
+    config: &Config,
+) -> Result<PublisherClient<InterceptedService<Channel, AuthInterceptor>>> {
+    use std::sync::Arc;
+
+    let skip_authentication = config.skip_authentication;
+
+    let client = if skip_authentication {
+        info!("Skipping auth...");
+
+        PublisherClient::with_interceptor(
+            channel,
+            AuthInterceptor {
+                token: Box::new(|| Ok(Arc::new(String::new()))),
+            },
+        )
+    } else {
+        let token = Token::new()?;
+
+        PublisherClient::with_interceptor(
+            channel,
+            AuthInterceptor {
+                token: Box::new(move || {
+                    token.header_value().map_err(|_| {
+                        Status::unavailable("Failed to retrieve authentication token.")
+                    })
+                }),
+            },
+        )
+    };
+
+    Ok(client)
+}
+
 #[async_trait::async_trait()]
 impl Sink for GpubSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
@@ -134,38 +188,8 @@ impl Sink for GpubSink {
         }
 
         let channel = channel.connect().await?;
-        #[allow(unused_assignments, unused_mut)]
-        let mut skip_authentication = false;
-        #[cfg(test)]
-        {
-            skip_authentication = self.config.skip_authentication;
-        }
 
-        let client = if skip_authentication {
-            info!("Skipping auth...");
-
-            PublisherClient::with_interceptor(
-                channel,
-                AuthInterceptor {
-                    token: Box::new(|| Ok(Arc::new(String::new()))),
-                },
-            )
-        } else {
-            let token = Token::new()?;
-
-            PublisherClient::with_interceptor(
-                channel,
-                AuthInterceptor {
-                    token: Box::new(move || {
-                        token.header_value().map_err(|_| {
-                            Status::unavailable("Failed to retrieve authentication token.")
-                        })
-                    }),
-                },
-            )
-        };
-
-        self.client = Some(client);
+        self.client = Some(create_publisher_client(channel, &self.config)?);
 
         Ok(true)
     }
@@ -217,17 +241,17 @@ impl Sink for GpubSink {
             if let Err(error) = inner_result {
                 error!("Failed to publish a message: {}", error);
 
-                if [
-                    Code::Aborted,
-                    Code::Cancelled,
-                    Code::DataLoss,
-                    Code::DeadlineExceeded,
-                    Code::Internal,
-                    Code::ResourceExhausted,
-                    Code::Unavailable,
-                    Code::Unknown,
-                ]
-                .contains(&error.code())
+                if matches!(
+                    error.code(),
+                    Code::Aborted
+                        | Code::Cancelled
+                        | Code::DataLoss
+                        | Code::DeadlineExceeded
+                        | Code::Internal
+                        | Code::ResourceExhausted
+                        | Code::Unavailable
+                        | Code::Unknown
+                )
                 {
                     ctx.swallow_err(
                         ctx.notifier.connection_lost().await,
