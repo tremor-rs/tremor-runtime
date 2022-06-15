@@ -251,8 +251,7 @@ impl Sink for GpubSink {
                         | Code::ResourceExhausted
                         | Code::Unavailable
                         | Code::Unknown
-                )
-                {
+                ) {
                     ctx.swallow_err(
                         ctx.notifier.connection_lost().await,
                         "Failed to notify about PubSub connection loss",
