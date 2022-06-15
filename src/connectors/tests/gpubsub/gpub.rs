@@ -75,40 +75,6 @@ async fn no_hostname() -> Result<()> {
 
 #[async_std::test]
 #[serial(gpubsub)]
-async fn no_token() -> Result<()> {
-    let _ = env_logger::try_init();
-
-    let runner = Cli::docker();
-
-    let (pubsub, pubsub_args) =
-        testcontainers::images::google_cloud_sdk_emulators::CloudSdk::pubsub();
-    let runnable_image = RunnableImage::from((pubsub, pubsub_args));
-    let container = runner.run(runnable_image);
-
-    let port = container
-        .get_host_port_ipv4(testcontainers::images::google_cloud_sdk_emulators::PUBSUB_PORT);
-    let endpoint = format!("http://localhost:{}", port);
-
-    let mut env = EnvHelper::new();
-    env.remove_var("GOOGLE_APPLICATION_CREDENTIALS");
-    let connector_yaml = literal!({
-        "codec": "binary",
-        "config":{
-            "endpoint": endpoint,
-            "connect_timeout": 30000000000u64,
-            "topic": "projects/test/topics/test",
-            "skip_authentication": false
-        }
-    });
-
-    let harness =
-        ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await?;
-    assert!(harness.start().await.is_err());
-    Ok(())
-}
-
-#[async_std::test]
-#[serial(gpubsub)]
 async fn simple_publish() -> Result<()> {
     let _ = env_logger::try_init();
 
