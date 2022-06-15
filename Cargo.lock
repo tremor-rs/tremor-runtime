@@ -4975,11 +4975,29 @@ checksum = "45456094d1983e2ee2a18fdfebce3189fa451699d0502cb8e3b49dba5ba41451"
 
 [[package]]
 name = "snmalloc-rs"
+version = "0.2.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36acaace2719c972eab3ef6a6b3aee4495f0bf300f59715bb9cff6c5acf4ae20"
+dependencies = [
+ "snmalloc-sys 0.2.28",
+]
+
+[[package]]
+name = "snmalloc-rs"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ad716cba37744e3db2c63486b77f1fbeeed268767ff47156b10b17677636e9c"
 dependencies = [
- "snmalloc-sys",
+ "snmalloc-sys 0.3.1",
+]
+
+[[package]]
+name = "snmalloc-sys"
+version = "0.2.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "35a7e6e7d5fe756bee058ddedefc7e0a9f9c8dbaa9401b48ed3c17d6578e40b5"
+dependencies = [
+ "cmake",
 ]
 
 [[package]]
@@ -5841,7 +5859,7 @@ dependencies = [
  "signal-hook",
  "signal-hook-async-std",
  "simd-json",
- "snmalloc-rs",
+ "snmalloc-rs 0.2.28",
  "surf",
  "tch",
  "temp-dir",
@@ -5875,7 +5893,7 @@ dependencies = [
  "lexical",
  "pretty_assertions",
  "simd-json",
- "snmalloc-rs",
+ "snmalloc-rs 0.3.1",
  "value-trait",
 ]
 
