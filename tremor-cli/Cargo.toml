@@ -39,13 +39,10 @@ serde_yaml = "0.8"
 signal-hook = "0.3"
 signal-hook-async-std = "0.2"
 simd-json = { version = "0.5", features = ["known-key"] }
-# we need to stick with 0.2.26 as it includes its own libc
-# which allows us to build on older systems like centos 7
-# issues to track until we can loosen those restrictions:
-#   - https://github.com/microsoft/snmalloc/issues/328
-#   - https://github.com/SchrodingerZhu/snmalloc-rs/issues/145
-snmalloc-rs = { version = "=0.3.1", optional = false }
-snmalloc-sys = { version = "=0.3.1", optional = false }
+snmalloc-rs = { version = "=0.3.1", optional = false, feature = [
+    "qemu",
+    "usecxx17",
+] }
 surf = { version = "=2.3.2", default-features = false, features = [
     "encoding",
     "h1-client-rustls",
