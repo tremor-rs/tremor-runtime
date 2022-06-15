@@ -44,9 +44,6 @@ pub struct Config {
     #[serde(default = "crate::connectors::impls::gpubsub::default_endpoint")]
     pub endpoint: String,
     pub topic: String,
-    #[cfg(test)]
-    #[serde(default = "crate::connectors::impls::gpubsub::default_skip_authentication")]
-    pub skip_authentication: bool,
 }
 
 impl ConfigImpl for Config {}
@@ -267,7 +264,6 @@ mod tests {
                 request_timeout: 0,
                 endpoint: "".to_string(),
                 topic: "".to_string(),
-                skip_authentication: false,
             },
             url: Default::default(),
             hostname: "".to_string(),
@@ -285,7 +281,6 @@ mod tests {
                 request_timeout: 0,
                 endpoint: "".to_string(),
                 topic: "".to_string(),
-                skip_authentication: false,
             },
             url: Default::default(),
             hostname: "".to_string(),
