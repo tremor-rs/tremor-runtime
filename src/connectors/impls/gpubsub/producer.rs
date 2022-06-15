@@ -26,12 +26,11 @@ use crate::errors::Result;
 use async_std::prelude::FutureExt;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage};
-use gouth::Token;
 use std::collections::HashMap;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
-use tonic::{Code, Status};
+use tonic::{Code};
 use tremor_pipeline::{ConfigImpl, Event};
 use tremor_value::Value;
 use value_trait::ValueAccess;
@@ -122,8 +121,10 @@ struct GpubSink {
 #[cfg(not(test))]
 fn create_publisher_client(
     channel: Channel,
-    _config: &Config,
 ) -> Result<PublisherClient<InterceptedService<Channel, AuthInterceptor>>> {
+    use gouth::Token;
+    use tonic::Status;
+
     let token = Token::new()?;
 
     Ok(PublisherClient::with_interceptor(
@@ -141,37 +142,15 @@ fn create_publisher_client(
 #[cfg(test)]
 fn create_publisher_client(
     channel: Channel,
-    config: &Config,
 ) -> Result<PublisherClient<InterceptedService<Channel, AuthInterceptor>>> {
     use std::sync::Arc;
 
-    let skip_authentication = config.skip_authentication;
-
-    let client = if skip_authentication {
-        info!("Skipping auth...");
-
-        PublisherClient::with_interceptor(
-            channel,
-            AuthInterceptor {
-                token: Box::new(|| Ok(Arc::new(String::new()))),
-            },
-        )
-    } else {
-        let token = Token::new()?;
-
-        PublisherClient::with_interceptor(
-            channel,
-            AuthInterceptor {
-                token: Box::new(move || {
-                    token.header_value().map_err(|_| {
-                        Status::unavailable("Failed to retrieve authentication token.")
-                    })
-                }),
-            },
-        )
-    };
-
-    Ok(client)
+    Ok(PublisherClient::with_interceptor(
+        channel,
+        AuthInterceptor {
+            token: Box::new(|| Ok(Arc::new(String::new()))),
+        },
+    ))
 }
 
 #[async_trait::async_trait()]
@@ -189,7 +168,7 @@ impl Sink for GpubSink {
 
         let channel = channel.connect().await?;
 
-        self.client = Some(create_publisher_client(channel, &self.config)?);
+        self.client = Some(create_publisher_client(channel)?);
 
         Ok(true)
     }
