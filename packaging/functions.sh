@@ -58,6 +58,13 @@ function package_archive {
 
 
 function package_deb {
+  if [ "${PROFILE}" != "release" ]
+  then
+    # cargo deb has a bug that prevents it from being build as debug see https://github.com/kornelski/cargo-deb/issues/34
+    echo "WARNING: We are skipping deb creation"
+    return
+  fi
+
   # install cargo-deb if not already there (helps us easily build a deb package)
   # see https://github.com/mmstick/cargo-deb
   if ! cargo deb --version > /dev/null 2>&1; then
@@ -69,10 +76,13 @@ function package_deb {
   # attempt to get the deb file name, but this suppresses error output too
   #local deb_file=$(cargo deb --no-build --no-strip --output "$PACKAGES_DIR" --deb-version "$VERSION" --target "$TARGET" | tail -n1)
   # we control stripping as part of the build process separately so don't do it here
+
+
   cargo deb --verbose --no-build --no-strip \
     --target "$TARGET" \
     --output "$PACKAGES_DIR" \
-    --deb-version "$VERSION"
+    --deb-version "$VERSION" \
+    --profile "${PROFILE}"
 
   # final cleanup. directory created by cargo-deb
   rm -rf "${ROOT_DIR}/target/${TARGET}/debian/"
@@ -91,6 +101,12 @@ function package_deb {
 
 
 function package_rpm {
+  if [ "${PROFILE}" != "release" ]
+  then
+    # cargo RPM has a bug that prevents it from being build as debug see https://github.com/iqlusioninc/cargo-rpm/issues/94
+    echo "WARNING: We are skipping RPM creation"
+    return
+  fi
   local rpm_build_dir="${TARGET_BUILD_DIR}/rpmbuild"
 
   # install cargo-rpm if not already there (helps us easily build a rpm package)

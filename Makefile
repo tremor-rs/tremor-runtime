@@ -197,5 +197,30 @@ package-%: build-%
 
 packages:
 	make $(foreach target,$(RELEASE_TARGETS),package-$(target))
+###############################################################################
+
+# eg: test-build-x86_64-unknown-linux-gnu
+test-build-%:
+	@echo ""
+	TREMOR_MODE=debug ./packaging/cross_build.sh $*
+
+
+# eg: test-package-x86_64-unknown-linux-gnu
+test-package-%: test-build-%
+	@echo ""
+
+	@# ensure that we have RELEASE_FORMATS_* var defined here for the provided target
+	@echo "Packaging for target: $*"
+	@RELEASE_FORMATS=$(RELEASE_FORMATS_$*); \
+		if [ -z "$${RELEASE_FORMATS}" ]; then \
+			echo "Error: Variable RELEASE_FORMATS_$* not set in the Makefile"; \
+			exit 1; \
+		fi
+
+	@# package applicable formats for the given release target
+	./packaging/run.sh -d -f $(RELEASE_FORMATS_$*) $*
+
+test-packages:
+	make $(foreach target,$(RELEASE_TARGETS),test-package-$(target))
 
 ###############################################################################
