@@ -2,7 +2,7 @@
 
 ## Unreleased
 ### Fixes
-- Don't fail unrecoverably when the connecition to the server is lost in Google PubSub consumer.
+- Don't fail unrecoverably when the connection to the server is lost in Google PubSub consumer.
 
 ## [0.12.2]
 ### New features
