@@ -3,6 +3,7 @@
 ## Unreleased
 ### Fixes
 - Don't fail unrecoverably when the connection to the server is lost in Google PubSub consumer.
+- Update bert operators to work with tremor 0.12
 
 ## [0.12.2]
 ### New features

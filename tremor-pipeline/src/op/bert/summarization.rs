@@ -17,10 +17,10 @@
 
 use std::fmt;
 
-use crate::errors::*;
 use crate::op::prelude::*;
 //use rust_bert::pipelines::common::ModelType;
 use rust_bert::pipelines::summarization::{SummarizationConfig, SummarizationModel};
+use std::sync::Mutex;
 use tremor_script::prelude::*;
 
 #[derive(Deserialize)]
@@ -33,7 +33,7 @@ struct Config {
 impl ConfigImpl for Config {}
 
 struct Summerization {
-    model: SummarizationModel,
+    model: Mutex<SummarizationModel>,
 }
 
 impl fmt::Debug for Summerization {
@@ -46,10 +46,10 @@ op!(SummerizationFactory(_uid, node) {
     if let Some(config_map) = &node.config {
         let config = Config::new(config_map)?;
         debug!("{}", config.file);
-        let s_config =SummarizationConfig::default();
+        let s_config = SummarizationConfig::default();
         if let Ok(model) = SummarizationModel::new(s_config) {
             Ok(Box::new(Summerization {
-                model
+                model: Mutex::new(model)
             }))
         } else {
             Err(ErrorKind::BadOpConfig("Could not instantiate this BERT summarization operator.".to_string()).into())
@@ -61,32 +61,23 @@ op!(SummerizationFactory(_uid, node) {
 });
 
 impl Operator for Summerization {
-    fn handles_contraflow(&self) -> bool {
-        false
-    }
-
-    fn handles_signal(&self) -> bool {
-        true
-    }
-    fn on_signal(&mut self, _uid: u64, _signal: &mut Event) -> Result<EventAndInsights> {
-        Ok(EventAndInsights::default())
-    }
-
     fn on_event(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _port: &str,
         _state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {
-        event.data.rent_mut(|ValueAndMeta { v, m }| {
+        event.data.rent_mut(|data| -> Result<()> {
+            let (v, m) = data.parts_mut();
             if let Some(s) = v.as_str() {
-                let mut summary = self.model.summarize(&[s]);
+                let mut summary = self.model.lock()?.summarize(&[s]);
                 if let Some(s) = summary.pop() {
-                    m.insert("summary", s)?;
+                    m.try_insert("summary", s);
                 }
             }
-        });
+            Ok(())
+        })?;
         Ok(EventAndInsights::from(event))
     }
 }
