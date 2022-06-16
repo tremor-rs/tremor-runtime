@@ -8,6 +8,26 @@ on:
 
 jobs:
   tests-linux:
+    strategy:
+      matrix:
+        include:
+          - project: "tremor-runtime"
+            covname: runtime
+            features: "--features integration"
+          - project: "tremor-api"
+            covname: api
+          - project: "tremor-cli"
+            covname: cli
+          - project: "tremor-common"
+            covname: common
+          - project: "tremor-influx"
+            covname: influx
+          - project: "tremor-pipeline"
+            covname: pipeline
+          - project: "tremor-script"
+            covname: script
+          - project: "tremor-value"
+            covname: value
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -25,11 +45,10 @@ jobs:
           PROPTEST_CASES: 2500
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
           RUST_BACKTRACE: 1
-        run: cargo llvm-cov --workspace --lcov --output-path lcov.txt --features integration
+        run: cargo llvm-cov --lcov --output-path lcov.txt -p ${{ matrix.project }} --all-targets ${{ matrix.features }}
       - uses: codecov/codecov-action@v3
         with:
-          #token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
           files: ./lcov.txt # optional
-          flags: unittests # optional
+          flags: ${{ matrix.covname }} # optional
           fail_ci_if_error: true # optional (default = false)
           verbose: true # optional (default = false)      
