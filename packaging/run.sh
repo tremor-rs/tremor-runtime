@@ -34,15 +34,20 @@ function print_help {
     cat <<EOF
 Usage: ${0##*/} [-h] [-f FORMATS] TARGET
   -h         show this help
+  -d         create debug build
   -f FORMATS package format(s). Supported values: ${SUPPORTED_FORMATS}
              To specify multiple formats, pass as a comma-separated string.
 EOF
 }
 
 ###############################################################################
+PROFILE="release"
 
-while getopts hf: opt; do
+while getopts hdf: opt; do
   case $opt in
+    d)
+      PROFILE="debug"
+      ;;
     h)
       print_help
       exit 0
@@ -57,6 +62,7 @@ while getopts hf: opt; do
   esac
 done
 shift "$((OPTIND-1))"
+
 TARGET="$@"
 
 if [ -z "$TARGET" ]; then
@@ -80,7 +86,7 @@ pushd "$ROOT_DIR" > /dev/null
 
 ###############################################################################
 
-TARGET_BUILD_DIR="${ROOT_DIR}/target/${TARGET}/release" # we always package for release builds
+TARGET_BUILD_DIR="${ROOT_DIR}/target/${TARGET}/${PROFILE}" # we always package for release builds
 TARGET_BIN="${TARGET_BUILD_DIR}/tremor"
 
 # assumes that the build's been done first

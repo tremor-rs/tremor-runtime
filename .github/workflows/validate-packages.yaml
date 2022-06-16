@@ -8,6 +8,6 @@ jobs:
       - name: Build releases
         run: make builds
       - name: Creating release packages
-        run: make packages
+        run: make test-packages
       - name: List files
         run: ls packaging/out/*
