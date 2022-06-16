@@ -1,5 +1,6 @@
 use std::time::Duration;
 use googapis::google::storage::v2::storage_client::StorageClient;
+use googapis::google::storage::v2::WriteObjectRequest;
 use gouth::Token;
 use tonic::codegen::InterceptedService;
 use tonic::Status;
@@ -16,7 +17,7 @@ use crate::connectors::utils::url::HttpsDefaults;
 pub struct Config {
     endpoint: String,
     connect_timeout: u64,
-    request_timeout: u64
+    // request_timeout: u64
 }
 
 impl ConfigImpl for Config {}
@@ -68,8 +69,24 @@ struct GCSWriterSink {
 
 #[async_trait::async_trait]
 impl Sink for GCSWriterSink {
-    async fn on_event(&mut self, input: &str, event: Event, ctx: &SinkContext, serializer: &mut EventSerializer, start: u64) -> Result<SinkReply> {
-        todo!()
+    async fn on_event(&mut self, _input: &str, _event: Event, _ctx: &SinkContext, _serializer: &mut EventSerializer, _start: u64) -> Result<SinkReply> {
+        let client = self.client.as_mut().unwrap(); // fixme error handling lol
+
+        let stream = async_stream::stream! {
+            yield WriteObjectRequest {
+                write_offset: 0,
+                object_checksums: None,
+                finish_write: false,
+                common_object_request_params: None,
+                common_request_params: None,
+                first_message: None,
+                data: None
+            };
+        };
+
+        client.write_object(stream).await?;
+
+        Ok(SinkReply::ACK)
     }
 
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
@@ -104,6 +121,6 @@ impl Sink for GCSWriterSink {
     }
 
     fn auto_ack(&self) -> bool {
-        todo!()
+        false
     }
 }
