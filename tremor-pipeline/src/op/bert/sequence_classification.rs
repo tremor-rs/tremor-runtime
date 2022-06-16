@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// this is not enabled
-// #![cfg_attr(coverage, no_coverage)]
-
-use crate::errors::*;
 use crate::op::prelude::*;
-//use rust_bert::pipelines::common::ModelType;
-use rust_bert::pipelines::sequence_classification::{
-    SequenceClassificationConfig, SequenceClassificationModel,
+use rust_bert::resources::{LocalResource, RemoteResource};
+use rust_bert::{
+    pipelines::sequence_classification::{
+        SequenceClassificationConfig, SequenceClassificationModel,
+    },
+    resources::ResourceProvider,
 };
-use rust_bert::resources::{LocalResource, RemoteResource, Resource};
 use std::path::PathBuf;
+use std::sync::Mutex;
 use tremor_script::prelude::*;
 use url::Url;
 
@@ -51,18 +50,26 @@ fn dflt_vocabulary() -> String {
     "https://cdn.huggingface.co/distilbert-base-uncased-finetuned-sst-2-english-vocab.txt"
         .to_string()
 }
+type Resource = Box<dyn ResourceProvider + Send>;
 
 impl ConfigImpl for Config {}
 
-#[derive(Debug)]
 struct SequenceClassification {
-    model: SequenceClassificationModel,
+    model: Mutex<SequenceClassificationModel>,
+}
+
+impl std::fmt::Debug for SequenceClassification {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SequenceClassification")
+            .field("model", &"...")
+            .finish()
+    }
 }
 
 fn get_resource(resource: &str) -> Result<Resource> {
-    if resource.starts_with("/") {
+    if resource.starts_with('/') {
         // local
-        Ok(Resource::Local(LocalResource {
+        Ok(Box::new(LocalResource {
             local_path: PathBuf::from(resource),
         }))
     } else {
@@ -70,31 +77,27 @@ fn get_resource(resource: &str) -> Result<Resource> {
         let err: Error = ErrorKind::BadOpConfig("Invalid URL".to_string()).into();
         let name = remote_url
             .path_segments()
-            .and_then(|x| x.last())
-            .and_then(|l| l.split(".").next())
+            .and_then(std::iter::Iterator::last)
+            .and_then(|l| l.split('.').next())
             .ok_or(err)?;
-        Ok(Resource::Remote(RemoteResource::from_pretrained((
-            name, resource,
-        ))))
+        Ok(Box::new(RemoteResource::from_pretrained((name, resource))))
     }
 }
 
 op!(SequenceClassificationFactory(_uid, node) {
-    let mapping = serde_yaml::Value::Mapping(serde_yaml::Mapping::new());
-    let config_map = if let Some(map) = &node.config {
-        map
-    } else {
-        &mapping
-    };
+
+    let config_map =  node.config.clone().unwrap_or_else(Value::object);
     let config = Config::new(&config_map)?;
-    let mut sc_config = SequenceClassificationConfig::default();
-    sc_config.config_resource = get_resource(config.config_file.as_str())?; //rust_bert::resources::Resource::Remote(RemoteResource::)
-    sc_config.model_resource = get_resource(config.model_file.as_str())?;
-    sc_config.vocab_resource = get_resource(config.vocabulary_file.as_str())?;
+    let sc_config = SequenceClassificationConfig {
+        config_resource: get_resource(config.config_file.as_str())?,
+        model_resource: get_resource(config.model_file.as_str())?,
+        vocab_resource: get_resource(config.vocabulary_file.as_str())?,
+        ..Default::default()
+    };
 
     if let Ok(model) = SequenceClassificationModel::new(sc_config) {
         Ok(Box::new(SequenceClassification {
-            model
+            model: Mutex::new(model)
         }))
     } else {
         Err(ErrorKind::BadOpConfig("Could not instantiate this BERT sequence classification operator.".to_string()).into())
@@ -102,35 +105,26 @@ op!(SequenceClassificationFactory(_uid, node) {
 });
 
 impl Operator for SequenceClassification {
-    fn handles_contraflow(&self) -> bool {
-        false
-    }
-
-    fn handles_signal(&self) -> bool {
-        true
-    }
-    fn on_signal(&mut self, _uid: u64, _signal: &mut Event) -> Result<EventAndInsights> {
-        Ok(EventAndInsights::default())
-    }
-
     fn on_event(
         &mut self,
-        _uid: u64,
+        _uid: OperatorId,
         _port: &str,
         _state: &mut Value<'static>,
         mut event: Event,
     ) -> Result<EventAndInsights> {
-        event.data.rent_mut(|ValueAndMeta { v, m }| {
+        event.data.rent_mut(|data| -> Result<()> {
+            let (v, m) = data.parts_mut();
             if let Some(s) = v.as_str() {
-                let labels = self.model.predict(&[s]);
+                let labels = self.model.lock()?.predict(&[s]);
                 let mut label_meta = Value::object_with_capacity(labels.len());
                 for label in labels {
-                    label_meta.insert(label.text, label.score)?;
+                    label_meta.try_insert(label.text, label.score);
                 }
                 // mutating the event
-                m.insert("classification", label_meta)?;
+                m.try_insert("classification", label_meta);
             }
-        });
+            Ok(())
+        })?;
         Ok(EventAndInsights::from(event))
     }
 }
