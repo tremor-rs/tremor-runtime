@@ -11,9 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
-      - name: Build releases
-        run: make builds
-      - name: Creating release packages
+      - uses: Swatinem/rust-cache@v1
+      - name: Creating test packages
         run: make test-packages
       - name: List files
         run: ls packaging/out/*
