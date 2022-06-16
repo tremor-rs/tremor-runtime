@@ -121,7 +121,7 @@ async fn consumer_task(
     subscription_id: String,
     ack_deadline: Duration,
     ack_receiver: Receiver<u64>,
-) {
+) -> Result<()> {
     let mut ack_counter = 0;
 
     let ack_ids = Arc::new(RwLock::new(BlueGreenHashMap::new(
@@ -159,26 +159,10 @@ async fn consumer_task(
             }
         }
     };
-    let stream = client.streaming_pull(request_stream).await;
-
-    let mut stream = match stream {
-        Ok(stream) => stream.into_inner(),
-        Err(e) => {
-            error!("Failed to send a streaming pull request: {}", e);
-            return;
-        }
-    };
+    let mut stream = client.streaming_pull(request_stream).await?.into_inner();
 
     while let Some(response) = stream.next().await {
-        let response = match response {
-            Ok(x) => x,
-            Err(e) => {
-                // We can't receive from the stream, exit the task, so the main task can reconnect
-                warn!("Failed to read from stream, exiting client task... {}", e);
-
-                return;
-            }
-        };
+        let response = response?;
 
         for message in response.received_messages {
             let ReceivedMessage {
@@ -193,15 +177,13 @@ async fn consumer_task(
                     .write()
                     .await
                     .insert(ack_counter, ack_id, SystemTime::now());
-                if let Err(e) = sender.send(Ok((ack_counter, pubsub_message))).await {
-                    error!("Failed to send a PubSub message to the main task: {}", e);
 
-                    // If we can't send to the main task, disconnect and let it restart
-                    return;
-                }
+                sender.send(Ok((ack_counter, pubsub_message))).await?;
             }
         }
     }
+
+    Ok(())
 }
 
 fn pubsub_metadata(
@@ -228,7 +210,7 @@ fn pubsub_metadata(
 
 #[async_trait::async_trait]
 impl Source for GSubSource {
-    async fn connect(&mut self, _ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
         let mut channel = Channel::from_shared(self.config.endpoint.clone())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
         if self.url.scheme() == "https" {
@@ -286,14 +268,17 @@ impl Source for GSubSource {
         let (tx, rx) = async_std::channel::bounded(QSIZE.load(Ordering::Relaxed));
         let (ack_tx, ack_rx) = async_std::channel::bounded(QSIZE.load(Ordering::Relaxed));
 
-        let join_handle = async_std::task::spawn(consumer_task(
-            client_background,
-            self.client_id.clone(),
-            tx,
-            self.config.subscription_id.clone(),
-            Duration::from_nanos(self.config.ack_deadline),
-            ack_rx,
-        ));
+        let join_handle = spawn_task(
+            ctx.clone(),
+            consumer_task(
+                client_background,
+                self.client_id.clone(),
+                tx,
+                self.config.subscription_id.clone(),
+                Duration::from_nanos(self.config.ack_deadline),
+                ack_rx,
+            ),
+        );
 
         self.receiver = Some(rx);
         self.ack_sender = Some(ack_tx);
@@ -303,26 +288,14 @@ impl Source for GSubSource {
         Ok(true)
     }
 
-    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
         let receiver = self.receiver.as_mut().ok_or(ErrorKind::ClientNotAvailable(
             "PubSub",
             "The receiver is not connected",
         ))?;
         let (ack_id, pubsub_message) = match receiver.recv().await? {
             Ok(response) => response,
-            Err(error) => {
-                let error_kind = error.kind();
-                return if let ErrorKind::Timeout(_) = error_kind {
-                    ctx.swallow_err(
-                        ctx.notifier.connection_lost().await,
-                        "Failed to notify about PubSub connection loss",
-                    );
-
-                    Ok(SourceReply::StreamFail(DEFAULT_STREAM_ID))
-                } else {
-                    Err(error)
-                };
-            }
+            Err(error) => return Err(error),
         };
 
         *pull_id = ack_id;
