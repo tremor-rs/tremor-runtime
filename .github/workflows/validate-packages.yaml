@@ -1,5 +1,11 @@
 name: Validate Package Generation
 
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
 jobs:
   package:
     runs-on: ubuntu-latest
