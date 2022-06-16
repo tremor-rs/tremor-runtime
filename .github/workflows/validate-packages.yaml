@@ -1,8 +1,4 @@
-name: Validate package creation
-
-on:
-  release:
-    types: [published]
+name: Validate Package Generation
 
 jobs:
   package:
