@@ -41,7 +41,7 @@ signal-hook-async-std = "0.2"
 simd-json = { version = "0.5", features = ["known-key"] }
 # We need to stay with 0.2 for now as there are reasons that can be named for the need to be able to
 # compile and run on operating systems that are a decade old. (insert apropriate ammount rage)
-snmalloc-rs = { version = "0.2" }
+snmalloc-rs = { version = "0.3" }
 surf = { version = "=2.3.2", default-features = false, features = [
     "encoding",
     "h1-client-rustls",
