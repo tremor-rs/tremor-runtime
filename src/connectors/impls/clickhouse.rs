@@ -19,6 +19,7 @@ use std::fmt::{self, Display, Formatter};
 use crate::connectors::prelude::*;
 
 use clickhouse_rs::{
+    errors::Error as CError,
     types::{DateTimeType, SqlType},
     Block, ClientHandle, Pool,
 };
@@ -148,9 +149,20 @@ pub(crate) struct ClickhouseSink {
 
 #[async_trait::async_trait]
 impl Sink for ClickhouseSink {
-    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+    async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let pool = Pool::new(self.db_url.as_str());
-        let handle = pool.get_handle().await?;
+        let handle = match pool.get_handle().await {
+            Ok(handle) => handle,
+            err @ Err(e) => {
+                return match e {
+                    CError::Driver(_) | CError::Io(_) | CError::Connection(_) => {
+                        ctx.notifier.connection_lost()?;
+                        Ok(false)
+                    }
+                    _ => err,
+                }
+            }
+        };
 
         self.handle = Some(handle);
 
