@@ -33,6 +33,7 @@ pub(crate) mod file;
 /// Google Cloud Platform
 pub(crate) mod gbq;
 pub(crate) mod gcl;
+pub(crate) mod gcs;
 pub(crate) mod gpubsub;
 /// HTTP
 pub(crate) mod http;
@@ -63,4 +64,3 @@ pub(crate) mod unix_socket;
 pub(crate) mod wal;
 /// `WebSockets`
 pub(crate) mod ws;
-mod gcs;
