@@ -1,0 +1,18 @@
+# For details, see https://www.tremor.rs/docs/0.12/getting-started/
+
+
+define flow main
+flow
+  use tremor::pipelines;
+  use bench;
+  define connector metronome from metronome
+  with
+    config = {"interval": 500}
+  end;
+  create pipeline main from pipelines::passthrough;
+  create connector metronome;
+
+  connect /connector/metronome to /pipeline/main;
+  connect /pipeline/main to /connector/bench;
+end;
+deploy flow main;
