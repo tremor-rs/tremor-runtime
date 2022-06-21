@@ -28,25 +28,21 @@ else
 
     ARTEFACTS=""
 
-    # Load *.yaml files
-    YAMLS=$(find ${CFG_DIR} -name '*.yaml' -print 2>/dev/null | sort)
-    [ ! -z "$YAMLS" ] && ARTEFACTS="$ARTEFACTS $YAMLS"
+    # NOTE: find does not always provide sorting, we need to ensure that order is preserved
+    # correctly
 
-    # Load *.yml files
-    YMLS=$(find ${CFG_DIR} -name '*.yml' -print 2>/dev/null | sort)
-    [ ! -z "$YMLS" ] && ARTEFACTS="$ARTEFACTS $YMLS"
 
-    # Load *.trickle files
-    QUERIES=$(find ${CFG_DIR}/ -name '*.trickle' -print 2>/dev/null | sort)
-    [ ! -z "$QUERIES" ] && ARTEFACTS="$ARTEFACTS $QUERIES"
+    # Load *.troy files
+    TROYS=$(find /etc/tremor/config/ -not -path '*/.*' -type f,l -name '*.troy' -print 2>/dev/null | sort)
+    [ ! -z "$TROYS" ] && ARTEFACTS="$ARTEFACTS $TROYS"
 
-    ARGS="server run --logger-config ${LOGGER_FILE}"
+    ARGS="--logger-config ${LOGGER_FILE} server run"
 
     if [ ! -z "${ARTEFACTS}" ]
     then
-        ARGS="${ARGS} -f ${ARTEFACTS}"
+        ARGS="${ARGS} ${ARTEFACTS}"
     fi
 fi
 
 # IMPORTANT: do not quote ARGS, no matter what shellcheck tells you
-exec /usr/bin/tremor ${ARGS}
+exec /usr/bin/tini /tremor -- ${ARGS}
