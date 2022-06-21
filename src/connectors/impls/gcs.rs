@@ -1,1 +1,1 @@
-mod writer;
+pub(crate) mod writer;

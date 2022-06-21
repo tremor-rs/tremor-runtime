@@ -1,23 +1,33 @@
-use std::time::Duration;
-use googapis::google::storage::v2::storage_client::StorageClient;
-use googapis::google::storage::v2::WriteObjectRequest;
 use gouth::Token;
-use tonic::codegen::InterceptedService;
-use tonic::Status;
-use tonic::transport::{Certificate, Channel, ClientTlsConfig};
-use tremor_pipeline::{ConfigImpl, Event};
-use tremor_value::Value;
-use crate::connectors::{CodecReq, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
-use crate::connectors::google::AuthInterceptor;
-use crate::connectors::prelude::{Attempt, EventSerializer, SinkAddr, SinkContext, SinkManagerBuilder, SinkReply, Result, Url};
+use crate::connectors::prelude::{
+    Attempt, EventSerializer, Result, SinkAddr, SinkContext, SinkManagerBuilder, SinkReply, Url,
+};
 use crate::connectors::sink::Sink;
 use crate::connectors::utils::url::HttpsDefaults;
+use crate::connectors::{CodecReq, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType, Context};
+use http_client::h1::H1Client;
+use http_client::HttpClient;
+use http_types::{Method, Request};
+use value_trait::ValueAccess;
+use tremor_pipeline::{ConfigImpl, Event};
+use tremor_value::Value;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
+    #[serde(default="default_endpoint")]
     endpoint: String,
+    #[serde(default="default_connect_timeout")]
+    #[allow(unused)] // fixme! use or remove
     connect_timeout: u64,
     // request_timeout: u64
+}
+
+fn default_endpoint() -> String {
+    "https://storage.googleapis.com/upload/storage/v1".to_string()
+}
+
+fn default_connect_timeout() -> u64 {
+    10_000_000_000
 }
 
 impl ConfigImpl for Config {}
@@ -28,10 +38,15 @@ pub(crate) struct Builder {}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
-        ConnectorType("gcs-writer".into())
+        ConnectorType("gcs_writer".into())
     }
 
-    async fn build_cfg(&self, _alias: &str, _config: &ConnectorConfig, connector_config: &Value) -> Result<Box<dyn Connector>> {
+    async fn build_cfg(
+        &self,
+        _alias: &str,
+        _config: &ConnectorConfig,
+        connector_config: &Value,
+    ) -> Result<Box<dyn Connector>> {
         let config = Config::new(connector_config)?;
 
         Ok(Box::new(GCSWriterConnector { config }))
@@ -39,17 +54,21 @@ impl ConnectorBuilder for Builder {
 }
 
 struct GCSWriterConnector {
-    config:Config
+    config: Config,
 }
 
 #[async_trait::async_trait]
 impl Connector for GCSWriterConnector {
-    async fn create_sink(&mut self, sink_context: SinkContext, builder: SinkManagerBuilder) -> Result<Option<SinkAddr>> {
+    async fn create_sink(
+        &mut self,
+        sink_context: SinkContext,
+        builder: SinkManagerBuilder,
+    ) -> Result<Option<SinkAddr>> {
         let url = Url::<HttpsDefaults>::parse(&self.config.endpoint)?;
-        let sink = GCSWriterSink{
+        let sink = GCSWriterSink {
             client: None,
             url,
-            config: self.config.clone()
+            config: self.config.clone(),
         };
 
         let addr = builder.spawn(sink, sink_context)?;
@@ -62,58 +81,49 @@ impl Connector for GCSWriterConnector {
 }
 
 struct GCSWriterSink {
-    client: Option<StorageClient<InterceptedService<Channel, AuthInterceptor>>>,
+    client: Option<H1Client>,
     url: Url<HttpsDefaults>,
-    config: Config
+    #[allow(unused)] // fixme! use or remove
+    config: Config,
 }
 
 #[async_trait::async_trait]
 impl Sink for GCSWriterSink {
-    async fn on_event(&mut self, _input: &str, _event: Event, _ctx: &SinkContext, _serializer: &mut EventSerializer, _start: u64) -> Result<SinkReply> {
+    async fn on_event(
+        &mut self,
+        _input: &str,
+        event: Event,
+        ctx: &SinkContext,
+        serializer: &mut EventSerializer,
+        _start: u64,
+    ) -> Result<SinkReply> {
         let client = self.client.as_mut().unwrap(); // fixme error handling lol
+        let token = Token::new().unwrap();
 
-        let stream = async_stream::stream! {
-            yield WriteObjectRequest {
-                write_offset: 0,
-                object_checksums: None,
-                finish_write: false,
-                common_object_request_params: None,
-                common_request_params: None,
-                first_message: None,
-                data: None
-            };
-        };
+        for (value, meta) in event.value_meta_iter() {
+            let meta = ctx.extract_meta(meta);
 
-        client.write_object(stream).await?;
+            let url = url::Url::parse(
+                &format!(
+                    "{}/b/{}/o?name={}",
+                    self.url,
+                    meta.get("bucket").unwrap().as_str().unwrap(),
+                    meta.get("name").unwrap().as_str().unwrap()
+                )
+            ).unwrap();
+            let mut request = Request::new(Method::Post, url);
+            request.insert_header("Authorization", token.header_value().unwrap().to_string());
+            request.set_body(serializer.serialize(value, event.ingest_ns).unwrap()[0].clone());
+            let response = client.send(request).await;
+
+            dbg!(response.unwrap().body_string().await.unwrap());
+        }
 
         Ok(SinkReply::ACK)
     }
 
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let mut channel = Channel::from_shared(self.config.endpoint.clone())?
-            .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
-        if self.url.scheme() == "https" {
-            let tls_config = ClientTlsConfig::new()
-                .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
-                .domain_name(
-                    self.url
-                        .host_str()
-                        .ok_or_else(|| Status::unavailable("The endpoint is missing a hostname"))?
-                        .to_string(),
-                );
-
-            channel = channel.tls_config(tls_config)?;
-        }
-
-        let channel = channel.connect().await?;
-        let token = Token::new()?;
-        let client = StorageClient::with_interceptor(channel, AuthInterceptor {
-            token: Box::new(move || {
-                token.header_value().map_err(|_| {
-                    Status::unavailable("Failed to retrieve authentication token.")
-                })
-            }),
-        });
+        let client = H1Client::new();
 
         self.client = Some(client);
 
