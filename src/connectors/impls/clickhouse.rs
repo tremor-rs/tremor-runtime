@@ -153,13 +153,13 @@ impl Sink for ClickhouseSink {
         let pool = Pool::new(self.db_url.as_str());
         let handle = match pool.get_handle().await {
             Ok(handle) => handle,
-            err @ Err(e) => {
+            Err(e) => {
                 return match e {
                     CError::Driver(_) | CError::Io(_) | CError::Connection(_) => {
-                        ctx.notifier.connection_lost()?;
+                        ctx.notifier.connection_lost().await?;
                         Ok(false)
                     }
-                    _ => err,
+                    _ => Err(Error::from(e)),
                 }
             }
         };
