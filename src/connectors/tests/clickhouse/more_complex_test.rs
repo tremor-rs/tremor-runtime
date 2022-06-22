@@ -162,22 +162,22 @@ async fn test() -> Result<()> {
                     "name": "j",
                     "type": "DateTime",
                 },
-                // {
-                //     "name": "k",
-                //     "type": "DateTime64(0)",
-                // },
-                // {
-                //     "name": "l",
-                //     "type": "DateTime64(3)",
-                // },
-                // {
-                //     "name": "m",
-                //     "type": "DateTime64(6)",
-                // },
-                // {
-                //     "name": "n",
-                //     "type": "DateTime64(9)",
-                // },
+                {
+                    "name": "k",
+                    "type": "DateTime64(0)",
+                },
+                {
+                    "name": "l",
+                    "type": "DateTime64(3)",
+                },
+                {
+                    "name": "m",
+                    "type": "DateTime64(6)",
+                },
+                {
+                    "name": "n",
+                    "type": "DateTime64(9)",
+                },
                 {
                     "name": "o",
                     "type": "IPv4",
@@ -225,10 +225,10 @@ async fn test() -> Result<()> {
                     "h": -33_000,
                     "i": "hello",
                     "j": 1634400000,
-                    // "k": 1634400000,
-                    // "l": 1634400000_000_u64,
-                    // "m": 1634400000_000_000_u64,
-                    // "n": 1634400000_000_000_000_u64,
+                    "k": 1634400000,
+                    "l": 1634400000_000_u64,
+                    "m": 1634400000_000_000_u64,
+                    "n": 1634400000_000_000_000_u64,
                     "o": [192, 168, 1, 10],
                     "p": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
                     "q": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
@@ -250,10 +250,10 @@ async fn test() -> Result<()> {
                     "h": -33_000,
                     "i": "hello",
                     "j": 1634400000,
-                    // "k": 1634400000,
-                    // "l": 1634400000_000_u64,
-                    // "m": 1634400000_000_000_u64,
-                    // "n": 1634400000_000_000_000_u64,
+                    "k": 1634400000,
+                    "l": 1634400000_000_u64,
+                    "m": 1634400000_000_000_u64,
+                    "n": 1634400000_000_000_000_u64,
                     "o": "192.168.1.10",
                     "p": "0001:0203:0405:0607:0809:0A0B:0C0D:0E0F",
                     "q": "000102030405060708090A0B0C0D0E0F",
@@ -345,10 +345,10 @@ async fn test() -> Result<()> {
                 h: i64 = -33_000,
                 i: &str = "hello",
                 j: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1634400000, 0), Utc),
-                // k: _ = _,
-                // l: _ = _,
-                // m: _ = _,
-                // n: _ = _,
+                k: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1634400000, 0), Utc),
+                l: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1634400000, 0), Utc),
+                m: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1634400000, 0), Utc),
+                n: DateTime<Tz> = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(1634400000, 0), Utc),
                 o: Ipv4Addr = Ipv4Addr::new(192, 168, 1, 10),
                 p: Ipv6Addr = Ipv6Addr::from([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]),
                 // Any type here must implement the FromSql trait. The problem is
@@ -386,10 +386,10 @@ async fn create_table(port: u16) -> Result<()> {
             h Int64,
             i String,
             j DateTime,
-            -- k DateTime64(0, \"etc/UTC\"),
-            -- l DateTime64(3, \"etc/UTC\"),
-            -- m DateTime64(6, \"etc/UTC\"),
-            -- n DateTime64(9, \"etc/UTC\"),
+            k DateTime64(0, \"etc/UTC\"),
+            l DateTime64(3, \"etc/UTC\"),
+            m DateTime64(6, \"etc/UTC\"),
+            n DateTime64(9, \"etc/UTC\"),
             o IPv4,
             p IPv6,
             q UUID,
@@ -402,27 +402,3 @@ async fn create_table(port: u16) -> Result<()> {
     let mut client = pool.get_handle().await?;
     client.execute(request).await.map_err(Into::into)
 }
-
-// ---------------------------------
-// | Column name | Type            |
-// |-------------|-----------------|
-// | a           | UInt8           |
-// | b           | UInt16          |
-// | c           | UInt32          |
-// | d           | UInt64          |
-// | e           | Int8            |
-// | f           | Int16           |
-// | g           | Int32           |
-// | h           | Int64           |
-// | i           | String          |
-// | j           | DateTime        |
-// | k           | DateTime64(0)   |
-// | l           | DateTime64(3)   |
-// | m           | DateTime64(6)   |
-// | n           | DateTime64(9)   |
-// | o           | IpV4            |
-// | p           | IpV6            |
-// | q           | Uuid            |
-// | r           | Nullable(UInt8) |
-// | s           | Array(String)   |
-// ---------------------------------
