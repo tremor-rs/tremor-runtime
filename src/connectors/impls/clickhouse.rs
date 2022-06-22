@@ -367,7 +367,7 @@ mod tests {
                 $(
                     test_display! { $test_name :: $value => $displayed }
                 )*
-            }
+            };
         }
 
         use DummySqlType::*;
@@ -408,6 +408,84 @@ mod tests {
             datetime64_micros :: DateTime64Micros => "DateTime64(6)",
 
             datetime64_nanos :: DateTime64Nanos => "DateTime64(9)",
+        }
+    }
+
+    mod dummy_sql_type_into_sql_type {
+        use chrono_tz::Tz::UTC;
+
+        use super::*;
+
+        macro_rules! test_conversion {
+            ($test_name:ident :: $left:expr => $right:expr) => {
+                #[test]
+                fn $test_name() {
+                    // We don't want the enum variant import to pollute each
+                    // other. As such, the expansion of left and right go in two
+                    // separate blocks.
+
+                    let init: DummySqlType = {
+                        use DummySqlType::*;
+                        $left
+                    };
+                    let left: &'static SqlType = (&init).into();
+
+                    let right = {
+                        use SqlType::*;
+                        $right
+                    };
+
+                    assert_eq!(left, right);
+                }
+            };
+
+            ( $( $test_name:ident :: $left:expr => $right:expr ),* $(,)? ) => {
+                $(
+                    test_conversion! {
+                        $test_name :: $left => $right
+                    }
+                )*
+            }
+        }
+
+        test_conversion! {
+            array :: Array(Box::new(UInt8)) => &Array(&UInt8),
+
+            nullable :: Nullable(Box::new(UInt8)) => &Nullable(&UInt8),
+
+            uint8 :: UInt8 => &UInt8,
+
+            uint16 :: UInt16 => &UInt16,
+
+            uint32 :: UInt32 => &UInt32,
+
+            uint64 :: UInt64 => &UInt64,
+
+            int8 :: Int8 => &Int8,
+
+            int16 :: Int16 => &Int16,
+
+            int32 :: Int32 => &Int32,
+
+            int64 :: Int64 => &Int64,
+
+            string :: String => &String,
+
+            ipv4 :: Ipv4 => &Ipv4,
+
+            ipv6 :: Ipv6 => &Ipv6,
+
+            uuid :: Uuid => &Uuid,
+
+            datetime :: DateTime => &DateTime(DateTimeType::DateTime32),
+
+            datetime64_secs :: DateTime64Secs => &DateTime(DateTimeType::DateTime64(0, UTC)),
+
+            datetime64_millis :: DateTime64Millis => &DateTime(DateTimeType::DateTime64(3, UTC)),
+
+            datetime64_micros :: DateTime64Micros  => &DateTime(DateTimeType::DateTime64(6, UTC)),
+
+            datetime64_nanos :: DateTime64Nanos  => &DateTime(DateTimeType::DateTime64(9, UTC)),
         }
     }
 }
