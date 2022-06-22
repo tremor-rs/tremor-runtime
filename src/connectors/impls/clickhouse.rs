@@ -339,3 +339,75 @@ impl From<&DummySqlType> for &'static SqlType {
         non_static_type.into()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod dummy_sql_type_display {
+        use super::*;
+
+        macro_rules! test_display {
+            ($test_name:ident :: $value:expr => $displayed:literal $(,)? ) => {
+                #[test]
+                fn $test_name() {
+                    let ty: DummySqlType = $value;
+                    let left = ty.to_string();
+                    let right: &str = $displayed;
+
+                    assert_eq!(left, right);
+                }
+            };
+
+            (
+                $(
+                    $test_name:ident :: $value:expr => $displayed:literal
+                ),* $(,)?
+            ) => {
+                $(
+                    test_display! { $test_name :: $value => $displayed }
+                )*
+            }
+        }
+
+        use DummySqlType::*;
+
+        test_display! {
+            array :: Array(Box::new(UInt8)) => "Array(UInt8)",
+
+            nullable :: DummySqlType::Nullable(Box::new(DummySqlType::UInt8)) => "Nullable(UInt8)",
+
+            uint8 :: UInt8  => "UInt8",
+
+            uint16 :: UInt16 => "UInt16",
+
+            uint32 :: UInt32 => "UInt32",
+
+            uint64 :: UInt64 => "UInt64",
+
+            int8 :: Int8 => "Int8",
+
+            int16 :: Int16 => "Int16",
+
+            int32 :: Int32 => "Int32",
+
+            int64 :: Int64 => "Int64",
+
+            string :: String => "String",
+
+            ipv4 :: Ipv4 => "IPv4",
+
+            ipv6 :: Ipv6 => "IPv6",
+
+            datetime :: DateTime => "DateTime",
+
+            datetime64_secs :: DateTime64Secs => "DateTime64(0)",
+
+            datetime64_millis :: DateTime64Millis => "DateTime64(3)",
+
+            datetime64_micros :: DateTime64Micros => "DateTime64(6)",
+
+            datetime64_nanos :: DateTime64Nanos => "DateTime64(9)",
+        }
+    }
+}
