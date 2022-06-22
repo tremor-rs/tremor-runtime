@@ -40,9 +40,6 @@
 // | r           | Nullable(UInt8) |
 // | s           | Array(String)   |
 // ---------------------------------
-//
-// As the `DateTime64` encoding is not implemented in `clickhouse-rs`, the
-// columns `k`, `l`, `m` and `n` commented out everywhere in the file.
 
 use std::{
     net::{Ipv4Addr, Ipv6Addr},
