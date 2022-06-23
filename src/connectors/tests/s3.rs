@@ -21,10 +21,14 @@ use std::time::{Duration, Instant};
 use testcontainers::{clients::Cli, images::generic::GenericImage, Container, RunnableImage};
 
 use super::free_port::find_free_tcp_port;
-const IMAGE: &str = "adobe/s3mock";
-const TAG: &str = "2.4.9";
+const IMAGE: &str = "minio/minio";
+const TAG: &str = "RELEASE.2022-06-20T23-13-45Z";
 
-async fn wait_for_s3mock(port: u16) -> Result<()> {
+const MINIO_ROOT_USER: &str = "tremor";
+const MINIO_ROOT_PASSWORD: &str = "snot_badger";
+const MINIO_REGION: &str = "eu-central-1";
+
+async fn wait_for_s3(port: u16) -> Result<()> {
     let s3_client: Client = get_client(port);
 
     let wait_for = Duration::from_secs(60);
@@ -35,22 +39,48 @@ async fn wait_for_s3mock(port: u16) -> Result<()> {
             return Err(Error::from(e).chain_err(|| "Waiting for mock-s3 container timed out"));
         }
 
-        async_std::task::sleep(Duration::from_secs(1)).await;
+        async_std::task::sleep(Duration::from_millis(200)).await;
     }
+    Ok(())
+}
+
+async fn wait_for_bucket(bucket: &str, client: Client) -> Result<()> {
+    let wait_for = Duration::from_secs(10);
+    let start = Instant::now();
+
+    while let Err(e) = client.head_bucket().bucket(bucket).send().await {
+        if start.elapsed() > wait_for {
+            return Err(Error::from(e).chain_err(|| "Waiting for bucket to become alive timed out"));
+        }
+
+        async_std::task::sleep(Duration::from_millis(200)).await;
+    }
+    Ok(())
+}
+
+async fn create_bucket(bucket: &str, http_port: u16) -> Result<()> {
+    let client = get_client(http_port);
+    client.create_bucket().bucket(bucket).send().await?;
+    wait_for_bucket(bucket, client).await?;
     Ok(())
 }
 
 async fn spawn_docker<'d>(
     docker: &'d Cli,
-    image: GenericImage,
-) -> (Container<'d, GenericImage>, u16, u16) {
+) -> (Container<'d, GenericImage>, u16) {
+
+    let image = GenericImage::new(IMAGE, TAG)
+        .with_env_var("MINIO_ROOT_USER", MINIO_ROOT_USER)
+        .with_env_var("MINIO_ROOT_PASSWORD", MINIO_ROOT_PASSWORD)
+        .with_env_var("MINIO_REGION", MINIO_REGION);
     let http_port = find_free_tcp_port().await.unwrap_or(10080);
     let https_port = find_free_tcp_port().await.unwrap_or(10443);
-    let image = RunnableImage::from(image)
-        .with_mapped_port((http_port, 9090_u16))
-        .with_mapped_port((https_port, 9191_u16));
+    let image = RunnableImage::from((image, vec![String::from("server"), String::from("/data"), String::from("--console-address"), String::from(":9001")]))
+        .with_mapped_port((http_port, 9000_u16))
+        .with_mapped_port((https_port, 9001_u16));
     let container = docker.run(image);
-    (container, http_port, https_port)
+    let http_port = container.get_host_port_ipv4(9000);
+    (container, http_port)
 }
 
 fn random_bucket_name(prefix: &str) -> String {
@@ -60,6 +90,7 @@ fn random_bucket_name(prefix: &str) -> String {
         rand::thread_rng()
             .sample_iter(Alphanumeric)
             .map(char::from)
+            .filter(char::is_ascii_lowercase)
             .take(10)
             .collect::<String>()
     )
@@ -68,13 +99,13 @@ fn random_bucket_name(prefix: &str) -> String {
 fn get_client(http_port: u16) -> Client {
     let s3_config = Config::builder()
         .credentials_provider(Credentials::new(
-            "KEY_NOT_REQD",
-            "KEY_NOT_REQD",
+            MINIO_ROOT_USER,
+            MINIO_ROOT_PASSWORD,
             None,
             None,
             "Environment",
         ))
-        .region(Region::new("ap-south-1"))
+        .region(Region::new(MINIO_REGION))
         .endpoint_resolver(Endpoint::immutable(
             format!("http://localhost:{http_port}").parse().unwrap(),
         ))
