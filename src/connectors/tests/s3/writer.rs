@@ -15,7 +15,10 @@
 use std::io::Read;
 
 use super::super::{ConnectorHarness, TestPipeline};
-use super::{get_client, random_bucket_name, spawn_docker, wait_for_s3, create_bucket, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, MINIO_REGION};
+use super::{
+    create_bucket, get_client, random_bucket_name, spawn_docker, wait_for_s3, MINIO_REGION,
+    MINIO_ROOT_PASSWORD, MINIO_ROOT_USER,
+};
 use crate::connectors::impls::s3;
 use crate::connectors::utils::EnvHelper;
 use crate::errors::Result;

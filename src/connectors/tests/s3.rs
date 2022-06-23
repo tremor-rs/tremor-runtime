@@ -65,19 +65,24 @@ async fn create_bucket(bucket: &str, http_port: u16) -> Result<()> {
     Ok(())
 }
 
-async fn spawn_docker<'d>(
-    docker: &'d Cli,
-) -> (Container<'d, GenericImage>, u16) {
-
+async fn spawn_docker<'d>(docker: &'d Cli) -> (Container<'d, GenericImage>, u16) {
     let image = GenericImage::new(IMAGE, TAG)
         .with_env_var("MINIO_ROOT_USER", MINIO_ROOT_USER)
         .with_env_var("MINIO_ROOT_PASSWORD", MINIO_ROOT_PASSWORD)
         .with_env_var("MINIO_REGION", MINIO_REGION);
     let http_port = find_free_tcp_port().await.unwrap_or(10080);
     let https_port = find_free_tcp_port().await.unwrap_or(10443);
-    let image = RunnableImage::from((image, vec![String::from("server"), String::from("/data"), String::from("--console-address"), String::from(":9001")]))
-        .with_mapped_port((http_port, 9000_u16))
-        .with_mapped_port((https_port, 9001_u16));
+    let image = RunnableImage::from((
+        image,
+        vec![
+            String::from("server"),
+            String::from("/data"),
+            String::from("--console-address"),
+            String::from(":9001"),
+        ],
+    ))
+    .with_mapped_port((http_port, 9000_u16))
+    .with_mapped_port((https_port, 9001_u16));
     let container = docker.run(image);
     let http_port = container.get_host_port_ipv4(9000);
     (container, http_port)
