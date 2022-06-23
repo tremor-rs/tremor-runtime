@@ -139,16 +139,19 @@ pub(super) fn convert_value(
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct ConversionContext<'a, 'b, 'c, 'd> {
-    column_name: &'a str,
-    value: &'b TValue<'c>,
-    expected_type: &'d DummySqlType,
+struct ConversionContext<'config, 'event> {
+    column_name: &'config str,
+    value: &'event TValue<'event>,
+    expected_type: &'config DummySqlType,
 }
 
-fn wrap_getter_error<'a, 'b, F, T>(context: ConversionContext<'_, 'a, 'b, '_>, f: F) -> Result<T>
+fn wrap_getter_error<'config, 'event, F, T>(
+    context: ConversionContext<'config, 'event>,
+    f: F,
+) -> Result<T>
 where
-    F: FnOnce(&'a TValue<'b>) -> Option<T>,
-    T: 'a,
+    F: FnOnce(&'event TValue<'event>) -> Option<T>,
+    T: 'event,
 {
     f(context.value).ok_or_else(|| {
         Error::from(ErrorKind::UnexpectedEventFormat(
@@ -159,21 +162,21 @@ where
     })
 }
 
-fn get_and_wrap<'a, 'b, F, G, T>(
-    context: ConversionContext<'_, 'a, 'b, '_>,
+fn get_and_wrap<'config, 'event, F, G, T>(
+    context: ConversionContext<'config, 'event>,
     getter: F,
     wrapper: G,
 ) -> Result<CValue>
 where
-    F: FnOnce(&'a TValue<'b>) -> Option<T>,
+    F: FnOnce(&'event TValue<'event>) -> Option<T>,
     G: FnOnce(T) -> CValue,
-    T: 'a,
+    T: 'event,
 {
     wrap_getter_error(context, getter).map(wrapper)
 }
 
 fn convert_string_or_array<T, E, V, const N: usize>(
-    context: ConversionContext<'_, '_, '_, '_>,
+    context: ConversionContext,
     extractor: E,
     variant: V,
     error: ErrorKind,
