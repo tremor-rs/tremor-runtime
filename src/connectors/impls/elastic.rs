@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::fmt::Display;
 use std::time::Duration;
+use std::{fmt::Display, sync::atomic::AtomicBool};
 
 use crate::{
     connectors::{
@@ -22,7 +22,10 @@ use crate::{
     },
     errors::{err_conector_def, Error, Result},
 };
-use async_std::channel::{bounded, Receiver, Sender};
+use async_std::{
+    channel::{bounded, Receiver, Sender},
+    sync::Arc,
+};
 use either::Either;
 use elasticsearch::{
     auth::{ClientCertificate, Credentials},
@@ -153,6 +156,7 @@ impl ConnectorBuilder for Builder {
                     CertValidation::None
                 };
             let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+            let source_is_connected = Arc::new(AtomicBool::new(false));
             Ok(Box::new(Elastic {
                 node_urls,
                 config,
@@ -160,6 +164,7 @@ impl ConnectorBuilder for Builder {
                 credentials,
                 response_tx,
                 response_rx,
+                source_is_connected,
             }))
         }
     }
@@ -173,6 +178,7 @@ struct Elastic {
     credentials: Option<Credentials>,
     response_tx: Sender<SourceReply>,
     response_rx: Receiver<SourceReply>,
+    source_is_connected: Arc<AtomicBool>,
 }
 
 #[async_trait::async_trait()]
@@ -186,8 +192,10 @@ impl Connector for Elastic {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source =
-            ChannelSource::from_channel(self.response_tx.clone(), self.response_rx.clone());
+        let source = ElasticSource {
+            source_is_connected: self.source_is_connected.clone(),
+            response_rx: self.response_rx.clone(),
+        };
         builder.spawn(source, source_context).map(Some)
     }
 
@@ -200,11 +208,39 @@ impl Connector for Elastic {
             self.node_urls.clone(),
             self.response_tx.clone(),
             builder.reply_tx(),
+            self.source_is_connected.clone(),
             &self.config,
             self.credentials.clone(),
             self.cert_validation.clone(),
         );
         builder.spawn(sink, sink_context).map(Some)
+    }
+}
+
+struct ElasticSource {
+    source_is_connected: Arc<AtomicBool>,
+    response_rx: Receiver<SourceReply>,
+}
+
+#[async_trait::async_trait]
+impl Source for ElasticSource {
+    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+        Ok(self.response_rx.recv().await?)
+    }
+
+    async fn on_cb_open(&mut self, _ctx: &SourceContext) -> Result<()> {
+        // we will only know if we are connected to some pipelines if we receive a CBAction::Restore contraflow event
+        // we will not send responses to out/err if we are not connected and this is determined by this variable
+        self.source_is_connected.store(true, Ordering::Release);
+        Ok(())
+    }
+
+    fn is_transactional(&self) -> bool {
+        false
+    }
+
+    fn asynchronous(&self) -> bool {
+        true
     }
 }
 
@@ -267,6 +303,7 @@ struct ElasticSink {
     response_tx: Sender<SourceReply>,
     reply_tx: Sender<AsyncSinkReply>,
     concurrency_cap: ConcurrencyCap,
+    source_is_connected: Arc<AtomicBool>,
     config: Config,
     es_credentials: Option<Credentials>,
     cert_validation: CertValidation,
@@ -278,6 +315,7 @@ impl ElasticSink {
         node_urls: Vec<Url>,
         response_tx: Sender<SourceReply>,
         reply_tx: Sender<AsyncSinkReply>,
+        source_is_connected: Arc<AtomicBool>,
         config: &Config,
         es_credentials: Option<Credentials>,
         cert_validation: CertValidation,
@@ -288,6 +326,7 @@ impl ElasticSink {
             response_tx,
             reply_tx: reply_tx.clone(),
             concurrency_cap: ConcurrencyCap::new(config.concurrency, reply_tx),
+            source_is_connected,
             config: config.clone(),
             es_credentials,
             cert_validation,
@@ -381,6 +420,12 @@ impl Sink for ElasticSink {
             debug!("{ctx} Received empty event. Won't send it to ES");
             return Ok(SinkReply::NONE);
         }
+        // we need to check if the source is actually connected
+        // we should not send response events if it isn't
+        // as this would fille the response_tx channel and block the send tasks
+        // and keep them from completing
+        // The result is a complete hang and no progress. :(
+        let source_is_connected = self.source_is_connected.load(Ordering::Relaxed);
         // if we exceed the maximum concurrency here, we issue a CB close, but carry on anyhow
         let guard = self.concurrency_cap.inc_for(&event).await?;
 
@@ -429,33 +474,42 @@ impl Sink for ElasticSink {
                     match r {
                         Err(e) => {
                             debug!("{task_ctx} Error sending Elasticsearch Bulk Request: {e}");
+                            if source_is_connected {
+                                task_ctx.swallow_err(
+                                    handle_error(
+                                        e,
+                                        &event,
+                                        &origin_uri,
+                                        &response_tx,
+                                        include_payload,
+                                    )
+                                    .await,
+                                    "Error handling ES error",
+                                );
+                            }
                             task_ctx.swallow_err(
-                                handle_error(
-                                    e,
-                                    event,
-                                    &origin_uri,
-                                    &response_tx,
-                                    &reply_tx,
-                                    include_payload,
-                                )
-                                .await,
-                                "Error handling ES error",
+                                send_fail(event, &reply_tx).await,
+                                "Error sending fail CB",
                             );
                         }
                         Ok(v) => {
-                            task_ctx.swallow_err(
-                                handle_response(
-                                    v,
-                                    event,
-                                    &origin_uri,
-                                    response_tx,
-                                    reply_tx,
-                                    include_payload,
-                                    start,
-                                )
-                                .await,
-                                "Error handling ES response",
-                            );
+                            if source_is_connected {
+                                task_ctx.swallow_err(
+                                    handle_response(
+                                        v,
+                                        &event,
+                                        &origin_uri,
+                                        response_tx,
+                                        include_payload,
+                                    )
+                                    .await,
+                                    "Error handling ES response",
+                                );
+                                task_ctx.swallow_err(
+                                    send_ack(event, start, &reply_tx).await,
+                                    "Error sending ack CB",
+                                );
+                            }
                         }
                     }
                     drop(guard);
@@ -466,13 +520,16 @@ impl Sink for ElasticSink {
             error!("{} No elasticsearch client available.", &ctx);
             handle_error(
                 Error::from("No elasticsearch client available."),
-                event,
+                &event,
                 &self.origin_uri,
                 &self.response_tx,
-                &self.reply_tx,
                 self.config.include_payload_in_response,
             )
             .await?;
+            ctx.bail_err(
+                send_fail(event, &self.reply_tx).await,
+                "Error sending fail CB",
+            )?;
         }
         Ok(SinkReply::NONE)
     }
@@ -482,14 +539,15 @@ impl Sink for ElasticSink {
     }
 }
 
+/// Handle successful response from ES
+///
+/// send event to OUT
 async fn handle_response(
     mut response: Value<'static>,
-    event: Event,
+    event: &Event,
     elastic_origin_uri: &EventOriginUri,
     response_tx: Sender<SourceReply>,
-    reply_tx: Sender<AsyncSinkReply>,
     include_payload: bool,
-    start: u64,
 ) -> Result<()> {
     let correlation_values = event.correlation_metas();
     let payload_iter = event.value_iter();
@@ -566,22 +624,17 @@ async fn handle_response(
         )));
     }
     // ack the event
-    let duration = nanotime() - start;
-    if event.transactional {
-        reply_tx
-            .send(AsyncSinkReply::Ack(ContraflowData::from(event), duration))
-            .await?;
-    }
     Ok(())
 }
 
 /// handle an error for the whole event
+///
+/// send event to err port
 async fn handle_error<E>(
     e: E,
-    event: Event,
+    event: &Event,
     elastic_origin_uri: &EventOriginUri,
     response_tx: &Sender<SourceReply>,
-    reply_tx: &Sender<AsyncSinkReply>,
     include_payload: bool,
 ) -> Result<()>
 where
@@ -610,6 +663,22 @@ where
         port: Some(ERR),
     };
     response_tx.send(source_reply).await?;
+    Ok(())
+}
+
+async fn send_ack(event: Event, start: u64, reply_tx: &Sender<AsyncSinkReply>) -> Result<()> {
+    if event.transactional {
+        reply_tx
+            .send(AsyncSinkReply::Ack(
+                ContraflowData::from(event),
+                nanotime() - start,
+            ))
+            .await?;
+    }
+    Ok(())
+}
+
+async fn send_fail(event: Event, reply_tx: &Sender<AsyncSinkReply>) -> Result<()> {
     if event.transactional {
         reply_tx
             .send(AsyncSinkReply::Fail(ContraflowData::from(event)))

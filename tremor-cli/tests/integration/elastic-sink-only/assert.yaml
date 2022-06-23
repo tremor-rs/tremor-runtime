@@ -1,0 +1,9 @@
+status: 0
+name: elastic sink only
+asserts:
+  - source: fg.err.log
+    contains:
+      - |
+        All required CB events received. 
+      - |
+        Error sending Elasticsearch Bulk Request: Missing field `$elastic["_id"]`

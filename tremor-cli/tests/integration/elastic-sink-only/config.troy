@@ -1,0 +1,54 @@
+define flow elastic_sink_only
+flow
+  use integration;
+  use tremor::connectors;
+  use std::time::nanos;
+
+  define connector elastic_sink from elastic
+  with
+    config = {
+      "nodes": ["http://127.0.0.1:9200/"],
+      "include_payload_in_response": false
+    }
+  end;
+  create connector elastic_sink;
+
+  define connector input from cb
+  with
+    config =  {
+      "path": "in.json",
+      "timeout": nanos::from_seconds(5),
+
+    }
+  end;
+  create connector input;
+
+  define pipeline elastic_meta
+  pipeline
+
+    define script add_meta
+    script
+      let $elastic = {
+        "_index": "my_little_index",
+        "action": "update",
+        "raw_payload": true,
+        "timeout": "5m",
+        "refresh": "wait_for",
+        "retry_on_conflict": 2
+      };
+      # payload
+      emit {"doc": event, "doc_as_upsert": true};
+    end;
+    create script add_meta;
+
+    select event from in into add_meta;
+    select event from add_meta/out into out;
+    select event from add_meta/err into err;
+  end;
+  create pipeline elastic_meta;
+
+  connect /connector/input to /pipeline/elastic_meta;
+  connect /pipeline/elastic_meta to /connector/elastic_sink;
+end;
+
+deploy flow elastic_sink_only;

@@ -60,7 +60,8 @@ impl ConcurrencyCap {
     }
 
     async fn dec_with(&self, cf_data: &ContraflowData) -> Result<()> {
-        if self.counter.fetch_sub(1, Ordering::AcqRel) == self.cap {
+        let num = self.counter.fetch_sub(1, Ordering::AcqRel);
+        if num == self.cap {
             // we crossed max - send an open
             self.reply_tx
                 .send(AsyncSinkReply::CB(cf_data.clone(), CbAction::Restore))
@@ -82,7 +83,6 @@ impl Drop for CounterGuard {
     fn drop(&mut self) {
         // TODO: move this out of drop here
         if async_std::task::block_on(self.1.dec_with(&self.2)).is_err() {
-            // TODO: add a ctx log here
             error!("Error sending a CB Open.");
         }
     }
