@@ -15,7 +15,7 @@
 use std::io::Read;
 
 use super::super::{ConnectorHarness, TestPipeline};
-use super::{get_client, random_bucket_name, spawn_docker, wait_for_s3mock, IMAGE, TAG};
+use super::{get_client, random_bucket_name, spawn_docker, wait_for_s3, create_bucket, MINIO_ROOT_USER, MINIO_ROOT_PASSWORD, MINIO_REGION};
 use crate::connectors::impls::s3;
 use crate::connectors::utils::EnvHelper;
 use crate::errors::Result;
@@ -23,7 +23,7 @@ use aws_sdk_s3::Client;
 use bytes::Buf;
 use rand::{distributions::Alphanumeric, Rng};
 use serial_test::serial;
-use testcontainers::{clients, images::generic::GenericImage};
+use testcontainers::clients;
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value};
@@ -35,9 +35,9 @@ async fn connector_s3_no_connection() -> Result<()> {
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-connection");
     let mut env = EnvHelper::new();
-    env.set_var("AWS_ACCESS_KEY_ID", "KEY_NOT_REQD");
-    env.set_var("AWS_SECRET_ACCESS_KEY", "KEY_NOT_REQD");
-    env.set_var("AWS_DEFAULT_REGION", "eu-central-1");
+    env.set_var("AWS_ACCESS_KEY_ID", MINIO_ROOT_USER);
+    env.set_var("AWS_SECRET_ACCESS_KEY", MINIO_ROOT_PASSWORD);
+    env.set_var("AWS_DEFAULT_REGION", MINIO_REGION);
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
@@ -63,15 +63,15 @@ async fn connector_s3_no_credentials() -> Result<()> {
     let bucket_name = random_bucket_name("no-credentials");
 
     let docker = clients::Cli::default();
-    let image = GenericImage::new(IMAGE, TAG).with_env_var("initialBuckets", &bucket_name);
-    let (_container, http_port, _https_port) = spawn_docker(&docker, image).await;
+    let (_container, http_port) = spawn_docker(&docker).await;
 
-    wait_for_s3mock(http_port).await?;
+    wait_for_s3(http_port).await?;
+    create_bucket(&bucket_name, http_port).await?;
 
     let mut env = EnvHelper::new();
     env.remove_var("AWS_ACCESS_KEY_ID");
     env.remove_var("AWS_SECRET_ACCESS_KEY");
-    env.set_var("AWS_REGION", "eu-central-1");
+    env.set_var("AWS_REGION", MINIO_REGION);
     let endpoint = format!("http://localhost:{http_port}");
     let connector_yaml = literal!({
         "codec": "binary",
@@ -99,10 +99,10 @@ async fn connector_s3_no_region() -> Result<()> {
     let bucket_name = random_bucket_name("no-region");
 
     let docker = clients::Cli::default();
-    let image = GenericImage::new(IMAGE, TAG).with_env_var("initialBuckets", &bucket_name);
-    let (_container, http_port, _https_port) = spawn_docker(&docker, image).await;
+    let (_container, http_port) = spawn_docker(&docker).await;
 
-    wait_for_s3mock(http_port).await?;
+    wait_for_s3(http_port).await?;
+    create_bucket(&bucket_name, http_port).await?;
 
     let mut env = EnvHelper::new();
     env.set_var("AWS_ACCESS_KEY_ID", "snot");
@@ -137,15 +137,14 @@ async fn connector_s3_no_bucket() -> Result<()> {
     let bucket_name = random_bucket_name("no-bucket");
 
     let docker = clients::Cli::default();
-    let image = GenericImage::new(IMAGE, TAG);
-    let (_container, http_port, _https_port) = spawn_docker(&docker, image).await;
+    let (_container, http_port) = spawn_docker(&docker).await;
 
-    wait_for_s3mock(http_port).await?;
+    wait_for_s3(http_port).await?;
 
     let mut env = EnvHelper::new();
-    env.set_var("AWS_ACCESS_KEY_ID", "KEY_NOT_REQD");
-    env.set_var("AWS_SECRET_ACCESS_KEY", "KEY_NOT_REQD");
-    env.set_var("AWS_DEFAULT_REGION", "eu-central-1");
+    env.set_var("AWS_ACCESS_KEY_ID", MINIO_ROOT_USER);
+    env.set_var("AWS_SECRET_ACCESS_KEY", MINIO_ROOT_PASSWORD);
+    env.set_var("AWS_DEFAULT_REGION", MINIO_REGION);
     let endpoint = format!("http://localhost:{http_port}");
     let connector_yaml = literal!({
         "codec": "binary",
@@ -172,20 +171,18 @@ async fn connector_s3() -> Result<()> {
 
     let bucket_name = random_bucket_name("tremor");
 
-    // Run the mock s3 locally
     let docker = clients::Cli::default();
-    let image = GenericImage::new(IMAGE, TAG).with_env_var("initialBuckets", &bucket_name);
-    let (_container, http_port, _https_port) = spawn_docker(&docker, image).await;
+    let (_container, http_port) = spawn_docker(&docker).await;
 
-    wait_for_s3mock(http_port).await?;
+    wait_for_s3(http_port).await?;
+    create_bucket(&bucket_name, http_port).await?;
 
     let s3_client = get_client(http_port);
 
-    // set the needed environment variables. keys are not required for mock-s3
     let mut env = EnvHelper::new();
-    env.set_var("AWS_ACCESS_KEY_ID", "KEY_NOT_REQD");
-    env.set_var("AWS_SECRET_ACCESS_KEY", "KEY_NOT_REQD");
-    env.set_var("AWS_REGION", "ap-south-1");
+    env.set_var("AWS_ACCESS_KEY_ID", MINIO_ROOT_USER);
+    env.set_var("AWS_SECRET_ACCESS_KEY", MINIO_ROOT_PASSWORD);
+    env.set_var("AWS_REGION", MINIO_REGION);
 
     // connector setup
     let connector_yaml = literal!({
