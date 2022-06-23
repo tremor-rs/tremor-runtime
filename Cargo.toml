@@ -263,7 +263,7 @@ integration-local = [
   "crononome-integration",
   "metronome-integration",
   "socket-integration",
-  "tcp-integration",
+  "net-integration",
   "wal-integration",
 ]
 gcp-integration = []
@@ -276,7 +276,7 @@ file-integration = []
 crononome-integration = []
 metronome-integration = []
 socket-integration = []
-tcp-integration = []
+net-integration = []
 wal-integration = []
 tarpaulin-exclude = []
 # those are falky tests

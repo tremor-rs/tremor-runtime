@@ -37,8 +37,10 @@ mod metronome;
 mod pause_resume;
 #[cfg(feature = "s3-integration")]
 mod s3;
-#[cfg(feature = "tcp-integration")]
+#[cfg(feature = "net-integration")]
 mod tcp;
+#[cfg(feature = "net-integration")]
+mod udp;
 #[cfg(feature = "socket-integration")]
 mod unix_socket;
 #[cfg(feature = "wal-integration")]
@@ -284,7 +286,7 @@ impl ConnectorHarness {
         feature = "http-integration",
         feature = "es-integration",
         feature = "socket-integration",
-        feature = "tcp-integration",
+        feature = "net-integration",
         feature = "ws-integration"
     ))]
     pub(crate) async fn send_to_sink(&self, event: Event, port: Cow<'static, str>) -> Result<()> {
@@ -353,7 +355,7 @@ impl TestPipeline {
         feature = "kafka-integration",
         feature = "es-integration",
         feature = "s3-integration",
-        feature = "tcp-integration",
+        feature = "net-integration",
     ))]
     pub(crate) async fn get_contraflow(&self) -> Result<Event> {
         match self.rx_cf.recv().timeout(Duration::from_secs(20)).await?? {
