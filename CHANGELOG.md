@@ -10,6 +10,7 @@
 - Don't fail unrecoverably when the connection to the server is lost in Google PubSub consumer.
 - Update bert operators to work with tremor 0.12
 - Avoid hangs in `elastic` connector when not connected as source via its `out` or `err` port.
+- Default udp client bind ip to `0.0.0.0:0` instead of `127.0.0.1:0`
 
 ## [0.12.2]
 ### New features
