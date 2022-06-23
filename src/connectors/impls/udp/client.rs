@@ -23,8 +23,8 @@ use async_std::net::UdpSocket;
 pub(crate) struct Config {
     /// Host to connect to
     url: Url<super::UdpDefaults>,
-    #[serde(default = "Default::default")]
-    bind: Url<super::UdpDefaults>,
+    /// Optional ip/port to bind to
+    bind: Option<Url<super::UdpDefaults>>,
 }
 
 impl ConfigImpl for Config {}
@@ -100,11 +100,13 @@ impl UdpClientSink {
 #[async_trait::async_trait()]
 impl Sink for UdpClientSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let socket = UdpSocket::bind((
-            self.config.bind.host_or_local(),
-            self.config.bind.port_or_dflt(),
-        ))
-        .await?;
+        let bind = self
+            .config
+            .bind
+            .as_ref()
+            .map_or(("0.0.0.0", 0), |b| (b.host_or_local(), b.port_or_dflt()));
+        let socket = UdpSocket::bind(bind).await?;
+
         socket
             .connect((
                 self.config.url.host_or_local(),
