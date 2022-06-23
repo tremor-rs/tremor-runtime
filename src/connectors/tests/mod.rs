@@ -17,7 +17,7 @@
 //!
 //! ....
 
-#[cfg(feature = "ch-integration")]
+#[cfg(feature = "clickhouse-integration")]
 mod clickhouse;
 #[cfg(feature = "crononome-integration")]
 mod crononome;
