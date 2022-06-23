@@ -20,7 +20,8 @@ flow
     codec = "yaml",
     postprocessors = ["base64"],
     config = {
-      "url": "localhost:4242",
+      "url": "localhost:4243",
+      "bind": "localhost:4244"
     }
   end;
   
