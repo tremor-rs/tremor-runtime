@@ -1,0 +1,9 @@
+{
+    "dir": ".",
+    "cmd": "docker",
+    "args": [
+        "rm",
+        "-f",
+        "tremor-elasticsearch-integration-sink-only-unique"
+    ]
+}
