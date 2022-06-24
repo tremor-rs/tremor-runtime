@@ -7,3 +7,6 @@ updates:
       time: "04:00"
     open-pull-requests-limit: 10
     rebase-strategy: auto
+    ignore:
+      - dependency-name: "serial_test"
+        versions: ["0.7.x"]
