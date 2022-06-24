@@ -233,7 +233,7 @@ proptest = "1.0"
 regex = "1"
 # We downgraded to 0.6 because:
 # in the face of high concurrency serial_test 0.7.0 panics after 60 seconds
-serial_test = "=0.7"
+serial_test = "=0.6"
 signal-hook = "0.3"
 signal-hook-async-std = "0.2"
 tempfile = { version = "3.2" }
