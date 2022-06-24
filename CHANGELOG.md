@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.12.4]
 
 ### Fixes
 - Fix startup startup script for systemd installations
