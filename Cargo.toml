@@ -117,7 +117,7 @@ surf = { version = "=2.3.2", default-features = false, features = [
   "middleware-logger", # default feature, so we keep it
 ] }
 # We use our fork until: https://github.com/http-rs/http-client/pull/100 is merged
-http-client = { git = "https://github.com/tremor-rs/http-client", rev = "059b23e", features = [
+http-client = { git = "https://github.com/tremor-rs/http-client", rev = "059b23e", default-features = false, features = [
   "h1_client",
   "rustls",
 ] }
