@@ -292,18 +292,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-native-tls"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e9e7a929bd34c68a82d58a4de7f86fffdaf97fb2af850162a7bb19dd7269b33"
-dependencies = [
- "async-std",
- "native-tls",
- "thiserror",
- "url",
-]
-
-[[package]]
 name = "async-net"
 version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2404,7 +2392,6 @@ version = "6.5.1"
 source = "git+https://github.com/tremor-rs/http-client?rev=059b23e#059b23e5d615debe41a6a1cd1f4228579179a88c"
 dependencies = [
  "async-h1",
- "async-native-tls",
  "async-std",
  "async-tls 0.11.0",
  "async-trait",
