@@ -31,9 +31,14 @@ use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
-use tonic::Status;
+use tonic::{Code, Status};
 use tremor_common::blue_green_hashmap::BlueGreenHashMap;
 use tremor_pipeline::ConfigImpl;
+
+// controlling retries upon gpubsub returning `Unavailable` from StreamingPull
+// this in on purpose not exposed via config as this should remain an internal thing
+const RETRY_WAIT_INTERVAL: Duration = Duration::from_secs(1);
+const MAX_RETRIES: u64 = 5;
 
 #[derive(Deserialize, Clone)]
 struct Config {
@@ -116,6 +121,7 @@ impl GSubSource {
 
 async fn consumer_task(
     mut client: PubSubClient,
+    ctx: SourceContext,
     client_id: String,
     sender: Sender<AsyncTaskMessage>,
     subscription_id: String,
@@ -128,62 +134,100 @@ async fn consumer_task(
         ack_deadline,
         SystemTime::now(),
     )));
+    let initial_request = StreamingPullRequest {
+        subscription: subscription_id.clone(),
+        ack_ids: vec![],
+        modify_deadline_seconds: vec![],
+        modify_deadline_ack_ids: vec![],
+        stream_ack_deadline_seconds: i32::try_from(ack_deadline.as_secs()).unwrap_or(10),
+        client_id: client_id.clone(),
+        max_outstanding_messages: i64::try_from(QSIZE.load(Ordering::Relaxed)).unwrap_or(128),
+        max_outstanding_bytes: 0,
+    };
 
     let ack_ids_c = ack_ids.clone();
-    let request_stream = async_stream::stream! {
-        yield StreamingPullRequest {
-            subscription: subscription_id.clone(),
-            ack_ids: vec![],
-            modify_deadline_seconds: vec![],
-            modify_deadline_ack_ids: vec![],
-            stream_ack_deadline_seconds: i32::try_from(ack_deadline.as_secs()).unwrap_or(10),
-            client_id: client_id.clone(),
-            max_outstanding_messages: i64::try_from(QSIZE.load(Ordering::Relaxed)).unwrap_or(128),
-            max_outstanding_bytes: 0
+    let mut retry_wait_interval = RETRY_WAIT_INTERVAL;
+    let mut attempt: u64 = 0;
+
+    'retry: loop {
+        // yeah, i know, my name is george cloney
+        let initial_req = initial_request.clone();
+        let ack_recvr = ack_receiver.clone();
+        let ack_ids_cc = ack_ids_c.clone();
+        let client_id_c = client_id.clone();
+        let request_stream = async_stream::stream! {
+            yield initial_req;
+
+            while let Ok(pull_id) = ack_recvr.recv().await {
+                if let (Some(ack_id)) = ack_ids_cc.write().await.remove(&pull_id) {
+                    yield StreamingPullRequest {
+                        subscription: "".to_string(),
+                        ack_ids: vec![ack_id],
+                        modify_deadline_seconds: vec![],
+                        modify_deadline_ack_ids: vec![],
+                        stream_ack_deadline_seconds: 0,
+                        client_id: client_id_c.clone(),
+                        max_outstanding_messages: 0,
+                        max_outstanding_bytes: 0
+                    };
+                } else {
+                    warn!("Did not find an ACK ID for pull_id: {pull_id}");
+                }
+            }
         };
 
-        while let Ok(pull_id) = ack_receiver.recv().await {
-            if let (Some(ack_id)) = ack_ids_c.write().await.remove(&pull_id) {
-                yield StreamingPullRequest {
-                    subscription: "".to_string(),
-                    ack_ids: vec![ack_id],
-                    modify_deadline_seconds: vec![],
-                    modify_deadline_ack_ids: vec![],
-                    stream_ack_deadline_seconds: 0,
-                    client_id: client_id.clone(),
-                    max_outstanding_messages: 0,
-                    max_outstanding_bytes: 0
-                };
-            } else {
-                warn!("Did not find an ACK ID for pull_id: {}", pull_id);
+        let mut stream = client.streaming_pull(request_stream).await?.into_inner();
+
+        while let Some(response) = stream.next().await {
+            let response = match response {
+                Ok(res) => {
+                    // reset the wait interval and attempts
+                    retry_wait_interval = RETRY_WAIT_INTERVAL;
+                    attempt = 0;
+                    res
+                }
+                Err(status) if status.code() == Code::Unavailable => {
+                    // keep track of the numbers of retries
+                    attempt += 1;
+                    if attempt >= MAX_RETRIES {
+                        info!("{ctx} Got `Unavailable` for {MAX_RETRIES} times. Bailing out!");
+                        return Err(Error::from(status));
+                    }
+                    info!(
+                        "{ctx} ERROR: {status}. Waiting for {}s for a retry...",
+                        retry_wait_interval.as_secs_f32()
+                    );
+                    async_std::task::sleep(retry_wait_interval).await;
+                    // exponential backoff
+                    retry_wait_interval *= 2;
+
+                    continue 'retry;
+                }
+                Err(s) => {
+                    return Err(Error::from(s));
+                }
+            };
+
+            for message in response.received_messages {
+                let ReceivedMessage {
+                    ack_id,
+                    message: msg,
+                    ..
+                } = message;
+
+                if let Some(pubsub_message) = msg {
+                    ack_counter += 1;
+                    ack_ids
+                        .write()
+                        .await
+                        .insert(ack_counter, ack_id, SystemTime::now());
+
+                    sender.send(Ok((ack_counter, pubsub_message))).await?;
+                }
             }
         }
-    };
-    let mut stream = client.streaming_pull(request_stream).await?.into_inner();
-
-    while let Some(response) = stream.next().await {
-        let response = response?;
-
-        for message in response.received_messages {
-            let ReceivedMessage {
-                ack_id,
-                message: msg,
-                ..
-            } = message;
-
-            if let Some(pubsub_message) = msg {
-                ack_counter += 1;
-                ack_ids
-                    .write()
-                    .await
-                    .insert(ack_counter, ack_id, SystemTime::now());
-
-                sender.send(Ok((ack_counter, pubsub_message))).await?;
-            }
-        }
+        return Ok(());
     }
-
-    Ok(())
 }
 
 fn pubsub_metadata(
@@ -272,6 +316,7 @@ impl Source for GSubSource {
             ctx.clone(),
             consumer_task(
                 client_background,
+                ctx.clone(),
                 self.client_id.clone(),
                 tx,
                 self.config.subscription_id.clone(),
