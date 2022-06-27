@@ -38,6 +38,8 @@ macro_rules! test_cases {
             #[async_std::test]
             #[serial(query)]
             async fn $file() -> Result<()> {
+                serial_test::set_max_wait(std::time::Duration::from_secs(120));
+
                 tremor_runtime::functions::load()?;
                 let query_dir = concat!("tests/queries/", stringify!($file), "/").to_string();
                 let query_file = concat!("tests/queries/", stringify!($file), "/query.trickle");

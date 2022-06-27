@@ -226,6 +226,10 @@ uuid = { version = "1.1", features = ["v4"] }
 qwal = { git = "https://github.com/tremor-rs/qwal" }
 
 [dev-dependencies]
+serial_test = { version = "=0.8", features = [
+  "logging",
+] }
+# path = "../serial_test/serial_test" 
 env_logger = "0.9.0"
 matches = "0.1"
 pretty_assertions = "1.2.0"
@@ -233,7 +237,6 @@ proptest = "1.0"
 regex = "1"
 # We downgraded to 0.6 because:
 # in the face of high concurrency serial_test 0.7.0 panics after 60 seconds
-serial_test = "=0.8"
 signal-hook = "0.3"
 signal-hook-async-std = "0.2"
 tempfile = { version = "3.2" }
