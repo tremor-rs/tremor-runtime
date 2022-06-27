@@ -26,12 +26,12 @@ use aws_sdk_s3::Client;
 use bytes::Buf;
 use rand::{distributions::Alphanumeric, Rng};
 use serial_test::serial;
+use std::time::Duration;
 use testcontainers::clients;
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value};
 use value_trait::{Builder, Mutable, ValueAccess};
-use std::time::Duration;
 
 #[async_std::test]
 #[serial(s3)]
