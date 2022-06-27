@@ -16,6 +16,9 @@ use event_listener::Event;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
+use abi_stable::std_types::RBox;
+use async_ffi::{BorrowingFfiFuture, FutureExt};
+
 #[derive(Debug)]
 struct Inner {
     state: AtomicU32,
@@ -42,70 +45,96 @@ impl Default for Inner {
 #[allow(clippy::module_name_repetitions)]
 pub struct QuiescenceBeacon(Arc<Inner>);
 
-impl QuiescenceBeacon {
-    // we have max 2 listeners at a time, checking this beacon
-    // the connector itself, the sink and the source of the connector
-    const MAX_LISTENERS: usize = 3;
-
+/// `QuiescenceBeacon` is used for the plugin system, so it must be `#[repr(C)]`
+/// in order to interact with it. However, since it uses complex types
+/// internally, it's easier to just make it available as an opaque type instead,
+/// with the help of `sabi_trait`.
+#[abi_stable::sabi_trait]
+pub trait QuiescenceBeaconOpaque: fmt::Debug + Clone + Send + Sync {
     /// returns `true` if consumers should continue reading
     /// If the connector is paused, it awaits until it is resumed.
     ///
     /// Use this function in asynchronous tasks consuming from external resources to check
     /// whether it should still read from the external resource. This will also pause external consumption if the
     /// connector is paused.
-    pub async fn continue_reading(&self) -> bool {
-        loop {
-            match self.0.state.load(Ordering::Acquire) {
-                Inner::RUNNING => break true,
-                Inner::PAUSED => {
-                    // we wait to be notified
-                    // if so, we re-enter the loop to check the new state
-                    self.0.resume_event.listen().await;
-                }
-                _ => break false, // STOP_ALL | STOP_READING | _
-            }
-        }
-    }
+    fn continue_reading(&self) -> BorrowingFfiFuture<'_, bool>;
 
     /// Returns `true` if consumers should continue writing.
     /// If the connector is paused, it awaits until it is resumed.
-    pub async fn continue_writing(&self) -> bool {
-        loop {
-            match self.0.state.load(Ordering::Acquire) {
-                Inner::RUNNING | Inner::STOP_READING => break true,
-                Inner::PAUSED => {
-                    self.0.resume_event.listen().await;
-                }
-                _ => break false, // STOP_ALL | _
-            }
-        }
-    }
+    fn continue_writing(&self) -> BorrowingFfiFuture<'_, bool>;
 
     /// notify consumers of this beacon that reading should be stopped
-    pub fn stop_reading(&mut self) {
-        self.0.state.store(Inner::STOP_READING, Ordering::Release);
-        self.0.resume_event.notify(Self::MAX_LISTENERS); // we might have been paused, so notify here
-    }
+    fn stop_reading(&mut self);
 
     /// pause both reading and writing
-    pub fn pause(&mut self) {
-        if self
-            .0
-            .state
-            .compare_exchange(
-                Inner::RUNNING,
-                Inner::PAUSED,
-                Ordering::AcqRel,
-                Ordering::Relaxed,
-            )
-            .is_err()
-        {}
-    }
+    fn pause(&mut self);
 
     /// Resume both reading and writing.
     ///
     /// Has no effect if not currently paused.
-    pub fn resume(&mut self) {
+    fn resume(&mut self);
+
+    /// notify consumers of this beacon that reading and writing should be stopped
+    fn full_stop(&mut self);
+}
+impl QuiescenceBeacon {
+    // we have max 2 listeners at a time, checking this beacon
+    // the connector itself, the sink and the source of the connector
+    const MAX_LISTENERS: usize = 3;
+}
+impl QuiescenceBeaconOpaque for QuiescenceBeacon {
+    fn continue_reading(&self) -> BorrowingFfiFuture<'_, bool> {
+        async move {
+            loop {
+                match self.0.state.load(Ordering::Acquire) {
+                    Inner::RUNNING => break true,
+                    Inner::PAUSED => {
+                        // we wait to be notified
+                        // if so, we re-enter the loop to check the new state
+                        self.0.resume_event.listen().await;
+                    }
+                    _ => break false, // STOP_ALL | STOP_READING | _
+                }
+            }
+        }
+        .into_ffi()
+    }
+
+    fn continue_writing(&self) -> BorrowingFfiFuture<'_, bool> {
+        async move {
+            loop {
+                match self.0.state.load(Ordering::Acquire) {
+                    Inner::RUNNING | Inner::STOP_READING => break true,
+                    Inner::PAUSED => {
+                        self.0.resume_event.listen().await;
+                    }
+                    _ => break false, // STOP_ALL | _
+                }
+            }
+        }
+        .into_ffi()
+    }
+
+    fn stop_reading(&mut self) {
+        self.0.state.store(Inner::STOP_READING, Ordering::Release);
+        self.0.resume_event.notify(Self::MAX_LISTENERS); // we might have been paused, so notify here
+    }
+
+    fn pause(&mut self) {
+        if self
+            .0
+            .state
+            .compare_exchange(
+                Inner::RUNNING,
+                Inner::PAUSED,
+                Ordering::AcqRel,
+                Ordering::Relaxed,
+            )
+            .is_err()
+        {}
+    }
+
+    fn resume(&mut self) {
         if self
             .0
             .state
@@ -120,12 +149,13 @@ impl QuiescenceBeacon {
         self.0.resume_event.notify(Self::MAX_LISTENERS); // we might have been paused, so notify here
     }
 
-    /// notify consumers of this beacon that reading and writing should be stopped
-    pub fn full_stop(&mut self) {
+    fn full_stop(&mut self) {
         self.0.state.store(Inner::STOP_ALL, Ordering::Release);
         self.0.resume_event.notify(Self::MAX_LISTENERS); // we might have been paused, so notify here
     }
 }
+/// Alias for the FFI-safe beacon, boxed
+pub type BoxedQuiescenceBeacon = QuiescenceBeaconOpaque_TO<'static, RBox<()>>;
 
 #[cfg(test)]
 mod tests {

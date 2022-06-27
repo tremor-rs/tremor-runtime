@@ -35,7 +35,7 @@ use rustls::ServerConfig;
 use simd_json::ValueAccess;
 use std::sync::Arc;
 
-use crate::{pdk::RError, ttry};
+use crate::system::World;
 use abi_stable::{
     export_root_module,
     prefix_type::PrefixTypeTrait,
@@ -47,7 +47,9 @@ use abi_stable::{
     },
     type_level::downcasting::TD_Opaque,
 };
-use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt};
+use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt as _};
+use std::future;
+use tremor_common::{pdk::RError, ttry};
 
 const URL_SCHEME: &str = "tremor-tcp-server";
 
@@ -73,7 +75,7 @@ pub struct TcpServer {
 
 /// Note that since it's a built-in plugin, `#[export_root_module]` can't be
 /// used or it would conflict with other plugins.
-pub fn instantiate_root_module() -> ConnectorPlugin_Ref {
+pub fn instantiate_root_module() -> ConnectorPluginRef {
     ConnectorPlugin {
         connector_type,
         from_config,
@@ -89,33 +91,31 @@ pub fn connector_type() -> ConnectorType {
 #[sabi_extern_fn]
 pub fn from_config<'a>(
     id: RStr<'a>,
-    raw_config: &'a ConnectorConfig,
+    _: &ConnectorConfig,
+    config: &'a Value,
+    _: ROption<World>,
 ) -> BorrowingFfiFuture<'a, RResult<BoxedRawConnector>> {
     async move {
-        if let RSome(raw_config) = &raw_config.config {
-            let config = ttry!(Config::new(raw_config));
-            if config.url.port().is_none() {
-                return RErr(Error::from("Missing port for TCP server").into());
-            }
-
-            let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
-                Some(ttry!(load_server_config(tls_config)))
-            } else {
-                None
-            };
-            let (sink_tx, sink_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-            ROk(BoxedRawConnector::from_value(
-                TcpServer {
-                    config,
-                    tls_server_config,
-                    sink_tx,
-                    sink_rx,
-                },
-                TD_Opaque,
-            ))
-        } else {
-            RErr(ErrorKind::MissingConfiguration(id.to_string()).into())
+        let config = ttry!(Config::new(config));
+        if config.url.port().is_none() {
+            return RErr(Error::from("Missing port for TCP server").into());
         }
+
+        let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
+            Some(ttry!(load_server_config(tls_config)))
+        } else {
+            None
+        };
+        let (sink_tx, sink_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
+        ROk(BoxedRawConnector::from_value(
+            TcpServer {
+                config,
+                tls_server_config,
+                sink_tx,
+                sink_rx,
+            },
+            TD_Opaque,
+        ))
     }
     .into_ffi()
 }
@@ -144,7 +144,8 @@ impl RawConnector for TcpServer {
             self.tls_server_config.clone(),
             sink_runtime,
         );
-        BoxedRawSource::from_value(source, TD_Opaque)
+        let source = BoxedRawSource::from_value(source, TD_Opaque);
+        future::ready(ROk(RSome(source))).into_ffi()
     }
 
     fn create_sink<'a>(
@@ -161,7 +162,8 @@ impl RawConnector for TcpServer {
             self.sink_tx.clone(),
             self.sink_rx.clone(),
         );
-        BoxedRawSink::from_value(sink, TD_Opaque)
+        let sink = BoxedRawSink::from_value(sink, TD_Opaque);
+        future::ready(ROk(RSome(sink))).into_ffi()
     }
 
     fn codec_requirements(&self) -> CodecReq {
@@ -200,7 +202,7 @@ impl RawSource for TcpServerSource {
     #[allow(clippy::too_many_lines)]
     fn connect<'a>(
         &'a mut self,
-        ctx: &'a ConnectorContext,
+        ctx: &'a SourceContext,
         _attempt: &'a Attempt,
     ) -> BorrowingFfiFuture<'a, RResult<bool>> {
         async move {
@@ -236,9 +238,9 @@ impl RawSource for TcpServerSource {
                             // Async<T> allows us to read in one thread and write in another concurrently - see its documentation
                             // So we don't need no BiLock like we would when using `.split()`
                             let origin_uri = EventOriginUri {
-                                scheme: URL_SCHEME.to_string(),
-                                host: peer_addr.ip().to_string(),
-                                port: Some(peer_addr.port()),
+                                scheme: RString::from(URL_SCHEME),
+                                host: RString::from(peer_addr.ip().to_string()),
+                                port: RSome(peer_addr.port()),
                                 path: path.clone(), // captures server port
                             };
 
@@ -259,7 +261,7 @@ impl RawSource for TcpServerSource {
                                     tls_read_stream,
                                     stream.clone(),
                                     vec![0; buf_size],
-                                    ctx.alias.clone(),
+                                    ctx.alias.clone().into(),
                                     origin_uri.clone(),
                                     meta,
                                 );
@@ -285,7 +287,7 @@ impl RawSource for TcpServerSource {
                                 let tcp_reader = TcpReader::new(
                                     stream.clone(),
                                     vec![0; buf_size],
-                                    ctx.alias.clone(),
+                                    ctx.alias.clone().into(),
                                     origin_uri.clone(),
                                     meta,
                                 );
@@ -319,7 +321,7 @@ impl RawSource for TcpServerSource {
         _pull_id: &'a mut u64,
         _ctx: &'a SourceContext,
     ) -> BorrowingFfiFuture<'a, RResult<SourceReply>> {
-        async move { ROk(ttry!(self.connection_rx.recv().await)) }.into_ffi()
+        async move { ROk(ttry!(self.connection_rx.recv().await.map_err(Error::from))) }.into_ffi()
     }
 
     fn on_stop(&mut self, _ctx: &SourceContext) -> BorrowingFfiFuture<'_, RResult<()>> {

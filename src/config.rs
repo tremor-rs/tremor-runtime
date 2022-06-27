@@ -101,8 +101,8 @@ impl<'v> TryFrom<&Value<'v>> for NameWithConfig {
             Ok(Self::from(name))
         } else if let Some(name) = value.get_str("name") {
             Ok(Self {
-                name: name.to_string(),
-                config: value.get("config").map(Value::clone_static),
+                name: RString::from(name),
+                config: value.get("config").map(Value::clone_static).into(),
             })
         } else {
             Err(format!("Invalid codec: {}", value).into())
@@ -246,26 +246,34 @@ impl Connector {
 
         Ok(Self {
             connector_type,
-            config,
-            preprocessors: connector_config
-                .get_array(ConnectorDefinition::PREPROCESSORS)
-                .map(|o| o.iter().map(Preprocessor::try_from).collect::<Result<_>>())
-                .transpose()?,
-            postprocessors: connector_config
-                .get_array(ConnectorDefinition::POSTPROCESSORS)
-                .map(|o| o.iter().map(Preprocessor::try_from).collect::<Result<_>>())
-                .transpose()?,
+            config: config.into(),
+            preprocessors: ROption::from(
+                connector_config
+                    .get_array(ConnectorDefinition::PREPROCESSORS)
+                    .map(|o| o.iter().map(Preprocessor::try_from).collect::<Result<_>>())
+                    .transpose()?,
+            ),
+            postprocessors: ROption::from(
+                connector_config
+                    .get_array(ConnectorDefinition::POSTPROCESSORS)
+                    .map(|o| o.iter().map(Preprocessor::try_from).collect::<Result<_>>())
+                    .transpose()?,
+            ),
             reconnect: connector_config
                 .get(ConnectorDefinition::RECONNECT)
                 .cloned()
                 .map(tremor_value::structurize)
                 .transpose()?
                 .unwrap_or_default(),
-            metrics_interval_s: connector_config.get_u64(ConnectorDefinition::METRICS_INTERVAL_S),
-            codec: connector_config
-                .get(ConnectorDefinition::CODEC)
-                .map(Codec::try_from)
-                .transpose()?,
+            metrics_interval_s: ROption::from(
+                connector_config.get_u64(ConnectorDefinition::METRICS_INTERVAL_S),
+            ),
+            codec: ROption::from(
+                connector_config
+                    .get(ConnectorDefinition::CODEC)
+                    .map(Codec::try_from)
+                    .transpose()?,
+            ),
         })
     }
 }

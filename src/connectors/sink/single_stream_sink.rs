@@ -31,7 +31,6 @@ use super::{AsyncSinkReply, ContraflowData, EventSerializer, Sink, SinkContext, 
 
 use crate::connectors::prelude::*;
 use crate::errors::Kind as ErrorKind;
-use crate::pdk::RResult;
 use abi_stable::{
     rtry,
     std_types::{
@@ -41,6 +40,7 @@ use abi_stable::{
     },
 };
 use async_ffi::{BorrowingFfiFuture, FutureExt};
+use tremor_common::pdk::RResult;
 use tremor_pipeline::Event;
 
 /// simple Sink implementation that is handling only a single stream
@@ -151,7 +151,13 @@ impl SingleStreamSinkRuntime {
             }
             let error = match writer.on_done(stream).await {
                 Err(e) => Some(e),
-                Ok(StreamDone::ConnectorClosed) => ctx.notifier.connection_lost().await.err(),
+                Ok(StreamDone::ConnectorClosed) => ctx
+                    .notifier
+                    .connection_lost()
+                    .await
+                    .err()
+                    .map(Error::from)
+                    .into(),
                 Ok(_) => None,
             };
             if let Some(e) = error {
@@ -196,14 +202,15 @@ where
                         None
                     };
                     let sink_data = SinkData {
-                        data,
+                        // TODO: avoid this conversion
+                        data: data.into_iter().map(Vec::from).collect(),
                         meta,
                         contraflow: contraflow.clone(), // :scream:
                         start,
                     };
                     if self.tx.send(sink_data).await.is_err() {
                         error!("[Sink::{}] Error sending to closed stream: 0", &ctx.alias);
-                        return Ok(SinkReply::FAIL);
+                        return ROk(SinkReply::FAIL);
                     }
                 }
                 // handle last item
@@ -214,7 +221,8 @@ where
                     None
                 };
                 let sink_data = SinkData {
-                    data,
+                    // TODO: avoid this conversion
+                    data: data.into_iter().map(Vec::from).collect(),
                     meta,
                     contraflow,
                     start,
@@ -230,6 +238,7 @@ where
                 ROk(SinkReply::ACK)
             }
         }
+        .into_ffi()
     }
 
     fn asynchronous(&self) -> bool {

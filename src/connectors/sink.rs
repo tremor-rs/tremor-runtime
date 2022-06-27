@@ -48,17 +48,24 @@ use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STRE
 use tremor_script::{ast::DeployEndpoint, EventPayload};
 use tremor_value::Value;
 
-use crate::connectors::prelude::*;
-use crate::errors::Error;
-use crate::pdk::{RError, RResult};
+use crate::{connectors::prelude::*, errors::Error};
 use abi_stable::{
     rvec,
-    std_types::{RBox, ROption::RSome, RResult::ROk, RStr, RString, RVec, SendRBoxError},
+    std_types::{
+        RBox,
+        ROption::{self, RNone, RSome},
+        RResult::ROk,
+        RStr, RString, RVec, SendRBoxError,
+    },
     type_level::downcasting::TD_Opaque,
     RMut, StableAbi,
 };
 use async_ffi::{BorrowingFfiFuture, FutureExt};
 use std::future;
+use tremor_common::{
+    pdk::{RError, RResult},
+    ttry,
+};
 
 /// Result for a sink function that may provide insights or response.
 ///
@@ -134,8 +141,9 @@ impl Default for SinkAck {
 }
 
 /// Possible replies from asynchronous sinks via `reply_channel` from event or signal handling
-#[derive(Debug)]
-pub(crate) enum AsyncSinkReply {
+#[repr(C)]
+#[derive(Debug, StableAbi)]
+pub enum AsyncSinkReply {
     /// success
     Ack(ContraflowData, u64),
     /// failure
@@ -154,7 +162,7 @@ pub trait RawSink: Send {
         input: RStr<'a>,
         event: Event,
         ctx: &'a SinkContext,
-        serializer: &'a mut EventSerializer,
+        serializer: &'a mut MutEventSerializer,
         start: u64,
     ) -> BorrowingFfiFuture<'a, RResult<SinkReply>>;
     /// called when receiving a signal
@@ -162,7 +170,7 @@ pub trait RawSink: Send {
         &'a mut self,
         _signal: Event,
         _ctx: &'a SinkContext,
-        _serializer: &'a mut EventSerializer,
+        _serializer: &'a mut MutEventSerializer,
     ) -> BorrowingFfiFuture<'a, RResult<SinkReply>> {
         future::ready(ROk(SinkReply::default())).into_ffi()
     }
@@ -526,6 +534,26 @@ impl SinkManagerBuilder {
     }
 }
 
+#[abi_stable::sabi_trait]
+pub trait ContraflowSenderOpaque: Send + Sync + Clone {
+    /// Send a contraflow message to the runtime
+    fn send(&self, reply: AsyncSinkReply) -> BorrowingFfiFuture<'_, RResult<()>>;
+}
+impl ContraflowSenderOpaque for Sender<AsyncSinkReply> {
+    fn send(&self, reply: AsyncSinkReply) -> BorrowingFfiFuture<'_, RResult<()>> {
+        async move { self.send(reply).await.map_err(RError::new).into() }.into_ffi()
+    }
+}
+/// Alias for the FFI-safe contraflow sender, boxed
+pub type BoxedContraflowSender = ContraflowSenderOpaque_TO<'static, RBox<()>>;
+
+// TODO: not quite sure what to debug here, but the implementation is necessary
+impl std::fmt::Debug for BoxedContraflowSender {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "boxed contraflow sender")
+    }
+}
+
 /// create a builder for a `SinkManager`.
 /// with the generic information available in the connector
 /// the builder then in a second step takes the source specific information to assemble and spawn the actual `SinkManager`.
@@ -539,9 +567,9 @@ pub(crate) fn builder(
     // resolve codec and processors
     let postprocessor_configs = config.postprocessors.clone().unwrap_or_default();
     let serializer = EventSerializer::new(
-        config.codec.clone(),
+        config.codec.clone().into(),
         connector_codec_requirement,
-        postprocessor_configs,
+        postprocessor_configs.into(),
         &config.connector_type,
         alias,
     )?;
@@ -593,7 +621,9 @@ impl EventSerializer {
             }
             CodecReq::Required => codec_config
                 .ok_or_else(|| format!("Missing codec for {connector_type} connector {alias}"))?,
-            CodecReq::Optional(opt) => codec_config.unwrap_or_else(|| CodecConfig::from(opt)),
+            CodecReq::Optional(opt) => {
+                codec_config.unwrap_or_else(|| CodecConfig::from(opt.as_str()))
+            }
         };
 
         let codec = codec::resolve(&codec_config)?;
@@ -607,23 +637,26 @@ impl EventSerializer {
             streams: BTreeMap::new(),
         })
     }
+}
 
+/// Note that since `EventSerializer` is used for the plugin system, it
+/// must be `#[repr(C)]` in order to interact with it. However, since it uses
+/// complex types and it's easier to just make it available as an opaque type
+/// instead, with the help of `sabi_trait`.
+#[abi_stable::sabi_trait]
+pub trait EventSerializerOpaque: Send {
     /// drop a stream
-    pub(crate) fn drop_stream(&mut self, stream_id: u64) {
-        self.streams.remove(&stream_id);
-    }
+    fn drop_stream(&mut self, stream_id: u64);
 
     /// clear out all streams - this can lead to data loss
     /// only use when you are sure, all the streams are gone
-    pub(crate) fn clear(&mut self) {
-        self.streams.clear();
-    }
+    fn clear(&mut self);
 
     /// serialize event for the default stream
     ///
     /// # Errors
     ///   * if serialization failed (codec or postprocessors)
-    pub(crate) fn serialize(&mut self, value: &Value, ingest_ns: u64) -> Result<Vec<Vec<u8>>> {
+    fn serialize(&mut self, value: &Value, ingest_ns: u64) -> RResult<RVec<RVec<u8>>> {
         self.serialize_for_stream(value, ingest_ns, DEFAULT_STREAM_ID)
     }
 
@@ -631,13 +664,13 @@ impl EventSerializer {
     ///
     /// # Errors
     ///   * if serialization failed (codec or postprocessors)
-    pub(crate) fn serialize_for_stream(
+    fn serialize_for_stream(
         &mut self,
         value: &Value,
         ingest_ns: u64,
         stream_id: u64,
-    ) -> Result<Vec<Vec<u8>>> {
-        self.serialize_for_stream_with_codec(value, ingest_ns, stream_id, None)
+    ) -> RResult<RVec<RVec<u8>>> {
+        self.serialize_for_stream_with_codec(value, ingest_ns, stream_id, RNone)
     }
 
     /// Serialize an event for a certain stream with the possibility to overwrite the configured codec.
@@ -647,51 +680,91 @@ impl EventSerializer {
     ///
     /// # Errors
     ///   * if serialization fails (codec or postprocessors)
-    pub(crate) fn serialize_for_stream_with_codec(
+    fn serialize_for_stream_with_codec(
         &mut self,
         value: &Value,
         ingest_ns: u64,
         stream_id: u64,
-        codec_overwrite: Option<&String>,
-    ) -> Result<Vec<Vec<u8>>> {
-        if stream_id == DEFAULT_STREAM_ID {
+        codec_overwrite: ROption<&RString>,
+    ) -> RResult<RVec<RVec<u8>>>;
+
+    /// remove and flush out any pending data from the stream identified by the given `stream_id`
+    fn finish_stream(&mut self, stream_id: u64) -> RResult<RVec<RVec<u8>>>;
+}
+
+impl EventSerializerOpaque for EventSerializer {
+    fn drop_stream(&mut self, stream_id: u64) {
+        self.streams.remove(&stream_id);
+    }
+
+    fn clear(&mut self) {
+        self.streams.clear();
+    }
+
+    fn serialize_for_stream_with_codec(
+        &mut self,
+        value: &Value,
+        ingest_ns: u64,
+        stream_id: u64,
+        codec_overwrite: ROption<&RString>,
+    ) -> RResult<RVec<RVec<u8>>> {
+        let data = if stream_id == DEFAULT_STREAM_ID {
             // no codec_overwrite for the default stream
-            postprocess(
+            ttry!(postprocess(
                 &mut self.postprocessors,
                 ingest_ns,
-                self.codec.encode(value)?,
+                ttry!(self.codec.encode(value)),
                 &self.alias,
-            )
+            ))
         } else {
             match self.streams.entry(stream_id) {
                 Entry::Occupied(mut entry) => {
                     let (codec, pps) = entry.get_mut();
-                    postprocess(pps, ingest_ns, codec.encode(value)?, &self.alias)
+                    ttry!(postprocess(
+                        pps,
+                        ingest_ns,
+                        ttry!(codec.encode(value)),
+                        &self.alias
+                    ))
                 }
                 Entry::Vacant(entry) => {
                     // codec overwrite only considered for new streams
-                    let codec = match codec_overwrite {
-                        Some(codec) => codec::resolve(&codec.into()),
-                        None => codec::resolve(&self.codec_config),
-                    }?;
-                    let pps = make_postprocessors(self.postprocessor_configs.as_slice())?;
+                    let codec = ttry!(match codec_overwrite {
+                        // TODO: add conversion RString -> Codec
+                        RSome(codec) => codec::resolve(&codec.as_str().into()),
+                        RNone => codec::resolve(&self.codec_config),
+                    });
+                    let pps = ttry!(make_postprocessors(self.postprocessor_configs.as_slice()));
                     // insert data for a new stream
                     let (c, pps2) = entry.insert((codec, pps));
-                    postprocess(pps2, ingest_ns, c.encode(value)?, &self.alias)
+                    ttry!(postprocess(
+                        pps2,
+                        ingest_ns,
+                        ttry!(c.encode(value)),
+                        &self.alias
+                    ))
                 }
             }
-        }
+        };
+        // TODO: avoid this conversion
+        ROk(data.into_iter().map(RVec::from).collect())
     }
 
-    /// remove and flush out any pending data from the stream identified by the given `stream_id`
-    pub(crate) fn finish_stream(&mut self, stream_id: u64) -> Result<Vec<Vec<u8>>> {
+    fn finish_stream(&mut self, stream_id: u64) -> RResult<RVec<RVec<u8>>> {
         if let Some((mut _codec, mut postprocessors)) = self.streams.remove(&stream_id) {
-            finish(&mut postprocessors, &self.alias)
+            // TODO: avoid this conversion
+            let data = ttry!(finish(&mut postprocessors, &self.alias));
+            ROk(data.into_iter().map(RVec::from).collect())
         } else {
-            Ok(vec![])
+            ROk(rvec![])
         }
     }
 }
+
+/// Alias for the type used in FFI, as a box
+pub type BoxedEventSerializer = EventSerializerOpaque_TO<'static, RBox<()>>;
+/// Alias for the type used in FFI, as a mutable reference
+pub type MutEventSerializer<'a> = EventSerializerOpaque_TO<'static, RMut<'a, ()>>;
 
 #[derive(Debug, PartialEq)]
 enum SinkState {
@@ -931,7 +1004,7 @@ impl SinkManager {
                         SinkMsg::Signal { signal } => {
                             // special treatment
                             match signal.kind {
-                                Some(SignalKind::Drain(source_uid)) => {
+                                RSome(SignalKind::Drain(source_uid)) => {
                                     debug!("{} Drain signal received from {source_uid}", self.ctx);
                                     // account for all received drains per source
                                     self.drains_received.insert(source_uid);
@@ -952,7 +1025,7 @@ impl SinkManager {
                                         .into_cb(CbAction::Drained(source_uid, self.ctx.uid));
                                     send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
                                 }
-                                Some(SignalKind::Start(source_uid)) => {
+                                RSome(SignalKind::Start(source_uid)) => {
                                     debug!("{} Received Start signal from {source_uid}", self.ctx);
                                     self.starts_received.insert(source_uid);
                                 }
@@ -1015,9 +1088,10 @@ impl SinkManager {
     }
 }
 
-#[derive(Clone, Debug)]
+#[repr(C)]
+#[derive(Clone, Debug, StableAbi)]
 /// basic data to build contraflow messages
-pub(crate) struct ContraflowData {
+pub struct ContraflowData {
     event_id: EventId,
     ingest_ns: u64,
     op_meta: OpMeta,

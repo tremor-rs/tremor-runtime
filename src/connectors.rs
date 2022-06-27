@@ -58,11 +58,10 @@ use tremor_value::Value;
 use utils::reconnect::{Attempt, ConnectionLostNotifier, ReconnectRuntime};
 use value_trait::{Builder, Mutable, ValueAccess};
 
-use crate::{
-    connectors::prelude::*,
-    pdk::{self, RResult},
-};
+use crate::{connectors::prelude::*, pdk};
 use abi_stable::{
+    library::RootModule,
+    rstr,
     std_types::{
         RBox, RCowStr,
         ROption::{self, RNone, RSome},
@@ -74,7 +73,7 @@ use abi_stable::{
 };
 use async_ffi::{BorrowingFfiFuture, FutureExt};
 use std::{env, future};
-use tremor_common::pdk::{beef_to_rcow_str, rcow_to_beef_str};
+use tremor_common::pdk::{beef_to_rcow_str, rcow_to_beef_str, RResult};
 
 /// quiescence stuff
 pub(crate) use utils::{metrics, reconnect};
@@ -251,14 +250,14 @@ pub(crate) struct ConnectorResult<T: std::fmt::Debug> {
 impl ConnectorResult<()> {
     fn ok(ctx: &ConnectorContext) -> Self {
         Self {
-            alias: ctx.alias.clone(),
+            alias: ctx.alias.clone().into(),
             res: Ok(()),
         }
     }
 
     fn err(ctx: &ConnectorContext, err_msg: &'static str) -> Self {
         Self {
-            alias: ctx.alias.clone(),
+            alias: ctx.alias.clone().into(),
             res: Err(Error::from(err_msg)),
         }
     }
@@ -270,10 +269,10 @@ pub(crate) trait Context: Display + Clone {
     fn alias(&self) -> &str;
 
     /// get the quiescence beacon for checking if we should continue reading/writing
-    fn quiescence_beacon(&self) -> &QuiescenceBeacon;
+    fn quiescence_beacon(&self) -> &BoxedQuiescenceBeacon;
 
     /// get the notifier to signal to the runtime that we are disconnected
-    fn notifier(&self) -> &reconnect::ConnectionLostNotifier;
+    fn notifier(&self) -> &BoxedConnectionLostNotifier;
 
     /// get the connector type
     fn connector_type(&self) -> &ConnectorType;
@@ -326,21 +325,22 @@ pub(crate) trait Context: Display + Clone {
         'ct: 'event,
     {
         let t: &str = self.connector_type().into();
-        event_meta.get(&Cow::borrowed(t))
+        event_meta.get(&RCowStr::Borrowed(RStr::from(t)))
     }
 }
 
 /// connector context
-#[derive(Clone)]
+#[repr(C)]
+#[derive(Clone, StableAbi)]
 pub(crate) struct ConnectorContext {
     /// url of the connector
-    pub(crate) alias: String,
+    pub(crate) alias: RString,
     /// type of the connector
     connector_type: ConnectorType,
     /// The Quiescence Beacon
-    quiescence_beacon: QuiescenceBeacon,
+    quiescence_beacon: BoxedQuiescenceBeacon,
     /// Notifier
-    notifier: reconnect::ConnectionLostNotifier,
+    notifier: BoxedConnectionLostNotifier,
 }
 
 impl Display for ConnectorContext {
@@ -358,11 +358,11 @@ impl Context for ConnectorContext {
         &self.connector_type
     }
 
-    fn quiescence_beacon(&self) -> &QuiescenceBeacon {
+    fn quiescence_beacon(&self) -> &BoxedQuiescenceBeacon {
         &self.quiescence_beacon
     }
 
-    fn notifier(&self) -> &reconnect::ConnectionLostNotifier {
+    fn notifier(&self) -> &BoxedConnectionLostNotifier {
         &self.notifier
     }
 }
@@ -406,7 +406,7 @@ pub(crate) enum StreamDone {
 }
 
 /// Lookup table for known connectors
-pub(crate) type Known = std::collections::HashMap<ConnectorType, ConnectorPlugin_Ref>;
+pub(crate) type Known = std::collections::HashMap<ConnectorType, ConnectorPluginRef>;
 
 /// Spawns a connector
 ///
@@ -415,11 +415,14 @@ pub(crate) type Known = std::collections::HashMap<ConnectorType, ConnectorPlugin
 pub(crate) async fn spawn(
     alias: &str,
     connector_id_gen: &mut ConnectorIdGen,
-    builder: &ConnectorPlugin_Ref,
+    builder: &ConnectorPluginRef,
     config: ConnectorConfig,
 ) -> Result<Addr> {
     // instantiate connector
-    let connector = builder.from_config()(alias.clone().into(), config).await?;
+    // TODO: what to do here??
+    let connector = builder.from_config()(alias.clone().into(), config).await;
+    let connector = Result::from(connector.map_err(Error::from))?;
+    let connector = Connector(connector);
     let r = connector_task(
         alias.to_string(),
         connector,
@@ -435,7 +438,7 @@ pub(crate) async fn spawn(
 // instantiates the connector and starts listening for control plane messages
 async fn connector_task(
     alias: String,
-    mut connector: ConnectorPlugin_Ref,
+    mut connector: Connector,
     config: ConnectorConfig,
     uid: ConnectorId,
 ) -> Result<Addr> {
@@ -444,13 +447,15 @@ async fn connector_task(
     let (msg_tx, msg_rx) = bounded(qsize);
 
     let mut connectivity = Connectivity::Disconnected;
-    let mut quiescence_beacon = QuiescenceBeacon::default();
+    let quiescence_beacon = QuiescenceBeacon::default();
+    let mut quiescence_beacon = BoxedQuiescenceBeacon::from_value(quiescence_beacon, TD_Opaque);
     let notifier = ConnectionLostNotifier::new(msg_tx.clone());
+    let notifier = BoxedConnectionLostNotifier::from_value(notifier, TD_Opaque);
 
     let source_metrics_reporter = SourceReporter::new(
         alias.clone(),
         METRICS_CHANNEL.tx(),
-        config.metrics_interval_s,
+        config.metrics_interval_s.into(),
     );
 
     let codec_requirement = connector.codec_requirements();
@@ -469,7 +474,7 @@ async fn connector_task(
         source_metrics_reporter,
     )?;
     let source_ctx = SourceContext {
-        alias: alias.clone(),
+        alias: alias.clone().into(),
         uid: uid.into(),
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
@@ -477,9 +482,9 @@ async fn connector_task(
     };
 
     let sink_metrics_reporter = SinkReporter::new(
-        alias.clone(),
+        alias.clone().into(),
         METRICS_CHANNEL.tx(),
-        config.metrics_interval_s,
+        config.metrics_interval_s.into(),
     );
     let sink_builder = sink::builder(
         &config,
@@ -490,7 +495,7 @@ async fn connector_task(
     )?;
     let sink_ctx = SinkContext {
         uid: uid.into(),
-        alias: alias.clone(),
+        alias: alias.clone().into(),
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
         notifier: notifier.clone(),
@@ -513,7 +518,7 @@ async fn connector_task(
     let notifier = reconnect.notifier();
 
     let ctx = ConnectorContext {
-        alias: alias.clone(),
+        alias: alias.clone().into(),
         connector_type: config.connector_type.clone(),
         quiescence_beacon: quiescence_beacon.clone(),
         notifier,
@@ -674,7 +679,7 @@ async fn connector_task(
                 Msg::Reconnect => {
                     // reconnect if we are below max_retries, otherwise bail out and fail the connector
                     info!("{} Connecting...", &ctx);
-                    let (new, will_retry) = reconnect.attempt(connector.as_mut(), &ctx).await?;
+                    let (new, will_retry) = reconnect.attempt(&mut connector, &ctx).await?;
                     match (&connectivity, &new) {
                         (Connectivity::Disconnected, Connectivity::Connected) => {
                             info!("{} Connected.", &ctx);
@@ -1111,7 +1116,7 @@ pub trait RawConnector: Send {
         &'a mut self,
         _ctx: &'a ConnectorContext,
     ) -> BorrowingFfiFuture<'a, RResult<()>> {
-        future::ready(Ok(())).into_ffi()
+        future::ready(ROk(())).into_ffi()
     }
 
     /// called when the connector is stopped
@@ -1119,7 +1124,7 @@ pub trait RawConnector: Send {
         &'a mut self,
         _ctx: &'a ConnectorContext,
     ) -> BorrowingFfiFuture<'a, RResult<()>> {
-        future::ready(Ok(())).into_ffi()
+        future::ready(ROk(())).into_ffi()
     }
 
     /// Returns the codec requirements for the connector
@@ -1322,14 +1327,14 @@ where
     T: ToString + ?Sized,
 {
     fn from(s: &T) -> Self {
-        Self(s.to_string())
+        Self(s.to_string().into())
     }
 }
 
 /// builtin connector types
 
 #[must_use]
-pub(crate) fn builtin_connector_types() -> Vec<ConnectorPlugin> {
+pub(crate) fn builtin_connector_types() -> Vec<ConnectorPluginRef> {
     vec![
         /*
         Box::new(impls::file::Builder::default()),
@@ -1370,7 +1375,7 @@ pub(crate) fn builtin_connector_types() -> Vec<ConnectorPlugin> {
 /// debug connector types
 
 #[must_use]
-pub(crate) fn debug_connector_types(world: &World) -> Vec<ConnectorPlugin> {
+pub(crate) fn debug_connector_types(world: &World) -> Vec<ConnectorPluginRef> {
     vec![
         /*
         Box::new(impls::cb::Builder::new(world.clone())),
@@ -1414,7 +1419,7 @@ where
             // notify connector task about a terminated connection loop
             let n = ctx.notifier();
             log_error!(
-                n.connection_lost().await,
+                Result::from(n.connection_lost().await.map_err(Error::from)),
                 "{ctx} Failed to notify on connection lost: {e}"
             );
         } else {

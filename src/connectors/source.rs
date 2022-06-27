@@ -59,7 +59,6 @@ use value_trait::Builder;
 use super::{CodecReq, Connectivity};
 
 use crate::connectors::prelude::*;
-use crate::pdk::RResult;
 use abi_stable::{
     rvec,
     std_types::{RBox, RCowStr, ROption, ROption::RSome, RResult::ROk, RString, RVec, Tuple2},
@@ -67,6 +66,10 @@ use abi_stable::{
 };
 use async_ffi::{BorrowingFfiFuture, FutureExt};
 use std::future;
+use tremor_common::{
+    pdk::{rcow_to_beef_str, RResult},
+    ttry,
+};
 
 #[derive(Debug)]
 /// Messages a Source can receive
@@ -118,7 +121,7 @@ pub enum SourceReply {
         /// The event_id will have the `DEFAULT_STREAM_ID` set as stream_id.
         stream: ROption<u64>,
         /// Port to send to, defaults to `out`
-        port: ROption<Cow<'static, str>>,
+        port: ROption<RCowStr<'static>>,
         /// Overwrite the codec being used for deserializing this data.
         /// Should only be used when setting `stream` to `None`
         codec_overwrite: ROption<RString>,
@@ -132,7 +135,7 @@ pub enum SourceReply {
         /// stream id
         stream: u64,
         /// Port to send to, defaults to `out`
-        port: ROption<Cow<'static, str>>,
+        port: ROption<RCowStr<'static>>,
     },
     /// A stream is closed
     /// This might result in additional events being flushed from
@@ -492,11 +495,11 @@ impl Context for SourceContext {
         &self.alias
     }
 
-    fn quiescence_beacon(&self) -> &QuiescenceBeacon {
+    fn quiescence_beacon(&self) -> &BoxedQuiescenceBeacon {
         &self.quiescence_beacon
     }
 
-    fn notifier(&self) -> &ConnectionLostNotifier {
+    fn notifier(&self) -> &BoxedConnectionLostNotifier {
         &self.notifier
     }
 
@@ -601,16 +604,14 @@ pub(crate) fn builder(
             }
             CodecConfig::from("null")
         }
-        CodecReq::Required => config
-            .codec
-            .clone()
+        CodecReq::Required => Option::from(config.codec.clone())
             .ok_or_else(|| format!("Missing codec for connector {}", config.connector_type))?,
         CodecReq::Optional(opt) => config
             .codec
             .clone()
-            .unwrap_or_else(|| CodecConfig::from(opt)),
+            .unwrap_or_else(|| CodecConfig::from(opt.as_str())),
     };
-    let streams = Streams::new(source_uid, codec_config, preprocessor_configs);
+    let streams = Streams::new(source_uid, codec_config, preprocessor_configs.into());
 
     Ok(SourceManagerBuilder {
         qsize,
@@ -1137,13 +1138,14 @@ impl SourceManager {
                 codec_overwrite,
             } => {
                 self.handle_data(
-                    stream,
+                    // TODO: these conversions could be avoided
+                    stream.into(),
                     pull_id,
                     origin_uri,
-                    port,
-                    data,
-                    meta,
-                    codec_overwrite,
+                    port.map(rcow_to_beef_str).into(),
+                    data.into(),
+                    meta.into(),
+                    codec_overwrite.map(String::from).into(),
                 )
                 .await?;
             }
@@ -1153,15 +1155,21 @@ impl SourceManager {
                 stream,
                 port,
             } => {
-                self.handle_structured(stream, pull_id, payload, port, origin_uri)
-                    .await?;
+                self.handle_structured(
+                    stream,
+                    pull_id,
+                    payload,
+                    port.map(rcow_to_beef_str).into(),
+                    origin_uri,
+                )
+                .await?;
             }
             SourceReply::EndStream {
                 origin_uri,
                 meta,
                 stream: stream_id,
             } => {
-                self.handle_end_stream(stream_id, pull_id, origin_uri, meta)
+                self.handle_end_stream(stream_id, pull_id, origin_uri, meta.into())
                     .await;
                 if self.state == SourceState::Draining && self.streams.is_empty() {
                     self.on_fully_drained().await?;
@@ -1421,6 +1429,7 @@ impl SourceManager {
             let r = {
                 // TODO: we could specialize for sources that just use a queue for pull_data
                 //       and handle it the same as rx
+                // TODO: what do I do with this??
                 let f2 = self.source.pull_data(&mut pull_id, &self.ctx);
                 match futures::future::select(f1.take().unwrap_or_else(|| rx.recv()), f2).await {
                     Either::Left((msg, o)) => {
@@ -1619,7 +1628,7 @@ fn build_event(
         id: stream_state.idgen.next_with_pull_id(pull_id),
         data: payload,
         ingest_ns,
-        origin_uri: Some(origin_uri),
+        origin_uri: RSome(origin_uri),
         transactional: is_transactional,
         ..Event::default()
     }

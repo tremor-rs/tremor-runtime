@@ -23,7 +23,7 @@ use async_std::{
 use futures::{AsyncRead, AsyncReadExt, AsyncWriteExt};
 use tremor_common::asy::file;
 
-use crate::{pdk::RError, ttry};
+use crate::{errors::Error, system::World};
 use abi_stable::{
     prefix_type::PrefixTypeTrait,
     rtry, rvec, sabi_extern_fn,
@@ -36,7 +36,10 @@ use abi_stable::{
 };
 use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt};
 use std::future;
-use tremor_common::pdk::beef_to_rcow_str;
+use tremor_common::{
+    pdk::{beef_to_rcow_str, RError},
+    ttry,
+};
 
 const URL_SCHEME: &str = "tremor-file";
 
@@ -99,7 +102,7 @@ pub(crate) struct File {
 
 /// Note that since it's a built-in plugin, `#[export_root_module]` can't be
 /// used or it would conflict with other plugins.
-pub fn instantiate_root_module() -> ConnectorPlugin_Ref {
+pub fn instantiate_root_module() -> ConnectorPluginRef {
     ConnectorPlugin {
         connector_type,
         from_config,
@@ -113,18 +116,17 @@ fn connector_type() -> ConnectorType {
 }
 
 #[sabi_extern_fn]
-pub fn from_config(
-    alias: RString,
-    config: ROption<Value<'static>>,
-) -> FfiFuture<RResult<BoxedRawConnector>> {
+pub fn from_config<'a>(
+    _: RStr<'a>,
+    _: &'a ConnectorConfig,
+    config: &'a Value,
+    _: ROption<World>,
+) -> BorrowingFfiFuture<'a, RResult<BoxedRawConnector>> {
     async move {
-        if let RSome(raw_config) = config {
-            let config = ttry!(Config::new(&raw_config.into()));
-            let file = File { config };
-            ROk(BoxedRawConnector::from_value(file, TD_Opaque))
-        } else {
-            RErr(ErrorKind::MissingConfiguration(alias.to_string()).into())
-        }
+        let config = ttry!(Config::new(config));
+        let file = File { config };
+        let file = BoxedRawConnector::from_value(file, TD_Opaque);
+        ROk(file)
     }
     .into_ffi()
 }
@@ -184,10 +186,10 @@ impl FileSource {
     fn new(config: Config) -> Self {
         let buf = vec![0; config.chunk_size];
         let origin_uri = EventOriginUri {
-            scheme: URL_SCHEME.to_string(),
-            host: hostname(),
-            port: None,
-            path: vec![config.path.display().to_string()],
+            scheme: RString::from(URL_SCHEME),
+            host: RString::from(hostname()),
+            port: RNone,
+            path: rvec![RString::from(config.path.display().to_string())],
         };
         Self {
             config,
@@ -227,7 +229,11 @@ impl RawSource for FileSource {
         }
         .into_ffi()
     }
-    async fn pull_data(&mut self, _pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+    fn pull_data<'a>(
+        &'a mut self,
+        _pull_id: &'a mut u64,
+        ctx: &'a SourceContext,
+    ) -> BorrowingFfiFuture<'a, RResult<SourceReply>> {
         async move {
             let reply = if self.eof {
                 SourceReply::Finished
@@ -236,7 +242,7 @@ impl RawSource for FileSource {
                     .reader
                     .as_mut()
                     .ok_or_else(|| Error::from("No file available.")));
-                let bytes_read = ttry!(reader.read(&mut self.buf).await);
+                let bytes_read = ttry!(reader.read(&mut self.buf).await.map_err(Error::from));
                 if bytes_read == 0 {
                     self.eof = true;
                     debug!("{} EOF", &ctx);
@@ -251,7 +257,7 @@ impl RawSource for FileSource {
                         stream: RSome(DEFAULT_STREAM_ID),
                         meta: RSome(self.meta.clone()),
                         // ALLOW: with the read above we ensure that this access is valid, unless async_std is broken
-                        data: RVec::from(self.buf[0..bytes_read]),
+                        data: RVec::from(&self.buf[0..bytes_read]),
                         port: RSome(beef_to_rcow_str(OUT)),
                         codec_overwrite: RNone,
                     }
@@ -325,6 +331,7 @@ impl RawSink for FileSink {
             self.file = Some(file);
             ROk(true)
         }
+        .into_ffi()
     }
 
     fn on_event<'a>(
@@ -342,24 +349,25 @@ impl RawSink for FileSink {
                 .ok_or_else(|| Error::from("No file available.")));
             let ingest_ns = event.ingest_ns;
             for value in event.value_iter() {
-                let data = serializer.serialize(value, ingest_ns)?;
+                let data = rtry!(serializer.serialize(value, ingest_ns));
                 for chunk in data {
                     if let Err(e) = file.write_all(&chunk).await {
                         error!("{} Error writing to file: {}", &ctx, &e);
                         self.file = None;
-                        ctx.notifier().connection_lost().await?;
-                        return Err(e.into());
+                        rtry!(ctx.notifier().connection_lost().await);
+                        return RErr(Error::from(e).into());
                     }
                 }
                 if let Err(e) = file.flush().await {
                     error!("{} Error flushing file: {}", &ctx, &e);
                     self.file = None;
-                    ctx.notifier().connection_lost().await?;
-                    return Err(e.into());
+                    rtry!(ctx.notifier().connection_lost().await);
+                    return RErr(Error::from(e).into());
                 }
             }
             ROk(SinkReply::NONE)
         }
+        .into_ffi()
     }
 
     fn auto_ack(&self) -> bool {

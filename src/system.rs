@@ -26,7 +26,7 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_script::{ast, highlighter::Highlighter};
 
-use crate::pdk::{self, ConnectorPlugin_Ref, DEFAULT_PLUGIN_PATH};
+use crate::pdk::{self, ConnectorPluginRef, DEFAULT_PLUGIN_PATH};
 use std::env;
 
 /// Configuration for the runtime
@@ -130,7 +130,7 @@ impl World {
     ///  * If the system is unavailable
     pub(crate) async fn register_builtin_connector_type(
         &self,
-        builder: ConnectorPlugin_Ref,
+        builder: ConnectorPluginRef,
     ) -> Result<()> {
         self.system
             .send(flow_supervisor::Msg::RegisterConnectorType {
@@ -178,7 +178,7 @@ impl World {
         let world = Self { system };
 
         connectors::register_builtin_connector_types(&world, config.debug_connectors).await?;
-        world.register_plugin_types().await?;
+        world.register_plugin_types().await;
 
         Ok((world, system_h))
     }

@@ -26,7 +26,7 @@ use hashbrown::{hash_map::Entry, HashMap};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
 use tremor_script::ast::DeployFlow;
 
-use crate::pdk::ConnectorPlugin_Ref;
+use crate::pdk::ConnectorPluginRef;
 
 pub(crate) type Channel = Sender<Msg>;
 
@@ -43,7 +43,7 @@ pub(crate) enum Msg {
         /// the type of connector
         connector_type: ConnectorType,
         /// the builder
-        builder: ConnectorPlugin_Ref,
+        builder: ConnectorPluginRef,
     },
     GetFlows(Sender<Result<Vec<Flow>>>),
     GetFlow(Id, Sender<Result<Flow>>),
@@ -76,10 +76,10 @@ impl FlowSupervisor {
     fn handle_register_connector_type(
         &mut self,
         connector_type: ConnectorType,
-        builder: ConnectorPlugin_Ref,
+        builder: ConnectorPluginRef,
     ) {
         if let Some(old) = self.known_connectors.insert(connector_type, builder) {
-            error!("Connector type {} already defined!", old.connector_type());
+            error!("Connector type {} already defined!", old.connector_type()());
         }
     }
 

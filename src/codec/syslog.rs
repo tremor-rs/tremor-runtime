@@ -17,6 +17,8 @@ use chrono::{DateTime, Datelike, Offset, TimeZone, Utc};
 use syslog_loose::{IncompleteDate, ProcId, Protocol, SyslogFacility, SyslogSeverity};
 use tremor_value::Value;
 
+use abi_stable::std_types::Tuple2;
+
 const DEFAULT_PRI: i32 = 13;
 
 pub trait Now: Send + Sync + Clone {
@@ -59,7 +61,7 @@ where
             ))
         })?;
         let mut elem = String::with_capacity(16);
-        for (id, params) in sd.iter() {
+        for Tuple2(id, params) in sd.iter() {
             elem.push('[');
             elem.push_str(id);
             let params = params.as_array().ok_or_else(|| {
@@ -73,7 +75,7 @@ where
                         "Invalid structured data: param's key value pair not an object",
                     ))
                 })?;
-                for (k, v) in kv_map {
+                for Tuple2(k, v) in kv_map {
                     let value = v.as_str().ok_or_else(|| {
                         Error::from(ErrorKind::InvalidSyslogData(
                             "Invalid structured data: param's key value pair not an object",

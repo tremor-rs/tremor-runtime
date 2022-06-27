@@ -1,8 +1,10 @@
 use crate::{
     config::Connector as ConnectorConfig,
     connectors::{BoxedRawConnector, ConnectorType},
-    pdk::RResult,
+    system::World,
 };
+use tremor_common::pdk::RResult;
+use tremor_value::Value;
 
 use std::fmt;
 
@@ -18,8 +20,7 @@ use async_ffi::BorrowingFfiFuture;
 
 #[repr(C)]
 #[derive(StableAbi)]
-// TODO: rename to follow PascalCase
-#[sabi(kind(Prefix(prefix_ref = ConnectorPlugin_Ref)))]
+#[sabi(kind(Prefix(prefix_ref = ConnectorPluginRef)))]
 pub struct ConnectorPlugin {
     /// the type of the connector
     pub connector_type: extern "C" fn() -> ConnectorType,
@@ -30,14 +31,16 @@ pub struct ConnectorPlugin {
     ///  * If the config is invalid for the connector
     #[sabi(last_prefix_field)]
     pub from_config: for<'a> extern "C" fn(
-        alias: RStr<'a>,
-        config: &'a ConnectorConfig,
+        id: RStr<'a>,
+        raw_config: &'a ConnectorConfig,
+        config: &'a Value,
+        world: ROption<World>,
     )
         -> BorrowingFfiFuture<'a, RResult<BoxedRawConnector>>,
 }
 
-/// `ConnectorPlugin_Ref` is the main module in this plugin declaration.
-impl RootModule for ConnectorPlugin_Ref {
+/// `ConnectorPluginRef` is the main module in this plugin declaration.
+impl RootModule for ConnectorPluginRef {
     /// The name of the dynamic library
     const BASE_NAME: &'static str = "connector";
     /// The name of the library for logging and similars
@@ -47,10 +50,10 @@ impl RootModule for ConnectorPlugin_Ref {
 
     /// Implements the `RootModule::root_module_statics` function, which is the
     /// only required implementation for the `RootModule` trait.
-    declare_root_module_statics! {ConnectorPlugin_Ref}
+    declare_root_module_statics! {ConnectorPluginRef}
 }
 
-impl fmt::Debug for ConnectorPlugin_Ref {
+impl fmt::Debug for ConnectorPluginRef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "connector plugin '{}'", self.connector_type()())
     }

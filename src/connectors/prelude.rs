@@ -63,14 +63,17 @@ pub(crate) fn default_false() -> bool {
 pub(crate) use crate::connectors::{sink::Sink, source::Source, Connector};
 pub use crate::{
     connectors::{
-        quiescence::BoxedQuiescenceBeacon,
         sink::{
             BoxedContraflowSender, BoxedEventSerializer, BoxedRawSink, ContraflowSenderOpaque,
             EventSerializerOpaque, MutEventSerializer, RawSink,
         },
         source::{BoxedRawSource, RawSource},
-        utils::reconnect::BoxedConnectionLostNotifier,
+        utils::{
+            quiescence::{BoxedQuiescenceBeacon, QuiescenceBeaconOpaque},
+            reconnect::{BoxedConnectionLostNotifier, ConnectionLostNotifierOpaque},
+        },
         BoxedRawConnector, RawConnector,
     },
-    pdk::{ConnectorPlugin, ConnectorPlugin_Ref, RResult},
+    pdk::{ConnectorPlugin, ConnectorPluginRef},
 };
+pub use tremor_common::pdk::RResult;

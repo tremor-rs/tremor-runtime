@@ -22,6 +22,21 @@ use futures::{
     AsyncReadExt, AsyncWriteExt,
 };
 
+use crate::errors::Error;
+use abi_stable::{
+    prefix_type::PrefixTypeTrait,
+    rstr, rvec, sabi_extern_fn,
+    std_types::{
+        ROption::{self, RNone, RSome},
+        RResult::{RErr, ROk},
+        RStr, RString, RVec,
+    },
+    type_level::downcasting::TD_Opaque,
+};
+use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt};
+use std::future;
+use tremor_common::{pdk::RError, ttry};
+
 pub(crate) struct TcpDefaults;
 impl Defaults for TcpDefaults {
     const SCHEME: &'static str = "tcp";
@@ -109,7 +124,7 @@ where
         Some(SourceReply::EndStream {
             origin_uri: self.origin_uri.clone(),
             stream,
-            meta: Some(self.meta.clone()),
+            meta: RSome(self.meta.clone()),
         })
     }
     async fn read(&mut self, stream: u64) -> Result<SourceReply> {
@@ -119,7 +134,7 @@ where
             trace!("[Connector::{}] Stream {stream} EOF", &self.alias);
             return Ok(SourceReply::EndStream {
                 origin_uri: self.origin_uri.clone(),
-                meta: Some(self.meta.clone()),
+                meta: RSome(self.meta.clone()),
                 stream,
             });
         }
@@ -127,12 +142,12 @@ where
 
         Ok(SourceReply::Data {
             origin_uri: self.origin_uri.clone(),
-            stream: Some(stream),
-            meta: Some(self.meta.clone()),
+            stream: RSome(stream),
+            meta: RSome(self.meta.clone()),
             // ALLOW: we know bytes_read is smaller than or equal buf_size
-            data: self.buffer[0..bytes_read].to_vec(),
-            port: None,
-            codec_overwrite: None,
+            data: RVec::from(&self.buffer[0..bytes_read]),
+            port: RNone,
+            codec_overwrite: RNone,
         })
     }
 

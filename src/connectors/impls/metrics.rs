@@ -18,8 +18,7 @@ use beef::Cow;
 use tremor_pipeline::{MetricsMsg, METRICS_CHANNEL};
 use tremor_script::utils::hostname;
 
-use crate::pdk::RError;
-use crate::ttry;
+use crate::system::World;
 use abi_stable::{
     prefix_type::PrefixTypeTrait,
     rstr, rvec, sabi_extern_fn,
@@ -33,6 +32,7 @@ use abi_stable::{
 };
 use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt};
 use std::future;
+use tremor_common::{pdk::RError, ttry};
 
 const MEASUREMENT: RCowStr<'static> = RCow::Borrowed(rstr!("measurement"));
 const TAGS: RCowStr<'static> = RCow::Borrowed(rstr!("tags"));
@@ -64,7 +64,7 @@ impl MetricsConnector {
 
 /// Note that since it's a built-in plugin, `#[export_root_module]` can't be
 /// used or it would conflict with other plugins.
-pub fn instantiate_root_module() -> ConnectorPlugin_Ref {
+pub fn instantiate_root_module() -> ConnectorPluginRef {
     ConnectorPlugin {
         connector_type,
         from_config,
@@ -77,10 +77,12 @@ fn connector_type() -> ConnectorType {
     "metrics".into()
 }
 #[sabi_extern_fn]
-pub fn from_config(
-    _alias: RString,
-    _raw_config: ROption<Value<'static>>,
-) -> FfiFuture<RResult<BoxedRawConnector>> {
+pub fn from_config<'a>(
+    _id: RStr<'a>,
+    _raw_config: &'a ConnectorConfig,
+    _config: &'a Value,
+    _world: ROption<World>,
+) -> BorrowingFfiFuture<'a, RResult<BoxedRawConnector>> {
     let connector = BoxedRawConnector::from_value(MetricsConnector::new(), TD_Opaque);
     future::ready(ROk(connector)).into_ffi()
 }
@@ -133,10 +135,10 @@ impl MetricsSource {
         Self {
             rx,
             origin_uri: EventOriginUri {
-                scheme: "tremor-metrics".to_string(),
-                host: hostname(),
-                port: None,
-                path: vec![],
+                scheme: RString::from("tremor-metrics"),
+                host: RString::from(hostname()),
+                port: RNone,
+                path: rvec![],
             },
         }
     }
@@ -161,6 +163,7 @@ impl RawSource for MetricsSource {
                 port: RNone,
             })
         }
+        .into_ffi()
     }
 
     fn is_transactional(&self) -> bool {
@@ -241,7 +244,7 @@ impl RawSink for MetricsSink {
                 origin_uri, data, ..
             } = event;
 
-            let metrics_msg = MetricsMsg::new(data, origin_uri);
+            let metrics_msg = MetricsMsg::new(data, origin_uri.into());
             let ack_or_fail = match self.tx.try_broadcast(metrics_msg) {
                 Err(TrySendError::Closed(_)) => {
                     // channel is closed
@@ -256,5 +259,6 @@ impl RawSink for MetricsSink {
 
             ROk(ack_or_fail)
         }
+        .into_ffi()
     }
 }

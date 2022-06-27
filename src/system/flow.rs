@@ -223,8 +223,7 @@ impl Flow {
                             })?;
                     connectors.insert(
                         ConnectorAlias::from(alias),
-                        connectors::spawn(alias, connector_id_gen, builder.as_ref(), config)
-                            .await?,
+                        connectors::spawn(alias, connector_id_gen, builder, config).await?,
                     );
                 }
                 ast::CreateTargetDefinition::Pipeline(defn) => {

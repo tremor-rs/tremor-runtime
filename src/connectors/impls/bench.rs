@@ -27,7 +27,7 @@ use std::{
 use tremor_common::{file, time::nanotime};
 use xz2::read::XzDecoder;
 
-use crate::{errors::Error, pdk::RError, ttry};
+use crate::errors::Error;
 use abi_stable::{
     prefix_type::PrefixTypeTrait,
     rstr, rvec, sabi_extern_fn,
@@ -40,6 +40,7 @@ use abi_stable::{
 };
 use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt};
 use std::future;
+use tremor_common::{pdk::RError, ttry};
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -83,7 +84,7 @@ impl ConfigImpl for Config {}
 
 /// Note that since it's a built-in plugin, `#[export_root_module]` can't be
 /// used or it would conflict with other plugins.
-pub fn instantiate_root_module() -> ConnectorPlugin_Ref {
+pub fn instantiate_root_module() -> ConnectorPluginRef {
     ConnectorPlugin {
         connector_type,
         from_config,
@@ -100,10 +101,11 @@ fn connector_type() -> ConnectorType {
 pub fn from_config<'a>(
     id: RStr<'a>,
     _: &ConnectorConfig,
-    config: &'a Value<'static>,
-) -> FfiFuture<RResult<BoxedRawConnector>> {
+    config: &'a Value,
+    world: ROption<World>,
+) -> BorrowingFfiFuture<'a, RResult<BoxedRawConnector>> {
     async move {
-            let config: Config = ttry!(Config::new(&config.into()));
+            let config: Config = ttry!(Config::new(config));
             let mut source_data_file = ttry!(file::open(&config.source));
             let mut data = vec![];
             let ext = file::extension(&config.source);
@@ -120,15 +122,15 @@ pub fn from_config<'a>(
                 port: RNone,
                 path: rvec![RString::from(config.source.clone())],
             };
-            let elements: RVec<RVec<u8>> = if let Some(chunk_size) = config.chunk_size {
+            let elements: Vec<Vec<u8>> = if let Some(chunk_size) = config.chunk_size {
                 // split into sized chunks
                 ttry!(data
                     .chunks(chunk_size)
-                    .map(|e| -> Result<RVec<u8>> {
+                    .map(|e| -> Result<Vec<u8>> {
                         if config.base64 {
-                            Ok(RVec::from(base64::decode(e)?))
+                            Ok(Vec::from(base64::decode(e)?))
                         } else {
-                            Ok(RVec::from(e))
+                            Ok(Vec::from(e))
                         }
                     })
                     .collect::<Result<_>>())
@@ -136,11 +138,11 @@ pub fn from_config<'a>(
                 // split into lines
                 ttry!(BufReader::new(data.as_slice())
                     .lines()
-                    .map(|e| -> Result<RVec<u8>> {
+                    .map(|e| -> Result<Vec<u8>> {
                         if config.base64 {
-                            Ok(RVec::from(base64::decode(&e?.as_bytes())?))
+                            Ok(Vec::from(base64::decode(&e?.as_bytes())?))
                         } else {
-                            Ok(RVec::from(e?.as_bytes()))
+                            Ok(Vec::from(e?.as_bytes()))
                         }
                     })
                     .collect::<Result<_>>())
@@ -165,7 +167,7 @@ pub fn from_config<'a>(
                 acc: Acc { elements, count: 0 },
                 origin_uri,
                 stop_after,
-                world: self.world.clone(),
+                world: world.unwrap().clone(),
             }, TD_Opaque))
     }
     .into_ffi()
@@ -225,7 +227,7 @@ impl RawConnector for Bench {
         _qsize: usize,
         _reply_tx: BoxedContraflowSender,
     ) -> BorrowingFfiFuture<'_, RResult<ROption<BoxedRawSink>>> {
-        let s = Blackhole::from_config(&self.config, self.stop_after, self.world.clone());
+        let s = Blackhole::new(&self.config, self.stop_after, self.world.clone());
         // We don't need to be able to downcast the connector back to the original
         // type, so we just pass it as an opaque type.
         let s = BoxedRawSink::from_value(s, TD_Opaque);
@@ -233,7 +235,7 @@ impl RawConnector for Bench {
     }
 
     fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Optional("json")
+        CodecReq::Optional(rstr!("json"))
     }
 }
 
@@ -248,10 +250,7 @@ struct Blaster {
 }
 
 impl RawSource for Blaster {
-    fn on_start<'a>(
-        &'a mut self,
-        _ctx: &'a ConnectorContext,
-    ) -> BorrowingFfiFuture<'a, RResult<()>> {
+    fn on_start<'a>(&'a mut self, _ctx: &'a SourceContext) -> BorrowingFfiFuture<'a, RResult<()>> {
         self.stop_at = self
             .stop_after
             .seconds
@@ -266,7 +265,7 @@ impl RawSource for Blaster {
     ) -> BorrowingFfiFuture<'a, RResult<SourceReply>> {
         async move {
             if self.finished {
-                return Ok(SourceReply::Finished);
+                return ROk(SourceReply::Finished);
             }
             if let Some(interval) = self.interval_ns {
                 async_std::task::sleep(interval).await;
@@ -288,7 +287,8 @@ impl RawSource for Blaster {
                 let data = self.acc.next();
                 SourceReply::Data {
                     origin_uri: self.origin_uri.clone(),
-                    data,
+                    // TODO: this conversion can be avoided
+                    data: data.into(),
                     meta: RNone,
                     stream: RSome(DEFAULT_STREAM_ID),
                     port: RNone,
@@ -376,14 +376,14 @@ impl RawSink for Blackhole {
                 for value in event.value_iter() {
                     if now_ns > self.warmup {
                         let delta_ns = now_ns - event.ingest_ns;
-                        if let Ok(bufs) = event_serializer.serialize(value, event.ingest_ns) {
+                        if let ROk(bufs) = event_serializer.serialize(value, event.ingest_ns) {
                             self.bytes += bufs.iter().map(RVec::len).sum::<usize>();
                         } else {
                             error!("failed to encode");
                         };
                         self.count += 1;
                         self.buf.clear();
-                        ttry!(self.delivered.record(delta_ns));
+                        ttry!(self.delivered.record(delta_ns).map_err(Error::from));
                     }
                 }
 
@@ -397,7 +397,7 @@ impl RawSink for Blackhole {
                     self.finished = true;
                     if self.structured {
                         let v = self.to_value(2);
-                        ttry!(v.write(&mut stdout()));
+                        ttry!(v.write(&mut stdout()).map_err(Error::from));
                     } else {
                         ttry!(self.write_text(stdout(), 5, 2));
                     }
@@ -419,6 +419,7 @@ impl RawSink for Blackhole {
 
             ROk(SinkReply::default())
         }
+        .into_ffi()
     }
 }
 

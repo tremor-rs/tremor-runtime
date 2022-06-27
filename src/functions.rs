@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::impls::otel;
+// use crate::connectors::impls::otel;
 use crate::errors::Result;
 use crate::version::VERSION;
 use tremor_script::registry::Registry;
@@ -33,7 +33,8 @@ pub fn load() -> Result<()> {
 /// # Errors
 ///  * if we can't install extensions
 pub fn install(reg: &mut Registry) -> Result<()> {
-    otel::load(reg);
+    // TODO: restore once implemented
+    // otel::load(reg);
     reg.insert(tremor_fn!(system|instance(_context) {
         Ok(Value::from(instance!()))
     }))

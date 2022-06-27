@@ -34,17 +34,17 @@ use tremor_pipeline::{CbAction, Event, SignalKind};
 use tremor_value::Value;
 use value_trait::ValueAccess;
 
-use crate::pdk::RResult;
 use abi_stable::{
     rtry,
     std_types::{
         ROption::{RNone, RSome},
-        RResult::ROk,
+        RResult::{RErr, ROk},
         RStr,
     },
 };
 use async_ffi::{BorrowingFfiFuture, FutureExt as FfiFutureExt};
 use std::future;
+use tremor_common::pdk::RResult;
 
 /// Behavioral trait for defining if a Channel Sink needs metadata or not
 pub(crate) trait SinkMetaBehaviour: Send + Sync {
@@ -91,7 +91,7 @@ pub(crate) struct SinkData {
     /// data to send
     pub(crate) data: Vec<Vec<u8>>,
     /// async reply utils (if required)
-    pub(crate) contraflow: Option<(ContraflowData, Sender<AsyncSinkReply>)>,
+    pub(crate) contraflow: Option<(ContraflowData, BoxedContraflowSender)>,
     /// Metadata for this request
     pub(crate) meta: Option<SinkMeta>,
     /// timestamp of processing start
@@ -111,7 +111,7 @@ where
     resolver: F,
     tx: Sender<ChannelSinkMsg<M>>,
     rx: Receiver<ChannelSinkMsg<M>>,
-    reply_tx: Sender<AsyncSinkReply>,
+    reply_tx: BoxedContraflowSender,
 }
 
 impl<T, F> ChannelSink<T, F, NoMeta>
@@ -122,7 +122,7 @@ where
     /// Construct a new instance that redacts metadata with prepared `rx` and `tx`
     pub(crate) fn from_channel_no_meta(
         resolver: F,
-        reply_tx: Sender<AsyncSinkReply>,
+        reply_tx: BoxedContraflowSender,
         tx: Sender<ChannelSinkMsg<T>>,
         rx: Receiver<ChannelSinkMsg<T>>,
     ) -> Self {
@@ -139,7 +139,7 @@ where
     pub(crate) fn new_with_meta(
         qsize: usize,
         resolver: F,
-        reply_tx: Sender<AsyncSinkReply>,
+        reply_tx: BoxedContraflowSender,
     ) -> Self {
         let (tx, rx) = bounded(qsize);
         ChannelSink::new(resolver, reply_tx, tx, rx)
@@ -157,7 +157,7 @@ where
     /// This costs a clone.
     pub(crate) fn new(
         resolver: F,
-        reply_tx: Sender<AsyncSinkReply>,
+        reply_tx: BoxedContraflowSender,
         tx: Sender<ChannelSinkMsg<T>>,
         rx: Receiver<ChannelSinkMsg<T>>,
     ) -> Self {
@@ -185,7 +185,7 @@ where
     fn handle_channels(
         &mut self,
         ctx: &SinkContext,
-        serializer: &mut EventSerializer,
+        serializer: &mut MutEventSerializer,
         clean_closed_streams: bool,
     ) -> bool {
         while let Ok(msg) = self.rx.try_recv() {
@@ -322,7 +322,7 @@ where
                             } else {
                                 AsyncSinkReply::Ack(cf_data, nanotime() - start)
                             };
-                            if let Err(e) = sender.send(reply).await {
+                            if let RErr(e) = sender.send(reply).await {
                                 error!("{ctx} Error sending async sink reply: {e}");
                             }
                         }
@@ -338,7 +338,13 @@ where
             }
             let error = match writer.on_done(stream).await {
                 Err(e) => Some(e),
-                Ok(StreamDone::ConnectorClosed) => ctx.notifier().connection_lost().await.err(),
+                Ok(StreamDone::ConnectorClosed) => ctx
+                    .notifier()
+                    .connection_lost()
+                    .await
+                    .err()
+                    .map(Error::from)
+                    .into(),
                 Ok(_) => None,
             };
             if let Some(e) = error {
@@ -385,7 +391,7 @@ where
             let empty = self.handle_channels(ctx, serializer, false);
             if empty {
                 // no streams available :sob:
-                return Ok(SinkReply {
+                return ROk(SinkReply {
                     ack: SinkAck::Fail,
                     cb: CbAction::Trigger,
                 });
@@ -429,7 +435,8 @@ where
                     };
                     let sink_data = SinkData {
                         meta,
-                        data,
+                        // TODO: avoid this conversion
+                        data: data.into_iter().map(Vec::from).collect(),
                         contraflow: contraflow_utils.clone(),
                         start,
                     };

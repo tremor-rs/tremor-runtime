@@ -294,8 +294,14 @@ flaky-test = []
 abi_stable = { git = "https://github.com/marioortizmanero/abi_stable_crates.git", branch = "halfbrown" }
 # FIXME: update to crates.io when the new version is released
 simd-json-derive = { git = "https://github.com/marioortizmanero/simd-json-derive.git", branch = "abi-stable" }
-# FIXME: remove once abi_stable is updated to 0.11
+# FIXME: remove once abi_stable is updated to 0.11.
+# This patch just modifies its `abi_stable` dependency so that it's the same as
+# the one above.
 value-trait = { path = "/home/mario/Programming/value-trait" }
+# FIXME: remove once abi_stable is updated to 0.11
+# This patch just modifies its `abi_stable` dependency so that it's the same as
+# the one above.
+async-ffi = { path = "/home/mario/Programming/async-ffi" }
 
 # for use during debian packaging, via cargo-deb
 # https://github.com/mmstick/cargo-deb#packagemetadatadeb-options
