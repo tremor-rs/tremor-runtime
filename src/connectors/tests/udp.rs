@@ -74,7 +74,7 @@ async fn udp_bind() -> Result<()> {
     let server_defn = literal!({
       "codec": "string",
       "config": {
-          "url": "127.0.0.1:4242",
+          "url": "127.0.0.1:4243",
       }
     });
 
@@ -89,8 +89,8 @@ async fn udp_bind() -> Result<()> {
     let client_defn = literal!({
       "codec": "string",
       "config": {
-          "url": "127.0.0.1:4242",
-          "bind": "127.0.0.1:4243",
+          "url": "127.0.0.1:4243",
+          "bind": "127.0.0.1:4244",
       }
     });
 
