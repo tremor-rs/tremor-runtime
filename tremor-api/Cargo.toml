@@ -10,7 +10,6 @@ version = "0.12.4"
 async-std = { version = "1.12.0", features = [
 	"unstable",
 	"attributes",
-	"tokio03",
 	"tokio1",
 ] }
 halfbrown = "0.1"
