@@ -34,6 +34,8 @@ use tremor_value::literal;
 #[async_std::test]
 #[serial(kafka)]
 async fn connector_kafka_producer() -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
     let _ = env_logger::try_init();
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;

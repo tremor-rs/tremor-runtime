@@ -74,3 +74,25 @@ pub fn value(
         TIMESTAMP: timestamp
     })
 }
+
+#[cfg(test)]
+mod test {
+    use simd_json::ValueAccess;
+
+    use super::*;
+    #[test]
+    fn value_test() {
+        let mut t = HashMap::new();
+        t.insert("tag".into(), "tag-value".into());
+
+        let mut f = HashMap::new();
+        f.insert("field".into(), "tag-value".into());
+        let m = value("name".into(), t, f, 42);
+
+        assert_eq!("name", m.get_str(&MEASUREMENT).expect("no value"));
+        assert_eq!(42, m.get_u64(&TIMESTAMP).expect("no value"));
+        let t = m.get(&TAGS).expect("no tags");
+        assert_eq!("tag-value", t.get_str("tag").expect("no tag"));
+        assert_eq!(None, t.get_str("no-tag"));
+    }
+}

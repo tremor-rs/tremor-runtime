@@ -27,10 +27,13 @@ use tonic::transport::Channel;
 use tremor_pipeline::CbAction;
 use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
+use std::time::Duration;
 
 #[async_std::test]
 #[serial(gpubsub)]
 async fn no_connection() -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
     let _ = env_logger::try_init();
     let connector_yaml = literal!({
         "codec": "binary",
@@ -51,6 +54,8 @@ async fn no_connection() -> Result<()> {
 #[async_std::test]
 #[serial(gpubsub)]
 async fn no_token() -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
     let _ = env_logger::try_init();
     let mut env = EnvHelper::new();
     env.remove_var("GOOGLE_APPLICATION_CREDENTIALS");
@@ -72,6 +77,8 @@ async fn no_token() -> Result<()> {
 #[async_std::test]
 #[serial(gpubsub)]
 async fn simple_subscribe() -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
     let _ = env_logger::try_init();
 
     let runner = Cli::docker();

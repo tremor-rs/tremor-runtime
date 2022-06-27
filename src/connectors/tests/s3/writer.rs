@@ -31,10 +31,13 @@ use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value};
 use value_trait::{Builder, Mutable, ValueAccess};
+use std::time::Duration;
 
 #[async_std::test]
 #[serial(s3)]
 async fn connector_s3_no_connection() -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-connection");
     let mut env = EnvHelper::new();
@@ -62,6 +65,8 @@ async fn connector_s3_no_connection() -> Result<()> {
 #[async_std::test]
 #[serial(s3)]
 async fn connector_s3_no_credentials() -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-credentials");
 
@@ -98,6 +103,8 @@ async fn connector_s3_no_credentials() -> Result<()> {
 #[async_std::test]
 #[serial(s3)]
 async fn connector_s3_no_region() -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-region");
 
@@ -136,6 +143,8 @@ async fn connector_s3_no_region() -> Result<()> {
 #[async_std::test]
 #[serial(s3)]
 async fn connector_s3_no_bucket() -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-bucket");
 
@@ -170,6 +179,8 @@ async fn connector_s3_no_bucket() -> Result<()> {
 #[async_std::test]
 #[serial(s3)]
 async fn connector_s3() -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
     let _ = env_logger::try_init();
 
     let bucket_name = random_bucket_name("tremor");

@@ -37,6 +37,8 @@ use value_trait::Builder;
 #[async_std::test]
 #[serial(kafka)]
 async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
@@ -280,6 +282,8 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
 #[async_std::test]
 #[serial(kafka)]
 async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
@@ -505,6 +509,8 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
 #[async_std::test]
 #[serial(kafka)]
 async fn connector_kafka_consumer_non_transactional() -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
@@ -731,6 +737,8 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
 #[async_std::test]
 #[serial(kafka)]
 async fn connector_kafka_consumer_unreachable() -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
     let kafka_port = free_port::find_free_tcp_port().await?;
     let _ = env_logger::try_init();
     let connector_config = literal!({
@@ -771,6 +779,8 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
 #[async_std::test]
 #[serial(kafka)]
 async fn connector_kafka_consumer_pause_resume() -> Result<()> {
+    serial_test::set_max_wait(Duration::from_secs(600));
+
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
