@@ -9,3 +9,6 @@ updates:
     rebase-strategy: auto
     ignore:
       - dependency-name: "serial_test"
+        # ignore those versions, as they still make our test suite fail
+        # check this issue for progress on this: https://github.com/palfrey/serial_test/issues/68
+        versions: ["0.7.x", "0.8.x"]
