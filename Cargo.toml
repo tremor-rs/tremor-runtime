@@ -40,7 +40,6 @@ async-compression = { version = "0.3", features = [
 async-std = { version = "1.12.0", features = [
   "unstable",
   "attributes",
-  "tokio03",
   "tokio1",
 ] }
 async-stream = "0.3"
@@ -226,9 +225,7 @@ uuid = { version = "1.1", features = ["v4"] }
 qwal = { git = "https://github.com/tremor-rs/qwal" }
 
 [dev-dependencies]
-serial_test = { version = "=0.8", features = [
-  "logging",
-] }
+serial_test = { version = "=0.8", features = ["logging"] }
 # path = "../serial_test/serial_test" 
 env_logger = "0.9.0"
 matches = "0.1"
