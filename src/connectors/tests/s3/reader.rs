@@ -24,10 +24,10 @@ use crate::errors::Result;
 use aws_sdk_s3::types::ByteStream;
 use aws_sdk_s3::Client;
 use serial_test::serial;
+use std::time::Duration;
 use testcontainers::clients;
 use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
-use std::time::Duration;
 
 #[async_std::test]
 #[serial(s3)]

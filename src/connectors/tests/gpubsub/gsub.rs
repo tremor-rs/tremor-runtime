@@ -21,13 +21,13 @@ use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage, Subscription, Topic};
 use serial_test::serial;
 use std::collections::HashMap;
+use std::time::Duration;
 use testcontainers::clients::Cli;
 use testcontainers::RunnableImage;
 use tonic::transport::Channel;
 use tremor_pipeline::CbAction;
 use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
-use std::time::Duration;
 
 #[async_std::test]
 #[serial(gpubsub)]
