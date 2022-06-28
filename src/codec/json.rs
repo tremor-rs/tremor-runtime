@@ -162,4 +162,19 @@ mod test {
 
         Ok(())
     }
+
+    #[test]
+    fn encode_into() -> Result<()> {
+        let value = literal!({"snot": ["badger", null, false, 1.5, 42]});
+        let codec: Box<dyn Codec> = Box::new(Json::<Unsorted>::default());
+        println!("{codec} {codec:?}"); // for coverage
+
+        let mut buf = vec![];
+        codec.encode_into(&value, &mut buf)?;
+        assert_eq!(
+            "{\"snot\":[\"badger\",null,false,1.5,42]}".to_string(),
+            String::from_utf8_lossy(&buf)
+        );
+        Ok(())
+    }
 }

@@ -94,6 +94,7 @@ async fn simple_subscribe() -> Result<()> {
     let endpoint_clone = endpoint.clone();
 
     let connector_yaml: Value = literal!({
+        "metrics_interval_s": 1,
         "codec": "binary",
         "config":{
             "endpoint": endpoint,

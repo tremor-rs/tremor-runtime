@@ -623,7 +623,10 @@ pub(crate) async fn pipeline_task(
 mod tests {
 
     use super::*;
-    use crate::connectors::{prelude::SinkAddr, source::SourceAddr};
+    use crate::{
+        connectors::{prelude::SinkAddr, source::SourceAddr},
+        pipeline::report::{InputReport, OutputReport},
+    };
     use std::time::Instant;
     use tremor_common::{
         ids::{Id, SourceId},
@@ -632,6 +635,109 @@ mod tests {
     use tremor_pipeline::{EventId, OpMeta};
     use tremor_script::{aggr_registry, lexer::Location, NodeMeta, FN_REGISTRY};
     use tremor_value::Value;
+
+    #[async_std::test]
+    async fn report() -> Result<()> {
+        let _ = env_logger::try_init();
+        let mut operator_id_gen = OperatorIdGen::new();
+        let trickle = r#"select event from in into out;"#;
+        let aggr_reg = aggr_registry();
+        let query =
+            tremor_pipeline::query::Query::parse(trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
+        let addr = spawn("test-pipe1", &query, &mut operator_id_gen)?;
+        let addr2 = spawn("test-pipe2", &query, &mut operator_id_gen)?;
+        let addr3 = spawn("test-pipe3", &query, &mut operator_id_gen)?;
+        println!("{:?}", addr); // coverage
+        let yolo_mid = NodeMeta::new(Location::yolo(), Location::yolo());
+        // interconnect 3 pipelines
+        addr.send_mgmt(MgmtMsg::ConnectOutput {
+            port: Cow::const_str("out"),
+            endpoint: DeployEndpoint::new("snot2", "in", &yolo_mid),
+            target: OutputTarget::Pipeline(Box::new(addr2.clone())),
+        })
+        .await?;
+        addr2
+            .send_mgmt(MgmtMsg::ConnectInput {
+                endpoint: DeployEndpoint::new("snot", "out", &yolo_mid),
+                target: InputTarget::Pipeline(Box::new(addr.clone())),
+                is_transactional: true,
+            })
+            .await?;
+        addr2
+            .send_mgmt(MgmtMsg::ConnectOutput {
+                port: Cow::const_str("out"),
+                endpoint: DeployEndpoint::new("snot3", "in", &yolo_mid),
+                target: OutputTarget::Pipeline(Box::new(addr3.clone())),
+            })
+            .await?;
+        addr3
+            .send_mgmt(MgmtMsg::ConnectInput {
+                endpoint: DeployEndpoint::new("snot2", "out", &yolo_mid),
+                target: InputTarget::Pipeline(Box::new(addr2.clone())),
+                is_transactional: false,
+            })
+            .await?;
+        // get a status report from every single one
+        let (tx, rx) = unbounded();
+        addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
+        let mut report1 = rx.recv().await?;
+        assert!(report1.inputs.is_empty());
+        let mut output1 = report1
+            .outputs
+            .remove("out")
+            .expect("nothing at port `out`");
+        assert!(report1.outputs.is_empty());
+        assert_eq!(1, output1.len());
+        let output1 = output1.pop().unwrap();
+        assert_eq!(
+            output1,
+            OutputReport::Pipeline {
+                alias: "snot2".to_string(),
+                port: "in".to_string()
+            }
+        );
+        addr2.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
+        let mut report2 = rx.recv().await?;
+        let input2 = report2.inputs.pop().expect("no input at port in");
+        assert_eq!(
+            input2,
+            InputReport::Pipeline {
+                alias: "snot".to_string(),
+                port: "out".to_string()
+            }
+        );
+        let mut output2 = report2
+            .outputs
+            .remove("out")
+            .expect("no outputs on out port");
+        assert!(report2.outputs.is_empty());
+        assert_eq!(1, output2.len());
+        let output2 = output2.pop().unwrap();
+        assert_eq!(
+            output2,
+            OutputReport::Pipeline {
+                alias: "snot3".to_string(),
+                port: "in".to_string()
+            }
+        );
+
+        addr3.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
+        let mut report3 = rx.recv().await?;
+        assert!(report3.outputs.is_empty());
+        let input3 = report3.inputs.pop().expect("no inputs");
+        assert_eq!(
+            input3,
+            InputReport::Pipeline {
+                alias: "snot2".to_string(),
+                port: "out".to_string()
+            }
+        );
+
+        addr.stop().await?;
+        addr2.stop().await?;
+        addr3.stop().await?;
+        Ok(())
+    }
 
     #[async_std::test]
     async fn pipeline_spawn() -> Result<()> {
