@@ -203,8 +203,8 @@ impl DeployEndpoint {
     /// Creates a new endpoint
     pub fn new<A, P>(alias: &A, port: &P, mid: &NodeMeta) -> Self
     where
-        A: ToString,
-        P: ToString,
+        A: ToString + ?Sized,
+        P: ToString + ?Sized,
     {
         Self {
             alias: alias.to_string(),

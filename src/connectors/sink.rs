@@ -119,16 +119,6 @@ impl Default for SinkAck {
     }
 }
 
-impl From<bool> for SinkAck {
-    fn from(ok: bool) -> Self {
-        if ok {
-            Self::Ack
-        } else {
-            Self::Fail
-        }
-    }
-}
-
 /// Possible replies from asynchronous sinks via `reply_channel` from event or signal handling
 #[derive(Debug)]
 pub(crate) enum AsyncSinkReply {
