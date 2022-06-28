@@ -173,11 +173,16 @@ pub fn load(registry: &mut Registry) {
         ).insert(tremor_const_fn! (string|into_binary(_context, _input: String) {
                 Ok(Value::Bytes(_input.as_bytes().to_vec().into()))
             }),
+        ).insert(tremor_const_fn! (string|reverse(_context, _input: String) {
+                let input = _input.clone();
+                let output = input.chars().rev().collect::<String>();
+                Ok(Value::from(output))
+            }),
         ).insert(TremorFnWrapper::new(
             "string".to_string(),
             "format".to_string(),
             Box::new(StringFormat::default()),
-        ));
+        ));     
 }
 
 #[cfg(test)]
