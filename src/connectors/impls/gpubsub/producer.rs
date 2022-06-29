@@ -14,7 +14,8 @@
 
 use crate::connectors::google::AuthInterceptor;
 use crate::connectors::prelude::{
-    Attempt, ErrorKind, EventSerializer, SinkAddr, SinkContext, SinkManagerBuilder, SinkReply, Url,
+    Attempt, ErrorKind, EventSerializer, KillSwitch, SinkAddr, SinkContext, SinkManagerBuilder,
+    SinkReply, Url,
 };
 use crate::connectors::sink::Sink;
 use crate::connectors::utils::url::HttpsDefaults;
@@ -62,6 +63,7 @@ impl ConnectorBuilder for Builder {
         _alias: &str,
         _config: &ConnectorConfig,
         raw_config: &Value,
+        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
 

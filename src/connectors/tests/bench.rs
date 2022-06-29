@@ -43,8 +43,13 @@ async fn stop_after_events() -> Result<()> {
       }
     });
     let (world, world_handle) = World::start(WorldConfig::default()).await?;
-    let harness =
-        ConnectorHarness::new(function_name!(), &bench::Builder::new(world.clone()), &defn).await?;
+    let harness = ConnectorHarness::new_with_kill_switch(
+        function_name!(),
+        &bench::Builder::default(),
+        &defn,
+        world.kill_switch,
+    )
+    .await?;
     let out = harness.out().expect("No out pipeline connected");
     harness.start().await?;
     harness.wait_for_connected().await?;
@@ -88,8 +93,13 @@ async fn stop_after_secs() -> Result<()> {
     });
 
     let (world, world_handle) = World::start(WorldConfig::default()).await?;
-    let harness =
-        ConnectorHarness::new(function_name!(), &bench::Builder::new(world.clone()), &defn).await?;
+    let harness = ConnectorHarness::new_with_kill_switch(
+        function_name!(),
+        &bench::Builder::default(),
+        &defn,
+        world.kill_switch,
+    )
+    .await?;
     let out = harness.out().expect("No out pipeline connected");
     harness.start().await?;
     harness.wait_for_connected().await?;

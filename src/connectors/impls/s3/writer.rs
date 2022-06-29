@@ -62,6 +62,7 @@ impl ConnectorBuilder for Builder {
         id: &str,
         _: &ConnectorConfig,
         config: &Value,
+        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = S3Config::new(config)?;
 

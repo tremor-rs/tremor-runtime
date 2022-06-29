@@ -78,6 +78,7 @@ impl ConnectorBuilder for Builder {
         alias: &str,
         config: &ConnectorConfig,
         raw_config: &Value,
+        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let metrics_interval_s = config.metrics_interval_s;
         let config = Config::new(raw_config)?;

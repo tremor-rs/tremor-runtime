@@ -184,6 +184,7 @@ impl ConnectorBuilder for Builder {
         id: &str,
         _: &ConnectorConfig,
         config: &Value,
+        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
         if !PathBuf::from(&config.dir).is_dir().await {

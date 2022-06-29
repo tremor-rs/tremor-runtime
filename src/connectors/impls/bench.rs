@@ -15,7 +15,7 @@
 // #![cfg_attr(coverage, no_coverage)] // This is for benchmarking and testing
 
 use crate::connectors::prelude::*;
-use crate::system::{ShutdownMode, World};
+use crate::system::{KillSwitch, ShutdownMode};
 use hdrhistogram::Histogram;
 use std::io::{stdout, Write};
 use std::{
@@ -67,16 +67,8 @@ fn default_significant_figures() -> u8 {
 
 impl ConfigImpl for Config {}
 
-#[derive(Debug)]
-pub(crate) struct Builder {
-    world: World,
-}
-
-impl Builder {
-    pub(crate) fn new(world: World) -> Self {
-        Self { world }
-    }
-}
+#[derive(Debug, Default)]
+pub(crate) struct Builder {}
 
 fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> Result<Vec<u8>> {
     if base64 {
@@ -94,6 +86,7 @@ impl ConnectorBuilder for Builder {
         id: &str,
         _: &ConnectorConfig,
         config: &Value,
+        kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
         let mut source_data_file = file::open(&config.source)?;
@@ -142,7 +135,7 @@ impl ConnectorBuilder for Builder {
             acc: Acc { elements, count: 0 },
             origin_uri,
             stop_after,
-            world: self.world.clone(),
+            kill_switch: kill_switch.clone(),
         }))
     }
 
@@ -175,7 +168,7 @@ pub struct Bench {
     acc: Acc,
     origin_uri: EventOriginUri,
     stop_after: StopAfter,
-    world: World,
+    kill_switch: KillSwitch,
 }
 
 #[async_trait::async_trait]
@@ -204,7 +197,7 @@ impl Connector for Bench {
     ) -> Result<Option<SinkAddr>> {
         builder
             .spawn(
-                Blackhole::new(&self.config, self.stop_after, self.world.clone()),
+                Blackhole::new(&self.config, self.stop_after, self.kill_switch.clone()),
                 sink_context,
             )
             .map(Some)
@@ -297,13 +290,13 @@ struct Blackhole {
     count: usize,
     structured: bool,
     buf: Vec<u8>,
-    world: World,
+    kill_switch: KillSwitch,
     finished: bool,
 }
 
 impl Blackhole {
     #[allow(clippy::cast_precision_loss, clippy::unwrap_used)]
-    fn new(c: &Config, stop_after: StopAfter, world: World) -> Self {
+    fn new(c: &Config, stop_after: StopAfter, kill_switch: KillSwitch) -> Self {
         let now_ns = nanotime();
         let sigfig = min(c.significant_figures, 5);
         // ALLOW: this is a debug connector and the values are validated ahead of time
@@ -321,7 +314,7 @@ impl Blackhole {
             bytes: 0,
             count: 0,
             buf: Vec::with_capacity(1024),
-            world,
+            kill_switch,
             finished: false,
         }
     }
@@ -371,7 +364,7 @@ impl Sink for Blackhole {
                 } else {
                     self.write_text(stdout(), 5, 2)?;
                 }
-                let world = self.world.clone();
+                let kill_switch = self.kill_switch.clone();
                 let stop_ctx = ctx.clone();
                 info!("Bench done");
 
@@ -380,7 +373,7 @@ impl Sink for Blackhole {
                 async_std::task::spawn(async move {
                     info!("{stop_ctx} Exiting...");
                     stop_ctx.swallow_err(
-                        world.stop(ShutdownMode::Forceful).await,
+                        kill_switch.stop(ShutdownMode::Forceful).await,
                         "Error stopping the world",
                     );
                 });

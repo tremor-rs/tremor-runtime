@@ -36,7 +36,7 @@ use self::utils::quiescence::QuiescenceBeacon;
 pub(crate) use crate::config::Connector as ConnectorConfig;
 use crate::instance::State;
 use crate::pipeline;
-use crate::system::World;
+use crate::system::{KillSwitch, World};
 use crate::{
     errors::{Error, Kind as ErrorKind, Result},
     log_error,
@@ -400,9 +400,10 @@ pub(crate) async fn spawn(
     connector_id_gen: &mut ConnectorIdGen,
     builder: &dyn ConnectorBuilder,
     config: ConnectorConfig,
+    kill_switch: &KillSwitch,
 ) -> Result<Addr> {
     // instantiate connector
-    let connector = builder.build(alias, &config).await?;
+    let connector = builder.build(alias, &config, kill_switch).await?;
     let r = connector_task(
         alias.to_string(),
         connector,
@@ -1141,12 +1142,17 @@ pub(crate) trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
     ///
     /// # Errors
     ///  * If the config is invalid for the connector
-    async fn build(&self, alias: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+    async fn build(
+        &self,
+        alias: &str,
+        config: &ConnectorConfig,
+        kill_switch: &KillSwitch,
+    ) -> Result<Box<dyn Connector>> {
         let cc = config
             .config
             .as_ref()
             .ok_or_else(|| ErrorKind::MissingConfiguration(alias.to_string()))?;
-        self.build_cfg(alias, config, cc).await
+        self.build_cfg(alias, config, cc, kill_switch).await
     }
 
     /// create a connector from the given `alias`, outer `ConnectorConfig` and the connector-specific `connector_config`
@@ -1158,6 +1164,7 @@ pub(crate) trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
         _alias: &str,
         _config: &ConnectorConfig,
         _connector_config: &Value,
+        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         Err("build_cfg is unimplemented".into())
     }
@@ -1205,11 +1212,12 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
 /// debug connector types
 
 #[must_use]
-pub(crate) fn debug_connector_types(world: &World) -> Vec<Box<dyn ConnectorBuilder + 'static>> {
+pub(crate) fn debug_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>> {
     vec![
-        Box::new(impls::cb::Builder::new(world.clone())),
-        Box::new(impls::bench::Builder::new(world.clone())),
+        Box::new(impls::cb::Builder::default()),
+        Box::new(impls::bench::Builder::default()),
         Box::new(impls::null::Builder::default()),
+        Box::new(impls::exit::Builder::default()),
     ]
 }
 
@@ -1223,11 +1231,9 @@ pub(crate) async fn register_builtin_connector_types(world: &World, debug: bool)
         world.register_builtin_connector_type(builder).await?;
     }
     if debug {
-        for builder in debug_connector_types(world) {
+        for builder in debug_connector_types() {
             world.register_builtin_connector_type(builder).await?;
         }
-        let builder = Box::new(impls::exit::Builder::new(world));
-        world.register_builtin_connector_type(builder).await?;
     }
 
     Ok(())

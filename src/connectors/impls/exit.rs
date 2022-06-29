@@ -23,7 +23,7 @@
 //!
 //! * delay: milliseconds to wait before stopping the process
 use crate::connectors::prelude::*;
-use crate::system::{ShutdownMode, World};
+use crate::system::{KillSwitch, ShutdownMode};
 use async_std::task;
 use std::time::Duration;
 use value_trait::ValueAccess;
@@ -49,17 +49,8 @@ impl Default for Config {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct Builder {
-    world: World,
-}
-impl Builder {
-    pub(crate) fn new(world: &World) -> Self {
-        Self {
-            world: world.clone(),
-        }
-    }
-}
+#[derive(Debug, Default)]
+pub(crate) struct Builder {}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
@@ -67,13 +58,18 @@ impl ConnectorBuilder for Builder {
         "exit".into()
     }
 
-    async fn build(&self, _id: &str, config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+    async fn build(
+        &self,
+        _id: &str,
+        config: &ConnectorConfig,
+        kill_switch: &KillSwitch,
+    ) -> Result<Box<dyn Connector>> {
         let config = match config.config.as_ref() {
             Some(raw_config) => Config::new(raw_config)?,
             None => Config::default(),
         };
         Ok(Box::new(Exit {
-            world: self.world.clone(),
+            kill_switch: kill_switch.clone(),
             config,
             done: false,
         }))
@@ -81,7 +77,7 @@ impl ConnectorBuilder for Builder {
 }
 #[derive(Clone)]
 pub struct Exit {
-    world: World,
+    kill_switch: KillSwitch,
     config: Config,
     done: bool,
 }
@@ -137,14 +133,14 @@ impl Sink for Exit {
             } else {
                 ShutdownMode::Forceful
             };
-            let world = self.world.clone();
+            let kill_switch = self.kill_switch.clone();
             let stop_ctx = ctx.clone();
 
             // this should stop the whole server process
             // we spawn this out into another task, so we don't block the sink loop handling control plane messages
             async_std::task::spawn(async move {
                 info!("{stop_ctx} Exiting...");
-                stop_ctx.swallow_err(world.stop(mode).await, "Error stopping the world");
+                stop_ctx.swallow_err(kill_switch.stop(mode).await, "Error stopping the world");
             });
 
             self.done = true;

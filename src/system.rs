@@ -14,12 +14,13 @@
 
 /// contains Flow definition, control plane task and lifecycle management
 pub mod flow;
-mod flow_supervisor;
+/// contains the runtime actor starting and maintaining flows
+pub mod flow_supervisor;
 
 use self::flow::Flow;
 use crate::errors::{Error, Kind as ErrorKind, Result};
 use crate::{connectors, QSIZE};
-use async_std::channel::bounded;
+use async_std::channel::{bounded, Sender};
 use async_std::prelude::*;
 use async_std::task::JoinHandle;
 use std::sync::atomic::Ordering;
@@ -56,10 +57,48 @@ pub enum ShutdownMode {
     Forceful,
 }
 
+/// for draining and stopping
+#[derive(Debug, Clone)]
+pub struct KillSwitch(Sender<flow_supervisor::Msg>);
+
+impl KillSwitch {
+    /// stop the runtime
+    ///
+    /// # Errors
+    /// * if draining or stopping fails
+    pub(crate) async fn stop(&self, mode: ShutdownMode) -> Result<()> {
+        if mode == ShutdownMode::Graceful {
+            let (tx, rx) = bounded(1);
+            self.0.send(flow_supervisor::Msg::Drain(tx)).await?;
+            if let Ok(res) = rx.recv().timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT).await {
+                if let Err(e) | Ok(Err(e)) = res.map_err(Error::from) {
+                    error!("Error draining all Flows: {}", e);
+                }
+            } else {
+                warn!(
+                    "Timeout draining all Flows after {}s",
+                    DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT.as_secs()
+                );
+            }
+        }
+        let res = self.0.send(flow_supervisor::Msg::Stop).await;
+        if let Err(e) = &res {
+            error!("Error stopping all Flows: {e}");
+        }
+        Ok(res?)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn dummy() -> Self {
+        KillSwitch(bounded(1).0)
+    }
+}
+
 /// Tremor runtime
 #[derive(Clone, Debug)]
 pub struct World {
     pub(crate) system: flow_supervisor::Channel,
+    pub(crate) kill_switch: KillSwitch,
 }
 
 impl World {
@@ -147,27 +186,16 @@ impl World {
     /// # Errors
     ///  * if the world manager can't be started
     pub async fn start(config: WorldConfig) -> Result<(Self, JoinHandle<Result<()>>)> {
-        let (system_h, system) = flow_supervisor::FlowSupervisor::new(config.qsize).start();
+        let (system_h, system, kill_switch) =
+            flow_supervisor::FlowSupervisor::new(config.qsize).start();
 
-        let world = Self { system };
+        let world = Self {
+            system,
+            kill_switch,
+        };
 
         connectors::register_builtin_connector_types(&world, config.debug_connectors).await?;
         Ok((world, system_h))
-    }
-
-    /// Drain the runtime
-    ///
-    /// # Errors
-    ///  * if the system failed to drain
-    pub async fn drain(&self, timeout: Duration) -> Result<()> {
-        let (tx, rx) = bounded(1);
-        self.system.send(flow_supervisor::Msg::Drain(tx)).await?;
-        if let Ok(res) = rx.recv().timeout(timeout).await {
-            res??;
-        } else {
-            warn!("Timeout draining all Flows after {}s", timeout.as_secs());
-        }
-        Ok(())
     }
 
     /// Stop the runtime
@@ -175,15 +203,6 @@ impl World {
     /// # Errors
     ///  * if the system failed to stop
     pub async fn stop(&self, mode: ShutdownMode) -> Result<()> {
-        if mode == ShutdownMode::Graceful {
-            if let Err(e) = self.drain(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT).await {
-                error!("Error draining all Flows: {}", e);
-            }
-        }
-        let res = self.system.send(flow_supervisor::Msg::Stop).await;
-        if let Err(e) = &res {
-            error!("Error stopping all Flows: {e}");
-        }
-        Ok(res?)
+        self.kill_switch.stop(mode).await
     }
 }

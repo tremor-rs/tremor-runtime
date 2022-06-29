@@ -73,6 +73,7 @@ impl ConnectorBuilder for Builder {
         id: &str,
         raw_config: &ConnectorConfig,
         config: &Value,
+        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         let tls_server_config = config.tls.clone();

@@ -45,6 +45,7 @@ impl ConnectorBuilder for Builder {
         _: &str,
         _: &ConnectorConfig,
         raw: &Value,
+        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw)?;
         Ok(Box::new(UdpServer { config }))

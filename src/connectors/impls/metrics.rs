@@ -55,7 +55,12 @@ impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
         "metrics".into()
     }
-    async fn build(&self, _id: &str, _config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+    async fn build(
+        &self,
+        _id: &str,
+        _config: &ConnectorConfig,
+        _kill_switch: &KillSwitch,
+    ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(MetricsConnector::new()))
     }
 }
