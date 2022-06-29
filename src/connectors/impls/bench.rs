@@ -97,6 +97,15 @@ fn connector_type() -> ConnectorType {
     "bench".into()
 }
 
+fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> Result<Vec<u8>> {
+    if base64 {
+        Ok(base64::decode(data)?)
+    } else {
+        let d: &[u8] = data.as_ref();
+        Ok(d.to_vec())
+    }
+}
+
 #[sabi_extern_fn]
 pub fn from_config<'a>(
     id: RStr<'a>,
@@ -105,70 +114,55 @@ pub fn from_config<'a>(
     world: ROption<World>,
 ) -> BorrowingFfiFuture<'a, RResult<BoxedRawConnector>> {
     async move {
-            let config: Config = ttry!(Config::new(config));
-            let mut source_data_file = ttry!(file::open(&config.source));
-            let mut data = vec![];
-            let ext = file::extension(&config.source);
-            if ext == Some("xz") {
-                ttry!(XzDecoder::new(source_data_file)
-                    .read_to_end(&mut data)
-                    .map_err(RError::new));
-            } else {
-                ttry!(source_data_file.read_to_end(&mut data).map_err(RError::new));
-            };
-            let origin_uri = EventOriginUri {
-                scheme: RString::from("tremor-blaster"),
-                host: RString::from(hostname()),
-                port: RNone,
-                path: rvec![RString::from(config.source.clone())],
-            };
-            let elements: Vec<Vec<u8>> = if let Some(chunk_size) = config.chunk_size {
-                // split into sized chunks
-                ttry!(data
-                    .chunks(chunk_size)
-                    .map(|e| -> Result<Vec<u8>> {
-                        if config.base64 {
-                            Ok(Vec::from(base64::decode(e)?))
-                        } else {
-                            Ok(Vec::from(e))
-                        }
-                    })
-                    .collect::<Result<_>>())
-            } else {
-                // split into lines
-                ttry!(BufReader::new(data.as_slice())
-                    .lines()
-                    .map(|e| -> Result<Vec<u8>> {
-                        if config.base64 {
-                            Ok(Vec::from(base64::decode(&e?.as_bytes())?))
-                        } else {
-                            Ok(Vec::from(e?.as_bytes()))
-                        }
-                    })
-                    .collect::<Result<_>>())
-            };
-            let num_elements = elements.len();
-            let stop_after_events = config.iters.map(|i| i * num_elements);
-            let stop_after_secs = if config.stop_after_secs == 0 {
-                None
-            } else {
-                Some(config.stop_after_secs + config.warmup_secs)
-            };
-            let stop_after = StopAfter {
-                events: stop_after_events,
-                seconds: stop_after_secs,
-            };
-            if stop_after.events.is_none() && stop_after.seconds.is_none() {
-                warn!("[Connector::{id}] No stop condition is specified. This connector will emit events infinitely.");
-            }
+        let config: Config = ttry!(Config::new(config));
+        let mut source_data_file = ttry!(file::open(&config.source));
+        let mut data = vec![];
+        let ext = file::extension(&config.source);
+        if ext == Some("xz") {
+            ttry!(XzDecoder::new(source_data_file).read_to_end(&mut data).map_err(Error::from));
+        } else {
+            ttry!(source_data_file.read_to_end(&mut data).map_err(Error::from));
+        };
+        let origin_uri = EventOriginUri {
+            scheme: RString::from("tremor-blaster"),
+            host: RString::from(hostname()),
+            port: RNone,
+            path: rvec![RString::from(config.source.clone())],
+        };
+        let elements: Vec<Vec<u8>> = if let Some(chunk_size) = config.chunk_size {
+            // split into sized chunks
+            ttry!(data.chunks(chunk_size)
+                .map(|e| decode(config.base64, e))
+                .collect::<Result<_>>())
+        } else {
+            // split into lines
+            ttry!(BufReader::new(data.as_slice())
+                .lines()
+                .map(|e| decode(config.base64, e?))
+                .collect::<Result<_>>())
+        };
+        let num_elements = elements.len();
+        let stop_after_events = config.iters.map(|i| i * num_elements);
+        let stop_after_secs = if config.stop_after_secs == 0 {
+            None
+        } else {
+            Some(config.stop_after_secs + config.warmup_secs)
+        };
+        let stop_after = StopAfter {
+            events: stop_after_events,
+            seconds: stop_after_secs,
+        };
+        if stop_after.events.is_none() && stop_after.seconds.is_none() {
+            warn!("[Connector::{id}] No stop condition is specified. This connector will emit events infinitely.");
+        }
 
-            ROk(BoxedRawConnector::from_value(Bench {
-                config,
-                acc: Acc { elements, count: 0 },
-                origin_uri,
-                stop_after,
-                world: world.unwrap().clone(),
-            }, TD_Opaque))
+        ROk(BoxedRawConnector::from_value(Bench {
+            config,
+            acc: Acc { elements, count: 0 },
+            origin_uri,
+            stop_after,
+            world: world.unwrap().clone(),
+        }, TD_Opaque))
     }
     .into_ffi()
 }

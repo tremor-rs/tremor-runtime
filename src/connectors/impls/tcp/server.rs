@@ -98,9 +98,8 @@ pub fn from_config<'a>(
     async move {
         let config = ttry!(Config::new(config));
         if config.url.port().is_none() {
-            return RErr(Error::from("Missing port for TCP server").into());
+            return RErr(err_conector_def(id.as_str(), "Missing port for TCP server").into());
         }
-
         let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
             Some(ttry!(load_server_config(tls_config)))
         } else {
@@ -232,7 +231,7 @@ impl RawSource for TcpServerSource {
                 while ctx.quiescence_beacon().continue_reading().await {
                     match listener.accept().timeout(ACCEPT_TIMEOUT).await {
                         Ok(Ok((stream, peer_addr))) => {
-                            debug!("{} new connection from {}", &accept_ctx, peer_addr);
+                            debug!("{accept_ctx} new connection from {peer_addr}");
                             let stream_id: u64 = stream_id_gen.next_stream_id();
                             let connection_meta: ConnectionMeta = peer_addr.into();
                             // Async<T> allows us to read in one thread and write in another concurrently - see its documentation
@@ -305,9 +304,10 @@ impl RawSource for TcpServerSource {
                             }
                         }
                         Ok(Err(e)) => return Err(e.into()),
-                        Err(_) => continue,
+                        Err(_) => continue, // timeout accepting
                     };
                 }
+                debug!("{accept_ctx} stopped accepting connections.");
                 Ok::<(), Error>(())
             }));
 
