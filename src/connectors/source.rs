@@ -1429,8 +1429,7 @@ impl SourceManager {
             let r = {
                 // TODO: we could specialize for sources that just use a queue for pull_data
                 //       and handle it the same as rx
-                // TODO: what do I do with this??
-                let f2 = self.source.pull_data(&mut pull_id, &self.ctx);
+                let f2 = Box::pin(self.source.pull_data(&mut pull_id, &self.ctx));
                 match futures::future::select(f1.take().unwrap_or_else(|| rx.recv()), f2).await {
                     Either::Left((msg, o)) => {
                         drop(o);

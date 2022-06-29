@@ -420,7 +420,12 @@ pub(crate) async fn spawn(
 ) -> Result<Addr> {
     // instantiate connector
     // TODO: what to do here??
-    let connector = builder.from_config()(alias.clone().into(), config).await;
+    let connector = builder.from_config()(
+        alias.clone().into(),
+        config,
+        config.config.unwrap_or_default(),
+    )
+    .await;
     let connector = Result::from(connector.map_err(Error::from))?;
     let connector = Connector(connector);
     let r = connector_task(
@@ -1336,6 +1341,9 @@ where
 #[must_use]
 pub(crate) fn builtin_connector_types() -> Vec<ConnectorPluginRef> {
     vec![
+        impls::file::instantiate_root_module(),
+        impls::bench::instantiate_root_module(),
+        impls::tcp::server::instantiate_root_module(),
         /*
         Box::new(impls::file::Builder::default()),
         Box::new(impls::metrics::Builder::default()),
