@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::flow::{Flow, Id};
+use super::KillSwitch;
 use crate::errors::{Kind as ErrorKind, Result};
 use crate::system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
 use crate::{
@@ -81,7 +82,12 @@ impl FlowSupervisor {
         }
     }
 
-    async fn handle_start_deploy(&mut self, flow: DeployFlow<'static>, sender: Sender<Result<()>>) {
+    async fn handle_start_deploy(
+        &mut self,
+        flow: DeployFlow<'static>,
+        sender: Sender<Result<()>>,
+        kill_switch: &KillSwitch,
+    ) {
         let id = Id::from(&flow);
         let res = match self.flows.entry(id.clone()) {
             Entry::Occupied(_occupied) => Err(ErrorKind::DuplicateFlow(id.0.clone()).into()),
@@ -90,6 +96,7 @@ impl FlowSupervisor {
                 &mut self.operator_id_gen,
                 &mut self.connector_id_gen,
                 &self.known_connectors,
+                kill_switch,
             )
             .await
             .map(|deploy| {
@@ -186,8 +193,10 @@ impl FlowSupervisor {
         }
     }
 
-    pub fn start(mut self) -> (JoinHandle<Result<()>>, Channel) {
+    pub fn start(mut self) -> (JoinHandle<Result<()>>, Channel, KillSwitch) {
         let (tx, rx) = bounded(self.qsize);
+        let kill_switch = KillSwitch(tx.clone());
+        let task_kill_switch = kill_switch.clone();
         let system_h = task::spawn(async move {
             while let Ok(msg) = rx.recv().await {
                 match msg {
@@ -197,7 +206,8 @@ impl FlowSupervisor {
                         ..
                     } => self.handle_register_connector_type(connector_type, builder),
                     Msg::StartDeploy { flow, sender } => {
-                        self.handle_start_deploy(*flow, sender).await;
+                        self.handle_start_deploy(*flow, sender, &task_kill_switch)
+                            .await;
                     }
                     Msg::GetFlows(reply_tx) => self.handle_get_flows(reply_tx).await,
                     Msg::GetFlow(id, reply_tx) => self.handle_get_flow(id, reply_tx).await,
@@ -211,6 +221,6 @@ impl FlowSupervisor {
             info!("Manager stopped.");
             Ok(())
         });
-        (system_h, tx)
+        (system_h, tx, kill_switch)
     }
 }

@@ -73,6 +73,7 @@ impl ConnectorBuilder for Builder {
         alias: &str,
         _: &ConnectorConfig,
         raw: &Value,
+        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw)?;
         let url = Url::<HttpsDefaults>::parse(config.endpoint.as_str())?;

@@ -70,6 +70,7 @@ impl ConnectorBuilder for Builder {
         _id: &str,
         _: &ConnectorConfig,
         config: &Value,
+        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         let origin_uri = EventOriginUri {
@@ -211,7 +212,8 @@ mod tests {
         )?;
 
         let builder = super::Builder::default();
-        let _connector = builder.build("foo", &config).await?;
+        let kill_switch = KillSwitch::dummy();
+        let _connector = builder.build("foo", &config, &kill_switch).await?;
 
         Ok(())
     }

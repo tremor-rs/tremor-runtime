@@ -75,7 +75,7 @@ use tremor_common::{
 use tremor_pipeline::{CbAction, EventId};
 use tremor_script::{ast::DeployEndpoint, lexer::Location, NodeMeta, Value};
 
-use super::sink::SinkMsg;
+use super::{prelude::KillSwitch, sink::SinkMsg};
 
 pub(crate) struct ConnectorHarness {
     addr: connectors::Addr,
@@ -87,6 +87,7 @@ impl ConnectorHarness {
         id: &str,
         builder: &dyn connectors::ConnectorBuilder,
         defn: &Value<'static>,
+        kill_switch: KillSwitch,
         input_ports: Vec<Cow<'static, str>>,
         output_ports: Vec<Cow<'static, str>>,
     ) -> Result<Self> {
@@ -98,7 +99,7 @@ impl ConnectorHarness {
         }
         let raw_config = config::Connector::from_config(id, builder.connector_type(), defn)?;
         let connector_addr =
-            connectors::spawn(id, &mut connector_id_gen, builder, raw_config).await?;
+            connectors::spawn(id, &mut connector_id_gen, builder, raw_config, &kill_switch).await?;
         let mut pipes = HashMap::new();
 
         let (link_tx, link_rx) = async_std::channel::unbounded();
@@ -158,7 +159,16 @@ impl ConnectorHarness {
         builder: &dyn connectors::ConnectorBuilder,
         defn: &Value<'static>,
     ) -> Result<Self> {
-        Self::new_with_ports(id, builder, defn, vec![IN], vec![OUT, ERR]).await
+        Self::new_with_kill_switch(id, builder, defn, KillSwitch::dummy()).await
+    }
+
+    pub(crate) async fn new_with_kill_switch(
+        id: &str,
+        builder: &dyn connectors::ConnectorBuilder,
+        defn: &Value<'static>,
+        kill_switch: KillSwitch,
+    ) -> Result<Self> {
+        Self::new_with_ports(id, builder, defn, kill_switch, vec![IN], vec![OUT, ERR]).await
     }
 
     pub(crate) async fn start(&self) -> Result<()> {

@@ -70,6 +70,7 @@ impl ConnectorBuilder for Builder {
         id: &str,
         _: &ConnectorConfig,
         config: &Value,
+        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let origin_uri = EventOriginUri {
             scheme: "tremor-otel-server".to_string(),
@@ -210,7 +211,8 @@ mod tests {
         )?;
 
         let builder = super::Builder::default();
-        let _connector = builder.build("foo", &config).await?;
+        let kill_switch = KillSwitch::dummy();
+        let _connector = builder.build("foo", &config, &kill_switch).await?;
 
         Ok(())
     }

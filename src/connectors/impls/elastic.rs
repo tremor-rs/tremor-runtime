@@ -15,6 +15,7 @@
 use std::time::Duration;
 use std::{fmt::Display, sync::atomic::AtomicBool};
 
+use crate::system::KillSwitch;
 use crate::{
     connectors::{
         impls::http::utils::Header, prelude::*, sink::concurrency_cap::ConcurrencyCap,
@@ -101,6 +102,7 @@ impl ConnectorBuilder for Builder {
         id: &str,
         _: &ConnectorConfig,
         raw_config: &Value,
+        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
         if config.nodes.is_empty() {
@@ -945,10 +947,11 @@ mod tests {
         let id = "my_elastic";
         let builder = super::Builder::default();
         let connector_config = ConnectorConfig::from_config(id, builder.connector_type(), &config)?;
+        let kill_switch = KillSwitch::dummy();
         assert_eq!(
             String::from("Invalid Definition for connector \"my_elastic\": empty nodes provided"),
             builder
-                .build("my_elastic", &connector_config)
+                .build("my_elastic", &connector_config, &kill_switch)
                 .await
                 .err()
                 .unwrap()
@@ -970,12 +973,13 @@ mod tests {
         let id = "my_elastic";
         let builder = super::Builder::default();
         let connector_config = ConnectorConfig::from_config(id, builder.connector_type(), &config)?;
+        let kill_switch = KillSwitch::dummy();
         assert_eq!(
             String::from(
                 "Invalid Definition for connector \"my_elastic\": relative URL without a base"
             ),
             builder
-                .build("my_elastic", &connector_config)
+                .build("my_elastic", &connector_config, &kill_switch)
                 .await
                 .err()
                 .unwrap()

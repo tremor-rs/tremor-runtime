@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::prelude::*;
+use crate::{connectors::prelude::*, system::KillSwitch};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std_resolver::{
     lookup::Lookup,
@@ -33,7 +33,12 @@ impl ConnectorBuilder for Builder {
         "dns_client".into()
     }
 
-    async fn build(&self, _id: &str, _raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+    async fn build(
+        &self,
+        _id: &str,
+        _raw_config: &ConnectorConfig,
+        _kill_switch: &KillSwitch,
+    ) -> Result<Box<dyn Connector>> {
         let (tx, rx) = bounded(128);
         Ok(Box::new(Client { tx, rx }))
     }
