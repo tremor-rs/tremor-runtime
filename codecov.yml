@@ -8,6 +8,9 @@ coverage:
   round: down
   range: "70...100"
   status: # see https://docs.codecov.com/docs/commit-status
+    patch:
+      default:
+        target: 80%
     project:
       default:
         # basic
