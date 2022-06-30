@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use super::TestConfig;
 use crate::errors::{Error, Result};
 use crate::test;
 use crate::test::stats;
 use crate::test::status;
 use crate::{env, report};
 use report::TestSuite;
+use std::fmt::Write as _; // import without risk of name clashing
 use std::io::Read;
 use std::{collections::HashMap, path::Path};
 use test::tag;
@@ -31,8 +33,6 @@ use tremor_script::{
     NO_AGGRS,
 };
 use tremor_script::{ctx::EventContext, NO_CONSTS};
-
-use super::TestConfig;
 const EXEC_OPTS: ExecOpts = ExecOpts {
     result_needed: true,
     aggr: AggrType::Tick,
@@ -150,7 +150,7 @@ fn eval_suite_tests(
                 let success = if let Some(success) = value.as_bool() {
                     success
                 } else if let Some([expected, got]) = value.as_array().map(Vec::as_slice) {
-                    info.push_str(&format!("{} != {}", expected, got));
+                    write!(info, "{expected} != {got}")?;
                     false
                 } else {
                     false
