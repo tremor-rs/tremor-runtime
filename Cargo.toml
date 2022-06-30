@@ -52,7 +52,7 @@ bytes = "1.1"
 chrono = "0.4"
 csv = "1.1"
 dashmap = "5.3"
-either = { version = "1.6", features = ["serde"] }
+either = { version = "1.7", features = ["serde"] }
 error-chain = "0.12"
 file-mode = "0.1"
 futures = "0.3.21"
