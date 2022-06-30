@@ -312,10 +312,10 @@ impl<'value> Value<'value> {
     /// Tries to get an element of an object as bytes
     #[inline]
     #[must_use]
-    pub fn get_bytes<Q: ?Sized>(&self, k: &Q) -> Option<&[u8]>
+    pub fn get_bytes<Q>(&self, k: &Q) -> Option<&[u8]>
     where
         Cow<'value, str>: Borrow<Q> + Hash + Eq,
-        Q: Hash + Eq + Ord,
+        Q: Hash + Eq + Ord + ?Sized,
     {
         self.get(k).and_then(Self::as_bytes)
     }
@@ -341,10 +341,10 @@ impl<'value> Value<'value> {
     /// is a string
     #[inline]
     #[must_use]
-    pub fn get_char<Q: ?Sized>(&self, k: &Q) -> Option<char>
+    pub fn get_char<Q>(&self, k: &Q) -> Option<char>
     where
         Cow<'value, str>: Borrow<Q> + Hash + Eq,
-        Q: Hash + Eq + Ord,
+        Q: Hash + Eq + Ord + ?Sized,
     {
         self.get(k).and_then(Self::as_char)
     }

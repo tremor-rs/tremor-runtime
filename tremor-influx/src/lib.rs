@@ -38,6 +38,8 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
+// TODO: remove this when https://github.com/rust-lang/rust-clippy/issues/9076 is fixed
+#![allow(clippy::trait_duplication_in_bounds)]
 
 mod decoder;
 mod encoder;

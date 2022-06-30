@@ -110,7 +110,7 @@ pub trait BaseRef {
 #[macro_export]
 macro_rules! impl_fqn {
     ($struct:ident) => {
-        impl crate::ast::node_id::BaseRef for $struct<'_> {
+        impl $crate::ast::node_id::BaseRef for $struct<'_> {
             fn fqn(&self) -> String {
                 self.node_id.fqn()
             }
