@@ -203,7 +203,7 @@ tremor-otelapis = { version = "0.2.4" }
 # aws-s3
 aws-sdk-s3 = "0.14.0"
 aws-types = "0.14.0"
-aws-config = "0.14"
+aws-config = "0.15"
 aws-smithy-http = "0.44.0"
 
 # gcp
