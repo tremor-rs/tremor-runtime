@@ -34,6 +34,22 @@ test::suite({
   "tags": [ "array" ],
   "tests": [
     test::test({
+      "name": "array sort 1",
+      "test": test::assert("array sort 1", array::sort([1,4,3]),[1,3,4])
+    }),
+    test::test({
+      "name": "array sort 2",
+      "test": test::assert("array sort 2", array::sort(["b","a","parrot"]),["a","b","parrot"])
+    }),
+    test::test({
+      "name": "array reverse 1",
+      "test": test::assert("array reverse 1", array::reverse([1,2,3]),[3,2,1])
+    }),
+    test::test({
+      "name": "array reverse 2",
+      "test": test::assert("array reverse 2", array::reverse(["fudge","brownies"]),["brownies","fudge"])
+    }),
+    test::test({
       "name": "array len 1",
       "test": test::assert("array len 1", array::len([]),0)
     }),
@@ -366,6 +382,10 @@ test::suite({
   "name": "String library tests",
   "tags": [ "string" ],
   "tests": [
+    test::test({
+      "name": "reverse",
+      "test": test::assert("reverse", string::reverse("cats"), "stac")
+    }),
     test::test({
       "name": "from_butf8_lossy",
       "test": test::assert("from_butf8_lossy", string::from_utf8_lossy(<< 115, 110, 111, 116 >>), "snot")

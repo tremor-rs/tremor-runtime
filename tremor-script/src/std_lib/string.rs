@@ -198,6 +198,12 @@ mod test {
         assert_val!(f(&[&v]), "badger\u{fffd}");
     }
     #[test]
+    fn reverse() {
+        let f = fun("string", "reverse");
+        let v = Value::from("badger");
+        assert_val!(f(&[&v]), Value::from("regdab"));
+    }
+    #[test]
     fn into_binary() {
         let f = fun("string", "into_binary");
         let v = Value::from("badger");

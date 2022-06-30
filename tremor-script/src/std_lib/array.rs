@@ -117,6 +117,24 @@ mod test {
     use crate::registry::fun;
 
     #[test]
+    fn sort() {
+        let f = fun("array", "sort");
+        let v = Value::from(vec!["this", "is", "a", "test"]);
+        assert_val!(f(&[&v]), Value::from(vec!["a", "is", "test", "this"]));
+        let v = Value::from(vec![3, 2, 3, 1, 4]);
+        assert_val!(f(&[&v]), Value::from(vec![1, 2, 3, 3, 4]));
+    }
+
+    #[test]
+    fn reverse() {
+        let f = fun("array", "reverse");
+        let v = Value::from(vec!["this", "is", "a", "test"]);
+        assert_val!(f(&[&v]), Value::from(vec!["test", "a", "is", "this"]));
+        let v = Value::from(vec![1, 2, 3, 3, 4]);
+        assert_val!(f(&[&v]), Value::from(vec![4, 3, 3, 2, 1]));
+    }
+
+    #[test]
     fn len() {
         let f = fun("array", "len");
         let v = Value::from(vec!["this", "is", "a", "test"]);
