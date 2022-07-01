@@ -70,11 +70,11 @@ fn is_test_start(ch: char) -> bool {
 }
 
 fn is_dec_digit(ch: char) -> bool {
-    ch.is_digit(10)
+    ch.is_ascii_digit()
 }
 
 fn is_hex(ch: char) -> bool {
-    ch.is_digit(16)
+    ch.is_ascii_hexdigit()
 }
 
 pub(crate) fn ident_to_token(ident: &str) -> Token {

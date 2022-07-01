@@ -34,7 +34,7 @@ macro_rules! impl_expr_exraw {
             <Ex as Upable<'script>>::Target: Expression + 'script,
             Ex: ExpressionRaw<'script> + 'script,
         {
-            fn meta(&self) -> &crate::ast::NodeMeta {
+            fn meta(&self) -> &$crate::ast::NodeMeta {
                 &self.mid
             }
         }
@@ -47,7 +47,7 @@ macro_rules! impl_expr_exraw {
 macro_rules! impl_expr_no_lt {
     ($name:ident) => {
         impl BaseExpr for $name {
-            fn meta(&self) -> &crate::ast::NodeMeta {
+            fn meta(&self) -> &$crate::ast::NodeMeta {
                 &self.mid
             }
         }

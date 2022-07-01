@@ -5,9 +5,13 @@
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
+#![deny(missing_docs)]
 // We might want to revisit inline_always
 #![allow(clippy::module_name_repetitions, clippy::inline_always)]
-#![deny(missing_docs)]
+// TODO: remove this when https://github.com/rust-lang/rust-clippy/issues/9076 is fixed
+#![allow(clippy::trait_duplication_in_bounds)]
+// TODO: remove this when https://github.com/rust-lang/rust-clippy/issues/8772 is fixed
+#![allow(clippy::type_repetition_in_bounds)]
 // Copyright 2020-2021, The Tremor Team
 //
 // Licensed under the Apache License, Version 2.0 (the "License");

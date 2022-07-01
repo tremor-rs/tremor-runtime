@@ -4609,9 +4609,9 @@ dependencies = [
 
 [[package]]
 name = "simd-json"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3868f37d8473eb1410c71a8b88a5411778f72ae82bd72340b2355d1c133f2b6a"
+checksum = "d67c573ee0994adb422b5f9ea7c55693ee943c39f4eb20aa76475a5b7039bb87"
 dependencies = [
  "halfbrown",
  "serde",
@@ -4636,9 +4636,9 @@ dependencies = [
 
 [[package]]
 name = "simd-json-derive-int"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd11950c39dbc9c906d98a217d7fd6be29253145e5d50d45fa0ab0e3a73eb799"
+checksum = "972b82d1297521581f52ee8bebdb70b3d9ca1471d0ef937e4ec19e60ffba8512"
 dependencies = [
  "proc-macro2",
  "quote",
