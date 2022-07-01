@@ -88,6 +88,33 @@ pub(crate) fn instrumentation_library_logs_to_json(
         .collect()
 }
 
+pub(crate) fn log_record_to_pb(log: &Value<'_>) -> Result<LogRecord> {
+    Ok(LogRecord {
+        // value of 0 indicates unknown or missing timestamp
+        time_unix_nano: pb::maybe_int_to_pbu64(log.get("time_unix_nano")).unwrap_or_default(),
+
+        // severity value is optional - default to 0 if not specified
+        severity_number: pb::maybe_int_to_pbi32(log.get("severity_number"))
+            .ok()
+            .and_then(|sn| affirm_severity_number_valid(sn).ok())
+            .unwrap_or_default(),
+        // defined as optional - fallback to an empty string
+        severity_text: pb::maybe_string_to_pb(log.get("severity_text")).unwrap_or_default(),
+        // name is defined as optional - fallback to empty string
+        name: pb::maybe_string_to_pb(log.get("name")).unwrap_or_default(),
+        body: log.get("body").map(common::any_value_to_pb),
+        flags: affirm_traceflags_valid(
+            pb::maybe_int_to_pbu32(log.get("flags")).unwrap_or_default(),
+        )?,
+        // span_id and trace_id are optional - fallback to empty bytes
+        span_id: id::hex_span_id_to_pb(log.get("span_id")).unwrap_or(vec![]),
+        trace_id: id::hex_trace_id_to_pb(log.get("trace_id")).unwrap_or(vec![]),
+        dropped_attributes_count: pb::maybe_int_to_pbu32(log.get("dropped_attributes_count"))
+            .unwrap_or_default(),
+        attributes: common::maybe_key_value_list_to_pb(log.get("attributes")).unwrap_or_default(),
+    })
+}
+
 pub(crate) fn maybe_instrumentation_library_logs_to_pb(
     data: Option<&Value<'_>>,
 ) -> Result<Vec<InstrumentationLibraryLogs>> {
@@ -101,24 +128,7 @@ pub(crate) fn maybe_instrumentation_library_logs_to_pb(
                 .and_then(Value::as_array)
                 .unwrap_or(&EMPTY)
                 .iter()
-                .map(|log| {
-                    Ok(LogRecord {
-                        name: pb::maybe_string_to_pb(log.get("name"))?,
-                        time_unix_nano: pb::maybe_int_to_pbu64(log.get("time_unix_nano"))?,
-                        severity_number: affirm_severity_number_valid(pb::maybe_int_to_pbi32(
-                            log.get("severity_number"),
-                        )?)?,
-                        severity_text: pb::maybe_string_to_pb(log.get("severity_text"))?,
-                        flags: affirm_traceflags_valid(pb::maybe_int_to_pbu32(log.get("flags"))?)?,
-                        span_id: id::hex_span_id_to_pb(log.get("span_id"))?,
-                        trace_id: id::hex_trace_id_to_pb(log.get("trace_id"))?,
-                        dropped_attributes_count: pb::maybe_int_to_pbu32(
-                            log.get("dropped_attributes_count"),
-                        )?,
-                        attributes: common::maybe_key_value_list_to_pb(log.get("attributes"))?,
-                        body: log.get("body").map(common::any_value_to_pb),
-                    })
-                })
+                .map(log_record_to_pb)
                 .collect::<Result<Vec<_>>>()?;
 
             Ok(InstrumentationLibraryLogs {
@@ -384,6 +394,67 @@ mod tests {
         assert_eq!(sorted_serialize(&expected)?, sorted_serialize(&json)?);
         assert_eq!(pb.resource_logs, back_again);
 
+        Ok(())
+    }
+
+    #[test]
+    fn minimal_logs() -> Result<()> {
+        let log = literal!({"logs": [
+                {
+                    "instrumentation_library_logs": [
+                    ],
+                    "schema_url": ""
+                }
+            ]
+        });
+        assert_eq!(
+            Ok(vec![ResourceLogs {
+                instrumentation_library_logs: vec![],
+                resource: None,
+                schema_url: String::from("")
+            }]),
+            resource_logs_to_pb(&log)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn minimal_instrumentation_library_logs() -> Result<()> {
+        let ill = literal!([
+            {
+                "logs": [],
+                "schema_url": ""
+            }
+        ]);
+        assert_eq!(
+            Ok(vec![InstrumentationLibraryLogs {
+                instrumentation_library: None,
+                logs: vec![],
+                schema_url: String::from("")
+            }]),
+            maybe_instrumentation_library_logs_to_pb(Some(&ill))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn minimal_log_record() -> Result<()> {
+        let lr = literal!({});
+        assert_eq!(
+            Ok(LogRecord {
+                time_unix_nano: 0,
+                severity_number: 0,
+                severity_text: String::new(),
+                name: String::new(),
+                body: None,
+                attributes: vec![],
+                dropped_attributes_count: 0,
+                flags: 0,
+                trace_id: vec![],
+                span_id: vec![]
+            }),
+            log_record_to_pb(&lr)
+        );
         Ok(())
     }
 }

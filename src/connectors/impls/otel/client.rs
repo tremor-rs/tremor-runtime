@@ -147,17 +147,26 @@ impl Sink for OtelSink {
             for value in event.value_iter() {
                 let err = if self.config.metrics && value.contains_key("metrics") {
                     let request = ExportMetricsServiceRequest {
-                        resource_metrics: metrics::resource_metrics_to_pb(Some(value))?,
+                        resource_metrics: ctx.bail_err(
+                            metrics::resource_metrics_to_pb(Some(value)),
+                            "Error converting payload to otel metrics",
+                        )?,
                     };
                     remote.metrics_client.export(request).await.err()
                 } else if self.config.logs && value.contains_key("logs") {
                     let request = ExportLogsServiceRequest {
-                        resource_logs: logs::resource_logs_to_pb(value)?,
+                        resource_logs: ctx.bail_err(
+                            logs::resource_logs_to_pb(value),
+                            "Error converting payload to otel logs",
+                        )?,
                     };
                     remote.logs_client.export(request).await.err()
                 } else if self.config.trace && value.contains_key("trace") {
                     let request = ExportTraceServiceRequest {
-                        resource_spans: trace::resource_spans_to_pb(Some(value))?,
+                        resource_spans: ctx.bail_err(
+                            trace::resource_spans_to_pb(Some(value)),
+                            "Error converting payload to otel span",
+                        )?,
                     };
                     remote.trace_client.export(request).await.err()
                 } else {
