@@ -473,6 +473,15 @@ fn metric_to_json(metric: Metric) -> Value<'static> {
     })
 }
 
+pub(crate) fn metric_to_pb(metric: &Value) -> Result<Metric> {
+    Ok(Metric {
+        name: pb::maybe_string_to_pb(metric.get("name"))?,
+        description: pb::maybe_string_to_pb(metric.get("description"))?,
+        unit: pb::maybe_string_to_pb(metric.get("unit"))?,
+        data: metric.get("data").map(metrics_data_to_pb).transpose()?,
+    })
+}
+
 pub(crate) fn instrumentation_library_metrics_to_json<'event>(
     pb: Vec<tremor_otelapis::opentelemetry::proto::metrics::v1::InstrumentationLibraryMetrics>,
 ) -> Value<'event> {
@@ -501,12 +510,7 @@ pub(crate) fn instrumentation_library_metrics_to_pb(
         let mut metrics = Vec::new();
         if let Some(data) = data.get_array("metrics") {
             for metric in data {
-                metrics.push(Metric {
-                    name: pb::maybe_string_to_pb(metric.get("name"))?,
-                    description: pb::maybe_string_to_pb(metric.get("description"))?,
-                    unit: pb::maybe_string_to_pb(metric.get("unit"))?,
-                    data: metric.get("data").map(metrics_data_to_pb).transpose()?,
-                });
+                metrics.push(metric_to_pb(metric)?);
             }
         }
 
@@ -1250,6 +1254,64 @@ mod tests {
         assert_eq!(sorted_serialize(&expected)?, sorted_serialize(&json)?);
         assert_eq!(pb.resource_metrics, back_again);
 
+        Ok(())
+    }
+
+    #[test]
+    fn minimal_resource_metrics() -> Result<()> {
+        let rm = literal!({
+            "metrics": [
+                {
+                    "schema_url": "bla",
+                    "instrumentation_library_metrics": []
+                }
+            ]
+        });
+        assert_eq!(
+            Ok(vec![ResourceMetrics {
+                resource: None,
+                instrumentation_library_metrics: vec![],
+                schema_url: "bla".to_string()
+            }]),
+            resource_metrics_to_pb(Some(&rm))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn minimal_instrumentation_library_metrics() -> Result<()> {
+        let ilm = literal!([{
+            "metrics": [],
+            "schema_url": "snot"
+        }]);
+        assert_eq!(
+            Ok(vec![InstrumentationLibraryMetrics {
+                instrumentation_library: None,
+                metrics: vec![],
+                schema_url: "snot".to_string()
+            }]),
+            instrumentation_library_metrics_to_pb(Some(&ilm))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn minimal_metric() -> Result<()> {
+        let metric = literal!({
+            "name": "badger",
+            "description": "snot",
+            "unit": "fahrenheit",
+            // surprise: no data
+        });
+        assert_eq!(
+            Ok(Metric {
+                name: "badger".to_string(),
+                description: "snot".to_string(),
+                unit: "fahrenheit".to_string(),
+                data: None
+            }),
+            metric_to_pb(&metric)
+        );
         Ok(())
     }
 }

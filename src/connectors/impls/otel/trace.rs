@@ -72,8 +72,10 @@ pub(crate) fn span_events_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Event>> 
             Ok(Event {
                 name: maybe_string_to_pb(json.get("name"))?,
                 time_unix_nano: maybe_int_to_pbu64(json.get("time_unix_nano"))?,
-                attributes: common::maybe_key_value_list_to_pb(json.get("attributes"))?,
-                dropped_attributes_count: maybe_int_to_pbu32(json.get("dropped_attributes_count"))?,
+                attributes: common::maybe_key_value_list_to_pb(json.get("attributes"))
+                    .unwrap_or_default(),
+                dropped_attributes_count: maybe_int_to_pbu32(json.get("dropped_attributes_count"))
+                    .unwrap_or_default(),
             })
         })
         .collect()
@@ -146,6 +148,30 @@ fn span_to_json(span: Span) -> Value<'static> {
     })
 }
 
+pub(crate) fn span_to_pb(span: &Value<'_>) -> Result<Span> {
+    Ok(Span {
+        name: maybe_string_to_pb(span.get("name"))?,
+        start_time_unix_nano: maybe_int_to_pbu64(span.get("start_time_unix_nano"))?,
+        end_time_unix_nano: maybe_int_to_pbu64(span.get("end_time_unix_nano"))?,
+        status: status_to_pb(span.get("status"))?,
+        kind: maybe_int_to_pbi32(span.get("kind")).unwrap_or_default(),
+        parent_span_id: id::hex_parent_span_id_to_pb(span.get("parent_span_id"))
+            .unwrap_or_default(),
+        span_id: id::hex_span_id_to_pb(span.get("span_id"))?,
+        trace_id: id::hex_trace_id_to_pb(span.get("trace_id"))?,
+        trace_state: maybe_string_to_pb(span.get("trace_state"))?,
+        attributes: common::maybe_key_value_list_to_pb(span.get("attributes"))?,
+        dropped_attributes_count: maybe_int_to_pbu32(span.get("dropped_attributes_count"))
+            .unwrap_or_default(),
+        dropped_events_count: maybe_int_to_pbu32(span.get("dropped_events_count"))
+            .unwrap_or_default(),
+        dropped_links_count: maybe_int_to_pbu32(span.get("dropped_links_count"))
+            .unwrap_or_default(),
+        events: span_events_to_pb(span.get("events"))?,
+        links: span_links_to_pb(span.get("links"))?,
+    })
+}
+
 pub(crate) fn instrumentation_library_spans_to_json(
     data: Vec<InstrumentationLibrarySpans>,
 ) -> Value<'static> {
@@ -177,27 +203,7 @@ pub(crate) fn instrumentation_library_spans_to_pb(
                 .and_then(Value::as_array)
                 .unwrap_or(&EMPTY)
                 .iter()
-                .map(|span| {
-                    Ok(Span {
-                        name: maybe_string_to_pb(span.get("name"))?,
-                        start_time_unix_nano: maybe_int_to_pbu64(span.get("start_time_unix_nano"))?,
-                        end_time_unix_nano: maybe_int_to_pbu64(span.get("end_time_unix_nano"))?,
-                        status: status_to_pb(span.get("status"))?,
-                        kind: maybe_int_to_pbi32(span.get("kind"))?,
-                        parent_span_id: id::hex_parent_span_id_to_pb(span.get("parent_span_id"))?,
-                        span_id: id::hex_span_id_to_pb(span.get("span_id"))?,
-                        trace_id: id::hex_trace_id_to_pb(span.get("trace_id"))?,
-                        trace_state: maybe_string_to_pb(span.get("trace_state"))?,
-                        attributes: common::maybe_key_value_list_to_pb(span.get("attributes"))?,
-                        dropped_attributes_count: maybe_int_to_pbu32(
-                            span.get("dropped_attributes_count"),
-                        )?,
-                        dropped_events_count: maybe_int_to_pbu32(span.get("dropped_events_count"))?,
-                        dropped_links_count: maybe_int_to_pbu32(span.get("dropped_links_count"))?,
-                        events: span_events_to_pb(span.get("events"))?,
-                        links: span_links_to_pb(span.get("links"))?,
-                    })
-                })
+                .map(span_to_pb)
                 .collect::<Result<_>>()?;
 
             Ok(InstrumentationLibrarySpans {
@@ -255,6 +261,8 @@ pub(crate) fn resource_spans_to_pb(json: Option<&Value<'_>>) -> Result<Vec<Resou
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use tremor_otelapis::opentelemetry::proto::{
         common::v1::InstrumentationLibrary, resource::v1::Resource,
     };
@@ -539,6 +547,99 @@ mod tests {
         let invalid = resource_spans_to_pb(Some(&literal!("snot")));
         assert!(invalid.is_err());
 
+        Ok(())
+    }
+
+    #[test]
+    fn minimal_resource_spans() -> Result<()> {
+        let resource_spans = literal!({
+            "trace": [
+                {
+                    "instrumentation_library_spans": [],
+                    "schema_url": "schema_url"
+                }
+            ]
+        });
+        assert_eq!(
+            Ok(vec![ResourceSpans {
+                resource: None,
+                instrumentation_library_spans: vec![],
+                schema_url: "schema_url".to_string()
+            }]),
+            resource_spans_to_pb(Some(&resource_spans))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn minimal_instrumentation_library_spans() -> Result<()> {
+        let ils = literal!([{
+            "spans": [],
+            "schema_url": "schema_url"
+        }]);
+        assert_eq!(
+            Ok(vec![InstrumentationLibrarySpans {
+                instrumentation_library: None,
+                spans: vec![],
+                schema_url: "schema_url".to_string()
+            }]),
+            instrumentation_library_spans_to_pb(Some(&ils))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn minimal_span() -> Result<()> {
+        let span = literal!({
+            // hex encoded strings
+            "trace_id": "61616161616161616161616161616161",
+            "span_id": "6161616161616161",
+            "trace_state": "",
+            "parent_span_id": "", // empty means we are a root span
+            "name": "span_name",
+            "start_time_unix_nano": Duration::from_secs(1).as_nanos() as u64,
+            "end_time_unix_nano": Duration::from_secs(2).as_nanos() as u64,
+            "attributes": {},
+            "dropped_attributes_count": 0
+        });
+        assert_eq!(
+            Ok(Span {
+                trace_id: b"aaaaaaaaaaaaaaaa".to_vec(),
+                span_id: b"aaaaaaaa".to_vec(),
+                trace_state: String::new(),
+                parent_span_id: vec![],
+                name: "span_name".to_string(),
+                kind: 0,
+                start_time_unix_nano: 1_000_000_000,
+                end_time_unix_nano: 2_000_000_000,
+                attributes: vec![],
+                dropped_attributes_count: 0,
+                events: vec![],
+                dropped_events_count: 0,
+                links: vec![],
+                dropped_links_count: 0,
+                status: None
+            }),
+            span_to_pb(&span)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn minimal_span_events() -> Result<()> {
+        let span_events = literal!([{
+            "time_unix_nano": 1,
+            "name": "urknall"
+        }]);
+        assert_eq!(
+            Ok(vec![Event {
+                time_unix_nano: 1,
+                name: "urknall".to_string(),
+                attributes: vec![],
+                dropped_attributes_count: 0
+            }]),
+            span_events_to_pb(Some(&span_events))
+        );
         Ok(())
     }
 }
