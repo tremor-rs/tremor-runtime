@@ -6,10 +6,12 @@ use crate::connectors::utils::url::HttpsDefaults;
 use crate::connectors::{
     CodecReq, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType, Context,
 };
+use async_std::task::sleep;
 use gouth::Token;
 use http_client::h1::H1Client;
-use http_client::{HttpClient};
+use http_client::HttpClient;
 use http_types::{Method, Request};
+use std::time::Duration;
 use tremor_pipeline::{ConfigImpl, Event};
 use tremor_value::Value;
 use value_trait::ValueAccess;
@@ -22,8 +24,7 @@ pub struct Config {
     #[allow(unused)] // FIXME: use or remove
     connect_timeout: u64,
     #[serde(default = "default_buffer_size")]
-    buffer_size: usize
-    // request_timeout: u64
+    buffer_size: usize, // request_timeout: u64
 }
 
 fn default_endpoint() -> String {
@@ -36,7 +37,7 @@ fn default_connect_timeout() -> u64 {
 
 fn default_buffer_size() -> usize {
     // 1024 * 1024 * 8 // 8MB - the recommended minimum
-    256*1024 // FIXME: This is way too low, using only for testing
+    512 * 1024 // FIXME: This is way too low, using only for testing
 }
 
 impl ConfigImpl for Config {}
@@ -80,7 +81,7 @@ impl Connector for GCSWriterConnector {
             config: self.config.clone(),
             buffers: Buffers::new(self.config.buffer_size),
             current_name: None,
-            current_session_url: None
+            current_session_url: None,
         };
 
         let addr = builder.spawn(sink, sink_context)?;
@@ -99,7 +100,7 @@ struct Buffers {
 }
 
 impl Buffers {
-    pub fn new(size:usize) -> Self {
+    pub fn new(size: usize) -> Self {
         Self {
             data: Vec::with_capacity(size * 2),
             block_size: size,
@@ -107,7 +108,7 @@ impl Buffers {
         }
     }
 
-    pub fn mark_done_until(&mut self, position:usize) {
+    pub fn mark_done_until(&mut self, position: usize) {
         // FIXME assert that position > self.buffer_start
         let bytes_to_remove = position - self.buffer_start;
         self.data = Vec::from(&self.data[bytes_to_remove..]);
@@ -122,7 +123,7 @@ impl Buffers {
         return Some(&self.data[..self.block_size]);
     }
 
-    pub fn write(&mut self, data:&[u8]) {
+    pub fn write(&mut self, data: &[u8]) {
         self.data.extend_from_slice(data);
     }
 
@@ -146,7 +147,7 @@ struct GCSWriterSink {
     config: Config,
     buffers: Buffers,
     current_name: Option<String>,
-    current_session_url: Option<String>
+    current_session_url: Option<String>,
 }
 
 #[async_trait::async_trait]
@@ -167,87 +168,121 @@ impl Sink for GCSWriterSink {
 
             let name = meta.get("name").unwrap().as_str().unwrap();
 
-            dbg!(name);
-            dbg!(&self.current_session_url);
-
             if let Some(_current_session_url) = &self.current_session_url {
                 if self.current_name.as_ref().map(|x| x.as_str()) != Some(name) {
                     let final_data = self.buffers.final_block();
 
-                    let mut request = Request::new(Method::Put, url::Url::parse(self.current_session_url.as_ref().unwrap()).unwrap());
-                    // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
-                    request.insert_header("Content-Range", format!("bytes {}-{}/{}", self.buffers.start(), self.buffers.start() + final_data.len() - 1, self.buffers.start() + final_data.len()));
-                    request.insert_header("Content-Length", format!("{}", final_data.len()));
-                    request.set_body(final_data);
+                    for i in 0..3 {
+                        let mut request = Request::new(
+                            Method::Put,
+                            url::Url::parse(self.current_session_url.as_ref().unwrap()).unwrap(),
+                        );
+                        // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
+                        request.insert_header(
+                            "Content-Range",
+                            format!(
+                                "bytes {}-{}/{}",
+                                self.buffers.start(),
+                                self.buffers.start() + final_data.len() - 1,
+                                self.buffers.start() + final_data.len()
+                            ),
+                        );
+                        request.insert_header("Content-Length", format!("{}", final_data.len()));
+                        request.set_body(final_data);
 
-                    dbg!(&request);
-                    let mut response = None;
-                    for _ in 0..3 {
-                        response = Some(client.send(request.clone()).await.unwrap());
+                        let response = client.send(request).await.unwrap();
 
-                        if let Some(response) = response.as_mut() {
-                            dbg!(response.body_string().await.unwrap());
-
-                            if !response.status().is_server_error() {
-                                break;
-                            }
+                        if !response.status().is_server_error() {
+                            break;
                         }
-                    };
-                    dbg!(&response);
+
+                        // FIXME: Adjust the timeout, this number  is pulled of my... hat
+                        sleep(Duration::from_millis(250u64 * 2u64.pow(i))).await;
+                    }
+
+                    self.buffers = Buffers::new(self.config.buffer_size);
                 }
             }
 
-            if self.current_session_url.is_none() || self.current_name.as_ref().map(|x| x.as_str()) != Some(name) {
+            if self.current_session_url.is_none()
+                || self.current_name.as_ref().map(|x| x.as_str()) != Some(name)
+            {
                 let url = url::Url::parse(&format!(
                     "{}/b/{}/o?name={}&uploadType=resumable",
                     self.url,
                     meta.get("bucket").unwrap().as_str().unwrap(),
                     name
                 ))
-                    .unwrap();
+                .unwrap();
                 let mut request = Request::new(Method::Post, url);
                 request.insert_header("Authorization", token.header_value().unwrap().to_string());
                 let response = client.send(request).await;
 
                 let response = response.unwrap();
-                self.current_session_url = Some(response.header("Location").unwrap().get(0).unwrap().to_string());
+                self.current_session_url = Some(
+                    response
+                        .header("Location")
+                        .unwrap()
+                        .get(0)
+                        .unwrap()
+                        .to_string(),
+                );
                 self.current_name = Some(name.into());
             }
 
-            self.buffers.write(&serializer.serialize(value, event.ingest_ns).unwrap()[0]);
+            self.buffers
+                .write(&serializer.serialize(value, event.ingest_ns).unwrap()[0]);
 
             if let Some(data) = self.buffers.read_current_block() {
-                let mut request = Request::new(Method::Put, url::Url::parse(self.current_session_url.as_ref().unwrap()).unwrap());
-                // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
-                request.insert_header("Content-Range", format!("bytes {}-{}/*", self.buffers.start(), self.buffers.end() - 1));
-                request.insert_header("Content-Length", format!("{}", self.buffers.end() - self.buffers.start()));
-                request.set_body(data);
-
-                dbg!(&request);
-
                 let mut response = None;
-                for _ in 0..3 {
-                    response = Some(client.send(request.clone()).await.unwrap());
+                for i in 0..3 {
+                    let mut request = Request::new(
+                        Method::Put,
+                        url::Url::parse(self.current_session_url.as_ref().unwrap()).unwrap(),
+                    );
+                    // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
+                    request.insert_header(
+                        "Content-Range",
+                        format!(
+                            "bytes {}-{}/*",
+                            self.buffers.start(),
+                            self.buffers.end() - 1
+                        ),
+                    );
+                    request.insert_header("User-Agent", "curl/7.68.0");
+                    request.insert_header("Accept", "*/*");
+                    // request.insert_header("Content-Length", format!("{}", self.buffers.end() - self.buffers.start()));
+                    request.set_body(data);
+
+                    match client.send(request).await {
+                        Ok(request) => response = Some(request),
+                        Err(e) => {
+                            // FIXME: Adjust the timeout, this number  is pulled of my... hat
+                            sleep(Duration::from_millis(250u64 * 2u64.pow(i))).await;
+                            dbg!(e);
+                            continue;
+                        }
+                    }
 
                     if let Some(response) = response.as_ref() {
-                        if !response.status().is_server_error() && response.header("Range").is_some() {
+                        if !response.status().is_server_error()
+                            && response.header("range").is_some()
+                        {
                             break;
                         }
 
-                        dbg!(&response);
+                        // FIXME: Adjust the timeout, this number  is pulled of my... hat
+                        sleep(Duration::from_millis(250u64 * 2u64.pow(i))).await;
                     }
-                };
+                }
 
                 if let Some(mut response) = response {
-                    if  response.status().is_server_error() {
+                    if response.status().is_server_error() {
+                        dbg!(response.body_string().await.unwrap());
                         return Err("Received server errors from Google Cloud Storage".into());
                     }
 
-                    dbg!(&response);
-
-                    dbg!(response.body_string().await.unwrap());
-
-                    if let Some(raw_range) = response.header("Range") {
+                    if let Some(raw_range) = response.header("range") {
                         let raw_range = raw_range[0].as_str();
 
                         // Range format: bytes=0-262143
@@ -268,7 +303,8 @@ impl Sink for GCSWriterSink {
     }
 
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let client = H1Client::new();
+        let mut client = H1Client::new();
+        client.set_config(http_client::Config::new().set_http_keep_alive(false))?;
 
         self.client = Some(client);
         self.current_name = None;
