@@ -107,8 +107,8 @@ pub(crate) fn log_record_to_pb(log: &Value<'_>) -> Result<LogRecord> {
             pb::maybe_int_to_pbu32(log.get("flags")).unwrap_or_default(),
         )?,
         // span_id and trace_id are optional - fallback to empty bytes
-        span_id: id::hex_span_id_to_pb(log.get("span_id")).unwrap_or(vec![]),
-        trace_id: id::hex_trace_id_to_pb(log.get("trace_id")).unwrap_or(vec![]),
+        span_id: id::hex_span_id_to_pb(log.get("span_id")).unwrap_or_default(),
+        trace_id: id::hex_trace_id_to_pb(log.get("trace_id")).unwrap_or_default(),
         dropped_attributes_count: pb::maybe_int_to_pbu32(log.get("dropped_attributes_count"))
             .unwrap_or_default(),
         attributes: common::maybe_key_value_list_to_pb(log.get("attributes")).unwrap_or_default(),
