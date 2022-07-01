@@ -173,6 +173,11 @@ pub fn load(registry: &mut Registry) {
         ).insert(tremor_const_fn! (string|into_binary(_context, _input: String) {
                 Ok(Value::Bytes(_input.as_bytes().to_vec().into()))
             }),
+        ).insert(tremor_const_fn! (string|reverse(_context, _input: String) {
+                let input = _input.clone();
+                let output = input.chars().rev().collect::<String>();
+                Ok(Value::from(output))
+            }),
         ).insert(TremorFnWrapper::new(
             "string".to_string(),
             "format".to_string(),
@@ -191,6 +196,12 @@ mod test {
         assert_val!(f(&[&v]), "badger");
         let v = Value::Bytes(b"badger\xF0\x90\x80".to_vec().into());
         assert_val!(f(&[&v]), "badger\u{fffd}");
+    }
+    #[test]
+    fn reverse() {
+        let f = fun("string", "reverse");
+        let v = Value::from("badger");
+        assert_val!(f(&[&v]), Value::from("regdab"));
     }
     #[test]
     fn into_binary() {
