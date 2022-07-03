@@ -145,13 +145,13 @@ struct ConversionContext<'config, 'event> {
     expected_type: &'config DummySqlType,
 }
 
-fn wrap_getter_error<'config, 'event, F, T>(
+fn wrap_getter_error<'config, 'event, Getter, Output>(
     context: ConversionContext<'config, 'event>,
-    f: F,
-) -> Result<T>
+    f: Getter,
+) -> Result<Output>
 where
-    F: FnOnce(&'event TValue<'event>) -> Option<T>,
-    T: 'event,
+    Getter: FnOnce(&'event TValue<'event>) -> Option<Output>,
+    Output: 'event,
 {
     f(context.value).ok_or_else(|| {
         Error::from(ErrorKind::UnexpectedEventFormat(
@@ -162,29 +162,29 @@ where
     })
 }
 
-fn get_and_wrap<'config, 'event, F, G, T>(
+fn get_and_wrap<'config, 'event, Getter, Mapper, Output>(
     context: ConversionContext<'config, 'event>,
-    getter: F,
-    wrapper: G,
+    getter: Getter,
+    wrapper: Mapper,
 ) -> Result<CValue>
 where
-    F: FnOnce(&'event TValue<'event>) -> Option<T>,
-    G: FnOnce(T) -> CValue,
-    T: 'event,
+    Getter: FnOnce(&'event TValue<'event>) -> Option<Output>,
+    Mapper: FnOnce(Output) -> CValue,
+    Output: 'event,
 {
     wrap_getter_error(context, getter).map(wrapper)
 }
 
-fn convert_string_or_array<T, E, V, const N: usize>(
+fn convert_string_or_array<Output, Getter, Variant, const N: usize>(
     context: ConversionContext,
-    extractor: E,
-    variant: V,
+    extractor: Getter,
+    variant: Variant,
     error: ErrorKind,
 ) -> Result<CValue>
 where
-    T: FromStr,
-    E: FnOnce(T) -> [u8; N],
-    V: FnOnce([u8; N]) -> CValue,
+    Output: FromStr,
+    Getter: FnOnce(Output) -> [u8; N],
+    Variant: FnOnce([u8; N]) -> CValue,
 {
     // Before everyone gets lost, let's briefly describe the generic types of
     // this function.
@@ -192,15 +192,26 @@ where
     // When a String is passed, we must have a parsing function and an
     // extracting function. The types involved are the following:
     //
-    //          T::from_str       extractor             variant
-    // String --------------> T ------------> [u8; N] ----------> CValue
+    // String
+    //  |
+    //  | Output::from_str
+    //  V
+    // Output
+    //  |
+    //  | extractor
+    //  V
+    // [u8; N]
+    //  |
+    //  | variant
+    //  V
+    // CValue
 
     if let Some(octets) = context.value.as_array() {
         coerce_octet_sequence(octets.as_slice())
             .map(variant)
             .map_err(|()| Error::from(error))
     } else if let Some(string) = context.value.as_str() {
-        T::from_str(string)
+        Output::from_str(string)
             .map(extractor)
             .map(variant)
             .map_err(|_| Error::from(error))
