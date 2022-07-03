@@ -31,10 +31,6 @@ use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_script::literal;
 
-const CONTAINER_NAME: &str = "clickhouse/clickhouse-server";
-const CONTAINER_VERSION: &str = "22.3.3.44";
-const SERVER_PORT: u16 = 9000;
-
 // In this test, we spin up an empty ClickHouse container, plug it to the
 // ClickHouse sink and use that sink to save a bunch of super simple events.
 // Once all these events are inserted, we use the regular ClickHouse client to
@@ -48,12 +44,12 @@ async fn simple_insertion() -> Result<()> {
     // The following lines spin up a regular ClickHouse container and wait for
     // the database to be up and running.
 
-    let image = GenericImage::new(CONTAINER_NAME, CONTAINER_VERSION);
+    let image = GenericImage::new(utils::CONTAINER_NAME, utils::CONTAINER_VERSION);
     // We want to access the container from the host, so we need to make the
     // corresponding port available.
     let local = free_port::find_free_tcp_port().await?;
     let port_to_expose = Port {
-        internal: SERVER_PORT,
+        internal: utils::SERVER_PORT,
         local,
     };
     let image = RunnableImage::from(image).with_mapped_port(port_to_expose);
