@@ -214,8 +214,8 @@ impl ClickhouseSink {
 
         for (column_name, expected_type) in columns.iter() {
             // If the value is not present, then we can replace it by null.
-            const NULL: Value = Value::const_null();
-            let cell = object.get(column_name.as_str()).unwrap_or(&NULL);
+            const NULL: &Value = &Value::const_null();
+            let cell = object.get(column_name.as_str()).unwrap_or(NULL);
 
             let cell = conversion::convert_value(column_name.as_str(), cell, expected_type)?;
 
