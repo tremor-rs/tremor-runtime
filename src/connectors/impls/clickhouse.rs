@@ -87,7 +87,7 @@ impl Clickhouse {
 
         let path = self.config.database.as_deref().unwrap_or_default();
 
-        let compression = self.config.compression.unwrap_or_default();
+        let compression = self.config.compression;
 
         format!("{host}/{path}?compression={compression}")
     }
@@ -96,7 +96,8 @@ impl Clickhouse {
 #[derive(Deserialize)]
 struct ClickhouseConfig {
     url: Url<ClickHouseDefaults>,
-    compression: Option<Compression>,
+    #[serde(default)]
+    compression: Compression,
     database: Option<String>,
     table: String,
     columns: Vec<Column>,
