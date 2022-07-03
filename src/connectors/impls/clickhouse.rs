@@ -34,7 +34,12 @@ impl ConnectorBuilder for Builder {
         "clickhouse".into()
     }
 
-    async fn build(&self, alias: &str, raw_config: &ConnectorConfig) -> Result<Box<dyn Connector>> {
+    async fn build(
+        &self,
+        alias: &str,
+        raw_config: &ConnectorConfig,
+        _kill_switch: &KillSwitch,
+    ) -> Result<Box<dyn Connector>> {
         let config = raw_config
             .config
             .as_ref()
