@@ -34,18 +34,14 @@ impl ConnectorBuilder for Builder {
         "clickhouse".into()
     }
 
-    async fn build(
+    async fn build_cfg(
         &self,
-        alias: &str,
-        raw_config: &ConnectorConfig,
+        _alias: &str,
+        _config: &ConnectorConfig,
+        connector_config: &Value,
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
-        let config = raw_config
-            .config
-            .as_ref()
-            .ok_or_else(|| ErrorKind::MissingConfiguration(alias.to_string()))?;
-
-        let config = ClickhouseConfig::new(config)?;
+        let config = ClickhouseConfig::new(connector_config)?;
 
         Ok(Box::new(Clickhouse { config }))
     }
