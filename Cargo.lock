@@ -1233,7 +1233,7 @@ dependencies = [
 [[package]]
 name = "clickhouse-rs"
 version = "1.0.0-alpha.1"
-source = "git+https://github.com/suharev7/clickhouse-rs?branch=async-await#5d1aae274ca40c704ce9cbbedbd2e9d73fd45076"
+source = "git+https://github.com/suharev7/clickhouse-rs?rev=553f3aa#553f3aa0f21f3b5e539c0cb899008a578eb67434"
 dependencies = [
  "async-std",
  "byteorder",
@@ -1260,7 +1260,7 @@ dependencies = [
 [[package]]
 name = "clickhouse-rs-cityhash-sys"
 version = "0.1.2"
-source = "git+https://github.com/suharev7/clickhouse-rs?branch=async-await#5d1aae274ca40c704ce9cbbedbd2e9d73fd45076"
+source = "git+https://github.com/suharev7/clickhouse-rs?rev=553f3aa#553f3aa0f21f3b5e539c0cb899008a578eb67434"
 dependencies = [
  "cc",
 ]

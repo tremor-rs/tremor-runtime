@@ -63,7 +63,7 @@ chrono-tz = "0.6"
 # Releases can be tracked at [1].
 #
 # [1]: https://crates.io/crates/clickhouse-rs/versions
-clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", branch = "async-await", default-features = false, features = [
+clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", rev = "553f3aa", default-features = false, features = [
   "async_std",
 ] }
 csv = "1.1"
