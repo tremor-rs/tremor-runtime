@@ -66,10 +66,6 @@ use crate::{
     errors::{Error, Result},
 };
 
-const CONTAINER_NAME: &str = "clickhouse/clickhouse-server";
-const CONTAINER_VERSION: &str = "22.3.3.44";
-const SERVER_PORT: u16 = 9000;
-
 macro_rules! assert_row_equals {
     (
         $row:expr,
@@ -93,12 +89,12 @@ async fn test() -> Result<()> {
     // The following lines spin up a regular ClickHouse container and wait for
     // the database to be up and running.
 
-    let image = GenericImage::new(CONTAINER_NAME, CONTAINER_VERSION);
+    let image = GenericImage::new(utils::CONTAINER_NAME, utils::CONTAINER_VERSION);
     // We want to access the container from the host, so we need to make the
     // corresponding port available.
     let local = free_port::find_free_tcp_port().await?;
     let port_to_expose = Port {
-        internal: SERVER_PORT,
+        internal: utils::SERVER_PORT,
         local,
     };
     let image = RunnableImage::from(image).with_mapped_port(port_to_expose);

@@ -18,6 +18,9 @@ use std::time::{Duration, Instant};
 use crate::errors::{Error, Result};
 
 pub(super) const DB_HOST: &str = "127.0.0.1";
+pub(crate) const CONTAINER_NAME: &str = "clickhouse/clickhouse-server";
+pub(crate) const CONTAINER_VERSION: &str = "22.3.3.44";
+pub(crate) const SERVER_PORT: u16 = 9000;
 
 // Blocks the task until calling GET on `url` returns an HTTP 200.
 pub(super) async fn wait_for_ok(port: u16) -> Result<()> {
