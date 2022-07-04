@@ -1,0 +1,7 @@
+name: otel_client connector
+status: 0
+asserts:
+  - source: before.err.0.log
+    contains: 
+      - "Body: snot badger"
+      - "Status message : woot"
