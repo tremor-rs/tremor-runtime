@@ -1,0 +1,32 @@
+define flow otel
+flow
+  use integration;
+  use tremor::pipelines;
+  use std::time::nanos;
+
+  define connector otel_c from otel_client
+  with
+    config = {
+      "url": "127.0.0.1:4317"
+    }
+  end;
+  create connector otel_c;
+  create connector input from integration::read_file;
+  define connector exit from exit
+  with
+    config = {
+      "delay": nanos::from_seconds(1),
+      "graceful": true
+    }
+  end;
+  create connector exit;
+
+  create pipeline out_or_exit from integration::out_or_exit;
+
+  connect /connector/input to /pipeline/out_or_exit;
+  connect /pipeline/out_or_exit/out to /connector/otel_c;
+  connect /pipeline/out_or_exit/exit to /connector/exit;
+
+end;
+
+deploy flow otel;
