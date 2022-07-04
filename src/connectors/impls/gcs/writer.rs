@@ -21,6 +21,7 @@ use crate::connectors::utils::url::HttpsDefaults;
 use crate::connectors::{
     CodecReq, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType, Context,
 };
+use crate::system::KillSwitch;
 use async_std::task::sleep;
 use gouth::Token;
 use http_client::h1::H1Client;
@@ -71,6 +72,7 @@ impl ConnectorBuilder for Builder {
         _alias: &str,
         _config: &ConnectorConfig,
         connector_config: &Value,
+        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(connector_config)?;
 
@@ -228,6 +230,7 @@ impl Sink for GCSWriterSink {
                     match client.send(request).await {
                         Ok(request) => response = Some(request),
                         Err(e) => {
+                            warn!("Failed to send a request to GCS: {}", e);
                             // FIXME: Adjust the timeout, this number  is pulled of my... hat
                             sleep(Duration::from_millis(250u64 * 2u64.pow(i))).await;
                             continue;
@@ -246,7 +249,7 @@ impl Sink for GCSWriterSink {
                     }
                 }
 
-                if let Some(mut response) = response {
+                if let Some(response) = response {
                     if response.status().is_server_error() {
                         return Err("Received server errors from Google Cloud Storage".into());
                     }
