@@ -1,5 +1,6 @@
 use crate::connectors::prelude::{
-    Attempt, EventSerializer, Result, SinkAddr, SinkContext, SinkManagerBuilder, SinkReply, Url,
+    Attempt, ErrorKind, EventSerializer, Result, SinkAddr, SinkContext, SinkManagerBuilder,
+    SinkReply, Url,
 };
 use crate::connectors::sink::Sink;
 use crate::connectors::utils::url::HttpsDefaults;
@@ -120,7 +121,7 @@ impl Buffers {
             return None;
         }
 
-        return Some(&self.data[..self.block_size]);
+        Some(&self.data[..self.block_size])
     }
 
     pub fn write(&mut self, data: &[u8]) {
@@ -160,85 +161,36 @@ impl Sink for GCSWriterSink {
         serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        let client = self.client.as_mut().unwrap(); // FIXME: error handling lol
-        let token = Token::new().unwrap();
-
         for (value, meta) in event.value_meta_iter() {
             let meta = ctx.extract_meta(meta);
 
-            let name = meta.get("name").unwrap().as_str().unwrap();
+            let name = meta
+                .get("name")
+                .ok_or(ErrorKind::GoogleCloudStorageError(
+                    "Metadata is missing the file name",
+                ))?
+                .as_str()
+                .ok_or(ErrorKind::GoogleCloudStorageError(
+                    "The file name in metadata is not a string",
+                ))?;
 
-            if let Some(_current_session_url) = &self.current_session_url {
-                if self.current_name.as_ref().map(|x| x.as_str()) != Some(name) {
-                    let final_data = self.buffers.final_block();
+            self.finish_upload_if_needed(name).await?;
 
-                    for i in 0..3 {
-                        let mut request = Request::new(
-                            Method::Put,
-                            url::Url::parse(self.current_session_url.as_ref().unwrap()).unwrap(),
-                        );
-                        // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
-                        request.insert_header(
-                            "Content-Range",
-                            format!(
-                                "bytes {}-{}/{}",
-                                self.buffers.start(),
-                                self.buffers.start() + final_data.len() - 1,
-                                self.buffers.start() + final_data.len()
-                            ),
-                        );
-                        request.insert_header("Content-Length", format!("{}", final_data.len()));
-                        request.set_body(final_data);
+            self.start_upload_if_needed(meta, name).await?;
 
-                        let response = client.send(request).await.unwrap();
-
-                        if !response.status().is_server_error() {
-                            break;
-                        }
-
-                        // FIXME: Adjust the timeout, this number  is pulled of my... hat
-                        sleep(Duration::from_millis(250u64 * 2u64.pow(i))).await;
-                    }
-
-                    self.buffers = Buffers::new(self.config.buffer_size);
-                }
+            let serialized_data = serializer.serialize(value, event.ingest_ns)?;
+            for item in serialized_data {
+                self.buffers.write(&item);
             }
-
-            if self.current_session_url.is_none()
-                || self.current_name.as_ref().map(|x| x.as_str()) != Some(name)
-            {
-                let url = url::Url::parse(&format!(
-                    "{}/b/{}/o?name={}&uploadType=resumable",
-                    self.url,
-                    meta.get("bucket").unwrap().as_str().unwrap(),
-                    name
-                ))
-                .unwrap();
-                let mut request = Request::new(Method::Post, url);
-                request.insert_header("Authorization", token.header_value().unwrap().to_string());
-                let response = client.send(request).await;
-
-                let response = response.unwrap();
-                self.current_session_url = Some(
-                    response
-                        .header("Location")
-                        .unwrap()
-                        .get(0)
-                        .unwrap()
-                        .to_string(),
-                );
-                self.current_name = Some(name.into());
-            }
-
-            self.buffers
-                .write(&serializer.serialize(value, event.ingest_ns).unwrap()[0]);
 
             if let Some(data) = self.buffers.read_current_block() {
                 let mut response = None;
                 for i in 0..3 {
                     let mut request = Request::new(
                         Method::Put,
-                        url::Url::parse(self.current_session_url.as_ref().unwrap()).unwrap(),
+                        url::Url::parse(self.current_session_url.as_ref().ok_or(
+                            ErrorKind::GoogleCloudStorageError("No session URL is available"),
+                        )?)?,
                     );
                     // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
                     request.insert_header(
@@ -253,6 +205,11 @@ impl Sink for GCSWriterSink {
                     request.insert_header("Accept", "*/*");
                     // request.insert_header("Content-Length", format!("{}", self.buffers.end() - self.buffers.start()));
                     request.set_body(data);
+
+                    let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
+                        "Google Cloud Storage",
+                        "not connected",
+                    ))?;
 
                     match client.send(request).await {
                         Ok(request) => response = Some(request),
@@ -278,7 +235,7 @@ impl Sink for GCSWriterSink {
 
                 if let Some(mut response) = response {
                     if response.status().is_server_error() {
-                        dbg!(response.body_string().await.unwrap());
+                        dbg!(response.body_string().await?);
                         return Err("Received server errors from Google Cloud Storage".into());
                     }
 
@@ -286,11 +243,14 @@ impl Sink for GCSWriterSink {
                         let raw_range = raw_range[0].as_str();
 
                         // Range format: bytes=0-262143
-                        let range_end = &raw_range[raw_range.find('-').unwrap() + 1..];
+                        let range_end = &raw_range[raw_range.find('-').ok_or(
+                            ErrorKind::GoogleCloudStorageError(
+                                "Did not find a - in the Range header",
+                            ),
+                        )? + 1..];
 
-                        self.buffers.mark_done_until(range_end.parse().unwrap());
+                        self.buffers.mark_done_until(range_end.parse()?);
                     } else {
-                        // FIXME: not sure if this is the correct behaviour - google documents that the header should always be present,  but it does not seem to be true
                         return Err("No range header?".into());
                     }
                 } else {
@@ -315,5 +275,94 @@ impl Sink for GCSWriterSink {
 
     fn auto_ack(&self) -> bool {
         false
+    }
+}
+
+impl GCSWriterSink {
+    async fn finish_upload_if_needed(&mut self, name: &str) -> Result<()> {
+        if let Some(current_session_url) = self.current_session_url.as_ref() {
+            if self.current_name.as_deref() != Some(name) {
+                let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
+                    "Google Cloud Storage",
+                    "not connected",
+                ))?;
+
+                let final_data = self.buffers.final_block();
+
+                for i in 0..3 {
+                    let mut request =
+                        Request::new(Method::Put, url::Url::parse(current_session_url)?);
+                    // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
+                    request.insert_header(
+                        "Content-Range",
+                        format!(
+                            "bytes {}-{}/{}",
+                            self.buffers.start(),
+                            self.buffers.start() + final_data.len() - 1,
+                            self.buffers.start() + final_data.len()
+                        ),
+                    );
+                    request.insert_header("Content-Length", format!("{}", final_data.len()));
+                    request.set_body(final_data);
+
+                    let response = client.send(request).await?;
+
+                    if !response.status().is_server_error() {
+                        self.buffers = Buffers::new(self.config.buffer_size);
+                        self.current_session_url = None;
+                        break;
+                    }
+
+                    // FIXME: Adjust the timeout, this number  is pulled of my... hat
+                    sleep(Duration::from_millis(250u64 * 2u64.pow(i))).await;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn start_upload_if_needed(&mut self, meta: Option<&Value<'_>>, name: &str) -> Result<()> {
+        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
+            "Google Cloud Storage",
+            "not connected",
+        ))?;
+
+        let token = Token::new()?;
+
+        if self.current_session_url.is_none() {
+            let url = url::Url::parse(&format!(
+                "{}/b/{}/o?name={}&uploadType=resumable",
+                self.url,
+                meta.get("bucket")
+                    .ok_or(ErrorKind::GoogleCloudStorageError(
+                        "No bucket name in the metadata"
+                    ))
+                    .as_str()
+                    .ok_or(ErrorKind::GoogleCloudStorageError(
+                        "Bucket name is not a string"
+                    ))?,
+                name
+            ))?;
+            let mut request = Request::new(Method::Post, url);
+            request.insert_header("Authorization", token.header_value()?.to_string());
+            let response = client.send(request).await?;
+
+            self.current_session_url = Some(
+                response
+                    .header("Location")
+                    .ok_or(ErrorKind::GoogleCloudStorageError(
+                        "Missing Location header",
+                    ))?
+                    .get(0)
+                    .ok_or(ErrorKind::GoogleCloudStorageError(
+                        "Missing Location header value",
+                    ))?
+                    .to_string(),
+            );
+            self.current_name = Some(name.into());
+        }
+
+        Ok(())
     }
 }

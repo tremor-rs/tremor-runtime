@@ -388,6 +388,10 @@ error_chain! {
             description("Type in the message does not match Google Cloud Logging API type")
             display("Type in the message does not match Google Cloud Logging API type. Expected: {}, actual: {:?}", expected, actual)
         }
+        GoogleCloudStorageError(msg: &'static str) {
+            description("Google cloud storage error")
+                display("Google cloud storage error: {}", msg)
+        }
     }
 }
 
