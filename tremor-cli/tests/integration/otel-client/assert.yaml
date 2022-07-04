@@ -5,3 +5,7 @@ asserts:
     contains: 
       - "Body: snot badger"
       - "Status message : woot"
+  - source: "fg.err.log"
+    contains:
+      - "All required CB events received."
+      - "Got acks: [0, 1, 2, 3]"

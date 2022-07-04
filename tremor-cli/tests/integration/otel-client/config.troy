@@ -1,6 +1,5 @@
 define flow otel
 flow
-  use integration;
   use tremor::pipelines;
   use std::time::nanos;
 
@@ -11,21 +10,21 @@ flow
     }
   end;
   create connector otel_c;
-  create connector input from integration::read_file;
-  define connector exit from exit
+
+  define connector input from cb
   with
+    codec = "json",
     config = {
-      "delay": nanos::from_seconds(1),
-      "graceful": true
+      "path": "in.json",
+      "timeout": nanos::from_seconds(1)
     }
   end;
-  create connector exit;
+  create connector input;
 
-  create pipeline out_or_exit from integration::out_or_exit;
+  create pipeline passthrough from pipelines::passthrough;
 
-  connect /connector/input to /pipeline/out_or_exit;
-  connect /pipeline/out_or_exit/out to /connector/otel_c;
-  connect /pipeline/out_or_exit/exit to /connector/exit;
+  connect /connector/input to /pipeline/passthrough;
+  connect /pipeline/passthrough to /connector/otel_c;
 
 end;
 
