@@ -243,6 +243,15 @@ impl Query {
                         )
                         .into());
                     }
+                    if !nodes_by_name.contains_key(&s.into.0.id) {
+                        return Err(query_stream_not_defined_err(
+                            s,
+                            &s.into.0,
+                            s.into.0.to_string(),
+                            s.into.1.to_string(),
+                        )
+                        .into());
+                    }
                     let e = select.stmt.extent();
                     let mut h = Dumb::new();
                     let label = h
