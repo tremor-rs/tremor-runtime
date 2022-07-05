@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::Value;
+use crate::{value::Object, Value};
 use beef::Cow;
-use halfbrown::RawEntryMut;
+use fxhash::FxBuildHasher;
+use hashbrown::hash_map::RawEntryMut;
 use std::fmt;
 use std::hash::{BuildHasher, Hash, Hasher};
 use value_trait::{Mutable, Value as ValueTrait, ValueAccess, ValueType};
@@ -55,7 +56,7 @@ where
 {
     fn from(key: S) -> Self {
         let key = Cow::from(key);
-        let hash_builder = halfbrown::DefaultHashBuilder::default();
+        let hash_builder = FxBuildHasher::default();
         let mut hasher = hash_builder.build_hasher();
         key.hash(&mut hasher);
         Self {
@@ -115,7 +116,7 @@ impl<'key> KnownKey<'key> {
     #[must_use]
     pub fn map_lookup<'target, 'value>(
         &self,
-        map: &'target halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target Object<'value>,
     ) -> Option<&'target Value<'value>>
     where
         'value: 'target,
@@ -180,19 +181,21 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_lookup_mut<'target, 'value>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut Object<'value>,
     ) -> Option<&'target mut Value<'value>>
     where
         'key: 'value,
         'value: 'target,
     {
-        match map
-            .raw_entry_mut()
-            .from_key_hashed_nocheck(self.hash, &self.key)
-        {
-            RawEntryMut::Occupied(e) => Some(e.into_mut()),
-            RawEntryMut::Vacant(_e) => None,
-        }
+        // FIXME
+        // match map
+        //     .raw_entry_mut()
+        //     .from_key_hashed_nocheck(self.hash, &self.key)
+        // {
+        //     RawEntryMut::Occupied(e) => Some(e.into_mut()),
+        //     RawEntryMut::Vacant(_e) => None,
+        // }
+        map.get_mut(self.key())
     }
 
     /// Looks up this key in a `Value`, inserts `with` when the key
@@ -277,7 +280,7 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_lookup_or_insert_mut<'target, 'value, F>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut Object<'value>,
         with: F,
     ) -> &'target mut Value<'value>
     where
@@ -365,7 +368,7 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_insert<'target, 'value>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut Object<'value>,
         value: Value<'value>,
     ) -> Option<Value<'value>>
     where

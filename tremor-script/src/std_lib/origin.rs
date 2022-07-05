@@ -16,7 +16,6 @@ use crate::prelude::*;
 use crate::registry::Registry;
 use crate::tremor_fn;
 use crate::EventOriginUri;
-use halfbrown::hashmap;
 use std::string::ToString;
 
 pub fn load(registry: &mut Registry) {
@@ -27,17 +26,17 @@ pub fn load(registry: &mut Registry) {
         .insert(tremor_fn! (origin|as_uri_record(context) {
             if let Some(uri) = context.origin_uri() {
                 Ok(Value::from(
-                    hashmap! {
-                        "scheme".into() => Value::from(uri.scheme().to_string()),
-                        "host".into() => Value::from(uri.host().to_string()),
-                        "port".into() => match uri.port() {
+                    maplit::hashmap! {
+                        "scheme" => Value::from(uri.scheme().to_string()),
+                        "host" => Value::from(uri.host().to_string()),
+                        "port" => match uri.port() {
                             Some(n) => Value::from(n),
                             // TODO would be nice to support this?
                             //None => Value::from(None),
                             None => Value::null(),
                         },
                         // TODO avoid uri path clone here?
-                        "path".into() => Value::from(uri.path().to_vec()),
+                        "path" => Value::from(uri.path().to_vec()),
                     }
                 ))
             } else {

@@ -666,7 +666,7 @@ mod test {
 
     #[test]
     pub fn test_can_encode_a_struct() {
-        let mut values = halfbrown::HashMap::new();
+        let mut values = Object::default();
         values.insert("a".into(), Value::Static(StaticNode::I64(1)));
         values.insert("b".into(), Value::Static(StaticNode::I64(1024)));
         let input = Value::Object(Box::new(values));
@@ -751,7 +751,7 @@ mod test {
 
     #[test]
     pub fn can_encode_json() {
-        let value = Value::Object(Box::new(halfbrown::HashMap::new()));
+        let value = Value::object();
         let field = Field {
             table_type: TableType::Json,
             tag: 1,
@@ -882,7 +882,7 @@ mod test {
             ],
             &sink_context,
         );
-        let mut fields = halfbrown::HashMap::new();
+        let mut fields = Object::default();
         fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
         fields.insert("b".into(), Value::Static(StaticNode::I64(21)));
         let result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
@@ -926,11 +926,12 @@ mod test {
             ],
             &sink_context,
         );
-        let mut fields = halfbrown::HashMap::new();
+        let mut fields = Object::default();
         fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
         fields.insert("b".into(), Value::Static(StaticNode::I64(21)));
         fields.insert("c".into(), Value::Static(StaticNode::I64(33)));
-        let result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
+        let mut result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
+        result.sort();
 
         assert_eq!([8u8, 12u8, 16u8, 21u8], result[..]);
     }
@@ -968,10 +969,10 @@ mod test {
             }],
             &sink_context,
         );
-        let mut inner_fields = halfbrown::HashMap::new();
+        let mut inner_fields = Object::default();
         inner_fields.insert("x".into(), Value::Static(StaticNode::I64(10)));
         inner_fields.insert("y".into(), Value::Static(StaticNode::I64(10)));
-        let mut fields = halfbrown::HashMap::new();
+        let mut fields = Object::default();
         fields.insert("a".into(), Value::Object(Box::new(inner_fields)));
         let result = mapping.map(&Value::Object(Box::new(fields))).unwrap();
 
@@ -1002,7 +1003,7 @@ mod test {
             }],
             &sink_context,
         );
-        let mut fields = halfbrown::HashMap::new();
+        let mut fields = Object::default();
         fields.insert("a".into(), Value::Static(StaticNode::I64(12)));
         let result = mapping.map(&Value::Object(Box::new(fields)));
 

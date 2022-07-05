@@ -86,46 +86,47 @@ pub fn load(registry: &mut Registry) {
 
 #[cfg(test)]
 mod test {
+    use simd_json::Builder;
+
     use crate::registry::fun;
     use crate::Value;
-    use halfbrown::hashmap;
 
     #[test]
     fn len() {
         let f = fun("record", "len");
-        let v = Value::from(hashmap! {
-            "this".into() => Value::from("is"),
-            "a".into() => Value::from("test")
+        let v = Value::from(maplit::hashmap! {
+            "this" => Value::from("is"),
+            "a" => Value::from("test")
         });
         assert_val!(f(&[&v]), 2);
-        let v = Value::from(hashmap! {});
+        let v = Value::object();
         assert_val!(f(&[&v]), 0);
     }
 
     #[test]
     fn is_empty() {
         let f = fun("record", "is_empty");
-        let v = Value::from(hashmap! {
-            "this".into() => Value::from("is"),
-            "a".into() => Value::from("test")
+        let v = Value::from(maplit::hashmap! {
+            "this" => Value::from("is"),
+            "a" => Value::from("test")
         });
         assert_val!(f(&[&v]), false);
-        let v = Value::from(hashmap! {});
+        let v = Value::object();
         assert_val!(f(&[&v]), true);
     }
 
     #[test]
     fn contains() {
         let f = fun("record", "contains");
-        let v1 = Value::from(hashmap! {
-            "this".into() => Value::from("is"),
-            "a".into() => Value::from("test")
+        let v1 = Value::from(maplit::hashmap! {
+            "this" => Value::from("is"),
+            "a" => Value::from("test")
         });
         let v2 = Value::from("this");
         assert_val!(f(&[&v1, &v2]), true);
-        let v1 = Value::from(hashmap! {
-            "this".into() => Value::from("is"),
-            "a".into() => Value::from("test")
+        let v1 = Value::from(maplit::hashmap! {
+            "this" => Value::from("is"),
+            "a" => Value::from("test")
         });
         let v2 = Value::from("that");
         assert_val!(f(&[&v1, &v2]), false);
@@ -134,18 +135,18 @@ mod test {
     #[test]
     fn keys() {
         let f = fun("record", "keys");
-        let v = Value::from(hashmap! {
-            "this".into() => Value::from("is"),
-            "a".into() => Value::from("test")
+        let v = Value::from(maplit::hashmap! {
+            "this" => Value::from("is"),
+            "a" => Value::from("test")
         });
         assert_val!(f(&[&v]), Value::from(vec!["this", "a"]));
     }
     #[test]
     fn values() {
         let f = fun("record", "values");
-        let v = Value::from(hashmap! {
-            "this".into() => Value::from("is"),
-            "a".into() => Value::from("test")
+        let v = Value::from(maplit::hashmap! {
+            "this" => Value::from("is"),
+            "a" => Value::from("test")
         });
         assert_val!(f(&[&v]), Value::from(vec!["is", "test"]));
     }
@@ -153,9 +154,9 @@ mod test {
     #[test]
     fn to_array() {
         let f = fun("record", "to_array");
-        let v = Value::from(hashmap! {
-            "this".into() => Value::from("is"),
-            "a".into() => Value::from("test")
+        let v = Value::from(maplit::hashmap! {
+            "this" => Value::from("is"),
+            "a" => Value::from("test")
         });
         assert_val!(
             f(&[&v]),
@@ -169,9 +170,9 @@ mod test {
         let v = Value::from(vec![vec!["this", "is"], vec!["a", "test"]]);
         assert_val!(
             f(&[&v]),
-            Value::from(hashmap! {
-                "this".into() => Value::from("is"),
-                "a".into() => Value::from("test")
+            Value::from(maplit::hashmap! {
+                "this" => Value::from("is"),
+                "a" => Value::from("test")
             })
         );
     }
@@ -179,35 +180,35 @@ mod test {
     #[test]
     fn extract() {
         let f = fun("record", "extract");
-        let v1 = Value::from(hashmap! {
-            "this".into() => Value::from("is"),
-            "a".into() => Value::from("test")
+        let v1 = Value::from(maplit::hashmap! {
+            "this" => Value::from("is"),
+            "a" => Value::from("test")
         });
         let v2 = Value::from(vec!["this", "is"]);
         assert_val!(
             f(&[&v1, &v2]),
-            Value::from(hashmap! {
-                "this".into() => Value::from("is"),
+            Value::from(maplit::hashmap! {
+                "this" => Value::from("is"),
             })
         );
     }
     #[test]
     fn combine() {
         let f = fun("record", "combine");
-        let v1 = Value::from(hashmap! {
-            "this".into() => Value::from("is"),
-            "a".into() => Value::from("test")
+        let v1 = Value::from(maplit::hashmap! {
+            "this" => Value::from("is"),
+            "a" => Value::from("test")
         });
-        let v2 = Value::from(hashmap! {
-            "with".into() => Value::from("cake"),
-            "a".into() => Value::from("cake")
+        let v2 = Value::from(maplit::hashmap! {
+            "with" => Value::from("cake"),
+            "a" => Value::from("cake")
         });
         assert_val!(
             f(&[&v1, &v2]),
-            Value::from(hashmap! {
-                "this".into() => Value::from("is"),
-                "a".into() => Value::from("cake"),
-                "with".into() => Value::from("cake"),
+            Value::from(maplit::hashmap! {
+                "this" => Value::from("is"),
+                "a" => Value::from("cake"),
+                "with" => Value::from("cake"),
             })
         );
     }

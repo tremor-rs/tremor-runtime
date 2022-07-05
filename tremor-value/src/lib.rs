@@ -96,7 +96,7 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
     #[inline(always)]
     #[allow(clippy::unwrap_used)]
     fn parse_map(&mut self, len: usize) -> Value<'input> {
-        let mut res = Object::with_capacity(len);
+        let mut res = Object::with_capacity_and_hasher(len, fxhash::FxBuildHasher::default());
 
         // Since we checked if it's empty we know that we at least have one
         // element so we eat this
@@ -104,7 +104,7 @@ impl<'input, 'tape> ValueDeser<'input, 'tape> {
             // ALLOW: we know the values will be OK
             if let Node::String(key) = self.0.next().unwrap() {
                 // ALLOW: we know it will parse correctly
-                res.insert_nocheck(key.into(), self.parse().unwrap());
+                res.insert(key.into(), self.parse().unwrap());
             } else {
                 // ALLOW: We check against this in tape
                 unreachable!();

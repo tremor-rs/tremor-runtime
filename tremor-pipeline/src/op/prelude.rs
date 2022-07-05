@@ -16,7 +16,7 @@ pub use super::*;
 pub use crate::errors::*;
 pub use crate::{CbAction, Event, OpMeta, Operator};
 pub use beef::Cow;
-pub use halfbrown::{hashmap, HashMap};
+pub use hashbrown::HashMap;
 pub use serde_yaml;
 pub use simd_json::OwnedValue;
 pub use value_trait::Value as ValueTrait;

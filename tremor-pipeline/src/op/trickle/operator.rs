@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::op::prelude::*;
-use beef::Cow;
 use tremor_script::{
     ast::{self, Helper},
     prelude::*,
@@ -28,11 +27,7 @@ fn mk_node_config(id: String, op_type: String, config: Value) -> NodeConfig {
         id,
         kind: crate::NodeKind::Operator,
         op_type,
-        config: if config
-            .as_object()
-            .map(HashMap::is_empty)
-            .unwrap_or_default()
-        {
+        config: if config.as_object().map(Object::is_empty).unwrap_or_default() {
             None
         } else {
             Some(config.into_static())
@@ -92,11 +87,7 @@ impl Operator for TrickleOperator {
         self.op.on_contraflow(uid, contraevent);
     }
 
-    fn metrics(
-        &self,
-        tags: &HashMap<Cow<'static, str>, Value<'static>>,
-        timestamp: u64,
-    ) -> Result<Vec<Value<'static>>> {
+    fn metrics(&self, tags: &Object<'static>, timestamp: u64) -> Result<Vec<Value<'static>>> {
         self.op.metrics(tags, timestamp)
     }
 

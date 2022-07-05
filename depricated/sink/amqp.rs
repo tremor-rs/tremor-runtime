@@ -21,7 +21,7 @@
 use crate::sink::prelude::*;
 use tremor_common::url::TremorUrl;
 use async_std::channel::{bounded, Receiver};
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use lapin::{
     options::BasicPublishOptions, publisher_confirm::Confirmation, BasicProperties, Channel,
     Connection, ConnectionProperties, PromiseChain,

@@ -14,7 +14,7 @@
 
 //! Runtime status API
 
-use halfbrown::HashMap;
+use std::collections::HashMap;
 use tremor_runtime::instance::State;
 
 use crate::api::prelude::*;

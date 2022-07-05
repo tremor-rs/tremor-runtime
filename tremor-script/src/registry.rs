@@ -21,7 +21,7 @@ use crate::utils::hostname as get_hostname;
 use crate::Value;
 use crate::{tremor_fn, EventContext};
 use downcast_rs::{impl_downcast, DowncastSync};
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use std::default::Default;
 use std::fmt;
 use std::ops::RangeInclusive;

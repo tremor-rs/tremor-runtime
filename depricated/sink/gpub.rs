@@ -28,7 +28,7 @@ use crate::connectors::qos::{self, QoSFacilities, SinkQoS};
 use crate::sink::prelude::*;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use tremor_pipeline::{EventIdGenerator, OpMeta};
 use tremor_value::Value;
 

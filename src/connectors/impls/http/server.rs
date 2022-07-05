@@ -23,7 +23,7 @@ use async_std::{
     task::JoinHandle,
 };
 use dashmap::DashMap;
-use halfbrown::{Entry, HashMap};
+use hashbrown::{hash_map::Entry, HashMap};
 use http_types::headers::{self, HeaderValue, HeaderValues};
 use http_types::{mime::BYTE_STREAM, Mime, StatusCode};
 use simd_json::ValueAccess;

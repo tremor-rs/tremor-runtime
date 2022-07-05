@@ -22,7 +22,7 @@ use async_nats::Connection as NatsConnection;
 use async_nats::Headers;
 use async_nats::Options as NatsOptions;
 use async_std::channel::{bounded, Receiver};
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use tremor_pipeline::OpMeta;
 
 // struct containing connection options

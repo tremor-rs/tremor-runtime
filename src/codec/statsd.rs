@@ -80,7 +80,7 @@ fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
         None,
     }
     let mut d = data.iter().enumerate().peekable();
-    let mut m = Object::with_capacity(4);
+    let mut m = Object::with_capacity_and_hasher(4, Default::default());
     let value_start: usize;
     let mut is_float = false;
     loop {

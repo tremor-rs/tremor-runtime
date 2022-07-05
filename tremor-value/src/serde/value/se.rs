@@ -196,7 +196,7 @@ impl serde::Serializer for Serializer {
     where
         T: Serialize,
     {
-        let mut values = Object::with_capacity(1);
+        let mut values = Object::with_capacity_and_hasher(1, fxhash::FxBuildHasher::default());
         values.insert(variant.into(), stry!(to_value(&value)));
         Ok(Value::from(values))
     }
@@ -247,7 +247,7 @@ impl serde::Serializer for Serializer {
 
     fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap> {
         Ok(SerializeMap::Map {
-            map: Object::new(),
+            map: Object::default(),
             next_key: None,
         })
     }
@@ -265,7 +265,7 @@ impl serde::Serializer for Serializer {
     ) -> Result<Self::SerializeStructVariant> {
         Ok(SerializeStructVariant {
             name: variant.to_owned(),
-            map: Object::new(),
+            map: Object::default(),
         })
     }
 }
@@ -353,7 +353,7 @@ impl serde::ser::SerializeTupleVariant for SerializeTupleVariant {
     }
 
     fn end(self) -> Result<Value<'static>> {
-        let mut object = Object::with_capacity(1);
+        let mut object = Object::with_capacity_and_hasher(1, fxhash::FxBuildHasher::default());
 
         object.insert(self.name.into(), Value::Array(self.vec));
 
@@ -620,7 +620,7 @@ impl serde::ser::SerializeStructVariant for SerializeStructVariant {
     }
 
     fn end(self) -> Result<Value<'static>> {
-        let mut object = Object::with_capacity(1);
+        let mut object = Object::with_capacity_and_hasher(1, fxhash::FxBuildHasher::default());
 
         object.insert(self.name.into(), Value::from(self.map));
 

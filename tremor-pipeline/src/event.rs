@@ -472,16 +472,16 @@ mod test {
         other: ValueAndMeta<'head>,
     ) -> Result<()> {
         if let Some(ref mut a) = this.value_mut().as_array_mut() {
-            let mut e = Object::with_capacity(7);
-            let mut data = Object::with_capacity(2);
+            let mut e = Object::with_capacity_and_hasher(7, Default::default());
+            let mut data = Object::with_capacity_and_hasher(2, Default::default());
             let (value, meta) = other.into_parts();
-            data.insert_nocheck("value".into(), value);
-            data.insert_nocheck("meta".into(), meta);
-            e.insert_nocheck("data".into(), Value::from(data));
-            e.insert_nocheck("ingest_ns".into(), 1.into());
+            data.insert("value".into(), value);
+            data.insert("meta".into(), meta);
+            e.insert("data".into(), Value::from(data));
+            e.insert("ingest_ns".into(), 1.into());
             // kind is always null on events
-            e.insert_nocheck("kind".into(), Value::null());
-            e.insert_nocheck("is_batch".into(), false.into());
+            e.insert("kind".into(), Value::null());
+            e.insert("is_batch".into(), false.into());
             a.push(Value::from(e))
         };
         Ok(())

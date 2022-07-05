@@ -13,10 +13,9 @@
 // limitations under the License.
 
 use crate::errors::Result;
-use halfbrown::HashMap;
 use serde::Deserialize;
-use std::fs;
 use std::path::Path;
+use std::{collections::HashMap, fs};
 use std::{ffi::OsStr, fmt};
 use tremor_common::file as cfile;
 use tremor_script::{

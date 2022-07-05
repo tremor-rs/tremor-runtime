@@ -66,7 +66,7 @@ use crate::metrics::value_count;
 use crate::op::prelude::*;
 use crate::{Event, Operator};
 use beef::Cow;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use lru::LruCache;
 use tremor_script::prelude::*;
 use window::TimeWindow;
@@ -194,11 +194,7 @@ impl Operator for Grouper {
         }
     }
 
-    fn metrics(
-        &self,
-        tags: &HashMap<Cow<'static, str>, Value<'static>>,
-        timestamp: u64,
-    ) -> Result<Vec<Value<'static>>> {
+    fn metrics(&self, tags: &Object<'static>, timestamp: u64) -> Result<Vec<Value<'static>>> {
         let mut res = Vec::with_capacity(self.buckets.len() * 2);
         if !self.buckets.is_empty() {
             let mut tags = tags.clone();
@@ -297,7 +293,7 @@ mod test {
         assert_eq!(port, "out");
         assert_eq!(e, event3);
 
-        let mut m = op.metrics(&HashMap::new(), 0).unwrap();
+        let mut m = op.metrics(&Object::default(), 0).unwrap();
         let overflow = m.pop().unwrap();
         let pass = m.pop().unwrap();
         assert!(m.is_empty());

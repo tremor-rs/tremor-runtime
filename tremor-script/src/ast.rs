@@ -65,7 +65,7 @@ pub(crate) use analyzer::*;
 pub use base_expr::BaseExpr;
 use beef::Cow;
 pub use deploy::*;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
 use std::{collections::BTreeMap, mem};

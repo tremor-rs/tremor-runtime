@@ -42,7 +42,7 @@ fn record() {
     };
 
     let r = super::Record {
-        base: crate::Object::new(),
+        base: crate::Object::default(),
         mid: NodeMeta::dummy(),
         fields: vec![f1, f2],
     };
@@ -61,7 +61,7 @@ fn as_record() {
     assert!(i.as_record().is_none());
     let i = ImutExpr::Record(Record {
         mid: Box::new(i.meta().clone()),
-        base: Object::new(),
+        base: Object::default(),
         fields: Fields::new(),
     });
     assert!(i.as_record().is_some());

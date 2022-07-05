@@ -14,6 +14,7 @@
 
 use crate::{Error, Object, Value};
 use beef::Cow;
+use hashbrown::hash_map::Iter;
 use serde::de::{EnumAccess, IntoDeserializer, VariantAccess};
 use serde_ext::de::{
     self, Deserialize, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor,
@@ -239,7 +240,7 @@ impl<'de, 'value> SeqAccess<'de> for Array<'value, 'de> {
 }
 
 struct ObjectAccess<'de, 'value: 'de> {
-    i: halfbrown::Iter<'de, Cow<'value, str>, Value<'value>>,
+    i: Iter<'de, Cow<'value, str>, Value<'value>>,
     v: &'de Value<'value>,
 }
 
@@ -513,7 +514,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     {
         let size = map.size_hint().unwrap_or_default();
 
-        let mut m = Object::with_capacity(size);
+        let mut m = Object::with_capacity_and_hasher(size, fxhash::FxBuildHasher::default());
         while let Some(k) = map.next_key::<&str>()? {
             let v = map.next_value()?;
             m.insert(k.into(), v);

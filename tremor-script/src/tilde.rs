@@ -23,7 +23,7 @@
 //  '{}' -> json|| => Ok({})
 //  Predicate for json||: "is valid json"
 //  '{blarg' -> json|| =>
-use halfbrown::{hashmap, HashMap};
+use hashbrown::HashMap;
 
 use crate::{datetime, grok::Pattern as GrokPattern, EventContext, Object, Value};
 use crate::{grok::PATTERNS_FILE_DEFAULT_PATH, prelude::*};
@@ -582,7 +582,7 @@ impl Extractor {
 
                 Self::Re { compiled, .. } => compiled.captures(s).map_or(NoMatch, |caps| {
                     if result_needed {
-                        let matches: HashMap<beef::Cow<str>, Value> = compiled
+                        let matches: Object = compiled
                             .capture_names()
                             .flatten()
                             .filter_map(|n| {
@@ -673,14 +673,21 @@ impl<'cidr> From<Cidr>
 {
     fn from(x: Cidr) -> Self {
         match x.0 {
-            IpCidr::V4(y) => hashmap!(
-                       "prefix".into() => Value::from(y.get_prefix_as_u8_array().to_vec()),
-                       "mask".into() => Value::from(y.get_mask_as_u8_array().to_vec()),
-            ),
-            IpCidr::V6(y) => hashmap!(
-                       "prefix".into() => Value::from(y.get_prefix_as_u16_array().to_vec()),
-                       "mask".into() => Value::from(y.get_mask_as_u16_array().to_vec()),
-            ),
+            IpCidr::V4(y) => maplit::hashmap!(
+                       "prefix" => Value::from(y.get_prefix_as_u8_array().to_vec()),
+                       "mask" => Value::from(y.get_mask_as_u8_array().to_vec()),
+            )
+            .into_iter()
+            .map(|(k, v)| (k.into(), v.into()))
+            .collect(),
+
+            IpCidr::V6(y) => maplit::hashmap!(
+                       "prefix" => Value::from(y.get_prefix_as_u16_array().to_vec()),
+                       "mask" => Value::from(y.get_mask_as_u16_array().to_vec()),
+            )
+            .into_iter()
+            .map(|(k, v)| (k.into(), v.into()))
+            .collect(),
         }
     }
 }

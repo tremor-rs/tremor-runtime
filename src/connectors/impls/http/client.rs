@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use async_std::channel::{bounded, Receiver, Sender};
 use either::Either;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use http_client::h1::H1Client;
 use http_client::HttpClient;
 use http_types::Method;

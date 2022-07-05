@@ -716,7 +716,6 @@ fn select_nowin_nogrp_whrt_havf() -> Result<()> {
 
 #[test]
 fn select_nowin_nogrp_whrt_havbad() -> Result<()> {
-    use halfbrown::hashmap;
     let target = test_target();
     let mut stmt_ast = test_stmt(target);
     stmt_ast.maybe_where = Some(ImutExpr::from(ast::Literal {
@@ -725,8 +724,8 @@ fn select_nowin_nogrp_whrt_havbad() -> Result<()> {
     }));
     stmt_ast.maybe_having = Some(ImutExpr::from(Literal {
         mid: mid(),
-        value: Value::from(hashmap! {
-            "snot".into() => "badger".into(),
+        value: Value::from(maplit::hashmap! {
+            "snot" => "badger".into(),
         }),
     }));
 
@@ -801,9 +800,9 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
         Some(defn) => defn,
         other => return Err(format!("Didnt get a window defn, got: {:?}", other).into()),
     };
-    let mut params = halfbrown::HashMap::with_capacity(1);
+    let mut params = hashbrown::HashMap::with_capacity(1);
     params.insert("size".to_string(), Value::from(3));
-    let with = dbg!(window_defn.params.render())?;
+    let with = window_defn.params.render()?;
     let interval = with
         .get("interval")
         .and_then(Value::as_u64)

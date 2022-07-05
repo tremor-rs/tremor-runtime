@@ -40,7 +40,7 @@ use crate::{
     AggrType, EventContext, Return,
 };
 use beef::Cow;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use tremor_common::time::nanotime;
 use tremor_value::literal;
 

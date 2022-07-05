@@ -4,11 +4,7 @@
 # useful to pass these environment variables into the build environment from
 # the calling shell
 [build.env]
-passthrough = [
-    "RUST_BACKTRACE",
-    "RUST_LOG",
-    "RUSTFLAGS",
-]
+passthrough = ["RUST_BACKTRACE", "RUST_LOG", "RUSTFLAGS"]
 
 # For the targets below, override cross's default images with our own, since our
 # dependencies like snmalloc do not build successfuly there currently. So we

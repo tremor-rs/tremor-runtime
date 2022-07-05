@@ -22,10 +22,10 @@ pub mod r#static;
 
 use crate::{Error, Result};
 use beef::Cow;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use simd_json::prelude::*;
 use simd_json::{AlignedBuf, Deserializer, Node, StaticNode};
-use std::{borrow::Borrow, convert::TryInto, fmt};
+use std::{borrow::Borrow, convert::TryInto, fmt, hash::BuildHasherDefault};
 use std::{cmp::Ord, hash::Hash};
 use std::{
     cmp::Ordering,
@@ -36,7 +36,8 @@ pub use crate::serde::to_value;
 pub use r#static::StaticValue;
 
 /// Representation of a JSON object
-pub type Object<'value> = HashMap<Cow<'value, str>, Value<'value>>;
+pub type Object<'value> =
+    HashMap<Cow<'value, str>, Value<'value>, BuildHasherDefault<fxhash::FxHasher>>;
 /// Bytes
 pub type Bytes<'value> = Cow<'value, [u8]>;
 
@@ -364,7 +365,10 @@ impl<'value> Builder<'value> for Value<'value> {
     #[inline]
     #[must_use]
     fn object_with_capacity(capacity: usize) -> Self {
-        Self::Object(Box::new(Object::with_capacity(capacity)))
+        Self::Object(Box::new(Object::with_capacity_and_hasher(
+            capacity,
+            fxhash::FxBuildHasher::default(),
+        )))
     }
 }
 
@@ -379,18 +383,22 @@ impl<'value> Mutable for Value<'value> {
     }
     #[inline]
     #[must_use]
-    fn as_object_mut(&mut self) -> Option<&mut HashMap<<Self as ValueAccess>::Key, Self>> {
+    fn as_object_mut(
+        &mut self,
+    ) -> Option<&mut HashMap<<Self as ValueAccess>::Key, Self, BuildHasherDefault<fxhash::FxHasher>>>
+    {
         match self {
-            Self::Object(m) => Some(m),
+            Self::Object(m) => Some(m.as_mut()),
             _ => None,
         }
     }
 }
+
 impl<'value> ValueAccess for Value<'value> {
     type Target = Self;
     type Key = Cow<'value, str>;
     type Array = Vec<Self>;
-    type Object = HashMap<Self::Key, Self>;
+    type Object = Object<'value>;
 
     #[inline]
     #[must_use]
@@ -468,7 +476,7 @@ impl<'value> ValueAccess for Value<'value> {
 
     #[inline]
     #[must_use]
-    fn as_object(&self) -> Option<&HashMap<Self::Key, Self>> {
+    fn as_object(&self) -> Option<&HashMap<Self::Key, Self, BuildHasherDefault<fxhash::FxHasher>>> {
         match self {
             Self::Object(m) => Some(m),
             _ => None,
@@ -597,12 +605,12 @@ impl<'de> ValueDeserializer<'de> {
 
     #[cfg_attr(not(feature = "no-inline"), inline(always))]
     fn parse_map(&mut self, len: usize) -> Value<'de> {
-        let mut res = Object::with_capacity(len);
+        let mut res = Object::with_capacity_and_hasher(len, BuildHasherDefault::default());
 
         for _ in 0..len {
             // We know the tape is sane
             if let Node::String(key) = unsafe { self.0.next_() } {
-                res.insert_nocheck(key.into(), self.parse());
+                res.insert(key.into(), self.parse());
             } else {
                 // ALLOW: we guarantee this in the tape
                 unreachable!();
@@ -621,8 +629,8 @@ mod test {
 
     #[test]
     fn test_cmp_map() {
-        let mut o1 = Object::new();
-        let mut o2 = Object::new();
+        let mut o1 = Object::default();
+        let mut o2 = Object::default();
 
         assert_eq!(cmp_map(&o1, &o2), Ordering::Equal);
         o1.insert("snot".into(), 1.into());
@@ -1214,7 +1222,7 @@ mod test {
 
     #[test]
     fn conversions_object() {
-        let v = Value::from(Object::new());
+        let v = Value::from(Object::default());
         assert!(v.is_object());
         assert_eq!(v.value_type(), ValueType::Object);
         let v = Value::from("no object");

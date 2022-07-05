@@ -26,7 +26,7 @@ use crate::{
     registry::{Aggr as AggrRegistry, Registry},
 };
 use beef::Cow;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use std::{collections::BTreeSet, mem};
 
 /// ordered collection of warnings

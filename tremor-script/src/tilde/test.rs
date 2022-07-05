@@ -15,7 +15,6 @@
 use super::ExtractorResult::{Match, MatchNull, NoMatch};
 use super::*;
 use crate::Value;
-use halfbrown::hashmap;
 
 use matches::assert_matches;
 #[test]
@@ -29,9 +28,9 @@ fn test_reg_extractor() {
                     &Value::from("foo=bar&baz=bat&"),
                     &EventContext::new(0, None)
                 ),
-                Match(Value::from(hashmap! {
-                    "key".into() => Value::from(vec!["foo", "baz"]),
-                    "val".into() => Value::from(vec!["bar", "bat"])
+                Match(Value::from(maplit::hashmap! {
+                    "key" => Value::from(vec!["foo", "baz"]),
+                    "val" => Value::from(vec!["bar", "bat"])
                 }))
             );
         }
@@ -45,8 +44,8 @@ fn test_re_extractor() {
         Extractor::Re { .. } => {
             assert_eq!(
                 ex.extract(true, &Value::from("foobar"), &EventContext::new(0, None)),
-                Match(Value::from(hashmap! {
-                "snot".into() => Value::from("bar") }))
+                Match(Value::from(maplit::hashmap! {
+                "snot" => Value::from("bar") }))
             );
         }
         _ => unreachable!(),
@@ -59,9 +58,9 @@ fn test_kv_extractor() {
         Extractor::Kv { .. } => {
             assert_eq!(
                 ex.extract(true, &Value::from("a:b c:d"), &EventContext::new(0, None)),
-                Match(Value::from(hashmap! {
-                    "a".into() => "b".into(),
-                   "c".into() => "d".into()
+                Match(Value::from(maplit::hashmap! {
+                    "a" => "b".into(),
+                   "c" => "d".into()
                 }))
             );
         }
@@ -80,9 +79,9 @@ fn test_json_extractor() {
                     &Value::from(r#"{"a":"b", "c":"d"}"#),
                     &EventContext::new(0, None)
                 ),
-                Match(Value::from(hashmap! {
-                    "a".into() => "b".into(),
-                    "c".into() => "d".into()
+                Match(Value::from(maplit::hashmap! {
+                    "a" => "b".into(),
+                    "c" => "d".into()
                 }))
             );
         }
@@ -183,9 +182,9 @@ fn test_cidr_extractor() {
                     &Value::from("192.168.1.0"),
                     &EventContext::new(0, None)
                 ),
-                Match(Value::from(hashmap! (
-                    "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
-                    "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()])
+                Match(Value::from(maplit::hashmap! (
+                    "prefix" => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
+                    "mask" => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()])
 
 
                 )))
@@ -196,9 +195,9 @@ fn test_cidr_extractor() {
                     &Value::from("192.168.1.0/24"),
                     &EventContext::new(0, None)
                 ),
-                Match(Value::from(hashmap! (
-                                    "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
-                                    "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 0.into()])
+                Match(Value::from(maplit::hashmap! (
+                                    "prefix" => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
+                                    "mask" => Value::from(vec![Value::from(255), 255.into(), 255.into(), 0.into()])
 
 
                 )))
@@ -210,9 +209,9 @@ fn test_cidr_extractor() {
                     &Value::from("192.168.1.0"),
                     &EventContext::new(0, None)
                 ),
-                Match(Value::from(hashmap!(
-                            "prefix".into() => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
-                            "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()])
+                Match(Value::from(maplit::hashmap!(
+                            "prefix" => Value::from(vec![Value::from(192), 168.into(), 1.into(), 0.into()]),
+                            "mask" => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()])
                 )))
             );
 
@@ -222,9 +221,9 @@ fn test_cidr_extractor() {
                     &Value::from("2001:4860:4860:0000:0000:0000:0000:8888"),
                     &EventContext::new(0, None)
                 ),
-                Match(Value::from(hashmap!(
-                            "prefix".into() => Value::from(vec![Value::from(8193),  18528.into(), 18528.into(), 0.into(), 0.into(), 0.into(), 0.into(), 34952.into()]),
-                            "mask".into() => Value::from(vec![Value::from(65535), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into()])
+                Match(Value::from(maplit::hashmap!(
+                            "prefix" => Value::from(vec![Value::from(8193),  18528.into(), 18528.into(), 0.into(), 0.into(), 0.into(), 0.into(), 34952.into()]),
+                            "mask" => Value::from(vec![Value::from(65535), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into(), 65535.into()])
                 )))
             );
         }
@@ -240,9 +239,9 @@ fn test_cidr_extractor() {
                     &Value::from("10.22.0.254"),
                     &EventContext::new(0, None)
                 ),
-                Match(Value::from(hashmap! (
-                        "prefix".into() => Value::from(vec![Value::from(10), 22.into(), 0.into(), 254.into()]),
-                        "mask".into() => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()]),
+                Match(Value::from(maplit::hashmap! (
+                        "prefix" => Value::from(vec![Value::from(10), 22.into(), 0.into(), 254.into()]),
+                        "mask" => Value::from(vec![Value::from(255), 255.into(), 255.into(), 255.into()]),
                 )))
             );
 
@@ -269,11 +268,11 @@ fn test_influx_extractor() {
                 &Value::from("wea\\ ther,location=us-midwest temperature=82 1465839830100400200"),
                 &EventContext::new(0, None)
             ),
-            Match(Value::from(hashmap! (
-                   "measurement".into() => "wea ther".into(),
-                   "tags".into() => Value::from(hashmap!("location".into() => "us-midwest".into())),
-                   "fields".into() => Value::from(hashmap!("temperature".into() => 82.0_f64.into())),
-                   "timestamp".into() => Value::from(1_465_839_830_100_400_200_u64)
+            Match(Value::from(maplit::hashmap! (
+                   "measurement" => "wea ther".into(),
+                   "tags" => Value::from(maplit::hashmap!("location" => "us-midwest".into())),
+                   "fields" => Value::from(maplit::hashmap!("temperature" => 82.0_f64.into())),
+                   "timestamp" => Value::from(1_465_839_830_100_400_200_u64)
             )))
         ),
         _ => unreachable!(),

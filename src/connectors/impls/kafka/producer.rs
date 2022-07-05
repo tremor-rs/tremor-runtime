@@ -26,7 +26,7 @@ use async_std::channel::{bounded, Sender};
 use async_std::prelude::FutureExt;
 use async_std::task;
 use beef::Cow;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use rdkafka::config::{ClientConfig, FromClientConfigAndContext};
 use rdkafka::producer::{DeliveryFuture, Producer};
 use rdkafka::{
@@ -106,7 +106,7 @@ impl ConnectorBuilder for Builder {
         config
             .rdkafka_options
             .iter()
-            .flat_map(halfbrown::HashMap::iter)
+            .flat_map(hashbrown::HashMap::iter)
             .for_each(|(k, v)| {
                 producer_config.set(k, v);
             });
@@ -133,7 +133,7 @@ impl ClientContext for TremorProducerContext {
     fn stats(&self, stats: Statistics) {
         if stats.client_type.eq("producer") {
             let timestamp = stats.time as u64 * 1_000_000_000;
-            let mut fields = HashMap::with_capacity(3);
+            let mut fields = Object::with_capacity_and_hasher(3, Default::default());
             fields.insert(Cow::const_str("tx_msgs"), Value::from(stats.txmsgs));
             fields.insert(
                 Cow::const_str("tx_msg_bytes"),
@@ -141,7 +141,7 @@ impl ClientContext for TremorProducerContext {
             );
             fields.insert(Cow::const_str("queued_msgs"), Value::from(stats.msg_cnt));
 
-            let mut tags = HashMap::with_capacity(1);
+            let mut tags = Object::with_capacity_and_hasher(1, Default::default());
             tags.insert(
                 Cow::const_str("connector"),
                 Value::from(self.ctx.alias.clone()),

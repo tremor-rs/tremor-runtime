@@ -31,8 +31,8 @@ use tremor_pipeline::{
 use tremor_script::{ast::DeployEndpoint, highlighter::Dumb, prelude::BaseExpr};
 
 const TICK_MS: u64 = 100;
-type Inputs = halfbrown::HashMap<DeployEndpoint, (bool, InputTarget)>;
-type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(DeployEndpoint, OutputTarget)>>;
+type Inputs = hashbrown::HashMap<DeployEndpoint, (bool, InputTarget)>;
+type Dests = hashbrown::HashMap<Cow<'static, str>, Vec<(DeployEndpoint, OutputTarget)>>;
 type EventSet = Vec<(Cow<'static, str>, Event)>;
 /// Address for a pipeline
 #[derive(Clone)]
@@ -230,7 +230,7 @@ mod report {
     pub(crate) struct StatusReport {
         pub(crate) state: State,
         pub(crate) inputs: Vec<InputReport>,
-        pub(crate) outputs: halfbrown::HashMap<String, Vec<OutputReport>>,
+        pub(crate) outputs: hashbrown::HashMap<String, Vec<OutputReport>>,
     }
 
     #[derive(Debug, Clone, PartialEq)]
@@ -451,8 +451,8 @@ pub(crate) async fn pipeline_task(
 ) -> Result<()> {
     pipeline.id = alias.clone();
 
-    let mut dests: Dests = halfbrown::HashMap::new();
-    let mut inputs: Inputs = halfbrown::HashMap::new();
+    let mut dests: Dests = hashbrown::HashMap::new();
+    let mut inputs: Inputs = hashbrown::HashMap::new();
     let mut eventset = Vec::new();
 
     let mut state: State = State::Initializing;
@@ -591,7 +591,7 @@ pub(crate) async fn pipeline_task(
                     .iter()
                     .map(|(k, v)| InputReport::new(k, &v.1))
                     .collect::<Vec<_>>();
-                let outputs: halfbrown::HashMap<String, Vec<OutputReport>> = dests
+                let outputs: hashbrown::HashMap<String, Vec<OutputReport>> = dests
                     .iter()
                     .map(|(k, v)| {
                         (

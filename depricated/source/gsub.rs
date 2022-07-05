@@ -154,7 +154,7 @@ impl Source for Int {
         &mut self,
         _event: Event,
         _codec: &dyn Codec,
-        _codec_map: &halfbrown::HashMap<String, Box<dyn Codec>>,
+        _codec_map: &hashbrown::HashMap<String, Box<dyn Codec>>,
     ) -> Result<()> {
         Ok(())
     }

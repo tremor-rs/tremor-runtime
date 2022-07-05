@@ -25,7 +25,7 @@
 
 use crate::sink::prelude::*;
 use async_std::io;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use std::time::{Duration, Instant};
 
 #[derive(Debug, Clone)]

@@ -24,7 +24,7 @@
 
 use crate::common::postgres::{json_to_record, Record};
 use crate::sink::prelude::*;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use postgres::{Client, NoTls};
 
 pub(crate) struct Postgres {

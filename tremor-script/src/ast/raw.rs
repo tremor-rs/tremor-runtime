@@ -37,7 +37,7 @@ use crate::{
 };
 pub use base_expr::BaseExpr;
 use beef::Cow;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 pub use query::*;
 use serde::Serialize;
 
@@ -338,7 +338,7 @@ impl<'script> Upable<'script> for RecordRaw<'script> {
     type Target = Record<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(Record {
-            base: crate::Object::new(),
+            base: crate::Object::default(),
             mid: self.mid,
             fields: self.fields.up(helper)?,
         })

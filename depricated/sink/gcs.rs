@@ -28,7 +28,7 @@ use crate::connectors::gcp::{
 };
 use crate::connectors::qos::{self, QoSFacilities, SinkQoS};
 use crate::sink::prelude::*;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use http::HeaderMap;
 use tremor_pipeline::{EventIdGenerator, OpMeta};
 use tremor_value::Value;

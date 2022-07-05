@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 
 const MIME_TYPES: [(&str, &str); 9] = [
     ("application/json", "json"),

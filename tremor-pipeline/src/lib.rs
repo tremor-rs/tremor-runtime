@@ -33,7 +33,7 @@ use crate::errors::{ErrorKind, Result};
 use async_broadcast::{broadcast, Receiver, Sender};
 use beef::Cow;
 use executable_graph::NodeConfig;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use lazy_static::lazy_static;
 use petgraph::graph;
 use simd_json::OwnedValue;

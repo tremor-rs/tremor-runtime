@@ -24,7 +24,7 @@ use async_broadcast::{broadcast, Receiver as BroadcastReceiver, Sender as Broadc
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::{FutureExt, StreamExt};
 use async_std::task::{self, JoinHandle};
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use indexmap::IndexMap;
 use log::Level::Debug;
 use rdkafka::config::ClientConfig;
@@ -116,7 +116,7 @@ impl ConnectorBuilder for Builder {
         config
             .rdkafka_options
             .iter()
-            .flat_map(halfbrown::HashMap::iter)
+            .flat_map(hashbrown::HashMap::iter)
             .for_each(|(k, v)| {
                 client_config.set(k, v);
             });
@@ -151,7 +151,7 @@ impl ClientContext for TremorConsumerContext {
             let timestamp = stats.time as u64 * 1_000_000_000;
 
             // consumer stats
-            let mut fields = HashMap::with_capacity(4);
+            let mut fields = Object::with_capacity_and_hasher(4, Default::default());
             fields.insert(Cow::const_str("rx_msgs"), Value::from(stats.rxmsgs));
             fields.insert(
                 Cow::const_str("rx_msg_bytes"),
@@ -172,7 +172,7 @@ impl ClientContext for TremorConsumerContext {
                 }
             }
             fields.insert(Cow::const_str("consumer_lag"), Value::from(consumer_lag));
-            let mut tags = HashMap::with_capacity(1);
+            let mut tags = Object::with_capacity_and_hasher(1, Default::default());
             tags.insert(
                 Cow::const_str("connector"),
                 Value::from(self.ctx.alias.clone()),

@@ -242,6 +242,21 @@ impl<'value> From<Object<'value>> for Value<'value> {
     }
 }
 
+impl<T> From<std::collections::HashMap<T, Value<'static>>> for Value<'static>
+where
+    T: ToString,
+{
+    #[inline]
+    #[must_use]
+    fn from(map: std::collections::HashMap<T, Value<'static>>) -> Self {
+        Value::from(
+            map.into_iter()
+                .map(|(k, v)| (Cow::from(k.to_string()), v))
+                .collect::<Object>(),
+        )
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::Value;

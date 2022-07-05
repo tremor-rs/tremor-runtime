@@ -48,7 +48,7 @@ use async_std::{
 };
 use beef::Cow;
 use futures::Future;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use std::{fmt::Display, sync::atomic::Ordering, time::Duration};
 use tremor_common::ids::{ConnectorId, ConnectorIdGen, SourceId};
 use tremor_common::ports::{ERR, IN, OUT};

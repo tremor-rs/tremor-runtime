@@ -24,7 +24,7 @@ use crate::op::prelude::trickle::window::{GroupWindow, SelectCtx, Trait};
 use crate::{errors::Result, SignalKind};
 use crate::{op::prelude::*, EventIdGenerator};
 use crate::{Event, EventId, Operator};
-use halfbrown::Entry;
+use hashbrown::hash_map::Entry;
 use tremor_common::stry;
 
 use tremor_script::{

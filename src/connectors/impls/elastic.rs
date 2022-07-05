@@ -40,7 +40,7 @@ use elasticsearch::{
     params::{Refresh, VersionType},
     Bulk, BulkDeleteOperation, BulkOperation, BulkOperations, BulkParts, Elasticsearch,
 };
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use tremor_common::time::nanotime;
 use tremor_script::utils::sorted_serialize;
 use tremor_value::value::StaticValue;

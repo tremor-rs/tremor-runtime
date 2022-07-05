@@ -121,14 +121,14 @@ impl BInflux {
         let measurement = read_string(&mut c)?;
         let timestamp = c.read_u64::<BigEndian>()?;
         let tag_count = c.read_u16::<BigEndian>()? as usize;
-        let mut tags = Object::with_capacity(tag_count);
+        let mut tags = Object::with_capacity_and_hasher(tag_count, Default::default());
         for _i in 0..tag_count {
             let key = read_string(&mut c)?;
             let value = read_string(&mut c)?;
             tags.insert(key, Value::from(value));
         }
         let field_count = c.read_u16::<BigEndian>()? as usize;
-        let mut fields = Object::with_capacity(field_count);
+        let mut fields = Object::with_capacity_and_hasher(field_count, Default::default());
         for _i in 0..field_count {
             let key = read_string(&mut c)?;
             let kind = c.read_u8()?;

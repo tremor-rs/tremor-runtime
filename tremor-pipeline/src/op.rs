@@ -26,10 +26,9 @@ use self::prelude::OUT;
 use super::{Event, NodeConfig};
 use crate::errors::Result;
 use beef::Cow;
-use halfbrown::HashMap;
 use regex::Regex;
 use tremor_common::ids::OperatorId;
-use tremor_script::Value;
+use tremor_script::{Object, Value};
 
 lazy_static::lazy_static! {
     static ref LINE_REGEXP: Regex = {
@@ -127,11 +126,7 @@ pub trait Operator: std::fmt::Debug + Send + Sync {
     ///
     /// # Errors
     /// if metrics can not be generated
-    fn metrics(
-        &self,
-        _tags: &HashMap<Cow<'static, str>, Value<'static>>,
-        _timestamp: u64,
-    ) -> Result<Vec<Value<'static>>> {
+    fn metrics(&self, _tags: &Object<'static>, _timestamp: u64) -> Result<Vec<Value<'static>>> {
         // Make the trait signature nicer
         Ok(Vec::new())
     }

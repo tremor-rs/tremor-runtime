@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use beef::Cow;
-use halfbrown::HashMap;
 use tremor_common::ports::{ERR, IN, OUT};
 use tremor_pipeline::metrics::{value, value_count};
 use tremor_pipeline::MetricsSender;
@@ -141,9 +140,9 @@ pub(crate) fn make_event_count_metrics_payload(
     count: u64,
     artefact_id: &str,
 ) -> EventPayload {
-    let mut tags: HashMap<Cow<'static, str>, Value<'static>> = HashMap::with_capacity(2);
-    tags.insert_nocheck(Cow::const_str("connector"), artefact_id.to_string().into());
-    tags.insert_nocheck(Cow::const_str("port"), port.into());
+    let mut tags = Object::with_capacity_and_hasher(2, Default::default());
+    tags.insert(Cow::const_str("connector"), artefact_id.to_string().into());
+    tags.insert(Cow::const_str("port"), port.into());
 
     let value = value_count(Cow::from("connector_events"), tags, count, timestamp);
     // full metrics payload
@@ -154,8 +153,8 @@ pub(crate) fn make_event_count_metrics_payload(
 #[must_use]
 pub(crate) fn make_metrics_payload(
     name: &'static str,
-    fields: HashMap<Cow<'static, str>, Value<'static>>,
-    tags: HashMap<Cow<'static, str>, Value<'static>>,
+    fields: Object<'static>,
+    tags: Object<'static>,
     timestamp: u64,
 ) -> EventPayload {
     let value = value(Cow::const_str(name), tags, fields, timestamp);

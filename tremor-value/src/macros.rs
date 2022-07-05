@@ -183,7 +183,7 @@ macro_rules! literal_internal {
     (@object $object:ident [@entries] () () ()) => {};
 
     // Count the number of entries to insert.
-    // Modified version of https://docs.rs/halfbrown/0.1.11/src/halfbrown/macros.rs.html#46-62
+    // Modified version of https://docs.rs/hashbrown/0.1.11/src/hashbrown/macros.rs.html#46-62
     (@object @count [@entries $(($value:expr => $($key:tt)+))*]) => {
         <[()]>::len(&[$(literal_internal!(@object @count @single ($($key)+))),*])
     };
@@ -191,8 +191,10 @@ macro_rules! literal_internal {
 
     // Done. Insert all entries from the stack
     (@object $object:ident [@entries $(($value:expr => $($key:tt)+))*] () () ()) => {
-        let len = literal_internal!(@object @count [@entries $(($value:expr => $($key:tt)+))*]);
-        $object = $crate::Object::with_capacity(len);
+        // FIXME
+        // let len = literal_internal!(@object @count [@entries $(($value:expr => $($key:tt)+))*]);
+        //len, Default::default()
+        $object = $crate::Object::default();
         $(
             // ALLOW: this is a macro, we don't care about the return value
             let _ = $object.insert(($($key)+).into(), $value);

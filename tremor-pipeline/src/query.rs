@@ -25,7 +25,7 @@ use crate::{
     Operator, OperatorNode, State, METRICS_CHANNEL,
 };
 use beef::Cow;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use indexmap::IndexMap;
 use petgraph::{
     algo::is_cyclic_directed,

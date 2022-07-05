@@ -24,7 +24,7 @@
 use std::io::{Cursor, Read, Write};
 
 use chrono::prelude::Utc;
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use http_types::headers::{CONTENT_ENCODING, CONTENT_TYPE};
 use libflate::{finish, gzip};
 use log::debug;

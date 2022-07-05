@@ -15,7 +15,7 @@
 
 use crate::source::prelude::*;
 use async_std::channel::{Sender, TryRecvError};
-use halfbrown::HashMap;
+use hashbrown::HashMap;
 use surf::middleware::{Middleware, Next};
 use surf::{Client, Request, Response};
 

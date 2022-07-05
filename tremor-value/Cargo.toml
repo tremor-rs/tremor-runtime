@@ -12,13 +12,14 @@ version = "0.12.4"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+value-trait = { features = ["custom-types", "hashbrown"], version = "*" }
+fxhash = "*"
 base64 = "0.13"
 beef = "0.5"
-halfbrown = { version = "0.1", features = ["fxhash"] }
 serde = "1.0"
 simd-json = "0.5"
 simd-json-derive = "0.3"
-value-trait = { version = "0.2", features = ["custom-types"] }
+hashbrown = "0.12"
 
 [dev-dependencies]
 float-cmp = "0.9"
