@@ -132,13 +132,15 @@ impl TargetProcess {
             buf.canonicalize()?
         };
         // env var replacement
-        let mut args: Box<dyn Iterator<Item = String>> = Box::new(args.iter().cloned());
-        for (var, value) in env {
-            args = Box::new(args.map(|s| s.replace(&format!("${}", var.clone()), value)));
-        }
-        // replace $PWD if not provided yet in env
-        let pwd = current_dir.to_string_lossy();
-        let args = args.map(|s| s.replace("$PWD", &pwd)).collect::<Vec<_>>();
+        let args = Box::new(args.iter().cloned())
+            .map(|mut s| {
+                for (var, value) in env {
+                    s = s.replace(&format!("${var}"), value);
+                }
+                // replace $PWD if not provided yet in env
+                s.replace("$PWD", &current_dir.to_string_lossy())
+            })
+            .collect::<Vec<_>>();
         let cmdline = format!(
             "{}{} {}",
             env.iter()
