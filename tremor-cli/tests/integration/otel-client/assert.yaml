@@ -1,0 +1,11 @@
+name: otel_client connector
+status: 0
+asserts:
+  - source: before.err.0.log
+    contains: 
+      - "Body: snot badger"
+      - "Status message : woot"
+  - source: "fg.err.log"
+    contains:
+      - "All required CB events received."
+      - "Got acks: [0, 1, 2, 3]"

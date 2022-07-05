@@ -1,5 +1,8 @@
 # Changelog
 
+### New features
+- Add reverse functions and tests for arrays and strings, add sort test for arrays
+
 ## [0.12.4]
 
 ### Fixes

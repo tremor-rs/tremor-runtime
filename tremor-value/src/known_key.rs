@@ -18,8 +18,8 @@ use std::fmt;
 use std::hash::{BuildHasher, Hash, Hasher};
 use value_trait::{Mutable, Value as ValueTrait, ValueAccess, ValueType};
 
-use abi_stable::std_types::{map::RRawEntryMut, RCowStr, RHashMap};
-use tremor_common::pdk::beef_to_rcow_str;
+use abi_stable::std_types::{map::RRawEntryMut, RCowStr};
+use tremor_common::pdk::{beef_to_rcow_str, RHashMap};
 
 /// Well known key that can be looked up in a `Value` faster.
 /// It achives this by memorizing the hash.
@@ -64,12 +64,13 @@ impl<'key> From<RCowStr<'key>> for KnownKey<'key> {
 }
 impl<'key> From<beef::Cow<'key, str>> for KnownKey<'key> {
     fn from(key: beef::Cow<'key, str>) -> Self {
+        let key = beef_to_rcow_str(key);
         let hash_builder = halfbrown::DefaultHashBuilder::default();
         let mut hasher = hash_builder.build_hasher();
         key.hash(&mut hasher);
         Self {
             hash: hasher.finish(),
-            key: beef_to_rcow_str(key),
+            key,
         }
     }
 }

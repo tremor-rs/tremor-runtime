@@ -42,7 +42,7 @@ use abi_stable::{
         RStr,
     },
 };
-use async_ffi::{BorrowingFfiFuture, FutureExt as FfiFutureExt};
+use async_ffi::{BorrowingFfiFuture, FutureExt as _};
 use std::future;
 use tremor_common::pdk::RResult;
 

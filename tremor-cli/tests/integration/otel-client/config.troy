@@ -1,0 +1,31 @@
+define flow otel
+flow
+  use tremor::pipelines;
+  use std::time::nanos;
+
+  define connector otel_c from otel_client
+  with
+    config = {
+      "url": "127.0.0.1:4317"
+    }
+  end;
+  create connector otel_c;
+
+  define connector input from cb
+  with
+    codec = "json",
+    config = {
+      "path": "in.json",
+      "timeout": nanos::from_seconds(1)
+    }
+  end;
+  create connector input;
+
+  create pipeline passthrough from pipelines::passthrough;
+
+  connect /connector/input to /pipeline/passthrough;
+  connect /pipeline/passthrough to /connector/otel_c;
+
+end;
+
+deploy flow otel;

@@ -139,7 +139,7 @@ impl ReconnectStrategy for RetryWithBackoff {
 /// describing the number of previous connection attempts
 #[repr(C)]
 #[derive(Debug, Default, PartialEq, Eq, Clone, StableAbi)]
-pub(crate) struct Attempt {
+pub struct Attempt {
     overall: u64,
     success: u64,
     since_last_success: u64,

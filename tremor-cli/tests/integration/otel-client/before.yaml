@@ -1,0 +1,18 @@
+- dir: .
+  cmd: docker
+  args:
+    - "run"
+    - "--name"
+    - "tremor-otel-blabla-unique"
+    - "-p4317:4317"
+    - "-p13133:13133"
+    - "--mount"
+    - "type=bind,source=$PWD/before/config.yaml,target=/etc/otel/config.yaml"
+    - "otel/opentelemetry-collector:0.54.0"
+    - "--config=file:/etc/otel/config.yaml"
+  await:
+    port-open: 
+      - "4317"
+    http-ok:
+      - "http://127.0.0.1:13133/"
+  max-await-secs: 120

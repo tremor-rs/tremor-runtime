@@ -19,6 +19,7 @@ use crate::{
     log_error,
     pipeline::{self, InputTarget},
     primerge::PriorityMerge,
+    system::BoxedKillSwitch,
 };
 use async_std::prelude::*;
 use async_std::{
@@ -204,6 +205,7 @@ impl Flow {
         operator_id_gen: &mut OperatorIdGen,
         connector_id_gen: &mut ConnectorIdGen,
         known_connectors: &Known,
+        kill_switch: &BoxedKillSwitch,
     ) -> Result<Self> {
         let mut pipelines = HashMap::new();
         let mut connectors = HashMap::new();
@@ -223,7 +225,8 @@ impl Flow {
                             })?;
                     connectors.insert(
                         ConnectorAlias::from(alias),
-                        connectors::spawn(alias, connector_id_gen, builder, config).await?,
+                        connectors::spawn(alias, connector_id_gen, builder, config, kill_switch)
+                            .await?,
                     );
                 }
                 ast::CreateTargetDefinition::Pipeline(defn) => {
@@ -815,6 +818,7 @@ mod tests {
                 &self,
                 _alias: &str,
                 _config: &ConnectorConfig,
+                _kill_switch: &BoxedKillSwitch,
             ) -> Result<Box<dyn Connector>> {
                 Ok(Box::new(FakeConnector {
                     tx: self.tx.clone(),
@@ -850,6 +854,8 @@ mod tests {
         end;
         deploy flow test;
         "#;
+        let (tx, _rx) = bounded(1);
+        let kill_switch = BoxedKillSwitch::from_value(tx, TD_Opaque);
         let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let deploy = deployable
             .deploy
@@ -869,6 +875,7 @@ mod tests {
             &mut operator_id_gen,
             &mut connector_id_gen,
             &known_connectors,
+            &kill_switch,
         )
         .await?;
 

@@ -138,7 +138,7 @@ pub(crate) type Postprocessor = NameWithConfig;
 /// Specific parts are catched in the `config` map.
 #[repr(C)]
 #[derive(Clone, Debug, Default, StableAbi)]
-pub(crate) struct Connector {
+pub struct Connector {
     /// Connector type
     pub connector_type: ConnectorType,
 

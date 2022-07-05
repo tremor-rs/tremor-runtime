@@ -19,10 +19,8 @@ use tremor_script::{
     prelude::*,
 };
 
-use abi_stable::std_types::{
-    RHashMap,
-    ROption::{RNone, RSome},
-};
+use abi_stable::std_types::ROption::{RNone, RSome};
+use tremor_common::pdk::RHashMap;
 
 #[derive(Debug)]
 pub(crate) struct TrickleOperator {

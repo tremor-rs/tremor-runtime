@@ -1,7 +1,7 @@
 use crate::{
     config::Connector as ConnectorConfig,
     connectors::{BoxedRawConnector, ConnectorType},
-    system::World,
+    system::BoxedKillSwitch,
 };
 use tremor_common::pdk::RResult;
 use tremor_value::Value;
@@ -34,7 +34,7 @@ pub struct ConnectorPlugin {
         id: RStr<'a>,
         raw_config: &'a ConnectorConfig,
         config: &'a Value,
-        world: ROption<World>,
+        kill_switch: &'a BoxedKillSwitch,
     )
         -> BorrowingFfiFuture<'a, RResult<BoxedRawConnector>>,
 }

@@ -49,9 +49,10 @@ use tremor_script::{
 };
 
 use abi_stable::{
-    std_types::{RHashMap, ROption, RVec, Tuple2},
+    std_types::{ROption, RVec, Tuple2},
     StableAbi,
 };
+use tremor_common::pdk::RHashMap;
 
 /// Pipeline Errors
 pub mod errors;

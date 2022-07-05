@@ -671,11 +671,11 @@ impl<'cidr> From<Cidr> for tremor_value::value::Object<'cidr> {
         match x.0 {
             IpCidr::V4(y) => {
                 let mut h = Object::with_capacity(2);
-                h.insert(
+                h.insert_nocheck(
                     "prefix".into(),
                     Value::from(y.get_prefix_as_u8_array().to_vec()),
                 );
-                h.insert(
+                h.insert_nocheck(
                     "mask".into(),
                     Value::from(y.get_mask_as_u8_array().to_vec()),
                 );
@@ -683,11 +683,11 @@ impl<'cidr> From<Cidr> for tremor_value::value::Object<'cidr> {
             }
             IpCidr::V6(y) => {
                 let mut h = Object::with_capacity(2);
-                h.insert(
+                h.insert_nocheck(
                     "prefix".into(),
                     Value::from(y.get_prefix_as_u16_array().to_vec()),
                 );
-                h.insert(
+                h.insert_nocheck(
                     "mask".into(),
                     Value::from(y.get_mask_as_u16_array().to_vec()),
                 );

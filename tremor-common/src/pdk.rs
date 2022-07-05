@@ -4,6 +4,12 @@ use abi_stable::std_types::{RCowSlice, RCowStr};
 pub type RError = abi_stable::std_types::SendRBoxError;
 /// The result type used for the PDK, from `abi_stable`
 pub type RResult<T> = abi_stable::std_types::RResult<T, RError>;
+/// The KnownKey optimization currently relies on a deterministic hasher. Thus,
+/// we must ensure that `RHashMap` always uses `halfbrown`'s hasher.
+///
+/// This can be removed after
+/// https://github.com/tremor-rs/tremor-runtime/issues/1812 is fixed.
+pub type RHashMap<K, V> = abi_stable::std_types::RHashMap<K, V, halfbrown::DefaultHashBuilder>;
 
 /// This can be used alongside [`abi_stable::rtry`] for error handling. Its
 /// difference is that it does an implicit conversion to `RResult`, which is

@@ -131,6 +131,16 @@ impl TargetProcess {
             };
             buf.canonicalize()?
         };
+        // env var replacement
+        let args = Box::new(args.iter().cloned())
+            .map(|mut s| {
+                for (var, value) in env {
+                    s = s.replace(&format!("${var}"), value);
+                }
+                // replace $PWD if not provided yet in env
+                s.replace("$PWD", &current_dir.to_string_lossy())
+            })
+            .collect::<Vec<_>>();
         let cmdline = format!(
             "{}{} {}",
             env.iter()

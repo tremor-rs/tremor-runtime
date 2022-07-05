@@ -35,7 +35,7 @@ use rustls::ServerConfig;
 use simd_json::ValueAccess;
 use std::sync::Arc;
 
-use crate::system::World;
+use crate::system::BoxedKillSwitch;
 use abi_stable::{
     export_root_module,
     prefix_type::PrefixTypeTrait,
@@ -93,7 +93,7 @@ pub fn from_config<'a>(
     id: RStr<'a>,
     _: &ConnectorConfig,
     config: &'a Value,
-    _: ROption<World>,
+    _: &'a BoxedKillSwitch,
 ) -> BorrowingFfiFuture<'a, RResult<BoxedRawConnector>> {
     async move {
         let config = ttry!(Config::new(config));

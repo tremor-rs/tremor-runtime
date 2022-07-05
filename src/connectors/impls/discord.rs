@@ -17,7 +17,10 @@
 mod handler;
 mod utils;
 
-use crate::connectors::{prelude::*, spawn_task, Context};
+use crate::{
+    connectors::{prelude::*, spawn_task, Context},
+    system::KillSwitch,
+};
 use async_std::{
     channel::{bounded, Receiver, Sender},
     task::JoinHandle,
@@ -49,6 +52,7 @@ impl ConnectorBuilder for Builder {
         _: &str,
         _: &ConnectorConfig,
         config: &Value,
+        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
 

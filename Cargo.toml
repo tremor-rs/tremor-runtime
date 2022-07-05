@@ -52,7 +52,7 @@ bytes = "1.1"
 chrono = "0.4"
 csv = "1.1"
 dashmap = "5.3"
-either = { version = "1.6", features = ["serde"] }
+either = { version = "1.7", features = ["serde"] }
 error-chain = "0.12"
 file-mode = "0.1"
 futures = "0.3.21"
@@ -201,10 +201,10 @@ prost-types = "0.9.0"
 tremor-otelapis = { version = "0.2.4" }
 
 # aws-s3
-aws-sdk-s3 = "0.14.0"
-aws-types = "0.14.0"
-aws-config = "0.14"
-aws-smithy-http = "0.44.0"
+aws-sdk-s3 = "0.15.0"
+aws-types = "0.15.0"
+aws-config = "0.15"
+aws-smithy-http = "0.45.0"
 
 # gcp
 googapis = { version = "0.6", default-features = false, features = [
@@ -297,11 +297,11 @@ simd-json-derive = { git = "https://github.com/marioortizmanero/simd-json-derive
 # FIXME: remove once abi_stable is updated to 0.11.
 # This patch just modifies its `abi_stable` dependency so that it's the same as
 # the one above.
-value-trait = { path = "/home/mario/Programming/value-trait" }
+value-trait = { git = "https://github.com/marioortizmanero/value-trait.git", branch = "tremor-patches" }
 # FIXME: remove once abi_stable is updated to 0.11
 # This patch just modifies its `abi_stable` dependency so that it's the same as
 # the one above.
-async-ffi = { path = "/home/mario/Programming/async-ffi" }
+async-ffi = { git = "https://github.com/marioortizmanero/async-ffi.git", branch = "tremor-patches" }
 
 # for use during debian packaging, via cargo-deb
 # https://github.com/mmstick/cargo-deb#packagemetadatadeb-options

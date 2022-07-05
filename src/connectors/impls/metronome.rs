@@ -40,6 +40,7 @@ impl ConnectorBuilder for Builder {
         _: &str,
         _: &ConnectorConfig,
         raw: &Value,
+        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw)?;
         let origin_uri = EventOriginUri {
@@ -138,7 +139,7 @@ mod tests {
 
     use crate::{
         config::Reconnect,
-        connectors::ConnectorBuilder,
+        connectors::{prelude::KillSwitch, ConnectorBuilder},
         errors::{Error, Kind as ErrorKind, Result},
     };
     #[async_std::test]
@@ -153,9 +154,10 @@ mod tests {
             reconnect: Reconnect::None,
             metrics_interval_s: Some(5),
         };
+        let kill_switch = KillSwitch::dummy();
         assert!(matches!(
             builder
-                .build("snot", &connector_config)
+                .build("snot", &connector_config, &kill_switch)
                 .await
                 .err()
                 .unwrap(),

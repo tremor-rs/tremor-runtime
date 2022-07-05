@@ -60,7 +60,7 @@ use abi_stable::{
     type_level::downcasting::TD_Opaque,
     RMut, StableAbi,
 };
-use async_ffi::{BorrowingFfiFuture, FutureExt};
+use async_ffi::{BorrowingFfiFuture, FutureExt as _};
 use std::future;
 use tremor_common::{
     pdk::{RError, RResult},
@@ -76,7 +76,7 @@ use tremor_common::{
 /// A response is an event generated from the sink delivery.
 #[repr(C)]
 #[derive(Clone, Debug, Default, Copy, PartialEq, StableAbi)]
-pub(crate) struct SinkReply {
+pub struct SinkReply {
     /// guaranteed delivery response - did we sent the event successfully `SinkAck::Ack` or did it fail `SinkAck::Fail`
     pub(crate) ack: SinkAck,
     /// circuit breaker action
@@ -403,7 +403,7 @@ pub(crate) trait SinkRuntime: Send + Sync {
 /// context for the connector sink
 #[repr(C)]
 #[derive(Clone, StableAbi)]
-pub(crate) struct SinkContext {
+pub struct SinkContext {
     /// the connector unique identifier
     pub(crate) uid: SinkId,
     /// the connector url

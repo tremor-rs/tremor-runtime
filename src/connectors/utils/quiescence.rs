@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
 use abi_stable::std_types::RBox;
-use async_ffi::{BorrowingFfiFuture, FutureExt};
+use async_ffi::{BorrowingFfiFuture, FutureExt as _};
 
 #[derive(Debug)]
 struct Inner {

@@ -33,7 +33,8 @@ pub(crate) fn resource_to_pb(json: &Value<'_>) -> Result<Resource> {
         .as_object()
         .ok_or("Invalid json mapping for Resource")?;
     Ok(Resource {
-        dropped_attributes_count: pb::maybe_int_to_pbu32(json.get("dropped_attributes_count"))?,
+        dropped_attributes_count: pb::maybe_int_to_pbu32(json.get("dropped_attributes_count"))
+            .unwrap_or_default(),
         attributes: common::maybe_key_value_list_to_pb(json.get("attributes"))?,
     })
 }

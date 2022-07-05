@@ -16,11 +16,8 @@ use beef::Cow;
 use halfbrown::HashMap;
 use tremor_value::{literal, Value};
 
-use abi_stable::{
-    rstr,
-    std_types::{RCowStr, RHashMap},
-};
-use tremor_common::pdk::beef_to_rcow_str;
+use abi_stable::{rstr, std_types::RCowStr};
+use tremor_common::pdk::{beef_to_rcow_str, RHashMap};
 
 const COUNT: RCowStr<'static> = RCowStr::Borrowed(rstr!("count"));
 const MEASUREMENT: RCowStr<'static> = RCowStr::Borrowed(rstr!("measurement"));

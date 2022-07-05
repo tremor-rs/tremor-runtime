@@ -16,7 +16,7 @@
 
 use std::time::Duration;
 
-use crate::system::{ShutdownMode, World};
+use crate::system::{KillSwitch, ShutdownMode};
 use crate::{connectors::prelude::*, errors::err_conector_def};
 use async_std::io::prelude::BufReadExt;
 use async_std::stream::StreamExt;
@@ -43,16 +43,8 @@ fn default_timeout() -> u64 {
 
 impl ConfigImpl for Config {}
 
-#[derive(Debug)]
-pub(crate) struct Builder {
-    world: World,
-}
-
-impl Builder {
-    pub(crate) fn new(world: World) -> Self {
-        Self { world }
-    }
-}
+#[derive(Debug, Default)]
+pub(crate) struct Builder {}
 
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
@@ -65,11 +57,12 @@ impl ConnectorBuilder for Builder {
         _: &str,
         _: &ConnectorConfig,
         raw: &Value,
+        kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw)?;
         Ok(Box::new(Cb {
             config,
-            world: self.world.clone(),
+            kill_switch: kill_switch.clone(),
         }))
     }
 }
@@ -87,7 +80,7 @@ impl ConnectorBuilder for Builder {
 /// * In case the pipeline branches off, it copies the event and it reaches two offramps, we might receive more than 1 ack or fail for an event with the current runtime.
 pub struct Cb {
     config: Config,
-    world: World,
+    kill_switch: KillSwitch,
 }
 
 #[async_trait::async_trait()]
@@ -101,8 +94,12 @@ impl Connector for Cb {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source =
-            CbSource::new(&self.config, source_context.alias(), self.world.clone()).await?;
+        let source = CbSource::new(
+            &self.config,
+            source_context.alias(),
+            self.kill_switch.clone(),
+        )
+        .await?;
         let source_addr = builder.spawn(source, source_context)?;
         Ok(Some(source_addr))
     }
@@ -206,7 +203,7 @@ struct CbSource {
     finished: bool,
     config: Config,
     origin_uri: EventOriginUri,
-    world: World,
+    kill_switch: KillSwitch,
 }
 
 impl CbSource {
@@ -221,7 +218,7 @@ impl CbSource {
         };
         self.finished && all_received
     }
-    async fn new(config: &Config, alias: &str, world: World) -> Result<Self> {
+    async fn new(config: &Config, alias: &str, kill_switch: KillSwitch) -> Result<Self> {
         if let Some(path) = config.path.as_ref() {
             let file = open(path).await?;
             Ok(Self {
@@ -236,7 +233,7 @@ impl CbSource {
                     host: hostname(),
                     ..EventOriginUri::default()
                 },
-                world,
+                kill_switch,
             })
         } else {
             Err(err_conector_def(alias, "Missing path key."))
@@ -260,7 +257,7 @@ impl Source for CbSource {
                 codec_overwrite: None,
             })
         } else if self.finished {
-            let world = self.world.clone();
+            let kill_switch = self.kill_switch.clone();
 
             if self.config.timeout > 0 && !self.did_receive_all() {
                 async_std::task::sleep(Duration::from_nanos(self.config.timeout)).await;
@@ -277,7 +274,7 @@ impl Source for CbSource {
                 eprintln!("Got fails: {:?}", self.received_cbs.fail);
             }
             async_std::task::spawn::<_, Result<()>>(async move {
-                world.stop(ShutdownMode::Graceful).await?;
+                kill_switch.stop(ShutdownMode::Graceful).await?;
                 Ok(())
             });
 

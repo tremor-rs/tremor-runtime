@@ -15,7 +15,7 @@
 // #![cfg_attr(coverage, no_coverage)] // This is for benchmarking and testing
 
 use crate::connectors::prelude::*;
-use crate::system::{ShutdownMode, World};
+use crate::system::{BoxedKillSwitch, ShutdownMode};
 use hdrhistogram::Histogram;
 use std::io::{stdout, Write};
 use std::{
@@ -38,7 +38,7 @@ use abi_stable::{
     },
     type_level::downcasting::TD_Opaque,
 };
-use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt};
+use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt as _};
 use std::future;
 use tremor_common::{pdk::RError, ttry};
 
@@ -111,7 +111,7 @@ pub fn from_config<'a>(
     id: RStr<'a>,
     _: &ConnectorConfig,
     config: &'a Value,
-    world: ROption<World>,
+    kill_switch: &'a BoxedKillSwitch,
 ) -> BorrowingFfiFuture<'a, RResult<BoxedRawConnector>> {
     async move {
         let config: Config = ttry!(Config::new(config));
@@ -161,7 +161,7 @@ pub fn from_config<'a>(
             acc: Acc { elements, count: 0 },
             origin_uri,
             stop_after,
-            world: world.unwrap().clone(),
+            kill_switch: kill_switch.clone(),
         }, TD_Opaque))
     }
     .into_ffi()
@@ -191,7 +191,7 @@ pub struct Bench {
     acc: Acc,
     origin_uri: EventOriginUri,
     stop_after: StopAfter,
-    world: World,
+    kill_switch: BoxedKillSwitch,
 }
 
 impl RawConnector for Bench {
@@ -221,7 +221,7 @@ impl RawConnector for Bench {
         _qsize: usize,
         _reply_tx: BoxedContraflowSender,
     ) -> BorrowingFfiFuture<'_, RResult<ROption<BoxedRawSink>>> {
-        let s = Blackhole::new(&self.config, self.stop_after, self.world.clone());
+        let s = Blackhole::new(&self.config, self.stop_after, self.kill_switch.clone());
         // We don't need to be able to downcast the connector back to the original
         // type, so we just pass it as an opaque type.
         let s = BoxedRawSink::from_value(s, TD_Opaque);
@@ -321,13 +321,13 @@ struct Blackhole {
     count: usize,
     structured: bool,
     buf: Vec<u8>,
-    world: World,
+    kill_switch: BoxedKillSwitch,
     finished: bool,
 }
 
 impl Blackhole {
     #[allow(clippy::cast_precision_loss, clippy::unwrap_used)]
-    fn new(c: &Config, stop_after: StopAfter, world: World) -> Self {
+    fn new(c: &Config, stop_after: StopAfter, kill_switch: BoxedKillSwitch) -> Self {
         let now_ns = nanotime();
         let sigfig = min(c.significant_figures, 5);
         // ALLOW: this is a debug connector and the values are validated ahead of time
@@ -345,7 +345,7 @@ impl Blackhole {
             bytes: 0,
             count: 0,
             buf: Vec::with_capacity(1024),
-            world,
+            kill_switch,
             finished: false,
         }
     }
@@ -395,7 +395,7 @@ impl RawSink for Blackhole {
                     } else {
                         ttry!(self.write_text(stdout(), 5, 2));
                     }
-                    let world = self.world.clone();
+                    let kill_switch = self.kill_switch.clone();
                     let stop_ctx = ctx.clone();
                     info!("Bench done");
 
@@ -404,7 +404,11 @@ impl RawSink for Blackhole {
                     async_std::task::spawn(async move {
                         info!("{stop_ctx} Exiting...");
                         stop_ctx.swallow_err(
-                            world.stop(ShutdownMode::Forceful).await,
+                            kill_switch
+                                .stop(ShutdownMode::Forceful)
+                                .await
+                                .map_err(Error::from)
+                                .into(),
                             "Error stopping the world",
                         );
                     });
