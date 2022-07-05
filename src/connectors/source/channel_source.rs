@@ -21,6 +21,13 @@ use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::*;
 use async_std::task;
 use std::time::Duration;
+
+use super::RawSource;
+use crate::errors::Error;
+use abi_stable::std_types::ROk;
+use async_ffi::{BorrowingFfiFuture, FutureExt as _};
+use tremor_common::{pdk::RResult, ttry};
+
 /// A source that receives `SourceReply` messages via a channel.
 /// It does not handle acks/fails.
 ///
@@ -117,7 +124,7 @@ impl ChannelSourceRuntime {
 
             if reader.on_done(stream).await == StreamDone::ConnectorClosed {
                 ctx.swallow_err(
-                    ctx.notifier().connection_lost().await,
+                    Result::from(ctx.notifier().connection_lost().await.map_err(Error::from)),
                     "Failed to notify connector",
                 );
             }
@@ -125,10 +132,13 @@ impl ChannelSourceRuntime {
     }
 }
 
-#[async_trait::async_trait()]
-impl Source for ChannelSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.rx.recv().await?)
+impl RawSource for ChannelSource {
+    fn pull_data<'a>(
+        &'a mut self,
+        _pull_id: &'a mut u64,
+        _ctx: &'a SourceContext,
+    ) -> BorrowingFfiFuture<'a, RResult<SourceReply>> {
+        async move { ROk(ttry!(self.rx.recv().await.map_err(Error::from))) }.into_ffi()
     }
 
     /// this source is not handling acks/fails

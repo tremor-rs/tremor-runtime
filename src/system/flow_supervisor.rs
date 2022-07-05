@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use super::flow::{Flow, Id};
-use super::KillSwitch;
+use super::BoxedKillSwitch;
 use crate::errors::{Kind as ErrorKind, Result};
 use crate::system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
 use crate::{
-    connectors::{self, ConnectorBuilder, ConnectorType},
+    connectors::{self, ConnectorType},
     log_error,
 };
 use async_std::channel::{bounded, Sender};
@@ -26,6 +26,9 @@ use async_std::task::{self, JoinHandle};
 use hashbrown::{hash_map::Entry, HashMap};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
 use tremor_script::ast::DeployFlow;
+
+use crate::pdk::ConnectorPluginRef;
+use abi_stable::type_level::downcasting::TD_Opaque;
 
 pub(crate) type Channel = Sender<Msg>;
 
@@ -42,7 +45,7 @@ pub(crate) enum Msg {
         /// the type of connector
         connector_type: ConnectorType,
         /// the builder
-        builder: Box<dyn ConnectorBuilder>,
+        builder: ConnectorPluginRef,
     },
     GetFlows(Sender<Result<Vec<Flow>>>),
     GetFlow(Id, Sender<Result<Flow>>),
@@ -75,10 +78,10 @@ impl FlowSupervisor {
     fn handle_register_connector_type(
         &mut self,
         connector_type: ConnectorType,
-        builder: Box<dyn ConnectorBuilder>,
+        builder: ConnectorPluginRef,
     ) {
         if let Some(old) = self.known_connectors.insert(connector_type, builder) {
-            error!("Connector type {} already defined!", old.connector_type());
+            error!("Connector type {} already defined!", old.connector_type()());
         }
     }
 
@@ -86,7 +89,7 @@ impl FlowSupervisor {
         &mut self,
         flow: DeployFlow<'static>,
         sender: Sender<Result<()>>,
-        kill_switch: &KillSwitch,
+        kill_switch: &BoxedKillSwitch,
     ) {
         let id = Id::from(&flow);
         let res = match self.flows.entry(id.clone()) {
@@ -193,9 +196,9 @@ impl FlowSupervisor {
         }
     }
 
-    pub fn start(mut self) -> (JoinHandle<Result<()>>, Channel, KillSwitch) {
+    pub fn start(mut self) -> (JoinHandle<Result<()>>, Channel, BoxedKillSwitch) {
         let (tx, rx) = bounded(self.qsize);
-        let kill_switch = KillSwitch(tx.clone());
+        let kill_switch = BoxedKillSwitch::from_value(tx.clone(), TD_Opaque);
         let task_kill_switch = kill_switch.clone();
         let system_h = task::spawn(async move {
             while let Ok(msg) = rx.recv().await {

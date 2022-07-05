@@ -27,6 +27,15 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tremor_script::{ast, highlighter::Highlighter};
 
+use crate::pdk::{self, ConnectorPluginRef, DEFAULT_PLUGIN_PATH};
+use abi_stable::{
+    std_types::{RBox, RResult::ROk},
+    StableAbi,
+};
+use async_ffi::{BorrowingFfiFuture, FutureExt as _};
+use std::env;
+use tremor_common::{pdk::RResult, ttry};
+
 /// Configuration for the runtime
 pub struct WorldConfig {
     /// default size for queues
@@ -48,7 +57,8 @@ pub const DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// default timeout for interrogating operations, like listing deployments
 
-#[derive(Debug, PartialEq)]
+#[repr(C)]
+#[derive(Debug, PartialEq, StableAbi)]
 /// shutdown mode - controls how we shutdown Tremor
 pub enum ShutdownMode {
     /// shut down by stopping all binding instances and wait for quiescence
@@ -58,47 +68,53 @@ pub enum ShutdownMode {
 }
 
 /// for draining and stopping
-#[derive(Debug, Clone)]
-pub struct KillSwitch(Sender<flow_supervisor::Msg>);
-
-impl KillSwitch {
+///
+/// This is an opaque type because it's used in the PDK.
+#[abi_stable::sabi_trait]
+pub trait KillSwitchOpaque: Send + Sync + Debug + Clone {
     /// stop the runtime
     ///
     /// # Errors
     /// * if draining or stopping fails
-    pub(crate) async fn stop(&self, mode: ShutdownMode) -> Result<()> {
-        if mode == ShutdownMode::Graceful {
-            let (tx, rx) = bounded(1);
-            self.0.send(flow_supervisor::Msg::Drain(tx)).await?;
-            if let Ok(res) = rx.recv().timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT).await {
-                if let Err(e) | Ok(Err(e)) = res.map_err(Error::from) {
-                    error!("Error draining all Flows: {}", e);
+    fn stop(&self, mode: ShutdownMode) -> BorrowingFfiFuture<'_, RResult<()>>;
+}
+impl KillSwitchOpaque for Sender<flow_supervisor::Msg> {
+    fn stop(&self, mode: ShutdownMode) -> BorrowingFfiFuture<'_, RResult<()>> {
+        async move {
+            if mode == ShutdownMode::Graceful {
+                let (tx, rx) = bounded(1);
+                ttry!(self
+                    .send(flow_supervisor::Msg::Drain(tx))
+                    .await
+                    .map_err(Error::from));
+                if let Ok(res) = rx.recv().timeout(DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT).await {
+                    if let Err(e) | Ok(Err(e)) = res.map_err(Error::from) {
+                        error!("Error draining all Flows: {}", e);
+                    }
+                } else {
+                    warn!(
+                        "Timeout draining all Flows after {}s",
+                        DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT.as_secs()
+                    );
                 }
-            } else {
-                warn!(
-                    "Timeout draining all Flows after {}s",
-                    DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT.as_secs()
-                );
             }
+            let res = self.send(flow_supervisor::Msg::Stop).await;
+            if let Err(e) = &res {
+                error!("Error stopping all Flows: {e}");
+            }
+            ROk(ttry!(res.map_err(Error::from)))
         }
-        let res = self.0.send(flow_supervisor::Msg::Stop).await;
-        if let Err(e) = &res {
-            error!("Error stopping all Flows: {e}");
-        }
-        Ok(res?)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn dummy() -> Self {
-        KillSwitch(bounded(1).0)
+        .into_ffi()
     }
 }
+/// Alias for the FFI-safe kill switch, boxed
+pub type BoxedKillSwitch = KillSwitchOpaque_TO<'static, RBox<()>>;
 
 /// Tremor runtime
 #[derive(Clone, Debug)]
 pub struct World {
     pub(crate) system: flow_supervisor::Channel,
-    pub(crate) kill_switch: KillSwitch,
+    pub(crate) kill_switch: BoxedKillSwitch,
 }
 
 impl World {
@@ -137,17 +153,40 @@ impl World {
         }
     }
 
+    /// Finds all the available plugins and loads them dynamically. For now,
+    /// plugins are loaded from the path defined by `TREMOR_PLUGIN_PATH`.
+    pub(crate) async fn register_plugin_types(&self) {
+        let plugin_path =
+            env::var("TREMOR_PLUGIN_PATH").unwrap_or_else(|_| String::from(DEFAULT_PLUGIN_PATH));
+        // TODO: print warning when no paths are configured?
+        for path in plugin_path.split(':') {
+            log::info!("Dynamically loading plugins in directory '{}'", path);
+
+            // TODO: this could be done in parallel
+            for plugin in pdk::find_recursively(&path) {
+                todo!()
+                // match plugin {
+                //     // TODO: create a `register_plugin_connector_type` function?
+                //     // Or rename this into `register_connector_type`?
+                //     ArtefactPlugin::Connector(p) => {
+                //         self.register_builtin_connector_type(p).await?
+                //     }
+                // }
+            }
+        }
+    }
+
     /// Registers the given connector type with `type_name` and the corresponding `builder`
     ///
     /// # Errors
     ///  * If the system is unavailable
     pub(crate) async fn register_builtin_connector_type(
         &self,
-        builder: Box<dyn connectors::ConnectorBuilder>,
+        builder: ConnectorPluginRef,
     ) -> Result<()> {
         self.system
             .send(flow_supervisor::Msg::RegisterConnectorType {
-                connector_type: builder.connector_type(),
+                connector_type: builder.connector_type()(),
                 builder,
             })
             .await?;
@@ -195,6 +234,8 @@ impl World {
         };
 
         connectors::register_builtin_connector_types(&world, config.debug_connectors).await?;
+        world.register_plugin_types().await;
+
         Ok((world, system_h))
     }
 
@@ -203,6 +244,10 @@ impl World {
     /// # Errors
     ///  * if the system failed to stop
     pub async fn stop(&self, mode: ShutdownMode) -> Result<()> {
-        self.kill_switch.stop(mode).await
+        self.kill_switch
+            .stop(mode)
+            .await
+            .map_err(Error::from)
+            .into()
     }
 }

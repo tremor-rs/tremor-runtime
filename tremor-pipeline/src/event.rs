@@ -19,9 +19,24 @@ use tremor_common::time::nanotime;
 use tremor_script::prelude::*;
 use tremor_script::{literal, EventOriginUri, EventPayload, Value};
 
+use abi_stable::{
+    std_types::{
+        ROption::{self, RSome},
+        RVec,
+    },
+    StableAbi,
+};
+
 /// A tremor event
+#[repr(C)]
 #[derive(
-    Debug, Clone, PartialEq, Default, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Debug,
+    Clone,
+    PartialEq,
+    Default,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+    StableAbi,
 )]
 pub struct Event {
     /// The event ID
@@ -31,9 +46,9 @@ pub struct Event {
     /// Nanoseconds at when the event was ingested
     pub ingest_ns: u64,
     /// URI to identify the origin of the event
-    pub origin_uri: Option<EventOriginUri>,
+    pub origin_uri: ROption<EventOriginUri>,
     /// The kind of the event
-    pub kind: Option<SignalKind>,
+    pub kind: ROption<SignalKind>,
     /// If this event is batched (containing multiple events itself)
     pub is_batch: bool,
 
@@ -51,7 +66,7 @@ impl Event {
     pub fn signal_tick() -> Self {
         Self {
             ingest_ns: nanotime(),
-            kind: Some(SignalKind::Tick),
+            kind: RSome(SignalKind::Tick),
             ..Self::default()
         }
     }
@@ -61,7 +76,7 @@ impl Event {
     pub fn signal_drain(source_id: SourceId) -> Self {
         Self {
             ingest_ns: nanotime(),
-            kind: Some(SignalKind::Drain(source_id)),
+            kind: RSome(SignalKind::Drain(source_id)),
             ..Self::default()
         }
     }
@@ -71,7 +86,7 @@ impl Event {
     pub fn signal_start(uid: SourceId) -> Self {
         Self {
             ingest_ns: nanotime(),
-            kind: Some(SignalKind::Start(uid)),
+            kind: RSome(SignalKind::Start(uid)),
             ..Self::default()
         }
     }
@@ -239,7 +254,7 @@ impl Event {
     /// normally 1, but for batched events possibly > 1
     pub fn len(&self) -> usize {
         if self.is_batch {
-            self.data.suffix().value().as_array().map_or(0, Vec::len)
+            self.data.suffix().value().as_array().map_or(0, RVec::len)
         } else {
             1
         }
@@ -254,7 +269,7 @@ impl Event {
                 .suffix()
                 .value()
                 .as_array()
-                .map_or(true, Vec::is_empty)
+                .map_or(true, RVec::is_empty)
     }
 
     /// Extracts the `$correlation` metadata into a `Vec` of `Option<Value<'static>>`.

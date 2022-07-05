@@ -14,16 +14,18 @@
 
 use crate::Value;
 use beef::Cow;
-use halfbrown::RawEntryMut;
 use std::fmt;
 use std::hash::{BuildHasher, Hash, Hasher};
 use value_trait::{Mutable, Value as ValueTrait, ValueAccess, ValueType};
+
+use abi_stable::std_types::{map::RRawEntryMut, RCowStr};
+use tremor_common::pdk::{beef_to_rcow_str, RHashMap};
 
 /// Well known key that can be looked up in a `Value` faster.
 /// It achives this by memorizing the hash.
 #[derive(Debug, Clone, PartialEq)]
 pub struct KnownKey<'key> {
-    key: Cow<'key, str>,
+    key: RCowStr<'key>,
     hash: u64,
 }
 impl<'key> std::fmt::Display for KnownKey<'key> {
@@ -49,12 +51,20 @@ impl fmt::Display for Error {
 }
 impl std::error::Error for Error {}
 
-impl<'key, S> From<S> for KnownKey<'key>
-where
-    Cow<'key, str>: From<S>,
-{
-    fn from(key: S) -> Self {
-        let key = Cow::from(key);
+impl<'key> From<RCowStr<'key>> for KnownKey<'key> {
+    fn from(key: RCowStr<'key>) -> Self {
+        let hash_builder = halfbrown::DefaultHashBuilder::default();
+        let mut hasher = hash_builder.build_hasher();
+        key.hash(&mut hasher);
+        Self {
+            hash: hasher.finish(),
+            key,
+        }
+    }
+}
+impl<'key> From<beef::Cow<'key, str>> for KnownKey<'key> {
+    fn from(key: beef::Cow<'key, str>) -> Self {
+        let key = beef_to_rcow_str(key);
         let hash_builder = halfbrown::DefaultHashBuilder::default();
         let mut hasher = hash_builder.build_hasher();
         key.hash(&mut hasher);
@@ -96,6 +106,7 @@ impl<'key> KnownKey<'key> {
     {
         target.as_object().and_then(|m| self.map_lookup(m))
     }
+
     /// Looks up this key in a `HashMap<<Cow<'value, str>, Value<'value>>` the inner representation of an object `Value`, returns None if the
     /// key wasn't present.
     ///
@@ -110,19 +121,23 @@ impl<'key> KnownKey<'key> {
     ///   assert_eq!(known_key.map_lookup(inner).unwrap(), &42);
     /// }
     /// ```
-
     #[inline]
     #[must_use]
     pub fn map_lookup<'target, 'value>(
         &self,
-        map: &'target halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target RHashMap<RCowStr<'value>, Value<'value>>,
     ) -> Option<&'target Value<'value>>
     where
         'value: 'target,
     {
-        map.raw_entry()
-            .from_key_hashed_nocheck(self.hash, self.key())
+        // map.get(self.key())
+        map
+            // TODO: update to better ergonomics when available
+            // .raw_entry()
+            // .from_key_hashed_nocheck(self.hash, self.key())
+            .raw_entry_key_hashed_nocheck(self.hash, self.key())
             .map(|kv| kv.1)
+            .into()
     }
 
     /// Looks up this key in a `Value`, returns None if the
@@ -180,18 +195,20 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_lookup_mut<'target, 'value>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut RHashMap<RCowStr<'value>, Value<'value>>,
     ) -> Option<&'target mut Value<'value>>
     where
         'key: 'value,
         'value: 'target,
     {
         match map
-            .raw_entry_mut()
-            .from_key_hashed_nocheck(self.hash, &self.key)
+            // TODO: update to better ergonomics when available
+            // .raw_entry_mut()
+            // .from_key_hashed_nocheck(self.hash, &self.key)
+            .raw_entry_mut_key_hashed_nocheck(self.hash, &self.key)
         {
-            RawEntryMut::Occupied(e) => Some(e.into_mut()),
-            RawEntryMut::Vacant(_e) => None,
+            RRawEntryMut::Occupied(e) => Some(e.into_mut()),
+            RRawEntryMut::Vacant(_e) => None,
         }
     }
 
@@ -277,7 +294,7 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_lookup_or_insert_mut<'target, 'value, F>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut RHashMap<RCowStr<'value>, Value<'value>>,
         with: F,
     ) -> &'target mut Value<'value>
     where
@@ -285,9 +302,11 @@ impl<'key> KnownKey<'key> {
         'value: 'target,
         F: FnOnce() -> Value<'value>,
     {
-        let key: &str = &self.key;
-        map.raw_entry_mut()
-            .from_key_hashed_nocheck(self.hash, key)
+        map
+            // TODO: update to better ergonomics when available
+            // .raw_entry_mut()
+            // .from_key_hashed_nocheck(self.hash, key)
+            .raw_entry_mut_key_hashed_nocheck(self.hash, &self.key)
             .or_insert_with(|| (self.key.clone(), with()))
             .1
     }
@@ -365,7 +384,7 @@ impl<'key> KnownKey<'key> {
     #[inline]
     pub fn map_insert<'target, 'value>(
         &self,
-        map: &'target mut halfbrown::HashMap<Cow<'value, str>, Value<'value>>,
+        map: &'target mut RHashMap<RCowStr<'value>, Value<'value>>,
         value: Value<'value>,
     ) -> Option<Value<'value>>
     where
@@ -373,11 +392,13 @@ impl<'key> KnownKey<'key> {
         'value: 'target,
     {
         match map
-            .raw_entry_mut()
-            .from_key_hashed_nocheck(self.hash, self.key())
+            // TODO: update to better ergonomics when available
+            // .raw_entry_mut()
+            // .from_key_hashed_nocheck(self.hash, self.key())
+            .raw_entry_mut_key_hashed_nocheck(self.hash, &self.key)
         {
-            RawEntryMut::Occupied(mut e) => Some(e.insert(value)),
-            RawEntryMut::Vacant(e) => {
+            RRawEntryMut::Occupied(mut e) => Some(e.insert(value)),
+            RRawEntryMut::Vacant(e) => {
                 e.insert_hashed_nocheck(self.hash, self.key.clone(), value);
                 None
             }
@@ -391,7 +412,7 @@ impl<'script> KnownKey<'script> {
     pub fn into_static(self) -> KnownKey<'static> {
         let KnownKey { key, hash } = self;
         KnownKey {
-            key: Cow::owned(key.to_string()),
+            key: RCowStr::Owned(key.to_string().into()),
             hash,
         }
     }

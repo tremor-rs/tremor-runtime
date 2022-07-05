@@ -34,6 +34,12 @@ impl From<sled::transaction::TransactionError<()>> for Error {
         Self::from(format!("Sled Transaction Error: {:?}", e))
     }
 }
+/// For more ergonomic error-handling in PDK contexts
+impl From<Error> for tremor_common::pdk::RError {
+    fn from(e: Error) -> Self {
+        Self::new(e)
+    }
+}
 
 error_chain! {
     links {

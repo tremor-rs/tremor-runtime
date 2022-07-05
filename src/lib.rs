@@ -14,8 +14,13 @@
 
 //! Tremor runtime
 
+// TODO: disable and cleanup with `cargo fix` automatically once done
+#![allow(unused)]
+#![allow(dead_code)]
+/* TODO: restore
 #![deny(warnings)]
 #![deny(missing_docs)]
+*/
 #![recursion_limit = "1024"]
 #![deny(
     clippy::all,
@@ -74,6 +79,9 @@ pub mod version;
 /// Instance management
 pub mod instance;
 
+/// For the Plugin Development Kit
+pub mod pdk;
+
 /// Metrics instance name
 pub static mut INSTANCE: &str = "tremor";
 
@@ -88,6 +96,8 @@ use tremor_script::{
     deploy::Deploy, highlighter::Dumb as ToStringHighlighter, highlighter::Term as TermHighlighter,
 };
 use tremor_script::{highlighter::Highlighter, FN_REGISTRY};
+
+use abi_stable::std_types::RVec;
 
 /// Operator Config
 pub type OpConfig = tremor_value::Value<'static>;

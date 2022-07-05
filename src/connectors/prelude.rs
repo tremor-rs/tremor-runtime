@@ -14,24 +14,21 @@
 
 pub(crate) use crate::connectors::sink::{
     AsyncSinkReply, ChannelSink, ChannelSinkRuntime, ContraflowData, EventSerializer,
-    SingleStreamSink, SingleStreamSinkRuntime, Sink, SinkAck, SinkAddr, SinkContext,
-    SinkManagerBuilder, SinkMeta, SinkReply, SinkRuntime, StreamWriter,
+    SingleStreamSink, SingleStreamSinkRuntime, SinkAck, SinkAddr, SinkManagerBuilder, SinkMeta,
+    SinkRuntime, StreamWriter,
 };
 
 pub(crate) use crate::connectors::source::{
-    ChannelSource, ChannelSourceRuntime, Source, SourceAddr, SourceContext, SourceManagerBuilder,
-    SourceReply, StreamReader,
+    ChannelSource, ChannelSourceRuntime, SourceAddr, SourceManagerBuilder, SourceReply,
+    StreamReader,
 };
 pub(crate) use crate::connectors::utils::{
     reconnect::Attempt,
     url::{Defaults, Url},
 };
-pub(crate) use crate::connectors::{
-    spawn_task, CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context,
-    StreamDone, StreamIdGen, ACCEPT_TIMEOUT,
-};
+pub(crate) use crate::connectors::{spawn_task, Context, StreamDone, StreamIdGen, ACCEPT_TIMEOUT};
 pub(crate) use crate::errors::{Error, Kind as ErrorKind, Result};
-pub(crate) use crate::system::KillSwitch;
+pub(crate) use crate::system::BoxedKillSwitch;
 pub(crate) use crate::utils::hostname;
 pub(crate) use crate::{Event, QSIZE};
 pub(crate) use std::sync::atomic::Ordering;
@@ -59,3 +56,22 @@ pub(crate) fn default_true() -> bool {
 pub(crate) fn default_false() -> bool {
     false
 }
+
+// For the PDK
+pub(crate) use crate::connectors::{sink::Sink, source::Source, Connector};
+pub use crate::{
+    connectors::{
+        sink::{
+            BoxedContraflowSender, BoxedEventSerializer, BoxedRawSink, ContraflowSenderOpaque,
+            EventSerializerOpaque, MutEventSerializer, RawSink, SinkContext, SinkReply,
+        },
+        source::{BoxedRawSource, RawSource, SourceContext},
+        utils::{
+            quiescence::{BoxedQuiescenceBeacon, QuiescenceBeaconOpaque},
+            reconnect::{BoxedConnectionLostNotifier, ConnectionLostNotifierOpaque},
+        },
+        BoxedRawConnector, CodecReq, ConnectorContext, ConnectorType, RawConnector,
+    },
+    pdk::{ConnectorPlugin, ConnectorPluginRef},
+};
+pub use tremor_common::pdk::RResult;

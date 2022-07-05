@@ -27,6 +27,8 @@ pub type Postprocessors = Vec<Box<dyn Postprocessor>>;
 pub(crate) use compress::Compress;
 use std::{io::Write, mem, str};
 
+use abi_stable::std_types::ROption::RSome;
+
 trait PostprocessorState {}
 /// Postprocessor trait
 pub trait Postprocessor: Send + Sync {
@@ -59,7 +61,9 @@ pub trait Postprocessor: Send + Sync {
 
 pub fn lookup_with_config(config: &PostprocessorConfig) -> Result<Box<dyn Postprocessor>> {
     match config.name.as_str() {
-        "compress" => Ok(Box::new(Compress::from_config(config.config.as_ref())?)),
+        "compress" => Ok(Box::new(Compress::from_config(
+            config.config.as_ref().into(),
+        )?)),
         "separate" => Ok(Box::new(separate::Separate::from_config(&config.config)?)),
         "base64" => Ok(Box::new(Base64::default())),
         "ingest-ns" => Ok(Box::new(AttachIngresTs {})),

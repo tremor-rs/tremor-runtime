@@ -18,6 +18,10 @@ use tremor_script::{
     ast::{self, Helper},
     prelude::*,
 };
+
+use abi_stable::std_types::ROption::{RNone, RSome};
+use tremor_common::pdk::RHashMap;
+
 #[derive(Debug)]
 pub(crate) struct TrickleOperator {
     op: Box<dyn Operator>,
@@ -30,12 +34,12 @@ fn mk_node_config(id: String, op_type: String, config: Value) -> NodeConfig {
         op_type,
         config: if config
             .as_object()
-            .map(HashMap::is_empty)
+            .map(RHashMap::is_empty)
             .unwrap_or_default()
         {
-            None
+            RNone
         } else {
-            Some(config.into_static())
+            RSome(config.into_static())
         },
         ..NodeConfig::default()
     }

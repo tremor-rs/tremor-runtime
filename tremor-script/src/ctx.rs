@@ -17,19 +17,35 @@ use std::default;
 use std::fmt;
 use url::Url;
 
+use abi_stable::{
+    std_types::{
+        ROption::{self, RNone, RSome},
+        RSlice, RString, RVec,
+    },
+    StableAbi,
+};
+
 /// Event origin URI
+#[repr(C)]
 #[derive(
-    Debug, Clone, PartialEq, Eq, Hash, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+    StableAbi,
 )]
 pub struct EventOriginUri {
     /// schema part
-    pub scheme: String,
+    pub scheme: RString,
     /// host part
-    pub host: String,
+    pub host: RString,
     /// port part
-    pub port: Option<u16>,
+    pub port: ROption<u16>,
     /// path part
-    pub path: Vec<String>,
+    pub path: RVec<RString>,
 }
 
 impl EventOriginUri {
@@ -46,12 +62,12 @@ impl EventOriginUri {
                     // TODO add an error kind here
                     .ok_or_else(|| Error::from("EventOriginUri Parse Error: Missing host"))?;
                 Ok(Self {
-                    scheme: r.scheme().to_string(),
-                    host: host.to_string(),
-                    port: r.port(),
+                    scheme: RString::from(r.scheme()),
+                    host: RString::from(host),
+                    port: ROption::from(r.port()),
                     path: r
                         .path_segments()
-                        .map_or_else(Vec::new, |segs| segs.map(String::from).collect()),
+                        .map_or_else(RVec::new, |segs| segs.map(RString::from).collect()),
                 })
             }
             Err(e) => Err(e.into()),
@@ -73,13 +89,13 @@ impl EventOriginUri {
     /// return the port
     #[must_use]
     pub fn port(&self) -> Option<u16> {
-        self.port
+        self.port.into()
     }
 
     /// return the path
     #[must_use]
-    pub fn path(&self) -> &[String] {
-        &self.path
+    pub fn path(&self) -> RSlice<'_, RString> {
+        self.path.as_rslice()
     }
 
     /// Format as host and port
@@ -96,7 +112,7 @@ impl EventOriginUri {
 impl fmt::Display for EventOriginUri {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}://{}", self.scheme, self.host)?;
-        if let Some(port) = self.port {
+        if let RSome(port) = self.port {
             write!(f, ":{}", port)?;
         }
         let maybe_sep = if self.path.is_empty() { "" } else { "/" };
@@ -107,10 +123,10 @@ impl fmt::Display for EventOriginUri {
 impl default::Default for EventOriginUri {
     fn default() -> Self {
         Self {
-            scheme: "tremor-script".to_string(),
-            host: "localhost".to_string(),
-            port: None,
-            path: Vec::new(),
+            scheme: RString::from("tremor-script"),
+            host: RString::from("localhost"),
+            port: RNone,
+            path: RVec::new(),
         }
     }
 }

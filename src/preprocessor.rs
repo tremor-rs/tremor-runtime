@@ -61,7 +61,7 @@ pub fn lookup_with_config(config: &PreprocessorConfig) -> Result<Box<dyn Preproc
         "separate" => Ok(Box::new(Separate::from_config(&config.config)?)),
         "base64" => Ok(Box::new(Base64::default())),
         "decompress" => Ok(Box::new(decompress::Decompress::from_config(
-            config.config.as_ref(),
+            config.config.as_ref().into(),
         )?)),
         "remove-empty" => Ok(Box::new(FilterEmpty::default())),
         "gelf-chunking" => Ok(Box::new(gelf::Gelf::default())),

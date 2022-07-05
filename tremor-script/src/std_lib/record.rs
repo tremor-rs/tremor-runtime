@@ -17,6 +17,8 @@ use crate::registry::Registry;
 use crate::tremor_const_fn;
 use crate::Object;
 
+use abi_stable::std_types::Tuple2;
+
 pub fn load(registry: &mut Registry) {
     registry
         .insert(tremor_const_fn! (record|len(_context, _input: Object) {
@@ -40,7 +42,7 @@ pub fn load(registry: &mut Registry) {
         .insert(tremor_const_fn! (record|to_array(_context, _input: Object) {
             Ok(Value::from(
                 _input.iter()
-                    .map(|(k, v)| Value::from(vec![Value::from(k.clone()), v.clone()]))
+                    .map(|Tuple2(k, v)| Value::from(vec![Value::from(k.clone()), v.clone()]))
                     .collect::<Vec<_>>(),
             ))
         }))
@@ -63,7 +65,7 @@ pub fn load(registry: &mut Registry) {
         Ok(Value::from(r?))
         })).insert(tremor_const_fn!(record|extract(_context, _input: Object, _keys: Array) {
         let keys: Vec<_> = _keys.iter().filter_map(ValueAccess::as_str).collect();
-        let r: Object =_input.iter().filter_map(|(k, v)| {
+        let r: Object =_input.iter().filter_map(|Tuple2(k, v)| {
             let k: &str = k;
             if keys.contains(&k) {
                 Some((k.to_string().into(), v.clone()))
@@ -74,9 +76,9 @@ pub fn load(registry: &mut Registry) {
         Ok(Value::from(r))
     }))
         .insert(tremor_const_fn!(record|combine(_context, _left: Object, _right: Object) {
-        Ok(Value::from(_left.iter().chain(_right.iter()).map(|(k, v)| (k.clone(), v.clone())).collect::<Object>()))
+        Ok(Value::from(_left.iter().chain(_right.iter()).map(|Tuple2(k, v)| (k.clone(), v.clone())).collect::<Object>()))
         })).insert(tremor_const_fn!(record|rename(_context, _target: Object, _renameings: Object) {
-            Ok(Value::from(_target.iter().map(|(k, v)| if let Some(Value::String(k1)) = _renameings.get(k) {
+            Ok(Value::from(_target.iter().map(|Tuple2(k, v)| if let Some(Value::String(k1)) = _renameings.get(k) {
                 (k1.clone(), v.clone())
             } else {
                 (k.clone(), v.clone())

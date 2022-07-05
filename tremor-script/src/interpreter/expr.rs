@@ -36,6 +36,9 @@ use std::{
     iter,
 };
 
+use abi_stable::std_types::Tuple2;
+use tremor_common::pdk::beef_to_rcow_str;
+
 #[derive(Debug)]
 /// Continuation context to control program flow
 pub enum Cont<'run, 'event>
@@ -231,6 +234,13 @@ impl<'script> Expr<'script> {
         expr: &'run Comprehension<'event, Expr>,
     ) -> Result<Cont<'run, 'event>> {
         type Bi<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
+        // Converting from abi_stable to std
+        fn tuple<'k, K>(Tuple2(k, v): Tuple2<K, Value<'k>>) -> (K, Value<'k>)
+        where
+            K: 'k,
+        {
+            (k, v)
+        }
         fn kv<'k, K>((k, v): (K, Value)) -> (Value<'k>, Value)
         where
             K: 'k,
@@ -251,7 +261,7 @@ impl<'script> Expr<'script> {
                     |t| (t.len(), Box::new(t.clone().into_iter().enumerate().map(kv))),
                 )
             },
-            |t| (t.len(), Box::new(t.clone().into_iter().map(kv))),
+            |t| (t.len(), Box::new(t.clone().into_iter().map(tuple).map(kv))),
         );
 
         if opts.result_needed {
@@ -372,6 +382,7 @@ impl<'script> Expr<'script> {
                 }
                 Segment::Element { expr, .. } => {
                     let id = stry!(expr.eval_to_string(opts, env, event, state, meta, local));
+                    let id = beef_to_rcow_str(id);
                     // ALLOW: https://github.com/tremor-rs/tremor-runtime/issues/1033
                     let v: &mut Value<'event> = unsafe { mem::transmute(current) };
                     let map = stry!(v.as_object_mut().ok_or_else(|| err_need_obj(

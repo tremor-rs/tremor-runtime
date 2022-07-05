@@ -129,6 +129,19 @@ impl PartialEq for Error {
     }
 }
 
+/// For more ergonomic error-handling in PDK contexts
+impl From<Error> for tremor_common::pdk::RError {
+    fn from(e: Error) -> Self {
+        Self::new(e)
+    }
+}
+impl From<ErrorKind> for tremor_common::pdk::RError {
+    fn from(e: ErrorKind) -> Self {
+        let e: Error = e.into();
+        Self::new(e)
+    }
+}
+
 error_chain! {
     links {
         Script(tremor_script::errors::Error, tremor_script::errors::ErrorKind);
@@ -164,6 +177,7 @@ error_chain! {
         ParseIntError(std::num::ParseIntError);
         ParseFloatError(std::num::ParseFloatError);
         //Postgres(postgres::Error);
+        PluginError(tremor_common::pdk::RError);
         RegexError(regex::Error);
         ReqwestError(reqwest::Error);
         InvalidHeaderName(reqwest::header::InvalidHeaderName);

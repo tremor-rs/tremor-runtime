@@ -20,6 +20,8 @@ use crate::errors::{Kind as ErrorKind, Result};
 use crate::preprocessor::separate::{default_separator, DEFAULT_SEPARATOR};
 use tremor_pipeline::{ConfigImpl, ConfigMap};
 
+use abi_stable::std_types::ROption::RSome;
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -43,7 +45,7 @@ impl Default for Separate {
 
 impl Separate {
     pub(super) fn from_config(config: &ConfigMap) -> Result<Self> {
-        let separator = if let Some(raw_config) = config {
+        let separator = if let RSome(raw_config) = config {
             let config = Config::new(raw_config)?;
             if config.separator.len() != 1 {
                 return Err(ErrorKind::InvalidConfiguration(

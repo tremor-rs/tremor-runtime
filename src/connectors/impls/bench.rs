@@ -15,7 +15,7 @@
 // #![cfg_attr(coverage, no_coverage)] // This is for benchmarking and testing
 
 use crate::connectors::prelude::*;
-use crate::system::{KillSwitch, ShutdownMode};
+use crate::system::{BoxedKillSwitch, ShutdownMode};
 use hdrhistogram::Histogram;
 use std::io::{stdout, Write};
 use std::{
@@ -26,6 +26,21 @@ use std::{
 };
 use tremor_common::{file, time::nanotime};
 use xz2::read::XzDecoder;
+
+use crate::errors::Error;
+use abi_stable::{
+    prefix_type::PrefixTypeTrait,
+    rstr, rvec, sabi_extern_fn,
+    std_types::{
+        ROption::{self, RNone, RSome},
+        RResult::{RErr, ROk},
+        RStr, RString, RVec,
+    },
+    type_level::downcasting::TD_Opaque,
+};
+use async_ffi::{BorrowingFfiFuture, FfiFuture, FutureExt as _};
+use std::future;
+use tremor_common::{pdk::RError, ttry};
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -67,8 +82,20 @@ fn default_significant_figures() -> u8 {
 
 impl ConfigImpl for Config {}
 
-#[derive(Debug, Default)]
-pub(crate) struct Builder {}
+/// Note that since it's a built-in plugin, `#[export_root_module]` can't be
+/// used or it would conflict with other plugins.
+pub fn instantiate_root_module() -> ConnectorPluginRef {
+    ConnectorPlugin {
+        connector_type,
+        from_config,
+    }
+    .leak_into_prefix()
+}
+
+#[sabi_extern_fn]
+fn connector_type() -> ConnectorType {
+    "bench".into()
+}
 
 fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> Result<Vec<u8>> {
     if base64 {
@@ -79,41 +106,40 @@ fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> Result<Vec<u8>> {
     }
 }
 
-#[async_trait::async_trait]
-impl ConnectorBuilder for Builder {
-    async fn build_cfg(
-        &self,
-        id: &str,
-        _: &ConnectorConfig,
-        config: &Value,
-        kill_switch: &KillSwitch,
-    ) -> Result<Box<dyn Connector>> {
-        let config: Config = Config::new(config)?;
-        let mut source_data_file = file::open(&config.source)?;
+#[sabi_extern_fn]
+pub fn from_config<'a>(
+    id: RStr<'a>,
+    _: &ConnectorConfig,
+    config: &'a Value,
+    kill_switch: &'a BoxedKillSwitch,
+) -> BorrowingFfiFuture<'a, RResult<BoxedRawConnector>> {
+    async move {
+        let config: Config = ttry!(Config::new(config));
+        let mut source_data_file = ttry!(file::open(&config.source));
         let mut data = vec![];
         let ext = file::extension(&config.source);
         if ext == Some("xz") {
-            XzDecoder::new(source_data_file).read_to_end(&mut data)?;
+            ttry!(XzDecoder::new(source_data_file).read_to_end(&mut data).map_err(Error::from));
         } else {
-            source_data_file.read_to_end(&mut data)?;
+            ttry!(source_data_file.read_to_end(&mut data).map_err(Error::from));
         };
         let origin_uri = EventOriginUri {
-            scheme: "tremor-blaster".to_string(),
-            host: hostname(),
-            port: None,
-            path: vec![config.source.clone()],
+            scheme: RString::from("tremor-blaster"),
+            host: RString::from(hostname()),
+            port: RNone,
+            path: rvec![RString::from(config.source.clone())],
         };
         let elements: Vec<Vec<u8>> = if let Some(chunk_size) = config.chunk_size {
             // split into sized chunks
-            data.chunks(chunk_size)
+            ttry!(data.chunks(chunk_size)
                 .map(|e| decode(config.base64, e))
-                .collect::<Result<_>>()?
+                .collect::<Result<_>>())
         } else {
             // split into lines
-            BufReader::new(data.as_slice())
+            ttry!(BufReader::new(data.as_slice())
                 .lines()
                 .map(|e| decode(config.base64, e?))
-                .collect::<Result<_>>()?
+                .collect::<Result<_>>())
         };
         let num_elements = elements.len();
         let stop_after_events = config.iters.map(|i| i * num_elements);
@@ -130,18 +156,15 @@ impl ConnectorBuilder for Builder {
             warn!("[Connector::{id}] No stop condition is specified. This connector will emit events infinitely.");
         }
 
-        Ok(Box::new(Bench {
+        ROk(BoxedRawConnector::from_value(Bench {
             config,
             acc: Acc { elements, count: 0 },
             origin_uri,
             stop_after,
             kill_switch: kill_switch.clone(),
-        }))
+        }, TD_Opaque))
     }
-
-    fn connector_type(&self) -> ConnectorType {
-        "bench".into()
-    }
+    .into_ffi()
 }
 
 #[derive(Clone, Default)]
@@ -168,16 +191,15 @@ pub struct Bench {
     acc: Acc,
     origin_uri: EventOriginUri,
     stop_after: StopAfter,
-    kill_switch: KillSwitch,
+    kill_switch: BoxedKillSwitch,
 }
 
-#[async_trait::async_trait]
-impl Connector for Bench {
-    async fn create_source(
+impl RawConnector for Bench {
+    fn create_source(
         &mut self,
-        source_context: SourceContext,
-        builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
+        _source_context: SourceContext,
+        _qsize: usize,
+    ) -> BorrowingFfiFuture<'_, RResult<ROption<BoxedRawSource>>> {
         let s = Blaster {
             acc: self.acc.clone(),
             origin_uri: self.origin_uri.clone(),
@@ -187,24 +209,27 @@ impl Connector for Bench {
             interval_ns: self.config.interval.map(Duration::from_nanos),
             finished: false,
         };
-        builder.spawn(s, source_context).map(Some)
+        // We don't need to be able to downcast the connector back to the original
+        // type, so we just pass it as an opaque type.
+        let s = BoxedRawSource::from_value(s, TD_Opaque);
+        future::ready(ROk(RSome(s))).into_ffi()
     }
 
-    async fn create_sink(
+    fn create_sink(
         &mut self,
-        sink_context: SinkContext,
-        builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {
-        builder
-            .spawn(
-                Blackhole::new(&self.config, self.stop_after, self.kill_switch.clone()),
-                sink_context,
-            )
-            .map(Some)
+        _sink_context: SinkContext,
+        _qsize: usize,
+        _reply_tx: BoxedContraflowSender,
+    ) -> BorrowingFfiFuture<'_, RResult<ROption<BoxedRawSink>>> {
+        let s = Blackhole::new(&self.config, self.stop_after, self.kill_switch.clone());
+        // We don't need to be able to downcast the connector back to the original
+        // type, so we just pass it as an opaque type.
+        let s = BoxedRawSink::from_value(s, TD_Opaque);
+        future::ready(ROk(RSome(s))).into_ffi()
     }
 
     fn codec_requirements(&self) -> CodecReq {
-        CodecReq::Optional("json")
+        CodecReq::Optional(rstr!("json"))
     }
 }
 
@@ -218,49 +243,55 @@ struct Blaster {
     finished: bool,
 }
 
-#[async_trait::async_trait]
-impl Source for Blaster {
-    async fn on_start(&mut self, _ctx: &SourceContext) -> Result<()> {
+impl RawSource for Blaster {
+    fn on_start<'a>(&'a mut self, _ctx: &'a SourceContext) -> BorrowingFfiFuture<'a, RResult<()>> {
         self.stop_at = self
             .stop_after
             .seconds
             .map(|secs| nanotime() + (secs * 1_000_000_000));
-        Ok(())
+        future::ready(ROk(())).into_ffi()
     }
 
-    #[allow(clippy::cast_possible_truncation)]
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        if self.finished {
-            return Ok(SourceReply::Finished);
-        }
-        if let Some(interval) = self.interval_ns {
-            async_std::task::sleep(interval).await;
-        }
-        let res = if self.stop_at.iter().any(|stop_at| nanotime() >= *stop_at)
-            || self
-                .stop_after
-                .events
-                .iter()
-                .any(|stop_after_events| self.acc.count >= *stop_after_events)
-        {
-            self.finished = true;
-            SourceReply::EndStream {
-                origin_uri: self.origin_uri.clone(),
-                stream: DEFAULT_STREAM_ID,
-                meta: None,
+    fn pull_data<'a>(
+        &'a mut self,
+        _pull_id: &'a mut u64,
+        _ctx: &'a SourceContext,
+    ) -> BorrowingFfiFuture<'a, RResult<SourceReply>> {
+        async move {
+            if self.finished {
+                return ROk(SourceReply::Finished);
             }
-        } else {
-            let data = self.acc.next();
-            SourceReply::Data {
-                origin_uri: self.origin_uri.clone(),
-                data,
-                meta: None,
-                stream: Some(DEFAULT_STREAM_ID),
-                port: None,
-                codec_overwrite: None,
+            if let Some(interval) = self.interval_ns {
+                async_std::task::sleep(interval).await;
             }
-        };
-        Ok(res)
+            let res = if self.stop_at.iter().any(|stop_at| nanotime() >= *stop_at)
+                || self
+                    .stop_after
+                    .events
+                    .iter()
+                    .any(|stop_after_events| self.acc.count >= *stop_after_events)
+            {
+                self.finished = true;
+                SourceReply::EndStream {
+                    origin_uri: self.origin_uri.clone(),
+                    stream: DEFAULT_STREAM_ID,
+                    meta: RNone,
+                }
+            } else {
+                let data = self.acc.next();
+                SourceReply::Data {
+                    origin_uri: self.origin_uri.clone(),
+                    // TODO: this conversion can be avoided
+                    data: data.into(),
+                    meta: RNone,
+                    stream: RSome(DEFAULT_STREAM_ID),
+                    port: RNone,
+                    codec_overwrite: RNone,
+                }
+            };
+            ROk(res)
+        }
+        .into_ffi()
     }
 
     fn is_transactional(&self) -> bool {
@@ -290,13 +321,13 @@ struct Blackhole {
     count: usize,
     structured: bool,
     buf: Vec<u8>,
-    kill_switch: KillSwitch,
+    kill_switch: BoxedKillSwitch,
     finished: bool,
 }
 
 impl Blackhole {
     #[allow(clippy::cast_precision_loss, clippy::unwrap_used)]
-    fn new(c: &Config, stop_after: StopAfter, kill_switch: KillSwitch) -> Self {
+    fn new(c: &Config, stop_after: StopAfter, kill_switch: BoxedKillSwitch) -> Self {
         let now_ns = nanotime();
         let sigfig = min(c.significant_figures, 5);
         // ALLOW: this is a debug connector and the values are validated ahead of time
@@ -320,67 +351,73 @@ impl Blackhole {
     }
 }
 
-#[async_trait::async_trait]
-impl Sink for Blackhole {
+impl RawSink for Blackhole {
     fn auto_ack(&self) -> bool {
         true
     }
-    async fn on_event(
-        &mut self,
-        _input: &str,
-        event: tremor_pipeline::Event,
-        ctx: &SinkContext,
-        event_serializer: &mut EventSerializer,
+    fn on_event<'a>(
+        &'a mut self,
+        _input: RStr<'a>,
+        event: Event,
+        ctx: &'a SinkContext,
+        event_serializer: &'a mut MutEventSerializer,
         _start: u64,
-    ) -> Result<SinkReply> {
-        if !self.finished {
-            let now_ns = nanotime();
+    ) -> BorrowingFfiFuture<'a, RResult<SinkReply>> {
+        async move {
+            if !self.finished {
+                let now_ns = nanotime();
 
-            for value in event.value_iter() {
-                if now_ns > self.warmup {
-                    let delta_ns = now_ns - event.ingest_ns;
-                    if let Ok(bufs) = event_serializer.serialize(value, event.ingest_ns) {
-                        self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
-                    } else {
-                        error!("failed to encode");
-                    };
-                    self.count += 1;
-                    self.buf.clear();
-                    self.delivered.record(delta_ns)?;
+                for value in event.value_iter() {
+                    if now_ns > self.warmup {
+                        let delta_ns = now_ns - event.ingest_ns;
+                        if let ROk(bufs) = event_serializer.serialize(value, event.ingest_ns) {
+                            self.bytes += bufs.iter().map(RVec::len).sum::<usize>();
+                        } else {
+                            error!("failed to encode");
+                        };
+                        self.count += 1;
+                        self.buf.clear();
+                        ttry!(self.delivered.record(delta_ns).map_err(Error::from));
+                    }
                 }
+
+                if self.stop_at.iter().any(|stop_at| now_ns >= *stop_at)
+                    || self
+                        .stop_after
+                        .events
+                        .iter()
+                        .any(|stop_after_events| self.count >= *stop_after_events)
+                {
+                    self.finished = true;
+                    if self.structured {
+                        let v = self.to_value(2);
+                        ttry!(v.write(&mut stdout()).map_err(Error::from));
+                    } else {
+                        ttry!(self.write_text(stdout(), 5, 2));
+                    }
+                    let kill_switch = self.kill_switch.clone();
+                    let stop_ctx = ctx.clone();
+                    info!("Bench done");
+
+                    // this should stop the whole server process
+                    // we spawn this out into another task, so we don't block the sink loop handling control plane messages
+                    async_std::task::spawn(async move {
+                        info!("{stop_ctx} Exiting...");
+                        stop_ctx.swallow_err(
+                            kill_switch
+                                .stop(ShutdownMode::Forceful)
+                                .await
+                                .map_err(Error::from)
+                                .into(),
+                            "Error stopping the world",
+                        );
+                    });
+                };
             }
 
-            if self.stop_at.iter().any(|stop_at| now_ns >= *stop_at)
-                || self
-                    .stop_after
-                    .events
-                    .iter()
-                    .any(|stop_after_events| self.count >= *stop_after_events)
-            {
-                self.finished = true;
-                if self.structured {
-                    let v = self.to_value(2);
-                    v.write(&mut stdout())?;
-                } else {
-                    self.write_text(stdout(), 5, 2)?;
-                }
-                let kill_switch = self.kill_switch.clone();
-                let stop_ctx = ctx.clone();
-                info!("Bench done");
-
-                // this should stop the whole server process
-                // we spawn this out into another task, so we don't block the sink loop handling control plane messages
-                async_std::task::spawn(async move {
-                    info!("{stop_ctx} Exiting...");
-                    stop_ctx.swallow_err(
-                        kill_switch.stop(ShutdownMode::Forceful).await,
-                        "Error stopping the world",
-                    );
-                });
-            };
+            ROk(SinkReply::default())
         }
-
-        Ok(SinkReply::default())
+        .into_ffi()
     }
 }
 
