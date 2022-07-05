@@ -20,7 +20,7 @@ use crate::{
     errors::{Error, ErrorKind},
     metrics::value_count,
     op::prelude::IN,
-    ConfigMap, ExecPortIndexMap, MetricsMsg, MetricsSender, NodeLookupFn,
+    ConfigMap, ExecPortIndexMap, LoggingSender, MetricsMsg, MetricsSender, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
@@ -255,6 +255,10 @@ pub struct ExecutableGraph {
     pub(crate) last_metrics: u64,
     pub(crate) metric_interval: Option<u64>,
     pub(crate) metrics_channel: MetricsSender,
+
+    #[allow(dead_code)]
+    // TODO fix
+    pub(crate) logging_channel: LoggingSender,
     /// snot
     pub insights: Vec<(usize, Event)>,
     /// the dot representation of the graph

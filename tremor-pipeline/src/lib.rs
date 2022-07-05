@@ -89,12 +89,17 @@ pub struct MetricsChannel {
     tx: Sender<MetricsMsg>,
     rx: Receiver<MetricsMsg>,
 }
+/// Channel for plugging logging messages
+pub struct LoggingChannel {
+    tx: Sender<LoggingMsg>,
+    rx: Receiver<LoggingMsg>,
+}
 
 impl MetricsChannel {
     pub(crate) fn new(qsize: usize) -> Self {
         let (mut tx, rx) = broadcast(qsize);
-        // We user overflow so that non collected messages can be removed
-        // Ffor Metrics it should be good enough we consume them quickly
+        // We use overflow so that non collected messages can be removed
+        // For Metrics it should be good enough we consume them quickly
         // and if not we got bigger problems
         tx.set_overflow(true);
         Self { tx, rx }
@@ -111,9 +116,40 @@ impl MetricsChannel {
         self.rx.clone()
     }
 }
+
+impl LoggingChannel {
+    pub(crate) fn new(qsize: usize) -> Self {
+        let (mut tx, rx) = broadcast(qsize);
+        // We use overflow so that non collected messages can be removed
+        // For Logging it should be good enough we consume them quickly
+        // and if not we got bigger problems
+        tx.set_overflow(true);
+        Self { tx, rx }
+    }
+
+    /// Get the sender
+    #[must_use]
+    pub fn tx(&self) -> Sender<LoggingMsg> {
+        self.tx.clone()
+    }
+    /// Get the receiver
+    #[must_use]
+    pub fn rx(&self) -> Receiver<LoggingMsg> {
+        self.rx.clone()
+    }
+}
+
 /// Metrics message
 #[derive(Debug, Clone)]
 pub struct MetricsMsg {
+    /// The payload
+    pub payload: EventPayload,
+    /// The origin
+    pub origin_uri: Option<EventOriginUri>,
+}
+#[derive(Debug)]
+/// Playload for ploggable logging
+pub struct LoggingMsg {
     /// The payload
     pub payload: EventPayload,
     /// The origin
@@ -130,13 +166,30 @@ impl MetricsMsg {
         }
     }
 }
+impl LoggingMsg {
+    /// creates a new message
+    #[must_use]
+    pub fn new(payload: EventPayload, origin_uri: Option<EventOriginUri>) -> Self {
+        Self {
+            payload,
+            origin_uri,
+        }
+    }
+}
 
 /// Sender for metrics
 pub type MetricsSender = Sender<MetricsMsg>;
 
+// TODO FIXME NOTE Add LogsSender
+
+/// Sender for plugging logging messagers
+pub type LoggingSender = Sender<LoggingMsg>;
+
 lazy_static! {
     /// TODO do we want to change this number or can we make it configurable?
     pub static ref METRICS_CHANNEL: MetricsChannel = MetricsChannel::new(128);
+    /// TODO do we want to change this number or can we make it configurable?
+    pub static ref LOGGING_CHANNEL: LoggingChannel = LoggingChannel::new(128);
 }
 
 /// Stringified numeric key

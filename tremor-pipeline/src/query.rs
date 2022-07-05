@@ -22,7 +22,7 @@ use crate::{
         trickle::{operator::TrickleOperator, select::Select, simple_select::SimpleSelect, window},
     },
     ConfigGraph, Connection, ExecPortIndexMap, ExecutableGraph, NodeConfig, NodeKind, NodeMetrics,
-    Operator, OperatorNode, State, METRICS_CHANNEL,
+    Operator, OperatorNode, State, LOGGING_CHANNEL, METRICS_CHANNEL,
 };
 use beef::Cow;
 use halfbrown::HashMap;
@@ -660,6 +660,7 @@ impl Query {
                 insights: Vec::new(),
                 dot: format!("{}", dot),
                 metrics_channel: METRICS_CHANNEL.tx(),
+                logging_channel: LOGGING_CHANNEL.tx(),
             })
         }
     }
