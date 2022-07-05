@@ -168,7 +168,7 @@ pub(crate) fn resource_logs_to_json(request: ExportLogsServiceRequest) -> Result
 
 pub(crate) fn resource_logs_to_pb(json: &Value<'_>) -> Result<Vec<ResourceLogs>> {
     json.get_array("logs")
-        .ok_or("Missing \"logs\" array")?
+        .ok_or("Missing `logs` array")?
         .iter()
         .filter_map(Value::as_object)
         .map(|data| {
