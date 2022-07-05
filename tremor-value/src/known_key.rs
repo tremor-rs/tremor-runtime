@@ -130,7 +130,6 @@ impl<'key> KnownKey<'key> {
     where
         'value: 'target,
     {
-        // map.get(self.key())
         map
             // TODO: update to better ergonomics when available
             // .raw_entry()
