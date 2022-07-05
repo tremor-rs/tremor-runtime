@@ -96,7 +96,7 @@ impl Connector for GCSWriterConnector {
             client: None,
             url,
             config: self.config.clone(),
-            buffers: Buffers::new(self.config.buffer_size),
+            buffers: ChunkedBuffer::new(self.config.buffer_size),
             current_name: None,
             current_session_url: None,
         };
@@ -110,13 +110,13 @@ impl Connector for GCSWriterConnector {
     }
 }
 
-struct Buffers {
+struct ChunkedBuffer {
     data: Vec<u8>,
     block_size: usize,
     buffer_start: usize,
 }
 
-impl Buffers {
+impl ChunkedBuffer {
     pub fn new(size: usize) -> Self {
         Self {
             data: Vec::with_capacity(size * 2),
@@ -162,7 +162,7 @@ struct GCSWriterSink {
     url: Url<HttpsDefaults>,
     #[allow(unused)] // FIXME: use or remove
     config: Config,
-    buffers: Buffers,
+    buffers: ChunkedBuffer,
     current_name: Option<String>,
     current_session_url: Option<String>,
 }
@@ -283,7 +283,7 @@ impl Sink for GCSWriterSink {
 
         self.client = Some(client);
         self.current_name = None;
-        self.buffers = Buffers::new(self.config.buffer_size); // FIXME: validate that the buffer size is a multiple of 256kB, as required by GCS
+        self.buffers = ChunkedBuffer::new(self.config.buffer_size); // FIXME: validate that the buffer size is a multiple of 256kB, as required by GCS
 
         Ok(true)
     }
@@ -323,7 +323,7 @@ impl GCSWriterSink {
                     let response = client.send(request).await?;
 
                     if !response.status().is_server_error() {
-                        self.buffers = Buffers::new(self.config.buffer_size);
+                        self.buffers = ChunkedBuffer::new(self.config.buffer_size);
                         self.current_session_url = None;
                         break;
                     }
@@ -379,5 +379,38 @@ impl GCSWriterSink {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    pub fn chunked_buffer_can_add_data() {
+        let mut buffer = ChunkedBuffer::new(10);
+        buffer.write(&(1..=10).collect::<Vec<u8>>());
+
+        assert_eq!(0, buffer.start());
+        assert_eq!(10, buffer.end());
+        assert_eq!([1,2,3,4,5,6,7,8,9,10], buffer.read_current_block().unwrap());
+    }
+
+    #[test]
+    pub fn chunked_buffer_will_not_return_a_block_which_is_not_full() {
+        let mut buffer = ChunkedBuffer::new(10);
+        buffer.write(&(1..=5).collect::<Vec<u8>>());
+
+        assert!(buffer.read_current_block().is_none());
+    }
+
+    #[test]
+    pub fn chunked_buffer_marking_as_done_removes_data() {
+        let mut buffer = ChunkedBuffer::new(10);
+        buffer.write(&(1..=15).collect::<Vec<u8>>());
+
+        buffer.mark_done_until(5);
+
+        assert_eq!(&(6..=15).collect::<Vec<u8>>(), buffer.read_current_block().unwrap());
     }
 }
