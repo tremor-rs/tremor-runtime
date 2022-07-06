@@ -12,11 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{common::OtelDefaults, logs, metrics, trace};
+use super::{
+    common::{Compression, OtelDefaults},
+    logs, metrics, trace,
+};
 use crate::connectors::prelude::*;
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::task::JoinHandle;
+use tonic::transport::Server as GrpcServer;
 use tremor_otelapis::all::{self, OpenTelemetryEvents};
+use tremor_otelapis::opentelemetry::proto::collector::{
+    logs::v1::logs_service_server::LogsServiceServer,
+    metrics::v1::metrics_service_server::MetricsServiceServer,
+    trace::v1::trace_service_server::TraceServiceServer,
+};
+
 const CONNECTOR_TYPE: &str = "otel_server";
 
 // TODO Consider concurrency cap?
@@ -34,6 +44,9 @@ pub(crate) struct Config {
     /// Enables the metrics service
     #[serde(default = "default_true")]
     pub(crate) metrics: bool,
+    /// Configure grpc compression
+    #[serde(default = "Default::default")]
+    pub(crate) compression: Compression,
 }
 
 impl ConfigImpl for Config {}
@@ -134,12 +147,7 @@ impl Connector for Server {
             previous_handle.cancel().await;
         }
 
-        let tx = self.tx.clone();
-
-        spawn_task(
-            ctx.clone(),
-            async move { Ok(all::make(endpoint, tx).await?) },
-        );
+        self.serve(ctx, endpoint).await;
         Ok(true)
     }
 }
@@ -188,6 +196,40 @@ impl Source for OtelSource {
 
     fn asynchronous(&self) -> bool {
         true
+    }
+}
+
+impl Server {
+    async fn serve(&mut self, ctx: &ConnectorContext, addr: std::net::SocketAddr) {
+        let trace_server =
+            TraceServiceServer::new(all::TraceServiceForwarder::with_sender(self.tx.clone()));
+
+        let logs_server =
+            LogsServiceServer::new(all::LogsServiceForwarder::with_sender(self.tx.clone()));
+
+        let metrics_server =
+            MetricsServiceServer::new(all::MetricsServiceForwarder::with_sender(self.tx.clone()));
+
+            
+        // set the compression on the server.
+        let (trace_server, logs_server, metrics_server) = match &self.config.compression {
+            Compression::Gzip => (
+                trace_server.accept_gzip().send_gzip(),
+                logs_server.accept_gzip().send_gzip(),
+                metrics_server.accept_gzip().send_gzip(),
+            ),
+
+            _ => (trace_server, logs_server, metrics_server),
+        };
+
+        spawn_task(ctx.clone(), async move {
+            Ok(GrpcServer::builder()
+                .add_service(trace_server)
+                .add_service(logs_server)
+                .add_service(metrics_server)
+                .serve(addr)
+                .await?)
+        });
     }
 }
 
