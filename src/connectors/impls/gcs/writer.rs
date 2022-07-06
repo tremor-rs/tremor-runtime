@@ -23,14 +23,16 @@ use crate::connectors::{
 };
 use crate::system::KillSwitch;
 use async_std::task::sleep;
+#[cfg(not(test))]
 use gouth::Token;
+#[cfg(not(test))]
 use http_client::h1::H1Client;
 use http_client::HttpClient;
 use http_types::{Method, Request};
 use std::time::Duration;
+use value_trait::ValueAccess;
 use tremor_pipeline::{ConfigImpl, Event};
 use tremor_value::Value;
-use value_trait::ValueAccess;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -158,6 +160,9 @@ impl ChunkedBuffer {
 }
 
 struct GCSWriterSink {
+    #[cfg(test)]
+    client: Option<tests::MockHttpClient>,
+    #[cfg(not(test))]
     client: Option<H1Client>,
     url: Url<HttpsDefaults>,
     #[allow(unused)] // FIXME: use or remove
@@ -277,8 +282,25 @@ impl Sink for GCSWriterSink {
         Ok(SinkReply::ACK)
     }
 
+    async fn on_stop(&mut self, _ctx: &SinkContext) -> Result<()> {
+        self.finish_upload().await
+    }
+
+    #[cfg(not(test))]
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let mut client = H1Client::new();
+        client.set_config(http_client::Config::new().set_http_keep_alive(false))?;
+
+        self.client = Some(client);
+        self.current_name = None;
+        self.buffers = ChunkedBuffer::new(self.config.buffer_size); // FIXME: validate that the buffer size is a multiple of 256kB, as required by GCS
+
+        Ok(true)
+    }
+
+    #[cfg(test)]
+    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
+        let mut client = tests::MockHttpClient { config: Default::default() };
         client.set_config(http_client::Config::new().set_http_keep_alive(false))?;
 
         self.client = Some(client);
@@ -295,42 +317,48 @@ impl Sink for GCSWriterSink {
 
 impl GCSWriterSink {
     async fn finish_upload_if_needed(&mut self, name: &str) -> Result<()> {
+        if self.current_name.as_deref() != Some(name) {
+            return self.finish_upload().await;
+        }
+
+        Ok(())
+    }
+
+    async fn finish_upload(&mut self) -> Result<()> {
         if let Some(current_session_url) = self.current_session_url.as_ref() {
-            if self.current_name.as_deref() != Some(name) {
-                let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
-                    "Google Cloud Storage",
-                    "not connected",
-                ))?;
+            let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
+                "Google Cloud Storage",
+                "not connected",
+            ))?;
 
-                let final_data = self.buffers.final_block();
+            let final_data = self.buffers.final_block();
 
-                for i in 0..3 {
-                    let mut request =
-                        Request::new(Method::Put, url::Url::parse(current_session_url)?);
-                    // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
-                    request.insert_header(
-                        "Content-Range",
-                        format!(
-                            "bytes {}-{}/{}",
-                            self.buffers.start(),
-                            self.buffers.start() + final_data.len() - 1,
-                            self.buffers.start() + final_data.len()
-                        ),
-                    );
-                    request.insert_header("Content-Length", format!("{}", final_data.len()));
-                    request.set_body(final_data);
+            for i in 0..3 {
+                let mut request =
+                    Request::new(Method::Put, url::Url::parse(current_session_url)?);
+                // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
+                request.insert_header(
+                    "Content-Range",
+                    format!(
+                        "bytes {}-{}/{}",
+                        self.buffers.start(),
+                        self.buffers.start() + final_data.len() - 1,
+                        self.buffers.start() + final_data.len()
+                    ),
+                );
+                request.insert_header("Content-Length", format!("{}", final_data.len()));
+                request.set_body(final_data);
 
-                    let response = client.send(request).await?;
+                let response = client.send(request).await?;
 
-                    if !response.status().is_server_error() {
-                        self.buffers = ChunkedBuffer::new(self.config.buffer_size);
-                        self.current_session_url = None;
-                        break;
-                    }
-
-                    // FIXME: Adjust the timeout, this number  is pulled of my... hat
-                    sleep(Duration::from_millis(250u64 * 2u64.pow(i))).await;
+                if !response.status().is_server_error() {
+                    self.buffers = ChunkedBuffer::new(self.config.buffer_size);
+                    self.current_session_url = None;
+                    break;
                 }
+
+                // FIXME: Adjust the timeout, this number  is pulled of my... hat
+                sleep(Duration::from_millis(250u64 * 2u64.pow(i))).await;
             }
         }
 
@@ -343,6 +371,7 @@ impl GCSWriterSink {
             "not connected",
         ))?;
 
+        #[cfg(not(test))]
         let token = Token::new()?;
 
         if self.current_session_url.is_none() {
@@ -359,8 +388,15 @@ impl GCSWriterSink {
                     ))?,
                 name
             ))?;
+            #[cfg(not(test))]
             let mut request = Request::new(Method::Post, url);
-            request.insert_header("Authorization", token.header_value()?.to_string());
+            #[cfg(test)]
+            let request = Request::new(Method::Post, url);
+            #[cfg(not(test))] {
+                request.insert_header("Authorization", token.header_value()?.to_string());
+            }
+
+            dbg!(&request);
             let response = client.send(request).await?;
 
             self.current_session_url = Some(
@@ -384,7 +420,36 @@ impl GCSWriterSink {
 
 #[cfg(test)]
 mod tests {
+    use beef::Cow;
+    use http_client::{Error, Response};
+    use tremor_common::ports::IN;
+    use tremor_script::{ValueAndMeta};
+    use tremor_value::{literal, Value};
+    use crate::connectors::tests::ConnectorHarness;
     use super::*;
+
+    #[derive(Debug)]
+    pub struct MockHttpClient {
+        pub config: http_client::Config
+    }
+
+    #[async_trait::async_trait]
+    impl HttpClient for MockHttpClient {
+        async fn send(&self, req: http_client::Request) -> std::result::Result<Response, Error> {
+            panic!("Boooo {:?}", req);
+            // Ok(Response::new(http_types::StatusCode::Ok))
+        }
+
+        fn set_config(&mut self, config: http_client::Config) -> http_types::Result<()> {
+            self.config = config;
+
+            Ok(())
+        }
+
+        fn config(&self) -> &http_client::Config {
+            &self.config
+        }
+    }
 
     #[test]
     pub fn chunked_buffer_can_add_data() {
@@ -412,5 +477,56 @@ mod tests {
         buffer.mark_done_until(5);
 
         assert_eq!(&(6..=15).collect::<Vec<u8>>(), buffer.read_current_block().unwrap());
+    }
+
+    #[test]
+    pub fn chunked_buffer_returns_all_the_data_in_the_final_block() {
+        let mut buffer = ChunkedBuffer::new(10);
+        buffer.write(&(1..=16).collect::<Vec<u8>>());
+
+        buffer.mark_done_until(5);
+        assert_eq!(&(6..=16).collect::<Vec<u8>>(), buffer.final_block());
+    }
+
+    #[async_std::test]
+    pub async fn upload_single_file() -> Result<()> {
+        let connector_yaml: Value = literal!({
+            "codec": "binary",
+            "config":{
+                "buffer_size": 512*1024
+            }
+        });
+
+        let harness =
+            ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await?;
+        harness.start().await?;
+        harness.wait_for_connected().await?;
+        harness.consume_initial_sink_contraflow().await?;
+
+        let meta = literal!({
+            "gcs_writer": {
+                "name": "my-object.txt",
+                "bucket": "some_bucket"
+            }
+        });
+        harness.send_to_sink(Event {
+            id: Default::default(),
+            data: ValueAndMeta::from_parts(Value::Bytes(Cow::from((0..=1024*1024).map(|_| 0x20u8).collect::<Vec<u8>>())), meta).into(),
+            ingest_ns: 0,
+            origin_uri: None,
+            kind: None,
+            is_batch: false,
+            cb: Default::default(),
+            op_meta: Default::default(),
+            transactional: false
+        }, IN).await?;
+
+        sleep(Duration::from_secs(10)).await;
+
+        harness.stop().await?;
+
+        todo!("Acutally implement this test");
+
+        // Ok(())
     }
 }
