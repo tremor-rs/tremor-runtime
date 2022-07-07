@@ -210,7 +210,6 @@ impl Server {
         let metrics_server =
             MetricsServiceServer::new(all::MetricsServiceForwarder::with_sender(self.tx.clone()));
 
-            
         // set the compression on the server.
         let (trace_server, logs_server, metrics_server) = match &self.config.compression {
             Compression::Gzip => (
@@ -219,7 +218,7 @@ impl Server {
                 metrics_server.accept_gzip().send_gzip(),
             ),
 
-            _ => (trace_server, logs_server, metrics_server),
+            Compression::None => (trace_server, logs_server, metrics_server),
         };
 
         spawn_task(ctx.clone(), async move {

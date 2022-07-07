@@ -34,6 +34,7 @@ impl url::Defaults for OtelDefaults {
 
 /// Enum to support configurable compression on otel grpc client/servers.
 #[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum Compression {
     #[default]
     None,
