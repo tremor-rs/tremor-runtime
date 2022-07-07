@@ -2,6 +2,7 @@
 
 ### New features
 - Add reverse functions and tests for arrays and strings, add sort test for arrays
+- Add `compression` field in `otel` connectors for compression support on payloads.
 
 ## [0.12.4]
 
