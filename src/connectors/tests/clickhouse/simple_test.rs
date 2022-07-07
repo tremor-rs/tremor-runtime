@@ -54,7 +54,7 @@ async fn simple_insertion() -> Result<()> {
     };
     let image = RunnableImage::from(image).with_mapped_port(port_to_expose);
     let container = docker.run(image);
-    let port = container.get_host_port(9000);
+    let port = container.get_host_port_ipv4(9000);
     utils::wait_for_ok(port).await?;
 
     // Once the database is available, we use the regular client to create the
