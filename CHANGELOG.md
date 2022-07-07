@@ -2,6 +2,7 @@
 
 ### New features
 - Add reverse functions and tests for arrays and strings, add sort test for arrays
+- Add a ClickHouse connector
 
 ## [0.12.4]
 
