@@ -394,6 +394,18 @@ impl<'value> ValueAccess for Value<'value> {
 
     #[inline]
     #[must_use]
+    fn value_type(&self) -> ValueType {
+        match self {
+            Self::Static(s) => s.value_type(),
+            Self::String(_) => ValueType::String,
+            Self::Array(_) => ValueType::Array,
+            Self::Object(_) => ValueType::Object,
+            Self::Bytes(_) => ValueType::Custom("bytes"),
+        }
+    }
+
+    #[inline]
+    #[must_use]
     fn as_bool(&self) -> Option<bool> {
         match self {
             Self::Static(StaticNode::Bool(b)) => Some(*b),
@@ -481,18 +493,6 @@ impl<'value> ValueTrait for Value<'value> {
     #[must_use]
     fn is_custom(&self) -> bool {
         matches!(self, Value::Bytes(_))
-    }
-
-    #[inline]
-    #[must_use]
-    fn value_type(&self) -> ValueType {
-        match self {
-            Self::Static(s) => s.value_type(),
-            Self::String(_) => ValueType::String,
-            Self::Array(_) => ValueType::Array,
-            Self::Object(_) => ValueType::Object,
-            Self::Bytes(_) => ValueType::Custom("bytes"),
-        }
     }
 
     #[inline]
