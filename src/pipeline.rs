@@ -584,6 +584,11 @@ pub(crate) async fn pipeline_task(
                 target,
             }) => {
                 info!("{ctx} Connecting port '{port}' to {endpoint}",);
+                // add error statement for port out in pipeline, currently no error messages
+                if output_doesnt_exist(&port, &pipeline) {
+                    error!("{ctx} Error connecting output pipeline {port}");
+                    continue;
+                }
                 // notify other pipeline about a new input
                 if let OutputTarget::Pipeline(pipe) = &target {
                     // avoid linking the same pipeline as input to itself
@@ -672,6 +677,11 @@ pub(crate) async fn pipeline_task(
 
     info!("{ctx} Stopped.");
     Ok(())
+}
+
+fn output_doesnt_exist(port: &Cow<'static, str>, pipeline: &ExecutableGraph) -> bool {
+    // function checks if port is in pipeline
+    return !pipeline.outputs.contains_key(port);
 }
 
 #[cfg(test)]

@@ -273,6 +273,7 @@ impl Query {
                     };
                     select_num += 1;
                     let mut from = resolve_output_port(&s.from);
+                    //future error fixing here, could be other in ports other than "in/" that need error messages
                     if from.id == "in" && from.port != "out" {
                         let name: Cow<'static, str> = format!("in/{}", from.port).into();
                         from.id = name.clone();
@@ -286,6 +287,7 @@ impl Query {
                             nodes_by_name.insert(name.clone(), id);
                         }
                     }
+                    //check 'out' to see if it prevents good errors
                     let mut into = resolve_input_port(&s.into);
                     if into.id == "out" && into.port != "in" {
                         let name: Cow<'static, str> = format!("out/{}", into.port).into();
@@ -652,6 +654,21 @@ impl Query {
                 }
             }
 
+            let mut outputs: HashMap<beef::Cow<'static, str>, usize> = HashMap::new();
+            for idx in pipe_graph.externals(Outgoing) {
+                if let Some(NodeConfig {
+                    kind: NodeKind::Output(_),
+                    id,
+                    ..
+                }) = pipe_graph.node_weight(idx)
+                {
+                    let v = *i2pos
+                        .get(&idx)
+                        .ok_or_else(|| Error::from("Invalid graph - failed to build outputs"))?;
+                    outputs.insert(id.clone().into(), v);
+                }
+            }
+
             Ok(ExecutableGraph {
                 metrics: iter::repeat(NodeMetrics::default())
                     .take(graph.len())
@@ -669,6 +686,7 @@ impl Query {
                 insights: Vec::new(),
                 dot: format!("{}", dot),
                 metrics_channel: METRICS_CHANNEL.tx(),
+                outputs,
             })
         }
     }
