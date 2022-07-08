@@ -30,7 +30,7 @@ tremor-common = { version = "0.12.4", path = "../tremor-common" }
 tremor-script = { version = "0.12.4", path = "../tremor-script" }
 tremor-value = { version = "0.12.4", path = "../tremor-value" }
 url = "2.2.2"
-value-trait = "0.2"
+value-trait = "0.3"
 window = { git = "https://github.com/tremor-rs/window.git", tag = "v0.1.1" }
 
 [dev-dependencies]
