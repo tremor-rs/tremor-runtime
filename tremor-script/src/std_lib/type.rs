@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::prelude::*;
 use crate::registry::Registry;
+use crate::{errors, prelude::*};
 use crate::{tremor_const_fn, tremor_fn_};
 
 macro_rules! map_function {
@@ -39,16 +39,7 @@ pub fn load(registry: &mut Registry) {
         .insert(map_function!(is_array))
         .insert(map_function!(is_record, is_object))
         .insert(tremor_const_fn! (type|as_string(_context, _input) {
-            Ok(match _input.value_type() {
-                ValueType::Null => Value::from("null"),
-                ValueType::Bool => Value::from("bool"),
-                ValueType::U64 | ValueType::I64 => Value::from("integer"),
-                ValueType::F64 => Value::from("float"),
-                ValueType::String => Value::from("string"),
-                ValueType::Array => Value::from("array"),
-                ValueType::Object => Value::from("record"),
-                ValueType::Custom(c) => Value::from(c),
-            })
+            Ok(errors::t2s(_input.value_type()).into())
         }))
         .insert(tremor_const_fn! (type|is_number(_context, _input) {
             Ok(match _input.value_type() {
