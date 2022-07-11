@@ -136,18 +136,14 @@ impl ChunkedBuffer {
         }
 
         let bytes_to_remove = position - self.buffer_start;
-        self.data = Vec::from(&self.data[bytes_to_remove..]);
+        self.data = Vec::from(self.data.get(bytes_to_remove..).ok_or(ErrorKind::GoogleCloudStorageError("Not enough data in the buffer"))?);
         self.buffer_start += bytes_to_remove;
 
         Ok(())
     }
 
     pub fn read_current_block(&self) -> Option<&[u8]> {
-        if self.data.len() < self.block_size {
-            return None;
-        }
-
-        Some(&self.data[..self.block_size])
+        self.data.get(..self.block_size)
     }
 
     pub fn write(&mut self, data: &[u8]) {
@@ -163,7 +159,7 @@ impl ChunkedBuffer {
     }
 
     pub fn final_block(&self) -> &[u8] {
-        &self.data[..]
+        self.data.as_slice()
     }
 }
 
