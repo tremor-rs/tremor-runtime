@@ -13,14 +13,12 @@
 // limitations under the License.
 
 use async_std::sync::Arc;
-use beef::Cow;
 use std::time::Duration;
 
 use crate::connectors::impls::kafka::{
-    is_failed_connect_error, SmolRuntime, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT, NO_ERROR,
+    SmolRuntime, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT, NO_ERROR,
 };
 use crate::connectors::prelude::*;
-use crate::connectors::utils::metrics::make_metrics_payload;
 use async_broadcast::{broadcast, Receiver as BroadcastReceiver};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::{FutureExt, StreamExt};
@@ -32,7 +30,7 @@ use rdkafka::config::ClientConfig;
 use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, Rebalance, StreamConsumer};
 use rdkafka::error::KafkaError;
 use rdkafka::message::{BorrowedMessage, Headers, Message};
-use rdkafka::{ClientContext, Offset, TopicPartitionList};
+use rdkafka::{Offset, TopicPartitionList};
 use rdkafka_sys::RDKafkaErrorCode;
 
 const KAFKA_CONSUMER_META_KEY: &str = "kafka_consumer";

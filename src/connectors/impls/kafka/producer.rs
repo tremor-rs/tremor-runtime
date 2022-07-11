@@ -18,26 +18,20 @@
 use std::time::Duration;
 
 use crate::connectors::impls::kafka::{
-    is_failed_connect_error, is_fatal_error, SmolRuntime, TremorRDKafkaContext,
-    KAFKA_CONNECT_TIMEOUT,
+    is_fatal_error, SmolRuntime, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT,
 };
-use crate::connectors::metrics::make_metrics_payload;
 use crate::connectors::prelude::*;
 use async_broadcast::{broadcast, Receiver as BroadcastReceiver};
 use async_std::channel::{bounded, Sender};
 use async_std::prelude::FutureExt;
 use async_std::task;
-use beef::Cow;
 use halfbrown::HashMap;
 use rdkafka::config::{ClientConfig, FromClientConfigAndContext};
-use rdkafka::producer::{DeliveryFuture, Producer, ProducerContext};
+use rdkafka::producer::{DeliveryFuture, Producer};
 use rdkafka::{
-    error::KafkaError,
     message::OwnedHeaders,
     producer::{FutureProducer, FutureRecord},
 };
-use rdkafka::{ClientContext, Statistics};
-use rdkafka_sys::RDKafkaErrorCode;
 use tremor_common::time::nanotime;
 
 const KAFKA_PRODUCER_META_KEY: &str = "kafka_producer";

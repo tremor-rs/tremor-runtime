@@ -145,24 +145,25 @@ where
             | rdkafka::config::RDKafkaLogLevel::Alert
             | rdkafka::config::RDKafkaLogLevel::Critical
             | rdkafka::config::RDKafkaLogLevel::Error => {
-                error!(target: "librdkafka", "{} librdkafka: {} {}", self.ctx, fac, log_message)
+                error!(target: "librdkafka", "{} librdkafka: {} {}", self.ctx, fac, log_message);
             }
             rdkafka::config::RDKafkaLogLevel::Warning => {
-                warn!(target: "librdkafka", "{} librdkafka: {} {}", self.ctx, fac, log_message)
+                warn!(target: "librdkafka", "{} librdkafka: {} {}", self.ctx, fac, log_message);
             }
             rdkafka::config::RDKafkaLogLevel::Notice => {
-                info!(target: "librdkafka", "{} librdkafka: {} {}", self.ctx, fac, log_message)
+                info!(target: "librdkafka", "{} librdkafka: {} {}", self.ctx, fac, log_message);
             }
             rdkafka::config::RDKafkaLogLevel::Info => {
-                info!(target: "librdkafka", "{} librdkafka: {} {}", self.ctx, fac, log_message)
+                info!(target: "librdkafka", "{} librdkafka: {} {}", self.ctx, fac, log_message);
             }
             rdkafka::config::RDKafkaLogLevel::Debug => {
-                debug!(target: "librdkafka", "{} librdkafka: {} {}", self.ctx, fac, log_message)
+                debug!(target: "librdkafka", "{} librdkafka: {} {}", self.ctx, fac, log_message);
             }
         }
     }
 
     // TODO: add full connector id to tags
+    #[allow(clippy::cast_sign_loss)]
     fn stats(&self, stats: rdkafka::Statistics) {
         let metrics_payload = if stats.client_type.eq(Self::PRODUCER) {
             let timestamp = stats.time as u64 * 1_000_000_000;
