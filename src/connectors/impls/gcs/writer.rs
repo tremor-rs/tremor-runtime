@@ -126,11 +126,16 @@ impl ChunkedBuffer {
         }
     }
 
-    pub fn mark_done_until(&mut self, position: usize) {
-        // FIXME assert that position > self.buffer_start
+    pub fn mark_done_until(&mut self, position: usize) -> Result<()> {
+        if position < self.buffer_start {
+            return Err("Buffer was marked as done at index which is not in memory anymore".into());
+        }
+
         let bytes_to_remove = position - self.buffer_start;
         self.data = Vec::from(&self.data[bytes_to_remove..]);
         self.buffer_start += bytes_to_remove;
+
+        Ok(())
     }
 
     pub fn read_current_block(&self) -> Option<&[u8]> {
@@ -220,9 +225,8 @@ impl Sink for GCSWriterSink {
                             self.buffers.end() - 1
                         ),
                     );
-                    request.insert_header("User-Agent", "curl/7.68.0"); // FIXME: set a sensible user-agent
+                    request.insert_header("User-Agent", "Tremor");
                     request.insert_header("Accept", "*/*");
-                    // request.insert_header("Content-Length", format!("{}", self.buffers.end() - self.buffers.start()));
                     request.set_body(data);
 
                     let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
@@ -267,7 +271,7 @@ impl Sink for GCSWriterSink {
                             ),
                         )? + 1..];
 
-                        self.buffers.mark_done_until(range_end.parse()?);
+                        self.buffers.mark_done_until(range_end.parse()?)?;
                     } else {
                         return Err("No range header?".into());
                     }
@@ -520,7 +524,7 @@ mod tests {
         let mut buffer = ChunkedBuffer::new(10);
         buffer.write(&(1..=15).collect::<Vec<u8>>());
 
-        buffer.mark_done_until(5);
+        buffer.mark_done_until(5).unwrap();
 
         assert_eq!(
             &(6..=15).collect::<Vec<u8>>(),
@@ -533,7 +537,7 @@ mod tests {
         let mut buffer = ChunkedBuffer::new(10);
         buffer.write(&(1..=16).collect::<Vec<u8>>());
 
-        buffer.mark_done_until(5);
+        buffer.mark_done_until(5).unwrap();
         assert_eq!(&(6..=16).collect::<Vec<u8>>(), buffer.final_block());
     }
 
