@@ -30,9 +30,9 @@ use http_client::h1::H1Client;
 use http_client::HttpClient;
 use http_types::{Method, Request};
 use std::time::Duration;
-use value_trait::ValueAccess;
 use tremor_pipeline::{ConfigImpl, Event};
 use tremor_value::Value;
+use value_trait::ValueAccess;
 
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
@@ -222,7 +222,7 @@ impl Sink for GCSWriterSink {
                             self.buffers.end() - 1
                         ),
                     );
-                    request.insert_header("User-Agent", "curl/7.68.0");
+                    request.insert_header("User-Agent", "curl/7.68.0"); // FIXME: set a sensible user-agent
                     request.insert_header("Accept", "*/*");
                     // request.insert_header("Content-Length", format!("{}", self.buffers.end() - self.buffers.start()));
                     request.set_body(data);
@@ -300,7 +300,10 @@ impl Sink for GCSWriterSink {
 
     #[cfg(test)]
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let mut client = tests::MockHttpClient { config: Default::default() };
+        let mut client = tests::MockHttpClient {
+            config: Default::default(),
+            expect_final_request: false,
+        };
         client.set_config(http_client::Config::new().set_http_keep_alive(false))?;
 
         self.client = Some(client);
@@ -334,8 +337,7 @@ impl GCSWriterSink {
             let final_data = self.buffers.final_block();
 
             for i in 0..3 {
-                let mut request =
-                    Request::new(Method::Put, url::Url::parse(current_session_url)?);
+                let mut request = Request::new(Method::Put, url::Url::parse(current_session_url)?);
                 // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
                 request.insert_header(
                     "Content-Range",
@@ -392,11 +394,11 @@ impl GCSWriterSink {
             let mut request = Request::new(Method::Post, url);
             #[cfg(test)]
             let request = Request::new(Method::Post, url);
-            #[cfg(not(test))] {
+            #[cfg(not(test))]
+            {
                 request.insert_header("Authorization", token.header_value()?.to_string());
             }
 
-            dbg!(&request);
             let response = client.send(request).await?;
 
             self.current_session_url = Some(
@@ -416,28 +418,68 @@ impl GCSWriterSink {
 
         Ok(())
     }
+
+    #[cfg(test)]
+    fn http_client(&mut self) -> Option<&mut tests::MockHttpClient> {
+        self.client.as_mut()
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use beef::Cow;
-    use http_client::{Error, Response};
-    use tremor_common::ports::IN;
-    use tremor_script::{ValueAndMeta};
-    use tremor_value::{literal, Value};
-    use crate::connectors::tests::ConnectorHarness;
     use super::*;
+    use crate::config::Codec;
+    use crate::connectors::reconnect::ConnectionLostNotifier;
+    use async_std::channel::unbounded;
+    use beef::Cow;
+    use http_types::{Error, Response};
+    use tremor_script::ValueAndMeta;
+    use tremor_value::literal;
 
     #[derive(Debug)]
     pub struct MockHttpClient {
-        pub config: http_client::Config
+        pub config: http_client::Config,
+        pub expect_final_request: bool,
     }
 
     #[async_trait::async_trait]
     impl HttpClient for MockHttpClient {
-        async fn send(&self, req: http_client::Request) -> std::result::Result<Response, Error> {
-            panic!("Boooo {:?}", req);
-            // Ok(Response::new(http_types::StatusCode::Ok))
+        async fn send(
+            &self,
+            mut req: http_client::Request,
+        ) -> std::result::Result<Response, Error> {
+            if req.url().host_str() == Some("start.example.com") {
+                let mut response = Response::new(http_types::StatusCode::Ok);
+                response.insert_header("Location", "https://upload.example.com/");
+
+                Ok(response)
+            } else if req.url().host_str() == Some("upload.example.com") {
+                let content_range = req.header("Content-Range").unwrap()[0].as_str();
+                let start: usize = content_range["bytes ".len()..content_range.find("-").unwrap()]
+                    .parse()
+                    .unwrap();
+                let end: usize = content_range
+                    [content_range.find("-").unwrap() + 1..content_range.find('/').unwrap()]
+                    .parse()
+                    .unwrap();
+                let total_size = &content_range[content_range.find("/").unwrap() + 1..];
+
+                if self.expect_final_request {
+                    assert_eq!(end + 1, total_size.parse::<usize>().unwrap());
+                } else {
+                    assert_eq!("*", total_size);
+                }
+
+                // NOTE: +1 here because Content-Range is an INCLUSIVE range
+                assert_eq!(req.body_bytes().await.unwrap().len(), end - start + 1);
+
+                let mut response = Response::new(http_types::StatusCode::Ok);
+                response.insert_header("Range", format!("{}-{}", start, end));
+
+                Ok(response)
+            } else {
+                panic!("Unexpected request URL: {}", req.url());
+            }
         }
 
         fn set_config(&mut self, config: http_client::Config) -> http_types::Result<()> {
@@ -458,7 +500,10 @@ mod tests {
 
         assert_eq!(0, buffer.start());
         assert_eq!(10, buffer.end());
-        assert_eq!([1,2,3,4,5,6,7,8,9,10], buffer.read_current_block().unwrap());
+        assert_eq!(
+            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+            buffer.read_current_block().unwrap()
+        );
     }
 
     #[test]
@@ -476,7 +521,10 @@ mod tests {
 
         buffer.mark_done_until(5);
 
-        assert_eq!(&(6..=15).collect::<Vec<u8>>(), buffer.read_current_block().unwrap());
+        assert_eq!(
+            &(6..=15).collect::<Vec<u8>>(),
+            buffer.read_current_block().unwrap()
+        );
     }
 
     #[test]
@@ -490,18 +538,21 @@ mod tests {
 
     #[async_std::test]
     pub async fn upload_single_file() -> Result<()> {
-        let connector_yaml: Value = literal!({
-            "codec": "binary",
-            "config":{
-                "buffer_size": 512*1024
-            }
-        });
-
-        let harness =
-            ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await?;
-        harness.start().await?;
-        harness.wait_for_connected().await?;
-        harness.consume_initial_sink_contraflow().await?;
+        let mut sink = GCSWriterSink {
+            client: Some(MockHttpClient {
+                config: Default::default(),
+                expect_final_request: false,
+            }),
+            url: Url::parse("https://start.example.com").unwrap(),
+            config: Config {
+                endpoint: "https://start.example.com".to_string(),
+                connect_timeout: 0,
+                buffer_size: 0,
+            },
+            buffers: ChunkedBuffer::new(100),
+            current_name: None,
+            current_session_url: None,
+        };
 
         let meta = literal!({
             "gcs_writer": {
@@ -509,24 +560,47 @@ mod tests {
                 "bucket": "some_bucket"
             }
         });
-        harness.send_to_sink(Event {
+        let event = Event {
             id: Default::default(),
-            data: ValueAndMeta::from_parts(Value::Bytes(Cow::from((0..=1024*1024).map(|_| 0x20u8).collect::<Vec<u8>>())), meta).into(),
+            data: ValueAndMeta::from_parts(
+                Value::Bytes(Cow::from(
+                    (0..=1024 * 1024).map(|_| 0x20u8).collect::<Vec<u8>>(),
+                )),
+                meta,
+            )
+            .into(),
             ingest_ns: 0,
             origin_uri: None,
             kind: None,
             is_batch: false,
             cb: Default::default(),
             op_meta: Default::default(),
-            transactional: false
-        }, IN).await?;
+            transactional: false,
+        };
 
-        sleep(Duration::from_secs(10)).await;
+        let (tx, _rx) = unbounded();
+        let context = SinkContext {
+            uid: Default::default(),
+            alias: "".to_string(),
+            connector_type: "gcs_writer".into(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(tx),
+        };
 
-        harness.stop().await?;
+        let mut serializer = EventSerializer::new(
+            Some(Codec::from("json")),
+            CodecReq::Required,
+            vec![],
+            &ConnectorType("gcs_writer".into()),
+            "gbq",
+        )?;
+        sink.on_event("", event, &context, &mut serializer, 0)
+            .await?;
 
-        todo!("Acutally implement this test");
+        sink.http_client().unwrap().expect_final_request = true;
+        // FIXME: make the HttpClient expect the final request here
+        sink.on_stop(&context).await?;
 
-        // Ok(())
+        Ok(())
     }
 }
