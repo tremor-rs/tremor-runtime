@@ -238,8 +238,8 @@ impl Sink for GCSWriterSink {
                         Ok(request) => response = Some(request),
                         Err(e) => {
                             warn!("Failed to send a request to GCS: {}", e);
-                            // FIXME: Adjust the timeout, this number  is pulled of my... hat
-                            sleep(Duration::from_millis(250u64 * 2u64.pow(i))).await;
+
+                            sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
                             continue;
                         }
                     }
@@ -251,8 +251,7 @@ impl Sink for GCSWriterSink {
                             break;
                         }
 
-                        // FIXME: Adjust the timeout, this number  is pulled of my... hat
-                        sleep(Duration::from_millis(250u64 * 2u64.pow(i))).await;
+                        sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
                     }
                 }
 
@@ -364,8 +363,7 @@ impl GCSWriterSink {
                     break;
                 }
 
-                // FIXME: Adjust the timeout, this number  is pulled of my... hat
-                sleep(Duration::from_millis(250u64 * 2u64.pow(i))).await;
+                sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
             }
         }
 
