@@ -1265,7 +1265,7 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         Box::new(impls::gpubsub::producer::Builder::default()),
         Box::new(impls::clickhouse::Builder::default()),
         Box::new(impls::gcl::writer::Builder::default()),
-        Box::new(impls::gcs::writer::Builder::default())
+        Box::new(impls::gcs::writer::Builder::default()),
     ]
 }
 

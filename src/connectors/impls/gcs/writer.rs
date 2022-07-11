@@ -539,15 +539,12 @@ mod tests {
     #[async_std::test]
     pub async fn upload_single_file() -> Result<()> {
         let mut sink = GCSWriterSink {
-            client: Some(MockHttpClient {
-                config: Default::default(),
-                expect_final_request: false,
-            }),
+            client: None,
             url: Url::parse("https://start.example.com").unwrap(),
             config: Config {
                 endpoint: "https://start.example.com".to_string(),
                 connect_timeout: 0,
-                buffer_size: 0,
+                buffer_size: 100,
             },
             buffers: ChunkedBuffer::new(100),
             current_name: None,
@@ -594,6 +591,7 @@ mod tests {
             &ConnectorType("gcs_writer".into()),
             "gbq",
         )?;
+        sink.connect(&context, &Attempt::default()).await?;
         sink.on_event("", event, &context, &mut serializer, 0)
             .await?;
 
