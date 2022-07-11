@@ -39,10 +39,10 @@ pub struct Config {
     #[serde(default = "default_endpoint")]
     endpoint: String,
     #[serde(default = "default_connect_timeout")]
-    #[allow(unused)] // FIXME: use or remove
+    #[cfg_attr(test, allow(unused))]
     connect_timeout: u64,
     #[serde(default = "default_buffer_size")]
-    buffer_size: usize, // request_timeout: u64
+    buffer_size: usize,
 }
 
 fn default_endpoint() -> String {
@@ -54,8 +54,7 @@ fn default_connect_timeout() -> u64 {
 }
 
 fn default_buffer_size() -> usize {
-    // 1024 * 1024 * 8 // 8MB - the recommended minimum
-    512 * 1024 // FIXME: This is way too low, using only for testing
+    1024 * 1024 * 8 // 8MB - the recommended minimum
 }
 
 impl ConfigImpl for Config {}
@@ -165,7 +164,6 @@ struct GCSWriterSink {
     #[cfg(not(test))]
     client: Option<H1Client>,
     url: Url<HttpsDefaults>,
-    #[allow(unused)] // FIXME: use or remove
     config: Config,
     buffers: ChunkedBuffer,
     current_name: Option<String>,
@@ -289,7 +287,10 @@ impl Sink for GCSWriterSink {
     #[cfg(not(test))]
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let mut client = H1Client::new();
-        client.set_config(http_client::Config::new().set_http_keep_alive(false))?;
+        client.set_config(
+            http_client::Config::new()
+                .set_timeout(Some(Duration::from_nanos(self.config.connect_timeout))),
+        )?;
 
         self.client = Some(client);
         self.current_name = None;
