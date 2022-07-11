@@ -169,6 +169,7 @@ impl Addr {
 }
 
 /// Messages a Connector instance receives and acts upon
+#[derive(Debug)]
 pub(crate) enum Msg {
     /// connect 1 or more pipelines to a port
     LinkInput {
@@ -1263,18 +1264,18 @@ where
 }
 
 #[cfg(test)]
-mod unit_tests {
+pub(crate) mod unit_tests {
     use super::*;
 
     #[derive(Clone)]
-    struct FakeContext {
+    pub(crate) struct FakeContext {
         t: ConnectorType,
         notifier: reconnect::ConnectionLostNotifier,
         beacon: QuiescenceBeacon,
     }
 
     impl FakeContext {
-        fn new(tx: Sender<Msg>) -> Self {
+        pub(crate) fn new(tx: Sender<Msg>) -> Self {
             Self {
                 t: ConnectorType::from("snot"),
                 notifier: reconnect::ConnectionLostNotifier::new(tx),
