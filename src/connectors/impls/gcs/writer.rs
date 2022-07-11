@@ -321,6 +321,7 @@ impl Sink for GCSWriterSink {
         let mut client = tests::MockHttpClient {
             config: Default::default(),
             expect_final_request: false,
+            inject_failure: Default::default(),
         };
         client.set_config(http_client::Config::new().set_http_keep_alive(false))?;
 
@@ -369,12 +370,14 @@ impl GCSWriterSink {
                 request.insert_header("Content-Length", format!("{}", final_data.len()));
                 request.set_body(final_data);
 
-                let response = client.send(request).await?;
+                let response = client.send(request).await;
 
-                if !response.status().is_server_error() {
-                    self.buffers = ChunkedBuffer::new(self.config.buffer_size);
-                    self.current_session_url = None;
-                    break;
+                if let Ok(response) = response {
+                    if !response.status().is_server_error() {
+                        self.buffers = ChunkedBuffer::new(self.config.buffer_size);
+                        self.current_session_url = None;
+                        break;
+                    }
                 }
 
                 sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
@@ -394,43 +397,54 @@ impl GCSWriterSink {
         let token = Token::new()?;
 
         if self.current_session_url.is_none() {
-            let url = url::Url::parse(&format!(
-                "{}/b/{}/o?name={}&uploadType=resumable",
-                self.url,
-                meta.get("bucket")
-                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                        "No bucket name in the metadata"
-                    ))
-                    .as_str()
-                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                        "Bucket name is not a string"
-                    ))?,
-                name
-            ))?;
-            #[cfg(not(test))]
-            let mut request = Request::new(Method::Post, url);
-            #[cfg(test)]
-            let request = Request::new(Method::Post, url);
-            #[cfg(not(test))]
-            {
-                request.insert_header("Authorization", token.header_value()?.to_string());
+            for i in 0..3 {
+                let url = url::Url::parse(&format!(
+                    "{}/b/{}/o?name={}&uploadType=resumable",
+                    self.url,
+                    meta.get("bucket")
+                        .ok_or(ErrorKind::GoogleCloudStorageError(
+                            "No bucket name in the metadata"
+                        ))
+                        .as_str()
+                        .ok_or(ErrorKind::GoogleCloudStorageError(
+                            "Bucket name is not a string"
+                        ))?,
+                    name
+                ))?;
+                #[cfg(not(test))]
+                let mut request = Request::new(Method::Post, url);
+                #[cfg(test)]
+                let request = Request::new(Method::Post, url);
+                #[cfg(not(test))]
+                {
+                    request.insert_header("Authorization", token.header_value()?.to_string());
+                }
+
+                let response = client.send(request).await;
+
+                if let Ok(response) = response {
+                    if !response.status().is_server_error() {
+                        self.current_session_url = Some(
+                            response
+                                .header("Location")
+                                .ok_or(ErrorKind::GoogleCloudStorageError(
+                                    "Missing Location header",
+                                ))?
+                                .get(0)
+                                .ok_or(ErrorKind::GoogleCloudStorageError(
+                                    "Missing Location header value",
+                                ))?
+                                .to_string(),
+                        );
+                        self.current_name = Some(name.into());
+
+                        break;
+                    }
+                }
+
+                sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
+                continue;
             }
-
-            let response = client.send(request).await?;
-
-            self.current_session_url = Some(
-                response
-                    .header("Location")
-                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                        "Missing Location header",
-                    ))?
-                    .get(0)
-                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                        "Missing Location header value",
-                    ))?
-                    .to_string(),
-            );
-            self.current_name = Some(name.into());
         }
 
         Ok(())
@@ -449,7 +463,8 @@ mod tests {
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use async_std::channel::unbounded;
     use beef::Cow;
-    use http_types::{Error, Response};
+    use http_types::{Error, Response, StatusCode};
+    use std::sync::atomic::{AtomicBool, Ordering};
     use tremor_script::ValueAndMeta;
     use tremor_value::literal;
 
@@ -457,6 +472,7 @@ mod tests {
     pub struct MockHttpClient {
         pub config: http_client::Config,
         pub expect_final_request: bool,
+        pub inject_failure: AtomicBool,
     }
 
     #[async_trait::async_trait]
@@ -465,6 +481,13 @@ mod tests {
             &self,
             mut req: http_client::Request,
         ) -> std::result::Result<Response, Error> {
+            if self.inject_failure.swap(false, Ordering::AcqRel) {
+                return Err(Error::new(
+                    StatusCode::InternalServerError,
+                    anyhow::Error::msg("injected error"),
+                ));
+            }
+
             if req.url().host_str() == Some("start.example.com") {
                 let mut response = Response::new(http_types::StatusCode::Ok);
                 response.insert_header("Location", "https://upload.example.com/");
@@ -612,10 +635,18 @@ mod tests {
             "gbq",
         )?;
         sink.connect(&context, &Attempt::default()).await?;
+        sink.http_client()
+            .unwrap()
+            .inject_failure
+            .store(true, Ordering::Release);
         sink.on_event("", event, &context, &mut serializer, 0)
             .await?;
 
         sink.http_client().unwrap().expect_final_request = true;
+        sink.http_client()
+            .unwrap()
+            .inject_failure
+            .store(true, Ordering::Release);
         sink.on_stop(&context).await?;
 
         Ok(())
