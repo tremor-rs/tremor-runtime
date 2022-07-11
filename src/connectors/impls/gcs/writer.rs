@@ -77,6 +77,10 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(connector_config)?;
 
+        if config.buffer_size % (256 * 1024) != 0 {
+            return Err("Buffer size must be a multiple of 256kiB".into());
+        }
+
         Ok(Box::new(GCSWriterConnector { config }))
     }
 }
@@ -297,7 +301,7 @@ impl Sink for GCSWriterSink {
 
         self.client = Some(client);
         self.current_name = None;
-        self.buffers = ChunkedBuffer::new(self.config.buffer_size); // FIXME: validate that the buffer size is a multiple of 256kB, as required by GCS
+        self.buffers = ChunkedBuffer::new(self.config.buffer_size);
 
         Ok(true)
     }
@@ -312,7 +316,7 @@ impl Sink for GCSWriterSink {
 
         self.client = Some(client);
         self.current_name = None;
-        self.buffers = ChunkedBuffer::new(self.config.buffer_size); // FIXME: validate that the buffer size is a multiple of 256kB, as required by GCS
+        self.buffers = ChunkedBuffer::new(self.config.buffer_size);
 
         Ok(true)
     }
@@ -599,7 +603,6 @@ mod tests {
             .await?;
 
         sink.http_client().unwrap().expect_final_request = true;
-        // FIXME: make the HttpClient expect the final request here
         sink.on_stop(&context).await?;
 
         Ok(())
