@@ -19,7 +19,7 @@ use crate::{
     errors::{err_conector_def, Result},
 };
 use async_broadcast::Sender as BroadcastSender;
-use async_std::channel::Sender;
+use async_std::{channel::Sender, task::JoinHandle};
 use beef::Cow;
 use core::future::Future;
 use futures::future;
@@ -119,7 +119,7 @@ where
         }
     }
 
-    fn on_connection_lost(&self) {
+    fn on_connection_lost(&self) -> JoinHandle<()> {
         let ctx = self.ctx.clone();
 
         // only actually notify the notifier if we didn't do so before
@@ -129,7 +129,10 @@ where
                 if let Err(e) = ctx.notifier().connection_lost().await {
                     error!("{ctx} Error notifying the connector of a lost connection: {e}");
                 }
-            });
+            })
+        } else {
+            // do nothing
+            async_std::task::spawn(async move {})
         }
     }
 }
@@ -275,5 +278,176 @@ fn is_fatal_error(e: &KafkaError) -> bool {
 
         // This is required due to `KafkaError` being mared as `#[non_exhaustive]`
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::time::Duration;
+
+    use super::{ClientContext, TremorRDKafkaContext};
+    use crate::connectors::unit_tests::FakeContext;
+    use crate::connectors::Msg;
+    use crate::errors::Result;
+    use async_broadcast::broadcast;
+    use async_std::channel::bounded;
+    use async_std::prelude::FutureExt;
+    use rdkafka::Statistics;
+    use tremor_value::literal;
+
+    #[async_std::test]
+    async fn context_on_connection_loss() -> Result<()> {
+        let (ctx_tx, ctx_rx) = bounded(1);
+        let (connect_tx, _connect_rx) = bounded(1);
+        let (metrics_tx, _metrics_rx) = broadcast(1);
+        let fake_ctx = FakeContext::new(ctx_tx);
+        let ctx = TremorRDKafkaContext::new(fake_ctx, connect_tx, metrics_tx);
+        ctx.on_connection_lost().await;
+        let msg = ctx_rx.recv().timeout(Duration::from_secs(1)).await??;
+        assert!(matches!(msg, Msg::ConnectionLost));
+
+        // no second time
+        ctx.on_connection_lost().await;
+        assert!(ctx_rx.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn metrics_tx() -> Result<()> {
+        let (ctx_tx, _ctx_rx) = bounded(1);
+        let (connect_tx, _connect_rx) = bounded(1);
+        let (metrics_tx, mut metrics_rx) = broadcast(1);
+        let fake_ctx = FakeContext::new(ctx_tx);
+        let ctx = TremorRDKafkaContext::new(fake_ctx, connect_tx, metrics_tx);
+
+        let s = Statistics {
+            name: "snot".to_string(),
+            client_id: "snot".to_string(),
+            client_type: "consumer".to_string(),
+            ts: 100,
+            time: 100,
+            age: 0,
+            replyq: 2,
+            msg_cnt: 4,
+            msg_size: 5,
+            msg_max: 1000,
+            msg_size_max: 42,
+            tx: 2,
+            tx_bytes: 0,
+            rx: 1,
+            rx_bytes: 0,
+            txmsgs: 12,
+            txmsg_bytes: 42,
+            rxmsgs: 42,
+            rxmsg_bytes: 42,
+            simple_cnt: 42,
+            metadata_cache_cnt: 42,
+            brokers: HashMap::new(),
+            topics: HashMap::new(),
+            cgrp: None,
+            eos: None,
+        };
+        ctx.stats(s);
+        let metrics_msg = metrics_rx.try_recv()?;
+        assert_eq!(
+            &literal!({
+                "measurement": "kafka_consumer_stats",
+                "tags": {
+                    "connector": "snot"
+                },
+                "fields": {
+                    "rx_msgs": 42,
+                    "rx_msg_bytes": 42,
+                    "consumer_lag": 0,
+                },
+                "timestamp": 100000000000_u64
+            }),
+            metrics_msg.suffix().value()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn closed_metrics_rx() -> Result<()> {
+        let (ctx_tx, _ctx_rx) = bounded(1);
+        let (connect_tx, _connect_rx) = bounded(1);
+        let (metrics_tx, metrics_rx) = broadcast(1);
+        metrics_rx.close();
+        let fake_ctx = FakeContext::new(ctx_tx);
+        let ctx = TremorRDKafkaContext::new(fake_ctx, connect_tx, metrics_tx);
+
+        let s = Statistics {
+            name: "snot".to_string(),
+            client_id: "snot".to_string(),
+            client_type: "consumer".to_string(),
+            ts: 100,
+            time: 100,
+            age: 0,
+            replyq: 2,
+            msg_cnt: 4,
+            msg_size: 5,
+            msg_max: 1000,
+            msg_size_max: 42,
+            tx: 2,
+            tx_bytes: 0,
+            rx: 1,
+            rx_bytes: 0,
+            txmsgs: 12,
+            txmsg_bytes: 42,
+            rxmsgs: 42,
+            rxmsg_bytes: 42,
+            simple_cnt: 42,
+            metadata_cache_cnt: 42,
+            brokers: HashMap::new(),
+            topics: HashMap::new(),
+            cgrp: None,
+            eos: None,
+        };
+        ctx.stats(s);
+        Ok(())
+    }
+
+    #[test]
+    fn unknown_statistics_client_type() -> Result<()> {
+        let (ctx_tx, _ctx_rx) = bounded(1);
+        let (connect_tx, _connect_rx) = bounded(1);
+        let (metrics_tx, metrics_rx) = broadcast(1);
+        let fake_ctx = FakeContext::new(ctx_tx);
+        let ctx = TremorRDKafkaContext::new(fake_ctx, connect_tx, metrics_tx);
+        let s = Statistics::default();
+        ctx.stats(s);
+        assert!(metrics_rx.is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn log_coverage() -> Result<()> {
+        let (ctx_tx, _ctx_rx) = bounded(1);
+        let (connect_tx, _connect_rx) = bounded(1);
+        let (metrics_tx, _metrics_rx) = broadcast(1);
+        let fake_ctx = FakeContext::new(ctx_tx);
+        let ctx = TremorRDKafkaContext::new(fake_ctx, connect_tx, metrics_tx);
+
+        ctx.log(rdkafka::config::RDKafkaLogLevel::Emerg, "consumer", "snot");
+        ctx.log(rdkafka::config::RDKafkaLogLevel::Alert, "consumer", "snot");
+        ctx.log(
+            rdkafka::config::RDKafkaLogLevel::Critical,
+            "consumer",
+            "snot",
+        );
+        ctx.log(rdkafka::config::RDKafkaLogLevel::Error, "consumer", "snot");
+        ctx.log(
+            rdkafka::config::RDKafkaLogLevel::Warning,
+            "consumer",
+            "snot",
+        );
+        ctx.log(rdkafka::config::RDKafkaLogLevel::Notice, "consumer", "snot");
+        ctx.log(rdkafka::config::RDKafkaLogLevel::Info, "consumer", "snot");
+        ctx.log(rdkafka::config::RDKafkaLogLevel::Debug, "consumer", "snot");
+
+        Ok(())
     }
 }
