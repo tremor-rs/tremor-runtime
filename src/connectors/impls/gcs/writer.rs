@@ -136,7 +136,9 @@ impl ChunkedBuffer {
         }
 
         let bytes_to_remove = position - self.buffer_start;
-        self.data = Vec::from(self.data.get(bytes_to_remove..).ok_or(ErrorKind::GoogleCloudStorageError("Not enough data in the buffer"))?);
+        self.data = Vec::from(self.data.get(bytes_to_remove..).ok_or(
+            ErrorKind::GoogleCloudStorageError("Not enough data in the buffer"),
+        )?);
         self.buffer_start += bytes_to_remove;
 
         Ok(())
@@ -261,18 +263,30 @@ impl Sink for GCSWriterSink {
                     }
 
                     if let Some(raw_range) = response.header("range") {
-                        let raw_range = raw_range[0].as_str();
+                        let raw_range = raw_range
+                            .get(0)
+                            .ok_or(ErrorKind::GoogleCloudStorageError(
+                                "Missing Range header value",
+                            ))?
+                            .as_str();
 
                         // Range format: bytes=0-262143
-                        let range_end = &raw_range[raw_range.find('-').ok_or(
-                            ErrorKind::GoogleCloudStorageError(
-                                "Did not find a - in the Range header",
-                            ),
-                        )? + 1..];
+                        let range_end = &raw_range
+                            .get(
+                                raw_range
+                                    .find('-')
+                                    .ok_or(ErrorKind::GoogleCloudStorageError(
+                                        "Did not find a - in the Range header",
+                                    ))?
+                                    + 1..,
+                            )
+                            .ok_or(ErrorKind::GoogleCloudStorageError(
+                                "Unable to get the end of the Range",
+                            ))?;
 
                         self.buffers.mark_done_until(range_end.parse()?)?;
                     } else {
-                        return Err("No range header?".into());
+                        return Err("No range header".into());
                     }
                 } else {
                     return Err("no response from GCS".into());
@@ -458,11 +472,14 @@ mod tests {
                 Ok(response)
             } else if req.url().host_str() == Some("upload.example.com") {
                 let content_range = req.header("Content-Range").unwrap()[0].as_str();
-                let start: usize = content_range["bytes ".len()..content_range.find("-").unwrap()]
+                let start: usize = content_range
+                    .get("bytes ".len()..content_range.find("-").unwrap())
+                    .unwrap()
                     .parse()
                     .unwrap();
                 let end: usize = content_range
-                    [content_range.find("-").unwrap() + 1..content_range.find('/').unwrap()]
+                    .get(content_range.find("-").unwrap() + 1..content_range.find('/').unwrap())
+                    .unwrap()
                     .parse()
                     .unwrap();
                 let total_size = &content_range[content_range.find("/").unwrap() + 1..];
