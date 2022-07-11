@@ -59,7 +59,7 @@ tremor-kv = "0.3"
 tremor-value = { version = "0.12.4", path = "../tremor-value" }
 unicode-xid = "0.2"
 url = "2"
-value-trait = "0.2"
+value-trait = "0.4"
 xz2 = "0.1"
 
 [build-dependencies]
