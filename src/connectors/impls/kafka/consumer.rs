@@ -16,11 +16,12 @@ use async_std::sync::Arc;
 use beef::Cow;
 use std::time::Duration;
 
-use super::SmolRuntime;
-use crate::connectors::impls::kafka::{is_failed_connect_error, KAFKA_CONNECT_TIMEOUT};
+use crate::connectors::impls::kafka::{
+    is_failed_connect_error, SmolRuntime, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT, NO_ERROR,
+};
 use crate::connectors::prelude::*;
 use crate::connectors::utils::metrics::make_metrics_payload;
-use async_broadcast::{broadcast, Receiver as BroadcastReceiver, Sender as BroadcastSender};
+use async_broadcast::{broadcast, Receiver as BroadcastReceiver};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::{FutureExt, StreamExt};
 use async_std::task::{self, JoinHandle};
@@ -137,82 +138,7 @@ impl ConnectorBuilder for Builder {
 #[derive(Debug, Clone)]
 struct KafkaStats {}
 
-struct TremorConsumerContext {
-    ctx: SourceContext,
-    connect_tx: Sender<Result<bool>>,
-    metrics_tx: BroadcastSender<EventPayload>,
-}
-
-impl ClientContext for TremorConsumerContext {
-    #[allow(clippy::cast_sign_loss)] // thanks librdkafka
-    fn stats(&self, stats: rdkafka::Statistics) {
-        // expose as metrics to the source
-        if stats.client_type.eq("consumer") {
-            let timestamp = stats.time as u64 * 1_000_000_000;
-
-            // consumer stats
-            let mut fields = HashMap::with_capacity(4);
-            fields.insert(Cow::const_str("rx_msgs"), Value::from(stats.rxmsgs));
-            fields.insert(
-                Cow::const_str("rx_msg_bytes"),
-                Value::from(stats.rxmsg_bytes),
-            );
-            if let Some(cg) = stats.cgrp {
-                fields.insert(
-                    Cow::const_str("partitions_assigned"),
-                    Value::from(cg.assignment_size),
-                );
-            }
-            let mut consumer_lag = 0_i64;
-            for topic in stats.topics.values() {
-                for partition in topic.partitions.values() {
-                    if partition.desired && !partition.unknown && partition.consumer_lag >= 0 {
-                        consumer_lag += partition.consumer_lag;
-                    }
-                }
-            }
-            fields.insert(Cow::const_str("consumer_lag"), Value::from(consumer_lag));
-            let mut tags = HashMap::with_capacity(1);
-            tags.insert(
-                Cow::const_str("connector"),
-                Value::from(self.ctx.alias.clone()),
-            );
-            let metrics_payload =
-                make_metrics_payload("kafka_consumer_stats", fields, tags, timestamp);
-
-            if let Err(e) = self.metrics_tx.try_broadcast(metrics_payload) {
-                warn!("{} Error sending kafka statistics: {}", &self.ctx, e);
-            }
-        }
-    }
-
-    fn error(&self, error: KafkaError, reason: &str) {
-        error!("{} Kafka Error {}: {}", &self.ctx, error, reason);
-        // check for errors that manifest a non-working consumer, so we bail out
-        if matches!(&error, KafkaError::Subscription(_)) || is_failed_connect_error(&error) {
-            if self.connect_tx.is_closed() {
-                // issue a reconnect upon fatal errors
-                let notifier = self.ctx.notifier().clone();
-                task::spawn(async move {
-                    notifier.connection_lost().await?;
-                    Ok::<(), Error>(())
-                });
-            } else {
-                // we are in the connect phase - channel is still open, so notify the connect method of an error
-                if let Err(e) = self.connect_tx.try_send(Err(error.into())) {
-                    error!(
-                        "{} Error notifying the connect method of a failure: {e}",
-                        self.ctx
-                    );
-                } else {
-                    self.connect_tx.close();
-                }
-            }
-        }
-    }
-}
-
-impl ConsumerContext for TremorConsumerContext {
+impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
     fn post_rebalance<'a>(&self, rebalance: &rdkafka::consumer::Rebalance<'a>) {
         match rebalance {
             Rebalance::Assign(tpl) => {
@@ -230,7 +156,9 @@ impl ConsumerContext for TremorConsumerContext {
                     .collect();
                 // if we got something assigned, this is a good indicator that we are connected
                 if !offset_strings.is_empty() {
-                    if let Err(e) = self.connect_tx.try_send(Ok(true)) {
+                    if let Err(e) = self.connect_tx.try_send(NO_ERROR)
+                    // we seem to be connected, indicate success
+                    {
                         // we can safely ignore errors here as they will happen after the first connector
                         // as we only have &self here, we cannot switch out the connector
                         trace!("{} Error sending to connect channel: {e}", &self.ctx);
@@ -295,25 +223,18 @@ impl ConsumerContext for TremorConsumerContext {
             }
             // this is actually not an error - we just didnt have any offset to commit
             Err(KafkaError::ConsumerCommit(rdkafka_sys::RDKafkaErrorCode::NoOffset)) => {}
+            Err(KafkaError::ConsumerCommit(rdkafka_sys::RDKafkaErrorCode::UnknownMemberId)) => {
+                warn!(
+                    "{} UnknownMemberId error during commit. Reconnecting...",
+                    &self.ctx
+                );
+                self.on_connection_lost();
+            }
             Err(e) => warn!("{} Error while committing offsets: {}", &self.ctx, e),
         };
     }
 }
-
-impl TremorConsumerContext {
-    fn new(
-        source_ctx: &SourceContext,
-        connect_tx: Sender<Result<bool>>,
-        metrics_tx: BroadcastSender<EventPayload>,
-    ) -> Self {
-        Self {
-            ctx: source_ctx.clone(),
-            connect_tx,
-            metrics_tx,
-        }
-    }
-}
-
+type TremorConsumerContext = TremorRDKafkaContext<SourceContext>;
 type TremorConsumer = StreamConsumer<TremorConsumerContext, SmolRuntime>;
 
 struct KafkaConsumerConnector {
@@ -426,6 +347,7 @@ impl KafkaConsumerSource {
 impl Source for KafkaConsumerSource {
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
         if let Some(consumer_task) = self.consumer_task.take() {
+            info!("{ctx} Reconnecting. Unsubscribing old consumer...");
             if let Some(consumer) = self.consumer.take() {
                 consumer.unsubscribe();
                 drop(consumer);
@@ -442,7 +364,7 @@ impl Source for KafkaConsumerSource {
         metrics_tx.set_overflow(true);
         self.metrics_rx = Some(metrics_rx);
         let consumer_context =
-            TremorConsumerContext::new(ctx, connect_result_tx.clone(), metrics_tx);
+            TremorConsumerContext::new(ctx.clone(), connect_result_tx.clone(), metrics_tx);
         let consumer: TremorConsumer = self.client_config.create_with_context(consumer_context)?;
 
         let topics: Vec<&str> = self
@@ -486,7 +408,8 @@ impl Source for KafkaConsumerSource {
                 // receive error - bail out
                 Err(e.into())
             }
-            Ok(Ok(connected)) => connected,
+            Ok(Ok(KafkaError::Global(RDKafkaErrorCode::NoError))) => Ok(true), // connected
+            Ok(Ok(err)) => Err(err.into()),                                    // any other error
         }
     }
 
@@ -609,7 +532,7 @@ async fn consumer_task(
     task_consumer: Arc<StreamConsumer<TremorConsumerContext, SmolRuntime>>,
     topic_resolver: TopicResolver,
     consumer_origin_uri: EventOriginUri,
-    connect_result_tx: Sender<Result<bool>>,
+    connect_result_tx: Sender<KafkaError>,
     source_tx: Sender<(SourceReply, Option<u64>)>,
     source_ctx: SourceContext,
 ) {
@@ -624,7 +547,7 @@ async fn consumer_task(
                 if let Some(tx) = connect_result_channel.take() {
                     if !tx.is_closed() {
                         source_ctx
-                            .swallow_err(tx.try_send(Ok(true)), "Error sending to connect channel");
+                            .swallow_err(tx.try_send(NO_ERROR), "Error sending to connect channel");
                     }
                 }
                 // handle kafka msg
@@ -660,14 +583,14 @@ async fn consumer_task(
                 match e {
                     // Those we consider fatal
                     KafkaError::MessageConsumption(
-                        e @ (RDKafkaErrorCode::UnknownTopicOrPartition
+                        error_code @ (RDKafkaErrorCode::UnknownTopicOrPartition
                         | RDKafkaErrorCode::TopicAuthorizationFailed
                         | RDKafkaErrorCode::UnknownTopic),
                     ) => {
-                        error!("{source_ctx} Subscription failed: {e}.");
+                        error!("{source_ctx} Subscription failed: {error_code}.");
 
                         if let Some(tx) = connect_result_channel.take() {
-                            if tx.try_send(Err("Subscription failed".into())).is_err() {
+                            if tx.try_send(e).is_err() {
                                 // in case the connect_result_channel has already been closed,
                                 // lets initiate a reconnect via the notifier
                                 // this might happen when we subscribe to multiple topics
@@ -700,8 +623,10 @@ async fn consumer_task(
                 );
                 if let Some(tx) = connect_result_channel.take() {
                     if !tx.is_closed() {
-                        source_ctx
-                            .swallow_err(tx.try_send(Err("Consumer done".into())), "Send failed");
+                        source_ctx.swallow_err(
+                            tx.try_send(KafkaError::Global(RDKafkaErrorCode::End)), // consumer done
+                            "Send failed",
+                        );
                     }
                 } else {
                     source_ctx.swallow_err(
