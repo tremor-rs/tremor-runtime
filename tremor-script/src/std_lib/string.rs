@@ -182,8 +182,7 @@ pub fn load(registry: &mut Registry) {
             "string".to_string(),
             "format".to_string(),
             Box::new(StringFormat::default()),
-        ))
-    );
+        ));
 }
 
 #[cfg(test)]
