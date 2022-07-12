@@ -182,9 +182,7 @@ pub fn load(registry: &mut Registry) {
             "string".to_string(),
             "format".to_string(),
             Box::new(StringFormat::default()),
-        )).insert(tremor_const_fn!(string|spam(_context) {
-            Ok(Value::from("a".repeat(250 * 1024)))
-        })
+        ))
     );
 }
 

@@ -111,5 +111,3 @@ intrinsic fn into_binary(bytes) as string::into_binary;
 ##
 ## Returns a `string`
 intrinsic fn reverse(input) as string::reverse;
-
-intrinsic fn spam() as string::spam;
