@@ -80,13 +80,15 @@ impl ConnectorBuilder for Builder {
         if config.buffer_size % (256 * 1024) != 0 {
             return Err("Buffer size must be a multiple of 256kiB".into());
         }
+        let url = Url::<HttpsDefaults>::parse(&config.endpoint)?;
 
-        Ok(Box::new(GCSWriterConnector { config }))
+        Ok(Box::new(GCSWriterConnector { config, url }))
     }
 }
 
 struct GCSWriterConnector {
     config: Config,
+    url: Url<HttpsDefaults>,
 }
 
 #[async_trait::async_trait]
@@ -96,10 +98,9 @@ impl Connector for GCSWriterConnector {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let url = Url::<HttpsDefaults>::parse(&self.config.endpoint)?;
         let sink = GCSWriterSink {
             client: None,
-            url,
+            url: self.url.clone(),
             config: self.config.clone(),
             buffers: ChunkedBuffer::new(self.config.buffer_size),
             current_name: None,
@@ -534,6 +535,33 @@ mod tests {
         fn config(&self) -> &http_client::Config {
             &self.config
         }
+    }
+
+    #[async_std::test]
+    pub async fn fails_when_buffer_size_is_not_divisible_by_256ki() {
+        let raw_config = literal!({
+            "buffer_size": 256 * 1000
+        });
+
+        let builder = Builder {};
+        let result = builder
+            .build_cfg(
+                "",
+                &ConnectorConfig {
+                    connector_type: Default::default(),
+                    codec: None,
+                    config: None,
+                    preprocessors: None,
+                    postprocessors: None,
+                    reconnect: Default::default(),
+                    metrics_interval_s: None,
+                },
+                &raw_config,
+                &KillSwitch::dummy(),
+            )
+            .await;
+
+        assert!(result.is_err());
     }
 
     #[test]
