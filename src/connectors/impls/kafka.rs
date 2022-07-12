@@ -24,7 +24,7 @@ use beef::Cow;
 use core::future::Future;
 use futures::future;
 use halfbrown::HashMap;
-use rdkafka::{error::KafkaError, util::AsyncRuntime, ClientContext};
+use rdkafka::{error::KafkaError, util::AsyncRuntime, ClientContext, Statistics};
 use rdkafka_sys::RDKafkaErrorCode;
 use std::{
     sync::atomic::{AtomicBool, Ordering},
@@ -105,6 +105,17 @@ where
 {
     const PRODUCER: &'static str = "producer";
     const CONSUMER: &'static str = "consumer";
+    const TX_MSGS: Cow<'static, str> = Cow::const_str("tx_msgs");
+    const TX_MSG_BYTES: Cow<'static, str> = Cow::const_str("tx_msg_bytes");
+    const QUEUED_MSGS: Cow<'static, str> = Cow::const_str("queued_msgs");
+    const CONNECTOR: Cow<'static, str> = Cow::const_str("connector");
+    const KAFKA_PRODUCER_STATS: &'static str = "kafka_producer_stats";
+
+    const RX_MSGS: Cow<'static, str> = Cow::const_str("rx_msgs");
+    const RX_MSG_BYTES: Cow<'static, str> = Cow::const_str("rx_msg_bytes");
+    const PARTITIONS_ASSIGNED: Cow<'static, str> = Cow::const_str("partitions_assigned");
+    const CONSUMER_LAG: Cow<'static, str> = Cow::const_str("consumer_lag");
+    const KAFKA_CONSUMER_STATS: &'static str = "kafka_consumer_stats";
 
     fn new(
         ctx: Ctx,
@@ -124,7 +135,7 @@ where
 
         // only actually notify the notifier if we didn't do so before
         // otherwise we would flood the connector and reconnect multiple times
-        if self.active.fetch_and(false, Ordering::AcqRel) {
+        if self.active.swap(false, Ordering::AcqRel) {
             async_std::task::spawn(async move {
                 if let Err(e) = ctx.notifier().connection_lost().await {
                     error!("{ctx} Error notifying the connector of a lost connection: {e}");
@@ -134,6 +145,52 @@ where
             // do nothing
             async_std::task::spawn(async move {})
         }
+    }
+
+    // TODO: add full connector id to tags
+    fn handle_stats(&self, stats: Statistics) -> Result<()> {
+        let metrics_payload = match stats.client_type.as_str() {
+            Self::PRODUCER => {
+                let timestamp = u64::try_from(stats.time)? * 1_000_000_000;
+                let mut fields = HashMap::with_capacity(3);
+                fields.insert(Self::TX_MSGS, Value::from(stats.txmsgs));
+                fields.insert(Self::TX_MSG_BYTES, Value::from(stats.txmsg_bytes));
+                fields.insert(Self::QUEUED_MSGS, Value::from(stats.msg_cnt));
+
+                let mut tags = HashMap::with_capacity(1);
+                tags.insert(Self::CONNECTOR, Value::from(self.ctx.alias().to_string()));
+
+                make_metrics_payload(Self::KAFKA_PRODUCER_STATS, fields, tags, timestamp)
+            }
+            Self::CONSUMER => {
+                let timestamp = u64::try_from(stats.time)? * 1_000_000_000;
+
+                // consumer stats
+                let mut fields = HashMap::with_capacity(4);
+                fields.insert(Self::RX_MSGS, Value::from(stats.rxmsgs));
+                fields.insert(Self::RX_MSG_BYTES, Value::from(stats.rxmsg_bytes));
+                if let Some(cg) = stats.cgrp {
+                    fields.insert(Self::PARTITIONS_ASSIGNED, Value::from(cg.assignment_size));
+                }
+                let mut consumer_lag = 0_i64;
+                for topic in stats.topics.values() {
+                    for partition in topic.partitions.values() {
+                        if partition.desired && !partition.unknown && partition.consumer_lag >= 0 {
+                            consumer_lag += partition.consumer_lag;
+                        }
+                    }
+                }
+                fields.insert(Self::CONSUMER_LAG, Value::from(consumer_lag));
+                let mut tags = HashMap::with_capacity(1);
+                tags.insert(Self::CONNECTOR, Value::from(self.ctx.alias().to_string()));
+                make_metrics_payload(Self::KAFKA_CONSUMER_STATS, fields, tags, timestamp)
+            }
+            other => {
+                return Err(format!("Unknown stats client_type \"{other}\"").into());
+            }
+        };
+        self.metrics_tx.try_broadcast(metrics_payload)?;
+        Ok(())
     }
 }
 
@@ -165,67 +222,9 @@ where
         }
     }
 
-    // TODO: add full connector id to tags
-    #[allow(clippy::cast_sign_loss)]
     fn stats(&self, stats: rdkafka::Statistics) {
-        let metrics_payload = if stats.client_type.eq(Self::PRODUCER) {
-            let timestamp = stats.time as u64 * 1_000_000_000;
-            let mut fields = HashMap::with_capacity(3);
-            fields.insert(Cow::const_str("tx_msgs"), Value::from(stats.txmsgs));
-            fields.insert(
-                Cow::const_str("tx_msg_bytes"),
-                Value::from(stats.txmsg_bytes),
-            );
-            fields.insert(Cow::const_str("queued_msgs"), Value::from(stats.msg_cnt));
-
-            let mut tags = HashMap::with_capacity(1);
-            tags.insert(
-                Cow::const_str("connector"),
-                Value::from(self.ctx.alias().to_string()),
-            );
-
-            make_metrics_payload("kafka_producer_stats", fields, tags, timestamp)
-        } else if stats.client_type.eq(Self::CONSUMER) {
-            let timestamp = stats.time as u64 * 1_000_000_000;
-
-            // consumer stats
-            let mut fields = HashMap::with_capacity(4);
-            fields.insert(Cow::const_str("rx_msgs"), Value::from(stats.rxmsgs));
-            fields.insert(
-                Cow::const_str("rx_msg_bytes"),
-                Value::from(stats.rxmsg_bytes),
-            );
-            if let Some(cg) = stats.cgrp {
-                fields.insert(
-                    Cow::const_str("partitions_assigned"),
-                    Value::from(cg.assignment_size),
-                );
-            }
-            let mut consumer_lag = 0_i64;
-            for topic in stats.topics.values() {
-                for partition in topic.partitions.values() {
-                    if partition.desired && !partition.unknown && partition.consumer_lag >= 0 {
-                        consumer_lag += partition.consumer_lag;
-                    }
-                }
-            }
-            fields.insert(Cow::const_str("consumer_lag"), Value::from(consumer_lag));
-            let mut tags = HashMap::with_capacity(1);
-            tags.insert(
-                Cow::const_str("connector"),
-                Value::from(self.ctx.alias().to_string()),
-            );
-            make_metrics_payload("kafka_consumer_stats", fields, tags, timestamp)
-        } else {
-            warn!(
-                "{} Unknown stats client_type: \"{}\"",
-                &self.ctx, stats.client_type
-            );
-            return;
-        };
-
-        if let Err(e) = self.metrics_tx.try_broadcast(metrics_payload) {
-            warn!("{} Error sending kafka stats: {e}", self.ctx);
+        if let Err(e) = self.handle_stats(stats) {
+            warn!("{} Error handling kafka stats: {}", self.ctx, e);
         }
     }
 
