@@ -17,25 +17,21 @@
 
 use std::time::Duration;
 
-use super::SmolRuntime;
-use crate::connectors::impls::kafka::{is_failed_connect_error, KAFKA_CONNECT_TIMEOUT};
-use crate::connectors::metrics::make_metrics_payload;
+use crate::connectors::impls::kafka::{
+    is_fatal_error, SmolRuntime, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT,
+};
 use crate::connectors::prelude::*;
-use async_broadcast::{broadcast, Receiver as BroadcastReceiver, Sender as BroadcastSender};
+use async_broadcast::{broadcast, Receiver as BroadcastReceiver};
 use async_std::channel::{bounded, Sender};
 use async_std::prelude::FutureExt;
 use async_std::task;
-use beef::Cow;
 use halfbrown::HashMap;
 use rdkafka::config::{ClientConfig, FromClientConfigAndContext};
 use rdkafka::producer::{DeliveryFuture, Producer};
 use rdkafka::{
-    error::KafkaError,
     message::OwnedHeaders,
     producer::{FutureProducer, FutureRecord},
 };
-use rdkafka::{ClientContext, Statistics};
-use rdkafka_sys::RDKafkaErrorCode;
 use tremor_common::time::nanotime;
 
 const KAFKA_PRODUCER_META_KEY: &str = "kafka_producer";
@@ -117,69 +113,6 @@ impl ConnectorBuilder for Builder {
     }
 }
 
-struct TremorProducerContext {
-    ctx: SinkContext,
-    /// during connect we poll the producer to peek for errors, like AllBrokersDown and similar
-    /// We try to send it to a special `bounded(1)` channel to fail the connect attempt
-    connect_tx: Sender<KafkaError>,
-    // using a broadcast channel as a hack, as it supports overflow handling
-    // and will this always only have the latest metrics value available, which is what we want,
-    // old shit is old
-    metrics_tx: BroadcastSender<EventPayload>,
-}
-
-impl ClientContext for TremorProducerContext {
-    #[allow(clippy::cast_sign_loss)] // Sadly we need to use the kafka types
-    fn stats(&self, stats: Statistics) {
-        if stats.client_type.eq("producer") {
-            let timestamp = stats.time as u64 * 1_000_000_000;
-            let mut fields = HashMap::with_capacity(3);
-            fields.insert(Cow::const_str("tx_msgs"), Value::from(stats.txmsgs));
-            fields.insert(
-                Cow::const_str("tx_msg_bytes"),
-                Value::from(stats.txmsg_bytes),
-            );
-            fields.insert(Cow::const_str("queued_msgs"), Value::from(stats.msg_cnt));
-
-            let mut tags = HashMap::with_capacity(1);
-            tags.insert(
-                Cow::const_str("connector"),
-                Value::from(self.ctx.alias.clone()),
-            );
-
-            let metrics_payload =
-                make_metrics_payload("kafka_producer_stats", fields, tags, timestamp);
-
-            if let Err(e) = self.metrics_tx.try_broadcast(metrics_payload) {
-                warn!("{} Erro sending kafka stats: {e}", self.ctx);
-            }
-        }
-    }
-
-    fn error(&self, error: KafkaError, reason: &str) {
-        error!("{} Kafka Error: {}: {}", &self.ctx, error, reason);
-
-        // send to the connect sender if it is not yet closed, that is if we are still waiting in connect
-        // otherwise notify the runtime
-        if !self.connect_tx.is_closed() {
-            if is_fatal(&error) || is_failed_connect_error(&error) {
-                // ignore any errors here, if the queue is full, we are probably not in the connect phase anymore
-                if let Err(e) = self.connect_tx.try_send(error) {
-                    warn!("{} Erro sending connect message: {e}", self.ctx);
-                }
-                self.connect_tx.close();
-            }
-        } else if is_fatal(&error) {
-            // issue a reconnect upon fatal errors
-            let notifier = self.ctx.notifier().clone();
-            task::spawn(async move {
-                notifier.connection_lost().await?;
-                Ok::<(), Error>(())
-            });
-        }
-    }
-}
-
 struct KafkaProducerConnector {
     config: Config,
     producer_config: ClientConfig,
@@ -205,10 +138,12 @@ impl Connector for KafkaProducerConnector {
     }
 }
 
+type TremorProducer = FutureProducer<TremorRDKafkaContext<SinkContext>, SmolRuntime>;
+
 struct KafkaProducerSink {
     config: Config,
     producer_config: ClientConfig,
-    producer: Option<FutureProducer<TremorProducerContext, SmolRuntime>>,
+    producer: Option<TremorProducer>,
     reply_tx: Sender<AsyncSinkReply>,
     metrics_rx: Option<BroadcastReceiver<EventPayload>>,
 }
@@ -287,7 +222,7 @@ impl Sink for KafkaProducerSink {
                     }
                     Err((e, _)) => {
                         error!("{ctx} Failed to enqueue message: {e}");
-                        if is_fatal(&e) {
+                        if is_fatal_error(&e) {
                             error!("{ctx} Fatal Kafka Error: {e}. Attempting a reconnect.");
                             ctx.notifier.connection_lost().await?;
                         }
@@ -328,16 +263,12 @@ impl Sink for KafkaProducerSink {
         let (mut metrics_tx, metrics_rx) = broadcast(1);
         metrics_tx.set_overflow(true);
         self.metrics_rx = Some(metrics_rx);
-        let context = TremorProducerContext {
-            ctx: ctx.clone(),
-            connect_tx: tx,
-            metrics_tx,
-        };
+        let context = TremorRDKafkaContext::new(ctx.clone(), tx, metrics_tx);
         let (version_n, version_s) = rdkafka::util::get_rdkafka_version();
         info!("{ctx} Connecting kafka producer with rdkafka 0x{version_n:08x} {version_s}");
 
         let producer_config = self.producer_config.clone();
-        let producer: FutureProducer<TremorProducerContext, SmolRuntime> =
+        let producer: TremorProducer =
             FutureProducer::from_config_and_context(&producer_config, context)?;
         // check if we receive any error callbacks
         match rx.recv().timeout(KAFKA_CONNECT_TIMEOUT).await {
@@ -396,7 +327,7 @@ async fn wait_for_delivery(
         Ok(results) => {
             if let Some((kafka_error, _)) = results.into_iter().find_map(std::result::Result::err) {
                 error!("{ctx} Error delivering kafka record: {kafka_error}");
-                if is_fatal(&kafka_error) && ctx.notifier().connection_lost().await.is_err() {
+                if is_fatal_error(&kafka_error) && ctx.notifier().connection_lost().await.is_err() {
                     error!("{ctx} Error notifying runtime of fatal Kafka error");
                 }
                 cf_data.map(AsyncSinkReply::Fail)
@@ -415,25 +346,4 @@ async fn wait_for_delivery(
         };
     }
     Ok(())
-}
-
-/// check if a kafka error is fatal for the producer
-fn is_fatal(e: &KafkaError) -> bool {
-    match e {
-        // Generic fatal errors
-        KafkaError::AdminOp(code)
-        | KafkaError::ConsumerCommit(code)
-        | KafkaError::Global(code)
-        | KafkaError::GroupListFetch(code)
-        | KafkaError::MessageConsumption(code)
-        | KafkaError::MessageProduction(code)
-        | KafkaError::MetadataFetch(code)
-        | KafkaError::OffsetFetch(code)
-        | KafkaError::SetPartitionOffset(code)
-        | KafkaError::StoreOffset(code) => matches!(code, RDKafkaErrorCode::Fatal),
-        // Check if it is a fatal transaction error
-        KafkaError::Transaction(e) => e.is_fatal(),
-        // This is required due to `KafkaError` being mared as `#[non_exhaustive]`
-        _ => false,
-    }
 }

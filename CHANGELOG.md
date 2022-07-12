@@ -4,6 +4,10 @@
 - Add reverse functions and tests for arrays and strings, add sort test for arrays
 - Add a ClickHouse connector
 
+### Fixes
+
+- Allow `kafka_consumer` connector to reconnect upon more error conditions and avoid stalls.
+
 ## [0.12.4]
 
 ### Fixes

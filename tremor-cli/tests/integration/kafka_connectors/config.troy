@@ -109,6 +109,7 @@ flow
                 "rdkafka_options": {
                     "enable.auto.commit": "false",
                     "auto.offset.reset": "beginning",
+                    "debug": "consumer"
                 }
             }
     end;
