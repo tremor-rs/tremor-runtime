@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::flow::{Flow, Id};
+use super::flow::{Flow, FlowAlias};
 use super::KillSwitch;
 use crate::errors::{Kind as ErrorKind, Result};
 use crate::system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
@@ -45,7 +45,7 @@ pub(crate) enum Msg {
         builder: Box<dyn ConnectorBuilder>,
     },
     GetFlows(Sender<Result<Vec<Flow>>>),
-    GetFlow(Id, Sender<Result<Flow>>),
+    GetFlow(FlowAlias, Sender<Result<Flow>>),
     /// Initiate the Quiescence process
     Drain(Sender<Result<()>>),
     /// stop this manager
@@ -54,7 +54,7 @@ pub(crate) enum Msg {
 
 #[derive(Debug)]
 pub(crate) struct FlowSupervisor {
-    flows: HashMap<Id, Flow>,
+    flows: HashMap<FlowAlias, Flow>,
     operator_id_gen: OperatorIdGen,
     connector_id_gen: ConnectorIdGen,
     known_connectors: connectors::Known,
@@ -88,9 +88,9 @@ impl FlowSupervisor {
         sender: Sender<Result<()>>,
         kill_switch: &KillSwitch,
     ) {
-        let id = Id::from(&flow);
+        let id = FlowAlias::from(&flow);
         let res = match self.flows.entry(id.clone()) {
-            Entry::Occupied(_occupied) => Err(ErrorKind::DuplicateFlow(id.0.clone()).into()),
+            Entry::Occupied(_occupied) => Err(ErrorKind::DuplicateFlow(id.to_string()).into()),
             Entry::Vacant(vacant) => Flow::start(
                 flow,
                 &mut self.operator_id_gen,
@@ -115,14 +115,14 @@ impl FlowSupervisor {
             "Error sending ListFlows response: {e}"
         );
     }
-    async fn handle_get_flow(&self, id: Id, reply_tx: Sender<Result<Flow>>) {
+    async fn handle_get_flow(&self, id: FlowAlias, reply_tx: Sender<Result<Flow>>) {
         log_error!(
             reply_tx
                 .send(
                     self.flows
                         .get(&id)
                         .cloned()
-                        .ok_or_else(|| ErrorKind::FlowNotFound(id.0).into()),
+                        .ok_or_else(|| ErrorKind::FlowNotFound(id.to_string()).into()),
                 )
                 .await,
             "Error sending GetFlow response {e}"
@@ -139,7 +139,7 @@ impl FlowSupervisor {
                 log_error!(
                     flow.stop(tx.clone()).await,
                     "Failed to stop Deployment \"{alias}\": {e}",
-                    alias = flow.alias()
+                    alias = flow.id()
                 );
                 expected_stops += 1;
             }
@@ -171,7 +171,7 @@ impl FlowSupervisor {
                 if !log_error!(
                     flow.drain(tx.clone()).await,
                     "Failed to drain Deployment \"{alias}\": {e}",
-                    alias = flow.alias()
+                    alias = flow.id()
                 ) {
                     alive_flows += 1;
                 }

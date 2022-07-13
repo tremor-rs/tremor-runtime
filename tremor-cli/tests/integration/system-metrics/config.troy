@@ -70,27 +70,30 @@ flow
         # initialize state
         default => {
           "source_out": 0,   # source port `out`
-          "pipeline_in": 0, # pipeline port `in`
+          "source_err": 0,   # source port `err`
+          "pipeline_in": 0,  # pipeline port `in`
           "pipeline_out": 0, # pipeline port `out`
-          "sink_in": 0      # sink port `in`
+          "sink_in": 0       # sink port `in`
         }
       end;
       # update state counters
       match event of 
-        case matched = %{ tags ~= %{`pipeline` == "main", port == "in" }, fields ~= %{ present count } } =>
+        case matched = %{ tags ~= %{`pipeline` == "main1::main1", port == "in" }, fields ~= %{ present count } } =>
           let state.pipeline_in = matched.fields.count
-        case matched = %{ tags ~= %{ `pipeline` == "main", port == "out"}, fields ~= %{ present count } } =>
+        case matched = %{ tags ~= %{ `pipeline` == "main1::main1", port == "out"}, fields ~= %{ present count } } =>
           let state.pipeline_out = matched.fields.count
-        case matched = %{ tags ~= %{ `connector` == "in", port == "out" }, fields ~= %{ present count } } => 
+        case matched = %{ tags ~= %{ `connector` == "main1::in_here", port == "out" }, fields ~= %{ present count } } => 
           let state.source_out = matched.fields.count
-        case matched = %{ tags ~= %{ `connector` == "out", port == "in" }, fields ~= %{ present count } } => 
+        case matched = %{ tags ~= %{ `connector` == "main1::in_here", port == "err" }, fields ~= %{ present count } } => 
+          let state.source_err = matched.fields.count
+        case matched = %{ tags ~= %{ `connector` == "main1::out_here", port == "in" }, fields ~= %{ present count } } => 
           let state.sink_in = matched.fields.count
         default => null
       end;
 
       # exit if we have at least 10 events
       match state of
-        case %{ source_out >= 10, pipeline_in >= 10, pipeline_in >= 10, sink_in >= 10} =>
+        case %{ source_out >= 10, source_err == 0, pipeline_in >= 10, pipeline_in >= 10, sink_in >= 10} =>
           emit {"EXIT": "NOW"} => "exit"
         default =>
           emit state => "out"
@@ -107,20 +110,20 @@ flow
   end;
 
   # creating connectors
-  create connector in;
-  create connector out;
+  create connector in_here from in;
+  create connector out_here from out;
 
   create connector exit from connectors::exit;
   create connector metrics from connectors::metrics;
   create connector stdio from connectors::console;
 
   # creating pipelines
-  create pipeline main;
+  create pipeline main1 from main;
   create pipeline metrics;
 
   # connects
-  connect /connector/in to  /pipeline/main;
-  connect /pipeline/main/out to /connector/out;
+  connect /connector/in_here to  /pipeline/main1;
+  connect /pipeline/main1/out to /connector/out_here;
 
   connect /connector/metrics to /pipeline/metrics;
   # catching other outputs, just in case
@@ -133,4 +136,4 @@ flow
 
 end;
 
-deploy flow main;
+deploy flow main1 from main;

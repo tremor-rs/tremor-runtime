@@ -381,7 +381,7 @@ error_chain! {
     }
 }
 
-pub(crate) fn err_conector_def<C: ToString + ?Sized, E: ToString + ?Sized>(c: &C, e: &E) -> Error {
+pub(crate) fn err_connector_def<C: ToString + ?Sized, E: ToString + ?Sized>(c: &C, e: &E) -> Error {
     ErrorKind::InvalidConnectorDefinition(c.to_string(), e.to_string()).into()
 }
 
@@ -392,7 +392,7 @@ mod test {
 
     #[test]
     fn test_err_conector_def() {
-        let r = err_conector_def("snot", "badger").0;
+        let r = err_connector_def("snot", "badger").0;
         assert_matches!(r, ErrorKind::InvalidConnectorDefinition(_, _))
     }
 

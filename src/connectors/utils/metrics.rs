@@ -20,9 +20,16 @@ use tremor_pipeline::MetricsSender;
 use tremor_script::EventPayload;
 use tremor_value::prelude::*;
 
+use crate::system::flow::ConnectorAlias;
+
+const FLOW: Cow<'static, str> = Cow::const_str("flow");
+const CONNECTOR: Cow<'static, str> = Cow::const_str("connector");
+const PORT: Cow<'static, str> = Cow::const_str("port");
+const CONNECTOR_EVENTS: Cow<'static, str> = Cow::const_str("connector_events");
+
 /// metrics reporter for connector sources
 pub struct SourceReporter {
-    alias: String,
+    alias: ConnectorAlias,
     metrics_out: u64,
     metrics_err: u64,
     tx: MetricsSender,
@@ -31,7 +38,11 @@ pub struct SourceReporter {
 }
 
 impl SourceReporter {
-    pub(crate) fn new(alias: String, tx: MetricsSender, flush_interval_s: Option<u64>) -> Self {
+    pub(crate) fn new(
+        alias: ConnectorAlias,
+        tx: MetricsSender,
+        flush_interval_s: Option<u64>,
+    ) -> Self {
         Self {
             alias,
             metrics_out: 0,
@@ -78,7 +89,7 @@ impl SourceReporter {
 
 /// metrics reporter for connector sinks
 pub(crate) struct SinkReporter {
-    alias: String,
+    alias: ConnectorAlias,
     metrics_in: u64,
     tx: MetricsSender,
     flush_interval_ns: Option<u64>,
@@ -86,7 +97,11 @@ pub(crate) struct SinkReporter {
 }
 
 impl SinkReporter {
-    pub(crate) fn new(alias: String, tx: MetricsSender, flush_interval_s: Option<u64>) -> Self {
+    pub(crate) fn new(
+        alias: ConnectorAlias,
+        tx: MetricsSender,
+        flush_interval_s: Option<u64>,
+    ) -> Self {
         Self {
             alias,
             metrics_in: 0,
@@ -123,7 +138,7 @@ impl SinkReporter {
 
 // this is simple forwarding
 // #[cfg_attr(coverage, no_coverage)]
-pub(crate) fn send(tx: &MetricsSender, metric: EventPayload, alias: &str) {
+pub(crate) fn send(tx: &MetricsSender, metric: EventPayload, alias: &ConnectorAlias) {
     use tremor_pipeline::MetricsMsg;
 
     if let Err(_e) = tx.try_broadcast(MetricsMsg::new(metric, None)) {
@@ -139,13 +154,14 @@ pub(crate) fn make_event_count_metrics_payload(
     timestamp: u64,
     port: Cow<'static, str>,
     count: u64,
-    artefact_id: &str,
+    connector_id: &ConnectorAlias,
 ) -> EventPayload {
     let mut tags: HashMap<Cow<'static, str>, Value<'static>> = HashMap::with_capacity(2);
-    tags.insert_nocheck(Cow::const_str("connector"), artefact_id.to_string().into());
-    tags.insert_nocheck(Cow::const_str("port"), port.into());
+    tags.insert_nocheck(FLOW, Value::from(connector_id.flow_alias().to_string()));
+    tags.insert_nocheck(CONNECTOR, connector_id.to_string().into());
+    tags.insert_nocheck(PORT, port.into());
 
-    let value = value_count(Cow::from("connector_events"), tags, count, timestamp);
+    let value = value_count(CONNECTOR_EVENTS, tags, count, timestamp);
     // full metrics payload
     (value, Value::object()).into()
 }

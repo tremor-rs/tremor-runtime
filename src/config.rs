@@ -153,7 +153,10 @@ pub(crate) struct Connector {
 
 impl Connector {
     /// Spawns a connector from a definition
-    pub(crate) fn from_defn(defn: &ast::ConnectorDefinition<'static>) -> crate::Result<Self> {
+    pub(crate) fn from_defn(
+        alias: &ConnectorAlias,
+        defn: &ast::ConnectorDefinition<'static>,
+    ) -> crate::Result<Self> {
         let aggr_reg = tremor_script::registry::aggr();
         let reg = &*FN_REGISTRY.read()?;
 
@@ -162,19 +165,24 @@ impl Connector {
 
         let conf = params.generate_config(&mut helper)?;
 
-        Self::from_config(defn.id.as_str(), defn.builtin_kind.clone().into(), &conf)
+        Self::from_config(alias, defn.builtin_kind.clone().into(), &conf)
     }
     /// Creates a connector from it's definition (aka config + settings)
     #[allow(clippy::too_many_lines)]
     pub(crate) fn from_config(
-        connector_id: &str,
+        connector_alias: &ConnectorAlias,
         connector_type: ConnectorType,
         connector_config: &Value<'static>,
     ) -> crate::Result<Self> {
-        fn validate_type(v: &Value, k: &str, t: ValueType, connector_id: &str) -> Result<()> {
+        fn validate_type(
+            v: &Value,
+            k: &str,
+            t: ValueType,
+            connector_alias: &ConnectorAlias,
+        ) -> Result<()> {
             if v.get(k).is_some() && v.get(k).map(Value::value_type) != Some(t) {
                 return Err(ErrorKind::InvalidConnectorDefinition(
-                    connector_id.to_string(),
+                    connector_alias.to_string(),
                     format!(
                         "Expected type {t:?} for key {k} but got {:?}",
                         v.get(k).map_or(ValueType::Null, Value::value_type)
@@ -192,44 +200,44 @@ impl Connector {
             connector_config,
             ConnectorDefinition::CODEC,
             ValueType::String,
-            connector_id,
+            connector_alias,
         )?;
         validate_type(
             connector_config,
             ConnectorDefinition::CONFIG,
             ValueType::Object,
-            connector_id,
+            connector_alias,
         )?;
         validate_type(
             connector_config,
             ConnectorDefinition::RECONNECT,
             ValueType::Object,
-            connector_id,
+            connector_alias,
         )?;
         validate_type(
             connector_config,
             ConnectorDefinition::PREPROCESSORS,
             ValueType::Array,
-            connector_id,
+            connector_alias,
         )?;
         validate_type(
             connector_config,
             ConnectorDefinition::POSTPROCESSORS,
             ValueType::Array,
-            connector_id,
+            connector_alias,
         )?;
         validate_type(
             connector_config,
             ConnectorDefinition::METRICS_INTERVAL_S,
             ValueType::U64,
-            connector_id,
+            connector_alias,
         )
         .or_else(|_| {
             validate_type(
                 connector_config,
                 ConnectorDefinition::METRICS_INTERVAL_S,
                 ValueType::I64,
-                connector_id,
+                connector_alias,
             )
         })?;
 
@@ -273,7 +281,7 @@ pub struct Binding {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::errors::Result;
+    use crate::{errors::Result, system::flow::FlowAlias};
 
     #[test]
     fn test_reconnect_serde() -> Result<()> {
@@ -308,7 +316,7 @@ mod tests {
     #[test]
     fn test_config_builtin_preproc_with_config() -> Result<()> {
         let c = Connector::from_config(
-            "my_otel_client",
+            &ConnectorAlias::new(FlowAlias::new("flow"), "my_otel_client"),
             ConnectorType::from("otel_client".to_string()),
             &literal!({
                 "preprocessors": [ {"name": "snot", "config": { "separator": "\n" }}],
@@ -336,10 +344,10 @@ mod tests {
             "reconnect": {},
             "metrics_interval_s": "wrong_type"
         });
-        let id = "my_id";
-        let res = Connector::from_config(id, "fancy_schmancy".into(), &config);
+        let id = ConnectorAlias::new(FlowAlias::new("flow"), "my_id");
+        let res = Connector::from_config(&id, "fancy_schmancy".into(), &config);
         assert!(res.is_err());
-        assert_eq!(String::from("Invalid Definition for connector \"my_id\": Expected type I64 for key metrics_interval_s but got String"), res.err().unwrap().to_string());
+        assert_eq!(String::from("Invalid Definition for connector \"flow::my_id\": Expected type I64 for key metrics_interval_s but got String"), res.err().unwrap().to_string());
         Ok(())
     }
 }

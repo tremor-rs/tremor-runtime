@@ -18,6 +18,7 @@ pub(crate) mod separate;
 
 use crate::config::Preprocessor as PreprocessorConfig;
 use crate::errors::{Error, Result};
+use crate::system::flow::ConnectorAlias;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::{buf::Buf, BytesMut};
 use std::str;
@@ -102,7 +103,7 @@ pub fn preprocess(
     preprocessors: &mut [Box<dyn Preprocessor>],
     ingest_ns: &mut u64,
     data: Vec<u8>,
-    alias: &str,
+    alias: &ConnectorAlias,
 ) -> Result<Vec<Vec<u8>>> {
     let mut data = vec![data];
     let mut data1 = Vec::new();
@@ -112,7 +113,7 @@ pub fn preprocess(
             match pp.process(ingest_ns, d) {
                 Ok(mut r) => data1.append(&mut r),
                 Err(e) => {
-                    error!("[{}] Preprocessor [{}] error: {}", alias, i, e);
+                    error!("[Connector::{alias}] Preprocessor [{i}] error: {e}");
                     return Err(e);
                 }
             }
@@ -129,14 +130,14 @@ pub fn preprocess(
 /// * If a preprocessor failed
 pub fn finish(
     preprocessors: &mut [Box<dyn Preprocessor>],
-    instance_id: &str,
+    alias: &ConnectorAlias,
 ) -> Result<Vec<Vec<u8>>> {
     if let Some((head, tail)) = preprocessors.split_first_mut() {
         let mut data = match head.finish(None) {
             Ok(d) => d,
             Err(e) => {
                 error!(
-                    "[{instance_id}] Preprocessor '{}' finish error: {e}",
+                    "[Connector::{alias}] Preprocessor '{}' finish error: {e}",
                     head.name()
                 );
                 return Err(e);
@@ -150,7 +151,7 @@ pub fn finish(
                     Ok(mut r) => data1.append(&mut r),
                     Err(e) => {
                         error!(
-                            "[{instance_id}] Preprocessor '{}' finish error: {e}",
+                            "[Connector::{alias}] Preprocessor '{}' finish error: {e}",
                             pp.name()
                         );
                         return Err(e);
@@ -302,6 +303,7 @@ mod test {
     use super::*;
     use crate::postprocessor::{self as post, separate::Separate as SeparatePost, Postprocessor};
     use crate::preprocessor::{self as pre, separate::Separate, Preprocessor};
+    use crate::system::flow::FlowAlias;
     #[test]
     fn ingest_ts() -> Result<()> {
         let mut pre_p = pre::ExtractIngestTs {};
@@ -453,18 +455,18 @@ mod test {
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         let wire = post_p.process(0, 0, &data)?;
         let (start, end) = wire[0].split_at(7);
-        let id = String::from("test");
+        let alias = ConnectorAlias::new(FlowAlias::new("test"), "test");
         let mut pps: Vec<Box<dyn Preprocessor>> = vec![Box::new(pre_p)];
-        let recv = preprocess(pps.as_mut_slice(), &mut it, start.to_vec(), &id)?;
+        let recv = preprocess(pps.as_mut_slice(), &mut it, start.to_vec(), &alias)?;
         assert!(recv.is_empty());
-        let recv = preprocess(pps.as_mut_slice(), &mut it, end.to_vec(), &id)?;
+        let recv = preprocess(pps.as_mut_slice(), &mut it, end.to_vec(), &alias)?;
         assert_eq!(recv[0], data);
 
         // incomplete data
-        let processed = preprocess(pps.as_mut_slice(), &mut it, start.to_vec(), &id)?;
+        let processed = preprocess(pps.as_mut_slice(), &mut it, start.to_vec(), &alias)?;
         assert!(processed.is_empty());
         // not emitted upon finish
-        let finished = finish(pps.as_mut_slice(), &id)?;
+        let finished = finish(pps.as_mut_slice(), &alias)?;
         assert!(finished.is_empty());
 
         Ok(())

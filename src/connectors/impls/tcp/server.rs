@@ -21,7 +21,7 @@ use crate::{
             ConnectionMeta,
         },
     },
-    errors::err_conector_def,
+    errors::err_connector_def,
 };
 use async_std::{
     channel::{bounded, Receiver, Sender},
@@ -67,14 +67,14 @@ impl ConnectorBuilder for Builder {
     }
     async fn build_cfg(
         &self,
-        id: &str,
+        id: &ConnectorAlias,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
     ) -> crate::errors::Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         if config.url.port().is_none() {
-            return Err(err_conector_def(id, "Missing port for TCP server"));
+            return Err(err_connector_def(id, "Missing port for TCP server"));
         }
         let tls_server_config = if let Some(tls_config) = config.tls.as_ref() {
             Some(load_server_config(tls_config)?)

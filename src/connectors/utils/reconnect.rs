@@ -18,6 +18,7 @@ use crate::connectors::sink::SinkMsg;
 use crate::connectors::source::SourceMsg;
 use crate::connectors::{Addr, Connectivity, Connector, ConnectorContext, Context, Msg};
 use crate::errors::{Error, Result};
+use crate::system::flow::ConnectorAlias;
 use async_std::channel::{bounded, Sender};
 use async_std::task::{self, JoinHandle};
 use futures::future::{join3, ready, FutureExt};
@@ -188,7 +189,7 @@ pub(crate) struct ReconnectRuntime {
     addr: Addr,
     notifier: ConnectionLostNotifier,
     retry_task: Option<JoinHandle<()>>,
-    alias: String,
+    alias: ConnectorAlias,
 }
 
 /// Notifier that connector implementations
@@ -229,7 +230,7 @@ impl ReconnectRuntime {
     }
     fn inner(
         addr: Addr,
-        alias: String,
+        alias: ConnectorAlias,
         notifier: ConnectionLostNotifier,
         config: &Reconnect,
     ) -> Self {
@@ -380,7 +381,10 @@ impl ReconnectRuntime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::connectors::{utils::quiescence::QuiescenceBeacon, CodecReq};
+    use crate::{
+        connectors::{utils::quiescence::QuiescenceBeacon, CodecReq},
+        system::flow::FlowAlias,
+    };
 
     /// does not connect
     struct FakeConnector {
@@ -442,7 +446,7 @@ mod tests {
     async fn failfast_runtime() -> Result<()> {
         let (tx, rx) = async_std::channel::unbounded();
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let alias = String::from("test");
+        let alias = ConnectorAlias::new(FlowAlias::new("flow"), "test");
         let addr = Addr {
             alias: alias.clone(),
             source: None,
@@ -476,7 +480,7 @@ mod tests {
         use async_std::prelude::FutureExt;
         let (tx, rx) = async_std::channel::unbounded();
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let alias = String::from("test");
+        let alias = ConnectorAlias::new(FlowAlias::new("flow"), "test");
         let addr = Addr {
             alias: alias.clone(),
             source: None,

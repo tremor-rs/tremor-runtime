@@ -36,7 +36,7 @@ where
     wrapped_stream: S,
     underlying_stream: TcpStream,
     buffer: Vec<u8>,
-    alias: String,
+    alias: ConnectorAlias,
     origin_uri: EventOriginUri,
     meta: Value<'static>,
 }
@@ -45,7 +45,7 @@ impl TcpReader<TcpStream> {
     fn new(
         stream: TcpStream,
         buffer: Vec<u8>,
-        alias: String,
+        alias: ConnectorAlias,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
     ) -> Self {
@@ -65,7 +65,7 @@ impl TcpReader<ReadHalf<async_tls::server::TlsStream<TcpStream>>> {
         stream: ReadHalf<async_tls::server::TlsStream<TcpStream>>,
         underlying_stream: TcpStream,
         buffer: Vec<u8>,
-        alias: String,
+        alias: ConnectorAlias,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
     ) -> Self {
@@ -85,7 +85,7 @@ impl TcpReader<ReadHalf<async_tls::client::TlsStream<TcpStream>>> {
         stream: ReadHalf<async_tls::client::TlsStream<TcpStream>>,
         underlying_stream: TcpStream,
         buffer: Vec<u8>,
-        alias: String,
+        alias: ConnectorAlias,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
     ) -> Self {

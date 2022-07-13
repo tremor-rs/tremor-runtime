@@ -33,6 +33,7 @@ use crate::errors::Result;
 use crate::pipeline;
 use crate::postprocessor::{finish, make_postprocessors, postprocess, Postprocessors};
 use crate::primerge::PriorityMerge;
+use crate::system::flow::ConnectorAlias;
 use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task;
@@ -251,8 +252,8 @@ pub(crate) trait SinkRuntime: Send + Sync {
 pub(crate) struct SinkContext {
     /// the connector unique identifier
     pub(crate) uid: SinkId,
-    /// the connector url
-    pub(crate) alias: String,
+    /// the connector alias
+    pub(crate) alias: ConnectorAlias,
     /// the connector type
     pub(crate) connector_type: ConnectorType,
 
@@ -270,7 +271,7 @@ impl Display for SinkContext {
 }
 
 impl Context for SinkContext {
-    fn alias(&self) -> &str {
+    fn alias(&self) -> &ConnectorAlias {
         &self.alias
     }
 
@@ -388,7 +389,7 @@ impl SinkManagerBuilder {
 pub(crate) fn builder(
     config: &ConnectorConfig,
     connector_codec_requirement: CodecReq,
-    alias: &str,
+    alias: &ConnectorAlias,
     qsize: usize,
     metrics_reporter: SinkReporter,
 ) -> Result<SinkManagerBuilder> {
@@ -435,7 +436,7 @@ impl EventSerializer {
         default_codec: CodecReq,
         postprocessor_configs: Vec<PostprocessorConfig>,
         connector_type: &ConnectorType,
-        alias: &str,
+        alias: &ConnectorAlias,
     ) -> Result<Self> {
         let codec_config = match default_codec {
             CodecReq::Structured => {
@@ -638,7 +639,7 @@ where
                                 ..Event::default()
                             };
                             // send CB start to all pipes
-                            send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
+                            send_contraflow(&self.pipelines, &self.ctx, cf).await;
                         }
                         SinkMsg::Connect(sender, attempt) => {
                             info!("{} Connecting...", &self.ctx);
@@ -724,7 +725,7 @@ where
                             );
                             let cf = Event::cb_open(nanotime(), self.merged_operator_meta.clone());
                             // send CB restore to all pipes
-                            send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
+                            send_contraflow(&self.pipelines, &self.ctx, cf).await;
                         }
                         SinkMsg::ConnectionLost => {
                             // clean out all pending stream data from EventSerializer - we assume all streams closed at this point
@@ -735,7 +736,7 @@ where
                             );
                             // send CB trigger to all pipes
                             let cf = Event::cb_close(nanotime(), self.merged_operator_meta.clone());
-                            send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
+                            send_contraflow(&self.pipelines, &self.ctx, cf).await;
                         }
                         SinkMsg::Event { event, port } => {
                             let cf_builder = ContraflowData::from(&event);
@@ -770,7 +771,7 @@ where
                                         duration,
                                         cf_builder,
                                         &self.pipelines,
-                                        &self.ctx.alias,
+                                        &self.ctx,
                                         transactional && self.sink.auto_ack(),
                                     )
                                     .await;
@@ -780,7 +781,7 @@ where
                                     // TODO: error logging? This could fill the logs quickly. Rather emit a metrics event with the logging info?
                                     if transactional {
                                         let cf = cf_builder.into_fail();
-                                        send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
+                                        send_contraflow(&self.pipelines, &self.ctx, cf).await;
                                     }
                                 }
                             };
@@ -807,7 +808,7 @@ where
                                     // send a cb Drained contraflow message back
                                     let cf = ContraflowData::from(&signal)
                                         .into_cb(CbAction::Drained(source_uid, self.ctx.uid));
-                                    send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
+                                    send_contraflow(&self.pipelines, &self.ctx, cf).await;
                                 }
                                 Some(SignalKind::Start(source_uid)) => {
                                     debug!("{} Received Start signal from {source_uid}", self.ctx);
@@ -830,7 +831,7 @@ where
                                         duration,
                                         cf_builder,
                                         &self.pipelines,
-                                        &self.ctx.alias,
+                                        &self.ctx,
                                         false,
                                     )
                                     .await;
@@ -862,7 +863,7 @@ where
                             Event::insight(cb, data.event_id, data.ingest_ns, data.op_meta)
                         }
                     };
-                    send_contraflow(&self.pipelines, &self.ctx.alias, cf).await;
+                    send_contraflow(&self.pipelines, &self.ctx, cf).await;
                 }
             }
         }
@@ -923,23 +924,17 @@ impl From<Event> for ContraflowData {
 /// send contraflow back to pipelines
 async fn send_contraflow(
     pipelines: &[(DeployEndpoint, pipeline::Addr)],
-    connector_url: &str,
+    connector_ctx: &impl Context,
     contraflow: Event,
 ) {
     if let Some(((last_url, last_addr), rest)) = pipelines.split_last() {
         for (url, addr) in rest {
             if let Err(e) = addr.send_insight(contraflow.clone()).await {
-                error!(
-                    "[Connector::{}] Error sending contraflow to {}: {}",
-                    &connector_url, url, e
-                );
+                error!("{connector_ctx} Error sending contraflow to {url}: {e}",);
             }
         }
         if let Err(e) = last_addr.send_insight(contraflow).await {
-            error!(
-                "[Connector::{}] Error sending contraflow to {}: {}",
-                &connector_url, last_url, e
-            );
+            error!("{connector_ctx} Error sending contraflow to {last_url}: {e}",);
         }
     }
 }
@@ -949,22 +944,21 @@ async fn handle_replies(
     duration: u64,
     cf_builder: ContraflowData,
     pipelines: &[(DeployEndpoint, pipeline::Addr)],
-    connector_url: &str,
+    ctx: &impl Context,
     send_auto_ack: bool,
 ) {
     let ps = pipelines;
-    let url = connector_url;
     if reply.cb != CbAction::None {
         // we do not maintain a merged op_meta here, to avoid the cost
         // the downside is, only operators which this event passed get to know this CB event
         // but worst case is, 1 or 2 more events are lost - totally worth it
-        send_contraflow(ps, url, cf_builder.cb(reply.cb)).await;
+        send_contraflow(ps, ctx, cf_builder.cb(reply.cb)).await;
     }
     match reply.ack {
-        SinkAck::Ack => send_contraflow(ps, url, cf_builder.into_ack(duration)).await,
-        SinkAck::Fail => send_contraflow(ps, url, cf_builder.into_fail()).await,
+        SinkAck::Ack => send_contraflow(ps, ctx, cf_builder.into_ack(duration)).await,
+        SinkAck::Fail => send_contraflow(ps, ctx, cf_builder.into_fail()).await,
         SinkAck::None if send_auto_ack => {
-            send_contraflow(ps, url, cf_builder.into_ack(duration)).await;
+            send_contraflow(ps, ctx, cf_builder.into_ack(duration)).await;
         }
         SinkAck::None => (),
     }
