@@ -14,7 +14,9 @@
 
 #![allow(dead_code)]
 
-use crate::errors::{Error, Result};
+use crate::errors::{Error, ErrorKind, Result};
+use simd_json::StaticNode;
+use std::collections::BTreeMap;
 use tremor_otelapis::opentelemetry::proto::metrics::v1;
 use tremor_value::Value;
 use value_trait::ValueAccess;
@@ -109,6 +111,74 @@ pub(crate) fn u64_repeated_to_pb(json: Option<&Value<'_>>) -> Result<Vec<u64>> {
         .map(Some)
         .map(maybe_int_to_pbu64)
         .collect()
+}
+
+pub(crate) fn value_to_prost_value(json: &Value) -> Result<prost_types::Value> {
+    use prost_types::value::Kind;
+    Ok(match json {
+        Value::Static(StaticNode::Null) => prost_types::Value {
+            kind: Some(Kind::NullValue(0)),
+        },
+        Value::Static(StaticNode::Bool(v)) => prost_types::Value {
+            kind: Some(Kind::BoolValue(*v)),
+        },
+        #[allow(clippy::cast_precision_loss)]
+        Value::Static(StaticNode::I64(v)) => prost_types::Value {
+            kind: Some(Kind::NumberValue(*v as f64)),
+        },
+        #[allow(clippy::cast_precision_loss)]
+        Value::Static(StaticNode::U64(v)) => prost_types::Value {
+            kind: Some(Kind::NumberValue(*v as f64)),
+        },
+        Value::Static(StaticNode::F64(v)) => prost_types::Value {
+            kind: Some(Kind::NumberValue(*v)),
+        },
+        Value::String(v) => prost_types::Value {
+            kind: Some(Kind::StringValue(v.to_string())),
+        },
+        Value::Array(v) => {
+            let mut arr: Vec<prost_types::Value> = vec![];
+            for val in v {
+                arr.push(value_to_prost_value(val)?);
+            }
+            prost_types::Value {
+                kind: Some(Kind::ListValue(prost_types::ListValue { values: arr })),
+            }
+        }
+        Value::Object(v) => {
+            let mut fields = BTreeMap::new();
+            for (key, val) in v.iter() {
+                fields.insert(key.to_string(), value_to_prost_value(val)?);
+            }
+            prost_types::Value {
+                kind: Some(Kind::StructValue(prost_types::Struct { fields })),
+            }
+        }
+        Value::Bytes(v) => {
+            let encoded = base64::encode(v);
+            prost_types::Value {
+                kind: Some(Kind::StringValue(encoded)),
+            }
+        }
+    })
+}
+
+pub(crate) fn value_to_prost_struct(json: &Value<'_>) -> Result<prost_types::Struct> {
+    use prost_types::value::Kind;
+    use simd_json::Value as SimdValue; // for value_type()
+
+    if json.is_object() {
+        if let prost_types::Value {
+            kind: Some(Kind::StructValue(s)),
+        } = value_to_prost_value(json)?
+        {
+            return Ok(s);
+        }
+    }
+    Err(Error::from(ErrorKind::GclTypeMismatch(
+        "Value::Object",
+        json.value_type(),
+    )))
 }
 
 #[cfg(test)]
@@ -277,5 +347,74 @@ mod test {
         assert!(maybe_int_to_pbi32(None).is_err());
         assert!(f64_repeated_to_pb(None).is_err());
         assert!(u64_repeated_to_pb(None).is_err());
+    }
+
+    #[test]
+    fn prost_value_mappings() -> Result<()> {
+        use prost_types::value::Kind;
+        let v = value_to_prost_value(&literal!(null))?;
+        assert_eq!(Some(Kind::NullValue(0)), v.kind);
+
+        let v = value_to_prost_value(&literal!(true))?;
+        assert_eq!(Some(Kind::BoolValue(true)), v.kind);
+
+        let v = value_to_prost_value(&literal!(1i64))?;
+        assert_eq!(Some(Kind::NumberValue(1f64)), v.kind);
+
+        let v = value_to_prost_value(&literal!(1u64))?;
+        assert_eq!(Some(Kind::NumberValue(1f64)), v.kind);
+
+        let v = value_to_prost_value(&literal!(1f64))?;
+        assert_eq!(Some(Kind::NumberValue(1f64)), v.kind);
+
+        let v = value_to_prost_value(&literal!("snot"))?;
+        assert_eq!(Some(Kind::StringValue("snot".to_string())), v.kind);
+
+        let v = literal!([1u64, 2u64, 3u64]);
+        let v = value_to_prost_value(&v)?;
+        assert_eq!(
+            prost_types::Value {
+                kind: Some(Kind::ListValue(prost_types::ListValue {
+                    values: vec![
+                        value_to_prost_value(&literal!(1u64))?,
+                        value_to_prost_value(&literal!(2u64))?,
+                        value_to_prost_value(&literal!(3u64))?,
+                    ]
+                }))
+            },
+            v
+        );
+
+        let v = literal!({ "snot": "badger"});
+        let v = value_to_prost_value(&v)?;
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            "snot".to_string(),
+            value_to_prost_value(&literal!("badger"))?,
+        );
+        assert_eq!(
+            prost_types::Value {
+                kind: Some(Kind::StructValue(prost_types::Struct { fields }))
+            },
+            v
+        );
+
+        let v: beef::Cow<[u8]> = beef::Cow::owned("snot".as_bytes().to_vec());
+        let v = Value::Bytes(v);
+        let v = value_to_prost_value(&v)?;
+        assert_eq!(Some(Kind::StringValue("c25vdA==".to_string())), v.kind);
+
+        Ok(())
+    }
+
+    #[test]
+    fn prost_struct_mapping() {
+        let v = literal!({ "snot": "badger"});
+        let v = value_to_prost_struct(&v);
+        assert!(v.is_ok());
+
+        let v = literal!(null);
+        let v = value_to_prost_struct(&v);
+        assert!(v.is_err());
     }
 }
