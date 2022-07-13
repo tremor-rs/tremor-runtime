@@ -53,7 +53,7 @@ impl<S: Sorting> Default for Json<S> {
         Self {
             _phantom: PhantomData::default(),
             input_buffer: AlignedBuf::with_capacity(1024),
-            string_buffer: Vec::with_capacity(1024),
+            string_buffer: vec![0u8; 1024],
         }
     }
 }
@@ -80,7 +80,7 @@ impl<S: Sorting> Codec for Json<S> {
         // The input buffer will be automatically grown if required
         if self.string_buffer.capacity() < data.len() {
             let new_len = max(self.string_buffer.capacity(), data.len()) * 2;
-            self.string_buffer.reserve(new_len);
+            self.string_buffer.resize(new_len, 0);
         }
         tremor_value::parse_to_value_with_buffers(
             data,
