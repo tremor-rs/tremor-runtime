@@ -38,11 +38,12 @@ use value_trait::ValueAccess;
 pub struct Config {
     #[serde(default = "default_endpoint")]
     endpoint: String,
-    #[serde(default = "default_connect_timeout")]
     #[cfg_attr(test, allow(unused))]
+    #[serde(default = "default_connect_timeout")]
     connect_timeout: u64,
     #[serde(default = "default_buffer_size")]
     buffer_size: usize,
+    bucket: Option<String>,
 }
 
 fn default_endpoint() -> String {
@@ -98,6 +99,11 @@ impl Connector for GCSWriterConnector {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
+        let default_bucket = self
+            .config
+            .bucket
+            .as_ref()
+            .map(|bucket_name| Value::from(bucket_name.as_str()).into_static());
         let sink = GCSWriterSink {
             client: None,
             url: self.url.clone(),
@@ -105,10 +111,10 @@ impl Connector for GCSWriterConnector {
             buffers: ChunkedBuffer::new(self.config.buffer_size),
             current_name: None,
             current_session_url: None,
+            default_bucket,
         };
 
-        let addr = builder.spawn(sink, sink_context)?;
-        Ok(Some(addr))
+        builder.spawn(sink, sink_context).map(Some)
     }
 
     fn codec_requirements(&self) -> CodecReq {
@@ -176,6 +182,7 @@ struct GCSWriterSink {
     buffers: ChunkedBuffer,
     current_name: Option<String>,
     current_session_url: Option<String>,
+    default_bucket: Option<Value<'static>>,
 }
 
 #[async_trait::async_trait]
@@ -247,19 +254,28 @@ impl Sink for GCSWriterSink {
                         }
                     }
 
-                    if let Some(response) = response.as_ref() {
+                    if let Some(response) = response.as_mut() {
                         if !response.status().is_server_error()
                             && response.header("range").is_some()
                         {
                             break;
                         }
 
+                        error!(
+                            "Error from Google Cloud Storage: {}",
+                            response.body_string().await?
+                        );
+
                         sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
                     }
                 }
 
-                if let Some(response) = response {
+                if let Some(mut response) = response {
                     if response.status().is_server_error() {
+                        error!(
+                            "Error from Google Cloud Storage: {}",
+                            response.body_string().await?
+                        );
                         return Err("Received server errors from Google Cloud Storage".into());
                     }
 
@@ -285,6 +301,10 @@ impl Sink for GCSWriterSink {
                                 "Unable to get the end of the Range",
                             ))?;
 
+                        // NOTE: The data can only be thrown away to the point of the end of the Range header,
+                        // since google can persist less than we send in our request.
+                        //
+                        // see: https://cloud.google.com/storage/docs/performing-resumable-uploads#chunked-upload
                         self.buffers.mark_done_until(range_end.parse()?)?;
                     } else {
                         return Err("No range header".into());
@@ -313,6 +333,7 @@ impl Sink for GCSWriterSink {
         self.client = Some(client);
         self.current_name = None;
         self.buffers = ChunkedBuffer::new(self.config.buffer_size);
+        self.current_session_url = None;
 
         Ok(true)
     }
@@ -373,12 +394,16 @@ impl GCSWriterSink {
 
                 let response = client.send(request).await;
 
-                if let Ok(response) = response {
+                if let Ok(mut response) = response {
                     if !response.status().is_server_error() {
                         self.buffers = ChunkedBuffer::new(self.config.buffer_size);
                         self.current_session_url = None;
                         break;
                     }
+                    error!(
+                        "Error from Google Cloud Storage: {}",
+                        response.body_string().await?
+                    );
                 }
 
                 sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
@@ -403,6 +428,7 @@ impl GCSWriterSink {
                     "{}/b/{}/o?name={}&uploadType=resumable",
                     self.url,
                     meta.get("bucket")
+                        .or(self.default_bucket.as_ref())
                         .ok_or(ErrorKind::GoogleCloudStorageError(
                             "No bucket name in the metadata"
                         ))
@@ -423,7 +449,7 @@ impl GCSWriterSink {
 
                 let response = client.send(request).await;
 
-                if let Ok(response) = response {
+                if let Ok(mut response) = response {
                     if !response.status().is_server_error() {
                         self.current_session_url = Some(
                             response
@@ -441,6 +467,11 @@ impl GCSWriterSink {
 
                         break;
                     }
+
+                    error!(
+                        "Error from Google Cloud Storage: {}",
+                        response.body_string().await?
+                    );
                 }
 
                 sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
@@ -616,10 +647,12 @@ mod tests {
                 endpoint: "https://start.example.com".to_string(),
                 connect_timeout: 0,
                 buffer_size: 100,
+                bucket: None,
             },
             buffers: ChunkedBuffer::new(100),
             current_name: None,
             current_session_url: None,
+            default_bucket: None,
         };
 
         let meta = literal!({
