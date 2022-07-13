@@ -36,6 +36,7 @@ use tremor_script::{
 };
 
 /// unique identifier of a flow instance within a tremor instance
+#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
 pub struct FlowAlias(String);
 
@@ -46,6 +47,7 @@ impl FlowAlias {
     }
 
     /// reference this id as a stringy thing again
+    #[must_use]
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }
@@ -77,7 +79,7 @@ pub struct ConnectorAlias {
 }
 
 impl ConnectorAlias {
-    /// construct a new ConnectorId from the id of the containing flow and the connector instance id
+    /// construct a new `ConnectorId` from the id of the containing flow and the connector instance id
     pub fn new(flow_alias: FlowAlias, connector_alias: impl Into<String>) -> Self {
         Self {
             flow_alias,
@@ -86,13 +88,15 @@ impl ConnectorAlias {
     }
 
     /// get a reference to the flow alias
+    #[must_use]
     pub fn flow_alias(&self) -> &FlowAlias {
         &self.flow_alias
     }
 
     /// get a reference to the connector alias
+    #[must_use]
     pub fn connector_alias(&self) -> &str {
-        &self.connector_alias.as_str()
+        self.connector_alias.as_str()
     }
 }
 
