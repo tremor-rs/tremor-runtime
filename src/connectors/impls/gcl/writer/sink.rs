@@ -20,10 +20,7 @@ use crate::connectors::utils::pb;
 use async_std::prelude::FutureExt;
 use googapis::google::logging::v2::log_entry::Payload;
 use googapis::google::logging::v2::logging_service_v2_client::LoggingServiceV2Client;
-use googapis::google::logging::v2::{
-    LogEntry,
-    WriteLogEntriesRequest,
-};
+use googapis::google::logging::v2::{LogEntry, WriteLogEntriesRequest};
 use gouth::Token;
 use prost_types::Timestamp;
 use std::time::Duration;
@@ -98,7 +95,7 @@ impl Sink for GclSink {
             #[allow(clippy::cast_precision_loss)]
             #[allow(clippy::cast_possible_wrap)]
             let mut timestamp = Timestamp {
-                seconds: event.ingest_ns as i64 / 1_000_000_000i64,
+                seconds: (event.ingest_ns / 1_000_000_000) as i64,
                 nanos: (event.ingest_ns % 1_000_000_000) as i32,
             };
             timestamp.normalize();
