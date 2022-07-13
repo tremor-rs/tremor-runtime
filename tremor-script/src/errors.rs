@@ -1338,3 +1338,22 @@ pub(crate) fn unexpected_character<O: Ranged, I: Ranged>(
 ) -> Error {
     ErrorKind::UnexpectedCharacter(outer.extent(), inner.extent(), tkn, ch).into()
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use matches::assert_matches;
+
+    #[test]
+    fn test_type_error() {
+        let r = Error::from(TryTypeError {
+            expected: ValueType::Object,
+            got: ValueType::String,
+        })
+        .0;
+        assert_matches!(
+            r,
+            ErrorKind::TypeError(ValueType::Object, ValueType::String)
+        )
+    }
+}
