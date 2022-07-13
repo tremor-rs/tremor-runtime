@@ -395,4 +395,17 @@ mod test {
         let r = err_conector_def("snot", "badger").0;
         assert_matches!(r, ErrorKind::InvalidConnectorDefinition(_, _))
     }
+
+    #[test]
+    fn test_type_error() {
+        let r = Error::from(TryTypeError {
+            expected: ValueType::Object,
+            got: ValueType::String,
+        })
+        .0;
+        assert_matches!(
+            r,
+            ErrorKind::TypeError(ValueType::Object, ValueType::String)
+        )
+    }
 }
