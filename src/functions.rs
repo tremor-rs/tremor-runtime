@@ -13,10 +13,11 @@
 // limitations under the License.
 
 use crate::connectors::impls::otel;
+use crate::connectors::impls::gcl;
 use crate::errors::Result;
 use crate::version::VERSION;
 use tremor_script::registry::Registry;
-use tremor_script::tremor_fn;
+use tremor_script::{tremor_const_fn, tremor_fn};
 use tremor_script::FN_REGISTRY;
 
 /// Loads the function library
@@ -34,10 +35,11 @@ pub fn load() -> Result<()> {
 ///  * if we can't install extensions
 pub fn install(reg: &mut Registry) -> Result<()> {
     otel::load(reg);
+    gcl::load(reg);
     reg.insert(tremor_fn!(system|instance(_context) {
         Ok(Value::from(instance!()))
     }))
-    .insert(tremor_fn!(system|version(_context) {
+    .insert(tremor_const_fn!(system|version(_context) {
         Ok(Value::from(VERSION).into_static())
     }));
 

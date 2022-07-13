@@ -378,6 +378,16 @@ error_chain! {
             description("Malformed UUID")
                 display("Malformed UUID")
         }
+
+        GclSinkFailed(msg: &'static str) {
+            description("Google Cloud Logging Sink failed")
+                display("Google Cloud Logging Sink failed: {}", msg)
+        }
+
+        GclTypeMismatch(expected: &'static str, actual:value_trait::ValueType) {
+            description("Type in the message does not match Google Cloud Logging API type")
+            display("Type in the message does not match Google Cloud Logging API type. Expected: {}, actual: {:?}", expected, actual)
+        }
     }
 }
 

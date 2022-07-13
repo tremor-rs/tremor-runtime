@@ -30,9 +30,10 @@ pub(crate) mod elastic;
 pub(crate) mod exit;
 /// file connector implementation
 pub(crate) mod file;
-/// Google Big Query
+/// Google Cloud Platform
 pub(crate) mod gbq;
 pub(crate) mod gpubsub;
+pub(crate) mod gcl;
 /// HTTP
 pub(crate) mod http;
 /// Kafka consumer and producer

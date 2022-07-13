@@ -226,6 +226,7 @@ aws-smithy-http = "0.45.0"
 googapis = { version = "0.6", default-features = false, features = [
   "google-pubsub-v1",
   "google-cloud-bigquery-storage-v1",
+  "google-logging-v2",
 ] }
 gouth = { version = "0.2" }
 http = "0.2.8"

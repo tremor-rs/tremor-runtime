@@ -1,6 +1,7 @@
 # Changelog
 
 ### New features
+- Add `gcl_writer` Google Cloud Platform Cloud Logging connector for writing log entries
 - Add reverse functions and tests for arrays and strings, add sort test for arrays
 - Add a ClickHouse connector
 
