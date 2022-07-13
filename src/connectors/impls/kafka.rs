@@ -15,8 +15,8 @@ pub(crate) mod consumer;
 pub(crate) mod producer;
 
 use crate::{
-    connectors::{metrics::make_metrics_payload, Context},
-    errors::{err_conector_def, Result},
+    connectors::{metrics::make_metrics_payload, prelude::ConnectorAlias, Context},
+    errors::{err_connector_def, Result},
 };
 use async_broadcast::Sender as BroadcastSender;
 use async_std::{channel::Sender, task::JoinHandle};
@@ -55,7 +55,7 @@ impl AsyncRuntime for SmolRuntime {
 }
 
 /// verify broker host:port pairs in kafka connector configs
-fn verify_brokers(id: &str, brokers: &[String]) -> Result<(String, Option<u16>)> {
+fn verify_brokers(alias: &ConnectorAlias, brokers: &[String]) -> Result<(String, Option<u16>)> {
     let mut first_broker: Option<(String, Option<u16>)> = None;
     for broker in brokers {
         match broker.split(':').collect::<Vec<_>>().as_slice() {
@@ -63,18 +63,18 @@ fn verify_brokers(id: &str, brokers: &[String]) -> Result<(String, Option<u16>)>
                 first_broker.get_or_insert_with(|| ((*host).to_string(), None));
             }
             [host, port] => {
-                let port: u16 = port
-                    .parse()
-                    .map_err(|_| err_conector_def(id, &format!("Invalid broker: {host}:{port}")))?;
+                let port: u16 = port.parse().map_err(|_| {
+                    err_connector_def(alias, &format!("Invalid broker: {host}:{port}"))
+                })?;
                 first_broker.get_or_insert_with(|| ((*host).to_string(), Some(port)));
             }
             b => {
                 let e = format!("Invalid broker: {}", b.join(":"));
-                return Err(err_conector_def(id, &e));
+                return Err(err_connector_def(alias, &e));
             }
         }
     }
-    first_broker.ok_or_else(|| err_conector_def(id, "Missing brokers."))
+    first_broker.ok_or_else(|| err_connector_def(alias, "Missing brokers."))
 }
 
 /// Returns `true` if the error denotes a failed connect attempt
@@ -354,7 +354,7 @@ mod tests {
             &literal!({
                 "measurement": "kafka_consumer_stats",
                 "tags": {
-                    "connector": "snot"
+                    "connector": "fake::fake"
                 },
                 "fields": {
                     "rx_msgs": 42,

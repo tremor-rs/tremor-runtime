@@ -377,7 +377,7 @@ impl Sink for GbqSink {
     }
 
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        error!("{} Connecting to BigQuery", ctx);
+        info!("{ctx} Connecting to BigQuery");
         let token = Token::new()?;
 
         let tls_config = ClientTlsConfig::new()
@@ -390,13 +390,14 @@ impl Sink for GbqSink {
             .connect()
             .await?;
 
+        let interceptor_ctx = ctx.clone();
         let mut client = BigQueryWriteClient::with_interceptor(
             channel,
             AuthInterceptor {
                 token: Box::new(move || match token.header_value() {
                     Ok(val) => Ok(val),
                     Err(e) => {
-                        error!("Failed to get token for BigQuery: {}", e);
+                        error!("{interceptor_ctx} Failed to get token for BigQuery: {}", e);
 
                         Err(Status::unavailable(
                             "Failed to retrieve authentication token.",
@@ -449,6 +450,7 @@ mod test {
     use crate::connectors::impls::gbq;
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use crate::connectors::tests::ConnectorHarness;
+    use crate::system::flow::FlowAlias;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
     use std::sync::Arc;
     use value_trait::StaticNode;
@@ -471,7 +473,7 @@ mod test {
             }],
             &SinkContext {
                 uid: Default::default(),
-                alias: "".to_string(),
+                alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
                 connector_type: Default::default(),
                 quiescence_beacon: Default::default(),
                 notifier: ConnectionLostNotifier::new(rx),
@@ -500,7 +502,7 @@ mod test {
             }],
             &SinkContext {
                 uid: Default::default(),
-                alias: "".to_string(),
+                alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
                 connector_type: Default::default(),
                 quiescence_beacon: Default::default(),
                 notifier: ConnectionLostNotifier::new(rx),
@@ -538,7 +540,7 @@ mod test {
                 }],
                 &SinkContext {
                     uid: Default::default(),
-                    alias: "".to_string(),
+                    alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
                     connector_type: Default::default(),
                     quiescence_beacon: Default::default(),
                     notifier: ConnectionLostNotifier::new(rx),
@@ -578,7 +580,7 @@ mod test {
             }],
             &SinkContext {
                 uid: Default::default(),
-                alias: "".to_string(),
+                alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
                 connector_type: Default::default(),
                 quiescence_beacon: Default::default(),
                 notifier: ConnectionLostNotifier::new(rx),
@@ -803,7 +805,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: "".to_string(),
+            alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -852,7 +854,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: "".to_string(),
+            alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -896,7 +898,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: "".to_string(),
+            alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -941,7 +943,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: "".to_string(),
+            alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -984,7 +986,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: "".to_string(),
+            alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -1019,7 +1021,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: "".to_string(),
+            alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -1079,7 +1081,7 @@ mod test {
                 Event::signal_tick(),
                 &SinkContext {
                     uid: Default::default(),
-                    alias: "".to_string(),
+                    alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
                     connector_type: Default::default(),
                     quiescence_beacon: Default::default(),
                     notifier: ConnectionLostNotifier::new(rx),
@@ -1089,7 +1091,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    "",
+                    &ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
                 )
                 .unwrap(),
                 0,
@@ -1124,7 +1126,7 @@ mod test {
                 Event::signal_tick(),
                 &SinkContext {
                     uid: Default::default(),
-                    alias: "".to_string(),
+                    alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
                     connector_type: Default::default(),
                     quiescence_beacon: Default::default(),
                     notifier: ConnectionLostNotifier::new(rx),
@@ -1134,7 +1136,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    "",
+                    &ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
                 )
                 .unwrap(),
                 0,

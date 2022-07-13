@@ -17,7 +17,7 @@ flow
   with
     config =  {
       "path": "in.json",
-      "timeout": nanos::from_seconds(5),
+      "timeout": nanos::from_seconds(8),
 
     }
   end;

@@ -162,7 +162,7 @@ impl World {
     ///  * if we fail to send the request or fail to receive it
     pub async fn get_flow(&self, flow_id: String) -> Result<Flow> {
         let (flow_tx, flow_rx) = bounded(1);
-        let flow_id = flow::Id(flow_id);
+        let flow_id = flow::FlowAlias::new(flow_id);
         self.system
             .send(flow_supervisor::Msg::GetFlow(flow_id.clone(), flow_tx))
             .await?;

@@ -29,7 +29,7 @@ use super::utils::{Header, RequestId};
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
 use crate::connectors::utils::mime::MimeCodecMap;
 use crate::connectors::utils::tls::{tls_client_config, TLSClientConfig};
-use crate::{connectors::prelude::*, errors::err_conector_def};
+use crate::{connectors::prelude::*, errors::err_connector_def};
 
 const CONNECTOR_TYPE: &str = "http_client";
 const DEFAULT_CODEC: &str = "json";
@@ -87,7 +87,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        id: &str,
+        id: &ConnectorAlias,
         connector_config: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
@@ -103,9 +103,9 @@ impl ConnectorBuilder for Builder {
             Some(Either::Right(false)) | None => None,
         };
         if config.url.scheme() == "https" && tls_client_config.is_none() {
-            return Err(err_conector_def(
+            return Err(err_connector_def(
                     id,
-                    &format!("missing tls config for {id} with 'https' url. Set 'tls' to 'true' or provide a full tls config."),
+                    &format!("missing tls config with 'https' url. Set 'tls' to 'true' or provide a full tls config."),
                 ));
         }
         let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));

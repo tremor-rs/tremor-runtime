@@ -61,7 +61,9 @@ use crate::{
     connectors::{self, builtin_connector_types, source::SourceMsg, Connectivity, StatusReport},
     errors::Result,
     instance::State,
-    pipeline, Event, QSIZE,
+    pipeline,
+    system::flow::{ConnectorAlias, FlowAlias, PipelineAlias},
+    Event, QSIZE,
 };
 use async_std::{
     channel::{bounded, Receiver},
@@ -87,22 +89,29 @@ pub(crate) struct ConnectorHarness {
 
 impl ConnectorHarness {
     pub(crate) async fn new_with_ports(
-        id: &str,
+        alias: &str,
         builder: &dyn connectors::ConnectorBuilder,
         defn: &Value<'static>,
         kill_switch: KillSwitch,
         input_ports: Vec<Cow<'static, str>>,
         output_ports: Vec<Cow<'static, str>>,
     ) -> Result<Self> {
+        let alias = ConnectorAlias::new(FlowAlias::new("test"), alias);
         let mut connector_id_gen = ConnectorIdGen::new();
         let mut known_connectors = HashMap::new();
 
         for builder in builtin_connector_types() {
             known_connectors.insert(builder.connector_type(), builder);
         }
-        let raw_config = config::Connector::from_config(id, builder.connector_type(), defn)?;
-        let connector_addr =
-            connectors::spawn(id, &mut connector_id_gen, builder, raw_config, &kill_switch).await?;
+        let raw_config = config::Connector::from_config(&alias, builder.connector_type(), defn)?;
+        let connector_addr = connectors::spawn(
+            &alias,
+            &mut connector_id_gen,
+            builder,
+            raw_config,
+            &kill_switch,
+        )
+        .await?;
         let mut pipes = HashMap::new();
 
         let (link_tx, link_rx) = async_std::channel::unbounded();
@@ -123,7 +132,7 @@ impl ConnectorHarness {
             if let Err(e) = link_rx.recv().await? {
                 info!(
                     "Error connecting fake pipeline to port {} of connector {}: {}",
-                    &port, id, e
+                    &port, alias, e
                 );
             } else {
                 pipes.insert(port, pipeline);
@@ -144,7 +153,7 @@ impl ConnectorHarness {
             if let Err(e) = link_rx.recv().await? {
                 info!(
                     "Error connecting fake pipeline to port {} of connector {}: {}",
-                    &port, id, e
+                    &port, alias, e
                 );
             } else {
                 pipes.insert(port, pipeline);
@@ -340,11 +349,13 @@ pub(crate) struct TestPipeline {
 
 impl TestPipeline {
     pub(crate) fn new(alias: String) -> Self {
+        let flow_id = FlowAlias::new("test");
         let qsize = QSIZE.load(Ordering::Relaxed);
         let (tx, rx) = bounded(qsize);
         let (tx_cf, rx_cf) = bounded(qsize);
         let (tx_mgmt, rx_mgmt) = bounded(qsize);
-        let addr = pipeline::Addr::new(tx, tx_cf, tx_mgmt, alias);
+        let pipeline_id = PipelineAlias::new(flow_id, alias);
+        let addr = pipeline::Addr::new(tx, tx_cf, tx_mgmt, pipeline_id);
         Self {
             rx,
             rx_cf,

@@ -20,7 +20,7 @@
 
 use super::TcpReader;
 use crate::connectors::utils::tls::{tls_client_connector, TLSClientConfig};
-use crate::{connectors::prelude::*, errors::err_conector_def};
+use crate::{connectors::prelude::*, errors::err_connector_def};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::net::TcpStream;
 use async_std::prelude::*;
@@ -68,18 +68,18 @@ impl ConnectorBuilder for Builder {
     }
     async fn build_cfg(
         &self,
-        id: &str,
+        id: &ConnectorAlias,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         if config.url.port().is_none() {
-            return Err(err_conector_def(id, Self::MISSING_PORT));
+            return Err(err_connector_def(id, Self::MISSING_PORT));
         }
         let host = match config.url.host_str() {
             Some(host) => host.to_string(),
-            None => return Err(err_conector_def(id, Self::MISSING_HOST)),
+            None => return Err(err_connector_def(id, Self::MISSING_HOST)),
         };
         let (tls_connector, tls_domain) = match config.tls.as_ref() {
             Some(Either::Right(true)) => {

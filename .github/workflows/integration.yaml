@@ -28,7 +28,6 @@ jobs:
     env:
       TREMOR_PATH: "${{ github.workspace }}/tremor-script/lib:${{ github.workspace }}/tremor-cli/tests/lib"
       RUSTFLAGS: -D warnings -C target-feature=${{ matrix.target_feature }}
-      RUST_LOG: debug
 
     runs-on: ${{ matrix.os }}
     steps:

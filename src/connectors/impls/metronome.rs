@@ -37,7 +37,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _: &str,
+        _: &ConnectorAlias,
         _: &ConnectorConfig,
         raw: &Value,
         _kill_switch: &KillSwitch,
@@ -139,11 +139,16 @@ mod tests {
 
     use crate::{
         config::Reconnect,
-        connectors::{prelude::KillSwitch, ConnectorBuilder},
+        connectors::{
+            prelude::{ConnectorAlias, KillSwitch},
+            ConnectorBuilder,
+        },
         errors::{Error, Kind as ErrorKind, Result},
+        system::flow::FlowAlias,
     };
     #[async_std::test]
     async fn missing_config() -> Result<()> {
+        let alias = ConnectorAlias::new(FlowAlias::new("flow"), "connector");
         let builder = super::Builder::default();
         let connector_config = super::ConnectorConfig {
             connector_type: builder.connector_type(),
@@ -157,7 +162,7 @@ mod tests {
         let kill_switch = KillSwitch::dummy();
         assert!(matches!(
             builder
-                .build("snot", &connector_config, &kill_switch)
+                .build(&alias, &connector_config, &kill_switch)
                 .await
                 .err()
                 .unwrap(),

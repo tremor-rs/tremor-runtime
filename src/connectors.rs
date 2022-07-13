@@ -36,6 +36,7 @@ use self::utils::quiescence::QuiescenceBeacon;
 pub(crate) use crate::config::Connector as ConnectorConfig;
 use crate::instance::State;
 use crate::pipeline;
+use crate::system::flow::ConnectorAlias;
 use crate::system::{KillSwitch, World};
 use crate::{
     errors::{Error, Kind as ErrorKind, Result},
@@ -67,8 +68,8 @@ pub(crate) const ACCEPT_TIMEOUT: Duration = Duration::from_millis(100);
 /// connector address
 #[derive(Clone, Debug)]
 pub struct Addr {
-    /// connector instance url
-    pub(crate) alias: String,
+    /// connector instance alias
+    pub(crate) alias: ConnectorAlias,
     sender: Sender<Msg>,
     source: Option<SourceAddr>,
     pub(crate) sink: Option<SinkAddr>,
@@ -225,8 +226,8 @@ pub(crate) enum Msg {
 /// result of an async operation of the connector.
 /// bears a `url` to identify the connector who finished the operation
 pub(crate) struct ConnectorResult<T: std::fmt::Debug> {
-    /// the connector url
-    pub(crate) alias: String,
+    /// the connector alias
+    pub(crate) alias: ConnectorAlias,
     /// the actual result
     pub(crate) res: Result<T>,
 }
@@ -249,8 +250,8 @@ impl ConnectorResult<()> {
 
 /// context for a Connector or its parts
 pub(crate) trait Context: Display + Clone {
-    /// provide the url of the connector
-    fn alias(&self) -> &str;
+    /// provide the alias of the connector
+    fn alias(&self) -> &ConnectorAlias;
 
     /// get the quiescence beacon for checking if we should continue reading/writing
     fn quiescence_beacon(&self) -> &QuiescenceBeacon;
@@ -316,8 +317,8 @@ pub(crate) trait Context: Display + Clone {
 /// connector context
 #[derive(Clone)]
 pub(crate) struct ConnectorContext {
-    /// url of the connector
-    pub(crate) alias: String,
+    /// alias of the connector instance
+    pub(crate) alias: ConnectorAlias,
     /// type of the connector
     connector_type: ConnectorType,
     /// The Quiescence Beacon
@@ -333,7 +334,7 @@ impl Display for ConnectorContext {
 }
 
 impl Context for ConnectorContext {
-    fn alias(&self) -> &str {
+    fn alias(&self) -> &ConnectorAlias {
         &self.alias
     }
 
@@ -353,7 +354,9 @@ impl Context for ConnectorContext {
 /// Connector instance status report
 #[derive(Debug, Serialize)]
 pub struct StatusReport {
-    /// connector instance url
+    /// connector alias without the containing flow alias
+    /// when we report this report will happen in the context of a flow,
+    /// so we don't need to provide that extra context here again
     pub(crate) alias: String,
     /// state of the connector
     pub status: State,
@@ -397,7 +400,7 @@ pub(crate) type Known =
 /// # Errors
 /// if the connector can not be built or the config is invalid
 pub(crate) async fn spawn(
-    alias: &str,
+    alias: &ConnectorAlias,
     connector_id_gen: &mut ConnectorIdGen,
     builder: &dyn ConnectorBuilder,
     config: ConnectorConfig,
@@ -405,13 +408,7 @@ pub(crate) async fn spawn(
 ) -> Result<Addr> {
     // instantiate connector
     let connector = builder.build(alias, &config, kill_switch).await?;
-    let r = connector_task(
-        alias.to_string(),
-        connector,
-        config,
-        connector_id_gen.next_id(),
-    )
-    .await?;
+    let r = connector_task(alias.clone(), connector, config, connector_id_gen.next_id()).await?;
 
     Ok(r)
 }
@@ -419,7 +416,7 @@ pub(crate) async fn spawn(
 #[allow(clippy::too_many_lines)]
 // instantiates the connector and starts listening for control plane messages
 async fn connector_task(
-    alias: String,
+    alias: ConnectorAlias,
     mut connector: Box<dyn Connector>,
     config: ConnectorConfig,
     uid: ConnectorId,
@@ -537,7 +534,7 @@ async fn connector_task(
                             .collect();
                     if let Err(e) = tx
                         .send(StatusReport {
-                            alias: alias.clone(),
+                            alias: alias.connector_alias().to_string(),
                             status: connector_state,
                             connectivity,
                             pipelines: pipes,
@@ -902,7 +899,7 @@ enum DrainState {
 
 struct Drainage {
     tx: Sender<ConnectorResult<()>>,
-    alias: String,
+    alias: ConnectorAlias,
     source_drained: DrainState,
     sink_drained: DrainState,
 }
@@ -1145,7 +1142,7 @@ pub(crate) trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
     ///  * If the config is invalid for the connector
     async fn build(
         &self,
-        alias: &str,
+        alias: &ConnectorAlias,
         config: &ConnectorConfig,
         kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
@@ -1162,7 +1159,7 @@ pub(crate) trait ConnectorBuilder: Sync + Send + std::fmt::Debug {
     ///  * If the config is invalid for the connector
     async fn build_cfg(
         &self,
-        _alias: &str,
+        _alias: &ConnectorAlias,
         _config: &ConnectorConfig,
         _connector_config: &Value,
         _kill_switch: &KillSwitch,
@@ -1265,11 +1262,14 @@ where
 
 #[cfg(test)]
 pub(crate) mod unit_tests {
+    use crate::system::flow::FlowAlias;
+
     use super::*;
 
     #[derive(Clone)]
     pub(crate) struct FakeContext {
         t: ConnectorType,
+        alias: ConnectorAlias,
         notifier: reconnect::ConnectionLostNotifier,
         beacon: QuiescenceBeacon,
     }
@@ -1278,6 +1278,7 @@ pub(crate) mod unit_tests {
         pub(crate) fn new(tx: Sender<Msg>) -> Self {
             Self {
                 t: ConnectorType::from("snot"),
+                alias: ConnectorAlias::new(FlowAlias::new("fake"), "fake"),
                 notifier: reconnect::ConnectionLostNotifier::new(tx),
                 beacon: QuiescenceBeacon::default(),
             }
@@ -1291,8 +1292,8 @@ pub(crate) mod unit_tests {
     }
 
     impl Context for FakeContext {
-        fn alias(&self) -> &str {
-            "snot"
+        fn alias(&self) -> &ConnectorAlias {
+            &self.alias
         }
 
         fn quiescence_beacon(&self) -> &QuiescenceBeacon {

@@ -31,7 +31,7 @@ pub(crate) use crate::connectors::{
     StreamDone, StreamIdGen, ACCEPT_TIMEOUT,
 };
 pub(crate) use crate::errors::{Error, Kind as ErrorKind, Result};
-pub(crate) use crate::system::KillSwitch;
+pub(crate) use crate::system::{flow::ConnectorAlias, KillSwitch};
 pub(crate) use crate::utils::hostname;
 pub(crate) use crate::{Event, QSIZE};
 pub(crate) use std::sync::atomic::Ordering;

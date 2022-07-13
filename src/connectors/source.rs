@@ -46,6 +46,7 @@ use crate::preprocessor::{finish, make_preprocessors, preprocess, Preprocessors}
 use crate::{
     codec::{self, Codec},
     pipeline::InputTarget,
+    system::flow::ConnectorAlias,
 };
 use async_std::channel::{Receiver, Sender};
 use beef::Cow;
@@ -282,7 +283,7 @@ pub(crate) struct SourceContext {
     /// connector uid
     pub uid: SourceId,
     /// connector alias
-    pub(crate) alias: String,
+    pub(crate) alias: ConnectorAlias,
 
     /// connector type
     pub(crate) connector_type: ConnectorType,
@@ -300,7 +301,7 @@ impl Display for SourceContext {
 }
 
 impl Context for SourceContext {
-    fn alias(&self) -> &str {
+    fn alias(&self) -> &ConnectorAlias {
         &self.alias
     }
 
@@ -1274,7 +1275,7 @@ where
 /// preprocessor or codec errors are turned into events to the ERR port of the source/connector
 #[allow(clippy::too_many_arguments)]
 fn build_events(
-    alias: &str,
+    alias: &ConnectorAlias,
     stream_state: &mut StreamState,
     ingest_ns: &mut u64,
     pull_id: u64,
@@ -1343,7 +1344,7 @@ fn build_events(
 /// preprocessor or codec errors are turned into events to the ERR port of the source/connector
 #[allow(clippy::too_many_arguments)]
 fn build_last_events(
-    alias: &str,
+    alias: &ConnectorAlias,
     stream_state: &mut StreamState,
     ingest_ns: &mut u64,
     pull_id: u64,
@@ -1404,7 +1405,7 @@ fn build_last_events(
 
 /// create an error payload
 fn make_error(
-    connector_alias: &str,
+    connector_alias: &ConnectorAlias,
     error: &Error,
     stream_id: u64,
     pull_id: u64,
