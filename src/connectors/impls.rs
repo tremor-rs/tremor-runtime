@@ -32,8 +32,8 @@ pub(crate) mod exit;
 pub(crate) mod file;
 /// Google Cloud Platform
 pub(crate) mod gbq;
-pub(crate) mod gpubsub;
 pub(crate) mod gcl;
+pub(crate) mod gpubsub;
 /// HTTP
 pub(crate) mod http;
 /// Kafka consumer and producer
