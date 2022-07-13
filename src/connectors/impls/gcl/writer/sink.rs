@@ -21,7 +21,6 @@ use async_std::prelude::FutureExt;
 use googapis::google::logging::v2::log_entry::Payload;
 use googapis::google::logging::v2::logging_service_v2_client::LoggingServiceV2Client;
 use googapis::google::logging::v2::{
-    //    ListMonitoredResourceDescriptorsRequest, /* LogEntryOperation */
     LogEntry,
     WriteLogEntriesRequest,
 };
@@ -173,16 +172,6 @@ impl Sink for GclSink {
                 }),
             },
         );
-
-        // NOTE lists available monitored resources in the project / service account
-        //      Included for illustration in case validating the descriptors becomes a requirement
-        // let list = client
-        //     .list_monitored_resource_descriptors(ListMonitoredResourceDescriptorsRequest {
-        //         page_size: 0,
-        //         page_token: "".to_string(),
-        //     })
-        //     .await?;
-        // dbg!(list);
 
         self.client = Some(client);
 
