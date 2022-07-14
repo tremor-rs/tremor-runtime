@@ -31,10 +31,12 @@ extern crate log;
 
 use crate::errors::{ErrorKind, Result};
 use async_broadcast::{broadcast, Receiver, Sender};
+use async_std::task::block_on;
 use beef::Cow;
 use executable_graph::NodeConfig;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
+use log4rs::append::Append;
 use petgraph::graph;
 use simd_json::OwnedValue;
 use std::cmp::Ordering;
@@ -43,6 +45,7 @@ use std::fmt;
 use std::fmt::Display;
 use std::iter::Iterator;
 use std::str::FromStr;
+//use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
 use tremor_common::ids::{Id, OperatorId, SinkId, SourceId};
 use tremor_script::{
     ast::{self, Helper},
@@ -53,6 +56,9 @@ use tremor_script::{
 pub mod errors;
 mod event;
 mod executable_graph;
+
+/// Library functions for pluggable logging
+pub mod pluggable_logging;
 
 /// Common metrics related code - metrics message formats etc
 /// Placed here because we need it here and in tremor-runtime, but also depend on tremor-value inside of it
@@ -71,6 +77,31 @@ pub use op::{ConfigImpl, InitializableOperator, Operator};
 pub use tremor_script::prelude::EventOriginUri;
 pub(crate) type ExecPortIndexMap =
     HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
+#[derive(Debug)]
+struct PluggableLoggingAppender {
+    tx: async_std::channel::Sender<LoggingMsg>,
+}
+
+impl Append for PluggableLoggingAppender {
+    fn append(&self, _record: &log::Record) -> anyhow::Result<()> {
+        //print!("hello");
+        //self.flush();
+        let vec = br#"{"key": "value"}"#.to_vec();
+        let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).unwrap().into());
+        let msg = LoggingMsg {
+            payload: e,
+            origin_uri: None,
+        };
+        dbg!(&_record);
+        block_on(self.tx.send(msg))?;
+        Ok(())
+    }
+
+    fn flush(&self) {
+        todo!()
+    }
+}
+trait Encode {}
 
 /// A configuration map
 pub type ConfigMap = Option<tremor_value::Value<'static>>;
@@ -147,7 +178,7 @@ pub struct MetricsMsg {
     /// The origin
     pub origin_uri: Option<EventOriginUri>,
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Playload for ploggable logging
 pub struct LoggingMsg {
     /// The payload
@@ -180,7 +211,7 @@ impl LoggingMsg {
 /// Sender for metrics
 pub type MetricsSender = Sender<MetricsMsg>;
 
-// TODO FIXME NOTE Add LogsSender
+// TODO FIX ME NOTE Add LogsSender
 
 /// Sender for plugging logging messagers
 pub type LoggingSender = Sender<LoggingMsg>;
@@ -955,7 +986,16 @@ pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, Connection>;
 
 #[cfg(test)]
 mod test {
+    //use std::{pin::Pin, sync::Arc};
+
     use super::*;
+    use async_std::channel::bounded;
+    // use anyhow::Ok;
+    use log::LevelFilter;
+    use log4rs::{
+        config::{Appender, Root},
+        Config,
+    };
     use simd_json_derive::{Deserialize, Serialize};
     #[test]
     fn prim_str() {
@@ -1150,5 +1190,50 @@ mod test {
         event_id.track(&EventId::from_id(99, 75, 1024));
 
         assert_eq!(event_id.get_stream(99), Some(75));
+    }
+    #[test]
+    fn test_channel() {
+        let _m = METRICS_CHANNEL.rx();
+        let _l = LOGGING_CHANNEL.rx();
+    }
+
+    #[async_std::test]
+    async fn test_tremor_appender() {
+        use async_std::channel::{Receiver, Sender};
+        let channel: (Sender<LoggingMsg>, Receiver<LoggingMsg>) = bounded(1);
+        let tx = channel.0;
+        let rx = channel.1;
+
+        let stdout = PluggableLoggingAppender { tx };
+
+        let config = Config::builder()
+            .appender(Appender::builder().build("stdout", Box::new(stdout)))
+            .build(Root::builder().appender("stdout").build(LevelFilter::Info))
+            .unwrap();
+
+        let _handle = log4rs::init_config(config).unwrap();
+        log::info!("Stan is here today");
+        let _ = dbg!(rx.recv().await);
+    }
+    #[test]
+    fn test_logging_mertics_msg() {
+        // let raw = vec![1u8];
+        // let mut raw = Pin::new(raw);
+        // let data = f(raw.as_mut().get_mut());
+        // let structured = unsafe { mem::transmute::<ValueAndMeta<'_>, ValueAndMeta<'static>>(data) };
+        // let raw = vec![Arc::new(raw)];
+        // let msg = MetricsMsg {
+        //     payload: EventPayload {
+        //         raw,
+        //         data: structured,
+        //     },
+        //     origin_uri: None,
+        // };
+        let vec = br#"{"key": "value"}"#.to_vec();
+        let vec_ = br#"{"key": "value"}"#.to_vec();
+        let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).unwrap().into());
+        let ee = EventPayload::new(vec_, |d| tremor_value::parse_to_value(d).unwrap().into());
+        let _mmsg = MetricsMsg::new(e, None);
+        let _lmsg = LoggingMsg::new(ee, None);
     }
 }

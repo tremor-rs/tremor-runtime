@@ -5718,6 +5718,7 @@ dependencies = [
 name = "tremor-pipeline"
 version = "0.12.4"
 dependencies = [
+ "anyhow",
  "async-broadcast",
  "async-std",
  "base64 0.13.0",
@@ -5728,6 +5729,7 @@ dependencies = [
  "indexmap",
  "lazy_static",
  "log",
+ "log4rs",
  "lru",
  "petgraph",
  "rand 0.8.5",

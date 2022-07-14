@@ -20,7 +20,8 @@ use crate::{
     errors::{Error, ErrorKind},
     metrics::value_count,
     op::prelude::IN,
-    ConfigMap, ExecPortIndexMap, LoggingSender, MetricsMsg, MetricsSender, NodeLookupFn,
+    ConfigMap, ExecPortIndexMap, LoggingMsg, LoggingSender, MetricsMsg, MetricsSender,
+    NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
@@ -534,6 +535,18 @@ impl ExecutableGraph {
                     error!("Failed to send metrics: {}", e);
                 };
             }
+            for value in m.to_value(metric_name, &mut tags, ingest_ns) {
+                if let Err(e) = self
+                    .logging_channel
+                    .broadcast(LoggingMsg {
+                        payload: value.into(),
+                        origin_uri: None,
+                    })
+                    .await
+                {
+                    error!("Failed to send metrics: {}", e);
+                };
+            }
         }
     }
     // Takes the output of one operator, identified by `idx` and puts them on the stack
@@ -606,7 +619,7 @@ mod test {
     use super::*;
     use crate::{
         op::{identity::PassthroughFactory, prelude::OUT},
-        METRICS_CHANNEL,
+        LOGGING_CHANNEL, METRICS_CHANNEL,
     };
     use tremor_common::ids::Id;
     use tremor_script::prelude::*;
@@ -808,6 +821,7 @@ mod test {
             ops: vec![Value::null(), Value::null(), Value::null(), Value::null()],
         };
         let mut rx = METRICS_CHANNEL.rx();
+        let _rx_ = LOGGING_CHANNEL.rx();
         let mut g = ExecutableGraph {
             id: "flow::pipe".into(),
             graph,
@@ -824,6 +838,7 @@ mod test {
             insights: vec![],
             dot: String::from(""),
             metrics_channel: METRICS_CHANNEL.tx(),
+            logging_channel: LOGGING_CHANNEL.tx(),
         };
 
         // Test with one event
@@ -921,6 +936,7 @@ mod test {
             insights: vec![],
             dot: String::from(""),
             metrics_channel: METRICS_CHANNEL.tx(),
+            logging_channel: LOGGING_CHANNEL.tx(),
         };
         assert!(g.optimize().is_some());
         // Test with one event

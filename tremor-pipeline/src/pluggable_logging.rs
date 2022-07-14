@@ -12,37 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::impls::gcl;
-use crate::connectors::impls::otel;
 use crate::errors::Result;
-use crate::version::VERSION;
-use tremor_pipeline::pluggable_logging;
 use tremor_script::registry::Registry;
-use tremor_script::FN_REGISTRY;
-use tremor_script::{tremor_const_fn, tremor_fn};
-
-/// Loads the function library
-///
-/// # Errors
-///  * if we can't load the registry
-pub fn load() -> Result<()> {
-    let mut reg = FN_REGISTRY.write()?;
-    install(&mut reg)
-}
+use tremor_script::tremor_fn;
 
 /// Install's common functions into a registry
 ///
 /// # Errors
 ///  * if we can't install extensions
-pub fn install(reg: &mut Registry) -> Result<()> {
-    otel::load(reg);
-    gcl::load(reg);
-    pluggable_logging::load(reg)?;
-    reg.insert(tremor_fn!(system|instance(_context) {
-        Ok(Value::from(instance!()))
-    }))
-    .insert(tremor_const_fn!(system|version(_context) {
-        Ok(Value::from(VERSION).into_static())
+pub fn load(reg: &mut Registry) -> Result<()> {
+    reg.insert(tremor_fn!(logging|info(_context) {
+        // TODO FIXME Add logging logic
+        Ok(Value::from("snot"))
     }));
 
     Ok(())
