@@ -114,7 +114,6 @@ impl ConnectorBuilder for Builder {
         id: &alias::Connector,
         _connector_config: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
 

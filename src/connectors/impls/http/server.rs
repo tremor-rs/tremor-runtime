@@ -44,7 +44,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{sync::oneshot, task::JoinHandle};
-use tremor_common::ids::Id;
+use tremor_common::uids::UId;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -81,7 +81,6 @@ impl ConnectorBuilder for Builder {
         id: &alias::Connector,
         _raw_config: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         let tls_server_config = config.tls.clone();

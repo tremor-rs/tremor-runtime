@@ -1,0 +1,98 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: tremor
+  labels:
+    app: tremor
+spec:
+  serviceName: tremor
+  replicas: 3
+  selector:
+    matchLabels:
+      app: tremor
+  template:
+    metadata:
+      labels:
+        app: tremor
+    spec:
+      terminationGracePeriodSeconds: 1800
+      containers:
+      - name: tremor
+        image: tremor-cluster
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 8000
+          name: api
+        - containerPort: 9000
+          name: intra-node
+        resources:
+          limits:
+            cpu: "100m"
+            memory: 1Gi
+          requests:
+            cpu: "100m"
+            memory: 1Gi
+        # securityContext:
+        #   capabilities:
+        #     add:
+        #       - IPC_LOCK
+        # lifecycle:
+        #   preStop:
+        #     exec:
+        #       command: 
+        #       - /bin/sh
+        #       - -c
+        #       - nodetool drain
+        env:
+          - name: TREMOR_SEED
+            value: "tremor-0.tremor.default.svc.cluster.local"
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MY_NODE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: spec.nodeName
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+        # readinessProbe:
+        #   exec:
+        #     command:
+        #     - /bin/bash
+        #     - -c
+        #     - /ready-probe.sh
+        #   initialDelaySeconds: 15
+        #   timeoutSeconds: 5
+        # These volume mounts are persistent. They are like inline claims,
+        # but not exactly because the names need to match exactly one of
+        # the stateful pod volumes.
+        # volumeMounts:
+        # - name: tremor-ring
+        #   mountPath: /data
+  # These are converted to volume claims by the controller
+  # and mounted at the paths mentioned above.
+  # do not use these in production until ssd GCEPersistentDisk or other ssd pd
+#   volumeClaimTemplates:
+#   - metadata:
+#       name: tremor-ring
+#     spec:
+#       accessModes: [ "ReadWriteOnce" ]
+#       storageClassName: fast
+#       resources:
+#         requests:
+#           storage: 1Gi
+# ---
+# kind: StorageClass
+# apiVersion: storage.k8s.io/v1
+# metadata:
+#   name: fast
+# provisioner: k8s.io/minikube-hostpath
+# parameters:
+#   type: pd-ssd

@@ -281,7 +281,7 @@ mod tests {
     #[test]
     fn test_config_builtin_preproc_with_config() -> Result<()> {
         let c = Connector::from_config(
-            &alias::Connector::new("flow", "my_otel_client"),
+            &alias::Connector::new("my_otel_client"),
             ConnectorType::from("otel_client".to_string()),
             &literal!({
                 "preprocessors": [ {"name": "snot", "config": { "separator": "\n" }}],
@@ -312,9 +312,10 @@ mod tests {
             "reconnect": {},
             "metrics_interval_s": "wrong_type"
         });
-        let id = alias::Connector::new(tremor_common::alias::Flow::new("flow"), "my_id");
+
+        let id = alias::Connector::new("my_id");
         let res = Connector::from_config(&id, "fancy_schmancy".into(), &config);
         assert!(res.is_err());
-        assert_eq!(String::from("Invalid Definition for connector \"flow::my_id\": Expected type I64 for key metrics_interval_s but got String"), res.err().map(|e| e.to_string()).unwrap_or_default());
+        assert_eq!(String::from("Invalid Definition for connector \"my_id\": Expected type I64 for key metrics_interval_s but got String"), res.err().map(|e| e.to_string()).unwrap_or_default());
     }
 }

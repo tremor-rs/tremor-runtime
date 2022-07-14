@@ -16,7 +16,7 @@ use crate::{
     connectors::{
         impls::kafka,
         tests::{
-            free_port,
+            free_port::find_free_tcp_port,
             kafka::{redpanda_container, PRODUCE_TIMEOUT},
             ConnectorHarness,
         },
@@ -226,7 +226,7 @@ async fn transactional_retry() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
-            "source": "test::transactional_retry",
+            "source": "[Source::[Node::0][default/]::transactional_retry]",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -443,7 +443,7 @@ async fn custom_no_retry() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
-            "source": "test::custom_no_retry",
+            "source": "[Source::[Node::0][default/]::custom_no_retry]",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -649,7 +649,7 @@ async fn performance() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError(TapeError) at character 0 ('}')",
-            "source": "test::performance",
+            "source": "[Source::[Node::0][default/]::performance]",
             "stream_id": 8_589_934_592_u64,
             "pull_id": 1u64
         }),
@@ -696,7 +696,7 @@ async fn performance() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[serial(kafka)]
 async fn connector_kafka_consumer_unreachable() -> Result<()> {
-    let kafka_port = free_port::find_free_tcp_port().await?;
+    let kafka_port = find_free_tcp_port().await?;
     let _: std::result::Result<_, _> = env_logger::try_init();
     let connector_config = literal!({
         "reconnect": {
@@ -734,7 +734,7 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn invalid_rdkafka_options() -> Result<()> {
     let _: std::result::Result<_, _> = env_logger::try_init();
-    let kafka_port = free_port::find_free_tcp_port().await?;
+    let kafka_port = find_free_tcp_port().await?;
     let broker = format!("127.0.0.1:{kafka_port}");
     let topic = "tremor_test_pause_resume";
     let group_id = "invalid_rdkafka_options";

@@ -14,19 +14,22 @@
 
 pub(crate) mod raw;
 
-use super::{
-    err_generic, error_no_locals,
-    helper::Scope,
-    node_id::NodeId,
-    visitors::{ArgsRewriter, ConstFolder},
-    walkers::QueryWalker,
-    EventPath, HashMap, Helper, Ident, ImutExpr, InvokeAggrFn, NodeMeta, Path, Result, Script,
-    Serialize, Stmts, Upable, Value,
+use crate::{
+    ast::{
+        err_generic, error_no_locals,
+        helper::Scope,
+        node_id::NodeId,
+        optimizer::Optimizer,
+        raw::BaseExpr,
+        visitors::{ArgsRewriter, ConstFolder},
+        walkers::QueryWalker,
+        Consts, EventPath, Helper, Ident, ImutExpr, InvokeAggrFn, Literal, NodeMeta, Path, Result,
+        Script, Serialize, Stmts, Upable, Value,
+    },
+    errors::error_generic,
+    impl_expr,
 };
-use super::{raw::BaseExpr, Consts};
-use crate::ast::optimizer::Optimizer;
-use crate::ast::Literal;
-use crate::{errors::error_generic, impl_expr};
+use halfbrown::HashMap;
 use raw::WindowName;
 use tremor_common::ports::Port;
 use value_trait::prelude::*;
@@ -430,7 +433,8 @@ impl BaseExpr for StreamCreate {
 pub struct CreationalWith<'script> {
     /// `with` seection
     pub with: WithExprs<'script>,
-    pub(crate) mid: Box<NodeMeta>,
+    /// Metadata
+    pub mid: Box<NodeMeta>,
 }
 impl_expr!(CreationalWith);
 
@@ -537,7 +541,7 @@ impl<'script> DefinitionalArgsWith<'script> {
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DefinitionalArgs<'script> {
     /// `args` seection
-    pub(crate) args: ArgsExprs<'script>,
+    pub args: ArgsExprs<'script>,
     pub(crate) mid: Box<NodeMeta>,
 }
 impl_expr!(DefinitionalArgs);

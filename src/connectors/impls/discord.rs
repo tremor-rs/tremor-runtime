@@ -41,10 +41,7 @@ mod handler;
 mod utils;
 
 use crate::channel::{bounded, Receiver, Sender};
-use crate::{
-    connectors::{prelude::*, spawn_task},
-    system::KillSwitch,
-};
+use crate::connectors::prelude::*;
 use handler::Handler;
 use serenity::prelude::*;
 use tokio::task::JoinHandle;
@@ -73,7 +70,6 @@ impl ConnectorBuilder for Builder {
         _: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
 

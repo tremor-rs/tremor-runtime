@@ -209,11 +209,7 @@ use std::{
     io::{stdout, BufRead as StdBufRead, BufReader, Read, Write},
     time::Duration,
 };
-use tremor_common::{
-    base64::{Engine, BASE64},
-    file,
-    time::nanotime,
-};
+use tremor_common::{base64, file, time::nanotime};
 use xz2::read::XzDecoder;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -262,7 +258,7 @@ pub(crate) struct Builder {}
 
 fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> Result<Vec<u8>> {
     if base64 {
-        Ok(BASE64.decode(data)?)
+        Ok(base64::decode(data)?)
     } else {
         let d: &[u8] = data.as_ref();
         Ok(d.to_vec())
@@ -276,7 +272,6 @@ impl ConnectorBuilder for Builder {
         id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
-        kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
         let mut source_data_file = file::open(&config.path)?;
@@ -325,7 +320,6 @@ impl ConnectorBuilder for Builder {
             acc: Acc { elements, count: 0 },
             origin_uri,
             stop_after,
-            kill_switch: kill_switch.clone(),
         }))
     }
 
@@ -358,7 +352,6 @@ pub(crate) struct Bench {
     acc: Acc,
     origin_uri: EventOriginUri,
     stop_after: StopAfter,
-    kill_switch: KillSwitch,
 }
 
 #[async_trait::async_trait]
@@ -385,7 +378,7 @@ impl Connector for Bench {
         ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = Blackhole::new(&self.config, self.stop_after, self.kill_switch.clone());
+        let sink = Blackhole::new(&self.config, self.stop_after, ctx.killswitch());
         Ok(Some(builder.spawn(sink, ctx)))
     }
 

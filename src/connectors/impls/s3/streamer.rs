@@ -90,7 +90,6 @@ impl ConnectorBuilder for Builder {
         id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let mut config = Config::new(config)?;
         config.normalize(id);

@@ -113,7 +113,7 @@ echo "Successfully built the binary: ${TARGET_BIN}"
 # linking check
 echo "Printing linking information for the binary..."
 file "$TARGET_BIN"
-ldd "$TARGET_BIN"
+ldd "$TARGET_BIN" || true
 
 # back to the origin dir, just in case
 popd > /dev/null

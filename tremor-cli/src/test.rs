@@ -12,17 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::report;
-use crate::status;
-use crate::test::command::suite_command;
 use crate::util::{basename, slurp_string};
 use crate::{
     cli::Test,
     errors::{Error, ErrorKind, Result},
 };
 use crate::{cli::TestMode, target_process};
+use command::suite_command;
 use globwalk::{FileType, GlobWalkerBuilder};
 use metadata::Meta;
+use process::run_process;
 use std::collections::HashMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -38,7 +37,9 @@ mod before;
 mod command;
 mod metadata;
 mod process;
+mod report;
 pub mod stats;
+mod status;
 pub mod tag;
 mod unit;
 
@@ -92,7 +93,7 @@ async fn run_bench(
             let cwd = std::env::current_dir()?;
             file::set_current_dir(&root)?;
             status::tags(&tags, Some(&matched), Some(&config.excludes))?;
-            let test_report = process::run_process(
+            let test_report = run_process(
                 "bench",
                 config.base_directory.as_path(),
                 &cwd.join(&root),

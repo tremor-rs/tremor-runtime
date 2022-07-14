@@ -21,7 +21,7 @@ use crate::EventId;
 
 use super::*;
 
-use tremor_common::ids::Id;
+use tremor_common::uids::UId;
 use tremor_script::ast::{self, Helper, Ident, Literal};
 use tremor_script::{ast::Consts, NodeMeta};
 use tremor_script::{
@@ -30,8 +30,8 @@ use tremor_script::{
 };
 use tremor_value::{literal, Value};
 
-fn test_uid() -> OperatorId {
-    OperatorId::new(42)
+fn test_uid() -> OperatorUId {
+    OperatorUId::new(42)
 }
 
 fn test_select_stmt(stmt: tremor_script::ast::Select) -> SelectStmt {
@@ -102,7 +102,7 @@ fn test_event_tx(s: u64, transactional: bool, group: u64) -> Event {
     }
 }
 
-fn test_select(uid: OperatorId, stmt: &SelectStmt<'static>) -> Select {
+fn test_select(uid: OperatorUId, stmt: &SelectStmt<'static>) -> Select {
     let windows = vec![
         (
             "w15s".into(),
@@ -128,7 +128,7 @@ fn test_select(uid: OperatorId, stmt: &SelectStmt<'static>) -> Select {
 
 fn try_enqueue(op: &mut Select, event: Event) -> Result<Option<(Port<'static>, Event)>> {
     let mut state = Value::null();
-    let mut action = op.on_event(test_uid(), &Port::In, &mut state, event)?;
+    let mut action = op.on_event(0, test_uid(), &Port::In, &mut state, event)?;
     let first = action.events.pop();
     if action.events.is_empty() {
         Ok(first)
@@ -140,7 +140,7 @@ fn try_enqueue(op: &mut Select, event: Event) -> Result<Option<(Port<'static>, E
 #[allow(clippy::type_complexity)]
 fn try_enqueue_two(op: &mut Select, event: Event) -> Result<Option<[(Port<'static>, Event); 2]>> {
     let mut state = Value::null();
-    let mut action = op.on_event(test_uid(), &Port::In, &mut state, event)?;
+    let mut action = op.on_event(0, test_uid(), &Port::In, &mut state, event)?;
     let r = action
         .events
         .pop()
@@ -155,7 +155,7 @@ fn try_enqueue_two(op: &mut Select, event: Event) -> Result<Option<[(Port<'stati
 fn parse_query(query: &str) -> Result<crate::op::trickle::select::Select> {
     let reg = tremor_script::registry();
     let aggr_reg = tremor_script::aggr_registry();
-    let query = tremor_script::query::Query::parse(query, &reg, &aggr_reg)?;
+    let query = tremor_script::query::Query::parse(&query, &reg, &aggr_reg)?;
     let stmt = query
         .query
         .stmts
@@ -203,7 +203,7 @@ fn as_select<'a, 'b>(stmt: &'a Stmt<'b>) -> Option<&'a SelectStmt<'b>> {
 fn select_stmt_from_query(query_str: &str) -> Result<Select> {
     let reg = tremor_script::registry();
     let aggr_reg = tremor_script::aggr_registry();
-    let query = tremor_script::query::Query::parse(query_str, &reg, &aggr_reg)?;
+    let query = tremor_script::query::Query::parse(&query_str, &reg, &aggr_reg)?;
     let stmt = query
         .query
         .stmts
@@ -259,7 +259,7 @@ fn select_single_win_with_script_on_signal() -> Result<()> {
     let uid = test_uid();
     let mut state = Value::null();
     let mut tick1 = test_tick(1);
-    let mut eis = select.on_signal(uid, &mut state, &mut tick1)?;
+    let mut eis = select.on_signal(0, uid, &mut state, &mut tick1)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
@@ -273,13 +273,13 @@ fn select_single_win_with_script_on_signal() -> Result<()> {
         .into(),
         ..Event::default()
     };
-    eis = select.on_event(uid, &Port::In, &mut state, event)?;
+    eis = select.on_event(0, uid, &Port::In, &mut state, event)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
     // no emit on signal, although window interval would be passed
     let mut tick2 = test_tick(10);
-    eis = select.on_signal(uid, &mut state, &mut tick2)?;
+    eis = select.on_signal(0, uid, &mut state, &mut tick2)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
@@ -294,7 +294,7 @@ fn select_single_win_with_script_on_signal() -> Result<()> {
         .into(),
         ..Event::default()
     };
-    eis = select.on_event(uid, &Port::In, &mut state, event)?;
+    eis = select.on_event(0, uid, &Port::In, &mut state, event)?;
     assert!(eis.insights.is_empty());
     assert_eq!(1, eis.events.len());
     assert_eq!(&b"1"[..], sorted_serialize(eis.events[0].1.data.parts().0)?);
@@ -315,7 +315,7 @@ fn select_single_win_on_signal() -> Result<()> {
     let uid = test_uid();
     let mut state = Value::null();
     let mut tick1 = test_tick(1);
-    let mut eis = select.on_signal(uid, &mut state, &mut tick1)?;
+    let mut eis = select.on_signal(0, uid, &mut state, &mut tick1)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
@@ -329,19 +329,19 @@ fn select_single_win_on_signal() -> Result<()> {
         .into(),
         ..Event::default()
     };
-    eis = select.on_event(uid, &Port::In, &mut state, event)?;
+    eis = select.on_event(0, uid, &Port::In, &mut state, event)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
     // no emit yet
     let mut tick2 = test_tick(3);
-    eis = select.on_signal(uid, &mut state, &mut tick2)?;
+    eis = select.on_signal(0, uid, &mut state, &mut tick2)?;
     assert!(eis.insights.is_empty(), "{:?} is not empty", eis.insights);
     assert_eq!(0, eis.events.len());
 
     // now emit
     let mut tick3 = test_tick(4);
-    eis = select.on_signal(uid, &mut state, &mut tick3)?;
+    eis = select.on_signal(0, uid, &mut state, &mut tick3)?;
     assert!(eis.insights.is_empty());
     assert_eq!(1, eis.events.len());
     let event_id = eis.events[0].1.id.clone();
@@ -381,18 +381,18 @@ fn select_multiple_wins_on_signal() -> Result<()> {
     let uid = test_uid();
     let mut state = Value::null();
     let mut tick1 = test_tick(1);
-    let mut eis = select.on_signal(uid, &mut state, &mut tick1)?;
+    let mut eis = select.on_signal(0, uid, &mut state, &mut tick1)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
     let mut tick2 = test_tick(100);
-    eis = select.on_signal(uid, &mut state, &mut tick2)?;
+    eis = select.on_signal(0, uid, &mut state, &mut tick2)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
     // we have no groups, so no emit yet
     let mut tick3 = test_tick(201);
-    eis = select.on_signal(uid, &mut state, &mut tick3)?;
+    eis = select.on_signal(0, uid, &mut state, &mut tick3)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
@@ -408,13 +408,13 @@ fn select_multiple_wins_on_signal() -> Result<()> {
         transactional: true,
         ..Event::default()
     };
-    eis = select.on_event(uid, &Port::In, &mut state, event)?;
+    eis = select.on_event(0, uid, &Port::In, &mut state, event)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
     // finish the window with the next tick
     let mut tick4 = test_tick(401);
-    eis = select.on_signal(uid, &mut state, &mut tick4)?;
+    eis = select.on_signal(0, uid, &mut state, &mut tick4)?;
     assert!(eis.insights.is_empty());
     assert_eq!(1, eis.events.len());
     let (_port, event) = eis.events.remove(0);
@@ -435,7 +435,7 @@ fn select_multiple_wins_on_signal() -> Result<()> {
     );
 
     let mut tick5 = test_tick(499);
-    eis = select.on_signal(uid, &mut state, &mut tick5)?;
+    eis = select.on_signal(0, uid, &mut state, &mut tick5)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
@@ -451,11 +451,11 @@ fn select_multiple_wins_on_signal() -> Result<()> {
         transactional: false,
         ..Event::default()
     };
-    eis = select.on_event(uid, &Port::In, &mut state, event2)?;
+    eis = select.on_event(0, uid, &Port::In, &mut state, event2)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
     let mut tick6 = test_tick(600);
-    eis = select.on_signal(uid, &mut state, &mut tick6)?;
+    eis = select.on_signal(0, uid, &mut state, &mut tick6)?;
     assert!(eis.insights.is_empty());
     assert_eq!(2, eis.events.len());
 
@@ -488,13 +488,13 @@ fn test_transactional_single_window() -> Result<()> {
     let mut state = Value::null();
     let event1 = test_event_tx(0, false, 0);
     let id1 = event1.id.clone();
-    let res = op.on_event(uid, &Port::In, &mut state, event1)?;
+    let res = op.on_event(0, uid, &Port::In, &mut state, event1)?;
 
     assert!(res.events.is_empty());
 
     let event2 = test_event_tx(1, true, 0);
     let id2 = event2.id.clone();
-    let mut res = op.on_event(uid, &Port::In, &mut state, event2)?;
+    let mut res = op.on_event(0, uid, &Port::In, &mut state, event2)?;
     assert_eq!(1, res.events.len());
     let (_, event) = res.events.pop().ok_or("no data")?;
     assert!(event.transactional);
@@ -503,12 +503,12 @@ fn test_transactional_single_window() -> Result<()> {
 
     let event3 = test_event_tx(2, false, 0);
     let id3 = event3.id.clone();
-    let res = op.on_event(uid, &Port::In, &mut state, event3)?;
+    let res = op.on_event(0, uid, &Port::In, &mut state, event3)?;
     assert!(res.events.is_empty());
 
     let event4 = test_event_tx(3, false, 0);
     let id4 = event4.id.clone();
-    let mut res = op.on_event(uid, &Port::In, &mut state, event4)?;
+    let mut res = op.on_event(0, uid, &Port::In, &mut state, event4)?;
     assert_eq!(1, res.events.len());
     let (_, event) = res.events.pop().ok_or("no data")?;
     assert!(!event.transactional);
@@ -538,17 +538,17 @@ fn test_transactional_multiple_windows() -> Result<()> {
     let mut state = Value::null();
     let event0 = test_event_tx(0, true, 0);
     let id0 = event0.id.clone();
-    let res = op.on_event(uid, &Port::In, &mut state, event0)?;
+    let res = op.on_event(0, uid, &Port::In, &mut state, event0)?;
     assert_eq!(0, res.len());
 
     let event1 = test_event_tx(1, false, 1);
     let id1 = event1.id.clone();
-    let res = op.on_event(uid, &Port::In, &mut state, event1)?;
+    let res = op.on_event(0, uid, &Port::In, &mut state, event1)?;
     assert_eq!(0, res.len());
 
     let event2 = test_event_tx(2, false, 0);
     let id2 = event2.id.clone();
-    let mut res = op.on_event(uid, &Port::In, &mut state, event2)?;
+    let mut res = op.on_event(0, uid, &Port::In, &mut state, event2)?;
     assert_eq!(1, res.len());
     let (_, event) = res.events.pop().ok_or("no data")?;
     assert!(event.transactional);
@@ -557,7 +557,7 @@ fn test_transactional_multiple_windows() -> Result<()> {
 
     let event3 = test_event_tx(3, false, 1);
     let id3 = event3.id.clone();
-    let mut res = op.on_event(uid, &Port::In, &mut state, event3)?;
+    let mut res = op.on_event(0, uid, &Port::In, &mut state, event3)?;
     assert_eq!(1, res.len());
     let (_, event) = res.events.remove(0);
     assert!(!event.transactional);
@@ -566,12 +566,12 @@ fn test_transactional_multiple_windows() -> Result<()> {
 
     let event4 = test_event_tx(4, false, 0);
     let id4 = event4.id.clone();
-    let res = op.on_event(uid, &Port::In, &mut state, event4)?;
+    let res = op.on_event(0, uid, &Port::In, &mut state, event4)?;
     assert_eq!(0, res.len());
 
     let event5 = test_event_tx(5, false, 0);
     let id5 = event5.id.clone();
-    let mut res = op.on_event(uid, &Port::In, &mut state, event5)?;
+    let mut res = op.on_event(0, uid, &Port::In, &mut state, event5)?;
     assert_eq!(2, res.len());
 
     // first event from event5 and event6 - none of the source events are transactional
@@ -811,25 +811,25 @@ fn tumbling_window_on_time_emit() -> Result<()> {
             include: false,
             emit: false
         },
-        window.on_event(&mut vm, ingest_ns(5), &None)?
+        window.on_event(0, &mut vm, ingest_ns(5), &None)?
     );
     assert_eq!(
         Actions::all_false(),
-        window.on_event(&mut vm, ingest_ns(10), &None)?
+        window.on_event(0, &mut vm, ingest_ns(10), &None)?
     );
     assert_eq!(
         Actions {
             include: false,
             emit: true
         },
-        window.on_event(&mut vm, ingest_ns(15), &None)? // exactly on time
+        window.on_event(0, &mut vm, ingest_ns(15), &None)? // exactly on time
     );
     assert_eq!(
         Actions {
             include: false,
             emit: true
         },
-        window.on_event(&mut vm, ingest_ns(26), &None)? // exactly on time
+        window.on_event(0, &mut vm, ingest_ns(26), &None)? // exactly on time
     );
     Ok(())
 }
@@ -840,7 +840,7 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
     let reg = Registry::default();
     let aggr_reg = AggrRegistry::default();
     let q = tremor_script::query::Query::parse(
-        r#"
+        &r#"
             define window my_window from tumbling
             with
                 interval = 1000000000 # 1 second
@@ -875,25 +875,28 @@ fn tumbling_window_on_time_from_script_emit() -> Result<()> {
             include: false,
             emit: false
         },
-        window.on_event(&mut json1, 1, &None)?
+        window.on_event(0, &mut json1, 1, &None)?
     );
     let mut json2 = literal!({
         "timestamp": 1_999_999_999
     })
     .into();
-    assert_eq!(Actions::all_false(), window.on_event(&mut json2, 2, &None)?);
+    assert_eq!(
+        Actions::all_false(),
+        window.on_event(0, &mut json2, 2, &None)?
+    );
     let mut json3 = literal!({
         "timestamp": 2_000_000_000
     })
     .into();
     // ignoring on_tick as we have a script
-    assert_eq!(Actions::all_false(), window.on_tick(2_000_000_000)?);
+    assert_eq!(Actions::all_false(), window.on_tick(0, 2_000_000_000)?);
     assert_eq!(
         Actions {
             include: false,
             emit: true
         },
-        window.on_event(&mut json3, 3, &None)?
+        window.on_event(0, &mut json3, 3, &None)?
     );
     Ok(())
 }
@@ -906,25 +909,28 @@ fn tumbling_window_on_time_on_tick() -> Result<()> {
             include: false,
             emit: false
         },
-        window.on_tick(0)?
+        window.on_tick(0, 0)?
     );
-    assert_eq!(Actions::all_false(), window.on_tick(99)?);
+    assert_eq!(Actions::all_false(), window.on_tick(0, 99)?);
     assert_eq!(
         Actions {
             include: false,
             emit: true // we delete windows that do not have content so this is fine
         },
-        window.on_tick(100)?
+        window.on_tick(0, 100)?
     );
     let mut v = ValueAndMeta::default();
-    assert_eq!(Actions::all_false(), window.on_event(&mut v, 101, &None)?);
-    assert_eq!(Actions::all_false(), window.on_tick(102)?);
+    assert_eq!(
+        Actions::all_false(),
+        window.on_event(0, &mut v, 101, &None)?
+    );
+    assert_eq!(Actions::all_false(), window.on_tick(0, 102)?);
     assert_eq!(
         Actions {
             include: false,
             emit: true // we had an event yeah
         },
-        window.on_tick(200)?
+        window.on_tick(0, 200)?
     );
     Ok(())
 }
@@ -937,25 +943,28 @@ fn tumbling_window_on_time_emit_empty_windows() -> Result<()> {
             include: false,
             emit: false
         },
-        window.on_tick(0)?
+        window.on_tick(0, 0)?
     );
-    assert_eq!(Actions::all_false(), window.on_tick(99)?);
+    assert_eq!(Actions::all_false(), window.on_tick(0, 99)?);
     assert_eq!(
         Actions {
             include: false,
             emit: true // we **DO** emit even if we had no event
         },
-        window.on_tick(100)?
+        window.on_tick(0, 100)?
     );
     let mut v = ValueAndMeta::default();
-    assert_eq!(Actions::all_false(), window.on_event(&mut v, 101, &None)?);
-    assert_eq!(Actions::all_false(), window.on_tick(102)?);
+    assert_eq!(
+        Actions::all_false(),
+        window.on_event(0, &mut v, 101, &None)?
+    );
+    assert_eq!(Actions::all_false(), window.on_tick(0, 102)?);
     assert_eq!(
         Actions {
             include: false,
             emit: true // we had an event yeah
         },
-        window.on_tick(200)?
+        window.on_tick(0, 200)?
     );
 
     Ok(())
@@ -972,14 +981,14 @@ fn no_window_emit() -> Result<()> {
 
     assert_eq!(
         Actions::all_true(),
-        window.on_event(&mut vm, ingest_ns(0), &None)?
+        window.on_event(0, &mut vm, ingest_ns(0), &None)?
     );
-    assert_eq!(Actions::all_false(), window.on_tick(0)?);
+    assert_eq!(Actions::all_false(), window.on_tick(0, 0)?);
     assert_eq!(
         Actions::all_true(),
-        window.on_event(&mut vm, ingest_ns(1), &None)?
+        window.on_event(0, &mut vm, ingest_ns(1), &None)?
     );
-    assert_eq!(Actions::all_false(), window.on_tick(1)?);
+    assert_eq!(Actions::all_false(), window.on_tick(0, 1)?);
     Ok(())
 }
 
@@ -995,24 +1004,24 @@ fn tumbling_window_on_number_emit() -> Result<()> {
     // do not emit yet
     assert_eq!(
         Actions::all_false(),
-        window.on_event(&mut vm, ingest_ns(0), &None)?
+        window.on_event(0, &mut vm, ingest_ns(0), &None)?
     );
-    assert_eq!(Actions::all_false(), window.on_tick(1_000_000_000)?);
+    assert_eq!(Actions::all_false(), window.on_tick(0, 1_000_000_000)?);
     // do not emit yet
     assert_eq!(
         Actions::all_false(),
-        window.on_event(&mut vm, ingest_ns(1), &None)?
+        window.on_event(0, &mut vm, ingest_ns(1), &None)?
     );
-    assert_eq!(Actions::all_false(), window.on_tick(2_000_000_000)?);
+    assert_eq!(Actions::all_false(), window.on_tick(0, 2_000_000_000)?);
     // emit and open on the third event
     assert_eq!(
         Actions::all_true(),
-        window.on_event(&mut vm, ingest_ns(2), &None)?
+        window.on_event(0, &mut vm, ingest_ns(2), &None)?
     );
     // no emit here, next window
     assert_eq!(
         Actions::all_false(),
-        window.on_event(&mut vm, ingest_ns(3), &None)?
+        window.on_event(0, &mut vm, ingest_ns(3), &None)?
     );
 
     Ok(())

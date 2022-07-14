@@ -1,0 +1,20 @@
+define flow main
+flow
+  use lib::pipelines;
+  use tremor::connectors;
+
+  use std::time::nanos;
+  use tremor::connectors;
+  define connector every_second from metronome
+  with
+    config = {"interval": nanos::from_seconds(2)}
+  end;
+
+  create connector console from connectors::console;
+  create connector every_second;
+  create pipeline main from pipelines::main;
+
+  connect /connector/console to /pipeline/main/console;
+  connect /connector/every_second to /pipeline/main;
+  connect /pipeline/main to /connector/console;
+end;

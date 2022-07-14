@@ -77,7 +77,7 @@ pub use crate::ast::deploy::raw::run_script;
 pub use crate::ast::module;
 pub use crate::ast::query::SelectType;
 pub use crate::ast::NodeMeta;
-pub use crate::ctx::{EventContext, EventOriginUri};
+pub use crate::ctx::{EventContext, EventOriginUri, NO_CONTEXT};
 pub use crate::errors::{Kind as ErrorKind, Result};
 pub use crate::query::Query;
 pub use crate::registry::{
@@ -127,229 +127,222 @@ mod tests {
     use crate::interpreter::AggrType;
     use crate::prelude::*;
 
-    macro_rules! eval {
-        ($src:expr, $expected:expr) => {{
-            let reg: Registry = registry::registry();
-            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
-            let mut event = Value::object();
-            let mut state = Value::null();
-            let mut global_map = Value::object();
-            let value = runnable.run(
-                &EventContext::new(0, None),
-                AggrType::Emit,
-                &mut event,
-                &mut state,
-                &mut global_map,
-            );
-            assert_eq!(
-                Ok(Return::Emit {
-                    value: $expected,
-                    port: None
-                }),
-                value
-            );
-        }};
+    fn eval(src: &'static str, expected: Value<'static>) {
+        let reg: Registry = registry::registry();
+        let runnable: Script = Script::parse(&src, &reg).expect("parse failed");
+        let mut event = Value::object();
+        let mut state = Value::null();
+        let mut global_map = Value::object();
+        let value = runnable.run(
+            &NO_CONTEXT,
+            AggrType::Emit,
+            &mut event,
+            &mut state,
+            &mut global_map,
+        );
+        assert_eq!(
+            Ok(Return::Emit {
+                value: expected,
+                port: None
+            }),
+            value
+        );
     }
 
-    macro_rules! eval_global {
-        ($src:expr, $expected:expr) => {{
-            let reg: Registry = registry::registry();
-            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
-            let mut event = Value::object();
-            let mut state = Value::null();
-            let mut global_map = Value::object();
-            let _value = runnable.run(
-                &EventContext::new(0, None),
-                AggrType::Emit,
-                &mut event,
-                &mut state,
-                &mut global_map,
-            );
-            assert_eq!(global_map, $expected);
-        }};
+    fn eval_meta(src: &'static str, expected: &Value<'static>) {
+        let reg: Registry = registry::registry();
+        let runnable: Script = Script::parse(&src, &reg).expect("parse failed");
+        let mut event = Value::object();
+        let mut state = Value::null();
+        let mut meta = Value::object();
+        let _value = runnable.run(
+            &NO_CONTEXT,
+            AggrType::Emit,
+            &mut event,
+            &mut state,
+            &mut meta,
+        );
+        assert_eq!(meta, expected);
     }
-
-    macro_rules! eval_event {
-        ($src:expr, $expected:expr) => {{
-            let reg: Registry = registry::registry();
-            let runnable: Script = Script::parse($src, &reg).expect("parse failed");
-            let mut event = Value::object();
-            let mut state = Value::null();
-            let mut global_map = Value::object();
-            let _value = runnable.run(
-                &EventContext::new(0, None),
-                AggrType::Emit,
-                &mut event,
-                &mut state,
-                &mut global_map,
-            );
-            assert_eq!(event, $expected);
-        }};
+    fn eval_event(src: &'static str, expected: &Value<'static>) {
+        let reg: Registry = registry::registry();
+        let runnable: Script = Script::parse(&src, &reg).expect("parse failed");
+        let mut event = Value::object();
+        let mut state = Value::null();
+        let mut global_map = Value::object();
+        let _value = runnable.run(
+            &NO_CONTEXT,
+            AggrType::Emit,
+            &mut event,
+            &mut state,
+            &mut global_map,
+        );
+        assert_eq!(event, expected);
     }
 
     #[test]
     fn test_literal_expr() {
-        eval!("null;", Value::null());
-        eval!("true;", Value::from(true));
-        eval!("false;", Value::from(false));
-        eval!("0;", Value::from(0));
-        eval!("123;", Value::from(123));
-        eval!("123.456;", Value::from(123.456)); // 123.456 we can't match aginst float ...
-        eval!(
+        eval("null;", Value::null());
+        eval("true;", Value::from(true));
+        eval("false;", Value::from(false));
+        eval("0;", Value::from(0));
+        eval("123;", Value::from(123));
+        eval("123.456;", Value::from(123.456)); // 123.456 we can't match aginst float ...
+        eval(
             "123.456e10;",
-            Value::from(123.456e10) // 123.456e10 we can't match against float
+            Value::from(123.456e10), // 123.456e10 we can't match against float
         );
-        eval!("\"hello\";", Value::from("hello")); // we can't match against a COW
-        eval!("null;", Value::null());
-        eval!("true;", Value::from(true));
-        eval!("false;", Value::from(false));
-        eval!("0;", Value::from(0));
-        eval!("123;", Value::from(123));
-        eval!("123.456;", Value::from(123.456));
-        eval!("123.456e10;", Value::from(123.456e10));
-        eval!("\"hello\";", Value::from("hello"));
-        eval!("\"hello\";\"world\";", Value::from("world"));
-        eval!(
+        eval("\"hello\";", Value::from("hello")); // we can't match against a COW
+        eval("null;", Value::null());
+        eval("true;", Value::from(true));
+        eval("false;", Value::from(false));
+        eval("0;", Value::from(0));
+        eval("123;", Value::from(123));
+        eval("123.456;", Value::from(123.456));
+        eval("123.456e10;", Value::from(123.456e10));
+        eval("\"hello\";", Value::from("hello"));
+        eval("\"hello\";\"world\";", Value::from("world"));
+        eval(
             "true;\"hello\";[1,2,3,4,5];",
-            Value::from(vec![1_u64, 2, 3, 4, 5])
+            Value::from(vec![1_u64, 2, 3, 4, 5]),
         );
-        eval!(
+        eval(
             "true;\"hello\";[1,2,3,4,5,];",
-            Value::from(vec![1_u64, 2, 3, 4, 5])
+            Value::from(vec![1_u64, 2, 3, 4, 5]),
         );
     }
 
     #[test]
     fn test_let_expr() {
-        eval!("let test = null;", Value::null());
-        eval!("let test = 10;", Value::from(10));
-        eval!("let test = 10.2345;", Value::from(10.2345));
-        eval!("\"hello\"; let test = \"world\";", Value::from("world"));
-        eval!(
+        eval("let test = null;", Value::null());
+        eval("let test = 10;", Value::from(10));
+        eval("let test = 10.2345;", Value::from(10.2345));
+        eval("\"hello\"; let test = \"world\";", Value::from("world"));
+        eval(
             "\"hello\"; let test = [2,4,6,8];",
-            Value::from(vec![2_u64, 4, 6, 8])
+            Value::from(vec![2_u64, 4, 6, 8]),
         );
-        eval!("\"hello\"; let $test = \"world\";", Value::from("world"));
-        eval!(
+        eval("\"hello\"; let $test = \"world\";", Value::from("world"));
+        eval(
             "\"hello\"; let $test = [2,4,6,8];",
-            Value::from(vec![2_u64, 4, 6, 8])
+            Value::from(vec![2_u64, 4, 6, 8]),
         );
     }
 
     #[test]
     fn test_present() {
-        eval!(r#"let t = {}; present t"#, Value::from(true));
-        eval!(
+        eval(r#"let t = {}; present t"#, Value::from(true));
+        eval(
             r#"let t = {"a":{"b": {"c": ["d", "e"],}}}; present t.a"#,
-            Value::from(true)
+            Value::from(true),
         );
-        eval!(
+        eval(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b"#,
-            Value::from(true)
+            Value::from(true),
         );
-        eval!(
+        eval(
             r#"let t = {"a":{"b": {"c": ["d", "e"]},}}; present t.a.b.c"#,
-            Value::from(true)
+            Value::from(true),
         );
-        eval!(
+        eval(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b.c[0]"#,
-            Value::from(true)
+            Value::from(true),
         );
-        eval!(
+        eval(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b.c[1]"#,
-            Value::from(true)
+            Value::from(true),
         );
 
-        eval!(r#"let t = {}; present r"#, Value::from(false));
-        eval!(
+        eval(r#"let t = {}; present r"#, Value::from(false));
+        eval(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.x"#,
-            Value::from(false)
+            Value::from(false),
         );
-        eval!(
+        eval(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.x"#,
-            Value::from(false)
+            Value::from(false),
         );
-        eval!(
+        eval(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.x.b"#,
-            Value::from(false)
+            Value::from(false),
         );
-        eval!(
+        eval(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b.x"#,
-            Value::from(false)
+            Value::from(false),
         );
-        eval!(
+        eval(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.x.c"#,
-            Value::from(false)
+            Value::from(false),
         );
-        eval!(
+        eval(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.x.b.c"#,
-            Value::from(false)
+            Value::from(false),
         );
-        eval!(
+        eval(
             r#"let t = {"a":{"b": {"c": ["d", "e"]}}}; present t.a.b.c[2]"#,
-            Value::from(false)
+            Value::from(false),
         );
     }
 
     #[test]
     fn test_arith_expr() {
-        eval!("1 + 1;", Value::from(2));
-        eval!("2 - 1;", Value::from(1));
-        eval!("1 - 2;", Value::from(-1));
+        eval("1 + 1;", Value::from(2));
+        eval("2 - 1;", Value::from(1));
+        eval("1 - 2;", Value::from(-1));
     }
 
     #[test]
     fn test_assign_local() {
-        eval_global!(
+        eval_meta(
             "\"hello\"; let test = [2,4,6,8]; let $out = test;",
-            literal!({
+            &literal!({
                 "out": vec![2_u64, 4, 6, 8],
-            })
+            }),
         );
-        eval_global!(
+        eval_meta(
             "\"hello\"; let test = [4,6,8,10]; let test = [test]; let $out = test;",
-            literal!({
+            &literal!({
                 "out": vec![vec![4_u64, 6, 8, 10]],
-            })
+            }),
         );
     }
 
     #[test]
     fn test_assign_meta() {
-        eval_global!(
+        eval_meta(
             "\"hello\"; let $test = [2,4,6,8];",
-            literal!({
+            &literal!({
                 "test": vec![2_u64, 4, 6, 8],
-            })
+            }),
         );
-        eval_global!(
+        eval_meta(
             "\"hello\"; let test = [2,4,6,8]; let $test = [test];",
-            literal!({
+            &literal!({
                 "test": vec![vec![2_u64, 4, 6, 8]],
-            })
+            }),
         );
     }
 
     #[test]
     fn test_assign_event() {
-        eval_event!(
+        eval_event(
             "\"hello\"; let event.test = [2,4,6,8];",
-            literal!({
+            &literal!({
                 "test": vec![2_u64, 4, 6, 8],
-            })
+            }),
         );
-        eval_event!(
+        eval_event(
             "\"hello\"; let $test = [2,4,6,8]; let event.test = [$test];",
-            literal!({
+            &literal!({
                 "test": vec![vec![2_u64, 4, 6, 8]],
-            })
+            }),
         );
     }
 
     #[test]
     fn test_single_json_expr_is_valid() {
-        eval!("true ", Value::from(true));
-        eval!("true;", Value::from(true));
-        eval!("{ \"snot\": \"badger\" }", literal!({ "snot": "badger"}));
+        eval("true ", Value::from(true));
+        eval("true;", Value::from(true));
+        eval("{ \"snot\": \"badger\" }", literal!({ "snot": "badger"}));
     }
 }

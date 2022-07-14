@@ -60,6 +60,7 @@ use super::{prelude::KillSwitch, sink::SinkMsg};
 use crate::{
     channel::{bounded, unbounded, Receiver, UnboundedReceiver},
     errors::empty_error,
+    system::flow::AppContext,
 };
 use crate::{
     config,
@@ -74,8 +75,8 @@ use std::{collections::HashMap, time::Instant};
 use tokio::{sync::oneshot, task, time::timeout};
 use tremor_common::alias::{self};
 use tremor_common::{
-    ids::{ConnectorIdGen, Id, SourceId},
     ports::{Port, ERR, IN, OUT},
+    uids::{ConnectorUIdGen, SourceUId, UId},
 };
 use tremor_pipeline::{CbAction, EventId};
 use tremor_script::{ast::DeployEndpoint, lexer::Location, NodeMeta};
@@ -95,8 +96,8 @@ impl ConnectorHarness {
         input_ports: Vec<Port<'static>>,
         output_ports: Vec<Port<'static>>,
     ) -> Result<Self> {
-        let alias = alias::Connector::new("test", alias);
-        let mut connector_id_gen = ConnectorIdGen::new();
+        let alias = alias::Connector::new(alias);
+        let mut connector_id_gen = ConnectorUIdGen::new();
         let mut known_connectors = HashMap::new();
 
         for builder in builtin_connector_types() {
@@ -109,6 +110,7 @@ impl ConnectorHarness {
             builder,
             raw_config,
             &kill_switch,
+            AppContext::default(),
         )
         .await?;
         let mut pipes = HashMap::new();
@@ -196,7 +198,7 @@ impl ConnectorHarness {
         // ensure we notify the connector that its sink part is connected
         self.addr
             .send_sink(SinkMsg::Signal {
-                signal: Event::signal_start(SourceId::new(1)),
+                signal: Event::signal_start(SourceUId::new(1)),
             })
             .await?;
 
@@ -219,7 +221,7 @@ impl ConnectorHarness {
         let cr = rx.recv().await.ok_or_else(empty_error)?;
         debug!("Stop result received.");
         cr.res?;
-        //self.handle.cancel().await;
+        //self.handle.abort();
         let out_events = self
             .pipes
             .get_mut(&OUT)
@@ -374,12 +376,11 @@ impl TestPipeline {
         self.addr.send_mgmt(pipeline::MgmtMsg::Stop).await
     }
     pub(crate) fn new(alias: String) -> Self {
-        let flow_id = alias::Flow::new("test");
         let qsize = qsize();
         let (tx, rx) = bounded(qsize);
         let (tx_cf, rx_cf) = unbounded();
         let (tx_mgmt, mut rx_mgmt) = bounded(qsize);
-        let pipeline_id = alias::Pipeline::new(flow_id, alias);
+        let pipeline_id = alias::Pipeline::new(alias);
         let addr = pipeline::Addr::new(tx, tx_cf, tx_mgmt, pipeline_id);
 
         task::spawn(async move {
@@ -526,6 +527,7 @@ pub(crate) mod free_port {
             loop {
                 if let Ok(listener) = TcpListener::bind(("127.0.0.1", candidate)).await {
                     let port = listener.local_addr()?.port();
+                    assert_eq!(candidate, port);
                     drop(listener);
                     return Ok(port);
                 }

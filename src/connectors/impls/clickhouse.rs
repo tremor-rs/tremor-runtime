@@ -306,7 +306,6 @@ impl ConnectorBuilder for Builder {
         _alias: &alias::Connector,
         _config: &ConnectorConfig,
         connector_config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = ClickhouseConfig::new(connector_config)?;
 

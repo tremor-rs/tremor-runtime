@@ -100,7 +100,6 @@ impl ConnectorBuilder for Builder {
         &self,
         _alias: &alias::Connector,
         _config: &ConnectorConfig,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(Null {}))
     }

@@ -13,19 +13,23 @@
 // limitations under the License.
 use crate::{
     channel::{bounded, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender},
-    qsize,
-};
-use crate::{
     connectors::{self, sink::SinkMsg, source::SourceMsg},
     errors::{pipe_send_e, Result},
     instance::State,
     primerge::PriorityMerge,
+    qsize,
+    system::flow::AppContext,
 };
 use futures::StreamExt;
 use std::{fmt, time::Duration};
 use tokio::task::{self, JoinHandle};
 use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
-use tremor_common::{alias, ids::OperatorIdGen, ports::Port, time::nanotime};
+use tremor_common::{
+    alias::{self, Generic},
+    ports::Port,
+    time::nanotime,
+    uids::OperatorUIdGen,
+};
 use tremor_pipeline::{
     errors::ErrorKind as PipelineErrorKind, CbAction, Event, ExecutableGraph, SignalKind,
 };
@@ -146,12 +150,13 @@ impl TryFrom<connectors::Addr> for OutputTarget {
 }
 
 pub(crate) fn spawn(
+    app_ctx: AppContext,
     pipeline_alias: alias::Pipeline,
     config: &tremor_pipeline::query::Query,
-    operator_id_gen: &mut OperatorIdGen,
+    operator_id_gen: &mut OperatorUIdGen,
 ) -> Result<Addr> {
     let qsize = qsize();
-    let mut pipeline = config.to_executable_graph(operator_id_gen)?;
+    let mut pipeline = config.to_executable_graph(operator_id_gen, &app_ctx.metrics)?;
     pipeline.optimize();
 
     let (tx, rx) = bounded::<Box<Msg>>(qsize);
@@ -179,6 +184,7 @@ pub(crate) fn spawn(
     let addr = Addr::new(tx, cf_tx, mgmt_tx, pipeline_alias.clone());
 
     task::spawn(pipeline_task(
+        app_ctx,
         pipeline_alias,
         pipeline,
         rx,
@@ -391,13 +397,13 @@ async fn send_signal(own_id: &alias::Pipeline, signal: Event, dests: &mut Dests)
     let first = destinations.next();
     for (id, dest) in destinations {
         // if we are connected to ourselves we should not forward signals
-        if matches!(dest, OutputTarget::Sink(_)) || id.alias() != own_id.pipeline_alias() {
+        if matches!(dest, OutputTarget::Sink(_)) || id.alias() != own_id.alias() {
             dest.send_signal(signal.clone()).await?;
         }
     }
     if let Some((id, dest)) = first {
         // if we are connected to ourselves we should not forward signals
-        if matches!(dest, OutputTarget::Sink(_)) || id.alias() != own_id.pipeline_alias() {
+        if matches!(dest, OutputTarget::Sink(_)) || id.alias() != own_id.alias() {
             dest.send_signal(signal).await?;
         }
     }
@@ -474,31 +480,30 @@ fn maybe_send(r: Result<()>) {
 ///
 /// currently only used for printing
 struct PipelineContext {
+    app_context: AppContext,
     alias: alias::Pipeline,
+}
+
+impl PipelineContext {
+    fn new(app_context: AppContext, alias: alias::Pipeline) -> Self {
+        Self { app_context, alias }
+    }
 }
 
 impl std::fmt::Display for PipelineContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[Pipeline::{}]", &self.alias)
-    }
-}
-
-impl From<&alias::Pipeline> for PipelineContext {
-    fn from(alias: &alias::Pipeline) -> Self {
-        Self {
-            alias: alias.clone(),
-        }
-    }
-}
-
-impl From<alias::Pipeline> for PipelineContext {
-    fn from(alias: alias::Pipeline) -> Self {
-        Self { alias }
+        write!(
+            f,
+            "[Node:{}][Pipeline::{}]",
+            self.app_context.raft.id(),
+            &self.alias
+        )
     }
 }
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn pipeline_task(
+    app_ctx: AppContext,
     id: alias::Pipeline,
     mut pipeline: ExecutableGraph,
     rx: Receiver<Box<Msg>>,
@@ -507,8 +512,8 @@ pub(crate) async fn pipeline_task(
     tick_handler: JoinHandle<()>,
 ) -> Result<()> {
     pipeline.id = id.to_string();
-
-    let ctx = PipelineContext::from(&id);
+    let node_id = app_ctx.raft.id();
+    let ctx = PipelineContext::new(app_ctx.clone(), id.clone());
 
     let mut dests: Dests = halfbrown::HashMap::new();
     let mut inputs: Inputs = halfbrown::HashMap::new();
@@ -528,7 +533,7 @@ pub(crate) async fn pipeline_task(
         match msg {
             AnyMsg::Contraflow(msg) => handle_cf_msg(msg, &mut pipeline, &inputs),
             AnyMsg::Flow(Msg::Event { input, event }) => {
-                match pipeline.enqueue(input.clone(), event, &mut eventset) {
+                match pipeline.enqueue(node_id, input.clone(), event, &mut eventset) {
                     Ok(()) => {
                         handle_insights(&mut pipeline, &inputs);
                         maybe_send(send_events(&mut eventset, &mut dests).await);
@@ -547,7 +552,7 @@ pub(crate) async fn pipeline_task(
                 }
             }
             AnyMsg::Flow(Msg::Signal(signal)) => {
-                if let Err(e) = pipeline.enqueue_signal(signal.clone(), &mut eventset) {
+                if let Err(e) = pipeline.enqueue_signal(node_id, signal.clone(), &mut eventset) {
                     let err_str = if let PipelineErrorKind::Script(script_kind) = e.0 {
                         let script_error = tremor_script::errors::Error(script_kind, e.1);
                         Dumb::error_to_string(&script_error)?
@@ -688,9 +693,9 @@ mod tests {
     };
     use std::time::Instant;
     use tremor_common::{
-        ids::Id as _,
-        ids::SourceId,
         ports::{IN, OUT},
+        uids::SourceUId,
+        uids::UId as _,
     };
     use tremor_pipeline::{EventId, OpMeta};
     use tremor_script::{aggr_registry, lexer::Location, NodeMeta, FN_REGISTRY};
@@ -699,23 +704,27 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn report() -> Result<()> {
         let _: std::result::Result<_, _> = env_logger::try_init();
-        let mut operator_id_gen = OperatorIdGen::new();
+        let mut operator_id_gen = OperatorUIdGen::new();
+
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();
         let query =
-            tremor_pipeline::query::Query::parse(trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
+            tremor_pipeline::query::Query::parse(&trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let addr = spawn(
-            alias::Pipeline::new("report", "test-pipe1"),
+            AppContext::default(),
+            alias::Pipeline::new("test-pipe1"),
             &query,
             &mut operator_id_gen,
         )?;
         let addr2 = spawn(
-            alias::Pipeline::new("report", "test-pipe2"),
+            AppContext::default(),
+            alias::Pipeline::new("test-pipe2"),
             &query,
             &mut operator_id_gen,
         )?;
         let addr3 = spawn(
-            alias::Pipeline::new("report", "test-pipe3"),
+            AppContext::default(),
+            alias::Pipeline::new("test-pipe3"),
             &query,
             &mut operator_id_gen,
         )?;
@@ -805,13 +814,18 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn pipeline_spawn() -> Result<()> {
         let _: std::result::Result<_, _> = env_logger::try_init();
-        let mut operator_id_gen = OperatorIdGen::new();
+        let mut operator_id_gen = OperatorUIdGen::new();
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();
-        let pipeline_id = alias::Pipeline::new("flow", "test-pipe");
+        let pipeline_id = alias::Pipeline::new("test-pipe");
         let query =
-            tremor_pipeline::query::Query::parse(trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
-        let addr = spawn(pipeline_id, &query, &mut operator_id_gen)?;
+            tremor_pipeline::query::Query::parse(&trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
+        let addr = spawn(
+            AppContext::default(),
+            pipeline_id,
+            &query,
+            &mut operator_id_gen,
+        )?;
 
         let (tx, mut rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
@@ -895,7 +909,7 @@ mod tests {
         }
 
         // send a signal
-        addr.send(Box::new(Msg::Signal(Event::signal_drain(SourceId::new(
+        addr.send(Box::new(Msg::Signal(Event::signal_drain(SourceUId::new(
             42,
         )))))
         .await?;

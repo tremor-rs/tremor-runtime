@@ -15,7 +15,6 @@ rust-version = "1.62"
 [workspace]
 
 members = [
-  "tremor-api",
   "tremor-cli",
   "tremor-codec",
   "tremor-common",
@@ -49,6 +48,7 @@ beef = { version = "0.5", features = ["impl_serde"] }
 bimap = { version = "0.6", features = ["serde"] }
 chrono = "0.4"
 chrono-tz = "0.8"
+jumphash = "0.1"
 
 # Once a new version of clickhouse-rs is released, we can stop using a git
 # repository as a dependency. The declaration can then be replaced with the
@@ -91,12 +91,14 @@ tremor-config = { path = "tremor-config" }
 tremor-codec = { path = "tremor-codec" }
 tremor-influx = { path = "tremor-influx" }
 tremor-pipeline = { path = "tremor-pipeline" }
-tremor-script = { path = "tremor-script" }
+tremor-script = { path = "tremor-script", features = ["arena-delete"] }
 tremor-value = { path = "tremor-value" }
 tremor-interceptor = { path = "tremor-interceptor" }
 url = "2.4"
 value-trait = "0.8"
-
+tide = "0.16"
+byteorder = "1.5"
+axum = "0.6"
 
 # blaster / blackhole# codecs
 hdrhistogram = "7"
@@ -194,6 +196,17 @@ ryu = "1"
 lexical = "6"
 simdutf8 = "0.1"
 
+# Clustering
+tarpc = { version = "0.33", features = ["full"] }
+openraft = { version = "0.8.4", features = [
+  "serde",
+], git = "https://github.com/datafuselabs/openraft.git", rev = "6098f5cf61b074c8fccecf722278183c3ee5cd27" }
+serde_json = "1.0.57"
+rocksdb = { version = "0.19.0", git = "https://github.com/tremor-rs/rust-rocksdb", rev = "a02b00f029fb45d294715748cd2459491594e0e3" }
+tar = "0.4"
+sha2 = "0.10"
+rmp-serde = "1"
+
 [dev-dependencies]
 port_scanner = "0.1"
 serial_test = { version = "2.0", features = ["logging"] }
@@ -213,10 +226,10 @@ num_cpus = "1"
 bytes = "1"
 
 [features]
-default = []
+default = ["integration"]
 
 # support for 128bit numbers in tremor-value
-128bit = ["tremor-value/128bit"]
+128bit = ["tremor-value/128bit", "simd-json/128bit", "value-trait/128bit"]
 bert = ["tremor-pipeline/bert"]
 
 integration = ["integration-docker", "integration-local"]
@@ -250,7 +263,6 @@ socket-integration = []
 net-integration = []
 wal-integration = []
 clickhouse-integration = []
-tarpaulin-exclude = []
 # those are falky tests
 flaky-test = []
 

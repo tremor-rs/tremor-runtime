@@ -17,7 +17,7 @@
 // different artefact types
 //
 
-use std::fmt::Display;
+use std::fmt::{Display, Formatter};
 
 /// Possible lifecycle states of an instance
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -46,7 +46,7 @@ impl State {
 }
 
 impl Display for State {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             Self::Initializing => "initialized",
             Self::Running => "running",
@@ -55,5 +55,35 @@ impl Display for State {
             Self::Stopped => "stopped",
             Self::Failed => "failed",
         })
+    }
+}
+
+/// Representing the state an instance should be in
+/// subset of `State` as those are the only states instances can be transitioned to
+#[derive(Serialize, Deserialize, Debug, Copy, Clone, PartialEq, Eq, Default)]
+pub enum IntendedState {
+    #[default]
+    Running,
+    Paused,
+    Stopped,
+}
+
+impl Display for IntendedState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Running => "running",
+            Self::Paused => "paused",
+            Self::Stopped => "stopped",
+        })
+    }
+}
+
+impl From<IntendedState> for State {
+    fn from(intended: IntendedState) -> Self {
+        match intended {
+            IntendedState::Paused => State::Paused,
+            IntendedState::Running => State::Running,
+            IntendedState::Stopped => State::Stopped,
+        }
     }
 }

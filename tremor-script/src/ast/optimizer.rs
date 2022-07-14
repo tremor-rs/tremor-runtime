@@ -12,29 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::visitors::{
-    ArrayAdditionOptimizer, ConstFolder, ExprVisitor, ImutExprVisitor, QueryVisitor, VisitRes,
+use crate::{
+    ast::{
+        query::raw::WindowName,
+        visitors::{
+            ArrayAdditionOptimizer, ConstFolder, DeployVisitor, ExprVisitor, ImutExprVisitor,
+            QueryVisitor, VisitRes,
+        },
+        walkers::{DeployWalker, ExprWalker, ImutExprWalker, QueryWalker},
+        ArgsExpr, ArrayAppend, ArrayPattern, ArrayPredicatePattern, BinExpr, BooleanBinExpr, Bytes,
+        ClauseGroup, ClausePreCondition, Comprehension, Const, CreationalWith, DefaultCase,
+        DefinitionalArgs, DefinitionalArgsWith, EmitExpr, EventPath, Expr, ExprPath,
+        FlowDefinition, FnDefn, GroupBy, Helper, Ident, IfElse, ImutExpr, Invoke, InvokeAggr, List,
+        Literal, LocalPath, Match, Merge, MetadataPath, OperatorCreate, OperatorDefinition, Patch,
+        PatchOperation, Path, Pattern, PipelineCreate, PipelineDefinition, PredicateClause,
+        PredicatePattern, Query, Record, RecordPattern, Recur, ReservedPath, Script, ScriptCreate,
+        ScriptDefinition, Segment, Select, SelectStmt, StatePath, Stmt, StrLitElement,
+        StreamCreate, StringLit, TestExpr, TuplePattern, UnaryExpr, WindowDefinition, WithExpr,
+    },
+    errors::Result,
+    module::Content,
 };
-use crate::ast::walkers::expr::Walker as ExprWalker;
-use crate::ast::walkers::imut_expr::Walker as IMutExprWalker;
-use crate::ast::walkers::query::Walker as QueryWalker;
-use crate::ast::{
-    ArgsExpr, ArrayAppend, ArrayPattern, ArrayPredicatePattern, BinExpr, BooleanBinExpr, Bytes,
-    ClauseGroup, ClausePreCondition, Comprehension, Const, CreationalWith, DefaultCase,
-    DefinitionalArgs, DefinitionalArgsWith, EmitExpr, EventPath, Expr, ExprPath, FnDefn, GroupBy,
-    Helper, Ident, IfElse, ImutExpr, Invoke, InvokeAggr, List, Literal, LocalPath, Match, Merge,
-    MetadataPath, OperatorCreate, OperatorDefinition, Patch, PatchOperation, Path, Pattern,
-    PipelineCreate, PipelineDefinition, PredicateClause, PredicatePattern, Query, Record,
-    RecordPattern, Recur, ReservedPath, Script, ScriptCreate, ScriptDefinition, Segment, Select,
-    SelectStmt, StatePath, Stmt, StrLitElement, StreamCreate, StringLit, TestExpr, TuplePattern,
-    UnaryExpr, WindowDefinition, WithExpr,
-};
-use crate::errors::Result;
-use crate::module::Content;
 use beef::Cow;
 
-use super::query::raw::WindowName;
-
+/// Combination Visitor
 struct CombinedVisitor<First, Second> {
     first: First,
     second: Second,
@@ -198,7 +199,7 @@ where
         Ok(())
     }
 }
-impl<'script, First, Second> IMutExprWalker<'script> for CombinedVisitor<First, Second>
+impl<'script, First, Second> ImutExprWalker<'script> for CombinedVisitor<First, Second>
 where
     First: ImutExprVisitor<'script>,
     Second: ImutExprVisitor<'script>,
@@ -1189,10 +1190,98 @@ where
         Ok(())
     }
 }
+
 impl<'script, First, Second> QueryWalker<'script> for CombinedVisitor<First, Second>
 where
     First: ExprVisitor<'script> + ImutExprVisitor<'script> + QueryVisitor<'script>,
     Second: ExprVisitor<'script> + ImutExprVisitor<'script> + QueryVisitor<'script>,
+{
+}
+impl<'script, First, Second> DeployVisitor<'script> for CombinedVisitor<First, Second>
+where
+    First: QueryWalker<'script> + DeployVisitor<'script>,
+    Second: QueryWalker<'script> + DeployVisitor<'script>,
+{
+    fn visit_flow_definition(
+        &mut self,
+        with: &mut super::FlowDefinition<'script>,
+    ) -> Result<VisitRes> {
+        self.first.visit_flow_definition(with)?;
+        self.second.visit_flow_definition(with)
+    }
+
+    fn leave_flow_definition(&mut self, with: &mut super::FlowDefinition<'script>) -> Result<()> {
+        self.first.leave_flow_definition(with)?;
+        self.second.leave_flow_definition(with)
+    }
+
+    fn visit_connector_definition(
+        &mut self,
+        with: &mut super::ConnectorDefinition<'script>,
+    ) -> Result<VisitRes> {
+        self.first.visit_connector_definition(with)?;
+        self.second.visit_connector_definition(with)
+    }
+
+    fn leave_connector_definition(
+        &mut self,
+        with: &mut super::ConnectorDefinition<'script>,
+    ) -> Result<()> {
+        self.first.leave_connector_definition(with)?;
+        self.second.leave_connector_definition(with)
+    }
+
+    fn visit_create_target_definition(
+        &mut self,
+        with: &mut super::CreateTargetDefinition<'script>,
+    ) -> Result<VisitRes> {
+        self.first.visit_create_target_definition(with)?;
+        self.second.visit_create_target_definition(with)
+    }
+
+    fn leave_create_target_definition(
+        &mut self,
+        with: &mut super::CreateTargetDefinition<'script>,
+    ) -> Result<()> {
+        self.first.leave_create_target_definition(with)?;
+        self.second.leave_create_target_definition(with)
+    }
+
+    fn visit_deploy_endpoint(&mut self, with: &mut super::DeployEndpoint) -> Result<VisitRes> {
+        self.first.visit_deploy_endpoint(with)?;
+        self.second.visit_deploy_endpoint(with)
+    }
+
+    fn leave_deploy_endpoint(&mut self, with: &mut super::DeployEndpoint) -> Result<()> {
+        self.first.leave_deploy_endpoint(with)?;
+        self.second.leave_deploy_endpoint(with)
+    }
+
+    fn visit_connect_stmt(&mut self, with: &mut super::ConnectStmt) -> Result<VisitRes> {
+        self.first.visit_connect_stmt(with)?;
+        self.second.visit_connect_stmt(with)
+    }
+
+    fn leave_connect_stmt(&mut self, with: &mut super::ConnectStmt) -> Result<()> {
+        self.first.leave_connect_stmt(with)?;
+        self.second.leave_connect_stmt(with)
+    }
+
+    fn visit_create_stmt(&mut self, with: &mut super::CreateStmt<'script>) -> Result<VisitRes> {
+        self.first.visit_create_stmt(with)?;
+        self.second.visit_create_stmt(with)
+    }
+
+    fn leave_create_stmt(&mut self, with: &mut super::CreateStmt<'script>) -> Result<()> {
+        self.first.leave_create_stmt(with)?;
+        self.second.leave_create_stmt(with)
+    }
+}
+
+impl<'script, First, Second> DeployWalker<'script> for CombinedVisitor<First, Second>
+where
+    First: QueryWalker<'script> + DeployVisitor<'script>,
+    Second: QueryWalker<'script> + DeployVisitor<'script>,
 {
 }
 
@@ -1201,6 +1290,7 @@ pub struct Optimizer<'run, 'script>
 where
     'script: 'run,
 {
+    /// the visitor
     visitor: CombinedVisitor<ConstFolder<'run, 'script>, ArrayAdditionOptimizer>,
 }
 
@@ -1223,7 +1313,7 @@ where
     /// # Errors
     /// When the walker fails
     pub fn walk_imut_expr(&mut self, expr: &mut ImutExpr<'script>) -> Result<()> {
-        IMutExprWalker::walk_expr(&mut self.visitor, expr)?;
+        ImutExprWalker::walk_expr(&mut self.visitor, expr)?;
 
         Ok(())
     }
@@ -1305,6 +1395,15 @@ where
     /// When the walker fails
     pub fn walk_script_defn(&mut self, e: &mut ScriptDefinition<'script>) -> Result<()> {
         self.visitor.walk_script_defn(e)?;
+
+        Ok(())
+    }
+    /// Walk `FlowDefinition`
+    /// # Errors
+    /// When the walker fails
+
+    pub fn walk_flow_definition(&mut self, e: &mut FlowDefinition<'script>) -> Result<()> {
+        self.visitor.walk_flow_definition(e)?;
 
         Ok(())
     }

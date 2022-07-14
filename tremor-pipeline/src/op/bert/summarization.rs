@@ -63,7 +63,8 @@ op!(SummerizationFactory(_uid, node) {
 impl Operator for Summerization {
     fn on_event(
         &mut self,
-        _uid: OperatorId,
+        _node_id: u64,
+        _uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,

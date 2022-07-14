@@ -46,7 +46,7 @@ pub(crate) struct Select {
 
 impl Select {
     pub fn from_stmt(
-        operator_uid: OperatorId,
+        operator_uid: OperatorUId,
         windows: Vec<(String, window::Impl)>,
         select: &ast::SelectStmt<'static>,
     ) -> Self {
@@ -170,7 +170,8 @@ impl Operator for Select {
     // so the state can never be changed.
     fn on_event(
         &mut self,
-        _uid: OperatorId,
+        node_id: u64,
+        _uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -194,7 +195,7 @@ impl Operator for Select {
             ..
         } = event;
 
-        let mut ctx = EventContext::new(ingest_ns, origin_uri.as_ref());
+        let mut ctx = EventContext::new(ingest_ns, origin_uri.as_ref(), node_id);
         ctx.cardinality = groups.len();
 
         let opts = Self::opts();
@@ -273,7 +274,7 @@ impl Operator for Select {
                     Entry::Occupied(mut o) => {
                         // If we found a group execute it, and remove it if it is not longer
                         // needed
-                        if stry!(o.get_mut().on_event(sel_ctx, consts, event, &mut events)) {
+                        if stry!(o.get_mut().on_event(node_id, sel_ctx, consts, event, &mut events)) {
                             o.remove();
                         }
                     }
@@ -283,7 +284,7 @@ impl Operator for Select {
                         dflt_group.value = group_value;
                         dflt_group.value.try_push(v.key().to_string());
                         // execute it
-                        if !stry!(dflt_group.on_event(sel_ctx, consts, event, &mut events)) {
+                        if !stry!(dflt_group.on_event(node_id, sel_ctx, consts, event, &mut events)) {
                             // if we can't delete it check if we're having too many groups,
                             // if so, error.
                             if ctx.cardinality >= *max_groups {
@@ -310,7 +311,8 @@ impl Operator for Select {
 
     fn on_signal(
         &mut self,
-        _uid: OperatorId,
+        node_id: u64,
+        _uid: OperatorUId,
         _state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
@@ -349,13 +351,13 @@ impl Operator for Select {
         consts.group = Value::const_null();
         consts.args = Value::const_null();
 
-        let mut ctx = EventContext::new(ingest_ns, None);
+        let mut ctx = EventContext::new(ingest_ns, None, node_id);
         ctx.cardinality = groups.len();
 
         let mut to_remove = vec![];
         for (group_str, g) in groups.iter_mut() {
             if let Some(w) = &mut g.windows {
-                let window_event = w.window.on_tick(ingest_ns)?;
+                let window_event = w.window.on_tick(node_id, ingest_ns)?;
                 let mut can_remove = window_event.emit;
 
                 if window_event.emit {
@@ -395,6 +397,7 @@ impl Operator for Select {
 
                     if let Some(next) = &mut w.next {
                         can_remove = next.on_event(
+                            node_id,
                             &mut ctx,
                             run,
                             &mut data,

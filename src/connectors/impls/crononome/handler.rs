@@ -151,7 +151,6 @@ impl<I> TemporalPriorityQueue<I> {
         self.q.push(Reverse(at));
     }
 
-    #[cfg(not(feature = "tarpaulin-exclude"))]
     #[cfg(test)]
     pub(crate) fn pop(&mut self) -> Option<TemporalItem<I>> {
         let Reverse(x) = self.q.peek()?;
@@ -176,7 +175,6 @@ impl<I> TemporalPriorityQueue<I> {
         self.q.pop().map(|Reverse(x)| x)
     }
 
-    #[cfg(not(feature = "tarpaulin-exclude"))]
     #[cfg(test)]
     pub(crate) fn drain(&mut self) -> Vec<TemporalItem<I>> {
         let now = Utc::now().timestamp();
@@ -228,7 +226,6 @@ impl ChronomicQueue {
         }
     }
 
-    #[cfg(not(feature = "tarpaulin-exclude"))]
     #[cfg(test)]
     pub(crate) fn drain(&mut self) -> Vec<(String, Option<Value<'static>>)> {
         let due = self.tpq.drain();
@@ -240,7 +237,6 @@ impl ChronomicQueue {
         }
         trigger
     }
-    #[cfg(not(feature = "tarpaulin-exclude"))]
     #[cfg(test)]
     pub(crate) fn next(&mut self) -> Option<(String, Option<Value<'static>>)> {
         self.tpq.pop().map(|ti| {
@@ -260,11 +256,8 @@ impl ChronomicQueue {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::convert::TryFrom;
-
-    #[cfg(not(feature = "tarpaulin-exclude"))]
     use chrono::DateTime;
-    #[cfg(not(feature = "tarpaulin-exclude"))]
+    use std::convert::TryFrom;
     use std::time::Duration;
 
     #[test]
@@ -287,7 +280,6 @@ mod tests {
 
     // This tight requirements for timing are extremely problematic in tests
     // and lead to frequent issues with the test being flaky or unrelaibale
-    #[cfg(not(feature = "tarpaulin-exclude"))]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_tpq_fill_drain() -> Result<()> {
         use chrono::prelude::Utc;
@@ -322,7 +314,6 @@ mod tests {
 
     // This tight requirements for timing are extremely problematic in tests
     // and lead to frequent issues with the test being flaky or unrelaibale
-    #[cfg(not(feature = "tarpaulin-exclude"))]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_tpq_fill_pop() -> Result<()> {
         use chrono::prelude::Utc;
@@ -358,7 +349,6 @@ mod tests {
 
     // This tight requirements for timing are extremely problematic in tests
     // and lead to frequent issues with the test being flaky or unrelaibale
-    #[cfg(not(feature = "tarpaulin-exclude"))]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_cq_fill_drain_refill() -> Result<()> {
         let mut cq = ChronomicQueue::default();
@@ -393,7 +383,6 @@ mod tests {
 
     // This tight requirements for timing are extremely problematic in tests
     // and lead to frequent issues with the test being flaky or unrelaibale
-    #[cfg(not(feature = "tarpaulin-exclude"))]
     #[tokio::test(flavor = "multi_thread")]
     async fn test_cq_fill_pop_refill() -> Result<()> {
         let mut cq = ChronomicQueue::default();

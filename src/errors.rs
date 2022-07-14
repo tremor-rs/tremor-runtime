@@ -186,11 +186,13 @@ error_chain! {
         JsonAccessError(value_trait::AccessError);
         JsonError(simd_json::Error);
         KafkaError(rdkafka::error::KafkaError);
+        SerdeJsonError(serde_json::Error);
         MimeParsingError(mime::FromStrError);
         ModeParseError(file_mode::ModeParseError);
         OneShotRecv(tokio::sync::oneshot::error::RecvError);
         ParseFloatError(std::num::ParseFloatError);
         ParseIntError(std::num::ParseIntError);
+        RaftAPIError(crate::raft::api::client::Error);
         RegexError(regex::Error);
         ReqwestError(reqwest::Error);
         RustlsError(rustls::Error);
@@ -210,9 +212,15 @@ error_chain! {
         WalJson(qwal::Error<simd_json::Error>);
         Ws(tokio_tungstenite::tungstenite::Error);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
+        CheckIsLeaderError(openraft::error::RaftError<crate::raft::NodeId, openraft::error::CheckIsLeaderError<crate::raft::NodeId, crate::raft::node::Addr>>);
+        ClientWriteError(openraft::error::RaftError<crate::raft::NodeId, openraft::error::ClientWriteError<crate::raft::NodeId, crate::raft::node::Addr>>);
     }
 
     errors {
+        RaftNotRunning {
+            description("Raft is not running")
+                display("Raft is not running")
+        }
         TypeError(expected: ValueType, found: ValueType) {
             description("Type error")
                 display("Type error: Expected {}, found {}", expected, found)
@@ -293,6 +301,10 @@ error_chain! {
             description("No socket available")
                 display("No socket available. Probably not connected yet.")
         }
+        FlowFailed(flow: String) {
+            description("Flow entered failed state")
+            display("Flow {flow} entered failed state")
+        }
         DeployFlowError(flow: String, err: String) {
             description("Error deploying Flow")
                 display("Error deploying Flow {}: {}", flow, err)
@@ -334,6 +346,7 @@ error_chain! {
             description("Type in the message does not match BigQuery type")
                 display("Type in the message does not match BigQuery type. Expected: {}, actual: {:?}", expected, actual)
         }
+
 
         NoClickHouseClientAvailable {
             description("The ClickHouse adapter has no client available")

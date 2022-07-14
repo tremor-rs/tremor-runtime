@@ -300,6 +300,7 @@ pub(super) fn extract_response_meta<B>(response: &Response<B>) -> Result<Value<'
 
 #[cfg(test)]
 mod test {
+
     use super::*;
     #[tokio::test(flavor = "multi_thread")]
     async fn builder() -> Result<()> {
@@ -310,13 +311,7 @@ mod test {
             "cake": ["black forst", "cheese"],
             "pie": "key lime"
         }});
-        let mut s = EventSerializer::new(
-            None,
-            CodecReq::Optional("json"),
-            vec![],
-            &ConnectorType("http".into()),
-            &alias::Connector::new("flow", "http"),
-        )?;
+        let mut s = EventSerializer::dummy(Some(tremor_codec::Config::from("json")))?;
         let config = client::Config::new(&c)?;
 
         let mut b = HttpRequestBuilder::new(request_id, meta, &codec_map, &config)?;

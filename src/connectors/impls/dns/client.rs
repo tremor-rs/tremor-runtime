@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::channel::{bounded, Receiver, Sender};
-use crate::{connectors::prelude::*, system::KillSwitch};
+use crate::connectors::prelude::*;
 use std::sync::Arc;
 use std::{boxed::Box, sync::atomic::AtomicBool};
 use trust_dns_resolver::{
@@ -35,7 +35,6 @@ impl ConnectorBuilder for Builder {
         &self,
         _id: &alias::Connector,
         _raw_config: &ConnectorConfig,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let (tx, rx) = bounded(128);
         Ok(Box::new(Client {

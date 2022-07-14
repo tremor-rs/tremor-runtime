@@ -49,7 +49,6 @@ impl ConnectorBuilder for Builder {
         _: &alias::Connector,
         _: &ConnectorConfig,
         conf: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(conf)?;
         let (source_tx, source_rx) = bounded(qsize());

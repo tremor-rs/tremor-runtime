@@ -15,35 +15,31 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
-use std::collections::HashSet;
-
-use super::{
-    super::raw::{IdentRaw, ImutExprRaw, ScriptRaw},
-    ArgsExprs, CreationalWith, DefinitionalArgs, DefinitionalArgsWith, WithExprs,
-};
-use super::{
-    err_generic, error_no_locals, BaseExpr, GroupBy, HashMap, Helper, OperatorCreate,
-    OperatorDefinition, OperatorKind, PipelineCreate, PipelineDefinition, Query, Result,
-    ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamCreate, Upable,
-    WindowDefinition, WindowKind,
-};
-use crate::ast::{
-    node_id::NodeId,
-    visitors::{
-        windows::{NoEventAccess, OnlyMutState},
-        GroupByExprExtractor, TargetEventRef,
-    },
-    Ident,
-};
-use crate::errors::error_generic;
-use crate::{ast::optimizer::Optimizer, prelude::Ranged};
-use crate::{ast::NodeMeta, impl_expr};
 use crate::{
-    ast::{raw::UseRaw, Consts},
-    impl_expr_no_lt,
-    module::Manager,
+    ast::{
+        node_id::NodeId,
+        optimizer::Optimizer,
+        query::{
+            err_generic, error_no_locals, ArgsExprs, BaseExpr, CreationalWith, DefinitionalArgs,
+            DefinitionalArgsWith, GroupBy, Helper, OperatorCreate, OperatorDefinition,
+            OperatorKind, PipelineCreate, PipelineDefinition, Query, Result, ScriptCreate,
+            ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamCreate, Upable,
+            WindowDefinition, WindowKind, WithExprs,
+        },
+        raw::{IdentRaw, ImutExprRaw, ScriptRaw, UseRaw},
+        visitors::{
+            windows::{NoEventAccess, OnlyMutState},
+            GroupByExprExtractor, TargetEventRef,
+        },
+        Consts, Ident, NodeMeta,
+    },
+    errors::error_generic,
+    impl_expr, impl_expr_no_lt,
+    prelude::Ranged,
 };
 use beef::Cow;
+use halfbrown::HashMap;
+use std::collections::HashSet;
 use tremor_common::ports::Port;
 use value_trait::prelude::*;
 
@@ -147,7 +143,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
         match self {
             StmtRaw::SelectStmt(stmt) => {
                 let mut aggregates = Vec::new();
-                let mut locals = HashMap::new();
+                let mut locals = std::collections::HashMap::default();
                 helper.swap(&mut aggregates, &mut locals);
                 let stmt: Select<'script> = stmt.up(helper)?;
                 helper.swap(&mut aggregates, &mut locals);
@@ -184,11 +180,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
             }
             StmtRaw::PipelineCreate(stmt) => Ok(Some(Stmt::PipelineCreate(stmt.up(helper)?))),
             StmtRaw::Use(UseRaw { modules, .. }) => {
-                for (module, alias) in modules {
-                    let module_id = Manager::load(&module)?;
-                    let alias = alias.unwrap_or_else(|| module.id.clone());
-                    helper.scope().add_module_alias(alias, module_id);
-                }
+                helper.load_modules(&modules)?;
                 Ok(None)
             }
         }

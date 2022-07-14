@@ -29,7 +29,6 @@ use crate::{
         },
     },
     errors::err_gcs,
-    system::KillSwitch,
 };
 use std::time::Duration;
 use tremor_common::time::nanotime;
@@ -120,7 +119,6 @@ impl ConnectorBuilder for Builder {
         alias: &alias::Connector,
         _config: &ConnectorConfig,
         connector_config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let mut config = Config::new(connector_config)?;
         config.normalize(alias);
@@ -407,17 +405,13 @@ pub(crate) mod tests {
         config::Reconnect,
         connectors::{
             impls::gcs::{resumable_upload_client::ResumableUploadClient, streamer::Mode},
-            reconnect::ConnectionLostNotifier,
-            utils::{
-                object_storage::{BufferPart, ObjectId},
-                quiescence::QuiescenceBeacon,
-            },
+            utils::object_storage::{BufferPart, ObjectId},
         },
-        errors::err_gcs,
+        system::flow::AppContext,
     };
     use halfbrown::HashMap;
     use std::sync::atomic::AtomicUsize;
-    use tremor_common::ids::{ConnectorIdGen, SinkId};
+    use tremor_common::uids::ConnectorUIdGen;
     use tremor_pipeline::EventId;
     use tremor_value::literal;
 
@@ -529,7 +523,7 @@ pub(crate) mod tests {
         });
 
         let mut config = Config::new(&raw_config).expect("config should be valid");
-        let alias = alias::Connector::new("flow", "conn");
+        let alias = alias::Connector::new("conn");
         config.normalize(&alias);
         assert_eq!(256 * 1024, config.buffer_size);
     }
@@ -568,23 +562,8 @@ pub(crate) mod tests {
             ChunkedBuffer,
         > = YoloSink::new(sink_impl);
 
-        let (connection_lost_tx, _) = bounded(10);
-
-        let alias = alias::Connector::new("a", "b");
-        let context = SinkContext::new(
-            SinkId::default(),
-            alias.clone(),
-            "gcs_streamer".into(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(connection_lost_tx),
-        );
-        let mut serializer = EventSerializer::new(
-            Some(tremor_codec::Config::from("json")),
-            CodecReq::Required,
-            vec![],
-            &"gcs_streamer".into(),
-            &alias,
-        )?;
+        let context = SinkContext::dummy("gcs_streamer");
+        let mut serializer = EventSerializer::dummy(Some(CodecConfig::from("json")))?;
 
         // simulate sink lifecycle
         sink.on_start(&context).await?;
@@ -754,23 +733,8 @@ pub(crate) mod tests {
             ChunkedBuffer,
         > = YoloSink::new(sink_impl);
 
-        let (connection_lost_tx, _) = bounded(10);
-
-        let alias = alias::Connector::new("a", "b");
-        let context = SinkContext::new(
-            SinkId::default(),
-            alias.clone(),
-            "gcs_streamer".into(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(connection_lost_tx),
-        );
-        let mut serializer = EventSerializer::new(
-            Some(tremor_codec::Config::from("json")),
-            CodecReq::Required,
-            vec![],
-            &"gcs_streamer".into(),
-            &alias,
-        )?;
+        let context = SinkContext::dummy("gcs_streamer");
+        let mut serializer = EventSerializer::dummy(Some(CodecConfig::from("json")))?;
 
         // simulate sink lifecycle
         sink.on_start(&context).await?;
@@ -928,23 +892,8 @@ pub(crate) mod tests {
             ChunkedBuffer,
         > = YoloSink::new(sink_impl);
 
-        let (connection_lost_tx, _) = bounded(10);
-
-        let alias = alias::Connector::new("a", "b");
-        let context = SinkContext::new(
-            SinkId::default(),
-            alias.clone(),
-            "gcs_streamer".into(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(connection_lost_tx),
-        );
-        let mut serializer = EventSerializer::new(
-            Some(tremor_codec::Config::from("json")),
-            CodecReq::Required,
-            vec![],
-            &"gcs_streamer".into(),
-            &alias,
-        )?;
+        let context = SinkContext::dummy("gcs_streamer");
+        let mut serializer = EventSerializer::dummy(Some(CodecConfig::from("json")))?;
 
         // simulate sink lifecycle
         sink.on_start(&context).await?;
@@ -1023,16 +972,7 @@ pub(crate) mod tests {
             ChunkedBuffer,
         > = YoloSink::new(sink_impl);
 
-        let (connection_lost_tx, _) = bounded(10);
-
-        let alias = alias::Connector::new("a", "b");
-        let context = SinkContext::new(
-            SinkId::default(),
-            alias.clone(),
-            "gcs_streamer".into(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(connection_lost_tx),
-        );
+        let context = SinkContext::dummy("gcs_streamer");
 
         // simulate sink lifecycle
         sink.on_start(&context).await?;
@@ -1077,23 +1017,8 @@ pub(crate) mod tests {
             ChunkedBuffer,
         > = ConsistentSink::new(sink_impl);
 
-        let (connection_lost_tx, _) = bounded(10);
-
-        let alias = alias::Connector::new("a", "b");
-        let context = SinkContext::new(
-            SinkId::default(),
-            alias.clone(),
-            "gcs_streamer".into(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(connection_lost_tx),
-        );
-        let mut serializer = EventSerializer::new(
-            Some(tremor_codec::Config::from("json")),
-            CodecReq::Required,
-            vec![],
-            &"gcs_streamer".into(),
-            &alias,
-        )?;
+        let context = SinkContext::dummy("gcs_streamer");
+        let mut serializer = EventSerializer::dummy(Some(CodecConfig::from("json")))?;
 
         // simulate standard sink lifecycle
         sink.on_start(&context).await?;
@@ -1302,23 +1227,8 @@ pub(crate) mod tests {
             ChunkedBuffer,
         > = ConsistentSink::new(sink_impl);
 
-        let (connection_lost_tx, _) = bounded(10);
-
-        let alias = alias::Connector::new("a", "b");
-        let context = SinkContext::new(
-            SinkId::default(),
-            alias.clone(),
-            "gcs_streamer".into(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(connection_lost_tx),
-        );
-        let mut serializer = EventSerializer::new(
-            Some(tremor_codec::Config::from("json")),
-            CodecReq::Required,
-            vec![],
-            &"gcs_streamer".into(),
-            &alias,
-        )?;
+        let context = SinkContext::dummy("gcs_streamer");
+        let mut serializer = EventSerializer::dummy(Some(CodecConfig::from("json")))?;
 
         // simulate standard sink lifecycle
         sink.on_start(&context).await?;
@@ -1453,13 +1363,19 @@ pub(crate) mod tests {
             metrics_interval_s: None,
         };
         let kill_switch = KillSwitch::dummy();
-        let alias = alias::Connector::new("snot", "badger");
-        let mut connector_id_gen = ConnectorIdGen::default();
+        let alias = alias::Connector::new("badger");
+        let mut connector_id_gen = ConnectorUIdGen::default();
 
         // lets cover create-sink here
-        let addr =
-            crate::connectors::spawn(&alias, &mut connector_id_gen, &builder, cfg, &kill_switch)
-                .await?;
+        let addr = crate::connectors::spawn(
+            &alias,
+            &mut connector_id_gen,
+            &builder,
+            cfg,
+            &kill_switch,
+            AppContext::default(),
+        )
+        .await?;
         let (tx, mut rx) = bounded(1);
         addr.stop(tx).await?;
         assert!(rx.recv().await.expect("rx empty").res.is_ok());
@@ -1484,13 +1400,19 @@ pub(crate) mod tests {
             metrics_interval_s: None,
         };
         let kill_switch = KillSwitch::dummy();
-        let alias = alias::Connector::new("snot", "badger");
-        let mut connector_id_gen = ConnectorIdGen::default();
+        let alias = alias::Connector::new("badger");
+        let mut connector_id_gen = ConnectorUIdGen::default();
 
         // lets cover create-sink here
-        let addr =
-            crate::connectors::spawn(&alias, &mut connector_id_gen, &builder, cfg, &kill_switch)
-                .await?;
+        let addr = crate::connectors::spawn(
+            &alias,
+            &mut connector_id_gen,
+            &builder,
+            cfg,
+            &kill_switch,
+            AppContext::default(),
+        )
+        .await?;
         let (tx, mut rx) = bounded(1);
         addr.stop(tx).await?;
         assert!(rx.recv().await.expect("rx empty").res.is_ok());

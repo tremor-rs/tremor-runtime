@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::system::flow::AppContext;
 use beef::Cow;
 use simd_json::ObjectHasher;
 use tremor_common::{
@@ -23,6 +24,8 @@ use tremor_pipeline::MetricsSender;
 use tremor_script::EventPayload;
 use tremor_value::prelude::*;
 
+const APP: Cow<'static, str> = Cow::const_str("app");
+const INSTANCE: Cow<'static, str> = Cow::const_str("instance");
 const FLOW: Cow<'static, str> = Cow::const_str("flow");
 const CONNECTOR: Cow<'static, str> = Cow::const_str("connector");
 const PORT: Cow<'static, str> = Cow::const_str("port");
@@ -30,6 +33,7 @@ const CONNECTOR_EVENTS: Cow<'static, str> = Cow::const_str("connector_events");
 
 /// metrics reporter for connector sources
 pub(crate) struct SourceReporter {
+    app_ctx: AppContext,
     alias: alias::Connector,
     metrics_out: u64,
     metrics_err: u64,
@@ -40,11 +44,13 @@ pub(crate) struct SourceReporter {
 
 impl SourceReporter {
     pub(crate) fn new(
+        app_ctx: AppContext,
         alias: alias::Connector,
         tx: MetricsSender,
         flush_interval_s: Option<u64>,
     ) -> Self {
         Self {
+            app_ctx,
             alias,
             metrics_out: 0,
             metrics_err: 0,
@@ -67,10 +73,20 @@ impl SourceReporter {
     pub(crate) fn periodic_flush(&mut self, timestamp: u64) -> Option<u64> {
         if let Some(interval) = self.flush_interval_ns {
             if timestamp >= self.last_flush_ns + interval {
-                let payload_out =
-                    make_event_count_metrics_payload(timestamp, OUT, self.metrics_out, &self.alias);
-                let payload_err =
-                    make_event_count_metrics_payload(timestamp, ERR, self.metrics_err, &self.alias);
+                let payload_out = make_event_count_metrics_payload(
+                    timestamp,
+                    OUT,
+                    self.metrics_out,
+                    &self.app_ctx,
+                    &self.alias,
+                );
+                let payload_err = make_event_count_metrics_payload(
+                    timestamp,
+                    ERR,
+                    self.metrics_err,
+                    &self.app_ctx,
+                    &self.alias,
+                );
                 send(&self.tx, payload_out, &self.alias);
                 send(&self.tx, payload_err, &self.alias);
                 self.last_flush_ns = timestamp;
@@ -90,6 +106,7 @@ impl SourceReporter {
 
 /// metrics reporter for connector sinks
 pub(crate) struct SinkReporter {
+    app_ctx: AppContext,
     alias: alias::Connector,
     metrics_in: u64,
     tx: MetricsSender,
@@ -99,11 +116,13 @@ pub(crate) struct SinkReporter {
 
 impl SinkReporter {
     pub(crate) fn new(
+        app_ctx: AppContext,
         alias: alias::Connector,
         tx: MetricsSender,
         flush_interval_s: Option<u64>,
     ) -> Self {
         Self {
+            app_ctx,
             alias,
             metrics_in: 0,
             tx,
@@ -119,8 +138,13 @@ impl SinkReporter {
     pub(crate) fn periodic_flush(&mut self, timestamp: u64) -> Option<u64> {
         if let Some(interval) = self.flush_interval_ns {
             if timestamp >= self.last_flush_ns + interval {
-                let payload =
-                    make_event_count_metrics_payload(timestamp, IN, self.metrics_in, &self.alias);
+                let payload = make_event_count_metrics_payload(
+                    timestamp,
+                    IN,
+                    self.metrics_in,
+                    &self.app_ctx,
+                    &self.alias,
+                );
                 send(&self.tx, payload, &self.alias);
                 self.last_flush_ns = timestamp;
                 return Some(timestamp);
@@ -153,10 +177,13 @@ pub(crate) fn make_event_count_metrics_payload(
     timestamp: u64,
     port: Port<'static>,
     count: u64,
+    app_ctx: &AppContext,
     connector_id: &alias::Connector,
 ) -> EventPayload {
-    let mut tags = Object::with_capacity_and_hasher(2, ObjectHasher::default());
-    tags.insert_nocheck(FLOW, Value::from(connector_id.flow_alias().to_string()));
+    let mut tags = Object::with_capacity_and_hasher(5, ObjectHasher::default());
+    tags.insert_nocheck(APP, Value::from(app_ctx.id().to_string()));
+    tags.insert_nocheck(INSTANCE, Value::from(app_ctx.instance().to_string()));
+    tags.insert_nocheck(FLOW, Value::from(connector_id.to_string()));
     tags.insert_nocheck(CONNECTOR, connector_id.to_string().into());
     tags.insert_nocheck(PORT, port.into());
 

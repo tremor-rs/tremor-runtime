@@ -243,30 +243,23 @@ where
 mod test {
     #![allow(clippy::cast_possible_wrap)]
     use super::*;
-    use crate::connectors::impls::gcl;
-    use crate::connectors::tests::ConnectorHarness;
-    use crate::connectors::ConnectionLostNotifier;
     use crate::connectors::{
-        google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
+        google::tests::TestTokenProvider, google::TokenSrc, impls::gcl, tests::ConnectorHarness,
     };
-    use crate::{channel::bounded, connectors::google::TokenSrc};
     use bytes::Bytes;
     use futures::future::Ready;
-    use googapis::google::logging::r#type::LogSeverity;
-    use googapis::google::logging::v2::WriteLogEntriesResponse;
+    use googapis::google::logging::{r#type::LogSeverity, v2::WriteLogEntriesResponse};
     use http::{HeaderMap, HeaderValue};
     use http_body::Body;
     use prost::Message;
-    use std::task::Poll;
     use std::{
         collections::HashMap,
         fmt::{Debug, Display, Formatter},
+        task::Poll,
     };
     use tonic::body::BoxBody;
     use tonic::codegen::Service;
-    use tremor_common::ids::SinkId;
-    use tremor_pipeline::CbAction::Trigger;
-    use tremor_pipeline::EventId;
+    use tremor_pipeline::{CbAction::Trigger, EventId};
     use tremor_value::{literal, structurize};
 
     #[derive(Debug)]
@@ -342,7 +335,6 @@ mod test {
     #[tokio::test(flavor = "multi_thread")]
     async fn on_event_can_send_an_event() -> Result<()> {
         let (tx, mut rx) = crate::channel::unbounded();
-        let (connection_lost_tx, _connection_lost_rx) = bounded(10);
 
         let mut sink = GclSink::<TestTokenProvider, _>::new(
             Config {
@@ -360,15 +352,9 @@ mod test {
             tx,
             MockChannelFactory,
         );
-        let ctx = SinkContext::new(
-            SinkId::default(),
-            alias::Connector::new("a", "b"),
-            ConnectorType::default(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(connection_lost_tx),
-        );
+        let sink_context = SinkContext::dummy("gcl_writer");
 
-        sink.connect(&ctx, &Attempt::default()).await?;
+        sink.connect(&sink_context, &Attempt::default()).await?;
 
         let event = Event {
             id: EventId::new(1, 2, 3, 4),
@@ -385,14 +371,8 @@ mod test {
         sink.on_event(
             "",
             event.clone(),
-            &ctx,
-            &mut EventSerializer::new(
-                None,
-                CodecReq::Structured,
-                vec![],
-                &"a".into(),
-                &alias::Connector::new("a", "b"),
-            )?,
+            &sink_context,
+            &mut EventSerializer::dummy(None)?,
             0,
         )
         .await?;
@@ -443,7 +423,6 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn on_event_fails_if_client_is_not_connected() -> Result<()> {
-        let (rx, _tx) = bounded(1024);
         let (reply_tx, _reply_rx) = crate::channel::unbounded();
         let config = Config::new(&literal!({
             "token": {"file": file!().to_string()},
@@ -456,20 +435,8 @@ mod test {
             .on_event(
                 "",
                 Event::signal_tick(),
-                &SinkContext::new(
-                    SinkId::default(),
-                    alias::Connector::new("", ""),
-                    ConnectorType::default(),
-                    QuiescenceBeacon::default(),
-                    ConnectionLostNotifier::new(rx),
-                ),
-                &mut EventSerializer::new(
-                    None,
-                    CodecReq::Structured,
-                    vec![],
-                    &ConnectorType::from(""),
-                    &alias::Connector::new("", ""),
-                )?,
+                &SinkContext::dummy("gcl_writer"),
+                &mut EventSerializer::dummy(None)?,
                 0,
             )
             .await;

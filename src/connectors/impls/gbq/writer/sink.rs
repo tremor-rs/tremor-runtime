@@ -29,6 +29,7 @@ use googapis::google::cloud::bigquery::storage::v1::{
 };
 use prost::encoding::WireType;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
+use simd_json_derive::Serialize;
 use std::collections::hash_map::Entry;
 use std::marker::PhantomData;
 use std::{collections::HashMap, time::Duration};
@@ -93,6 +94,7 @@ fn map_field(
     raw_fields: &Vec<TableFieldSchema>,
     ctx: &SinkContext,
 ) -> (DescriptorProto, HashMap<String, Field>) {
+    // see: https://cloud.google.com/bigquery/docs/write-api#data_type_conversions
     // The capacity for nested_types isn't known here, as it depends on the number of fields that have the struct type
     let mut nested_types = vec![];
     let mut proto_fields = Vec::with_capacity(raw_fields.len());
@@ -147,7 +149,7 @@ fn map_field(
             }
 
             TableType::Unspecified => {
-                warn!("{} Found a field of unspecified type: {}", ctx, raw_field.name);
+                warn!("{ctx} Found a field of unspecified type: {}", raw_field.name);
                 continue;
             }
         };
@@ -202,20 +204,17 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> 
     match field.table_type {
         TableType::Double => prost::encoding::double::encode(
             tag,
-            &val.as_f64()
-                .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("f64", val.value_type()))?,
+            &val.try_as_f64()?,
             result,
         ),
         TableType::Int64 => prost::encoding::int64::encode(
             tag,
-            &val.as_i64()
-                .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("i64", val.value_type()))?,
+            &val.try_as_i64()?,
             result,
         ),
         TableType::Bool => prost::encoding::bool::encode(
             tag,
-            &val.as_bool()
-                .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("bool", val.value_type()))?,
+            &val.try_as_bool()?,
             result,
         ),
         TableType::String
@@ -229,8 +228,7 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> 
         | TableType::Geography => {
             prost::encoding::string::encode(
                 tag,
-                &val.as_str()
-                    .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("string", val.value_type()))?
+                &val.try_as_str()?
                     .to_string(),
                 result,
             );
@@ -238,8 +236,7 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> 
         TableType::Struct => {
             let mut struct_buf: Vec<u8> = vec![];
             for (k, v) in val
-                .as_object()
-                .ok_or_else(|| ErrorKind::BigQueryTypeMismatch("object", val.value_type()))?
+                .try_as_object()?
             {
                 let subfield_description = field.subfields.get(&k.to_string());
 
@@ -259,16 +256,16 @@ fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> 
         TableType::Bytes => {
             prost::encoding::bytes::encode(
                 tag,
-                &Vec::from(
-                    val.as_bytes().ok_or_else(|| {
-                        ErrorKind::BigQueryTypeMismatch("bytes", val.value_type())
-                    })?,
-                ),
+                &val.try_as_bytes()?.to_vec(),
                 result,
             );
         }
         TableType::Json => {
-            warn!("Found a field of type JSON, this is not supported, ignoring.");
+            prost::encoding::string::encode(
+                tag,
+                &val.json_string()?,
+                result,
+            );
         }
         TableType::Interval => {
             warn!("Found a field of type Interval, this is not supported, ignoring.");
@@ -295,7 +292,6 @@ impl JsonToProtobufMapping {
     pub fn map(&self, value: &Value) -> Result<Vec<u8>> {
         if let Some(obj) = value.as_object() {
             let mut result = Vec::with_capacity(obj.len());
-
             for (key, val) in obj {
                 let k: &str = key;
                 if let Some(field) = self.fields.get(k) {
@@ -311,6 +307,7 @@ impl JsonToProtobufMapping {
         &self.descriptor
     }
 }
+
 impl<T: TokenProvider, TChannel: GbqChannel<TChannelError>, TChannelError: GbqChannelError>
     GbqSink<T, TChannel, TChannelError>
 {
@@ -629,9 +626,7 @@ mod test {
     use crate::connectors::{
         google::{tests::TestTokenProvider, TokenSrc},
         impls::gbq,
-        reconnect::ConnectionLostNotifier,
         tests::ConnectorHarness,
-        utils::quiescence::QuiescenceBeacon,
     };
     use bytes::Bytes;
     use futures::future::Ready;
@@ -643,14 +638,14 @@ mod test {
     };
     use http::{HeaderMap, HeaderValue};
     use prost::Message;
-    use std::collections::VecDeque;
-    use std::fmt::{Display, Formatter};
-    use std::sync::{Arc, RwLock};
-    use std::task::Poll;
+    use std::{
+        collections::VecDeque,
+        fmt::{Display, Formatter},
+        sync::{Arc, RwLock},
+        task::Poll,
+    };
     use tonic::body::BoxBody;
     use tonic::codegen::Service;
-    use tremor_common::ids::SinkId;
-    use value_trait::StaticNode;
 
     struct HardcodedChannelFactory {
         channel: Channel,
@@ -738,8 +733,6 @@ mod test {
 
     #[test]
     fn skips_unknown_field_types() {
-        let (rx, _tx) = crate::channel::bounded(1024);
-
         let result = map_field(
             "name",
             &vec![TableFieldSchema {
@@ -752,13 +745,7 @@ mod test {
                 precision: 0,
                 scale: 0,
             }],
-            &SinkContext::new(
-                SinkId::default(),
-                alias::Connector::new("flow", "connector"),
-                ConnectorType::default(),
-                QuiescenceBeacon::default(),
-                ConnectionLostNotifier::new(rx),
-            ),
+            &SinkContext::dummy("gbq_writer"),
         );
 
         assert_eq!(result.0.field.len(), 0);
@@ -767,8 +754,6 @@ mod test {
 
     #[test]
     fn skips_fields_of_unspecified_type() {
-        let (rx, _tx) = bounded(1024);
-
         let result = map_field(
             "name",
             &vec![TableFieldSchema {
@@ -781,13 +766,7 @@ mod test {
                 precision: 0,
                 scale: 0,
             }],
-            &SinkContext::new(
-                SinkId::default(),
-                alias::Connector::new("flow", "connector"),
-                ConnectorType::default(),
-                QuiescenceBeacon::default(),
-                ConnectionLostNotifier::new(rx),
-            ),
+            &SinkContext::dummy("gbq_writer"),
         );
 
         assert_eq!(result.0.field.len(), 0);
@@ -805,8 +784,6 @@ mod test {
         ];
 
         for item in data {
-            let (rx, _tx) = bounded(1024);
-
             let result = map_field(
                 "name",
                 &vec![TableFieldSchema {
@@ -819,13 +796,7 @@ mod test {
                     precision: 0,
                     scale: 0,
                 }],
-                &SinkContext::new(
-                    SinkId::default(),
-                    alias::Connector::new("flow", "connector"),
-                    ConnectorType::default(),
-                    QuiescenceBeacon::default(),
-                    ConnectionLostNotifier::new(rx),
-                ),
+                &SinkContext::dummy("gbq_writer"),
             );
 
             assert_eq!(result.1.len(), 1);
@@ -836,8 +807,6 @@ mod test {
 
     #[test]
     fn can_map_a_struct() {
-        let (rx, _tx) = bounded(1024);
-
         let result = map_field(
             "name",
             &vec![TableFieldSchema {
@@ -859,13 +828,7 @@ mod test {
                 precision: 0,
                 scale: 0,
             }],
-            &SinkContext::new(
-                SinkId::default(),
-                alias::Connector::new("flow", "connector"),
-                ConnectorType::default(),
-                QuiescenceBeacon::default(),
-                ConnectionLostNotifier::new(rx),
-            ),
+            &SinkContext::dummy("gbq_writer"),
         );
 
         assert_eq!(result.1.len(), 1);
@@ -885,7 +848,7 @@ mod test {
     fn encode_fails_on_type_mismatch() {
         let data = [
             (
-                Value::String("asdf".into()),
+                Value::from("asdf"),
                 Field {
                     table_type: TableType::Int64,
                     tag: 1,
@@ -893,7 +856,7 @@ mod test {
                 },
             ),
             (
-                Value::Static(StaticNode::F64(1.243)),
+                Value::from(1.243),
                 Field {
                     table_type: TableType::String,
                     tag: 2,
@@ -930,7 +893,7 @@ mod test {
             let mut result = vec![];
             assert!(
                 encode_field(
-                    &Value::String("I".into()),
+                    &Value::from("I"),
                     &Field {
                         table_type: item,
                         tag: 123,
@@ -984,7 +947,7 @@ mod test {
 
     #[test]
     pub fn can_encode_a_double() {
-        let value = Value::Static(StaticNode::F64(1.2345));
+        let value = Value::from(1.2345);
         let field = Field {
             table_type: TableType::Double,
             tag: 2,
@@ -1002,7 +965,7 @@ mod test {
 
     #[test]
     pub fn can_encode_boolean() {
-        let value = Value::Static(StaticNode::Bool(false));
+        let value = Value::from(false);
         let field = Field {
             table_type: TableType::Bool,
             tag: 43,
@@ -1041,14 +1004,13 @@ mod test {
 
         let mut result = Vec::new();
         assert!(encode_field(&value, &field, &mut result).is_ok());
-
         // json is currently not supported, so we expect the field to be skipped
-        assert_eq!([] as [u8; 0], result[..]);
+        assert_eq!([10, 2, 123, 125] as [u8; 4], result[..]);
     }
 
     #[test]
     pub fn can_encode_interval() {
-        let value = Value::String("".into());
+        let value = Value::from("");
         let field = Field {
             table_type: TableType::Interval,
             tag: 1,
@@ -1064,7 +1026,7 @@ mod test {
 
     #[test]
     pub fn can_skips_unspecified() {
-        let value = Value::String("".into());
+        let value = Value::from("");
         let field = Field {
             table_type: TableType::Unspecified,
             tag: 1,
@@ -1080,15 +1042,7 @@ mod test {
 
     #[test]
     pub fn mapping_generates_a_correct_descriptor() {
-        let (rx, _tx) = bounded(1024);
-
-        let ctx = SinkContext::new(
-            SinkId::default(),
-            alias::Connector::new("flow", "connector"),
-            ConnectorType::default(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(rx),
-        );
+        let ctx = SinkContext::dummy("gbq_writer");
         let mapping = JsonToProtobufMapping::new(
             &vec![
                 TableFieldSchema {
@@ -1129,15 +1083,7 @@ mod test {
 
     #[test]
     pub fn can_map_json_to_protobuf() -> Result<()> {
-        let (rx, _tx) = bounded(1024);
-
-        let ctx = SinkContext::new(
-            SinkId::default(),
-            alias::Connector::new("flow", "connector"),
-            ConnectorType::default(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(rx),
-        );
+        let ctx = SinkContext::dummy("gbq_writer");
         let mapping = JsonToProtobufMapping::new(
             &vec![
                 TableFieldSchema {
@@ -1174,15 +1120,7 @@ mod test {
 
     #[test]
     fn map_field_ignores_fields_that_are_not_in_definition() -> Result<()> {
-        let (rx, _tx) = bounded(1024);
-
-        let ctx = SinkContext::new(
-            SinkId::default(),
-            alias::Connector::new("flow", "connector"),
-            ConnectorType::default(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(rx),
-        );
+        let ctx = SinkContext::dummy("gbq_writer");
         let mapping = JsonToProtobufMapping::new(
             &vec![
                 TableFieldSchema {
@@ -1220,15 +1158,7 @@ mod test {
 
     #[test]
     fn map_field_ignores_struct_fields_that_are_not_in_definition() -> Result<()> {
-        let (rx, _tx) = bounded(1024);
-
-        let ctx = SinkContext::new(
-            SinkId::default(),
-            alias::Connector::new("flow", "connector"),
-            ConnectorType::default(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(rx),
-        );
+        let ctx = SinkContext::dummy("gbq_writer");
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
                 name: "a".to_string(),
@@ -1264,15 +1194,7 @@ mod test {
 
     #[test]
     fn fails_on_bytes_type_mismatch() {
-        let (rx, _tx) = bounded(1024);
-
-        let ctx = SinkContext::new(
-            SinkId::default(),
-            alias::Connector::new("flow", "connector"),
-            ConnectorType::default(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(rx),
-        );
+        let ctx = SinkContext::dummy("gbq_writer");
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
                 name: "a".to_string(),
@@ -1290,7 +1212,7 @@ mod test {
         fields.try_insert("a", 12);
         let result = mapping.map(&fields);
 
-        if let Err(Error(ErrorKind::BigQueryTypeMismatch("bytes", x), _)) = result {
+        if let Err(Error(ErrorKind::TypeError(ValueType::Custom("bytes"), x), _)) = result {
             assert_eq!(x, ValueType::I64);
         } else {
             panic!("Bytes conversion did not fail on type mismatch");
@@ -1299,15 +1221,7 @@ mod test {
 
     #[test]
     fn fails_if_the_event_is_not_an_object() {
-        let (rx, _tx) = bounded(1024);
-
-        let ctx = SinkContext::new(
-            SinkId::default(),
-            alias::Connector::new("flow", "connector"),
-            ConnectorType::default(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(rx),
-        );
+        let ctx = SinkContext::dummy("gbq_writer");
         let mapping = JsonToProtobufMapping::new(
             &vec![TableFieldSchema {
                 name: "a".to_string(),
@@ -1321,9 +1235,9 @@ mod test {
             }],
             &ctx,
         );
-        let result = mapping.map(&Value::Static(StaticNode::I64(123)));
+        let result = mapping.map(&Value::from(123_i64));
 
-        if let Err(Error(ErrorKind::BigQueryTypeMismatch("object", x), _)) = result {
+        if let Err(Error(ErrorKind::TypeError(ValueType::Object, x), _)) = result {
             assert_eq!(x, ValueType::I64);
         } else {
             panic!("Mapping did not fail on non-object event");
@@ -1347,7 +1261,6 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn on_event_fails_if_client_is_not_conected() -> Result<()> {
-        let (rx, _tx) = bounded(1024);
         let config = Config::new(&literal!({
             "token": {"file": file!().to_string()},
             "table_id": "doesnotmatter",
@@ -1362,20 +1275,8 @@ mod test {
             .on_event(
                 "",
                 Event::signal_tick(),
-                &SinkContext::new(
-                    SinkId::default(),
-                    alias::Connector::new("flow", "connector"),
-                    ConnectorType::default(),
-                    QuiescenceBeacon::default(),
-                    ConnectionLostNotifier::new(rx),
-                ),
-                &mut EventSerializer::new(
-                    None,
-                    CodecReq::Structured,
-                    vec![],
-                    &ConnectorType::from(""),
-                    &alias::Connector::new("flow", "connector"),
-                )?,
+                &SinkContext::dummy("gbq_writer"),
+                &mut EventSerializer::dummy(None)?,
                 0,
             )
             .await;
@@ -1386,7 +1287,6 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn on_event_fails_if_write_stream_is_not_conected() -> Result<()> {
-        let (rx, _tx) = bounded(1024);
         let config = Config::new(&literal!({
             "token": {"file": file!().to_string()},
             "table_id": "doesnotmatter",
@@ -1405,20 +1305,8 @@ mod test {
             .on_event(
                 "",
                 Event::signal_tick(),
-                &SinkContext::new(
-                    SinkId::default(),
-                    alias::Connector::new("flow", "connector"),
-                    ConnectorType::default(),
-                    QuiescenceBeacon::default(),
-                    ConnectionLostNotifier::new(rx),
-                ),
-                &mut EventSerializer::new(
-                    None,
-                    CodecReq::Structured,
-                    vec![],
-                    &ConnectorType::from(""),
-                    &alias::Connector::new("flow", "connector"),
-                )?,
+                &SinkContext::dummy("gbq_writer"),
+                &mut EventSerializer::dummy(None)?,
                 0,
             )
             .await;
@@ -1491,13 +1379,7 @@ mod test {
             }),
         );
 
-        let ctx = SinkContext::new(
-            SinkId::default(),
-            alias::Connector::new("flow", "connector"),
-            ConnectorType::default(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(crate::channel::bounded(1024).0),
-        );
+        let ctx = SinkContext::dummy("gbq_writer");
 
         sink.connect(&ctx, &Attempt::default()).await?;
 
@@ -1510,19 +1392,7 @@ mod test {
         event.transactional = true;
 
         let result = sink
-            .on_event(
-                "",
-                event,
-                &ctx,
-                &mut EventSerializer::new(
-                    None,
-                    CodecReq::Structured,
-                    vec![],
-                    &ConnectorType::from(""),
-                    &alias::Connector::new("flow", "connector"),
-                )?,
-                0,
-            )
+            .on_event("", event, &ctx, &mut EventSerializer::dummy(None)?, 0)
             .await?;
         assert_eq!(result.ack, SinkAck::Fail);
         assert_eq!(result.cb, CbAction::None);
@@ -1581,30 +1451,20 @@ mod test {
             }),
         );
 
-        let ctx = SinkContext::new(
-            SinkId::default(),
-            alias::Connector::new("flow", "connector"),
-            ConnectorType::default(),
-            QuiescenceBeacon::default(),
-            ConnectionLostNotifier::new(crate::channel::bounded(1024).0),
-        );
+        let ctx = SinkContext::dummy("gbq_writer");
 
         sink.connect(&ctx, &Attempt::default()).await?;
 
         let value = literal!([
             {
-                "data": {
-                    "value": {
-                        "a": "a".repeat(15*1024)
-                    },
-                    "meta": {}
-                }
+              "data": {
+               "value": {"a": "a".repeat(15*1024)},
+                "meta": {}
+              }
             },
             {
                 "data": {
-                    "value": {
-                        "a": "b".repeat(15*1024)
-                    },
+                    "value": {"a": "b".repeat(15*1024)},
                     "meta": {}
                 }
             }
@@ -1621,13 +1481,7 @@ mod test {
                     ..Default::default()
                 },
                 &ctx,
-                &mut EventSerializer::new(
-                    None,
-                    CodecReq::Structured,
-                    vec![],
-                    &ConnectorType::from(""),
-                    &alias::Connector::new("flow", "connector"),
-                )?,
+                &mut EventSerializer::dummy(None)?,
                 0,
             )
             .await?;

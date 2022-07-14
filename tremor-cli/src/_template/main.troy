@@ -1,2 +1,12 @@
-use lib::flows;
-deploy flow main from flows::main;
+define flow main
+flow
+  use lib::pipelines;
+  use tremor::connectors;
+
+  create connector console from connectors::console;
+  create pipeline main from pipelines::main;
+
+  connect /connector/console to /pipeline/main;
+  connect /pipeline/main to /connector/console;
+
+end;

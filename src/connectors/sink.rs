@@ -19,13 +19,15 @@ pub(crate) mod channel_sink;
 /// Utility for limiting concurrency (by sending `CB::Close` messages when a maximum concurrency value is reached)
 pub(crate) mod concurrency_cap;
 
+use super::{utils::metrics::SinkReporter, ConnectionLostNotifier, Msg, QuiescenceBeacon};
 use crate::{
     channel::{bounded, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender},
     config::Connector as ConnectorConfig,
     connectors::prelude::*,
     pipeline,
     primerge::PriorityMerge,
-    qsize,
+    qsize, raft,
+    system::flow::AppContext,
 };
 use futures::StreamExt; // for .next() on PriorityMerge
 use std::{
@@ -37,19 +39,13 @@ use std::{
 use tokio::task;
 use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
 use tremor_codec::{self as codec, Codec};
-use tremor_common::{
-    ids::{SinkId, SourceId},
-    ports::Port,
-    time::nanotime,
-};
+use tremor_common::time::nanotime;
 use tremor_interceptor::postprocessor::{
     self, finish, make_postprocessors, postprocess, Postprocessors,
 };
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::{ast::DeployEndpoint, EventPayload};
 use tremor_value::Value;
-
-use super::{metrics::SinkReporter, ConnectionLostNotifier, Msg, QuiescenceBeacon};
 
 pub(crate) type ReplySender = UnboundedSender<AsyncSinkReply>;
 
@@ -255,7 +251,7 @@ pub(crate) trait SinkRuntime: Send + Sync {
 #[derive(Clone)]
 pub(crate) struct SinkContextInner {
     /// the connector unique identifier
-    pub(crate) uid: SinkId,
+    pub(crate) uid: SinkUId,
     /// the connector alias
     pub(crate) alias: alias::Connector,
     /// the connector type
@@ -266,22 +262,46 @@ pub(crate) struct SinkContextInner {
 
     /// notifier the connector runtime if we lost a connection
     pub(crate) notifier: ConnectionLostNotifier,
+
+    /// sender for raft requests
+    /// Application Context
+    pub(crate) app_ctx: AppContext,
+
+    pub(crate) killswitch: KillSwitch,
 }
 #[derive(Clone)]
 pub(crate) struct SinkContext(Arc<SinkContextInner>);
 impl SinkContext {
-    pub(crate) fn uid(&self) -> SinkId {
+    #[cfg(test)]
+    pub(crate) fn dummy(ct: &str) -> Self {
+        let (tx, _rx) = bounded(1024);
+        Self::new(
+            SinkUId::default(),
+            Alias::from(ct),
+            ConnectorType::from(ct),
+            QuiescenceBeacon::default(),
+            ConnectionLostNotifier::new(tx),
+            AppContext::default(),
+            KillSwitch::dummy(),
+        )
+    }
+    pub(crate) fn killswitch(&self) -> KillSwitch {
+        self.0.killswitch.clone()
+    }
+    pub(crate) fn uid(&self) -> SinkUId {
         self.0.uid
     }
     pub(crate) fn notifier(&self) -> &ConnectionLostNotifier {
         &self.0.notifier
     }
     pub(crate) fn new(
-        uid: SinkId,
+        uid: SinkUId,
         alias: alias::Connector,
         connector_type: ConnectorType,
         quiescence_beacon: QuiescenceBeacon,
         notifier: ConnectionLostNotifier,
+        app_ctx: AppContext,
+        killswitch: KillSwitch,
     ) -> SinkContext {
         Self(Arc::new(SinkContextInner {
             uid,
@@ -289,34 +309,42 @@ impl SinkContext {
             connector_type,
             quiescence_beacon,
             notifier,
+            app_ctx,
+            killswitch,
         }))
+    }
+}
+
+impl Display for SinkContextInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}[Sink::{}]", self.app_ctx, self.alias)
     }
 }
 
 impl Display for SinkContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[Sink::{}]", &self.0.alias)
+        self.0.fmt(f)
     }
 }
 
 impl Context for SinkContext {
-    // fn uid(&self) -> &SinkId {
-    //     &self.0.uid
-    // }
     fn alias(&self) -> &alias::Connector {
         &self.0.alias
     }
-
     fn quiescence_beacon(&self) -> &QuiescenceBeacon {
         &self.0.quiescence_beacon
     }
-
     fn notifier(&self) -> &ConnectionLostNotifier {
         &self.0.notifier
     }
-
     fn connector_type(&self) -> &ConnectorType {
         &self.0.connector_type
+    }
+    fn raft(&self) -> &raft::Cluster {
+        &self.0.app_ctx.raft
+    }
+    fn app_ctx(&self) -> &AppContext {
+        &self.0.app_ctx
     }
 }
 
@@ -413,7 +441,6 @@ pub(crate) fn builder(
     config: &ConnectorConfig,
     connector_codec_requirement: CodecReq,
     alias: &alias::Connector,
-
     metrics_reporter: SinkReporter,
 ) -> Result<SinkManagerBuilder> {
     // resolve codec and processors
@@ -454,6 +481,21 @@ pub(crate) struct EventSerializer {
 }
 
 impl EventSerializer {
+    #[cfg(test)]
+    pub(crate) fn dummy(codec_config: Option<tremor_codec::Config>) -> Result<Self> {
+        let default = if codec_config.is_none() {
+            CodecReq::Structured
+        } else {
+            CodecReq::Required
+        };
+        Self::new(
+            codec_config,
+            default,
+            vec![],
+            &ConnectorType::from("dummy"),
+            &Alias::from("dummy"),
+        )
+    }
     pub(crate) fn new(
         codec_config: Option<tremor_codec::Config>,
         default_codec: CodecReq,
@@ -626,9 +668,9 @@ where
     // pipelines connected to IN port
     pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
     // set of source ids we received start signals from
-    starts_received: HashSet<SourceId>,
+    starts_received: HashSet<SourceUId>,
     // set of connector ids we received drain signals from
-    drains_received: HashSet<SourceId>, // TODO: use a bitset for both?
+    drains_received: HashSet<SourceUId>, // TODO: use a bitset for both?
     drain_channel: Option<Sender<Msg>>,
     state: SinkState,
 }

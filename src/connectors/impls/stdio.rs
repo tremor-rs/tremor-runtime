@@ -98,7 +98,6 @@ impl ConnectorBuilder for Builder {
         &self,
         _id: &alias::Connector,
         _raw_config: &ConnectorConfig,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(StdStreamConnector {}))
     }

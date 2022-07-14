@@ -35,7 +35,6 @@ use crate::errors::{ErrorKind, Result};
 use either::Either;
 use executable_graph::NodeConfig;
 use halfbrown::HashMap;
-use lazy_static::lazy_static;
 use petgraph::graph;
 use simd_json::OwnedValue;
 use std::collections::{BTreeMap, HashSet};
@@ -46,8 +45,8 @@ use std::str::FromStr;
 use std::{borrow::Borrow, cmp::Ordering};
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tremor_common::{
-    ids::{Id, OperatorId, SinkId, SourceId},
     ports::Port,
+    uids::{OperatorUId, SinkUId, SourceUId, UId},
 };
 use tremor_script::{
     ast::{self, Helper},
@@ -79,7 +78,7 @@ pub(crate) type ExecPortIndexMap = HashMap<(usize, Port<'static>), Vec<(usize, P
 /// A lookup function to used to look up operators
 pub type NodeLookupFn = fn(
     config: &NodeConfig,
-    uid: OperatorId,
+    uid: OperatorUId,
     node: Option<&ast::Stmt<'static>>,
     helper: &mut Helper<'static, '_>,
 ) -> Result<OperatorNode>;
@@ -90,8 +89,16 @@ pub struct MetricsChannel {
     tx: Sender<MetricsMsg>,
 }
 
+impl Default for MetricsChannel {
+    fn default() -> Self {
+        Self::new(128)
+    }
+}
+
 impl MetricsChannel {
-    pub(crate) fn new(qsize: usize) -> Self {
+    /// Creates a new metrics channel
+    #[must_use]
+    pub fn new(qsize: usize) -> Self {
         let (tx, _) = broadcast::channel(qsize);
         Self { tx }
     }
@@ -129,11 +136,6 @@ impl MetricsMsg {
 
 /// Sender for metrics
 pub type MetricsSender = Sender<MetricsMsg>;
-
-lazy_static! {
-    /// TODO do we want to change this number or can we make it configurable?
-    pub static ref METRICS_CHANNEL: MetricsChannel = MetricsChannel::new(128);
-}
 
 /// Stringified numeric key
 /// from <https://github.com/serde-rs/json-benchmark/blob/master/src/prim_str.rs>
@@ -194,23 +196,23 @@ where
 // TODO: optimization: - use two Vecs, one for operator ids, one for operator metadata (Values)
 //                     - make it possible to trace operators with and without metadata
 //                     - insert with bisect (numbers of operators tracked will be low single digit numbers most of the time)
-pub struct OpMeta(BTreeMap<PrimStr<OperatorId>, OwnedValue>);
+pub struct OpMeta(BTreeMap<PrimStr<OperatorUId>, OwnedValue>);
 
 impl OpMeta {
     /// inserts a value
-    pub fn insert<V>(&mut self, key: OperatorId, value: V) -> Option<OwnedValue>
+    pub fn insert<V>(&mut self, key: OperatorUId, value: V) -> Option<OwnedValue>
     where
         OwnedValue: From<V>,
     {
         self.0.insert(PrimStr(key), OwnedValue::from(value))
     }
     /// reads a value
-    pub fn get(&mut self, key: OperatorId) -> Option<&OwnedValue> {
+    pub fn get(&mut self, key: OperatorUId) -> Option<&OwnedValue> {
         self.0.get(&PrimStr(key))
     }
     /// checks existance of a key
     #[must_use]
-    pub fn contains_key(&self, key: OperatorId) -> bool {
+    pub fn contains_key(&self, key: OperatorUId) -> bool {
         self.0.contains_key(&PrimStr(key))
     }
 
@@ -285,9 +287,9 @@ pub enum CbAction {
     Fail,
     /// Notify all upstream sources that this sink has started, notifying them of its existence.
     /// Will be used for tracking for which sinks to wait during Drain.
-    SinkStart(SinkId),
+    SinkStart(SinkUId),
     /// answer to a `SignalKind::Drain(uid)` signal from a connector with the same uid
-    Drained(SourceId, SinkId),
+    Drained(SourceUId, SinkUId),
 }
 impl Default for CbAction {
     fn default() -> Self {
@@ -824,30 +826,30 @@ impl EventIdGenerator {
 
     #[must_use]
     /// create a new generator for the `Source` identified by `source_id` using the default stream id
-    pub fn new(source_id: SourceId) -> Self {
+    pub fn new(source_id: SourceUId) -> Self {
         Self(source_id.id(), DEFAULT_STREAM_ID, 0)
     }
 
     #[must_use]
     /// create a new generator for the `Operator` identified by `operator_id` using the default stream id
-    pub fn for_operator(operator_id: OperatorId) -> Self {
+    pub fn for_operator(operator_id: OperatorUId) -> Self {
         Self(operator_id.id(), DEFAULT_STREAM_ID, 0)
     }
 
     #[must_use]
     /// create a new generator for the `Operator` identified by `operator_id` with `stream_id`
-    pub fn for_operator_with_stream(operator_id: OperatorId, stream_id: u64) -> Self {
+    pub fn for_operator_with_stream(operator_id: OperatorUId, stream_id: u64) -> Self {
         Self(operator_id.id(), stream_id, 0)
     }
 
     #[must_use]
     /// create a new generator using the given source and stream id
-    pub fn new_with_stream(source_id: SourceId, stream_id: u64) -> Self {
+    pub fn new_with_stream(source_id: SourceUId, stream_id: u64) -> Self {
         Self(source_id.id(), stream_id, 0)
     }
 
     /// set the source id
-    pub fn set_source(&mut self, source_id: SourceId) {
+    pub fn set_source(&mut self, source_id: SourceUId) {
         self.0 = source_id.id();
     }
 
@@ -869,7 +871,7 @@ impl EventIdGenerator {
 pub enum SignalKind {
     // Lifecycle
     /// Start signal, containing the source uid which just started
-    Start(SourceId),
+    Start(SourceUId),
     /// Shutdown Signal
     Shutdown,
     // Pause, TODO debug trace
@@ -883,7 +885,7 @@ pub enum SignalKind {
     /// This signal must be answered with a Drain contraflow event containing the same uid (u64)
     /// this way a contraflow event will not be interpreted by connectors for which it isn't meant
     /// reception of such Drain contraflow event notifies the signal sender that the intermittent pipeline is drained and can be safely disconnected
-    Drain(SourceId),
+    Drain(SourceUId),
 }
 
 // We ignore this since it's a simple lookup table
@@ -922,7 +924,7 @@ fn factory(node: &NodeConfig) -> Result<Box<dyn InitializableOperator>> {
     Ok(factory)
 }
 
-fn operator(uid: OperatorId, node: &NodeConfig) -> Result<Box<dyn Operator + 'static>> {
+fn operator(uid: OperatorUId, node: &NodeConfig) -> Result<Box<dyn Operator + 'static>> {
     factory(node)?.node_to_operator(uid, node)
 }
 
@@ -966,9 +968,9 @@ mod test {
 
     #[test]
     fn op_meta_merge() {
-        let op_id1 = OperatorId::new(1);
-        let op_id2 = OperatorId::new(2);
-        let op_id3 = OperatorId::new(3);
+        let op_id1 = OperatorUId::new(1);
+        let op_id2 = OperatorUId::new(2);
+        let op_id3 = OperatorUId::new(3);
         let mut m1 = OpMeta::default();
         let mut m2 = OpMeta::default();
         m1.insert(op_id1, 1);
