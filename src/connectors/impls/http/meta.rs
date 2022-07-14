@@ -323,8 +323,6 @@ pub(super) fn extract_response_meta(response: &Response) -> Value<'static> {
 
 #[cfg(test)]
 mod test {
-    use crate::system::flow::FlowAlias;
-
     use super::*;
     #[async_std::test]
     async fn builder() -> Result<()> {
@@ -340,7 +338,7 @@ mod test {
             CodecReq::Optional("json"),
             vec![],
             &ConnectorType("http".into()),
-            &ConnectorAlias::new(FlowAlias::new("flow"), "http"),
+            &Alias::new("flow", "http"),
         )?;
         let config = client::Config::new(&c)?;
         let configured_codec = "json";

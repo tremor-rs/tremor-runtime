@@ -99,7 +99,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        id: &ConnectorAlias,
+        id: &Alias,
         _: &ConnectorConfig,
         raw_config: &Value,
         _kill_switch: &KillSwitch,
@@ -935,7 +935,7 @@ mod tests {
     use elasticsearch::http::request::Body;
 
     use super::*;
-    use crate::{config::Connector as ConnectorConfig, system::flow::FlowAlias};
+    use crate::config::Connector as ConnectorConfig;
 
     #[async_std::test]
     async fn connector_builder_empty_nodes() -> Result<()> {
@@ -944,7 +944,7 @@ mod tests {
                 "nodes": []
             }
         });
-        let alias = ConnectorAlias::new(FlowAlias::new("flow"), "my_elastic");
+        let alias = Alias::new("flow", "my_elastic");
         let builder = super::Builder::default();
         let connector_config =
             ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;
@@ -973,7 +973,7 @@ mod tests {
                 ]
             }
         });
-        let alias = ConnectorAlias::new(FlowAlias::new("snot"), "my_elastic");
+        let alias = Alias::new("snot", "my_elastic");
         let builder = super::Builder::default();
         let connector_config =
             ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;

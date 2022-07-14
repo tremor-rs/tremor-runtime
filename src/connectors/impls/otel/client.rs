@@ -67,7 +67,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _id: &ConnectorAlias,
+        _id: &Alias,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
@@ -204,13 +204,11 @@ impl Sink for OtelSink {
 
 #[cfg(test)]
 mod tests {
-    use crate::system::flow::FlowAlias;
-
     use super::*;
 
     #[async_std::test]
     async fn otel_client_builder() -> Result<()> {
-        let alias = ConnectorAlias::new(FlowAlias::new("flow"), "my_otel_client");
+        let alias = Alias::new("flow", "my_otel_client");
         let with_processors = literal!({
             "config": {
                 "host": "localhost",

@@ -60,7 +60,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build(
         &self,
-        _id: &ConnectorAlias,
+        _id: &Alias,
         config: &ConnectorConfig,
         kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {

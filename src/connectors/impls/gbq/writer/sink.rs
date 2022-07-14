@@ -450,7 +450,6 @@ mod test {
     use crate::connectors::impls::gbq;
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use crate::connectors::tests::ConnectorHarness;
-    use crate::system::flow::FlowAlias;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
     use std::sync::Arc;
     use value_trait::StaticNode;
@@ -473,7 +472,7 @@ mod test {
             }],
             &SinkContext {
                 uid: Default::default(),
-                alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
+                alias: Alias::new("flow", "connector"),
                 connector_type: Default::default(),
                 quiescence_beacon: Default::default(),
                 notifier: ConnectionLostNotifier::new(rx),
@@ -502,7 +501,7 @@ mod test {
             }],
             &SinkContext {
                 uid: Default::default(),
-                alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
+                alias: Alias::new("flow", "connector"),
                 connector_type: Default::default(),
                 quiescence_beacon: Default::default(),
                 notifier: ConnectionLostNotifier::new(rx),
@@ -540,7 +539,7 @@ mod test {
                 }],
                 &SinkContext {
                     uid: Default::default(),
-                    alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
+                    alias: Alias::new("flow", "connector"),
                     connector_type: Default::default(),
                     quiescence_beacon: Default::default(),
                     notifier: ConnectionLostNotifier::new(rx),
@@ -580,7 +579,7 @@ mod test {
             }],
             &SinkContext {
                 uid: Default::default(),
-                alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
+                alias: Alias::new("flow", "connector"),
                 connector_type: Default::default(),
                 quiescence_beacon: Default::default(),
                 notifier: ConnectionLostNotifier::new(rx),
@@ -805,7 +804,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
+            alias: Alias::new("flow", "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -854,7 +853,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
+            alias: Alias::new("flow", "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -898,7 +897,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
+            alias: Alias::new("flow", "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -943,7 +942,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
+            alias: Alias::new("flow", "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -986,7 +985,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
+            alias: Alias::new("flow", "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -1021,7 +1020,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
+            alias: Alias::new("flow", "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -1081,7 +1080,7 @@ mod test {
                 Event::signal_tick(),
                 &SinkContext {
                     uid: Default::default(),
-                    alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
+                    alias: Alias::new("flow", "connector"),
                     connector_type: Default::default(),
                     quiescence_beacon: Default::default(),
                     notifier: ConnectionLostNotifier::new(rx),
@@ -1091,7 +1090,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
+                    &Alias::new("flow", "connector"),
                 )
                 .unwrap(),
                 0,
@@ -1126,7 +1125,7 @@ mod test {
                 Event::signal_tick(),
                 &SinkContext {
                     uid: Default::default(),
-                    alias: ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
+                    alias: Alias::new("flow", "connector"),
                     connector_type: Default::default(),
                     quiescence_beacon: Default::default(),
                     notifier: ConnectionLostNotifier::new(rx),
@@ -1136,7 +1135,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    &ConnectorAlias::new(FlowAlias::new("flow"), "connector"),
+                    &Alias::new("flow", "connector"),
                 )
                 .unwrap(),
                 0,

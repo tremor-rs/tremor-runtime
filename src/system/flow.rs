@@ -36,11 +36,10 @@ use tremor_script::{
 };
 
 /// unique identifier of a flow instance within a tremor instance
-#[allow(clippy::module_name_repetitions)]
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
-pub struct FlowAlias(String);
+pub struct Alias(String);
 
-impl FlowAlias {
+impl Alias {
     /// construct a new flow if from some stringy thingy
     pub fn new(alias: impl Into<String>) -> Self {
         Self(alias.into())
@@ -53,84 +52,27 @@ impl FlowAlias {
     }
 }
 
-impl From<&DeployFlow<'_>> for FlowAlias {
+impl From<&DeployFlow<'_>> for Alias {
     fn from(f: &DeployFlow) -> Self {
-        FlowAlias(f.instance_alias.to_string())
+        Self(f.instance_alias.to_string())
     }
 }
 
-impl From<&str> for FlowAlias {
+impl From<&str> for Alias {
     fn from(e: &str) -> Self {
-        FlowAlias(e.to_string())
+        Self(e.to_string())
     }
 }
 
-impl std::fmt::Display for FlowAlias {
+impl From<String> for Alias {
+    fn from(alias: String) -> Self {
+        Self(alias)
+    }
+}
+
+impl std::fmt::Display for Alias {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
-    }
-}
-
-/// unique instance alias/id of a connector within a deployment
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
-pub struct ConnectorAlias {
-    flow_alias: FlowAlias,
-    connector_alias: String,
-}
-
-impl ConnectorAlias {
-    /// construct a new `ConnectorId` from the id of the containing flow and the connector instance id
-    pub fn new(flow_alias: FlowAlias, connector_alias: impl Into<String>) -> Self {
-        Self {
-            flow_alias,
-            connector_alias: connector_alias.into(),
-        }
-    }
-
-    /// get a reference to the flow alias
-    #[must_use]
-    pub fn flow_alias(&self) -> &FlowAlias {
-        &self.flow_alias
-    }
-
-    /// get a reference to the connector alias
-    #[must_use]
-    pub fn connector_alias(&self) -> &str {
-        self.connector_alias.as_str()
-    }
-}
-
-impl std::fmt::Display for ConnectorAlias {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}::{}", self.flow_alias, self.connector_alias)
-    }
-}
-
-#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
-pub(crate) struct PipelineAlias {
-    flow_alias: FlowAlias,
-    pipeline_alias: String,
-}
-
-impl PipelineAlias {
-    pub(crate) fn new(flow_alias: FlowAlias, pipeline_alias: impl Into<String>) -> Self {
-        Self {
-            flow_alias,
-            pipeline_alias: pipeline_alias.into(),
-        }
-    }
-
-    pub(crate) fn flow_alias(&self) -> &FlowAlias {
-        &self.flow_alias
-    }
-    pub(crate) fn pipeline_alias(&self) -> &str {
-        self.pipeline_alias.as_str()
-    }
-}
-
-impl std::fmt::Display for PipelineAlias {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}::{}", self.flow_alias, self.pipeline_alias)
     }
 }
 
@@ -152,7 +94,7 @@ pub(crate) enum Msg {
     /// The sender expects a Result, which makes it easier to signal errors on the message handling path to the sender
     Report(Sender<Result<StatusReport>>),
     /// Get the addr for a single connector
-    GetConnector(ConnectorAlias, Sender<Result<connectors::Addr>>),
+    GetConnector(connectors::Alias, Sender<Result<connectors::Addr>>),
     /// Get the addresses for all connectors of this flow
     GetConnectors(Sender<Result<Vec<connectors::Addr>>>),
 }
@@ -161,7 +103,7 @@ type Addr = Sender<Msg>;
 /// A deployed Flow instance
 #[derive(Debug, Clone)]
 pub struct Flow {
-    alias: FlowAlias,
+    alias: Alias,
     addr: Addr,
 }
 
@@ -169,15 +111,15 @@ pub struct Flow {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StatusReport {
     /// the id of the instance this report describes
-    pub alias: FlowAlias,
+    pub alias: Alias,
     /// the current state
     pub status: State,
     /// the crated connectors
-    pub connectors: Vec<String>,
+    pub connectors: Vec<connectors::Alias>,
 }
 
 impl Flow {
-    pub(crate) fn id(&self) -> &FlowAlias {
+    pub(crate) fn id(&self) -> &Alias {
         &self.alias
     }
     pub(crate) async fn stop(&self, tx: Sender<Result<()>>) -> Result<()> {
@@ -201,10 +143,12 @@ impl Flow {
     ///
     /// # Errors
     /// if the flow is not running anymore and can't be reached or if the connector is not part of the flow
-    pub async fn get_connector(&self, connector_id: String) -> Result<connectors::Addr> {
-        let connector_id = ConnectorAlias::new(self.id().clone(), connector_id);
+    pub async fn get_connector(&self, connector_alias: String) -> Result<connectors::Addr> {
+        let connector_alias = connectors::Alias::new(self.id().clone(), connector_alias);
         let (tx, rx) = bounded(1);
-        self.addr.send(Msg::GetConnector(connector_id, tx)).await?;
+        self.addr
+            .send(Msg::GetConnector(connector_alias, tx))
+            .await?;
         rx.recv().await?
     }
 
@@ -245,7 +189,7 @@ impl Flow {
     ) -> Result<Self> {
         let mut pipelines = HashMap::new();
         let mut connectors = HashMap::new();
-        let flow_alias = FlowAlias::from(&flow);
+        let flow_alias = Alias::from(&flow);
 
         for create in &flow.defn.creates {
             let alias: &str = &create.instance_alias;
@@ -253,7 +197,7 @@ impl Flow {
                 ast::CreateTargetDefinition::Connector(defn) => {
                     let mut defn = defn.clone();
                     defn.params.ingest_creational_with(&create.with)?;
-                    let connector_alias = ConnectorAlias::new(flow_alias.clone(), alias);
+                    let connector_alias = connectors::Alias::new(flow_alias.clone(), alias);
                     let config = crate::Connector::from_defn(&connector_alias, &defn)?;
                     let builder =
                         known_connectors
@@ -281,7 +225,7 @@ impl Flow {
 
                         defn.to_query(&create.with, &mut helper)?
                     };
-                    let pipeline_alias = PipelineAlias::new(flow_alias.clone(), alias);
+                    let pipeline_alias = pipeline::Alias::new(flow_alias.clone(), alias);
                     let pipeline = tremor_pipeline::query::Query(
                         tremor_script::query::Query::from_query(query),
                     );
@@ -442,7 +386,7 @@ async fn link(
 /// task handling flow instance control plane
 #[allow(clippy::too_many_lines)]
 async fn spawn_task(
-    id: FlowAlias,
+    id: Alias,
     pipelines: HashMap<String, pipeline::Addr>,
     connectors: HashMap<String, connectors::Addr>,
     links: &[ConnectStmt],
@@ -649,7 +593,10 @@ async fn spawn_task(
                 }
                 MsgWrapper::Msg(Msg::Report(sender)) => {
                     // TODO: aggregate states of all containing instances
-                    let connectors = connectors.keys().cloned().collect();
+                    let connectors = connectors
+                        .keys()
+                        .map(|c| connectors::Alias::new(id.clone(), c))
+                        .collect();
                     let report = StatusReport {
                         alias: id.clone(),
                         status: state,
@@ -660,17 +607,17 @@ async fn spawn_task(
                         "{prefix} Error sending status report: {e}"
                     );
                 }
-                MsgWrapper::Msg(Msg::GetConnector(connector_id, reply_tx)) => {
+                MsgWrapper::Msg(Msg::GetConnector(connector_alias, reply_tx)) => {
                     log_error!(
                         reply_tx
                             .send(
                                 connectors
-                                    .get(&connector_id.connector_alias)
+                                    .get(&connector_alias.connector_alias().to_string())
                                     .cloned()
                                     .ok_or_else(|| {
                                         ErrorKind::ConnectorNotFound(
-                                            connector_id.flow_alias().to_string(),
-                                            connector_id.connector_alias().to_string(),
+                                            connector_alias.flow_alias().to_string(),
+                                            connector_alias.connector_alias().to_string(),
                                         )
                                         .into()
                                     })
@@ -870,7 +817,7 @@ mod tests {
             }
             async fn build(
                 &self,
-                _alias: &ConnectorAlias,
+                _alias: &Alias,
                 _config: &ConnectorConfig,
                 _kill_switch: &KillSwitch,
             ) -> Result<Box<dyn Connector>> {

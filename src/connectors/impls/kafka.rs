@@ -14,10 +14,7 @@
 pub(crate) mod consumer;
 pub(crate) mod producer;
 
-use crate::{
-    connectors::{metrics::make_metrics_payload, prelude::ConnectorAlias, Context},
-    errors::{err_connector_def, Result},
-};
+use crate::connectors::prelude::*;
 use async_broadcast::Sender as BroadcastSender;
 use async_std::{channel::Sender, task::JoinHandle};
 use beef::Cow;
@@ -55,7 +52,7 @@ impl AsyncRuntime for SmolRuntime {
 }
 
 /// verify broker host:port pairs in kafka connector configs
-fn verify_brokers(alias: &ConnectorAlias, brokers: &[String]) -> Result<(String, Option<u16>)> {
+fn verify_brokers(alias: &Alias, brokers: &[String]) -> Result<(String, Option<u16>)> {
     let mut first_broker: Option<(String, Option<u16>)> = None;
     for broker in brokers {
         match broker.split(':').collect::<Vec<_>>().as_slice() {
