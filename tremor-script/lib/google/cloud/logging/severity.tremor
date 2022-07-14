@@ -1,0 +1,27 @@
+
+## The log entry has no assigned severity level.
+const DEFAULT	=	0;
+
+## Debug or trace information.
+const DEBUG	=	100;
+
+## Routine information, such as ongoing status or performance.
+const INFO	=	200;
+
+## Normal but significant events, such as start up, shut down, or a configuration change.
+const NOTICE	=	300;
+
+## Warning events might cause problems.
+const WARNING	=	400;
+
+## Error events are likely to cause problems.
+const ERROR	=	500;
+
+## Critical events cause more severe problems or outages.
+const CRITICAL	=	600;
+
+## A person must take an action immediately.
+const ALERT	=	700;
+
+## One or more systems are unusable.
+const EMERGENCY	=	800;

@@ -97,7 +97,7 @@ pub(crate) struct Config {
     pub default_severity: i32,
 
     /// This setting sets a default set of labels that can be overriden on a per event
-    /// // basis through metadata
+    /// basis through metadata
     #[serde(default = "Default::default")]
     pub labels: HashMap<String, String>,
 }
@@ -180,6 +180,7 @@ fn value_to_monitored_resource(
         Some(from) => {
             let vt = from.value_type();
             match from {
+                // Consider refactoring for unwrap_or_default when #1819 is resolved
                 OwnedValue::Object(from) => {
                     let kind = from.get("type");
                     let kind = kind.as_str();

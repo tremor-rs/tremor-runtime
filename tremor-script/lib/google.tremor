@@ -1,0 +1,14 @@
+### <p align="center">
+###   <img src="https://raw.githubusercontent.com/cncf/artwork/master/other/cncf/horizontal/color/cncf-color.png" width='35%'/>
+### </p>
+###
+### <hr/>
+###
+### # The Tremor language GCP library.
+###
+### It provides the following modules for the Google Cloud Platform
+###
+### * [cloud::logging](cloud/logging.md) - functionality related to `Cloud Logging v2`
+###
+
+use google::cloud;
