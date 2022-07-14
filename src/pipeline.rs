@@ -16,7 +16,7 @@ use crate::{
     errors::Result,
     instance::State,
     primerge::PriorityMerge,
-    system::flow::PipelineAlias,
+    system::flow,
 };
 use async_std::{
     channel::{bounded, unbounded, Receiver, Sender},
@@ -35,13 +35,45 @@ const TICK_MS: u64 = 100;
 type Inputs = halfbrown::HashMap<DeployEndpoint, (bool, InputTarget)>;
 type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(DeployEndpoint, OutputTarget)>>;
 type EventSet = Vec<(Cow<'static, str>, Event)>;
+
+#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
+pub(crate) struct Alias {
+    flow_alias: flow::Alias,
+    pipeline_alias: String,
+}
+
+impl Alias {
+    pub(crate) fn new(
+        flow_alias: impl Into<flow::Alias>,
+        pipeline_alias: impl Into<String>,
+    ) -> Self {
+        Self {
+            flow_alias: flow_alias.into(),
+            pipeline_alias: pipeline_alias.into(),
+        }
+    }
+
+    pub(crate) fn flow_alias(&self) -> &flow::Alias {
+        &self.flow_alias
+    }
+    pub(crate) fn pipeline_alias(&self) -> &str {
+        self.pipeline_alias.as_str()
+    }
+}
+
+impl std::fmt::Display for Alias {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}::{}", self.flow_alias, self.pipeline_alias)
+    }
+}
+
 /// Address for a pipeline
 #[derive(Clone)]
 pub struct Addr {
     addr: Sender<Box<Msg>>,
     cf_addr: Sender<CfMsg>,
     mgmt_addr: Sender<MgmtMsg>,
-    alias: PipelineAlias,
+    alias: Alias,
 }
 
 impl Addr {
@@ -51,7 +83,7 @@ impl Addr {
         addr: Sender<Box<Msg>>,
         cf_addr: Sender<CfMsg>,
         mgmt_addr: Sender<MgmtMsg>,
-        alias: PipelineAlias,
+        alias: Alias,
     ) -> Self {
         Self {
             addr,
@@ -144,7 +176,7 @@ impl TryFrom<connectors::Addr> for OutputTarget {
 }
 
 pub(crate) fn spawn(
-    pipeline_alias: PipelineAlias,
+    pipeline_alias: Alias,
     config: &tremor_pipeline::query::Query,
     operator_id_gen: &mut OperatorIdGen,
 ) -> Result<Addr> {
@@ -359,7 +391,7 @@ async fn send_events(eventset: &mut EventSet, dests: &mut Dests) -> Result<()> {
 }
 
 #[inline]
-async fn send_signal(own_id: &PipelineAlias, signal: Event, dests: &mut Dests) -> Result<()> {
+async fn send_signal(own_id: &Alias, signal: Event, dests: &mut Dests) -> Result<()> {
     let mut destinations = dests.values_mut().flatten();
     let first = destinations.next();
     for (id, dest) in destinations {
@@ -444,25 +476,36 @@ fn maybe_send(r: Result<()>) {
     }
 }
 
+/// Context for pipeline instances
+///
+/// currently only used for printing
 struct PipelineContext {
-    id: String,
+    alias: Alias,
 }
 
 impl std::fmt::Display for PipelineContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[Pipeline::{}]", &self.id)
+        write!(f, "[Pipeline::{}]", &self.alias)
     }
 }
 
-impl From<&PipelineAlias> for PipelineContext {
-    fn from(id: &PipelineAlias) -> Self {
-        Self { id: id.to_string() }
+impl From<&Alias> for PipelineContext {
+    fn from(alias: &Alias) -> Self {
+        Self {
+            alias: alias.clone(),
+        }
+    }
+}
+
+impl From<Alias> for PipelineContext {
+    fn from(alias: Alias) -> Self {
+        Self { alias }
     }
 }
 
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn pipeline_task(
-    id: PipelineAlias,
+    id: Alias,
     mut pipeline: ExecutableGraph,
     addr: Addr,
     rx: Receiver<Box<Msg>>,
@@ -638,7 +681,6 @@ mod tests {
     use crate::{
         connectors::{prelude::SinkAddr, source::SourceAddr},
         pipeline::report::{InputReport, OutputReport},
-        system::flow::FlowAlias,
     };
     use std::time::Instant;
     use tremor_common::{
@@ -656,21 +698,20 @@ mod tests {
         let mut operator_id_gen = OperatorIdGen::new();
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();
-        let flow_id = FlowAlias::new("report");
         let query =
             tremor_pipeline::query::Query::parse(trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let addr = spawn(
-            PipelineAlias::new(flow_id.clone(), "test-pipe1"),
+            Alias::new("report", "test-pipe1"),
             &query,
             &mut operator_id_gen,
         )?;
         let addr2 = spawn(
-            PipelineAlias::new(flow_id.clone(), "test-pipe2"),
+            Alias::new("report", "test-pipe2"),
             &query,
             &mut operator_id_gen,
         )?;
         let addr3 = spawn(
-            PipelineAlias::new(flow_id.clone(), "test-pipe3"),
+            Alias::new("report", "test-pipe3"),
             &query,
             &mut operator_id_gen,
         )?;
@@ -772,7 +813,7 @@ mod tests {
         let mut operator_id_gen = OperatorIdGen::new();
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();
-        let pipeline_id = PipelineAlias::new(FlowAlias::new("flow"), "test-pipe");
+        let pipeline_id = Alias::new("flow", "test-pipe");
         let query =
             tremor_pipeline::query::Query::parse(trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
         let addr = spawn(pipeline_id, &query, &mut operator_id_gen)?;

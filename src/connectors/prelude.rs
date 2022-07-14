@@ -27,11 +27,11 @@ pub(crate) use crate::connectors::utils::{
     url::{Defaults, Url},
 };
 pub(crate) use crate::connectors::{
-    spawn_task, CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context,
-    StreamDone, StreamIdGen, ACCEPT_TIMEOUT,
+    metrics::make_metrics_payload, spawn_task, Alias, CodecReq, Connector, ConnectorBuilder,
+    ConnectorContext, ConnectorType, Context, StreamDone, StreamIdGen, ACCEPT_TIMEOUT,
 };
-pub(crate) use crate::errors::{Error, Kind as ErrorKind, Result};
-pub(crate) use crate::system::{flow::ConnectorAlias, KillSwitch};
+pub(crate) use crate::errors::{err_connector_def, Error, Kind as ErrorKind, Result};
+pub(crate) use crate::system::KillSwitch;
 pub(crate) use crate::utils::hostname;
 pub(crate) use crate::{Event, QSIZE};
 pub(crate) use std::sync::atomic::Ordering;

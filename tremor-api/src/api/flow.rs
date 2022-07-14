@@ -14,16 +14,18 @@
 
 //! Flow API
 
-use crate::api::prelude::*;
-use tremor_runtime::instance::State;
+use crate::{
+    api::prelude::*,
+    model::{ApiConnectorStatusReport, ApiFlowStatusReport, PatchStatus},
+};
 
 pub(crate) async fn list_flows(req: Request) -> Result<Response> {
     let world = &req.state().world;
     let flows = world.get_flows().await?;
-    let mut result = Vec::with_capacity(flows.len());
+    let mut result: Vec<ApiFlowStatusReport> = Vec::with_capacity(flows.len());
     for flow in flows {
         let status = flow.report_status().await?;
-        result.push(status);
+        result.push(status.into());
     }
     reply(&req, result, StatusCode::Ok)
 }
@@ -33,12 +35,7 @@ pub(crate) async fn get_flow(req: Request) -> Result<Response> {
     let flow_id = req.param("id")?.to_string();
     let flow = world.get_flow(flow_id).await?;
     let report = flow.report_status().await?;
-    reply(&req, report, StatusCode::Ok)
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct PatchStatus {
-    pub(crate) status: State,
+    reply(&req, ApiFlowStatusReport::from(report), StatusCode::Ok)
 }
 
 pub(crate) async fn patch_flow_status(mut req: Request) -> Result<Response> {
@@ -52,12 +49,12 @@ pub(crate) async fn patch_flow_status(mut req: Request) -> Result<Response> {
             // desired status == current status
             current_status
         }
-        (State::Running, State::Paused) => {
+        (InstanceState::Running, InstanceState::Paused) => {
             flow.pause().await?;
             flow.report_status().await?
         }
 
-        (State::Paused, State::Running) => {
+        (InstanceState::Paused, InstanceState::Running) => {
             flow.resume().await?;
             flow.report_status().await?
         }
@@ -69,7 +66,7 @@ pub(crate) async fn patch_flow_status(mut req: Request) -> Result<Response> {
             )));
         }
     };
-    reply(&req, report, StatusCode::Ok)
+    reply(&req, ApiFlowStatusReport::from(report), StatusCode::Ok)
 }
 
 pub(crate) async fn get_flow_connectors(req: Request) -> Result<Response> {
@@ -77,10 +74,10 @@ pub(crate) async fn get_flow_connectors(req: Request) -> Result<Response> {
     let flow_id = req.param("id")?.to_string();
     let flow = world.get_flow(flow_id).await?;
     let connectors = flow.get_connectors().await?;
-    let mut result = Vec::with_capacity(connectors.len());
+    let mut result: Vec<ApiConnectorStatusReport> = Vec::with_capacity(connectors.len());
     for connector in connectors {
         let status = connector.report_status().await?;
-        result.push(status);
+        result.push(status.into());
     }
     reply(&req, result, StatusCode::Ok)
 }
@@ -93,7 +90,7 @@ pub(crate) async fn get_flow_connector_status(req: Request) -> Result<Response> 
 
     let connector = flow.get_connector(connector_id).await?;
     let report = connector.report_status().await?;
-    reply(&req, report, StatusCode::Ok)
+    reply(&req, ApiConnectorStatusReport::from(report), StatusCode::Ok)
 }
 
 pub(crate) async fn patch_flow_connector_status(mut req: Request) -> Result<Response> {
@@ -105,17 +102,17 @@ pub(crate) async fn patch_flow_connector_status(mut req: Request) -> Result<Resp
     let flow = world.get_flow(flow_id.clone()).await?;
     let connector = flow.get_connector(connector_id.clone()).await?;
     let current_status = connector.report_status().await?;
-    let report = match (current_status.status, patch_status_payload.status) {
-        (state1, state2) if state1 == state2 => {
+    let report = match (current_status.status(), patch_status_payload.status) {
+        (state1, state2) if *state1 == state2 => {
             // desired status == current status
             current_status
         }
-        (State::Running, State::Paused) => {
+        (InstanceState::Running, InstanceState::Paused) => {
             connector.pause().await?;
             connector.report_status().await?
         }
 
-        (State::Paused, State::Running) => {
+        (InstanceState::Paused, InstanceState::Running) => {
             connector.resume().await?;
             connector.report_status().await?
         }
@@ -125,5 +122,5 @@ pub(crate) async fn patch_flow_connector_status(mut req: Request) -> Result<Resp
             return Err(Error::bad_request(format!("Cannot patch status of connector {connector_id} in flow {flow_id} from {current} to {desired}")));
         }
     };
-    reply(&req, report, StatusCode::Ok)
+    reply(&req, ApiConnectorStatusReport::from(report), StatusCode::Ok)
 }

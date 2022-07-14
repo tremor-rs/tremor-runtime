@@ -58,11 +58,14 @@ mod bench;
 
 use crate::{
     config,
-    connectors::{self, builtin_connector_types, source::SourceMsg, Connectivity, StatusReport},
+    connectors::{
+        self, builtin_connector_types, source::SourceMsg, Alias as ConnectorAlias, Connectivity,
+        StatusReport,
+    },
     errors::Result,
     instance::State,
     pipeline,
-    system::flow::{ConnectorAlias, FlowAlias, PipelineAlias},
+    system::flow::Alias as FlowAlias,
     Event, QSIZE,
 };
 use async_std::{
@@ -96,7 +99,7 @@ impl ConnectorHarness {
         input_ports: Vec<Cow<'static, str>>,
         output_ports: Vec<Cow<'static, str>>,
     ) -> Result<Self> {
-        let alias = ConnectorAlias::new(FlowAlias::new("test"), alias);
+        let alias = ConnectorAlias::new("test", alias);
         let mut connector_id_gen = ConnectorIdGen::new();
         let mut known_connectors = HashMap::new();
 
@@ -354,7 +357,7 @@ impl TestPipeline {
         let (tx, rx) = bounded(qsize);
         let (tx_cf, rx_cf) = bounded(qsize);
         let (tx_mgmt, rx_mgmt) = bounded(qsize);
-        let pipeline_id = PipelineAlias::new(flow_id, alias);
+        let pipeline_id = pipeline::Alias::new(flow_id, alias);
         let addr = pipeline::Addr::new(tx, tx_cf, tx_mgmt, pipeline_id);
         Self {
             rx,

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::flow::{Flow, FlowAlias};
+use super::flow::{Alias, Flow};
 use super::KillSwitch;
 use crate::errors::{Kind as ErrorKind, Result};
 use crate::system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
@@ -45,7 +45,7 @@ pub(crate) enum Msg {
         builder: Box<dyn ConnectorBuilder>,
     },
     GetFlows(Sender<Result<Vec<Flow>>>),
-    GetFlow(FlowAlias, Sender<Result<Flow>>),
+    GetFlow(Alias, Sender<Result<Flow>>),
     /// Initiate the Quiescence process
     Drain(Sender<Result<()>>),
     /// stop this manager
@@ -54,7 +54,7 @@ pub(crate) enum Msg {
 
 #[derive(Debug)]
 pub(crate) struct FlowSupervisor {
-    flows: HashMap<FlowAlias, Flow>,
+    flows: HashMap<Alias, Flow>,
     operator_id_gen: OperatorIdGen,
     connector_id_gen: ConnectorIdGen,
     known_connectors: connectors::Known,
@@ -88,7 +88,7 @@ impl FlowSupervisor {
         sender: Sender<Result<()>>,
         kill_switch: &KillSwitch,
     ) {
-        let id = FlowAlias::from(&flow);
+        let id = Alias::from(&flow);
         let res = match self.flows.entry(id.clone()) {
             Entry::Occupied(_occupied) => Err(ErrorKind::DuplicateFlow(id.to_string()).into()),
             Entry::Vacant(vacant) => Flow::start(
@@ -115,7 +115,7 @@ impl FlowSupervisor {
             "Error sending ListFlows response: {e}"
         );
     }
-    async fn handle_get_flow(&self, id: FlowAlias, reply_tx: Sender<Result<Flow>>) {
+    async fn handle_get_flow(&self, id: Alias, reply_tx: Sender<Result<Flow>>) {
         log_error!(
             reply_tx
                 .send(

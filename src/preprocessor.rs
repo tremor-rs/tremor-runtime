@@ -17,8 +17,8 @@ pub(crate) mod gelf;
 pub(crate) mod separate;
 
 use crate::config::Preprocessor as PreprocessorConfig;
+use crate::connectors::Alias;
 use crate::errors::{Error, Result};
-use crate::system::flow::ConnectorAlias;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::{buf::Buf, BytesMut};
 use std::str;
@@ -103,7 +103,7 @@ pub fn preprocess(
     preprocessors: &mut [Box<dyn Preprocessor>],
     ingest_ns: &mut u64,
     data: Vec<u8>,
-    alias: &ConnectorAlias,
+    alias: &Alias,
 ) -> Result<Vec<Vec<u8>>> {
     let mut data = vec![data];
     let mut data1 = Vec::new();
@@ -128,10 +128,7 @@ pub fn preprocess(
 /// # Errors
 ///
 /// * If a preprocessor failed
-pub fn finish(
-    preprocessors: &mut [Box<dyn Preprocessor>],
-    alias: &ConnectorAlias,
-) -> Result<Vec<Vec<u8>>> {
+pub fn finish(preprocessors: &mut [Box<dyn Preprocessor>], alias: &Alias) -> Result<Vec<Vec<u8>>> {
     if let Some((head, tail)) = preprocessors.split_first_mut() {
         let mut data = match head.finish(None) {
             Ok(d) => d,
@@ -303,7 +300,6 @@ mod test {
     use super::*;
     use crate::postprocessor::{self as post, separate::Separate as SeparatePost, Postprocessor};
     use crate::preprocessor::{self as pre, separate::Separate, Preprocessor};
-    use crate::system::flow::FlowAlias;
     #[test]
     fn ingest_ts() -> Result<()> {
         let mut pre_p = pre::ExtractIngestTs {};
@@ -455,7 +451,7 @@ mod test {
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         let wire = post_p.process(0, 0, &data)?;
         let (start, end) = wire[0].split_at(7);
-        let alias = ConnectorAlias::new(FlowAlias::new("test"), "test");
+        let alias = Alias::new("test", "test");
         let mut pps: Vec<Box<dyn Preprocessor>> = vec![Box::new(pre_p)];
         let recv = preprocess(pps.as_mut_slice(), &mut it, start.to_vec(), &alias)?;
         assert!(recv.is_empty());

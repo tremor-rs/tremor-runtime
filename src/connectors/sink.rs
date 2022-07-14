@@ -28,12 +28,11 @@ use crate::config::{
     Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
 };
 use crate::connectors::utils::reconnect::{Attempt, ConnectionLostNotifier};
-use crate::connectors::{ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone};
+use crate::connectors::{Alias, ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone};
 use crate::errors::Result;
 use crate::pipeline;
 use crate::postprocessor::{finish, make_postprocessors, postprocess, Postprocessors};
 use crate::primerge::PriorityMerge;
-use crate::system::flow::ConnectorAlias;
 use async_std::channel::{bounded, unbounded, Receiver, Sender};
 use async_std::stream::StreamExt; // for .next() on PriorityMerge
 use async_std::task;
@@ -253,7 +252,7 @@ pub(crate) struct SinkContext {
     /// the connector unique identifier
     pub(crate) uid: SinkId,
     /// the connector alias
-    pub(crate) alias: ConnectorAlias,
+    pub(crate) alias: Alias,
     /// the connector type
     pub(crate) connector_type: ConnectorType,
 
@@ -271,7 +270,7 @@ impl Display for SinkContext {
 }
 
 impl Context for SinkContext {
-    fn alias(&self) -> &ConnectorAlias {
+    fn alias(&self) -> &Alias {
         &self.alias
     }
 
@@ -389,7 +388,7 @@ impl SinkManagerBuilder {
 pub(crate) fn builder(
     config: &ConnectorConfig,
     connector_codec_requirement: CodecReq,
-    alias: &ConnectorAlias,
+    alias: &Alias,
     qsize: usize,
     metrics_reporter: SinkReporter,
 ) -> Result<SinkManagerBuilder> {
@@ -436,7 +435,7 @@ impl EventSerializer {
         default_codec: CodecReq,
         postprocessor_configs: Vec<PostprocessorConfig>,
         connector_type: &ConnectorType,
-        alias: &ConnectorAlias,
+        alias: &Alias,
     ) -> Result<Self> {
         let codec_config = match default_codec {
             CodecReq::Structured => {

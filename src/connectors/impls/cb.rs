@@ -54,7 +54,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _: &ConnectorAlias,
+        _: &Alias,
         _: &ConnectorConfig,
         raw: &Value,
         kill_switch: &KillSwitch,
@@ -218,7 +218,7 @@ impl CbSource {
         };
         self.finished && all_received
     }
-    async fn new(config: &Config, alias: &ConnectorAlias, kill_switch: KillSwitch) -> Result<Self> {
+    async fn new(config: &Config, alias: &Alias, kill_switch: KillSwitch) -> Result<Self> {
         if let Some(path) = config.path.as_ref() {
             let file = open(path).await?;
             Ok(Self {
