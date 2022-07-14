@@ -14,8 +14,8 @@
 
 use crate::connectors::google::AuthInterceptor;
 use crate::connectors::prelude::{
-    Attempt, ErrorKind, EventSerializer, KillSwitch, SinkAddr, SinkContext, SinkManagerBuilder,
-    SinkReply, Url,
+    Alias, Attempt, ErrorKind, EventSerializer, KillSwitch, SinkAddr, SinkContext,
+    SinkManagerBuilder, SinkReply, Url,
 };
 use crate::connectors::sink::Sink;
 use crate::connectors::utils::url::HttpsDefaults;
@@ -60,7 +60,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _alias: &str,
+        _alias: &Alias,
         _config: &ConnectorConfig,
         raw_config: &Value,
         _kill_switch: &KillSwitch,

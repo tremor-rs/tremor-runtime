@@ -1,5 +1,5 @@
 Error: 
     1 | match true of
     2 |   case true when "snot" => true
-      |                  ^^^^^^ Conflicting types, got string but expected boolean
+      |                  ^^^^^^ Conflicting types, got string but expected bool
     3 | end

@@ -17,7 +17,7 @@
 use std::time::Duration;
 
 use crate::system::{KillSwitch, ShutdownMode};
-use crate::{connectors::prelude::*, errors::err_conector_def};
+use crate::{connectors::prelude::*, errors::err_connector_def};
 use async_std::io::prelude::BufReadExt;
 use async_std::stream::StreamExt;
 use async_std::{fs::File, io};
@@ -54,7 +54,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _: &str,
+        _: &Alias,
         _: &ConnectorConfig,
         raw: &Value,
         kill_switch: &KillSwitch,
@@ -218,7 +218,7 @@ impl CbSource {
         };
         self.finished && all_received
     }
-    async fn new(config: &Config, alias: &str, kill_switch: KillSwitch) -> Result<Self> {
+    async fn new(config: &Config, alias: &Alias, kill_switch: KillSwitch) -> Result<Self> {
         if let Some(path) = config.path.as_ref() {
             let file = open(path).await?;
             Ok(Self {
@@ -236,7 +236,7 @@ impl CbSource {
                 kill_switch,
             })
         } else {
-            Err(err_conector_def(alias, "Missing path key."))
+            Err(err_connector_def(alias, "Missing path key."))
         }
     }
 }

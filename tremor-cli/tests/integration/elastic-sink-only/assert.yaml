@@ -6,4 +6,4 @@ asserts:
       - |
         All required CB events received. 
       - |
-        Error sending Elasticsearch Bulk Request: Missing field `$elastic["_id"]`
+        Got acks: []

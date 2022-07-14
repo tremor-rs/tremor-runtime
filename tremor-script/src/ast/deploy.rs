@@ -185,6 +185,8 @@ impl ConnectStmt {
 /// A deployment endpoint
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize)]
 pub struct DeployEndpoint {
+    /// This alias is the instance-id of the instance targeted without the containing flow id
+    /// as we currently do not allow inter-flow connection, this needs to change if we do
     alias: String,
     /// Refers to a local artefact being deployed in a troy definition
     port: String,

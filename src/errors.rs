@@ -20,7 +20,7 @@
 use beef::Cow;
 use error_chain::error_chain;
 use hdrhistogram::{self, serialization as hdr_s};
-use simd_json::ValueType;
+use value_trait::prelude::*;
 
 use tremor_influx as influx;
 
@@ -122,6 +122,12 @@ impl From<aws_smithy_http::byte_stream::Error> for Error {
     }
 }
 
+impl From<TryTypeError> for Error {
+    fn from(e: TryTypeError) -> Self {
+        ErrorKind::TypeError(e.expected, e.got).into()
+    }
+}
+
 #[cfg(test)]
 impl PartialEq for Error {
     fn eq(&self, _other: &Self) -> bool {
@@ -191,6 +197,11 @@ error_chain! {
     }
 
     errors {
+        TypeError(expected: ValueType, found: ValueType) {
+            description("Type error")
+                display("Type error: Expected {}, found {}", expected, found)
+        }
+
         S3Error(n: String) {
             description("S3 Error")
             display("S3Error: {}", n)
@@ -380,7 +391,7 @@ error_chain! {
     }
 }
 
-pub(crate) fn err_conector_def<C: ToString + ?Sized, E: ToString + ?Sized>(c: &C, e: &E) -> Error {
+pub(crate) fn err_connector_def<C: ToString + ?Sized, E: ToString + ?Sized>(c: &C, e: &E) -> Error {
     ErrorKind::InvalidConnectorDefinition(c.to_string(), e.to_string()).into()
 }
 
@@ -391,7 +402,20 @@ mod test {
 
     #[test]
     fn test_err_conector_def() {
-        let r = err_conector_def("snot", "badger").0;
+        let r = err_connector_def("snot", "badger").0;
         assert_matches!(r, ErrorKind::InvalidConnectorDefinition(_, _))
+    }
+
+    #[test]
+    fn test_type_error() {
+        let r = Error::from(TryTypeError {
+            expected: ValueType::Object,
+            got: ValueType::String,
+        })
+        .0;
+        assert_matches!(
+            r,
+            ErrorKind::TypeError(ValueType::Object, ValueType::String)
+        )
     }
 }

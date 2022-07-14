@@ -16,7 +16,7 @@
 use crate::config::Reconnect;
 use crate::connectors::sink::SinkMsg;
 use crate::connectors::source::SourceMsg;
-use crate::connectors::{Addr, Connectivity, Connector, ConnectorContext, Context, Msg};
+use crate::connectors::{Addr, Alias, Connectivity, Connector, ConnectorContext, Context, Msg};
 use crate::errors::{Error, Result};
 use async_std::channel::{bounded, Sender};
 use async_std::task::{self, JoinHandle};
@@ -188,7 +188,7 @@ pub(crate) struct ReconnectRuntime {
     addr: Addr,
     notifier: ConnectionLostNotifier,
     retry_task: Option<JoinHandle<()>>,
-    alias: String,
+    alias: Alias,
 }
 
 /// Notifier that connector implementations
@@ -229,7 +229,7 @@ impl ReconnectRuntime {
     }
     fn inner(
         addr: Addr,
-        alias: String,
+        alias: Alias,
         notifier: ConnectionLostNotifier,
         config: &Reconnect,
     ) -> Self {
@@ -442,7 +442,7 @@ mod tests {
     async fn failfast_runtime() -> Result<()> {
         let (tx, rx) = async_std::channel::unbounded();
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let alias = String::from("test");
+        let alias = Alias::new("flow", "test");
         let addr = Addr {
             alias: alias.clone(),
             source: None,
@@ -476,7 +476,7 @@ mod tests {
         use async_std::prelude::FutureExt;
         let (tx, rx) = async_std::channel::unbounded();
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let alias = String::from("test");
+        let alias = Alias::new("flow", "test");
         let addr = Addr {
             alias: alias.clone(),
             source: None,

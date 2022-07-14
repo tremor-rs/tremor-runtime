@@ -37,7 +37,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _: &str,
+        _: &Alias,
         _: &ConnectorConfig,
         raw: &Value,
         _kill_switch: &KillSwitch,
@@ -137,13 +137,11 @@ impl Source for MetronomeSource {
 #[cfg(test)]
 mod tests {
 
-    use crate::{
-        config::Reconnect,
-        connectors::{prelude::KillSwitch, ConnectorBuilder},
-        errors::{Error, Kind as ErrorKind, Result},
-    };
+    use crate::{config::Reconnect, connectors::prelude::*};
+
     #[async_std::test]
     async fn missing_config() -> Result<()> {
+        let alias = Alias::new("flow", "connector");
         let builder = super::Builder::default();
         let connector_config = super::ConnectorConfig {
             connector_type: builder.connector_type(),
@@ -157,7 +155,7 @@ mod tests {
         let kill_switch = KillSwitch::dummy();
         assert!(matches!(
             builder
-                .build("snot", &connector_config, &kill_switch)
+                .build(&alias, &connector_config, &kill_switch)
                 .await
                 .err()
                 .unwrap(),

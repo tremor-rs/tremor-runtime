@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::Event;
-use crate::{connectors::prelude::*, errors::err_conector_def};
+use crate::{connectors::prelude::*, errors::err_connector_def};
 use std::mem;
 use value_trait::ValueAccess;
 
@@ -59,7 +59,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        id: &str,
+        id: &Alias,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
@@ -68,7 +68,7 @@ impl ConnectorBuilder for Builder {
 
         // Maintain the minimum size of 5 MBs.
         if config.min_part_size < MORE_THEN_FIVEMBS {
-            return Err(err_conector_def(id, Self::PART_SIZE));
+            return Err(err_connector_def(id, Self::PART_SIZE));
         }
         Ok(Box::new(S3Connector { config }))
     }

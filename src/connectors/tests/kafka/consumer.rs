@@ -250,7 +250,7 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
-            "source": "connector_kafka_consumer_transactional_retry",
+            "source": "test::connector_kafka_consumer_transactional_retry",
             "stream_id": 8589934592_u64,
             "pull_id": 1u64
         }),
@@ -477,7 +477,7 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
-            "source": "connector_kafka_consumer_transactional_no_retry",
+            "source": "test::connector_kafka_consumer_transactional_no_retry",
             "stream_id": 8589934592_u64,
             "pull_id": 1u64
         }),
@@ -705,7 +705,7 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
-            "source": "connector_kafka_consumer_non_transactional",
+            "source": "test::connector_kafka_consumer_non_transactional",
             "stream_id": 8589934592_u64,
             "pull_id": 1u64
         }),

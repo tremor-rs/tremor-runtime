@@ -28,6 +28,7 @@ use crate::{
 };
 use error_chain::error_chain;
 use lalrpop_util::ParseError as LalrpopError;
+use simd_json::{ExtendedValueType, TryTypeError};
 
 use std::num;
 use std::ops::{Range as RangeExclusive, RangeInclusive};
@@ -84,6 +85,12 @@ impl<P> From<std::sync::PoisonError<P>> for Error {
     }
 }
 
+impl From<TryTypeError> for Error {
+    fn from(e: TryTypeError) -> Self {
+        ErrorKind::TypeError(e.expected, e.got).into()
+    }
+}
+
 impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
     fn from(error: ParserError<'screw_lalrpop>) -> Self {
         match error {
@@ -132,16 +139,28 @@ impl<'screw_lalrpop> From<ParserError<'screw_lalrpop>> for Error {
 }
 
 // We need this since we call objects records
-fn t2s(t: ValueType) -> &'static str {
+pub(crate) fn t2s(t: ValueType) -> &'static str {
     match t {
         ValueType::Null => "null",
-        ValueType::Bool => "boolean",
+        ValueType::Bool => "bool",
         ValueType::String => "string",
-        ValueType::I64 | ValueType::U64 => "integer",
+        ValueType::I64 | ValueType::U64 | ValueType::I128 | ValueType::U128 => "integer",
         ValueType::F64 => "float",
         ValueType::Array => "array",
         ValueType::Object => "record",
         ValueType::Custom(c) => c,
+        ValueType::Extended(e) => match e {
+            ExtendedValueType::I32
+            | ExtendedValueType::I16
+            | ExtendedValueType::I8
+            | ExtendedValueType::U32
+            | ExtendedValueType::U16
+            | ExtendedValueType::U8
+            | ExtendedValueType::Usize => "integer",
+            ExtendedValueType::F32 => "float",
+            ExtendedValueType::Char => "char",
+            ExtendedValueType::None => "not even a value at all",
+        },
     }
 }
 
@@ -192,10 +211,11 @@ impl ErrorKind {
             NoEventReferencesAllowed, NoLocalsAllowed, NoObjectError, NotConstant, NotFound, Oops,
             ParseIntError, ParserError, PatchKeyExists, PipelineUnknownPort,
             QueryNodeDuplicateName, QueryNodeReservedName, QueryStreamNotDefined, RecursionLimit,
-            RuntimeError, TailingHereDoc, TypeConflict, UnexpectedCharacter, UnexpectedEndOfStream,
-            UnexpectedEscapeCode, UnknownLocal, UnrecognizedToken, UnterminatedExtractor,
-            UnterminatedHereDoc, UnterminatedIdentLiteral, UnterminatedInterpolation,
-            UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error, ValueError, WithParamNoArg,
+            RuntimeError, TailingHereDoc, TypeConflict, TypeError, UnexpectedCharacter,
+            UnexpectedEndOfStream, UnexpectedEscapeCode, UnknownLocal, UnrecognizedToken,
+            UnterminatedExtractor, UnterminatedHereDoc, UnterminatedIdentLiteral,
+            UnterminatedInterpolation, UnterminatedStringLiteral, UpdateKeyMissing, Utf8Error,
+            ValueError, WithParamNoArg,
         };
         match self {
             NoClauseHit(outer)
@@ -272,6 +292,7 @@ impl ErrorKind {
             | UpdateKeyMissing(outer, inner, _) => (Some(*outer), Some(*inner)),
             // Special cases
             EmptyScript
+            | TypeError(_, _)
             | AccessError(_)
             | CantSetArgsConst
             | CantSetGroupConst
@@ -529,6 +550,10 @@ error_chain! {
         CyclicUse(expr: Span, inner: Span, uses: Vec<String>) {
             description(" Cyclic dependency detected!")
                 display(" Cyclic dependency detected: {}", uses.join(" -> "))
+        }
+        TypeError(expected: ValueType, found: ValueType) {
+            description("Type error")
+                display("Type error: Expected {}, found {}", expected, found)
         }
 
 
@@ -1312,4 +1337,23 @@ pub(crate) fn unexpected_character<O: Ranged, I: Ranged>(
     ch: char,
 ) -> Error {
     ErrorKind::UnexpectedCharacter(outer.extent(), inner.extent(), tkn, ch).into()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use matches::assert_matches;
+
+    #[test]
+    fn test_type_error() {
+        let r = Error::from(TryTypeError {
+            expected: ValueType::Object,
+            got: ValueType::String,
+        })
+        .0;
+        assert_matches!(
+            r,
+            ErrorKind::TypeError(ValueType::Object, ValueType::String)
+        )
+    }
 }

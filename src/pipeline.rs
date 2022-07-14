@@ -16,6 +16,7 @@ use crate::{
     errors::Result,
     instance::State,
     primerge::PriorityMerge,
+    system::flow,
 };
 use async_std::{
     channel::{bounded, unbounded, Receiver, Sender},
@@ -34,13 +35,45 @@ const TICK_MS: u64 = 100;
 type Inputs = halfbrown::HashMap<DeployEndpoint, (bool, InputTarget)>;
 type Dests = halfbrown::HashMap<Cow<'static, str>, Vec<(DeployEndpoint, OutputTarget)>>;
 type EventSet = Vec<(Cow<'static, str>, Event)>;
+
+#[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
+pub(crate) struct Alias {
+    flow_alias: flow::Alias,
+    pipeline_alias: String,
+}
+
+impl Alias {
+    pub(crate) fn new(
+        flow_alias: impl Into<flow::Alias>,
+        pipeline_alias: impl Into<String>,
+    ) -> Self {
+        Self {
+            flow_alias: flow_alias.into(),
+            pipeline_alias: pipeline_alias.into(),
+        }
+    }
+
+    pub(crate) fn flow_alias(&self) -> &flow::Alias {
+        &self.flow_alias
+    }
+    pub(crate) fn pipeline_alias(&self) -> &str {
+        self.pipeline_alias.as_str()
+    }
+}
+
+impl std::fmt::Display for Alias {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}::{}", self.flow_alias, self.pipeline_alias)
+    }
+}
+
 /// Address for a pipeline
 #[derive(Clone)]
 pub struct Addr {
     addr: Sender<Box<Msg>>,
     cf_addr: Sender<CfMsg>,
     mgmt_addr: Sender<MgmtMsg>,
-    alias: String,
+    alias: Alias,
 }
 
 impl Addr {
@@ -50,7 +83,7 @@ impl Addr {
         addr: Sender<Box<Msg>>,
         cf_addr: Sender<CfMsg>,
         mgmt_addr: Sender<MgmtMsg>,
-        alias: String,
+        alias: Alias,
     ) -> Self {
         Self {
             addr,
@@ -143,7 +176,7 @@ impl TryFrom<connectors::Addr> for OutputTarget {
 }
 
 pub(crate) fn spawn(
-    alias: &str,
+    pipeline_alias: Alias,
     config: &tremor_pipeline::query::Query,
     operator_id_gen: &mut OperatorIdGen,
 ) -> Result<Addr> {
@@ -173,11 +206,15 @@ pub(crate) fn spawn(
 
     let tick_handler = task::spawn(tick(tx.clone()));
 
-    let addr = Addr::new(tx, cf_tx, mgmt_tx, alias.to_string());
+    let addr = Addr::new(tx, cf_tx, mgmt_tx, pipeline_alias.clone());
     task::Builder::new()
-        .name(format!("pipeline-{}", alias))
+        .name(format!(
+            "pipeline-{}-{}",
+            pipeline_alias.flow_alias(),
+            pipeline_alias.pipeline_alias()
+        ))
         .spawn(pipeline_task(
-            alias.to_string(),
+            pipeline_alias,
             pipeline,
             addr.clone(),
             rx,
@@ -354,18 +391,18 @@ async fn send_events(eventset: &mut EventSet, dests: &mut Dests) -> Result<()> {
 }
 
 #[inline]
-async fn send_signal(own_id: &str, signal: Event, dests: &mut Dests) -> Result<()> {
+async fn send_signal(own_id: &Alias, signal: Event, dests: &mut Dests) -> Result<()> {
     let mut destinations = dests.values_mut().flatten();
     let first = destinations.next();
     for (id, dest) in destinations {
         // if we are connected to ourselves we should not forward signals
-        if matches!(dest, OutputTarget::Sink(_)) || id.alias() != own_id {
+        if matches!(dest, OutputTarget::Sink(_)) || id.alias() != own_id.pipeline_alias() {
             dest.send_signal(signal.clone()).await?;
         }
     }
     if let Some((id, dest)) = first {
         // if we are connected to ourselves we should not forward signals
-        if matches!(dest, OutputTarget::Sink(_)) || id.alias() != own_id {
+        if matches!(dest, OutputTarget::Sink(_)) || id.alias() != own_id.pipeline_alias() {
             dest.send_signal(signal).await?;
         }
     }
@@ -439,9 +476,36 @@ fn maybe_send(r: Result<()>) {
     }
 }
 
+/// Context for pipeline instances
+///
+/// currently only used for printing
+struct PipelineContext {
+    alias: Alias,
+}
+
+impl std::fmt::Display for PipelineContext {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[Pipeline::{}]", &self.alias)
+    }
+}
+
+impl From<&Alias> for PipelineContext {
+    fn from(alias: &Alias) -> Self {
+        Self {
+            alias: alias.clone(),
+        }
+    }
+}
+
+impl From<Alias> for PipelineContext {
+    fn from(alias: Alias) -> Self {
+        Self { alias }
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 pub(crate) async fn pipeline_task(
-    alias: String,
+    id: Alias,
     mut pipeline: ExecutableGraph,
     addr: Addr,
     rx: Receiver<Box<Msg>>,
@@ -449,7 +513,9 @@ pub(crate) async fn pipeline_task(
     mgmt_rx: Receiver<MgmtMsg>,
     tick_handler: JoinHandle<()>,
 ) -> Result<()> {
-    pipeline.id = alias.clone();
+    pipeline.id = id.to_string();
+
+    let ctx = PipelineContext::from(&id);
 
     let mut dests: Dests = halfbrown::HashMap::new();
     let mut inputs: Inputs = halfbrown::HashMap::new();
@@ -457,7 +523,7 @@ pub(crate) async fn pipeline_task(
 
     let mut state: State = State::Initializing;
 
-    info!("[Pipeline::{alias}] Starting Pipeline.");
+    info!("{ctx} Starting Pipeline.");
 
     let ff = rx.map(|e| AnyMsg::Flow(*e));
     let cf = cf_rx.map(AnyMsg::Contraflow);
@@ -485,7 +551,7 @@ pub(crate) async fn pipeline_task(
                         } else {
                             format!(" {e}")
                         };
-                        error!("[Pipeline::{alias}] Error handling event:{err_str}");
+                        error!("{ctx} Error handling event:{err_str}");
                     }
                 }
             }
@@ -497,9 +563,9 @@ pub(crate) async fn pipeline_task(
                     } else {
                         format!(" {:?}", e)
                     };
-                    error!("[Pipeline::{}] Error handling signal:{}", alias, err_str);
+                    error!("{ctx} Error handling signal: {err_str}");
                 } else {
-                    maybe_send(send_signal(&alias, signal, &mut dests).await);
+                    maybe_send(send_signal(&id, signal, &mut dests).await);
                     handle_insights(&mut pipeline, &inputs).await;
                     maybe_send(send_events(&mut eventset, &mut dests).await);
                 }
@@ -509,7 +575,7 @@ pub(crate) async fn pipeline_task(
                 target,
                 is_transactional,
             }) => {
-                info!("[Pipeline::{}] Connecting {} to port 'in'", alias, endpoint);
+                info!("{ctx} Connecting {endpoint} to port 'in'");
                 inputs.insert(endpoint, (is_transactional, target));
             }
             AnyMsg::Mgmt(MgmtMsg::ConnectOutput {
@@ -517,29 +583,27 @@ pub(crate) async fn pipeline_task(
                 endpoint,
                 target,
             }) => {
-                info!(
-                    "[Pipeline::{}] Connecting port '{}' to {}",
-                    alias, &port, &endpoint
-                );
+                info!("{ctx} Connecting port '{port}' to {endpoint}",);
                 // notify other pipeline about a new input
                 if let OutputTarget::Pipeline(pipe) = &target {
                     // avoid linking the same pipeline as input to itself
                     // as this will create a nasty circle filling up queues.
                     // In general this does not avoid cycles via more complex constructs.
                     //
-                    if alias == endpoint.alias() {
+                    if id.pipeline_alias() == endpoint.alias() {
                         if let Err(e) = pipe
                             .send_mgmt(MgmtMsg::ConnectInput {
-                                endpoint: DeployEndpoint::new(&alias, &port, endpoint.meta()),
+                                endpoint: DeployEndpoint::new(
+                                    id.pipeline_alias(),
+                                    &port,
+                                    endpoint.meta(),
+                                ),
                                 target: InputTarget::Pipeline(Box::new(addr.clone())),
                                 is_transactional: true,
                             })
                             .await
                         {
-                            error!(
-                                "[Pipeline::{}] Error connecting input pipeline {}: {}",
-                                alias, &endpoint, e
-                            );
+                            error!("{ctx} Error connecting input pipeline {endpoint}: {e}",);
                         }
                     }
                 }
@@ -555,33 +619,24 @@ pub(crate) async fn pipeline_task(
                 state = State::Running;
             }
             AnyMsg::Mgmt(MgmtMsg::Start) => {
-                info!(
-                    "[Pipeline::{}] Ignoring Start Msg. Current state: {}",
-                    alias, &state
-                );
+                info!("{ctx} Ignoring Start Msg. Current state: {state}",);
             }
             AnyMsg::Mgmt(MgmtMsg::Pause) if state == State::Running => {
                 // No-op
                 state = State::Paused;
             }
             AnyMsg::Mgmt(MgmtMsg::Pause) => {
-                info!(
-                    "[Pipeline::{}] Ignoring Pause Msg. Current state: {}",
-                    alias, &state
-                );
+                info!("{ctx} Ignoring Pause Msg. Current state: {state}",);
             }
             AnyMsg::Mgmt(MgmtMsg::Resume) if state == State::Paused => {
                 // No-op
                 state = State::Running;
             }
             AnyMsg::Mgmt(MgmtMsg::Resume) => {
-                info!(
-                    "[Pipeline::{}] Ignoring Resume Msg. Current state: {}",
-                    alias, &state
-                );
+                info!("{ctx} Ignoring Resume Msg. Current state: {state}",);
             }
             AnyMsg::Mgmt(MgmtMsg::Stop) => {
-                info!("[Pipeline::{}] Stopping...", alias);
+                info!("{ctx} Stopping...");
                 break;
             }
             #[cfg(test)]
@@ -607,7 +662,7 @@ pub(crate) async fn pipeline_task(
                     outputs,
                 };
                 if tx.send(report).await.is_err() {
-                    error!("[Pipeline::{alias}] Error sending status report.");
+                    error!("{ctx} Error sending status report.");
                 }
             }
         }
@@ -615,7 +670,7 @@ pub(crate) async fn pipeline_task(
     // stop ticks
     tick_handler.cancel().await;
 
-    info!("[Pipeline::{alias}] Stopped.");
+    info!("{ctx} Stopped.");
     Ok(())
 }
 
@@ -629,7 +684,8 @@ mod tests {
     };
     use std::time::Instant;
     use tremor_common::{
-        ids::{Id, SourceId},
+        ids::Id as _,
+        ids::SourceId,
         ports::{IN, OUT},
     };
     use tremor_pipeline::{EventId, OpMeta};
@@ -644,9 +700,21 @@ mod tests {
         let aggr_reg = aggr_registry();
         let query =
             tremor_pipeline::query::Query::parse(trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
-        let addr = spawn("test-pipe1", &query, &mut operator_id_gen)?;
-        let addr2 = spawn("test-pipe2", &query, &mut operator_id_gen)?;
-        let addr3 = spawn("test-pipe3", &query, &mut operator_id_gen)?;
+        let addr = spawn(
+            Alias::new("report", "test-pipe1"),
+            &query,
+            &mut operator_id_gen,
+        )?;
+        let addr2 = spawn(
+            Alias::new("report", "test-pipe2"),
+            &query,
+            &mut operator_id_gen,
+        )?;
+        let addr3 = spawn(
+            Alias::new("report", "test-pipe3"),
+            &query,
+            &mut operator_id_gen,
+        )?;
         println!("{:?}", addr); // coverage
         let yolo_mid = NodeMeta::new(Location::yolo(), Location::yolo());
         // interconnect 3 pipelines
@@ -745,9 +813,10 @@ mod tests {
         let mut operator_id_gen = OperatorIdGen::new();
         let trickle = r#"select event from in into out;"#;
         let aggr_reg = aggr_registry();
+        let pipeline_id = Alias::new("flow", "test-pipe");
         let query =
             tremor_pipeline::query::Query::parse(trickle, &*FN_REGISTRY.read()?, &aggr_reg)?;
-        let addr = spawn("test-pipe", &query, &mut operator_id_gen)?;
+        let addr = spawn(pipeline_id, &query, &mut operator_id_gen)?;
 
         let (tx, rx) = unbounded();
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;

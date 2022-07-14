@@ -13,7 +13,7 @@
 // limitations under the License.
 mod handler;
 
-use crate::{connectors::prelude::*, errors::err_conector_def, system::KillSwitch};
+use crate::{connectors::prelude::*, errors::err_connector_def, system::KillSwitch};
 use handler::{ChronomicQueue, CronEntryInt};
 use serde_yaml::Value as YamlValue;
 use tremor_common::time::nanotime;
@@ -38,7 +38,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        id: &str,
+        id: &Alias,
         _: &ConnectorConfig,
         raw: &Value,
         _kill_switch: &KillSwitch,
@@ -59,7 +59,7 @@ impl ConnectorBuilder for Builder {
                 .map(CronEntryInt::try_from)
                 .collect::<Result<Vec<CronEntryInt>>>()?
         } else {
-            return Err(err_conector_def(id, "missing `entries` array"));
+            return Err(err_connector_def(id, "missing `entries` array"));
         };
 
         Ok(Box::new(Crononome { entries }))

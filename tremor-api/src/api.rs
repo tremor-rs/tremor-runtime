@@ -24,9 +24,11 @@ use http_types::{
 };
 use serde::{Deserialize, Serialize};
 use tide::Response;
+use tremor_runtime::instance::State as InstanceState;
 use tremor_runtime::system::World;
 
 pub mod flow;
+pub mod model;
 pub mod prelude;
 pub mod status;
 pub mod version;
@@ -222,15 +224,12 @@ mod tests {
     use tremor_runtime::{
         errors::Result as RuntimeResult,
         instance::State as InstanceState,
-        system::{
-            flow::{ConnectorAlias, StatusReport},
-            ShutdownMode, WorldConfig,
-        },
+        system::{ShutdownMode, WorldConfig},
     };
     use tremor_script::{aggr_registry, ast::DeployStmt, deploy::Deploy, FN_REGISTRY};
     use tremor_value::{literal, value::StaticValue};
 
-    use crate::flow::PatchStatus;
+    use crate::api::model::{ApiFlowStatusReport, PatchStatus};
 
     use super::*;
 
@@ -333,13 +332,13 @@ mod tests {
         let body = client
             .get("/v1/flows")
             .await?
-            .body_json::<Vec<StatusReport>>()
+            .body_json::<Vec<ApiFlowStatusReport>>()
             .await?;
         assert_eq!(1, body.len());
-        assert_eq!("api_test".to_string(), body[0].alias);
+        assert_eq!("api_test", body[0].alias.as_str());
         assert_eq!(InstanceState::Running, body[0].status);
         assert_eq!(1, body[0].connectors.len());
-        assert_eq!(ConnectorAlias::from("my_null"), body[0].connectors[0]);
+        assert_eq!(String::from("my_null"), body[0].connectors[0]);
 
         // get flow
         let res = client.get("/v1/flows/i_do_not_exist").await?;
@@ -348,13 +347,13 @@ mod tests {
         let body = client
             .get("/v1/flows/api_test")
             .await?
-            .body_json::<StatusReport>()
+            .body_json::<ApiFlowStatusReport>()
             .await?;
 
-        assert_eq!("api_test".to_string(), body.alias);
+        assert_eq!("api_test", body.alias.as_str());
         assert_eq!(InstanceState::Running, body.status);
         assert_eq!(1, body.connectors.len());
-        assert_eq!(ConnectorAlias::from("my_null"), body.connectors[0]);
+        assert_eq!(String::from("my_null"), body.connectors[0]);
 
         // patch flow status
         let body = client
@@ -363,13 +362,13 @@ mod tests {
                 status: InstanceState::Paused,
             })?
             .await?
-            .body_json::<StatusReport>()
+            .body_json::<ApiFlowStatusReport>()
             .await?;
 
-        assert_eq!("api_test".to_string(), body.alias);
+        assert_eq!("api_test", body.alias.as_str());
         assert_eq!(InstanceState::Paused, body.status);
         assert_eq!(1, body.connectors.len());
-        assert_eq!(ConnectorAlias::from("my_null"), body.connectors[0]);
+        assert_eq!(String::from("my_null"), body.connectors[0]);
 
         // invalid patch
         let mut res = client
@@ -388,13 +387,13 @@ mod tests {
                 status: InstanceState::Running,
             })?
             .await?
-            .body_json::<StatusReport>()
+            .body_json::<ApiFlowStatusReport>()
             .await?;
 
-        assert_eq!("api_test".to_string(), body.alias);
+        assert_eq!("api_test", body.alias.as_str());
         assert_eq!(InstanceState::Running, body.status);
         assert_eq!(1, body.connectors.len());
-        assert_eq!(ConnectorAlias::from("my_null"), body.connectors[0]);
+        assert_eq!(String::from("my_null"), body.connectors[0]);
 
         // list flow connectors
         let body = client

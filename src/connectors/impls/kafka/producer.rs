@@ -71,7 +71,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        alias: &str,
+        alias: &Alias,
         config: &ConnectorConfig,
         raw_config: &Value,
         _kill_switch: &KillSwitch,

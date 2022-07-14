@@ -67,7 +67,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        id: &str,
+        id: &Alias,
         _: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
@@ -199,20 +199,22 @@ mod tests {
 
     #[async_std::test]
     async fn otel_client_builder() -> Result<()> {
+        let alias = Alias::new("test", "my_otel_server");
         let with_processors = literal!({
             "config": {
                 "url": "localhost:4317",
             },
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(
-            "my_otel_server",
+            &alias,
             ConnectorType("otel_server".into()),
             &with_processors,
         )?;
+        let alias = Alias::new("flow", "my_otel_server");
 
         let builder = super::Builder::default();
         let kill_switch = KillSwitch::dummy();
-        let _connector = builder.build("foo", &config, &kill_switch).await?;
+        let _connector = builder.build(&alias, &config, &kill_switch).await?;
 
         Ok(())
     }

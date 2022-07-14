@@ -377,7 +377,7 @@ impl Sink for GbqSink {
     }
 
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        error!("{} Connecting to BigQuery", ctx);
+        info!("{ctx} Connecting to BigQuery");
         let token = Token::new()?;
 
         let tls_config = ClientTlsConfig::new()
@@ -390,13 +390,14 @@ impl Sink for GbqSink {
             .connect()
             .await?;
 
+        let interceptor_ctx = ctx.clone();
         let mut client = BigQueryWriteClient::with_interceptor(
             channel,
             AuthInterceptor {
                 token: Box::new(move || match token.header_value() {
                     Ok(val) => Ok(val),
                     Err(e) => {
-                        error!("Failed to get token for BigQuery: {}", e);
+                        error!("{interceptor_ctx} Failed to get token for BigQuery: {}", e);
 
                         Err(Status::unavailable(
                             "Failed to retrieve authentication token.",
@@ -471,7 +472,7 @@ mod test {
             }],
             &SinkContext {
                 uid: Default::default(),
-                alias: "".to_string(),
+                alias: Alias::new("flow", "connector"),
                 connector_type: Default::default(),
                 quiescence_beacon: Default::default(),
                 notifier: ConnectionLostNotifier::new(rx),
@@ -500,7 +501,7 @@ mod test {
             }],
             &SinkContext {
                 uid: Default::default(),
-                alias: "".to_string(),
+                alias: Alias::new("flow", "connector"),
                 connector_type: Default::default(),
                 quiescence_beacon: Default::default(),
                 notifier: ConnectionLostNotifier::new(rx),
@@ -538,7 +539,7 @@ mod test {
                 }],
                 &SinkContext {
                     uid: Default::default(),
-                    alias: "".to_string(),
+                    alias: Alias::new("flow", "connector"),
                     connector_type: Default::default(),
                     quiescence_beacon: Default::default(),
                     notifier: ConnectionLostNotifier::new(rx),
@@ -578,7 +579,7 @@ mod test {
             }],
             &SinkContext {
                 uid: Default::default(),
-                alias: "".to_string(),
+                alias: Alias::new("flow", "connector"),
                 connector_type: Default::default(),
                 quiescence_beacon: Default::default(),
                 notifier: ConnectionLostNotifier::new(rx),
@@ -803,7 +804,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: "".to_string(),
+            alias: Alias::new("flow", "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -852,7 +853,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: "".to_string(),
+            alias: Alias::new("flow", "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -896,7 +897,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: "".to_string(),
+            alias: Alias::new("flow", "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -941,7 +942,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: "".to_string(),
+            alias: Alias::new("flow", "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -984,7 +985,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: "".to_string(),
+            alias: Alias::new("flow", "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -1019,7 +1020,7 @@ mod test {
 
         let sink_context = SinkContext {
             uid: Default::default(),
-            alias: "".to_string(),
+            alias: Alias::new("flow", "connector"),
             connector_type: Default::default(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(rx),
@@ -1079,7 +1080,7 @@ mod test {
                 Event::signal_tick(),
                 &SinkContext {
                     uid: Default::default(),
-                    alias: "".to_string(),
+                    alias: Alias::new("flow", "connector"),
                     connector_type: Default::default(),
                     quiescence_beacon: Default::default(),
                     notifier: ConnectionLostNotifier::new(rx),
@@ -1089,7 +1090,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    "",
+                    &Alias::new("flow", "connector"),
                 )
                 .unwrap(),
                 0,
@@ -1124,7 +1125,7 @@ mod test {
                 Event::signal_tick(),
                 &SinkContext {
                     uid: Default::default(),
-                    alias: "".to_string(),
+                    alias: Alias::new("flow", "connector"),
                     connector_type: Default::default(),
                     quiescence_beacon: Default::default(),
                     notifier: ConnectionLostNotifier::new(rx),
@@ -1134,7 +1135,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    "",
+                    &Alias::new("flow", "connector"),
                 )
                 .unwrap(),
                 0,

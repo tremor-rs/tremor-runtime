@@ -16,7 +16,7 @@ use crate::connectors::{
     prelude::*,
     utils::{mime::MimeCodecMap, tls::TLSServerConfig},
 };
-use crate::{connectors::spawn_task, errors::err_conector_def};
+use crate::{connectors::spawn_task, errors::err_connector_def};
 use async_std::channel::unbounded;
 use async_std::{
     channel::{bounded, Receiver, Sender},
@@ -70,7 +70,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        id: &str,
+        id: &Alias,
         raw_config: &ConnectorConfig,
         config: &Value,
         _kill_switch: &KillSwitch,
@@ -79,7 +79,7 @@ impl ConnectorBuilder for Builder {
         let tls_server_config = config.tls.clone();
 
         if tls_server_config.is_some() && config.url.scheme() != "https" {
-            return Err(err_conector_def(id, Self::HTTPS_REQUIRED));
+            return Err(err_connector_def(id, Self::HTTPS_REQUIRED));
         }
         let origin_uri = EventOriginUri {
             scheme: "http-server".to_string(),

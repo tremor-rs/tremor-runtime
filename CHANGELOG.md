@@ -8,6 +8,7 @@
 ### Fixes
 
 - Allow `kafka_consumer` connector to reconnect upon more error conditions and avoid stalls.
+- Include flow alias in pipeline and connector aliases reported via metrics events and logging in order to deduplicate entries
 
 ## [0.12.4]
 

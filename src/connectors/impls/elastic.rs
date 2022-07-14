@@ -21,7 +21,7 @@ use crate::{
         impls::http::utils::Header, prelude::*, sink::concurrency_cap::ConcurrencyCap,
         utils::tls::TLSClientConfig,
     },
-    errors::{err_conector_def, Error, Result},
+    errors::{err_connector_def, Error, Result},
 };
 use async_std::{
     channel::{bounded, Receiver, Sender},
@@ -99,19 +99,19 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        id: &str,
+        id: &Alias,
         _: &ConnectorConfig,
         raw_config: &Value,
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
         if config.nodes.is_empty() {
-            Err(err_conector_def(id, "empty nodes provided"))
+            Err(err_connector_def(id, "empty nodes provided"))
         } else {
             let node_urls = config
                 .nodes
                 .iter()
-                .map(|s| Url::parse(s.as_str()).map_err(|e| err_conector_def(id, &e)))
+                .map(|s| Url::parse(s.as_str()).map_err(|e| err_connector_def(id, &e)))
                 .collect::<Result<Vec<Url>>>()?;
             let tls_config = match config.tls.as_ref() {
                 Some(Either::Left(tls_config)) => Some(tls_config.clone()),
@@ -122,7 +122,7 @@ impl ConnectorBuilder for Builder {
                 for node_url in &node_urls {
                     if node_url.scheme() != "https" {
                         let e = format!("Node URL '{node_url}' needs 'https' scheme with tls.");
-                        return Err(err_conector_def(id, &e));
+                        return Err(err_connector_def(id, &e));
                     }
                 }
             }
@@ -944,14 +944,17 @@ mod tests {
                 "nodes": []
             }
         });
-        let id = "my_elastic";
+        let alias = Alias::new("flow", "my_elastic");
         let builder = super::Builder::default();
-        let connector_config = ConnectorConfig::from_config(id, builder.connector_type(), &config)?;
+        let connector_config =
+            ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;
         let kill_switch = KillSwitch::dummy();
         assert_eq!(
-            String::from("Invalid Definition for connector \"my_elastic\": empty nodes provided"),
+            String::from(
+                "Invalid Definition for connector \"flow::my_elastic\": empty nodes provided"
+            ),
             builder
-                .build("my_elastic", &connector_config, &kill_switch)
+                .build(&alias, &connector_config, &kill_switch)
                 .await
                 .err()
                 .unwrap()
@@ -970,16 +973,17 @@ mod tests {
                 ]
             }
         });
-        let id = "my_elastic";
+        let alias = Alias::new("snot", "my_elastic");
         let builder = super::Builder::default();
-        let connector_config = ConnectorConfig::from_config(id, builder.connector_type(), &config)?;
+        let connector_config =
+            ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;
         let kill_switch = KillSwitch::dummy();
         assert_eq!(
             String::from(
-                "Invalid Definition for connector \"my_elastic\": relative URL without a base"
+                "Invalid Definition for connector \"snot::my_elastic\": relative URL without a base"
             ),
             builder
-                .build("my_elastic", &connector_config, &kill_switch)
+                .build(&alias, &connector_config, &kill_switch)
                 .await
                 .err()
                 .unwrap()

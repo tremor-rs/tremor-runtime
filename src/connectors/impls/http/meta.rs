@@ -338,7 +338,7 @@ mod test {
             CodecReq::Optional("json"),
             vec![],
             &ConnectorType("http".into()),
-            "http",
+            &Alias::new("flow", "http"),
         )?;
         let config = client::Config::new(&c)?;
         let configured_codec = "json";

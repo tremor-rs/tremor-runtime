@@ -83,7 +83,7 @@ fn decode<T: AsRef<[u8]>>(base64: bool, data: T) -> Result<Vec<u8>> {
 impl ConnectorBuilder for Builder {
     async fn build_cfg(
         &self,
-        id: &str,
+        id: &Alias,
         _: &ConnectorConfig,
         config: &Value,
         kill_switch: &KillSwitch,

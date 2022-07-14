@@ -242,7 +242,7 @@ impl NodeMetrics {
 /// form of a pipeline
 #[derive(Debug)]
 pub struct ExecutableGraph {
-    /// ID of the graph
+    /// ID of the graph, contains the flow id and pipeline id
     pub id: String,
     pub(crate) graph: Vec<OperatorNode>,
     pub(crate) state: State,
@@ -805,7 +805,7 @@ mod test {
         };
         let mut rx = METRICS_CHANNEL.rx();
         let mut g = ExecutableGraph {
-            id: "test".into(),
+            id: "flow::pipe".into(),
             graph,
             state,
             inputs,
