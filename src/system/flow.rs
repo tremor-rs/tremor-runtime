@@ -169,7 +169,7 @@ pub struct Flow {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct StatusReport {
     /// the id of the instance this report describes
-    pub id: FlowAlias,
+    pub alias: FlowAlias,
     /// the current state
     pub status: State,
     /// the crated connectors
@@ -651,7 +651,7 @@ async fn spawn_task(
                     // TODO: aggregate states of all containing instances
                     let connectors = connectors.keys().cloned().collect();
                     let report = StatusReport {
-                        id: id.clone(),
+                        alias: id.clone(),
                         status: state,
                         connectors,
                     };
