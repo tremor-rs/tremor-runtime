@@ -177,13 +177,13 @@ error_chain! {
         Io(std::io::Error);
         JsonAccessError(value_trait::AccessError);
         JsonError(simd_json::Error);
+        SerdeJsonError(serde_json::Error);
         KafkaError(rdkafka::error::KafkaError);
         ModeParseError(file_mode::ModeParseError);
         MsgPackDecoderError(rmp_serde::decode::Error);
         MsgPackEncoderError(rmp_serde::encode::Error);
         ParseIntError(std::num::ParseIntError);
         ParseFloatError(std::num::ParseFloatError);
-        //Postgres(postgres::Error);
         RegexError(regex::Error);
         ReqwestError(reqwest::Error);
         InvalidHeaderName(reqwest::header::InvalidHeaderName);

@@ -15,11 +15,11 @@
 use crate::cli::Doc;
 use crate::errors::{Error, Result};
 use crate::util::visit_path_str;
-use std::ffi::OsStr;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use tremor_script::arena::Arena;
+use std::{collections::HashMap, ffi::OsStr};
 use tremor_script::module::{Id, Module};
+use tremor_script::{arena::Arena, ast::NodeId};
 
 fn push_line(line: &str, buf: &mut String) {
     buf.push_str(line);
@@ -167,7 +167,14 @@ fn gen_doc(
             let module_id = Id::from(raw.as_bytes());
             let mut ids = Vec::new();
             let (aid, raw) = Arena::insert(&raw)?;
-            Module::load(module_id, &mut ids, aid, raw)?
+            Module::load(
+                NodeId::new(&"doc", &[]),
+                module_id,
+                &mut ids,
+                aid,
+                raw,
+                &HashMap::new(),
+            )?
         }
         Some(_) | None => return Ok(()),
     };

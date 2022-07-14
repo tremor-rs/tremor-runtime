@@ -102,7 +102,8 @@ tremor-script = { path = "tremor-script" }
 tremor-value = { path = "tremor-value" }
 url = "2.3"
 value-trait = "0.5"
-zstd = "0.12"
+tide = "0.16"
+zstd = "*"
 
 # blaster / blackhole
 hdrhistogram = "7"
@@ -149,12 +150,6 @@ cron = "0.12.0"
 
 # logstash grok patterns
 grok = "2"
-
-# sse-onramp
-#surf-sse = { git = "https://github.com/dak-x/surf-sse", tag = "2.0", default-features = false }
-
-# nats
-#async-nats = "0.10.1"
 
 # discord
 serenity = { version = "0.11", default-features = false, features = [
@@ -209,6 +204,16 @@ itoa = "1"
 ryu = "1"
 lexical = "6.1.1"
 simdutf8 = "0.1"
+
+# Clustering
+openraft = { version = "0.8", git = "https://github.com/datafuselabs/openraft.git", features = [
+  "serde",
+] }
+# Clustering
+tarpc = { version = "0.29", features = ["full"] }
+serde_json = "1.0.57"
+rocksdb = "0.19.0"
+tar = "*"
 
 [dev-dependencies]
 serial_test = { version = "2.0", features = ["logging"] }

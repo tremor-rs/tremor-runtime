@@ -12,27 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::TestConfig;
-use crate::errors::{Error, Result};
-use crate::test;
-use crate::test::stats;
-use crate::test::status;
-use crate::{env, report};
-use report::TestSuite;
-use std::fmt::Write as _; // import without risk of name clashing
-use std::io::Read;
-use std::{collections::HashMap, path::Path};
-use test::tag;
+use super::{
+    report::{self, TestSuite},
+    stats, status, tag, TestConfig,
+};
+use crate::{
+    env,
+    errors::{Error, Result},
+    test,
+};
+use std::{collections::HashMap, fmt::Write as _, io::Read, path::Path};
 use tremor_common::time::nanotime;
-use tremor_script::highlighter::{Dumb as DumbHighlighter, Highlighter, Term as TermHighlighter};
-use tremor_script::interpreter::{AggrType, Env, ExecOpts, LocalStack};
-use tremor_script::prelude::*;
 use tremor_script::{
     ast::{Expr, ImutExpr, Invoke, List, Record},
-    NO_AGGRS,
+    ctx::EventContext,
+    highlighter::{Dumb as DumbHighlighter, Highlighter, Term as TermHighlighter},
+    interpreter::{AggrType, Env, ExecOpts, LocalStack},
+    prelude::*,
+    Value, NO_AGGRS, NO_CONSTS,
 };
-use tremor_script::{ctx::EventContext, NO_CONSTS};
-use tremor_value::Value;
+
 const EXEC_OPTS: ExecOpts = ExecOpts {
     result_needed: true,
     aggr: AggrType::Tick,

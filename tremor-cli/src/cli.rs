@@ -53,6 +53,120 @@ pub(crate) enum Command {
         #[clap( value_parser = clap::value_parser!(String))]
         name: String,
     },
+
+    /// cluster commands
+    Cluster(Cluster),
+}
+
+#[derive(Parser, Debug)]
+pub(crate) struct Cluster {
+    #[clap(subcommand)]
+    pub(crate) command: ClusterCommand,
+}
+
+#[derive(Parser, Clone, Debug)]
+pub(crate) enum ClusterCommand {
+    /// Initializes a new initial cluster
+    Init {
+        /// Database dir to store raft data in
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        db_dir: String,
+        /// Raft RPC IP and endpoint to listen to
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        rpc: String,
+        /// Raft API IP and endpoint to listen to
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        api: String,
+    },
+
+    /// Joins a new node to the cluster
+    Join {
+        /// Database dir to store raft data in
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        db_dir: String,
+        /// The cluster to join, defaults to `TREMER_API_ADDRESS`
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        cluster_api: Option<String>,
+        /// Raft RPC IP and endpoint to listen to
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        rpc: String,
+        /// Raft API IP and endpoint to listen to
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        api: String,
+    },
+    /// Starts a cluster node that is part as a cluster already
+    Start {
+        /// Database dir to store raft data in
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        db_dir: String,
+    },
+    /// Removes a note from the cluster (the node still has to be stopped after this)
+    Remove {
+        /// Raft API IP and endpoint to send to
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        api: Option<String>,
+        /// Node to remove
+        #[clap(value_parser = clap::value_parser!(u64))]
+        node: u64,
+    },
+    /// Displays the cluster status
+    Status {
+        /// Raft API IP and endpoint to send to
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        api: Option<String>,
+        /// Show JSON output instead of human readable information
+        #[clap(short, long, action = clap::ArgAction::SetTrue)]
+        json: bool,
+    },
+    /// App related tommands
+    Apps {
+        /// Raft API IP and endpoint to send to, defaults to `TREMER_API_ADDRESS`
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        api: Option<String>,
+        #[clap(subcommand)]
+        command: AppsCommands,
+    },
+    /// Packages a tremor application
+    Package {
+        /// the file to load
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        name: Option<String>,
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        out: String,
+        #[clap( value_parser = clap::value_parser!(String))]
+        entrypoint: String,
+    },
+}
+
+#[derive(Parser, Clone, Debug)]
+pub(crate) enum AppsCommands {
+    /// lists all installed apps
+    List {
+        /// Show JSON output instead of human readable information
+        #[clap(short, long, action = clap::ArgAction::SetTrue)]
+        json: bool,
+    },
+    /// Installs  new app
+    Install {
+        /// the file to load
+        #[clap( value_parser = clap::value_parser!(String))]
+        file: String,
+    },
+    /// Starts an instance of a flow in an installed app
+    Start {
+        /// The app to start
+        #[clap(value_parser = clap::value_parser!(String))]
+        app: String,
+        /// the instance to start
+        #[clap(value_parser = clap::value_parser!(String))]
+        instance: String,
+        /// The flow to start defaults to main
+        #[clap(long, short, value_parser = clap::value_parser!(String))]
+        flow: Option<String>,
+        /// Data
+        #[clap(long, short, value_parser = clap::value_parser!(String))]
+        config: Option<String>,
+    },
 }
 
 /// Shell type

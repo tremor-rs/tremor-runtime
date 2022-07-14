@@ -39,17 +39,15 @@ use tremor_common::file;
 // use tremor_runtime::errors;
 
 mod alloc;
+pub(crate) mod cli;
+mod cluster;
 mod completions;
 mod debug;
 mod doc;
 mod env;
 mod errors;
-// mod explain;
-pub(crate) mod cli;
-mod report;
 mod run;
 mod server;
-pub(crate) mod status;
 mod target_process;
 mod test;
 mod util;
@@ -124,6 +122,7 @@ async fn run(cli: Cli) -> Result<()> {
             command.run().await;
             Ok(())
         }
+        Command::Cluster(command) => command.run().await,
         Command::Test(t) => t.run().await,
         Command::Dbg(d) => d.run(),
         Command::Run(r) => r.run().await,

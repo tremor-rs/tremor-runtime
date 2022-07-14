@@ -15,7 +15,7 @@
 //! Tremor runtime
 
 #![deny(warnings)]
-#![deny(missing_docs)]
+#![allow(missing_docs)] // FIXME: got to go through the raft code and make only pub what is needed to be pub
 #![recursion_limit = "1024"]
 #![deny(
     clippy::all,
@@ -75,20 +75,19 @@ pub mod version;
 /// Instance management
 pub mod instance;
 
+pub mod raft;
+
 /// Metrics instance name
 pub static mut INSTANCE: &str = "tremor";
 
-use std::sync::atomic::AtomicUsize;
-
-use crate::errors::{Error, Result};
-
 pub(crate) use crate::config::Connector;
-use system::World;
-pub use tremor_pipeline::Event;
-use tremor_script::{
-    deploy::Deploy, highlighter::Dumb as ToStringHighlighter, highlighter::Term as TermHighlighter,
+use crate::{
+    errors::{Error, Result},
+    system::World,
 };
-use tremor_script::{highlighter::Highlighter, FN_REGISTRY};
+use std::{io::Read, sync::atomic::AtomicUsize};
+pub use tremor_pipeline::Event;
+use tremor_script::highlighter::Dumb as ToStringHighlighter;
 
 /// Operator Config
 pub type OpConfig = tremor_value::Value<'static>;
@@ -109,7 +108,6 @@ pub(crate) fn qsize() -> usize {
 /// # Errors
 /// Fails if the file can not be loaded
 pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
-    use std::io::Read;
     info!("Loading troy from {file_name}");
 
     let mut file = tremor_common::file::open(&file_name)?;
@@ -117,28 +115,7 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
 
     file.read_to_string(&mut src)
         .map_err(|e| Error::from(format!("Could not open file {file_name} => {e}")))?;
-    let aggr_reg = tremor_script::registry::aggr();
-
-    let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg);
-    let mut h = TermHighlighter::stderr();
-    let deployable = match deployable {
-        Ok(deployable) => {
-            deployable.format_warnings_with(&mut h)?;
-            deployable
-        }
-        Err(e) => {
-            log_error!(h.format_error(&e), "Error: {e}");
-
-            return Err(format!("failed to load troy file: {file_name}").into());
-        }
-    };
-
-    let mut count = 0;
-    for flow in deployable.iter_flows() {
-        world.start_flow(flow).await?;
-        count += 1;
-    }
-    Ok(count)
+    world.load_troy(file_name, &src).await
 }
 
 /// Logs but ignores an error

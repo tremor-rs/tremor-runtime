@@ -163,6 +163,7 @@ impl ServerRun {
 
     async fn run(&self) {
         version::print();
+
         match self.run_dun().await {
             Err(e) => {
                 match e {

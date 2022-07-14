@@ -730,7 +730,9 @@ impl<'script> ImutExpr<'script> {
             _ => None,
         }
     }
-    pub(crate) fn literal(mid: Box<NodeMeta>, value: Value<'script>) -> Self {
+    /// Creates a new literal
+    #[must_use]
+    pub fn literal(mid: Box<NodeMeta>, value: Value<'script>) -> Self {
         ImutExpr::Literal(Literal { mid, value })
     }
     /// Tries to borrow the `ImutExpr` as a `Record`
@@ -743,7 +745,9 @@ impl<'script> ImutExpr<'script> {
         }
     }
     /// Tries to turn the `ImutExpr` into a `Value`
-    pub(crate) fn try_into_value(mut self, helper: &Helper<'script, '_>) -> Result<Value<'script>> {
+    /// # Errors
+    /// If the expression is not constant
+    pub fn try_into_value(mut self, helper: &Helper<'script, '_>) -> Result<Value<'script>> {
         ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut self)?;
         if let ImutExpr::Literal(Literal { value: v, .. }) = self {
             Ok(v)

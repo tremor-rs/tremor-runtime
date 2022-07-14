@@ -22,10 +22,11 @@ use crate::{
     channel::Sender,
     connectors,
     errors::{Error, Kind as ErrorKind, Result},
+    log_error,
 };
 use std::time::Duration;
 use tokio::{sync::oneshot, task::JoinHandle, time::timeout};
-use tremor_script::{ast, highlighter::Highlighter};
+use tremor_script::{ast, deploy::Deploy, highlighter::Highlighter, FN_REGISTRY};
 
 /// Configuration for the runtime
 #[derive(Default)]
@@ -72,7 +73,7 @@ impl KillSwitch {
                 );
             }
         }
-        let res = self.0.send(flow_supervisor::Msg::Stop).await;
+        let res = self.0.send(flow_supervisor::Msg::Terminate).await;
         if let Err(e) = &res {
             error!("Error stopping all Flows: {e}");
         }
@@ -98,6 +99,37 @@ pub struct World {
 }
 
 impl World {
+    /// Loads a Troy src
+    ///
+    /// # Errors
+    ///   Fails if the source can not be loaded
+    pub async fn load_troy(&self, name: &str, src: &str) -> Result<usize> {
+        info!("Loading troy src {}", name);
+
+        let aggr_reg = tremor_script::registry::aggr();
+
+        let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg);
+        let mut h = tremor_script::highlighter::Term::stderr();
+        let deployable = match deployable {
+            Ok(deployable) => {
+                deployable.format_warnings_with(&mut h)?;
+                deployable
+            }
+            Err(e) => {
+                log_error!(h.format_error(&e), "Error: {e}");
+
+                return Err(format!("failed to load troy file: {}", src).into());
+            }
+        };
+
+        let mut count = 0;
+        for flow in deployable.iter_flows() {
+            self.start_flow(flow).await?;
+            count += 1;
+        }
+        Ok(count)
+    }
+
     /// Instantiate a flow from
     /// # Errors
     /// If the flow can't be started
@@ -131,6 +163,29 @@ impl World {
         } else {
             Ok(())
         }
+    }
+    
+    /// stops a flow
+    pub async fn stop_flow(&self, id: flow::Alias) -> Result<()> {
+        self.system
+            .send(flow_supervisor::Msg::StopDeploy { id })
+            .await?;
+        Ok(())
+    }
+
+    /// pauses a flow
+    pub async fn pause_flow(&self, id: flow::Alias) -> Result<()> {
+        self.system
+            .send(flow_supervisor::Msg::PauseDeploy { id })
+            .await?;
+        Ok(())
+    }
+    /// resumes a flow
+    pub async fn resume_flow(&self, id: flow::Alias) -> Result<()> {
+        self.system
+            .send(flow_supervisor::Msg::ResumeDeploy { id })
+            .await?;
+        Ok(())
     }
 
     /// Registers the given connector type with `type_name` and the corresponding `builder`

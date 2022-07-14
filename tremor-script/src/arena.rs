@@ -22,6 +22,8 @@ lazy_static::lazy_static! {
     };
 }
 
+/// FIXME: for cluster undeploy we need to be able to delete parts of the arena
+
 /// Memory arena for source to get static lifeimtes
 
 #[derive(Debug)]

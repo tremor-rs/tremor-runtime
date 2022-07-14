@@ -48,6 +48,21 @@ pub(crate) enum Msg {
         /// result sender
         sender: oneshot::Sender<Result<()>>,
     },
+    StopDeploy {
+        /// unique ID for this deployment
+        id: Alias,
+        // FIXME: we need some way to stop deployments
+    },
+    PauseDeploy {
+        /// unique ID for this deployment
+        id: Alias,
+        // FIXME: we need some way to pause deployments
+    },
+    ResumeDeploy {
+        /// unique ID for this deployment
+        id: Alias,
+        // FIXME: we need some way to resume deployments
+    },
     RegisterConnectorType {
         /// the type of connector
         connector_type: ConnectorType,
@@ -59,7 +74,7 @@ pub(crate) enum Msg {
     /// Initiate the Quiescence process
     Drain(oneshot::Sender<Result<()>>),
     /// stop this manager
-    Stop,
+    Terminate,
 }
 
 #[derive(Debug)]
@@ -137,7 +152,7 @@ impl FlowSupervisor {
         );
     }
 
-    async fn handle_stop(&self) -> Result<()> {
+    async fn handle_terminate(&self) -> Result<()> {
         info!("Stopping Manager ...");
         if !self.flows.is_empty() {
             // send stop to each deployment
@@ -206,10 +221,20 @@ impl FlowSupervisor {
         }
     }
 
+    async fn handle_stop(&self, id: Alias) {
+        todo!("stop {id}");
+    }
+    async fn handle_pause(&self, id: Alias) {
+        todo!("pause {id}");
+    }
+    async fn handle_resume(&self, id: Alias) {
+        todo!("resume {id}");
+    }
     pub fn start(mut self) -> (JoinHandle<Result<()>>, Channel, KillSwitch) {
         let (tx, mut rx) = bounded(qsize());
         let kill_switch = KillSwitch(tx.clone());
         let task_kill_switch = kill_switch.clone();
+
         let system_h = task::spawn(async move {
             while let Some(msg) = rx.recv().await {
                 match msg {
@@ -223,12 +248,15 @@ impl FlowSupervisor {
                             .await;
                     }
                     Msg::GetFlows(reply_tx) => self.handle_get_flows(reply_tx),
-                    Msg::GetFlow(id, reply_tx) => self.handle_get_flow(&id, reply_tx),
-                    Msg::Stop => {
-                        self.handle_stop().await?;
+                    Msg::GetFlow(id, reply_tx) => self.handle_get_flow(id, reply_tx),
+                    Msg::Terminate => {
+                        self.handle_terminate().await?;
                         break;
                     }
                     Msg::Drain(sender) => self.handle_drain(sender).await,
+                    Msg::StopDeploy { id } => self.handle_stop(id).await,
+                    Msg::PauseDeploy { id } => self.handle_pause(id).await,
+                    Msg::ResumeDeploy { id } => self.handle_resume(id).await,
                 }
             }
             info!("Manager stopped.");

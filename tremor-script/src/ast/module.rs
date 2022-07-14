@@ -15,7 +15,6 @@
 #![allow(clippy::module_name_repetitions)]
 
 use super::{
-    base_expr::Ranged,
     deploy::raw::{ConnectorDefinitionRaw, FlowDefinitionRaw},
     docs::{Docs, ModDoc},
     query::raw::{
@@ -36,12 +35,16 @@ use crate::{
 };
 use beef::Cow;
 use sha2::Digest;
-use std::collections::btree_map::Entry;
-use std::{collections::BTreeMap, fmt::Debug};
+use std::{
+    collections::{btree_map::Entry, BTreeMap, HashMap},
+    fmt::Debug,
+    path::PathBuf,
+};
 
 use std::sync::RwLock;
 lazy_static::lazy_static! {
-    static ref MODULES: RwLock<Manager> = RwLock::new(Manager::default());
+    /// loaded modules
+    pub static ref MODULES: RwLock<Manager> = RwLock::new(Manager::default());
 }
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -217,12 +220,16 @@ impl<'script> Content<'script> {
 pub struct Module {
     /// module identifier
     pub id: Id,
+    /// Arena index for this module
+    pub arena_idx: arena::Index,
     /// module documentation
     pub docs: Docs,
     /// module contents
     pub content: Content<'static>,
     /// additionally loaded modules
     pub modules: BTreeMap<String, Index>,
+    /// Path under which the module is located
+    pub paths: Vec<NodeId>,
 }
 
 impl From<&[u8]> for Id {
@@ -243,10 +250,12 @@ impl Module {
     /// # Errors
     /// If parsing the module fails.
     pub fn load(
+        file: NodeId,
         id: Id,
         ids: &mut Vec<(Id, String)>,
         arena_idx: arena::Index,
         src: &'static str,
+        precached: &HashMap<NodeId, arena::Index>,
     ) -> Result<Self> {
         let aggr_reg = crate::aggr_registry();
         let reg = &*FN_REGISTRY.read()?;
@@ -261,18 +270,16 @@ impl Module {
             match s {
                 ModuleStmtRaw::Use(UseRaw { modules, mid: meta }) => {
                     for (module, alias) in modules {
-                        match Manager::load_(&module, ids) {
+                        match Manager::load_(&module, ids, precached) {
                             Err(Error(ErrorKind::CyclicUse(_, _, uses), o)) => {
                                 return Err(Error(
-                                    ErrorKind::CyclicUse(meta.range, meta.range, uses),
+                                    ErrorKind::CyclicUse(meta.range, module.mid.range, uses),
                                     o,
                                 ));
                             }
-                            Err(e) => {
-                                return Err(e);
-                            }
+                            Err(e) => return Err(e),
                             Ok(mod_idx) => {
-                                let alias = alias.unwrap_or_else(|| module.id.clone());
+                                let alias = alias.clone().unwrap_or_else(|| module.id.clone());
                                 helper.scope().add_module_alias(alias, mod_idx);
                             }
                         }
@@ -323,10 +330,12 @@ impl Module {
             doc: module_docs.map(|lines| lines.join("\n")),
         });
         Ok(Module {
+            arena_idx,
             id,
             docs,
             content: scope.content,
             modules: scope.modules,
+            paths: vec![file],
         })
     }
 }
@@ -423,9 +432,15 @@ impl Manager {
         MODULES.write()?.path.add(path);
         Ok(())
     }
+
     /// shows modules
-    pub(crate) fn modules(&self) -> &[Module] {
+    #[must_use]
+    pub fn modules(&self) -> &[Module] {
         &self.modules
+    }
+    /// shows modules
+    pub(crate) fn modules_mut(&mut self) -> &mut [Module] {
+        &mut self.modules
     }
 
     pub(crate) fn find_module(mut root: Index, nest: &[String]) -> Result<Option<Index>> {
@@ -443,26 +458,48 @@ impl Manager {
         Ok(Some(root))
     }
 
-    pub(crate) fn load(node_id: &NodeId) -> Result<Index> {
+    pub(crate) fn load(
+        node_id: &NodeId,
+        pre_cached: &HashMap<NodeId, arena::Index>,
+    ) -> Result<Index> {
         let mut ids = Vec::new();
-        Manager::load_(node_id, &mut ids)
+        Manager::load_(node_id, &mut ids, pre_cached)
     }
 
-    fn load_(node_id: &NodeId, ids: &mut Vec<(Id, String)>) -> Result<Index> {
-        let m = MODULES.read()?;
-        let path = &m.path;
-
-        let p = path.resolve_id(node_id).ok_or_else(|| {
-            crate::errors::ErrorKind::ModuleNotFound(
-                node_id.extent().expand_lines(2),
-                node_id.extent(),
-                node_id.fqn(),
-                path.mounts.clone(),
+    fn load_(
+        node_id: &NodeId,
+        ids: &mut Vec<(Id, String)>,
+        precached: &HashMap<NodeId, arena::Index>,
+    ) -> Result<Index> {
+        let file = node_id.clone();
+        let (src, path, aid) = if let Some(idx) = precached.get(node_id) {
+            let mut p: PathBuf = node_id.module().iter().collect();
+            p.push(format!("{}.tremor", node_id.id()));
+            (
+                Arena::get(*idx)?
+                    .map(Cow::from)
+                    .ok_or("Invalid cache index")?,
+                p,
+                Some(*idx),
             )
-        })?;
-        drop(m);
+        } else {
+            let m = MODULES.read()?;
 
-        let src = std::fs::read_to_string(&p)?;
+            let path = &m.path;
+
+            let p = path.resolve_id(node_id).ok_or_else(|| {
+                crate::errors::ErrorKind::ModuleNotFound(
+                    Span::yolo(),
+                    Span::yolo(),
+                    node_id.fqn(),
+                    path.mounts.clone(),
+                )
+            })?;
+
+            drop(m);
+
+            (Cow::from(std::fs::read_to_string(&p)?), p, None)
+        };
         let id = Id::from(src.as_bytes());
         if ids.iter().any(|(other, _)| &id == other) {
             return Err(ErrorKind::CyclicUse(
@@ -472,24 +509,27 @@ impl Manager {
             )
             .into());
         }
-        ids.push((id.clone(), p.to_string_lossy().to_string()));
+        ids.push((id.clone(), path.to_string_lossy().to_string()));
 
-        let m = MODULES.read()?;
-        let maybe_id = m
-            .modules()
-            .iter()
+        let mut mm = MODULES.write()?;
+        let maybe_id = mm
+            .modules_mut()
+            .iter_mut()
             .enumerate()
-            .find(|(_, m)| m.id == id)
-            .map(|(i, _)| i);
-        drop(m);
+            .find(|(_, m)| m.id == id);
+
         let r = if let Some(id) = maybe_id {
-            Ok(Index(id))
+            id.1.paths.push(file);
+            Ok(Index(id.0))
         } else {
-            let (arena_idx, src) = Arena::insert(&src)?;
-            let m = Module::load(id, ids, arena_idx, src)?;
-
+            let (arena_idx, src) = if let Some(aid) = aid {
+                (aid, src.unwrap_borrowed())
+            } else {
+                Arena::insert(&src)?
+            };
+            drop(mm);
+            let m = Module::load(file, id, ids, arena_idx, src, precached)?;
             let mut mm = MODULES.write()?;
-
             let n = mm.modules.len();
             mm.modules.push(m);
 
@@ -515,38 +555,50 @@ mod test {
     #[test]
     fn load_twice() -> Result<()> {
         Manager::add_path(&"./tests/modules")?;
-        let id1 = Manager::load(&NodeId {
-            id: "twice".to_string(),
-            module: vec!["loading".into()],
-            mid: NodeMeta::dummy(),
-        })?;
-        let id2 = Manager::load(&NodeId {
-            id: "twice".to_string(),
-            module: vec!["loading".into()],
-            mid: NodeMeta::dummy(),
-        })?;
+        let id1 = Manager::load(
+            &NodeId {
+                id: "twice".to_string(),
+                module: vec!["loading".into()],
+                mid: NodeMeta::dummy(),
+            },
+            &HashMap::new(),
+        )?;
+        let id2 = Manager::load(
+            &NodeId {
+                id: "twice".to_string(),
+                module: vec!["loading".into()],
+                mid: NodeMeta::dummy(),
+            },
+            &HashMap::new(),
+        )?;
         assert_eq!(id1, id2);
         Ok(())
     }
     #[test]
     fn load_nested() -> Result<()> {
         Manager::add_path(&"./tests/modules")?;
-        Manager::load(&NodeId {
-            id: "outside".to_string(),
-            module: vec![],
-            mid: NodeMeta::dummy(),
-        })?;
+        Manager::load(
+            &NodeId {
+                id: "outside".to_string(),
+                module: vec![],
+                mid: NodeMeta::dummy(),
+            },
+            &HashMap::new(),
+        )?;
         Ok(())
     }
     #[test]
     fn load_from_id() -> Result<()> {
         Manager::add_path(&"./lib")?;
 
-        Manager::load(&NodeId {
-            id: "string".to_string(),
-            module: vec!["std".to_string()],
-            mid: NodeMeta::dummy(),
-        })?;
+        Manager::load(
+            &NodeId {
+                id: "string".to_string(),
+                module: vec!["std".to_string()],
+                mid: NodeMeta::dummy(),
+            },
+            &HashMap::new(),
+        )?;
         Ok(())
     }
 }
