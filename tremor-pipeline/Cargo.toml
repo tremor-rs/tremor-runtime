@@ -14,7 +14,6 @@ error-chain = "0.12"
 halfbrown = "0.2"
 indexmap = "2"
 rand = { version = "0.8", features = ["small_rng"] }
-lazy_static = "1"
 log = "0.4"
 lru = "0.12"
 petgraph = "0.6"

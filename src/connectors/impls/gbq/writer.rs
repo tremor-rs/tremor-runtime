@@ -32,8 +32,8 @@ pub(crate) struct Config {
 }
 impl tremor_config::Impl for Config {}
 
+/// 10MB
 fn default_request_size_limit() -> usize {
-    // 10MB
     10 * 1024 * 1024
 }
 
@@ -75,7 +75,6 @@ impl ConnectorBuilder for Builder {
         _: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         Ok(Box::new(Gbq { config }))
@@ -84,13 +83,11 @@ impl ConnectorBuilder for Builder {
 
 #[cfg(test)]
 mod tests {
-    use tokio::sync::broadcast;
-    use tremor_common::ids::SinkId;
 
     use super::*;
-    use crate::connectors::reconnect::ConnectionLostNotifier;
     use crate::connectors::sink::builder;
-    use crate::connectors::{metrics::SinkReporter, utils::quiescence::QuiescenceBeacon};
+    use crate::connectors::{reconnect::ConnectionLostNotifier, utils::metrics::SinkReporter};
+    use crate::{connectors::utils::quiescence::QuiescenceBeacon, system::flow::AppContext};
 
     #[tokio::test(flavor = "multi_thread")]
     pub async fn can_spawn_sink() -> Result<()> {
@@ -103,25 +100,23 @@ mod tests {
                 token: TokenSrc::dummy(),
             },
         };
-
+        let app_ctx = AppContext::default();
         let sink_address = connector
             .create_sink(
                 SinkContext::new(
-                    SinkId::default(),
-                    alias::Connector::new("a", "b"),
+                    SinkUId::default(),
+                    alias::Connector::new("b"),
                     ConnectorType::default(),
                     QuiescenceBeacon::default(),
                     ConnectionLostNotifier::new(crate::channel::bounded(128).0),
+                    app_ctx.clone(),
+                    KillSwitch::dummy(),
                 ),
                 builder(
                     &ConnectorConfig::default(),
                     CodecReq::Structured,
-                    &alias::Connector::new("a", "b"),
-                    SinkReporter::new(
-                        alias::Connector::new("a", "b"),
-                        broadcast::channel(1).0,
-                        None,
-                    ),
+                    &alias::Connector::new("b"),
+                    SinkReporter::new(app_ctx, alias::Connector::new("b"), None),
                 )?,
             )
             .await?;

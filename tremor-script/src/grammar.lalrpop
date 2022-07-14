@@ -239,8 +239,8 @@ ModularTarget: NodeId = {
 
 /// Root
 pub(crate) Deploy : DeployRaw<'input> = {
-    <config:ConfigDirectives> <doc:(ModComment)?> <stmts:DeployStmts> => DeployRaw{config, stmts, doc},
-    <doc:(ModComment)?> <stmts:DeployStmts>=> DeployRaw{config: vec![], stmts, doc},
+    <start:@L> <config:ConfigDirectives> <doc:(ModComment)?> <stmts:DeployStmts> <end:@L> => DeployRaw{ mid: NodeMeta::new_box(start, end), config, stmts, doc},
+    <start:@L> <doc:(ModComment)?> <stmts:DeployStmts> <end:@L> => DeployRaw{ mid: NodeMeta::new_box(start, end), config: vec![], stmts, doc},
 }
 
 DeployStmts: DeployStmtsRaw<'input> = {

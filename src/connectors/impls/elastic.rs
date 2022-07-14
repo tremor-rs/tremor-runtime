@@ -230,7 +230,6 @@
 //! [optimistic concurrency control]: https://www.elastic.co/guide/en/elasticsearch/reference/current/docs-bulk.html#bulk-optimistic-concurrency-control
 
 use super::http::auth::Auth;
-use crate::system::KillSwitch;
 use crate::{
     connectors::{
         impls::http::utils::Header, prelude::*, sink::concurrency_cap::ConcurrencyCap,
@@ -313,7 +312,6 @@ impl ConnectorBuilder for Builder {
         id: &alias::Connector,
         _: &ConnectorConfig,
         raw_config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
         if config.nodes.is_empty() {
@@ -1174,9 +1172,10 @@ impl CertValidation {
 }
 #[cfg(test)]
 mod tests {
+    use elasticsearch::http::request::Body;
+
     use super::*;
     use crate::config::Connector as ConnectorConfig;
-    use elasticsearch::http::request::Body;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn connector_builder_empty_nodes() -> Result<()> {
@@ -1185,17 +1184,14 @@ mod tests {
                 "nodes": []
             }
         });
-        let alias = alias::Connector::new("flow", "my_elastic");
+        let alias = alias::Connector::new("my_elastic");
         let builder = super::Builder::default();
         let connector_config =
             ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;
-        let kill_switch = KillSwitch::dummy();
         assert_eq!(
-            String::from(
-                "Invalid Definition for connector \"flow::my_elastic\": empty nodes provided"
-            ),
+            String::from("Invalid Definition for connector \"my_elastic\": empty nodes provided"),
             builder
-                .build(&alias, &connector_config, &kill_switch)
+                .build(&alias, &connector_config,)
                 .await
                 .err()
                 .map(|e| e.to_string())
@@ -1214,15 +1210,14 @@ mod tests {
                 ]
             }
         });
-        let alias = alias::Connector::new("snot", "my_elastic");
+        let alias = alias::Connector::new("my_elastic");
         let builder = super::Builder::default();
         let connector_config =
             ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;
-        let kill_switch = KillSwitch::dummy();
         assert_eq!(
             String::from("empty host"),
             builder
-                .build(&alias, &connector_config, &kill_switch)
+                .build(&alias, &connector_config,)
                 .await
                 .err()
                 .map(|e| e.to_string())

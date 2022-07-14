@@ -316,17 +316,17 @@ impl<'value> Value<'value> {
             _ => None,
         }
     }
+
     /// Tries to get the bytes from a Value
     ///
     /// # Errors
-    /// if the value is not a byte array or string
+    /// if the value is not a bytes type
     #[inline]
-    pub fn try_as_bytes(&self) -> Result<&[u8]> {
-        match self {
-            Value::Bytes(bs) => Ok(bs),
-            Value::String(bs) => Ok(bs.as_bytes()),
-            _ => Err(Error::ExpectedBytes),
-        }
+    pub fn try_as_bytes(&self) -> std::result::Result<&[u8], TryTypeError> {
+        self.as_bytes().ok_or(TryTypeError {
+            expected: ValueType::Custom("bytes"),
+            got: self.value_type(),
+        })
     }
 
     /// Tries to get an element of an object as bytes

@@ -65,7 +65,7 @@ macro_rules! test_cases {
                         port: Some(23),
                         scheme: "snot".into(),
                     };
-                    let context = EventContext::new(id as u64, Some(&uri));
+                    let context = EventContext::new( id as u64, Some(&uri), 0);
                     let mut meta = Value::from(Object::default());
                     match script.run(&context, AggrType::Tick, &mut json, &mut state, &mut meta) {
                         Err(e) => {
@@ -180,6 +180,7 @@ test_cases!(
     fold_array_initial_imut,
     fold_array_imut,
     record_add,
+    complex_for,
     nested_use_with_path,
     multi_use,
     for_comprehension_filter,

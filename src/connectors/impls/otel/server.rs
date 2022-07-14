@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::net::ToSocketAddrs;
+
 use super::{common::OtelDefaults, logs, metrics, trace};
 use crate::{connectors::prelude::*, errors::already_created_error};
 use async_std::channel::{bounded, Receiver, Sender};
@@ -71,7 +73,6 @@ impl ConnectorBuilder for Builder {
         id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let origin_uri = EventOriginUri {
             scheme: "tremor-otel-server".to_string(),
@@ -129,7 +130,10 @@ impl Connector for Server {
             .url
             .port()
             .ok_or("Missing prot for otel server")?;
-        let endpoint = format!("{host}:{port}").parse()?;
+        let endpoint = format!("{host}:{port}")
+            .to_socket_addrs()?
+            .next()
+            .ok_or("badaddr")?;
 
         if let Some(previous_handle) = self.accept_task.take() {
             previous_handle.abort();
@@ -195,12 +199,10 @@ impl Source for OtelSource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use env_logger;
-    // use http_types::Method;
 
     #[tokio::test(flavor = "multi_thread")]
     async fn otel_client_builder() -> Result<()> {
-        let alias = alias::Connector::new("test", "my_otel_server");
+        let alias = alias::Connector::new("my_otel_server");
         let with_processors = literal!({
             "config": {
                 "url": "localhost:4317",
@@ -211,11 +213,10 @@ mod tests {
             ConnectorType("otel_server".into()),
             &with_processors,
         )?;
-        let alias = alias::Connector::new("flow", "my_otel_server");
+        let alias = alias::Connector::new("my_otel_server");
 
         let builder = super::Builder::default();
-        let kill_switch = KillSwitch::dummy();
-        let _connector = builder.build(&alias, &config, &kill_switch).await?;
+        let _connector = builder.build(&alias, &config).await?;
 
         Ok(())
     }

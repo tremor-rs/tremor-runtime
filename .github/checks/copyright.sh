@@ -4,7 +4,7 @@ count=0
 
 for file in $(find . -name '*.rs' | grep -v '/target')
 do
-    if ! grep 'Copyright \(....-\)\?202[12], The Tremor Team' "$file" > /dev/null
+    if ! grep 'Copyright \(....-\)\?202[123], The Tremor Team' "$file" > /dev/null
     then
         echo "##[error] Copyright missing in $file"
         count=$((count + 1))

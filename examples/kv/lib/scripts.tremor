@@ -1,0 +1,14 @@
+define script with_meta
+script
+  use std::json;
+  let decoded = json::decode(event);
+  match decoded of
+    case %{present get} =>
+      let $kv = {"get": decoded.get};
+      emit null
+    case %{present put, present data} =>
+      let $kv = {"put": decoded.put};
+      emit decoded.data
+    case _ => emit event => "err"
+  end
+end;

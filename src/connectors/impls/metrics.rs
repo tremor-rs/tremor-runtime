@@ -151,8 +151,8 @@
 
 use crate::connectors::prelude::*;
 use beef::Cow;
-use tokio::sync::broadcast::{error::RecvError, Receiver, Sender};
-use tremor_pipeline::{MetricsMsg, METRICS_CHANNEL};
+use tokio::sync::broadcast::error::RecvError;
+use tremor_pipeline::{MetricsMsg, MetricsReceiver, MetricsSender};
 use tremor_script::utils::hostname;
 
 const MEASUREMENT: Cow<'static, str> = Cow::const_str("measurement");
@@ -169,15 +169,11 @@ const TIMESTAMP: Cow<'static, str> = Cow::const_str("timestamp");
 ///
 /// There should be only one instance around all the time, identified by `tremor://localhost/connector/system::metrics/system`
 ///
-pub(crate) struct MetricsConnector {
-    tx: Sender<MetricsMsg>,
-}
+pub(crate) struct MetricsConnector {}
 
 impl MetricsConnector {
     pub(crate) fn new() -> Self {
-        Self {
-            tx: METRICS_CHANNEL.tx(),
-        }
+        Self {}
     }
 }
 
@@ -194,7 +190,6 @@ impl ConnectorBuilder for Builder {
         &self,
         _id: &alias::Connector,
         _config: &ConnectorConfig,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(MetricsConnector::new()))
     }
@@ -211,7 +206,8 @@ impl Connector for MetricsConnector {
         ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = MetricsSource::new(self.tx.subscribe());
+        let source = MetricsSource::new(ctx.app_ctx.metrics.rx());
+        info!("{ctx} Metrics connector id: {}", source.rx.id());
         Ok(Some(builder.spawn(source, ctx)))
     }
 
@@ -220,7 +216,7 @@ impl Connector for MetricsConnector {
         ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = MetricsSink::new(self.tx.clone());
+        let sink = MetricsSink::new(ctx.app_ctx().metrics.tx());
         Ok(Some(builder.spawn(sink, ctx)))
     }
     fn codec_requirements(&self) -> CodecReq {
@@ -229,12 +225,12 @@ impl Connector for MetricsConnector {
 }
 
 pub(crate) struct MetricsSource {
-    rx: Receiver<MetricsMsg>,
+    rx: MetricsReceiver,
     origin_uri: EventOriginUri,
 }
 
 impl MetricsSource {
-    pub(crate) fn new(rx: Receiver<MetricsMsg>) -> Self {
+    pub(crate) fn new(rx: MetricsReceiver) -> Self {
         Self {
             rx,
             origin_uri: EventOriginUri {
@@ -285,11 +281,11 @@ impl Source for MetricsSource {
 }
 
 pub(crate) struct MetricsSink {
-    tx: Sender<MetricsMsg>,
+    tx: MetricsSender,
 }
 
 impl MetricsSink {
-    pub(crate) fn new(tx: Sender<MetricsMsg>) -> Self {
+    pub(crate) fn new(tx: MetricsSender) -> Self {
         Self { tx }
     }
 }

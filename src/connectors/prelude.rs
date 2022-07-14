@@ -15,7 +15,6 @@
 pub(crate) use crate::{
     channel::{bounded, Receiver, Sender},
     connectors::{
-        metrics::make_metrics_payload,
         sink::{
             channel_sink::{ChannelSink, ChannelSinkRuntime},
             AsyncSinkReply, ContraflowData, EventSerializer, ReplySender, Sink, SinkAck, SinkAddr,
@@ -37,9 +36,12 @@ pub(crate) use crate::{
     Event,
 };
 pub(crate) use std::sync::atomic::Ordering;
-pub use tremor_common::alias;
+
 pub(crate) use tremor_common::{
+    alias,
     ports::{Port, ERR, IN, OUT},
+    time::nanotime,
+    uids::{SinkUId, SourceUId},
     url::{Defaults, HttpsDefaults, Url},
 };
 pub(crate) use tremor_config::Impl;

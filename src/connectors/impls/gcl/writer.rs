@@ -270,7 +270,6 @@ impl ConnectorBuilder for Builder {
         _id: &alias::Connector,
         _: &ConnectorConfig,
         raw: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         Ok(Box::new(Gcl {
             config: Config::new(raw)?,

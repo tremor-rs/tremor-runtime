@@ -71,7 +71,6 @@ impl ConnectorBuilder for Builder {
         _id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         let origin_uri = EventOriginUri {
@@ -212,7 +211,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn otel_client_builder() -> Result<()> {
-        let alias = alias::Connector::new("flow", "my_otel_client");
+        let alias = alias::Connector::new("my_otel_client");
         let with_processors = literal!({
             "config": {
                 "url": "localhost:4317",
@@ -225,8 +224,7 @@ mod tests {
         )?;
 
         let builder = super::Builder::default();
-        let kill_switch = KillSwitch::dummy();
-        let _connector = builder.build(&alias, &config, &kill_switch).await?;
+        let _connector = builder.build(&alias, &config).await?;
 
         Ok(())
     }

@@ -107,7 +107,8 @@ op!(SequenceClassificationFactory(_uid, node) {
 impl Operator for SequenceClassification {
     fn on_event(
         &mut self,
-        _uid: OperatorId,
+        _node_id: u64,
+        _uid: OperatorUId,
         _port: &Port<'static>,
         _state: &mut Value<'static>,
         mut event: Event,
@@ -115,7 +116,7 @@ impl Operator for SequenceClassification {
         event.data.rent_mut(|data| -> Result<()> {
             let (v, m) = data.parts_mut();
             if let Some(s) = v.as_str() {
-                let labels = self.model.lock()?.predict(&[s]);
+                let labels = self.model.lock()?.predict([s]);
                 let mut label_meta = Value::object_with_capacity(labels.len());
                 for label in labels {
                     label_meta.try_insert(label.text, label.score);

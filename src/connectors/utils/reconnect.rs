@@ -388,6 +388,7 @@ mod tests {
     use crate::{
         connectors::{utils::quiescence::QuiescenceBeacon, CodecReq},
         qsize,
+        system::flow::AppContext,
     };
 
     /// does not connect
@@ -447,7 +448,7 @@ mod tests {
     async fn failfast_runtime() -> Result<()> {
         let (tx, _rx) = bounded(qsize());
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let alias = alias::Connector::new("flow", "test");
+        let alias = alias::Connector::new("test");
         let addr = Addr {
             alias: alias.clone(),
             source: None,
@@ -465,6 +466,7 @@ mod tests {
             connector_type: "fake".into(),
             quiescence_beacon: qb,
             notifier: runtime.notifier(),
+            app_ctx: AppContext::default(),
         };
         // failing attempt
         assert_eq!(
@@ -479,7 +481,7 @@ mod tests {
     async fn backoff_runtime() -> Result<()> {
         let (tx, mut rx) = bounded(qsize());
         let notifier = ConnectionLostNotifier::new(tx.clone());
-        let alias = alias::Connector::new("flow", "test");
+        let alias = alias::Connector::new("test");
         let addr = Addr {
             alias: alias.clone(),
             source: None,
@@ -502,6 +504,7 @@ mod tests {
             connector_type: "fake".into(),
             quiescence_beacon: qb,
             notifier: runtime.notifier(),
+            app_ctx: AppContext::default(),
         };
         // 1st failing attempt
         assert!(matches!(

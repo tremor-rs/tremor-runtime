@@ -1,0 +1,199 @@
+// Copyright 2021, The Tremor Team
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use std::collections::{BTreeSet, HashMap};
+
+use super::{
+    node::Addr,
+    store::{StateApp, TremorRequest, TremorSet},
+    TremorRaftConfig, TremorRaftImpl,
+};
+use crate::channel::{oneshot, Sender};
+use crate::raft::api::APIStoreReq;
+use crate::Result;
+use crate::{
+    errors::{Error, ErrorKind},
+    raft::NodeId,
+};
+use openraft::{
+    error::{CheckIsLeaderError, ForwardToLeader, RaftError},
+    raft::ClientWriteResponse,
+};
+use simd_json::OwnedValue;
+use tremor_common::alias;
+
+#[derive(Clone, Default)]
+pub(crate) struct Cluster {
+    node_id: NodeId,
+    raft: Option<TremorRaftImpl>,
+    sender: Option<Sender<APIStoreReq>>,
+}
+
+impl std::fmt::Debug for Cluster {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Manager")
+            .field("node_id", &self.node_id)
+            .field("raft", &self.raft.is_some())
+            .field("sender", &self.sender.is_some())
+            .finish()
+    }
+}
+
+impl Cluster {
+    pub(crate) fn id(&self) -> NodeId {
+        self.node_id
+    }
+    async fn send(&self, command: APIStoreReq) -> Result<()> {
+        self.sender
+            .as_ref()
+            .ok_or(crate::errors::ErrorKind::RaftNotRunning)?
+            .send(command)
+            .await?;
+        Ok(())
+    }
+
+    fn raft(&self) -> Result<&TremorRaftImpl> {
+        Ok(self
+            .raft
+            .as_ref()
+            .ok_or(crate::errors::ErrorKind::RaftNotRunning)?)
+    }
+
+    async fn client_write<T>(&self, command: T) -> Result<ClientWriteResponse<TremorRaftConfig>>
+    where
+        T: Into<TremorRequest> + Send + 'static,
+    {
+        Ok(self.raft()?.client_write(command.into()).await?)
+    }
+
+    pub(crate) async fn is_leader(&self) -> Result<()> {
+        Ok(self.raft()?.is_leader().await?)
+    }
+
+    pub(crate) fn new(node_id: NodeId, sender: Sender<APIStoreReq>, raft: TremorRaftImpl) -> Self {
+        Self {
+            node_id,
+            raft: Some(raft),
+            sender: Some(sender),
+        }
+    }
+
+    // cluster
+    pub(crate) async fn get_node(&self, node_id: u64) -> Result<Option<Addr>> {
+        let (tx, rx) = oneshot();
+        let command = APIStoreReq::GetNode(node_id, tx);
+        self.send(command).await?;
+        Ok(rx.await?)
+    }
+    pub(crate) async fn get_nodes(&self) -> Result<HashMap<u64, Addr>> {
+        let (tx, rx) = oneshot();
+        let command = APIStoreReq::GetNodes(tx);
+        self.send(command).await?;
+        Ok(rx.await?)
+    }
+    pub(crate) async fn get_node_id(&self, addr: Addr) -> Result<Option<u64>> {
+        let (tx, rx) = oneshot();
+        let command = APIStoreReq::GetNodeId(addr, tx);
+        self.send(command).await?;
+        Ok(rx.await?)
+    }
+    pub(crate) async fn get_last_membership(&self) -> Result<BTreeSet<u64>> {
+        let (tx, rx) = oneshot();
+        let command = APIStoreReq::GetLastMembership(tx);
+        self.send(command).await?;
+        Ok(rx.await?)
+    }
+
+    // apps
+    pub(crate) async fn get_app_local(&self, app_id: alias::App) -> Result<Option<StateApp>> {
+        let (tx, rx) = oneshot();
+        let command = APIStoreReq::GetApp(app_id, tx);
+        self.send(command).await?;
+        Ok(rx.await?)
+    }
+
+    pub(crate) async fn get_apps_local(
+        &self,
+    ) -> Result<HashMap<alias::App, crate::raft::api::apps::AppState>> {
+        let (tx, rx) = oneshot();
+        let command = APIStoreReq::GetApps(tx);
+        self.send(command).await?;
+        Ok(rx.await?)
+    }
+
+    // kv
+    pub(crate) async fn kv_set(&self, key: String, mut value: Vec<u8>) -> Result<Vec<u8>> {
+        match self.is_leader().await {
+            Ok(()) => self.kv_set_local(key, value).await,
+            Err(Error(
+                ErrorKind::CheckIsLeaderError(RaftError::APIError(
+                    CheckIsLeaderError::ForwardToLeader(ForwardToLeader {
+                        leader_node: Some(n),
+                        ..
+                    }),
+                )),
+                _,
+            )) => {
+                let client = crate::raft::api::client::Tremor::new(n.api())?;
+                // TODO: there should be a better way to forward then the client
+                Ok(simd_json::to_vec(
+                    &client
+                        .write(&crate::raft::api::kv::KVSet {
+                            key,
+                            value: simd_json::from_slice(&mut value)?,
+                        })
+                        .await?,
+                )?)
+            }
+            Err(e) => Err(e),
+        }
+    }
+    pub(crate) async fn kv_set_local(&self, key: String, value: Vec<u8>) -> Result<Vec<u8>> {
+        let tremor_res = self.client_write(TremorSet { key, value }).await?;
+        tremor_res.data.into_kv_value()
+    }
+
+    pub(crate) async fn kv_get(&self, key: String) -> Result<Option<OwnedValue>> {
+        match self.is_leader().await {
+            Ok(()) => self.kv_get_local(key).await,
+            Err(Error(
+                ErrorKind::CheckIsLeaderError(RaftError::APIError(
+                    CheckIsLeaderError::ForwardToLeader(ForwardToLeader {
+                        leader_node: Some(n),
+                        ..
+                    }),
+                )),
+                _,
+            )) => {
+                let client = crate::raft::api::client::Tremor::new(n.api())?;
+                let res = client.read(&key).await;
+                match res {
+                    Ok(v) => Ok(Some(v)),
+                    Err(e) if e.is_not_found() => Ok(None),
+                    Err(e) => Err(e.into()),
+                }
+            }
+            Err(e) => Err(e),
+        }
+    }
+    pub(crate) async fn kv_get_local(&self, key: String) -> Result<Option<OwnedValue>> {
+        let (tx, rx) = oneshot();
+        let command = APIStoreReq::KVGet(key, tx);
+        self.send(command).await?;
+        Ok(rx
+            .await?
+            .map(|mut v| simd_json::from_slice(&mut v))
+            .transpose()?)
+    }
+}

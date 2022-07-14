@@ -37,6 +37,11 @@ impl<T> From<tokio::sync::mpsc::error::SendError<T>> for Error {
         Self::from("Send Error")
     }
 }
+impl From<tremor_runtime::raft::ClusterError> for Error {
+    fn from(e: tremor_runtime::raft::ClusterError) -> Self {
+        ErrorKind::ClusterError(e).into()
+    }
+}
 
 error_chain! {
     links {
@@ -49,6 +54,7 @@ error_chain! {
     foreign_links {
         Value(tremor_value::Error);
         YamlError(serde_yaml::Error) #[doc = "Error during yaml parsing"];
+        SerdeJsonError(serde_json::Error) #[doc = "Error during json parsing"];
         JsonError(simd_json::Error) #[doc = "Error during json parsing"];
         Io(std::io::Error) #[doc = "Error during std::io"];
         Fmt(std::fmt::Error) #[doc = "Error during std::fmt"];
@@ -62,6 +68,10 @@ error_chain! {
         JoinError(tokio::task::JoinError);
     }
     errors {
+        ClusterError(e: tremor_runtime::raft::ClusterError) {
+            description("Cluster Error")
+                display("Cluster Error: {}", e)
+        }
         TestFailures(stats: crate::test::stats::Stats) {
             description("Some tests failed")
                 display("{} out of {} tests failed.\nFailed tests: {}",

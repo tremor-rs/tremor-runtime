@@ -14,7 +14,7 @@
 
 use super::Result::{Match, MatchNull, NoMatch};
 use super::*;
-use crate::Value;
+use crate::{Value, NO_CONTEXT};
 
 use matches::assert_matches;
 #[test]
@@ -26,11 +26,7 @@ fn test_reg_extractor() {
             v.try_insert("key", vec!["foo", "baz"]);
             v.try_insert("val", vec!["bar", "bat"]);
             assert_eq!(
-                ex.extract(
-                    true,
-                    &Value::from("foo=bar&baz=bat&"),
-                    &EventContext::new(0, None)
-                ),
+                ex.extract(true, &Value::from("foo=bar&baz=bat&"), &NO_CONTEXT),
                 Match(v)
             );
         }
@@ -45,7 +41,7 @@ fn test_re_extractor() {
             let mut v = Value::object();
             v.try_insert("snot", "bar");
             assert_eq!(
-                ex.extract(true, &Value::from("foobar"), &EventContext::new(0, None)),
+                ex.extract(true, &Value::from("foobar"), &NO_CONTEXT),
                 Match(v)
             );
         }
@@ -61,7 +57,7 @@ fn test_kv_extractor() {
             v.try_insert("a", "b");
             v.try_insert("c", "d");
             assert_eq!(
-                ex.extract(true, &Value::from("a:b c:d"), &EventContext::new(0, None)),
+                ex.extract(true, &Value::from("a:b c:d"), &NO_CONTEXT),
                 Match(v)
             );
         }
@@ -79,11 +75,7 @@ fn test_json_extractor() {
             v.try_insert("c", "d");
 
             assert_eq!(
-                ex.extract(
-                    true,
-                    &Value::from(r#"{"a":"b", "c":"d"}"#),
-                    &EventContext::new(0, None)
-                ),
+                ex.extract(true, &Value::from(r#"{"a":"b", "c":"d"}"#), &NO_CONTEXT),
                 Match(v)
             );
         }
@@ -97,7 +89,7 @@ fn test_glob_extractor() {
     match ex {
         Extractor::Glob { .. } => {
             assert_eq!(
-                ex.extract(true, &Value::from("INFO"), &EventContext::new(0, None)),
+                ex.extract(true, &Value::from("INFO"), &NO_CONTEXT),
                 MatchNull
             );
         }
@@ -111,11 +103,7 @@ fn test_base64_extractor() {
     match ex {
         Extractor::Base64 => {
             assert_eq!(
-                ex.extract(
-                    true,
-                    &Value::from("8J+agHNuZWFreSByb2NrZXQh"),
-                    &EventContext::new(0, None)
-                ),
+                ex.extract(true, &Value::from("8J+agHNuZWFreSByb2NrZXQh"), &NO_CONTEXT),
                 Match("\u{1f680}sneaky rocket!".into())
             );
         }
@@ -129,7 +117,7 @@ fn test_dissect_extractor() {
     match ex {
         Extractor::Dissect { .. } => {
             assert_eq!(
-                ex.extract(true, &Value::from("John"), &EventContext::new(0, None)),
+                ex.extract(true, &Value::from("John"), &NO_CONTEXT),
                 Match(literal!({
                     "name": "John"
                 }))
@@ -151,7 +139,7 @@ fn test_grok_extractor() {
                 &Value::from(
                     "<%1>123 Jul   7 10:51:24 hostname 2019-04-01T09:59:19+0010 pod dc foo bar baz",
                 ),
-                &EventContext::new(0, None),
+                &NO_CONTEXT,
             );
 
             assert_eq!(
@@ -182,22 +170,14 @@ fn test_cidr_extractor() {
             v.try_insert("mask", vec![255, 255, 255, 255]);
 
             assert_eq!(
-                ex.extract(
-                    true,
-                    &Value::from("192.168.1.0"),
-                    &EventContext::new(0, None)
-                ),
+                ex.extract(true, &Value::from("192.168.1.0"), &NO_CONTEXT),
                 Match(v)
             );
             let mut v = Value::object();
             v.try_insert("prefix", vec![192, 168, 1, 0]);
             v.try_insert("mask", vec![255, 255, 255, 0]);
             assert_eq!(
-                ex.extract(
-                    true,
-                    &Value::from("192.168.1.0/24"),
-                    &EventContext::new(0, None)
-                ),
+                ex.extract(true, &Value::from("192.168.1.0/24"), &NO_CONTEXT),
                 Match(v)
             );
 
@@ -211,7 +191,7 @@ fn test_cidr_extractor() {
                 ex.extract(
                     true,
                     &Value::from("2001:4860:4860:0000:0000:0000:0000:8888"),
-                    &EventContext::new(0, None)
+                    &NO_CONTEXT
                 ),
                 Match(v)
             );
@@ -227,20 +207,12 @@ fn test_cidr_extractor() {
             v.try_insert("mask", vec![255, 255, 255, 255]);
 
             assert_eq!(
-                rex.extract(
-                    true,
-                    &Value::from("10.22.0.254"),
-                    &EventContext::new(0, None)
-                ),
+                rex.extract(true, &Value::from("10.22.0.254"), &NO_CONTEXT),
                 Match(v)
             );
 
             assert_eq!(
-                rex.extract(
-                    true,
-                    &Value::from("99.98.97.96"),
-                    &EventContext::new(0, None)
-                ),
+                rex.extract(true, &Value::from("99.98.97.96"), &NO_CONTEXT),
                 NoMatch
             );
         }
@@ -265,7 +237,7 @@ fn test_influx_extractor() {
             ex.extract(
                 true,
                 &Value::from("wea\\ ther,location=us-midwest temperature=82 1465839830100400200"),
-                &EventContext::new(0, None)
+                &NO_CONTEXT
             ),
             Match(v)
         ),
@@ -278,11 +250,7 @@ fn test_datetime_extractor() {
     let ex = Extractor::new("datetime", "%Y-%m-%d %H:%M:%S").expect("bad extractor");
     match ex {
         Extractor::Datetime { .. } => assert_eq!(
-            ex.extract(
-                true,
-                &Value::from("2019-06-20 00:00:00"),
-                &EventContext::new(0, None)
-            ),
+            ex.extract(true, &Value::from("2019-06-20 00:00:00"), &NO_CONTEXT),
             Match(Value::from(1_560_988_800_000_000_000_u64))
         ),
         _ => unreachable!(),

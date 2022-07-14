@@ -119,7 +119,6 @@ mod test {
     use crate::registry::fun;
     use crate::registry::FunctionError;
     use crate::registry::Mfa;
-    use crate::Value;
     use tremor_value::literal;
 
     fn try_default_mfa() -> Mfa {

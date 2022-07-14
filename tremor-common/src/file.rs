@@ -68,7 +68,7 @@ where
 ///   * if the file couldn't be created
 pub fn set_current_dir<S>(path: &S) -> Result<(), Error>
 where
-    S: AsRef<Path>,
+    S: AsRef<Path> + ?Sized,
 {
     std::env::set_current_dir(path).map_err(|e| {
         let p: &Path = path.as_ref();
@@ -80,10 +80,28 @@ pub fn extension(path: &str) -> Option<&str> {
     Path::new(path).extension().and_then(OsStr::to_str)
 }
 
+/// Returns true if the directory exists and is empty
+///
+/// # Errors
+///
+/// if the given path is not a directory or cannot be read or does not exist etc etc etc
+pub fn is_empty<D>(dir: &D) -> Result<bool, Error>
+where
+    D: AsRef<Path> + ?Sized,
+{
+    let dir = dir.as_ref();
+    Ok(dir
+        .read_dir()
+        .map_err(|e| Error::FileOpen(e, dir.display().to_string()))?
+        .next()
+        .is_none())
+}
+
 #[cfg(test)]
 mod test {
     #![allow(clippy::unwrap_used)]
     use crate::errors::Error;
+    use std::{fs::File, io::Write, path::PathBuf};
 
     #[test]
     fn set_current_dir() -> Result<(), Error> {
@@ -139,6 +157,35 @@ mod test {
         assert!(r.is_err());
         let err = r.err().unwrap();
         assert!(matches!(err, Error::FileOpen(_, bad) if bad == p));
+        Ok(())
+    }
+
+    #[test]
+    fn is_empty_does_not_exist() -> Result<(), std::io::Error> {
+        let dir = tempfile::tempdir()?;
+        let mut dir_buf = PathBuf::from(dir.path());
+        dir_buf.push("non-existent");
+        assert!(super::is_empty(&dir_buf).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn is_empty() -> Result<(), std::io::Error> {
+        let dir = tempfile::tempdir()?;
+        assert!(super::is_empty(&dir).expect("Expected empty dir to be empty"));
+        Ok(())
+    }
+
+    #[test]
+    fn is_not_empty() -> Result<(), std::io::Error> {
+        let dir = tempfile::tempdir()?;
+        let mut buf = PathBuf::from(dir.path());
+        buf.push("element");
+        let mut f = File::create(&buf)?;
+        f.write_all(b"snot")?;
+        f.flush()?;
+        drop(f);
+        assert!(!super::is_empty(&dir).expect("Expected dir to not be empty"));
         Ok(())
     }
 }

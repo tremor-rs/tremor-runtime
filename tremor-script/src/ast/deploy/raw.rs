@@ -34,9 +34,7 @@ use crate::{
         Deploy, DeployStmt, Helper, NodeMeta, Script, Upable,
     },
     errors::{Kind as ErrorKind, Result},
-    impl_expr,
-    module::Manager,
-    AggrType, EventContext, Return,
+    impl_expr, AggrType, EventContext, Return,
 };
 use beef::Cow;
 use halfbrown::HashMap;
@@ -49,7 +47,7 @@ use tremor_value::literal;
 /// If evaluation of the script fails, or a legal value cannot be evaluated by result
 pub fn run_script<'script>(expr: &Script<'script>) -> Result<Value<'script>> {
     // We duplicate these here as it simplifies use of the macro externally
-    let ctx = EventContext::new(nanotime(), None);
+    let ctx = EventContext::new(nanotime(), None, 0);
     let mut event = literal!({}).into_static();
     let mut state = literal!({}).into_static();
     let mut meta = literal!({}).into_static();
@@ -69,12 +67,14 @@ pub struct DeployRaw<'script> {
     pub(crate) config: ConfigRaw<'script>,
     pub(crate) stmts: DeployStmtsRaw<'script>,
     pub(crate) doc: Option<Vec<Cow<'script, str>>>,
+    pub(crate) mid: Box<NodeMeta>,
 }
 impl<'script> DeployRaw<'script> {
     pub(crate) fn up_script<'registry>(
         self,
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<Deploy<'script>> {
+        let mid = self.mid;
         let mut stmts: Vec<DeployStmt<'script>> = vec![];
         for (_i, stmt) in self.stmts.into_iter().enumerate() {
             if let Some(stmt) = stmt.up(helper)? {
@@ -99,6 +99,7 @@ impl<'script> DeployRaw<'script> {
             stmts,
             scope: helper.scope.clone(),
             docs: helper.docs.clone(),
+            mid,
         })
     }
 }
@@ -119,12 +120,7 @@ impl<'script> Upable<'script> for DeployStmtRaw<'script> {
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         match self {
             DeployStmtRaw::Use(UseRaw { modules, .. }) => {
-                for (module, alias) in modules {
-                    let module_id = Manager::load(&module)?;
-
-                    let alias = alias.unwrap_or_else(|| module.id.clone());
-                    helper.scope().add_module_alias(alias, module_id);
-                }
+                helper.load_modules(&modules)?;
                 Ok(None)
             }
             DeployStmtRaw::FlowDefinition(stmt) => {
@@ -310,11 +306,7 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
         for stmt in self.stmts {
             match stmt {
                 FlowStmtRaw::Use(UseRaw { modules, .. }) => {
-                    for (module, alias) in modules {
-                        let module_id = Manager::load(&module)?;
-                        let alias = alias.unwrap_or_else(|| module.id.clone());
-                        helper.scope().add_module_alias(alias, module_id);
-                    }
+                    helper.load_modules(&modules)?;
                 }
                 FlowStmtRaw::ConnectorDefinition(stmt) => {
                     let stmt = stmt.up(helper)?;

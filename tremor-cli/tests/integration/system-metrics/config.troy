@@ -9,6 +9,7 @@ flow
   use integration;
   use std::time::nanos;
   use tremor::connectors;
+  use tremor::pipelines;
 
   # connector definitions
   define connector in from metronome
@@ -78,17 +79,17 @@ flow
       end;
       # update state counters
       match event of 
-        case matched = %{ tags ~= %{`pipeline` == "main1::main1", port == "in" }, fields ~= %{ present count } } =>
+        case matched = %{ tags ~= %{`pipeline` == "main1", port == "in" }, fields ~= %{ present count } } =>
           let state.pipeline_in = matched.fields.count
-        case matched = %{ tags ~= %{ `pipeline` == "main1::main1", port == "out"}, fields ~= %{ present count } } =>
+        case matched = %{ tags ~= %{ `pipeline` == "main1", port == "out"}, fields ~= %{ present count } } =>
           let state.pipeline_out = matched.fields.count
-        case matched = %{ tags ~= %{ `connector` == "main1::in_here", port == "out" }, fields ~= %{ present count } } => 
+        case matched = %{ tags ~= %{ `connector` == "in_here", port == "out" }, fields ~= %{ present count } } => 
           let state.source_out = matched.fields.count
-        case matched = %{ tags ~= %{ `connector` == "main1::in_here", port == "err" }, fields ~= %{ present count } } => 
+        case matched = %{ tags ~= %{ `connector` == "in_here", port == "err" }, fields ~= %{ present count } } => 
           let state.source_err = matched.fields.count
-        case matched = %{ tags ~= %{ `connector` == "main1::out_here", port == "in" }, fields ~= %{ present count } } => 
+        case matched = %{ tags ~= %{ `connector` == "out_here", port == "in" }, fields ~= %{ present count } } => 
           let state.sink_in = matched.fields.count
-        case _ => null
+        case _ => emit => "err"
       end;
 
       # exit if we have at least 10 events

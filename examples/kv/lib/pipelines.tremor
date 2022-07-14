@@ -1,0 +1,9 @@
+  define pipeline main
+  pipeline
+    use lib::scripts;
+
+    create script with_meta from scripts::with_meta;
+    select event from in into with_meta;
+    select event from with_meta into out;
+    select event from with_meta/err into err;
+  end;

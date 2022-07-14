@@ -129,21 +129,20 @@ impl ConnectorBuilder for Builder {
         &self,
         _id: &alias::Connector,
         config: &ConnectorConfig,
-        kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = match config.config.as_ref() {
             Some(raw_config) => Config::new(raw_config)?,
             None => Config::default(),
         };
-        Ok(Box::new(Exit {
-            kill_switch: kill_switch.clone(),
-            config,
-            done: false,
-        }))
+        Ok(Box::new(Exit { config }))
     }
 }
 #[derive(Clone)]
 pub(crate) struct Exit {
+    config: Config,
+}
+
+pub(crate) struct ExitSink {
     kill_switch: KillSwitch,
     config: Config,
     done: bool,
@@ -156,9 +155,14 @@ impl Connector for Exit {
         ctx: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = self.clone();
-
-        Ok(Some(builder.spawn(sink, ctx)))
+        Ok(Some(builder.spawn(
+            ExitSink {
+                config: self.config.clone(),
+                done: false,
+                kill_switch: ctx.killswitch(),
+            },
+            ctx,
+        )))
     }
 
     fn codec_requirements(&self) -> CodecReq {
@@ -166,13 +170,13 @@ impl Connector for Exit {
     }
 }
 
-impl Exit {
+impl ExitSink {
     const DELAY: &'static str = "delay";
     const GRACEFUL: &'static str = "graceful";
 }
 
 #[async_trait::async_trait()]
-impl Sink for Exit {
+impl Sink for ExitSink {
     fn auto_ack(&self) -> bool {
         true
     }

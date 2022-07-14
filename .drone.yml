@@ -3,6 +3,7 @@ name: test-on-arm64
 
 platform:
   arch: arm64
+  os: linux
 
 steps:
   - name: test

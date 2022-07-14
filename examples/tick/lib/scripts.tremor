@@ -1,0 +1,12 @@
+## The main script, the event gets processed here
+define script port_test
+state "initial"
+script from console
+  let last = state;
+  let state = "console";
+  emit "(c) last port used: #{last}";
+script
+  let last = state;
+  let state = "in";
+  emit "(i) last port used: #{last}";
+end;

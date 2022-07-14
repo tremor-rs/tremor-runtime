@@ -115,11 +115,13 @@ impl default::Default for EventOriginUri {
     }
 }
 
-pub(crate) const NO_CONTEXT: EventContext<'static> = EventContext {
+/// No context
+pub const NO_CONTEXT: EventContext<'static> = EventContext {
     at: 0,
     origin_uri: None,
     panic_on_assert: false,
     cardinality: 0,
+    node_id: 0,
 };
 
 // TODO check if we need all of these derives here still
@@ -135,17 +137,20 @@ pub struct EventContext<'run> {
     pub panic_on_assert: bool,
     /// The cardinality of the current window, if any
     pub cardinality: usize,
+    /// Cluster Node ID
+    pub node_id: u64,
 }
 
 impl<'run> EventContext<'run> {
     /// Creates a new context
     #[must_use]
-    pub fn new(ingest_ns: u64, origin_uri: Option<&'run EventOriginUri>) -> Self {
+    pub fn new(ingest_ns: u64, origin_uri: Option<&'run EventOriginUri>, node_id: u64) -> Self {
         Self {
             at: ingest_ns,
             origin_uri,
             panic_on_assert: false,
             cardinality: 0,
+            node_id,
         }
     }
 

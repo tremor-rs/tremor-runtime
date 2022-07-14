@@ -127,7 +127,6 @@ impl ConnectorBuilder for Builder {
         _: &alias::Connector,
         _: &ConnectorConfig,
         raw: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw)?;
         let origin_uri = EventOriginUri {
@@ -228,7 +227,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn missing_config() -> Result<()> {
-        let alias = alias::Connector::new("flow", "connector");
+        let alias = alias::Connector::new("connector");
         let builder = super::Builder::default();
         let connector_config = super::ConnectorConfig {
             connector_type: builder.connector_type(),
@@ -239,12 +238,8 @@ mod tests {
             reconnect: Reconnect::None,
             metrics_interval_s: Some(5),
         };
-        let kill_switch = KillSwitch::dummy();
         assert!(matches!(
-            builder
-                .build(&alias, &connector_config, &kill_switch)
-                .await
-                .err(),
+            builder.build(&alias, &connector_config,).await.err(),
             Some(Error(ErrorKind::MissingConfiguration(_), _))
         ));
         Ok(())

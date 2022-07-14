@@ -53,8 +53,198 @@ pub(crate) enum Command {
         #[clap( value_parser = clap::value_parser!(String))]
         name: String,
     },
+
+    /// cluster commands
+    Cluster(Cluster),
 }
 
+#[derive(Parser, Debug)]
+pub(crate) struct Cluster {
+    #[clap(subcommand)]
+    pub(crate) command: ClusterCommand,
+}
+
+#[derive(Parser, Clone, Debug)]
+pub(crate) enum ClusterCommand {
+    /// Bootstraps a new initial cluster
+    Bootstrap {
+        /// Database dir to store raft data in
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        db_dir: String,
+        /// Raft RPC IP and endpoint to listen to
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        rpc: String,
+        /// Raft API IP and endpoint to listen to
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        api: String,
+        /// Removes the node from the cluster when it's shut down with SIGTERM
+        #[clap(long, action = clap::ArgAction::SetTrue)]
+        remove_on_sigterm: bool,
+    },
+    /// Starts a cluster node that is part as a cluster already
+    Start {
+        /// Database dir to store raft data in
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        db_dir: String,
+        /// optional Raft RPC IP and endpoint to listen to
+        /// if not provided, it will be read from the previously initialized cluster state
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        rpc: Option<String>,
+        /// optional Raft API IP and endpoint to listen to
+        /// if not provided, it will be read from the previously initialized cluster state
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        api: Option<String>,
+        /// Zero or more endpoints of the cluster to join
+        /// if no value is provided this node will not attempt to explicitly join any cluster
+        /// except the one it is already part of
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        join: Vec<String>,
+        /// If set to true the node will join the cluster as learner and not take part in voting
+        #[clap(long, action = clap::ArgAction::SetTrue)]
+        passive: bool,
+        /// Removes the node from the cluster when it's shut down with SIGTERM
+        #[clap(long, action = clap::ArgAction::SetTrue)]
+        remove_on_sigterm: bool,
+    },
+    /// Removes a node from the cluster (the node still has to be stopped after this)
+    Remove {
+        /// Raft API IP and endpoint to send to
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        api: Option<String>,
+        /// Node to remove
+        #[clap(value_parser = clap::value_parser!(u64))]
+        node: u64,
+    },
+    /// Displays the cluster status
+    Status {
+        /// Raft API IP and endpoint to send to
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        api: Option<String>,
+        /// Show JSON output instead of human readable information
+        #[clap(short, long, action = clap::ArgAction::SetTrue)]
+        json: bool,
+    },
+    /// App related tommands
+    Apps {
+        /// Raft API IP and endpoint to send to, defaults to `TREMOR_API_ADDRESS`
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        api: Option<String>,
+        #[clap(subcommand)]
+        command: AppsCommands,
+    },
+    /// Packages a tremor application
+    Package {
+        /// the file to load
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        name: Option<String>,
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        out: String,
+        #[clap( value_parser = clap::value_parser!(String))]
+        entrypoint: String,
+    },
+    Kv {
+        /// Raft API IP and endpoint to send to, defaults to `TREMOR_API_ADDRESS`
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        api: Option<String>,
+        #[clap(subcommand)]
+        command: KvCommands,
+    },
+}
+
+// TODO: do we want to split out start/stop/pause/resume into a own sub command
+#[derive(Parser, Clone, Debug)]
+pub(crate) enum AppsCommands {
+    /// lists all installed apps
+    List {
+        /// Show JSON output instead of human readable information
+        #[clap(short, long, action = clap::ArgAction::SetTrue)]
+        json: bool,
+    },
+    /// Installs  new app
+    Install {
+        /// the file to load
+        #[clap( value_parser = clap::value_parser!(String))]
+        file: String,
+    },
+    /// Installs  new app
+    Uninstall {
+        /// The app
+        #[clap(value_parser = clap::value_parser!(String))]
+        app: String,
+    },
+    /// Starts an instance of a flow in an installed app
+    Start {
+        /// The app containing the flow
+        #[clap(value_parser = clap::value_parser!(String))]
+        app: String,
+        /// the instance of the flow to start
+        #[clap(value_parser = clap::value_parser!(String))]
+        instance: String,
+        /// The flow to start defaults to `main`
+        #[clap(long, short, value_parser = clap::value_parser!(String))]
+        flow: Option<String>,
+        /// Configuration for the flow instance to start
+        #[clap(long, short, value_parser = clap::value_parser!(String))]
+        config: Option<String>,
+        /// Deploys the pipeline in paused state
+        #[clap(short, long, action = clap::ArgAction::SetTrue)]
+        paused: bool,
+        /// Deploys the flow in single node mode, this means the flow will only run
+        /// on one node in the cluster and might be balanced to other nodes on resize
+        #[clap(short, long, action = clap::ArgAction::SetTrue)]
+        single_node: bool,
+    },
+
+    /// Stops and removes an instance of a flow in an installed app
+    Stop {
+        /// The app
+        #[clap(value_parser = clap::value_parser!(String))]
+        app: String,
+        /// the instance to stop
+        #[clap(value_parser = clap::value_parser!(String))]
+        instance: String,
+    },
+    /// Pauses an instance of a flow in an installed app
+    Pause {
+        /// The app
+        #[clap(value_parser = clap::value_parser!(String))]
+        app: String,
+        /// the instance to stop
+        #[clap(value_parser = clap::value_parser!(String))]
+        instance: String,
+    },
+    /// Resumes an instance of a flow in an installed app
+    Resume {
+        /// The app
+        #[clap(value_parser = clap::value_parser!(String))]
+        app: String,
+        /// the instance to stop
+        #[clap(value_parser = clap::value_parser!(String))]
+        instance: String,
+    },
+}
+
+#[derive(Parser, Clone, Debug)]
+pub(crate) enum KvCommands {
+    /// Reads a value from the KV store
+    Get {
+        /// The key to get
+        #[clap(value_parser = clap::value_parser!(String))]
+        key: String,
+        /// Performs the read on the leader to guarnatee a non stale read
+        #[clap(short, long, action = clap::ArgAction::SetTrue)]
+        consistant: bool,
+    },
+    /// Writes a value to the KV store
+    Set {
+        /// The key to set
+        #[clap(value_parser = clap::value_parser!(String))]
+        key: String,
+        /// The value to set (valid json)
+        #[clap(value_parser = clap::value_parser!(String))]
+        value: String,
+    },
+}
 /// Shell type
 #[derive(ValueEnum, Clone, Copy, Debug)]
 pub(crate) enum Shell {

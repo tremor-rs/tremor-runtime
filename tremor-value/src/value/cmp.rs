@@ -14,7 +14,7 @@
 
 use super::Value;
 use simd_json::{prelude::*, BorrowedValue, OwnedValue};
-use tremor_common::base64::{Engine, BASE64};
+use tremor_common::base64;
 
 #[allow(clippy::cast_sign_loss, clippy::default_trait_access)]
 impl<'value> PartialEq for Value<'value> {
@@ -92,7 +92,7 @@ impl<'value> From<Value<'value>> for OwnedValue {
             Value::String(s) => OwnedValue::from(s.to_string()),
             Value::Array(a) => a.into_iter().collect(),
             Value::Object(m) => m.into_iter().collect(),
-            Value::Bytes(b) => OwnedValue::from(BASE64.encode(b)),
+            Value::Bytes(b) => OwnedValue::from(base64::encode(b)),
         }
     }
 }
@@ -106,7 +106,7 @@ impl<'value> From<Value<'value>> for BorrowedValue<'value> {
             Value::String(s) => BorrowedValue::from(s.to_string()),
             Value::Array(a) => a.into_iter().collect(),
             Value::Object(m) => m.into_iter().collect(),
-            Value::Bytes(b) => BorrowedValue::from(BASE64.encode(b)),
+            Value::Bytes(b) => BorrowedValue::from(base64::encode(b)),
         }
     }
 }

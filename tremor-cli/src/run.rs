@@ -22,13 +22,13 @@ use std::io::{self, BufReader, BufWriter};
 use tremor_codec::Codec;
 use tremor_common::{
     file,
-    ids::OperatorIdGen,
     ports::{Port, IN},
     time::nanotime,
+    uids::OperatorUIdGen,
 };
 use tremor_interceptor::{postprocessor, preprocessor};
-use tremor_pipeline::{Event, EventId};
-use tremor_runtime::system::{World, WorldConfig};
+use tremor_pipeline::{Event, EventId, MetricsChannel};
+use tremor_runtime::system::{Runtime, WorldConfig};
 use tremor_script::{
     arena::Arena,
     highlighter::{Error as HighlighterError, Highlighter, Term as TermHighlighter},
@@ -232,7 +232,7 @@ impl Run {
         let env = env::setup()?;
 
         let mut h = TermHighlighter::stderr();
-        match Script::parse(raw, &env.fun) {
+        match Script::parse(&raw, &env.fun) {
             Ok(mut script) => {
                 script.format_warnings_with(&mut h)?;
 
@@ -249,7 +249,7 @@ impl Run {
                             let mut global_map = Value::object();
                             let mut event = event.clone_static();
                             match runnable.run(
-                                &EventContext::new(at, None),
+                                &EventContext::new(at, None, 0),
                                 AggrType::Tick,
                                 &mut event,
                                 state,
@@ -338,8 +338,8 @@ impl Run {
         let mut egress = Egress::from_args(self)?;
 
         let runnable = tremor_pipeline::query::Query(runnable);
-        let mut idgen = OperatorIdGen::new();
-        let mut pipeline = runnable.to_executable_graph(&mut idgen)?;
+        let mut idgen = OperatorUIdGen::new();
+        let mut pipeline = runnable.to_executable_graph(&mut idgen, &MetricsChannel::new(128))?;
         let id = 0_u64;
 
         ingress
@@ -354,6 +354,7 @@ impl Run {
                     let mut continuation = vec![];
 
                     if let Err(e) = runnable.enqueue(
+                        0,
                         IN,
                         Event {
                             id: EventId::from_id(0, 0, *id),
@@ -423,7 +424,7 @@ impl Run {
         let config = WorldConfig {
             debug_connectors: true,
         };
-        let (world, handle) = World::start(config).await?;
+        let (world, handle) = Runtime::start(config).await?;
         tremor_runtime::load_troy_file(&world, &self.script).await?;
         handle.await??;
         Ok(())

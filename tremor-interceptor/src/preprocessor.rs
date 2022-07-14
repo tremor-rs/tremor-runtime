@@ -30,7 +30,7 @@ pub(crate) mod prelude {
 use self::prelude::*;
 use crate::errors::Result;
 use log::error;
-use tremor_common::alias::Connector as Alias;
+use tremor_common::alias;
 
 /// Configuration for a preprocessor
 pub type Config = tremor_config::NameWithConfig;
@@ -126,16 +126,16 @@ pub fn preprocess(
     ingest_ns: &mut u64,
     data: Vec<u8>,
     meta: Value<'static>,
-    alias: &Alias,
+    prefix: &alias::SourceContext,
 ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
     let mut data = vec![(data, meta)];
     let mut data1 = Vec::new();
     for pp in preprocessors {
-        for (i, (d, m)) in data.drain(..).enumerate() {
+        for (d, m) in data.drain(..) {
             match pp.process(ingest_ns, &d, m) {
                 Ok(mut r) => data1.append(&mut r),
                 Err(e) => {
-                    error!("[Connector::{alias}] Preprocessor [{i}] error: {e}");
+                    error!("{prefix}[{}] Preprocessor error: {e}", pp.name());
                     return Err(e);
                 }
             }
@@ -152,16 +152,13 @@ pub fn preprocess(
 /// * If a preprocessor failed
 pub fn finish(
     preprocessors: &mut [Box<dyn Preprocessor>],
-    alias: &Alias,
+    prefix: &alias::SourceContext,
 ) -> Result<Vec<(Vec<u8>, Value<'static>)>> {
     if let Some((head, tail)) = preprocessors.split_first_mut() {
         let mut data = match head.finish(None, None) {
             Ok(d) => d,
             Err(e) => {
-                error!(
-                    "[Connector::{alias}] Preprocessor '{}' finish error: {e}",
-                    head.name()
-                );
+                error!("[{prefix}][{}] Preprocessor finish error: {e}", head.name());
                 return Err(e);
             }
         };
@@ -171,10 +168,7 @@ pub fn finish(
                 match pp.finish(Some(&d), Some(m)) {
                     Ok(mut r) => data1.append(&mut r),
                     Err(e) => {
-                        error!(
-                            "[Connector::{alias}] Preprocessor '{}' finish error: {e}",
-                            pp.name()
-                        );
+                        error!("[{prefix}][{}] Preprocessor finish error: {e}", pp.name());
                         return Err(e);
                     }
                 }
@@ -225,6 +219,7 @@ mod test {
     }
 
     use proptest::prelude::*;
+    use tremor_common::alias;
 
     // generate multiple chopped length-prefixed strings
     fn multiple_textual_lengths(max_elements: usize) -> BoxedStrategy<(Vec<usize>, Vec<String>)> {
@@ -362,7 +357,7 @@ mod test {
         let data = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
         let wire = post_p.process(0, 0, &data)?;
         let (start, end) = wire[0].split_at(7);
-        let alias = Alias::new("test", "test");
+        let alias = alias::SourceContext::new("test");
         let mut pps: Vec<Box<dyn Preprocessor>> = vec![Box::new(pre_p)];
         let recv = preprocess(
             pps.as_mut_slice(),
@@ -675,10 +670,7 @@ mod test {
     #[test]
     fn single_pre_process_head_ok() {
         let pre = Box::new(BadPreprocessor {});
-        let alias = tremor_common::alias::Connector::new(
-            tremor_common::alias::Flow::new("chucky"),
-            "chucky".to_string(),
-        );
+        let alias = alias::SourceContext::new("chucky");
         let mut ingest_ns = 0_u64;
         let r = preprocess(
             &mut [pre],
@@ -695,10 +687,7 @@ mod test {
         let noop = Box::new(NoOp {});
         assert_eq!("nily", noop.name());
         let pre = Box::new(BadPreprocessor {});
-        let alias = tremor_common::alias::Connector::new(
-            tremor_common::alias::Flow::new("chucky"),
-            "chucky".to_string(),
-        );
+        let alias = alias::SourceContext::new("chucky");
         let mut ingest_ns = 0_u64;
         let r = preprocess(
             &mut [noop, pre],
@@ -713,10 +702,7 @@ mod test {
     #[test]
     fn single_pre_finish_ok() {
         let pre = Box::new(BadPreprocessor {});
-        let alias = tremor_common::alias::Connector::new(
-            tremor_common::alias::Flow::new("chucky"),
-            "chucky".to_string(),
-        );
+        let alias = alias::SourceContext::new("chucky");
         let r = finish(&mut [pre], &alias);
         assert!(r.is_ok());
     }
@@ -730,10 +716,7 @@ mod test {
 
     #[test]
     fn preprocess_finish_head_fail() {
-        let alias = tremor_common::alias::Connector::new(
-            tremor_common::alias::Flow::new("chucky"),
-            "chucky".to_string(),
-        );
+        let alias = alias::SourceContext::new("chucky");
         let pre = Box::new(BadFinisher {});
         let r = finish(&mut [pre], &alias);
         assert!(r.is_err());
@@ -741,10 +724,7 @@ mod test {
 
     #[test]
     fn preprocess_finish_tail_fail() {
-        let alias = tremor_common::alias::Connector::new(
-            tremor_common::alias::Flow::new("chucky"),
-            "chucky".to_string(),
-        );
+        let alias = alias::SourceContext::new("chucky");
         let noop = Box::new(NoOp {});
         let pre = Box::new(BadFinisher {});
         let r = finish(&mut [noop, pre], &alias);
@@ -753,10 +733,7 @@ mod test {
 
     #[test]
     fn preprocess_finish_multi_ok() {
-        let alias = tremor_common::alias::Connector::new(
-            tremor_common::alias::Flow::new("xyz"),
-            "xyz".to_string(),
-        );
+        let alias = alias::SourceContext::new("xyz");
         let noop1 = Box::new(NoOp {});
         let noop2 = Box::new(NoOp {});
         let noop3 = Box::new(NoOp {});

@@ -155,13 +155,9 @@ impl ConnectorBuilder for Builder {
         _: &alias::Connector,
         _: &ConnectorConfig,
         raw: &Value,
-        kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw)?;
-        Ok(Box::new(Cb {
-            config,
-            kill_switch: kill_switch.clone(),
-        }))
+        Ok(Box::new(Cb { config }))
     }
 }
 
@@ -178,7 +174,6 @@ impl ConnectorBuilder for Builder {
 /// * In case the pipeline branches off, it copies the event and it reaches two offramps, we might receive more than 1 ack or fail for an event with the current runtime.
 pub(crate) struct Cb {
     config: Config,
-    kill_switch: KillSwitch,
 }
 
 #[async_trait::async_trait()]
@@ -199,7 +194,7 @@ impl Connector for Cb {
             )
             .into());
         }
-        let source = CbSource::new(&self.config, ctx.alias(), self.kill_switch.clone()).await?;
+        let source = CbSource::new(&self.config, ctx.alias(), ctx.killswitch()).await?;
         Ok(Some(builder.spawn(source, ctx)))
     }
 

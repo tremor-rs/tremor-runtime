@@ -31,8 +31,8 @@ pub mod file;
 /// Time related functions
 pub mod time;
 
-/// common id handling
-pub mod ids;
+/// common uid handling
+pub mod uids;
 
 /// Random numbers
 pub mod rand;

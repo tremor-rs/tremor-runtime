@@ -28,6 +28,5 @@ pub fn hostname() -> String {
 
 #[must_use]
 pub(crate) fn task_id() -> String {
-    // tokio::task::try_id().map_or_else(|| String::from("<no-task>"), |i| i.to_string())
     String::from("<no-task>")
 }

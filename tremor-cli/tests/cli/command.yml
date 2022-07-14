@@ -208,6 +208,6 @@ suites:
         expects:
           - source: stdout
             contains:
-              - "test/main.troy"
+              - "test/test.troy"
 
 

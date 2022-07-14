@@ -65,30 +65,28 @@ pub mod version;
 /// Instance management
 pub mod instance;
 
+/// Clustering / Consensus code
+pub mod raft;
+
 /// Metrics instance name
 pub static mut INSTANCE: &str = "tremor";
 
-use std::sync::atomic::AtomicUsize;
-
-use crate::errors::{Error, Result};
-
 pub(crate) use crate::config::Connector;
-use system::World;
-pub use tremor_pipeline::Event;
-use tremor_script::{
-    deploy::Deploy, highlighter::Dumb as ToStringHighlighter, highlighter::Term as TermHighlighter,
+use crate::{
+    errors::{Error, Result},
+    system::Runtime,
 };
-use tremor_script::{highlighter::Highlighter, FN_REGISTRY};
+use std::{io::Read, sync::atomic::AtomicUsize};
+pub use tremor_pipeline::Event;
+use tremor_script::highlighter::Dumb as ToStringHighlighter;
 
 /// Operator Config
 pub type OpConfig = tremor_value::Value<'static>;
 
 pub(crate) mod channel;
 
-lazy_static! {
-    /// Default Q Size
-    static ref QSIZE: AtomicUsize = AtomicUsize::new(128);
-}
+/// Default Q Size
+static QSIZE: AtomicUsize = AtomicUsize::new(128);
 
 pub(crate) fn qsize() -> usize {
     QSIZE.load(std::sync::atomic::Ordering::Relaxed)
@@ -98,8 +96,7 @@ pub(crate) fn qsize() -> usize {
 ///
 /// # Errors
 /// Fails if the file can not be loaded
-pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
-    use std::io::Read;
+pub async fn load_troy_file(world: &Runtime, file_name: &str) -> Result<usize> {
     info!("Loading troy from {file_name}");
 
     let mut file = tremor_common::file::open(&file_name)?;
@@ -107,28 +104,7 @@ pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
 
     file.read_to_string(&mut src)
         .map_err(|e| Error::from(format!("Could not open file {file_name} => {e}")))?;
-    let aggr_reg = tremor_script::registry::aggr();
-
-    let deployable = Deploy::parse(&src, &*FN_REGISTRY.read()?, &aggr_reg);
-    let mut h = TermHighlighter::stderr();
-    let deployable = match deployable {
-        Ok(deployable) => {
-            deployable.format_warnings_with(&mut h)?;
-            deployable
-        }
-        Err(e) => {
-            log_error!(h.format_error(&e), "Error: {e}");
-
-            return Err(format!("failed to load troy file: {file_name}").into());
-        }
-    };
-
-    let mut count = 0;
-    for flow in deployable.iter_flows() {
-        world.start_flow(flow).await?;
-        count += 1;
-    }
-    Ok(count)
+    world.load_troy(file_name, &src).await
 }
 
 /// Logs but ignores an error
@@ -153,7 +129,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_load_troy_file() -> Result<()> {
-        let (world, handle) = World::start(WorldConfig::default()).await?;
+        let (world, handle) = Runtime::start(WorldConfig::default()).await?;
         let troy_file = tempfile::NamedTempFile::new()?;
         troy_file.as_file().write_all(
             r#"

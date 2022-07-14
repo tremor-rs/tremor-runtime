@@ -42,7 +42,7 @@ fn mk_node_config(id: String, op_type: String, config: Value) -> NodeConfig {
 
 impl TrickleOperator {
     pub fn with_stmt(
-        operator_uid: OperatorId,
+        operator_uid: OperatorUId,
         defn: &ast::OperatorDefinition<'static>,
         helper: &mut Helper,
     ) -> Result<Self> {
@@ -64,12 +64,13 @@ impl TrickleOperator {
 impl Operator for TrickleOperator {
     fn on_event(
         &mut self,
-        uid: OperatorId,
+        node_id: u64,
+        uid: OperatorUId,
         port: &Port<'static>,
         state: &mut Value<'static>,
         event: Event,
     ) -> Result<EventAndInsights> {
-        self.op.on_event(uid, port, state, event)
+        self.op.on_event(node_id, uid, port, state, event)
     }
 
     fn handles_signal(&self) -> bool {
@@ -77,17 +78,18 @@ impl Operator for TrickleOperator {
     }
     fn on_signal(
         &mut self,
-        uid: OperatorId,
+        node_id: u64,
+        uid: OperatorUId,
         state: &mut Value<'static>,
         signal: &mut Event,
     ) -> Result<EventAndInsights> {
-        self.op.on_signal(uid, state, signal)
+        self.op.on_signal(node_id, uid, state, signal)
     }
 
     fn handles_contraflow(&self) -> bool {
         self.op.handles_contraflow()
     }
-    fn on_contraflow(&mut self, uid: OperatorId, contraevent: &mut Event) {
+    fn on_contraflow(&mut self, uid: OperatorUId, contraevent: &mut Event) {
         self.op.on_contraflow(uid, contraevent);
     }
 

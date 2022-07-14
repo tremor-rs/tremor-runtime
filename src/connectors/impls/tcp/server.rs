@@ -77,7 +77,6 @@ impl ConnectorBuilder for Builder {
         id: &alias::Connector,
         _: &ConnectorConfig,
         config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> crate::errors::Result<Box<dyn Connector>> {
         let config = Config::new(config)?;
         if config.url.port().is_none() {

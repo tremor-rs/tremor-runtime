@@ -72,7 +72,6 @@ impl ConnectorBuilder for Builder {
         _id: &alias::Connector,
         _: &ConnectorConfig,
         raw_config: &Value,
-        _kill_switch: &KillSwitch,
     ) -> crate::errors::Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
 

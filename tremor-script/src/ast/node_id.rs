@@ -27,6 +27,20 @@ pub struct NodeId {
 }
 impl_expr_no_lt!(NodeId);
 
+impl NodeId {
+    /// Create a new node id
+    #[must_use]
+    pub fn new(id: String, module: Vec<String>, mid: Box<NodeMeta>) -> Self {
+        Self { id, module, mid }
+    }
+
+    ///Checks if the id and module are the same
+    #[must_use]
+    pub fn same(&self, other: &Self) -> bool {
+        self.id == other.id && self.module == other.module
+    }
+}
+
 impl<'script> From<IdentRaw<'script>> for NodeId {
     fn from(id: IdentRaw<'script>) -> Self {
         Self {

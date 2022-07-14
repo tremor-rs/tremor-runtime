@@ -115,7 +115,7 @@
 
 mod handler;
 
-use crate::{connectors::prelude::*, errors::err_connector_def, system::KillSwitch};
+use crate::connectors::prelude::*;
 use handler::{ChronomicQueue, CronEntryInt};
 use serde_yaml::Value as YamlValue;
 use tremor_common::time::nanotime;
@@ -144,7 +144,6 @@ impl ConnectorBuilder for Builder {
         id: &alias::Connector,
         _: &ConnectorConfig,
         raw: &Value,
-        _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let raw = Config::new(raw)?;
         let payload = if let Some(yaml_entries) = raw.entries {

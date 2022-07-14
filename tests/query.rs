@@ -13,10 +13,10 @@
 // limitations under the License.
 use pretty_assertions::assert_eq;
 use std::io::prelude::*;
-use tremor_common::{file, ids::OperatorIdGen, ports::IN};
-use tremor_pipeline::ExecutableGraph;
+use tremor_common::{file, ports::IN, uids::OperatorUIdGen};
 use tremor_pipeline::{query::Query, EventOriginUri};
 use tremor_pipeline::{Event, EventId};
+use tremor_pipeline::{ExecutableGraph, MetricsChannel};
 use tremor_script::FN_REGISTRY;
 
 use serial_test::serial;
@@ -27,9 +27,9 @@ use tremor_value::utils::sorted_serialize;
 
 fn to_pipe(query: String) -> Result<ExecutableGraph> {
     let aggr_reg = tremor_script::aggr_registry();
-    let mut idgen = OperatorIdGen::new();
+    let mut idgen = OperatorUIdGen::new();
     let q = Query::parse(&query, &*FN_REGISTRY.read()?, &aggr_reg)?;
-    Ok(q.to_executable_graph(&mut idgen)?)
+    Ok(q.to_executable_graph(&mut idgen, &MetricsChannel::new(128))?)
 }
 
 macro_rules! test_cases {
@@ -80,7 +80,7 @@ macro_rules! test_cases {
                         ..Event::default()
                     };
                     let mut r = vec![];
-                    pipeline.enqueue(IN, event, &mut r)?;
+                    pipeline.enqueue(0, IN, event, &mut r)?;
                     results.append(&mut r);
                 }
                 assert_eq!(results.len(), out_json.len(), "Number of events differ error");
