@@ -1,0 +1,13 @@
+use google::cloud::logging::severity;
+
+## Generate a random span id using the hex string representation
+##
+## Returns a `string`
+intrinsic fn gen_span_id_string() as google_logging::gen_span_id_string;
+
+## Generate a random trace id using the hex string representation
+##
+## Returns a `string`
+intrinsic fn gen_trace_id_string() as google_logging::gen_trace_id_string;
+
+
