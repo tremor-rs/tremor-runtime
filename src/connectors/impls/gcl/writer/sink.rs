@@ -243,7 +243,7 @@ mod test {
                 Event::signal_tick(),
                 &SinkContext {
                     uid: Default::default(),
-                    alias: "".to_string(),
+                    alias: Alias::new("", ""),
                     connector_type: Default::default(),
                     quiescence_beacon: Default::default(),
                     notifier: ConnectionLostNotifier::new(rx),
@@ -253,7 +253,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    "",
+                    &Alias::new("", ""),
                 )
                 .unwrap(),
                 0,
@@ -289,7 +289,7 @@ mod test {
                 Event::signal_tick(),
                 &SinkContext {
                     uid: Default::default(),
-                    alias: "".to_string(),
+                    alias: Alias::new("", ""),
                     connector_type: Default::default(),
                     quiescence_beacon: Default::default(),
                     notifier: ConnectionLostNotifier::new(rx),
@@ -299,7 +299,7 @@ mod test {
                     CodecReq::Structured,
                     vec![],
                     &ConnectorType::from(""),
-                    "",
+                    &Alias::new("", ""),
                 )
                 .unwrap(),
                 0,
