@@ -17,7 +17,7 @@ mod sink;
 
 use crate::connectors::impls::gcl::writer::sink::GclSink;
 use crate::connectors::prelude::*;
-use crate::connectors::{Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
+use crate::connectors::{Alias, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
 use crate::errors::Error;
 use googapis::google::api::MonitoredResource;
 use googapis::google::logging::r#type::LogSeverity;
@@ -249,7 +249,7 @@ impl ConnectorBuilder for Builder {
 
     async fn build_cfg(
         &self,
-        _id: &str,
+        _id: &Alias,
         _: &ConnectorConfig,
         raw: &Value,
         _kill_switch: &KillSwitch,
