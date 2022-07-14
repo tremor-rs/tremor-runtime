@@ -24,7 +24,9 @@ This is home to the `tremor_api` erlang library to property test the API exposed
 
 To run the EQC tests defined in `tremor_api`, you first need to start a tremor server with the API enabled. This is our system to test:
 
-    $ tremor server run
+    $ tremor server run config.troy
+
+A bunch of `config.troy` files to try can be found in the `samples` directory.
 
 Then run the tests with rebar3:
 

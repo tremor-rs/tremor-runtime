@@ -333,7 +333,7 @@ mod tests {
             .body_json::<Vec<StatusReport>>()
             .await?;
         assert_eq!(1, body.len());
-        assert_eq!("api_test", body[0].id.as_str());
+        assert_eq!("api_test", body[0].alias.as_str());
         assert_eq!(InstanceState::Running, body[0].status);
         assert_eq!(1, body[0].connectors.len());
         assert_eq!(String::from("my_null"), body[0].connectors[0]);
@@ -348,7 +348,7 @@ mod tests {
             .body_json::<StatusReport>()
             .await?;
 
-        assert_eq!("api_test", body.id.as_str());
+        assert_eq!("api_test", body.alias.as_str());
         assert_eq!(InstanceState::Running, body.status);
         assert_eq!(1, body.connectors.len());
         assert_eq!(String::from("my_null"), body.connectors[0]);
@@ -363,7 +363,7 @@ mod tests {
             .body_json::<StatusReport>()
             .await?;
 
-        assert_eq!("api_test", body.id.as_str());
+        assert_eq!("api_test", body.alias.as_str());
         assert_eq!(InstanceState::Paused, body.status);
         assert_eq!(1, body.connectors.len());
         assert_eq!(String::from("my_null"), body.connectors[0]);
@@ -388,7 +388,7 @@ mod tests {
             .body_json::<StatusReport>()
             .await?;
 
-        assert_eq!("api_test", body.id.as_str());
+        assert_eq!("api_test", body.alias.as_str());
         assert_eq!(InstanceState::Running, body.status);
         assert_eq!(1, body.connectors.len());
         assert_eq!(String::from("my_null"), body.connectors[0]);
