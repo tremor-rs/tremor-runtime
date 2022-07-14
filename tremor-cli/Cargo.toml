@@ -23,7 +23,7 @@ pretty_assertions = "1.2.0"
 [dependencies]
 anyhow = "1"
 async-std = { version = "1.12", features = ["unstable"] }
-clap = { version = "3.2.10", features = ["color", "derive"] }
+clap = { version = "3.2.11", features = ["color", "derive"] }
 clap_complete = "3.2.3"
 difference = "2"
 env_logger = "0.9.0"
