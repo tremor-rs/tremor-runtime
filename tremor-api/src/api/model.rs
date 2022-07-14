@@ -69,7 +69,7 @@ impl From<ConnectorStatusReport> for ApiConnectorStatusReport {
     fn from(csr: ConnectorStatusReport) -> Self {
         Self {
             alias: csr.alias().connector_alias().to_string(),
-            status: csr.status().clone(),
+            status: *csr.status(),
             connectivity: *csr.connectivity(),
             pipelines: csr
                 .pipelines()
@@ -77,7 +77,7 @@ impl From<ConnectorStatusReport> for ApiConnectorStatusReport {
                 .map(|(k, v)| {
                     (
                         k.to_string(),
-                        v.into_iter().map(Pipeline::from).collect::<Vec<_>>(),
+                        v.iter().map(Pipeline::from).collect::<Vec<_>>(),
                     )
                 })
                 .collect(),
