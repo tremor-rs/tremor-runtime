@@ -681,7 +681,7 @@ pub(crate) async fn pipeline_task(
 
 fn output_doesnt_exist(port: &Cow<'static, str>, pipeline: &ExecutableGraph) -> bool {
     // function checks if port is in pipeline
-    return !pipeline.outputs.contains_key(port);
+    !pipeline.outputs.contains_key(port)
 }
 
 #[cfg(test)]
