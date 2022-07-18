@@ -18,7 +18,9 @@ use crate::connectors::prelude::{
 };
 use crate::connectors::sink::{AsyncSinkReply, ContraflowData, Sink};
 use crate::connectors::utils::url::HttpsDefaults;
-use crate::connectors::{Alias, CodecReq, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType, Context};
+use crate::connectors::{
+    Alias, CodecReq, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType, Context,
+};
 use crate::system::KillSwitch;
 use crate::{connectors, QSIZE};
 use async_std::channel::{bounded, Receiver, Sender};
@@ -121,7 +123,7 @@ impl Connector for GCSWriterConnector {
             current_name: None,
             default_bucket,
             done_until: Arc::new(AtomicUsize::new(0)),
-            reply_tx
+            reply_tx,
         };
 
         builder.spawn(sink, sink_context).map(Some)
@@ -182,25 +184,27 @@ impl ChunkedBuffer {
     }
 }
 
+struct HttpTaskRequest {
+    command: HttpTaskCommand,
+    contraflow_data: Option<ContraflowData>,
+}
+
 enum HttpTaskCommand {
     FinishUpload {
         name: String,
         data: Vec<u8>,
         data_start: usize,
         data_length: usize,
-        contraflow_data: Option<ContraflowData>
     },
     StartUpload {
         bucket: String,
         name: String,
-        contraflow_data: ContraflowData
     },
     UploadData {
         name: String,
         data: Vec<u8>,
         data_start: usize,
         data_length: usize,
-        contraflow_data: ContraflowData
     },
 }
 
@@ -222,7 +226,7 @@ fn create_client(_connect_timeout: Duration) -> Result<MockHttpClient> {
 }
 
 async fn http_task(
-    command_rx: Receiver<HttpTaskCommand>,
+    command_rx: Receiver<HttpTaskRequest>,
     done_until: Arc<AtomicUsize>,
     reply_tx: Sender<AsyncSinkReply>,
 ) -> Result<()> {
@@ -237,207 +241,32 @@ async fn http_task(
 
     let mut sessions_per_file = HashMap::new();
 
-    while let Ok(command) = command_rx.recv().await {
-        match command {
-            HttpTaskCommand::FinishUpload {
-                name,
-                data,
-                data_start,
-                data_length,
-                contraflow_data,
-            } => {
-                let session_url: url::Url =
-                    sessions_per_file
-                        .remove(&name)
-                        .ok_or(ErrorKind::GoogleCloudStorageError(
-                            "No session URL is available",
-                        ))?;
+    while let Ok(request) = command_rx.recv().await {
+        let result = handle_http_command(
+            done_until.clone(),
+            &client,
+            &url,
+            #[cfg(not(test))]
+            &token,
+            &mut sessions_per_file,
+            request.command,
+        )
+        .await;
 
-                for i in 0..3 {
-                    let mut request = Request::new(Method::Put, session_url.clone());
-
-                    request.insert_header(
-                        "Content-Range",
-                        format!(
-                            "bytes {}-{}/{}",
-                            data_start,
-                            // -1 on the end is here, because Content-Range is inclusive
-                            data_start + data_length - 1,
-                            data_start + data_length
-                        ),
-                    );
-
-                    request.set_body(data.clone());
-
-                    let response = client.send(request).await;
-
-                    if let Ok(mut response) = response {
-                        if !response.status().is_server_error() {
-                            if let Some(contraflow_data) = contraflow_data {
-                                // FIXME: figure out what the 0 here is
-                                reply_tx.send(AsyncSinkReply::Ack(contraflow_data, 0)).await?;
-                            }
-                            break;
-                        }
-                        error!(
-                            "Error from Google Cloud Storage: {}",
-                            response.body_string().await?
-                        );
-                    }
-
-                    sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
+        match result {
+            Ok(_) => {
+                if let Some(contraflow_data) = request.contraflow_data {
+                    // FIXME: what is the 0 supposed to be?
+                    reply_tx
+                        .send(AsyncSinkReply::Ack(contraflow_data, 0))
+                        .await?;
                 }
             }
-            HttpTaskCommand::StartUpload { bucket, name, contraflow_data } => {
-                for i in 0..3 {
-                    let url = url::Url::parse(&format!(
-                        "{}/b/{}/o?name={}&uploadType=resumable",
-                        url, bucket, name
-                    ))?;
-                    #[cfg(not(test))]
-                    let mut request = Request::new(Method::Post, url);
-                    #[cfg(test)]
-                    let request = Request::new(Method::Post, url);
-                    #[cfg(not(test))]
-                    {
-                        request.insert_header("Authorization", token.header_value()?.to_string());
-                    }
-
-                    let response = client.send(request).await;
-
-                    if let Ok(mut response) = response {
-                        if !response.status().is_server_error() {
-                            sessions_per_file.insert(
-                                name.to_string(),
-                                url::Url::parse(
-                                    response
-                                        .header("Location")
-                                        .ok_or(ErrorKind::GoogleCloudStorageError(
-                                            "Missing Location header",
-                                        ))?
-                                        .get(0)
-                                        .ok_or(ErrorKind::GoogleCloudStorageError(
-                                            "Missing Location header value",
-                                        ))?
-                                        .as_str(),
-                                )?,
-                            );
-
-                            reply_tx.send(AsyncSinkReply::Ack(contraflow_data, 0)).await?; // FIXME: figure out what the 0 is supposed to be
-
-                            break;
-                        }
-
-                        error!(
-                            "Error from Google Cloud Storage: {}",
-                            response.body_string().await?
-                        );
-                    }
-
-                    sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
-                    continue;
-                }
-            }
-            HttpTaskCommand::UploadData {
-                name,
-                data,
-                data_start,
-                data_length,
-                contraflow_data
-            } => {
-                let mut response = None;
-                for i in 0..3 {
-                    let session_url =
-                        sessions_per_file
-                            .get(&name)
-                            .ok_or(ErrorKind::GoogleCloudStorageError(
-                                "No session URL is available",
-                            ))?;
-                    let mut request = Request::new(Method::Put, session_url.clone());
-
-                    request.insert_header(
-                        "Content-Range",
-                        format!(
-                            "bytes {}-{}/*",
-                            data_start,
-                            // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
-                            data_start + data_length - 1
-                        ),
-                    );
-                    request.insert_header("User-Agent", "Tremor");
-                    request.insert_header("Accept", "*/*");
-                    request.set_body(data.clone());
-
-                    match client.send(request).await {
-                        Ok(request) => response = Some(request),
-                        Err(e) => {
-                            warn!("Failed to send a request to GCS: {}", e);
-
-                            sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
-                            continue;
-                        }
-                    }
-
-                    if let Some(response) = response.as_mut() {
-                        if !response.status().is_server_error()
-                            && response.header("range").is_some()
-                        {
-                            break;
-                        }
-
-                        error!(
-                            "Error from Google Cloud Storage: {}",
-                            response.body_string().await?
-                        );
-
-                        sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
-                    }
-                }
-
-                if let Some(mut response) = response {
-                    if response.status().is_server_error() {
-                        error!(
-                            "Error from Google Cloud Storage: {}",
-                            response.body_string().await?
-                        );
-                        return Err("Received server errors from Google Cloud Storage".into());
-                    }
-
-                    if let Some(raw_range) = response.header("range") {
-                        let raw_range = raw_range
-                            .get(0)
-                            .ok_or(ErrorKind::GoogleCloudStorageError(
-                                "Missing Range header value",
-                            ))?
-                            .as_str();
-
-                        // Range format: bytes=0-262143
-                        let range_end = &raw_range
-                            .get(
-                                raw_range
-                                    .find('-')
-                                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                                        "Did not find a - in the Range header",
-                                    ))?
-                                    + 1..,
-                            )
-                            .ok_or(ErrorKind::GoogleCloudStorageError(
-                                "Unable to get the end of the Range",
-                            ))?;
-
-                        // NOTE: The data can only be thrown away to the point of the end of the Range header,
-                        // since google can persist less than we send in our request.
-                        //
-                        // see: https://cloud.google.com/storage/docs/performing-resumable-uploads#chunked-upload
-                        done_until.store(range_end.parse()?, Ordering::Release);
-
-                        reply_tx.send(AsyncSinkReply::Ack(contraflow_data,0 // FIXME: unsure what this number is, figure it out
-                        )).await?;
-                    } else {
-                        return Err("No range header".into());
-                    }
-                } else {
-                    return Err("no response from GCS".into());
+            Err(e) => {
+                warn!("Failed to handle a message: {:?}", e);
+                if let Some(contraflow_data) = request.contraflow_data {
+                    // FIXME: what is the 0 supposed to be?
+                    reply_tx.send(AsyncSinkReply::Fail(contraflow_data)).await?;
                 }
             }
         }
@@ -446,8 +275,210 @@ async fn http_task(
     Ok(())
 }
 
+async fn handle_http_command(
+    done_until: Arc<AtomicUsize>,
+    client: &impl HttpClient,
+    url: &&str,
+    #[cfg(not(test))] token: &Token,
+    sessions_per_file: &mut HashMap<String, url::Url>,
+    command: HttpTaskCommand,
+) -> Result<()> {
+    match command {
+        HttpTaskCommand::FinishUpload {
+            name,
+            data,
+            data_start,
+            data_length,
+        } => {
+            let session_url: url::Url =
+                sessions_per_file
+                    .remove(&name)
+                    .ok_or(ErrorKind::GoogleCloudStorageError(
+                        "No session URL is available",
+                    ))?;
+
+            for i in 0..3 {
+                let mut request = Request::new(Method::Put, session_url.clone());
+
+                request.insert_header(
+                    "Content-Range",
+                    format!(
+                        "bytes {}-{}/{}",
+                        data_start,
+                        // -1 on the end is here, because Content-Range is inclusive
+                        data_start + data_length - 1,
+                        data_start + data_length
+                    ),
+                );
+
+                request.set_body(data.clone());
+
+                let response = client.send(request).await;
+
+                if let Ok(mut response) = response {
+                    if !response.status().is_server_error() {
+                        break;
+                    }
+                    error!(
+                        "Error from Google Cloud Storage: {}",
+                        response.body_string().await?
+                    );
+                }
+
+                sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
+            }
+        }
+        HttpTaskCommand::StartUpload { bucket, name } => {
+            for i in 0..3 {
+                let url = url::Url::parse(&format!(
+                    "{}/b/{}/o?name={}&uploadType=resumable",
+                    url, bucket, name
+                ))?;
+                #[cfg(not(test))]
+                let mut request = Request::new(Method::Post, url);
+                #[cfg(test)]
+                let request = Request::new(Method::Post, url);
+                #[cfg(not(test))]
+                {
+                    request.insert_header("Authorization", token.header_value()?.to_string());
+                }
+
+                let response = client.send(request).await;
+
+                if let Ok(mut response) = response {
+                    if !response.status().is_server_error() {
+                        sessions_per_file.insert(
+                            name.to_string(),
+                            url::Url::parse(
+                                response
+                                    .header("Location")
+                                    .ok_or(ErrorKind::GoogleCloudStorageError(
+                                        "Missing Location header",
+                                    ))?
+                                    .get(0)
+                                    .ok_or(ErrorKind::GoogleCloudStorageError(
+                                        "Missing Location header value",
+                                    ))?
+                                    .as_str(),
+                            )?,
+                        );
+
+                        break;
+                    }
+
+                    error!(
+                        "Error from Google Cloud Storage: {}",
+                        response.body_string().await?
+                    );
+                }
+
+                sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
+                continue;
+            }
+        }
+        HttpTaskCommand::UploadData {
+            name,
+            data,
+            data_start,
+            data_length,
+        } => {
+            let mut response = None;
+            for i in 0..3 {
+                let session_url =
+                    sessions_per_file
+                        .get(&name)
+                        .ok_or(ErrorKind::GoogleCloudStorageError(
+                            "No session URL is available",
+                        ))?;
+                let mut request = Request::new(Method::Put, session_url.clone());
+
+                request.insert_header(
+                    "Content-Range",
+                    format!(
+                        "bytes {}-{}/*",
+                        data_start,
+                        // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
+                        data_start + data_length - 1
+                    ),
+                );
+                request.insert_header("User-Agent", "Tremor");
+                request.insert_header("Accept", "*/*");
+                request.set_body(data.clone());
+
+                match client.send(request).await {
+                    Ok(request) => response = Some(request),
+                    Err(e) => {
+                        warn!("Failed to send a request to GCS: {}", e);
+
+                        sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
+                        continue;
+                    }
+                }
+
+                if let Some(response) = response.as_mut() {
+                    if !response.status().is_server_error() && response.header("range").is_some() {
+                        break;
+                    }
+
+                    error!(
+                        "Error from Google Cloud Storage: {}",
+                        response.body_string().await?
+                    );
+
+                    sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
+                }
+            }
+
+            if let Some(mut response) = response {
+                if response.status().is_server_error() {
+                    error!(
+                        "Error from Google Cloud Storage: {}",
+                        response.body_string().await?
+                    );
+                    return Err("Received server errors from Google Cloud Storage".into());
+                }
+
+                if let Some(raw_range) = response.header("range") {
+                    let raw_range = raw_range
+                        .get(0)
+                        .ok_or(ErrorKind::GoogleCloudStorageError(
+                            "Missing Range header value",
+                        ))?
+                        .as_str();
+
+                    // Range format: bytes=0-262143
+                    let range_end = &raw_range
+                        .get(
+                            raw_range
+                                .find('-')
+                                .ok_or(ErrorKind::GoogleCloudStorageError(
+                                    "Did not find a - in the Range header",
+                                ))?
+                                + 1..,
+                        )
+                        .ok_or(ErrorKind::GoogleCloudStorageError(
+                            "Unable to get the end of the Range",
+                        ))?;
+
+                    // NOTE: The data can only be thrown away to the point of the end of the Range header,
+                    // since google can persist less than we send in our request.
+                    //
+                    // see: https://cloud.google.com/storage/docs/performing-resumable-uploads#chunked-upload
+                    done_until.store(range_end.parse()?, Ordering::Release);
+                } else {
+                    return Err("No range header".into());
+                }
+            } else {
+                return Err("no response from GCS".into());
+            }
+        }
+    }
+
+    Ok(())
+}
+
 struct GCSWriterSink {
-    client_tx: Option<Sender<HttpTaskCommand>>,
+    client_tx: Option<Sender<HttpTaskRequest>>,
     #[allow(unused)] // FIXME: use this in the http task
     url: Url<HttpsDefaults>,
     config: Config,
@@ -485,9 +516,11 @@ impl Sink for GCSWriterSink {
                     "The file name in metadata is not a string",
                 ))?;
 
-            self.finish_upload_if_needed(name, Some(contraflow_data.clone())).await?;
+            self.finish_upload_if_needed(name, Some(contraflow_data.clone()))
+                .await?;
 
-            self.start_upload_if_needed(meta, name, contraflow_data.clone()).await?;
+            self.start_upload_if_needed(meta, name, contraflow_data.clone())
+                .await?;
 
             let serialized_data = serializer.serialize(value, event.ingest_ns)?;
             for item in serialized_data {
@@ -503,14 +536,18 @@ impl Sink for GCSWriterSink {
                         "not connected",
                     ))?;
 
-                let message = HttpTaskCommand::UploadData {
+                let command = HttpTaskCommand::UploadData {
                     data: data.to_vec(),
                     name: name.to_string(),
                     data_start: self.buffers.start(),
                     data_length: self.buffers.len(),
-                    contraflow_data: contraflow_data.clone()
                 };
-                client_tx.send(message).await?;
+                client_tx
+                    .send(HttpTaskRequest {
+                        command,
+                        contraflow_data: Some(contraflow_data.clone()),
+                    })
+                    .await?;
             }
         }
 
@@ -525,7 +562,10 @@ impl Sink for GCSWriterSink {
 
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let (tx, rx) = bounded(QSIZE.load(Ordering::Relaxed));
-        connectors::spawn_task(ctx.clone(), http_task(rx, self.done_until.clone(), self.reply_tx.clone()));
+        connectors::spawn_task(
+            ctx.clone(),
+            http_task(rx, self.done_until.clone(), self.reply_tx.clone()),
+        );
 
         self.client_tx = Some(tx);
 
@@ -541,7 +581,11 @@ impl Sink for GCSWriterSink {
 }
 
 impl GCSWriterSink {
-    async fn finish_upload_if_needed(&mut self, name: &str, contraflow_data: Option<ContraflowData>) -> Result<()> {
+    async fn finish_upload_if_needed(
+        &mut self,
+        name: &str,
+        contraflow_data: Option<ContraflowData>,
+    ) -> Result<()> {
         if self.current_name.as_deref() != Some(name) && self.current_name.is_some() {
             return self.finish_upload(contraflow_data).await;
         }
@@ -566,10 +610,14 @@ impl GCSWriterSink {
                 data: final_data.to_vec(),
                 data_start: self.buffers.start(),
                 data_length: self.buffers.len(),
-                contraflow_data
             };
 
-            client_tx.send(command).await?;
+            client_tx
+                .send(HttpTaskRequest {
+                    command,
+                    contraflow_data,
+                })
+                .await?;
 
             self.buffers = ChunkedBuffer::new(self.config.buffer_size);
             self.current_name = None;
@@ -578,7 +626,12 @@ impl GCSWriterSink {
         Ok(())
     }
 
-    async fn start_upload_if_needed(&mut self, meta: Option<&Value<'_>>, name: &str, contraflow_data: ContraflowData) -> Result<()> {
+    async fn start_upload_if_needed(
+        &mut self,
+        meta: Option<&Value<'_>>,
+        name: &str,
+        contraflow_data: ContraflowData,
+    ) -> Result<()> {
         let client_tx = self
             .client_tx
             .as_mut()
@@ -600,11 +653,14 @@ impl GCSWriterSink {
                 ))?
                 .to_string();
 
+            let command = HttpTaskCommand::StartUpload {
+                bucket,
+                name: name.to_string(),
+            };
             client_tx
-                .send(HttpTaskCommand::StartUpload {
-                    bucket,
-                    name: name.to_string(),
-                    contraflow_data
+                .send(HttpTaskRequest {
+                    command,
+                    contraflow_data: Some(contraflow_data),
                 })
                 .await?;
 
