@@ -119,6 +119,7 @@ impl Connector for GCSWriterConnector {
             config: self.config.clone(),
             buffers: ChunkedBuffer::new(self.config.buffer_size),
             current_name: None,
+            current_bucket: None,
             default_bucket,
             done_until: Arc::new(AtomicUsize::new(0)),
             reply_tx,
@@ -191,16 +192,18 @@ struct HttpTaskRequest {
 enum HttpTaskCommand {
     FinishUpload {
         name: String,
+        bucket: String,
         data: Vec<u8>,
         data_start: usize,
         data_length: usize,
     },
     StartUpload {
-        bucket: String,
         name: String,
+        bucket: String,
     },
     UploadData {
         name: String,
+        bucket: String,
         data: Vec<u8>,
         data_start: usize,
         data_length: usize,
@@ -277,22 +280,20 @@ async fn handle_http_command(
     client: &impl HttpClient,
     url: &Url<HttpsDefaults>,
     #[cfg(not(test))] token: &Token,
-    sessions_per_file: &mut HashMap<String, url::Url>,
+    sessions_per_file: &mut HashMap<(String, String), url::Url>,
     command: HttpTaskCommand,
 ) -> Result<()> {
     match command {
         HttpTaskCommand::FinishUpload {
             name,
+            bucket,
             data,
             data_start,
             data_length,
         } => {
-            let session_url: url::Url =
-                sessions_per_file
-                    .remove(&name)
-                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                        "No session URL is available",
-                    ))?;
+            let session_url: url::Url = sessions_per_file.remove(&(bucket, name)).ok_or(
+                ErrorKind::GoogleCloudStorageError("No session URL is available"),
+            )?;
 
             for i in 0..3 {
                 let mut request = Request::new(Method::Put, session_url.clone());
@@ -345,7 +346,7 @@ async fn handle_http_command(
                 if let Ok(mut response) = response {
                     if !response.status().is_server_error() {
                         sessions_per_file.insert(
-                            name.to_string(),
+                            (bucket.clone(), name.to_string()),
                             url::Url::parse(
                                 response
                                     .header("Location")
@@ -375,18 +376,18 @@ async fn handle_http_command(
         }
         HttpTaskCommand::UploadData {
             name,
+            bucket,
             data,
             data_start,
             data_length,
         } => {
             let mut response = None;
             for i in 0..3 {
-                let session_url =
-                    sessions_per_file
-                        .get(&name)
-                        .ok_or(ErrorKind::GoogleCloudStorageError(
-                            "No session URL is available",
-                        ))?;
+                let session_url = sessions_per_file
+                    .get(&(bucket.clone(), name.clone()))
+                    .ok_or(ErrorKind::GoogleCloudStorageError(
+                        "No session URL is available",
+                    ))?;
                 let mut request = Request::new(Method::Put, session_url.clone());
 
                 request.insert_header(
@@ -479,6 +480,7 @@ struct GCSWriterSink {
     config: Config,
     buffers: ChunkedBuffer,
     current_name: Option<String>,
+    current_bucket: Option<String>,
     default_bucket: Option<Value<'static>>,
     done_until: Arc<AtomicUsize>,
     reply_tx: Sender<AsyncSinkReply>,
@@ -531,9 +533,13 @@ impl Sink for GCSWriterSink {
                         "not connected",
                     ))?;
 
+                let bucket = get_bucket_name(self.default_bucket.as_ref(), meta)?.to_string();
+                self.current_bucket = Some(bucket.clone());
+
                 let command = HttpTaskCommand::UploadData {
                     data: data.to_vec(),
                     name: name.to_string(),
+                    bucket,
                     data_start: self.buffers.start(),
                     data_length: self.buffers.len(),
                 };
@@ -613,6 +619,13 @@ impl GCSWriterSink {
 
             let command = HttpTaskCommand::FinishUpload {
                 name: current_name.to_string(),
+                bucket: self
+                    .current_bucket
+                    .as_ref()
+                    .ok_or(ErrorKind::GoogleCloudStorageError(
+                        "Current bucket not known",
+                    ))?
+                    .clone(),
                 data: final_data.to_vec(),
                 data_start: self.buffers.start(),
                 data_length: self.buffers.len(),
@@ -649,17 +662,8 @@ impl GCSWriterSink {
             ))?;
 
         if self.current_name.is_none() {
-            let bucket = meta
-                .get("bucket")
-                .or(self.default_bucket.as_ref())
-                .ok_or(ErrorKind::GoogleCloudStorageError(
-                    "No bucket name in the metadata",
-                ))
-                .as_str()
-                .ok_or(ErrorKind::GoogleCloudStorageError(
-                    "Bucket name is not a string",
-                ))?
-                .to_string();
+            let bucket = get_bucket_name(self.default_bucket.as_ref(), meta)?;
+            self.current_bucket = Some(bucket.clone());
 
             let command = HttpTaskCommand::StartUpload {
                 bucket,
@@ -678,6 +682,25 @@ impl GCSWriterSink {
 
         Ok(())
     }
+}
+
+fn get_bucket_name(
+    default_bucket: Option<&Value<'static>>,
+    meta: Option<&Value>,
+) -> Result<String> {
+    let bucket = meta
+        .get("bucket")
+        .or(default_bucket)
+        .ok_or(ErrorKind::GoogleCloudStorageError(
+            "No bucket name in the metadata",
+        ))
+        .as_str()
+        .ok_or(ErrorKind::GoogleCloudStorageError(
+            "Bucket name is not a string",
+        ))?
+        .to_string();
+
+    Ok(bucket)
 }
 
 #[cfg(test)]
