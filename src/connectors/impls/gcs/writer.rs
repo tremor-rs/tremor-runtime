@@ -106,11 +106,7 @@ impl Connector for GCSWriterConnector {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let default_bucket = self
-            .config
-            .bucket
-            .as_ref()
-            .map(|bucket_name| Value::from(bucket_name.as_str()).into_static());
+        let default_bucket = self.config.bucket.as_ref().cloned().map(Value::from);
 
         let reply_tx = builder.reply_tx();
 
