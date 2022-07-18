@@ -1688,7 +1688,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3495912c9c1ccf2e18976439f4443f3fee0fd61f424ff99fde6a66b15ecb448f"
 dependencies = [
  "cfg-if",
- "hashbrown 0.12.2",
+ "hashbrown 0.12.3",
  "lock_api",
  "parking_lot_core 0.9.3",
  "serde",
@@ -2343,7 +2343,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce69ed202df415a3d4a01e6f3341320ca88b9bd4f0bf37be6fa239cdea06d9bf"
 dependencies = [
  "fxhash",
- "hashbrown 0.12.2",
+ "hashbrown 0.12.3",
  "serde",
 ]
 
@@ -2358,9 +2358,9 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.12.2"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "607c8a29735385251a339424dd462993c0fed8fa09d378f259377df08c126022"
+checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 dependencies = [
  "ahash",
  "serde",
@@ -2670,7 +2670,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10a35a97730320ffe8e2d410b5d3b69279b98d2c14bdb8b70ea89ecf7888d41e"
 dependencies = [
  "autocfg",
- "hashbrown 0.12.2",
+ "hashbrown 0.12.3",
  "serde",
 ]
 
@@ -4237,7 +4237,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "196e3b77b07fd5bfcbc8187ecaef5d5931820d9abd6c3fe0a9dc6d3ddb035d72"
 dependencies = [
  "csv",
- "hashbrown 0.12.2",
+ "hashbrown 0.12.3",
  "itertools",
  "lazy_static",
  "protobuf",
@@ -5799,7 +5799,7 @@ dependencies = [
  "gouth",
  "grok",
  "halfbrown",
- "hashbrown 0.12.2",
+ "hashbrown 0.12.3",
  "hdrhistogram",
  "hex",
  "hostname",
