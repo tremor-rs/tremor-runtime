@@ -37,6 +37,7 @@ use std::sync::Arc;
 use std::time::Duration;
 #[cfg(test)]
 use tests::MockHttpClient;
+use tremor_common::time::nanotime;
 use tremor_pipeline::{ConfigImpl, Event};
 use tremor_value::Value;
 use value_trait::ValueAccess;
@@ -44,9 +45,8 @@ use value_trait::ValueAccess;
 #[derive(Deserialize, Debug, Clone)]
 pub struct Config {
     #[serde(default = "default_endpoint")]
-    endpoint: String,
+    endpoint: Url<HttpsDefaults>,
     // #[cfg_attr(test, allow(unused))]
-    #[allow(unused)] // FIXME: use it...
     #[serde(default = "default_connect_timeout")]
     connect_timeout: u64,
     #[serde(default = "default_buffer_size")]
@@ -54,8 +54,9 @@ pub struct Config {
     bucket: Option<String>,
 }
 
-fn default_endpoint() -> String {
-    "https://storage.googleapis.com/upload/storage/v1".to_string()
+fn default_endpoint() -> Url<HttpsDefaults> {
+    // ALLOW: this URL is hardcoded, so the only reason for parse failing would be if it was changed
+    Url::parse("https://storage.googleapis.com/upload/storage/v1").unwrap()
 }
 
 fn default_connect_timeout() -> u64 {
@@ -89,15 +90,13 @@ impl ConnectorBuilder for Builder {
         if config.buffer_size % (256 * 1024) != 0 {
             return Err("Buffer size must be a multiple of 256kiB".into());
         }
-        let url = Url::<HttpsDefaults>::parse(&config.endpoint)?;
 
-        Ok(Box::new(GCSWriterConnector { config, url }))
+        Ok(Box::new(GCSWriterConnector { config }))
     }
 }
 
 struct GCSWriterConnector {
     config: Config,
-    url: Url<HttpsDefaults>,
 }
 
 #[async_trait::async_trait]
@@ -117,7 +116,6 @@ impl Connector for GCSWriterConnector {
 
         let sink = GCSWriterSink {
             client_tx: None,
-            url: self.url.clone(),
             config: self.config.clone(),
             buffers: ChunkedBuffer::new(self.config.buffer_size),
             current_name: None,
@@ -187,6 +185,7 @@ impl ChunkedBuffer {
 struct HttpTaskRequest {
     command: HttpTaskCommand,
     contraflow_data: Option<ContraflowData>,
+    start: u64,
 }
 
 enum HttpTaskCommand {
@@ -229,12 +228,9 @@ async fn http_task(
     command_rx: Receiver<HttpTaskRequest>,
     done_until: Arc<AtomicUsize>,
     reply_tx: Sender<AsyncSinkReply>,
+    config: Config,
 ) -> Result<()> {
-    // FIXME pass the connect_timoeut from the config
-    let client = create_client(Duration::from_secs(10)).unwrap(); // FIXME: no unwrap!
-
-    // FIXME get this from the config
-    let url = "https://storage.googleapis.com/upload/storage/v1";
+    let client = create_client(Duration::from_nanos(config.connect_timeout))?;
 
     #[cfg(not(test))]
     let token = Token::new()?;
@@ -245,7 +241,7 @@ async fn http_task(
         let result = handle_http_command(
             done_until.clone(),
             &client,
-            &url,
+            &config.endpoint,
             #[cfg(not(test))]
             &token,
             &mut sessions_per_file,
@@ -256,16 +252,17 @@ async fn http_task(
         match result {
             Ok(_) => {
                 if let Some(contraflow_data) = request.contraflow_data {
-                    // FIXME: what is the 0 supposed to be?
                     reply_tx
-                        .send(AsyncSinkReply::Ack(contraflow_data, 0))
+                        .send(AsyncSinkReply::Ack(
+                            contraflow_data,
+                            nanotime() - request.start,
+                        ))
                         .await?;
                 }
             }
             Err(e) => {
                 warn!("Failed to handle a message: {:?}", e);
                 if let Some(contraflow_data) = request.contraflow_data {
-                    // FIXME: what is the 0 supposed to be?
                     reply_tx.send(AsyncSinkReply::Fail(contraflow_data)).await?;
                 }
             }
@@ -278,7 +275,7 @@ async fn http_task(
 async fn handle_http_command(
     done_until: Arc<AtomicUsize>,
     client: &impl HttpClient,
-    url: &&str,
+    url: &Url<HttpsDefaults>,
     #[cfg(not(test))] token: &Token,
     sessions_per_file: &mut HashMap<String, url::Url>,
     command: HttpTaskCommand,
@@ -479,8 +476,6 @@ async fn handle_http_command(
 
 struct GCSWriterSink {
     client_tx: Option<Sender<HttpTaskRequest>>,
-    #[allow(unused)] // FIXME: use this in the http task
-    url: Url<HttpsDefaults>,
     config: Config,
     buffers: ChunkedBuffer,
     current_name: Option<String>,
@@ -497,7 +492,7 @@ impl Sink for GCSWriterSink {
         event: Event,
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
-        _start: u64,
+        start: u64,
     ) -> Result<SinkReply> {
         self.buffers
             .mark_done_until(self.done_until.load(Ordering::Acquire))?;
@@ -516,10 +511,10 @@ impl Sink for GCSWriterSink {
                     "The file name in metadata is not a string",
                 ))?;
 
-            self.finish_upload_if_needed(name, Some(contraflow_data.clone()))
+            self.finish_upload_if_needed(name, Some(contraflow_data.clone()), start)
                 .await?;
 
-            self.start_upload_if_needed(meta, name, contraflow_data.clone())
+            self.start_upload_if_needed(meta, name, contraflow_data.clone(), start)
                 .await?;
 
             let serialized_data = serializer.serialize(value, event.ingest_ns)?;
@@ -545,6 +540,7 @@ impl Sink for GCSWriterSink {
                 client_tx
                     .send(HttpTaskRequest {
                         command,
+                        start,
                         contraflow_data: Some(contraflow_data.clone()),
                     })
                     .await?;
@@ -555,7 +551,7 @@ impl Sink for GCSWriterSink {
     }
 
     async fn on_stop(&mut self, _ctx: &SinkContext) -> Result<()> {
-        self.finish_upload(None).await?;
+        self.finish_upload(None, nanotime()).await?;
 
         Ok(())
     }
@@ -564,7 +560,12 @@ impl Sink for GCSWriterSink {
         let (tx, rx) = bounded(QSIZE.load(Ordering::Relaxed));
         connectors::spawn_task(
             ctx.clone(),
-            http_task(rx, self.done_until.clone(), self.reply_tx.clone()),
+            http_task(
+                rx,
+                self.done_until.clone(),
+                self.reply_tx.clone(),
+                self.config.clone(),
+            ),
         );
 
         self.client_tx = Some(tx);
@@ -585,15 +586,20 @@ impl GCSWriterSink {
         &mut self,
         name: &str,
         contraflow_data: Option<ContraflowData>,
+        start: u64,
     ) -> Result<()> {
         if self.current_name.as_deref() != Some(name) && self.current_name.is_some() {
-            return self.finish_upload(contraflow_data).await;
+            return self.finish_upload(contraflow_data, start).await;
         }
 
         Ok(())
     }
 
-    async fn finish_upload(&mut self, contraflow_data: Option<ContraflowData>) -> Result<()> {
+    async fn finish_upload(
+        &mut self,
+        contraflow_data: Option<ContraflowData>,
+        start: u64,
+    ) -> Result<()> {
         if let Some(current_name) = self.current_name.as_ref() {
             let client_tx = self
                 .client_tx
@@ -615,6 +621,7 @@ impl GCSWriterSink {
             client_tx
                 .send(HttpTaskRequest {
                     command,
+                    start,
                     contraflow_data,
                 })
                 .await?;
@@ -631,6 +638,7 @@ impl GCSWriterSink {
         meta: Option<&Value<'_>>,
         name: &str,
         contraflow_data: ContraflowData,
+        start: u64,
     ) -> Result<()> {
         let client_tx = self
             .client_tx
@@ -660,6 +668,7 @@ impl GCSWriterSink {
             client_tx
                 .send(HttpTaskRequest {
                     command,
+                    start,
                     contraflow_data: Some(contraflow_data),
                 })
                 .await?;
