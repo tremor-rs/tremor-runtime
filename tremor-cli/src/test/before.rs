@@ -89,10 +89,10 @@ impl Before {
 
         let result = self.wait_for(&mut process, base).await;
 
-        while let Ok(s) = process.stdout_receiver.try_recv().await {
+        while let Ok(s) = process.stdout_receiver.try_recv() {
             info!("Output: {:?}", s)
         }
-        while let Ok(s) = process.stderr_receiver.try_recv().await {
+        while let Ok(s) = process.stderr_receiver.try_recv() {
             info!("Error: {:?}", s)
         }
 
