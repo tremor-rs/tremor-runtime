@@ -87,7 +87,15 @@ impl Before {
             current_working_dir.display()
         );
 
-        self.wait_for(&mut process, base).await?;
+        let result = self.wait_for(&mut process, base).await;
+
+        while let Ok(s) = process.stdout_receiver.try_recv().await {
+            info!("Output: {:?}", s)
+        }
+
+        result?;
+
+
         debug!("Before process ready.");
         Ok(process)
     }
