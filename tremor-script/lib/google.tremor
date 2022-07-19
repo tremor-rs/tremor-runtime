@@ -8,7 +8,7 @@
 ###
 ### It provides the following modules for the Google Cloud Platform
 ###
-### * [cloud::logging](cloud/logging.md) - functionality related to `Cloud Logging v2`
+### * [cloud::logging](google/cloud/logging.md) - functionality related to `Cloud Logging v2`
 ###
 
 use google::cloud;
