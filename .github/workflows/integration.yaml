@@ -50,7 +50,7 @@ jobs:
         run: docker-compose --version
 
       - name: run ${{ matrix.kind }} tests
-        run: cargo llvm-cov run -p tremor-cli --lcov --output-path lcov.txt -- test --timeout 300 ${{ matrix.kind }} tremor-cli/tests ${{ matrix.exclude_tests }}
+        run: RUST_LOG=info cargo llvm-cov run -p tremor-cli --lcov --output-path lcov.txt -- test --timeout 300 ${{ matrix.kind }} tremor-cli/tests ${{ matrix.exclude_tests }}
 
       - name: Upload error logs
         uses: actions/upload-artifact@v2
