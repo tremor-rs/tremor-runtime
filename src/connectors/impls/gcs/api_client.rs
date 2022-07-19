@@ -2,6 +2,7 @@ use crate::connectors::impls::gcs::chunked_buffer::BufferPart;
 use crate::connectors::prelude::{ContraflowData, ErrorKind, Result, Url};
 use crate::connectors::utils::url::HttpsDefaults;
 use async_std::task::sleep;
+#[cfg(not(test))]
 use gouth::Token;
 use http_client::HttpClient;
 use http_types::{Method, Request};
@@ -50,7 +51,15 @@ pub(crate) async fn handle_http_command(
             finish_upload(client, sessions_per_file, file, data).await
         }
         HttpTaskCommand::StartUpload { file } => {
-            start_upload(client, url, token, sessions_per_file, file).await
+            start_upload(
+                client,
+                url,
+                #[cfg(not(test))]
+                token,
+                sessions_per_file,
+                file,
+            )
+            .await
         }
         HttpTaskCommand::UploadData { file, data } => {
             upload_data(done_until, client, sessions_per_file, file, data).await
@@ -161,7 +170,7 @@ async fn upload_data(
 async fn start_upload(
     client: &impl HttpClient,
     url: &Url<HttpsDefaults>,
-    token: &Token,
+    #[cfg(not(test))] token: &Token,
     sessions_per_file: &mut HashMap<FileId, url::Url>,
     file: FileId,
 ) -> Result<()> {
