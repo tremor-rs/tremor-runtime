@@ -30,15 +30,12 @@ use crate::{connectors, QSIZE};
 use async_std::channel::{bounded, Receiver, Sender};
 #[cfg(not(test))]
 use gouth::Token;
-#[cfg(not(test))]
 use http_client::h1::H1Client;
 use http_client::HttpClient;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-#[cfg(test)]
-use tests::MockHttpClient;
 use tremor_common::time::nanotime;
 use tremor_pipeline::{ConfigImpl, Event};
 use tremor_value::Value;
@@ -132,21 +129,11 @@ impl Connector for GCSWriterConnector {
     }
 }
 
-#[cfg(not(test))]
 fn create_client(connect_timeout: Duration) -> Result<H1Client> {
     let mut client = H1Client::new();
     client.set_config(http_client::Config::new().set_timeout(Some(connect_timeout)))?;
 
     Ok(client)
-}
-
-#[cfg(test)]
-fn create_client(_connect_timeout: Duration) -> Result<MockHttpClient> {
-    Ok(MockHttpClient {
-        config: Default::default(),
-        expect_final_request: false,
-        inject_failure: Default::default(),
-    })
 }
 
 async fn http_task(
@@ -421,82 +408,7 @@ fn get_bucket_name(
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use crate::config::Codec;
-    // use crate::connectors::reconnect::ConnectionLostNotifier;
-    // use async_std::channel::unbounded;
-    // use beef::Cow;
-    use http_types::{Error, Response, StatusCode};
-    use std::sync::atomic::{AtomicBool, Ordering};
-    // use tremor_script::ValueAndMeta;
     use tremor_value::literal;
-
-    #[derive(Debug)]
-    pub struct MockHttpClient {
-        pub config: http_client::Config,
-        pub expect_final_request: bool,
-        pub inject_failure: AtomicBool,
-    }
-
-    #[async_trait::async_trait]
-    impl HttpClient for MockHttpClient {
-        async fn send(
-            &self,
-            mut req: http_client::Request,
-        ) -> std::result::Result<Response, Error> {
-            if self.inject_failure.swap(false, Ordering::AcqRel) {
-                return Err(Error::new(
-                    StatusCode::InternalServerError,
-                    anyhow::Error::msg("injected error"),
-                ));
-            }
-
-            if req.url().host_str() == Some("start.example.com") {
-                let mut response = Response::new(http_types::StatusCode::Ok);
-                response.insert_header("Location", "https://upload.example.com/");
-
-                Ok(response)
-            } else if req.url().host_str() == Some("upload.example.com") {
-                let content_range = req.header("Content-Range").unwrap()[0].as_str();
-                let start: usize = content_range
-                    .get("bytes ".len()..content_range.find("-").unwrap())
-                    .unwrap()
-                    .parse()
-                    .unwrap();
-                let end: usize = content_range
-                    .get(content_range.find("-").unwrap() + 1..content_range.find('/').unwrap())
-                    .unwrap()
-                    .parse()
-                    .unwrap();
-                let total_size = &content_range[content_range.find("/").unwrap() + 1..];
-
-                if self.expect_final_request {
-                    assert_eq!(end + 1, total_size.parse::<usize>().unwrap());
-                } else {
-                    assert_eq!("*", total_size);
-                }
-
-                // NOTE: +1 here because Content-Range is an INCLUSIVE range
-                assert_eq!(req.body_bytes().await.unwrap().len(), end - start + 1);
-
-                let mut response = Response::new(http_types::StatusCode::Ok);
-                response.insert_header("Range", format!("{}-{}", start, end));
-
-                Ok(response)
-            } else {
-                panic!("Unexpected request URL: {}", req.url());
-            }
-        }
-
-        fn set_config(&mut self, config: http_client::Config) -> http_types::Result<()> {
-            self.config = config;
-
-            Ok(())
-        }
-
-        fn config(&self) -> &http_client::Config {
-            &self.config
-        }
-    }
 
     #[async_std::test]
     pub async fn fails_when_buffer_size_is_not_divisible_by_256ki() {
@@ -524,81 +436,4 @@ mod tests {
 
         assert!(result.is_err());
     }
-
-    /* FIXME: this test will need some changes, likely a mocked HTTP task?
-    #[async_std::test]
-    pub async fn upload_single_file() -> Result<()> {
-        let mut sink = GCSWriterSink {
-            client: None,
-            client_tx: None,
-            url: Url::parse("https://start.example.com").unwrap(),
-            config: Config {
-                endpoint: "https://start.example.com".to_string(),
-                connect_timeout: 0,
-                buffer_size: 100,
-                bucket: None,
-            },
-            buffers: ChunkedBuffer::new(100),
-            current_name: None,
-            current_session_url: None,
-            default_bucket: None,
-        };
-
-        let meta = literal!({
-            "gcs_writer": {
-                "name": "my-object.txt",
-                "bucket": "some_bucket"
-            }
-        });
-        let event = Event {
-            id: Default::default(),
-            data: ValueAndMeta::from_parts(
-                Value::Bytes(Cow::from(
-                    (0..=1024 * 1024).map(|_| 0x20u8).collect::<Vec<u8>>(),
-                )),
-                meta,
-            )
-            .into(),
-            ingest_ns: 0,
-            origin_uri: None,
-            kind: None,
-            is_batch: false,
-            cb: Default::default(),
-            op_meta: Default::default(),
-            transactional: false,
-        };
-
-        let (tx, _rx) = unbounded();
-        let context = SinkContext {
-            uid: Default::default(),
-            alias: "".to_string(),
-            connector_type: "gcs_writer".into(),
-            quiescence_beacon: Default::default(),
-            notifier: ConnectionLostNotifier::new(tx),
-        };
-
-        let mut serializer = EventSerializer::new(
-            Some(Codec::from("json")),
-            CodecReq::Required,
-            vec![],
-            &ConnectorType("gcs_writer".into()),
-            "gbq",
-        )?;
-        sink.connect(&context, &Attempt::default()).await?;
-        sink.http_client()
-            .unwrap()
-            .inject_failure
-            .store(true, Ordering::Release);
-        sink.on_event("", event, &context, &mut serializer, 0)
-            .await?;
-
-        sink.http_client().unwrap().expect_final_request = true;
-        sink.http_client()
-            .unwrap()
-            .inject_failure
-            .store(true, Ordering::Release);
-        sink.on_stop(&context).await?;
-
-        Ok(())
-    }*/
 }

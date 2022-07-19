@@ -270,3 +270,75 @@ async fn finish_upload(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fmt::{Debug, Formatter};
+    use async_std::task::block_on;
+    use super::*;
+    use http_types::{Error, Response, StatusCode};
+
+    pub struct MockHttpClient {
+        pub config: http_client::Config,
+        pub handle_request: Box<dyn Fn(http_client::Request) -> std::result::Result<Response, Error> + Send + Sync>
+    }
+
+    impl Debug for MockHttpClient {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            write!(f, "<mock>")
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl HttpClient for MockHttpClient {
+        async fn send(
+            &self,
+            req: http_client::Request,
+        ) -> std::result::Result<Response, Error> {
+            (self.handle_request)(req)
+        }
+
+        fn set_config(&mut self, config: http_client::Config) -> http_types::Result<()> {
+            self.config = config;
+
+            Ok(())
+        }
+
+        fn config(&self) -> &http_client::Config {
+            &self.config
+        }
+    }
+
+    #[async_std::test]
+    pub async fn can_upload_data() -> Result<()> {
+        let done_until = Arc::new(AtomicUsize::new(0));
+        let mock_client = MockHttpClient {
+            config: Default::default(),
+            handle_request: Box::new(|mut req| {
+                let body = block_on(req.body_bytes()).unwrap();
+                assert_eq!(vec![0,1,2,3,4,5,6,7,8,9], body);
+                assert_eq!(req.header("Content-Range").unwrap()[0], "bytes 0-9/*");
+
+                let mut response = Response::new(StatusCode::Ok);
+                response.insert_header("Range", "bytes=0-10");
+                Ok(response)
+            })
+        };
+        let mut sessions_per_file = HashMap::new();
+        sessions_per_file.insert(FileId::new("bucket", "my_file"), url::Url::parse("https://example.com/session").unwrap());
+
+        upload_data(
+            done_until.clone(),
+            &mock_client,
+            &mut sessions_per_file,
+            FileId::new("bucket", "my_file"),
+            BufferPart {
+                data: vec![0,1,2,3,4,5,6,7,8,9],
+                start: 0,
+                length: 10
+            }
+        ).await?;
+
+        Ok(())
+    }
+}
