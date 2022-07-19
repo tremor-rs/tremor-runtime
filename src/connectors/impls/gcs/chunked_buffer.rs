@@ -5,6 +5,7 @@ use crate::errors::ErrorKind;
 pub struct BufferPart {
     pub data: Vec<u8>,
     pub start: usize,
+    // FIXME remove this, as this is derivable from data
     pub length: usize,
 }
 
