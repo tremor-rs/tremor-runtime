@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::connectors::impls::gcs::api_client::{
+    handle_http_command, FileId, HttpTaskCommand, HttpTaskRequest,
+};
+use crate::connectors::impls::gcs::chunked_buffer::ChunkedBuffer;
 use crate::connectors::prelude::{
     Attempt, ErrorKind, EventSerializer, Result, SinkAddr, SinkContext, SinkManagerBuilder,
     SinkReply, Url,
@@ -24,13 +28,11 @@ use crate::connectors::{
 use crate::system::KillSwitch;
 use crate::{connectors, QSIZE};
 use async_std::channel::{bounded, Receiver, Sender};
-use async_std::task::sleep;
 #[cfg(not(test))]
 use gouth::Token;
 #[cfg(not(test))]
 use http_client::h1::H1Client;
 use http_client::HttpClient;
-use http_types::{Method, Request};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -54,6 +56,7 @@ pub struct Config {
     bucket: Option<String>,
 }
 
+#[allow(clippy::unwrap_used)]
 fn default_endpoint() -> Url<HttpsDefaults> {
     // ALLOW: this URL is hardcoded, so the only reason for parse failing would be if it was changed
     Url::parse("https://storage.googleapis.com/upload/storage/v1").unwrap()
@@ -129,83 +132,6 @@ impl Connector for GCSWriterConnector {
     }
 }
 
-struct ChunkedBuffer {
-    data: Vec<u8>,
-    block_size: usize,
-    buffer_start: usize,
-}
-
-impl ChunkedBuffer {
-    pub fn new(size: usize) -> Self {
-        Self {
-            data: Vec::with_capacity(size * 2),
-            block_size: size,
-            buffer_start: 0,
-        }
-    }
-
-    pub fn mark_done_until(&mut self, position: usize) -> Result<()> {
-        if position < self.buffer_start {
-            return Err("Buffer was marked as done at index which is not in memory anymore".into());
-        }
-
-        let bytes_to_remove = position - self.buffer_start;
-        self.data = Vec::from(self.data.get(bytes_to_remove..).ok_or(
-            ErrorKind::GoogleCloudStorageError("Not enough data in the buffer"),
-        )?);
-        self.buffer_start += bytes_to_remove;
-
-        Ok(())
-    }
-
-    pub fn read_current_block(&self) -> Option<&[u8]> {
-        self.data.get(..self.block_size)
-    }
-
-    pub fn write(&mut self, data: &[u8]) {
-        self.data.extend_from_slice(data);
-    }
-
-    pub fn start(&self) -> usize {
-        self.buffer_start
-    }
-
-    pub fn len(&self) -> usize {
-        self.data.len()
-    }
-
-    pub fn final_block(&self) -> &[u8] {
-        self.data.as_slice()
-    }
-}
-
-struct HttpTaskRequest {
-    command: HttpTaskCommand,
-    contraflow_data: Option<ContraflowData>,
-    start: u64,
-}
-
-enum HttpTaskCommand {
-    FinishUpload {
-        name: String,
-        bucket: String,
-        data: Vec<u8>,
-        data_start: usize,
-        data_length: usize,
-    },
-    StartUpload {
-        name: String,
-        bucket: String,
-    },
-    UploadData {
-        name: String,
-        bucket: String,
-        data: Vec<u8>,
-        data_start: usize,
-        data_length: usize,
-    },
-}
-
 #[cfg(not(test))]
 fn create_client(connect_timeout: Duration) -> Result<H1Client> {
     let mut client = H1Client::new();
@@ -264,206 +190,6 @@ async fn http_task(
                 if let Some(contraflow_data) = request.contraflow_data {
                     reply_tx.send(AsyncSinkReply::Fail(contraflow_data)).await?;
                 }
-            }
-        }
-    }
-
-    Ok(())
-}
-
-async fn handle_http_command(
-    done_until: Arc<AtomicUsize>,
-    client: &impl HttpClient,
-    url: &Url<HttpsDefaults>,
-    #[cfg(not(test))] token: &Token,
-    sessions_per_file: &mut HashMap<(String, String), url::Url>,
-    command: HttpTaskCommand,
-) -> Result<()> {
-    match command {
-        HttpTaskCommand::FinishUpload {
-            name,
-            bucket,
-            data,
-            data_start,
-            data_length,
-        } => {
-            let session_url: url::Url = sessions_per_file.remove(&(bucket, name)).ok_or(
-                ErrorKind::GoogleCloudStorageError("No session URL is available"),
-            )?;
-
-            for i in 0..3 {
-                let mut request = Request::new(Method::Put, session_url.clone());
-
-                request.insert_header(
-                    "Content-Range",
-                    format!(
-                        "bytes {}-{}/{}",
-                        data_start,
-                        // -1 on the end is here, because Content-Range is inclusive
-                        data_start + data_length - 1,
-                        data_start + data_length
-                    ),
-                );
-
-                request.set_body(data.clone());
-
-                let response = client.send(request).await;
-
-                if let Ok(mut response) = response {
-                    if !response.status().is_server_error() {
-                        break;
-                    }
-                    error!(
-                        "Error from Google Cloud Storage: {}",
-                        response.body_string().await?
-                    );
-                }
-
-                sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
-            }
-        }
-        HttpTaskCommand::StartUpload { bucket, name } => {
-            for i in 0..3 {
-                let url = url::Url::parse(&format!(
-                    "{}/b/{}/o?name={}&uploadType=resumable",
-                    url, bucket, name
-                ))?;
-                #[cfg(not(test))]
-                let mut request = Request::new(Method::Post, url);
-                #[cfg(test)]
-                let request = Request::new(Method::Post, url);
-                #[cfg(not(test))]
-                {
-                    request.insert_header("Authorization", token.header_value()?.to_string());
-                }
-
-                let response = client.send(request).await;
-
-                if let Ok(mut response) = response {
-                    if !response.status().is_server_error() {
-                        sessions_per_file.insert(
-                            (bucket.clone(), name.to_string()),
-                            url::Url::parse(
-                                response
-                                    .header("Location")
-                                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                                        "Missing Location header",
-                                    ))?
-                                    .get(0)
-                                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                                        "Missing Location header value",
-                                    ))?
-                                    .as_str(),
-                            )?,
-                        );
-
-                        break;
-                    }
-
-                    error!(
-                        "Error from Google Cloud Storage: {}",
-                        response.body_string().await?
-                    );
-                }
-
-                sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
-                continue;
-            }
-        }
-        HttpTaskCommand::UploadData {
-            name,
-            bucket,
-            data,
-            data_start,
-            data_length,
-        } => {
-            let mut response = None;
-            for i in 0..3 {
-                let session_url = sessions_per_file
-                    .get(&(bucket.clone(), name.clone()))
-                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                        "No session URL is available",
-                    ))?;
-                let mut request = Request::new(Method::Put, session_url.clone());
-
-                request.insert_header(
-                    "Content-Range",
-                    format!(
-                        "bytes {}-{}/*",
-                        data_start,
-                        // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
-                        data_start + data_length - 1
-                    ),
-                );
-                request.insert_header("User-Agent", "Tremor");
-                request.insert_header("Accept", "*/*");
-                request.set_body(data.clone());
-
-                match client.send(request).await {
-                    Ok(request) => response = Some(request),
-                    Err(e) => {
-                        warn!("Failed to send a request to GCS: {}", e);
-
-                        sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
-                        continue;
-                    }
-                }
-
-                if let Some(response) = response.as_mut() {
-                    if !response.status().is_server_error() && response.header("range").is_some() {
-                        break;
-                    }
-
-                    error!(
-                        "Error from Google Cloud Storage: {}",
-                        response.body_string().await?
-                    );
-
-                    sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
-                }
-            }
-
-            if let Some(mut response) = response {
-                if response.status().is_server_error() {
-                    error!(
-                        "Error from Google Cloud Storage: {}",
-                        response.body_string().await?
-                    );
-                    return Err("Received server errors from Google Cloud Storage".into());
-                }
-
-                if let Some(raw_range) = response.header("range") {
-                    let raw_range = raw_range
-                        .get(0)
-                        .ok_or(ErrorKind::GoogleCloudStorageError(
-                            "Missing Range header value",
-                        ))?
-                        .as_str();
-
-                    // Range format: bytes=0-262143
-                    let range_end = &raw_range
-                        .get(
-                            raw_range
-                                .find('-')
-                                .ok_or(ErrorKind::GoogleCloudStorageError(
-                                    "Did not find a - in the Range header",
-                                ))?
-                                + 1..,
-                        )
-                        .ok_or(ErrorKind::GoogleCloudStorageError(
-                            "Unable to get the end of the Range",
-                        ))?;
-
-                    // NOTE: The data can only be thrown away to the point of the end of the Range header,
-                    // since google can persist less than we send in our request.
-                    //
-                    // see: https://cloud.google.com/storage/docs/performing-resumable-uploads#chunked-upload
-                    done_until.store(range_end.parse()?, Ordering::Release);
-                } else {
-                    return Err("No range header".into());
-                }
-            } else {
-                return Err("no response from GCS".into());
             }
         }
     }
@@ -533,11 +259,8 @@ impl Sink for GCSWriterSink {
                 self.current_bucket = Some(bucket.clone());
 
                 let command = HttpTaskCommand::UploadData {
-                    data: data.to_vec(),
-                    name: name.to_string(),
-                    bucket,
-                    data_start: self.buffers.start(),
-                    data_length: self.buffers.len(),
+                    file: FileId::new(bucket, name),
+                    data,
                 };
                 client_tx
                     .send(HttpTaskRequest {
@@ -613,25 +336,22 @@ impl GCSWriterSink {
 
             let final_data = self.buffers.final_block();
 
+            let bucket = self
+                .current_bucket
+                .as_ref()
+                .ok_or(ErrorKind::GoogleCloudStorageError(
+                    "Current bucket not known",
+                ))?;
             let command = HttpTaskCommand::FinishUpload {
-                name: current_name.to_string(),
-                bucket: self
-                    .current_bucket
-                    .as_ref()
-                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                        "Current bucket not known",
-                    ))?
-                    .clone(),
-                data: final_data.to_vec(),
-                data_start: self.buffers.start(),
-                data_length: self.buffers.len(),
+                file: FileId::new(bucket, current_name),
+                data: final_data,
             };
 
             client_tx
                 .send(HttpTaskRequest {
                     command,
-                    start,
                     contraflow_data,
+                    start,
                 })
                 .await?;
 
@@ -662,8 +382,7 @@ impl GCSWriterSink {
             self.current_bucket = Some(bucket.clone());
 
             let command = HttpTaskCommand::StartUpload {
-                bucket,
-                name: name.to_string(),
+                file: FileId::new(bucket, name),
             };
             client_tx
                 .send(HttpTaskRequest {
@@ -804,49 +523,6 @@ mod tests {
             .await;
 
         assert!(result.is_err());
-    }
-
-    #[test]
-    pub fn chunked_buffer_can_add_data() {
-        let mut buffer = ChunkedBuffer::new(10);
-        buffer.write(&(1..=10).collect::<Vec<u8>>());
-
-        assert_eq!(0, buffer.start());
-        assert_eq!(10, buffer.len());
-        assert_eq!(
-            [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
-            buffer.read_current_block().unwrap()
-        );
-    }
-
-    #[test]
-    pub fn chunked_buffer_will_not_return_a_block_which_is_not_full() {
-        let mut buffer = ChunkedBuffer::new(10);
-        buffer.write(&(1..=5).collect::<Vec<u8>>());
-
-        assert!(buffer.read_current_block().is_none());
-    }
-
-    #[test]
-    pub fn chunked_buffer_marking_as_done_removes_data() {
-        let mut buffer = ChunkedBuffer::new(10);
-        buffer.write(&(1..=15).collect::<Vec<u8>>());
-
-        buffer.mark_done_until(5).unwrap();
-
-        assert_eq!(
-            &(6..=15).collect::<Vec<u8>>(),
-            buffer.read_current_block().unwrap()
-        );
-    }
-
-    #[test]
-    pub fn chunked_buffer_returns_all_the_data_in_the_final_block() {
-        let mut buffer = ChunkedBuffer::new(10);
-        buffer.write(&(1..=16).collect::<Vec<u8>>());
-
-        buffer.mark_done_until(5).unwrap();
-        assert_eq!(&(6..=16).collect::<Vec<u8>>(), buffer.final_block());
     }
 
     /* FIXME: this test will need some changes, likely a mocked HTTP task?
