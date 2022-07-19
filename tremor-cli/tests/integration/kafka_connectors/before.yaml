@@ -8,7 +8,7 @@
     - "127.0.0.1:9092:9092"
     - "-p"
     - "127.0.0.1:9644:9644"
-    - "docker.vectorized.io/vectorized/redpanda:latest"
+    - "vectorized/redpanda:latest"
     - "redpanda"
     - "start"
     - "--overprovisioned"

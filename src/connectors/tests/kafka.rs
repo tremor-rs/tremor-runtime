@@ -21,7 +21,7 @@ use testcontainers::{
     RunnableImage,
 };
 
-const IMAGE: &str = "docker.vectorized.io/vectorized/redpanda";
+const IMAGE: &str = "vectorized/redpanda";
 const VERSION: &str = "v21.11.15";
 
 async fn redpanda_container<'d>(docker: &'d DockerCli) -> Result<Container<'d, GenericImage>> {
