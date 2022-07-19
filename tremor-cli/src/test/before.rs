@@ -92,6 +92,9 @@ impl Before {
         while let Ok(s) = process.stdout_receiver.try_recv().await {
             info!("Output: {:?}", s)
         }
+        while let Ok(s) = process.stderr_receiver.try_recv().await {
+            info!("Error: {:?}", s)
+        }
 
         result?;
 
