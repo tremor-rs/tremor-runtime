@@ -288,7 +288,7 @@ impl Sink {
         self.0
             .on_event(input.into(), event, ctx, &mut serializer, start)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
     #[inline]
@@ -303,7 +303,7 @@ impl Sink {
         self.0
             .on_signal(signal, ctx, &mut serializer)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -317,7 +317,7 @@ impl Sink {
         self.0
             .on_start(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -326,7 +326,7 @@ impl Sink {
         self.0
             .connect(ctx, attempt)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -335,7 +335,7 @@ impl Sink {
         self.0
             .on_pause(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
     #[inline]
@@ -343,7 +343,7 @@ impl Sink {
         self.0
             .on_resume(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
     #[inline]
@@ -351,7 +351,7 @@ impl Sink {
         self.0
             .on_stop(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -360,7 +360,7 @@ impl Sink {
         self.0
             .on_connection_lost(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
     #[inline]
@@ -368,7 +368,7 @@ impl Sink {
         self.0
             .on_connection_established(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 

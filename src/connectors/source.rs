@@ -319,7 +319,7 @@ impl Source {
         self.0
             .pull_data(pull_id, ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -333,7 +333,7 @@ impl Source {
         self.0
             .on_no_events(pull_id, stream, ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -347,7 +347,7 @@ impl Source {
         self.0
             .on_start(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -356,7 +356,7 @@ impl Source {
         self.0
             .connect(ctx, attempt)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -365,7 +365,7 @@ impl Source {
         self.0
             .on_pause(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
     #[inline]
@@ -373,7 +373,7 @@ impl Source {
         self.0
             .on_resume(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
     #[inline]
@@ -381,7 +381,7 @@ impl Source {
         self.0
             .on_stop(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -390,7 +390,7 @@ impl Source {
         self.0
             .on_cb_close(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
     #[inline]
@@ -398,7 +398,7 @@ impl Source {
         self.0
             .on_cb_open(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -407,7 +407,7 @@ impl Source {
         self.0
             .ack(stream_id, pull_id, ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
     #[inline]
@@ -415,7 +415,7 @@ impl Source {
         self.0
             .fail(stream_id, pull_id, ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -424,7 +424,7 @@ impl Source {
         self.0
             .on_connection_lost(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
     #[inline]
@@ -432,7 +432,7 @@ impl Source {
         self.0
             .on_connection_established(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 

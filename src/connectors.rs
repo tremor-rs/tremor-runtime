@@ -1217,7 +1217,7 @@ impl Connector {
         self.0
             .connect(ctx, attempt)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -1226,7 +1226,7 @@ impl Connector {
         self.0
             .on_start(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -1235,7 +1235,7 @@ impl Connector {
         self.0
             .on_pause(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -1244,7 +1244,7 @@ impl Connector {
         self.0
             .on_resume(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -1253,7 +1253,7 @@ impl Connector {
         self.0
             .on_drain(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
@@ -1262,7 +1262,7 @@ impl Connector {
         self.0
             .on_stop(ctx)
             .await
-            .map_err(Into::into) // RBoxError -> Box<dyn Error>
+            .map_err(Into::into) // RBoxError -> Error::PluginError
             .into() // RResult -> Result
     }
 
