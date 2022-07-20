@@ -92,7 +92,7 @@ async fn upload_data(
                 "bytes {}-{}/*",
                 data.start,
                 // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
-                data.start + data.length - 1
+                data.start + data.len() - 1
             ),
         );
         request.insert_header("User-Agent", "Tremor");
@@ -248,8 +248,8 @@ async fn finish_upload(
                 "bytes {}-{}/{}",
                 data.start,
                 // -1 on the end is here, because Content-Range is inclusive
-                data.start + data.length - 1,
-                data.start + data.length
+                data.start + data.len() - 1,
+                data.start + data.len()
             ),
         );
 
@@ -392,7 +392,6 @@ mod tests {
             BufferPart {
                 data: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
                 start: 0,
-                length: 10,
             },
         )
         .await?;
@@ -425,7 +424,6 @@ mod tests {
             BufferPart {
                 data: vec![1, 2, 3],
                 start: 10,
-                length: 3,
             },
         )
         .await?;
