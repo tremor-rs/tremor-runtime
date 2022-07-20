@@ -277,11 +277,13 @@ mod tests {
     use async_std::task::block_on;
     use http_types::{Error, Response, StatusCode};
     use std::fmt::{Debug, Formatter};
+    use std::sync::atomic::AtomicBool;
 
     pub struct MockHttpClient {
         pub config: http_client::Config,
         pub handle_request:
             Box<dyn Fn(http_client::Request) -> std::result::Result<Response, Error> + Send + Sync>,
+        pub simulate_failure: Arc<AtomicBool>,
     }
 
     impl Debug for MockHttpClient {
@@ -293,6 +295,10 @@ mod tests {
     #[async_trait::async_trait]
     impl HttpClient for MockHttpClient {
         async fn send(&self, req: http_client::Request) -> std::result::Result<Response, Error> {
+            if self.simulate_failure.swap(false, Ordering::AcqRel) {
+                return Ok(Response::new(StatusCode::InternalServerError));
+            }
+
             (self.handle_request)(req)
         }
 
@@ -312,8 +318,6 @@ mod tests {
         let client = MockHttpClient {
             config: Default::default(),
             handle_request: Box::new(|req| {
-                dbg!(&req);
-
                 assert_eq!(req.url().path(), "/upload/b/bucket/o");
                 assert_eq!(
                     req.url().query().unwrap(),
@@ -324,6 +328,7 @@ mod tests {
                 response.insert_header("Location", "http://example.com/upload_session");
                 Ok(response)
             }),
+            simulate_failure: Arc::new(AtomicBool::new(true)),
         };
         let mut sessions_per_file = HashMap::new();
         start_upload(
@@ -356,6 +361,7 @@ mod tests {
                 response.insert_header("Range", "bytes=0-10");
                 Ok(response)
             }),
+            simulate_failure: Arc::new(AtomicBool::new(true)),
         };
         let mut sessions_per_file = HashMap::new();
         sessions_per_file.insert(
@@ -388,6 +394,7 @@ mod tests {
 
                 Ok(Response::new(StatusCode::Ok))
             }),
+            simulate_failure: Arc::new(AtomicBool::new(true)),
         };
 
         let mut sessions_per_file = HashMap::new();
