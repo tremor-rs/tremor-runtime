@@ -284,6 +284,7 @@ mod tests {
         pub handle_request:
             Box<dyn Fn(http_client::Request) -> std::result::Result<Response, Error> + Send + Sync>,
         pub simulate_failure: Arc<AtomicBool>,
+        pub simulate_transport_failure: Arc<AtomicBool>,
     }
 
     impl Debug for MockHttpClient {
@@ -295,6 +296,16 @@ mod tests {
     #[async_trait::async_trait]
     impl HttpClient for MockHttpClient {
         async fn send(&self, req: http_client::Request) -> std::result::Result<Response, Error> {
+            if self
+                .simulate_transport_failure
+                .swap(false, Ordering::AcqRel)
+            {
+                return Err(Error::new(
+                    StatusCode::InternalServerError,
+                    anyhow::Error::msg("injected error"),
+                ));
+            }
+
             if self.simulate_failure.swap(false, Ordering::AcqRel) {
                 return Ok(Response::new(StatusCode::InternalServerError));
             }
@@ -329,6 +340,7 @@ mod tests {
                 Ok(response)
             }),
             simulate_failure: Arc::new(AtomicBool::new(true)),
+            simulate_transport_failure: Arc::new(AtomicBool::new(true)),
         };
         let mut sessions_per_file = HashMap::new();
         start_upload(
@@ -362,6 +374,7 @@ mod tests {
                 Ok(response)
             }),
             simulate_failure: Arc::new(AtomicBool::new(true)),
+            simulate_transport_failure: Arc::new(AtomicBool::new(true)),
         };
         let mut sessions_per_file = HashMap::new();
         sessions_per_file.insert(
@@ -395,6 +408,7 @@ mod tests {
                 Ok(Response::new(StatusCode::Ok))
             }),
             simulate_failure: Arc::new(AtomicBool::new(true)),
+            simulate_transport_failure: Arc::new(AtomicBool::new(true)),
         };
 
         let mut sessions_per_file = HashMap::new();
