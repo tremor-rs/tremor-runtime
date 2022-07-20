@@ -409,6 +409,7 @@ fn get_bucket_name(
 mod tests {
     use super::*;
     use crate::config::Codec;
+    use crate::connectors::impls::gcs::chunked_buffer::BufferPart;
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use tremor_script::{EventPayload, ValueAndMeta};
     use tremor_value::literal;
@@ -450,7 +451,7 @@ mod tests {
             config: Config {
                 endpoint: Default::default(),
                 connect_timeout: 1000000000,
-                buffer_size: 100000000000,
+                buffer_size: 10,
                 bucket: None,
             },
             buffers: ChunkedBuffer::new(10),
@@ -511,6 +512,126 @@ mod tests {
             response.command,
             HttpTaskCommand::StartUpload {
                 file: FileId::new("woah", "test.txt")
+            }
+        );
+        assert_eq!(response.start, 1234);
+        assert!(response.contraflow_data.is_some());
+    }
+
+    #[async_std::test]
+    pub async fn finishes_upload_on_filename_change() {
+        let (client_tx, client_rx) = bounded(10);
+        let (reply_tx, _) = bounded(10);
+
+        let mut sink = GCSWriterSink {
+            client_tx: Some(client_tx),
+            config: Config {
+                endpoint: Default::default(),
+                connect_timeout: 1000000000,
+                buffer_size: 10,
+                bucket: None,
+            },
+            buffers: ChunkedBuffer::new(10),
+            current_name: None,
+            current_bucket: None,
+            default_bucket: None,
+            done_until: Arc::new(Default::default()),
+            reply_tx,
+        };
+
+        let (connection_lost_tx, _) = bounded(10);
+
+        let alias = Alias::new("a", "b");
+        let context = SinkContext {
+            uid: Default::default(),
+            alias: alias.clone(),
+            connector_type: "gcs_writer".into(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(connection_lost_tx),
+        };
+        let mut serializer = EventSerializer::new(
+            Some(Codec::from("json")),
+            CodecReq::Required,
+            vec![],
+            &"gcs_writer".into(),
+            &alias,
+        )
+        .unwrap();
+
+        let value = literal!({});
+        let meta = literal!({
+            "gcs_writer": {
+                "name": "test.txt",
+                "bucket": "woah"
+            }
+        });
+
+        let event_payload = EventPayload::from(ValueAndMeta::from_parts(value, meta));
+
+        let event = Event {
+            id: Default::default(),
+            data: event_payload,
+            ingest_ns: 0,
+            origin_uri: None,
+            kind: None,
+            is_batch: false,
+            cb: Default::default(),
+            op_meta: Default::default(),
+            transactional: false,
+        };
+        sink.on_event("", event.clone(), &context, &mut serializer, 1234)
+            .await
+            .unwrap();
+        let value = literal!({});
+        let meta = literal!({
+            "gcs_writer": {
+                "name": "test_other.txt",
+                "bucket": "woah"
+            }
+        });
+
+        let event_payload = EventPayload::from(ValueAndMeta::from_parts(value, meta));
+
+        let event = Event {
+            id: Default::default(),
+            data: event_payload,
+            ingest_ns: 0,
+            origin_uri: None,
+            kind: None,
+            is_batch: false,
+            cb: Default::default(),
+            op_meta: Default::default(),
+            transactional: false,
+        };
+        sink.on_event("", event.clone(), &context, &mut serializer, 1234)
+            .await
+            .unwrap();
+
+        // ignore the first event - upload start
+        let _ = client_rx.try_recv().unwrap();
+
+        let response = client_rx.try_recv().unwrap();
+
+        assert_eq!(
+            response.command,
+            HttpTaskCommand::FinishUpload {
+                file: FileId::new("woah", "test.txt"),
+                data: BufferPart {
+                    data: b"{}".to_vec(),
+                    start: 0,
+                    length: 2
+                }
+            }
+        );
+        assert_eq!(response.start, 1234);
+        assert!(response.contraflow_data.is_some());
+
+        let response = client_rx.try_recv().unwrap();
+
+        assert_eq!(
+            response.command,
+            HttpTaskCommand::StartUpload {
+                file: FileId::new("woah", "test_other.txt")
             }
         );
         assert_eq!(response.start, 1234);
