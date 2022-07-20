@@ -48,7 +48,7 @@ base64 = "0.13"
 beef = { version = "0.5", features = ["impl_serde"] }
 bimap = { version = "0.6", features = ["serde"] }
 byteorder = "1"
-bytes = "1.1"
+bytes = "1.2"
 chrono = "0.4"
 chrono-tz = "0.6"
 
