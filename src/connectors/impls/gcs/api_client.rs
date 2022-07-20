@@ -11,19 +11,21 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+#[derive(Debug)]
 pub(crate) struct HttpTaskRequest {
     pub command: HttpTaskCommand,
     pub contraflow_data: Option<ContraflowData>,
     pub start: u64,
 }
 
+#[derive(Debug, PartialEq)]
 pub(crate) enum HttpTaskCommand {
     FinishUpload { file: FileId, data: BufferPart },
     StartUpload { file: FileId },
     UploadData { file: FileId, data: BufferPart },
 }
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Debug)]
 pub(crate) struct FileId {
     pub bucket: String,
     pub name: String,
