@@ -315,14 +315,12 @@ mod tests {
             (self.handle_request)(req)
         }
 
-        #[cfg_attr(coverage, no_coverage)] // This function is required by the trait, but never called in tests
         fn set_config(&mut self, config: http_client::Config) -> http_types::Result<()> {
             self.config = config;
 
             Ok(())
         }
 
-        #[cfg_attr(coverage, no_coverage)] // This function is required by the trait, but never called in tests
         fn config(&self) -> &http_client::Config {
             &self.config
         }
