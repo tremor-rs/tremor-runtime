@@ -83,16 +83,23 @@ struct PluggableLoggingAppender {
 }
 
 impl Append for PluggableLoggingAppender {
-    fn append(&self, _record: &log::Record) -> anyhow::Result<()> {
+    fn append(&self, record: &log::Record) -> anyhow::Result<()> {
         //print!("hello");
-        //self.flush();
-        let vec = br#"{"key": "value"}"#.to_vec();
+        //self.flush();*
+        let vec = (r#"{"level": ""#.to_owned()
+            + &record.level().to_string()
+            + r#"", "args": ""#
+            + &record.args().to_string()
+            + r#""}"#)
+            .as_bytes()
+            .to_vec();
+
         let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).unwrap().into());
         let msg = LoggingMsg {
             payload: e,
             origin_uri: None,
         };
-        dbg!(&_record);
+
         block_on(self.tx.send(msg))?;
         Ok(())
     }
@@ -989,8 +996,8 @@ mod test {
     //use std::{pin::Pin, sync::Arc};
 
     use super::*;
+    //use anyhow::Ok;
     use async_std::channel::bounded;
-    // use anyhow::Ok;
     use log::LevelFilter;
     use log4rs::{
         config::{Appender, Root},
@@ -1212,28 +1219,17 @@ mod test {
             .unwrap();
 
         let _handle = log4rs::init_config(config).unwrap();
-        log::info!("Stan is here today");
-        let _ = dbg!(rx.recv().await);
+		let data = rx.recv().await;
+		assert!(data.is_ok());
+		let valuemeta = data.unwrap();
+		
+		//let some_variable = 12;
+		//log::warn!(" some_variable = {} ", some_variable);
+		//log::warn!("is");
+		//log::error!("here today");
+		//log::trace!("here today");
+       	log::info!("Stan is here today");
+		let _ = dbg!(rx.recv().await);
     }
-    #[test]
-    fn test_logging_mertics_msg() {
-        // let raw = vec![1u8];
-        // let mut raw = Pin::new(raw);
-        // let data = f(raw.as_mut().get_mut());
-        // let structured = unsafe { mem::transmute::<ValueAndMeta<'_>, ValueAndMeta<'static>>(data) };
-        // let raw = vec![Arc::new(raw)];
-        // let msg = MetricsMsg {
-        //     payload: EventPayload {
-        //         raw,
-        //         data: structured,
-        //     },
-        //     origin_uri: None,
-        // };
-        let vec = br#"{"key": "value"}"#.to_vec();
-        let vec_ = br#"{"key": "value"}"#.to_vec();
-        let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).unwrap().into());
-        let ee = EventPayload::new(vec_, |d| tremor_value::parse_to_value(d).unwrap().into());
-        let _mmsg = MetricsMsg::new(e, None);
-        let _lmsg = LoggingMsg::new(ee, None);
-    }
+ 
 }
