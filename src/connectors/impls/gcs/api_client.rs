@@ -345,11 +345,15 @@ mod tests {
             simulate_transport_failure: Arc::new(AtomicBool::new(true)),
         };
         let mut sessions_per_file = HashMap::new();
-        start_upload(
+        let done_until = Arc::new(AtomicUsize::new(0));
+        handle_http_command(
+            done_until,
             &client,
             &Url::parse("http://example.com/upload").unwrap(),
             &mut sessions_per_file,
-            FileId::new("bucket", "somefile"),
+            HttpTaskCommand::StartUpload {
+                file: FileId::new("bucket", "somefile"),
+            },
         )
         .await?;
 
@@ -383,15 +387,17 @@ mod tests {
             FileId::new("bucket", "my_file"),
             url::Url::parse("https://example.com/session").unwrap(),
         );
-
-        upload_data(
-            done_until.clone(),
+        handle_http_command(
+            done_until,
             &mock_client,
+            &Url::parse("http://example.com/upload").unwrap(),
             &mut sessions_per_file,
-            FileId::new("bucket", "my_file"),
-            BufferPart {
-                data: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-                start: 0,
+            HttpTaskCommand::UploadData {
+                file: FileId::new("bucket", "my_file"),
+                data: BufferPart {
+                    data: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+                    start: 0,
+                },
             },
         )
         .await?;
@@ -401,7 +407,8 @@ mod tests {
 
     #[async_std::test]
     pub async fn can_finish_upload() -> Result<()> {
-        let mut client = MockHttpClient {
+        let done_until = Arc::new(AtomicUsize::new(0));
+        let client = MockHttpClient {
             config: Default::default(),
             handle_request: Box::new(|req| {
                 assert_eq!(req.header("Content-Range").unwrap()[0], "bytes 10-12/13");
@@ -417,13 +424,17 @@ mod tests {
             FileId::new("somebucket", "somefile"),
             url::Url::parse("https://example.com/session").unwrap(),
         );
-        finish_upload(
-            &mut client,
+        handle_http_command(
+            done_until,
+            &client,
+            &Url::parse("http://example.com/upload").unwrap(),
             &mut sessions_per_file,
-            FileId::new("somebucket", "somefile"),
-            BufferPart {
-                data: vec![1, 2, 3],
-                start: 10,
+            HttpTaskCommand::FinishUpload {
+                file: FileId::new("somebucket", "somefile"),
+                data: BufferPart {
+                    data: vec![1, 2, 3],
+                    start: 10,
+                },
             },
         )
         .await?;
