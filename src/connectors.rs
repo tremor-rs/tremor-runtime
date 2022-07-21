@@ -1196,11 +1196,8 @@ impl Connector {
         sink_context: SinkContext,
         builder: sink::SinkManagerBuilder,
     ) -> Result<Option<sink::SinkAddr>> {
-        // TODO: this should take the boxed sender instead for performance (?)
-        // TODO: this should use `TD_Opaque`
-        // Note that we actually want to be able to downcast back to the
-        // original type here, so that it's easier to manage in the runtime.
-        let reply_tx = BoxedContraflowSender::from_value(builder.reply_tx(), TD_CanDowncast);
+        // TODO: we should avoid creating the opaque type here for performance
+        let reply_tx = BoxedContraflowSender::from_value(builder.reply_tx(), TD_Opaque);
         match self
             .0
             .create_sink(sink_context.clone(), builder.qsize(), reply_tx)
