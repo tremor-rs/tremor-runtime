@@ -42,7 +42,6 @@ use value_trait::ValueAccess;
 pub struct Config {
     #[serde(default = "default_endpoint")]
     endpoint: Url<HttpsDefaults>,
-    // #[cfg_attr(test, allow(unused))]
     #[serde(default = "default_connect_timeout")]
     connect_timeout: u64,
     #[serde(default = "default_buffer_size")]
@@ -141,30 +140,48 @@ async fn http_task(
 ) -> Result<()> {
     let client = create_client(Duration::from_nanos(config.connect_timeout))?;
 
-    // FIXME: take as an argument
     let mut api_client = DefaultApiClient::new(client)?;
 
     while let Ok(request) = command_rx.recv().await {
-        let result = api_client
-            .handle_http_command(done_until.clone(), &config.endpoint, request.command)
-            .await;
+        execute_http_call(
+            done_until.clone(),
+            reply_tx.clone(),
+            &config,
+            &mut api_client,
+            request,
+        )
+        .await?
+    }
 
-        match result {
-            Ok(_) => {
-                if let Some(contraflow_data) = request.contraflow_data {
-                    reply_tx
-                        .send(AsyncSinkReply::Ack(
-                            contraflow_data,
-                            nanotime() - request.start,
-                        ))
-                        .await?;
-                }
+    Ok(())
+}
+
+async fn execute_http_call(
+    done_until: Arc<AtomicUsize>,
+    reply_tx: Sender<AsyncSinkReply>,
+    config: &Config,
+    api_client: &mut impl ApiClient,
+    request: HttpTaskRequest,
+) -> Result<()> {
+    let result = api_client
+        .handle_http_command(done_until.clone(), &config.endpoint, request.command)
+        .await;
+
+    match result {
+        Ok(_) => {
+            if let Some(contraflow_data) = request.contraflow_data {
+                reply_tx
+                    .send(AsyncSinkReply::Ack(
+                        contraflow_data,
+                        nanotime() - request.start,
+                    ))
+                    .await?;
             }
-            Err(e) => {
-                warn!("Failed to handle a message: {:?}", e);
-                if let Some(contraflow_data) = request.contraflow_data {
-                    reply_tx.send(AsyncSinkReply::Fail(contraflow_data)).await?;
-                }
+        }
+        Err(e) => {
+            warn!("Failed to handle a message: {:?}", e);
+            if let Some(contraflow_data) = request.contraflow_data {
+                reply_tx.send(AsyncSinkReply::Fail(contraflow_data)).await?;
             }
         }
     }
@@ -793,5 +810,75 @@ mod tests {
             }
         );
         assert!(response.contraflow_data.is_none());
+    }
+
+    struct MockApiClient {}
+
+    #[async_trait::async_trait]
+    impl ApiClient for MockApiClient {
+        async fn handle_http_command(
+            &mut self,
+            _done_until: Arc<AtomicUsize>,
+            _url: &Url<HttpsDefaults>,
+            _command: HttpTaskCommand,
+        ) -> Result<()> {
+            Ok(())
+        }
+    }
+
+    #[async_std::test]
+    pub async fn sends_event_reply_after_http_response() {
+        let (reply_tx, reply_rx) = bounded(10);
+
+        let value = literal!({});
+        let meta = literal!({
+            "gcs_writer": {
+                "name": "test.txt",
+                "bucket": "woah"
+            }
+        });
+
+        let event_payload = EventPayload::from(ValueAndMeta::from_parts(value, meta));
+
+        let event = Event {
+            id: Default::default(),
+            data: event_payload,
+            ingest_ns: 0,
+            origin_uri: None,
+            kind: None,
+            is_batch: false,
+            cb: Default::default(),
+            op_meta: Default::default(),
+            transactional: false,
+        };
+
+        let contraflow_data = ContraflowData::from(event);
+        execute_http_call(
+            Arc::new(Default::default()),
+            reply_tx,
+            &Config {
+                endpoint: Default::default(),
+                connect_timeout: 100000000,
+                buffer_size: 1000,
+                bucket: None,
+            },
+            &mut MockApiClient {},
+            HttpTaskRequest {
+                command: HttpTaskCommand::StartUpload {
+                    file: FileId::new("somebucket", "something.txt"),
+                },
+                contraflow_data: Some(contraflow_data.clone()),
+                start: 10,
+            },
+        )
+        .await
+        .unwrap();
+
+        let reply = reply_rx.recv().await.unwrap();
+        if let AsyncSinkReply::Ack(data, duration) = reply {
+            assert_eq!(contraflow_data.into_ack(duration), data.into_ack(duration));
+        } else {
+            panic!("did not receive an ACK");
+        }
     }
 }
