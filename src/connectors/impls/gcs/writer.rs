@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::connectors::impls::gcs::api_client::{
-    handle_http_command, FileId, HttpTaskCommand, HttpTaskRequest,
+    ApiClient, DefaultApiClient, FileId, HttpTaskCommand, HttpTaskRequest,
 };
 use crate::connectors::impls::gcs::chunked_buffer::ChunkedBuffer;
 use crate::connectors::prelude::{
@@ -28,11 +28,8 @@ use crate::connectors::{
 use crate::system::KillSwitch;
 use crate::{connectors, QSIZE};
 use async_std::channel::{bounded, Receiver, Sender};
-#[cfg(not(test))]
-use gouth::Token;
 use http_client::h1::H1Client;
 use http_client::HttpClient;
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -144,22 +141,13 @@ async fn http_task(
 ) -> Result<()> {
     let client = create_client(Duration::from_nanos(config.connect_timeout))?;
 
-    #[cfg(not(test))]
-    let token = Token::new()?;
-
-    let mut sessions_per_file = HashMap::new();
+    // FIXME: take as an argument
+    let mut api_client = DefaultApiClient::new(client)?;
 
     while let Ok(request) = command_rx.recv().await {
-        let result = handle_http_command(
-            done_until.clone(),
-            &client,
-            &config.endpoint,
-            #[cfg(not(test))]
-            &token,
-            &mut sessions_per_file,
-            request.command,
-        )
-        .await;
+        let result = api_client
+            .handle_http_command(done_until.clone(), &config.endpoint, request.command)
+            .await;
 
         match result {
             Ok(_) => {
