@@ -254,7 +254,7 @@ regex = "1"
 signal-hook = "0.3"
 signal-hook-async-std = "0.2"
 tempfile = { version = "3.2" }
-test-case = "2.1"
+test-case = "2.2"
 testcontainers = { version = "0.14", features = ["watchdog"] }
 num_cpus = "*"
 
