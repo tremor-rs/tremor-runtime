@@ -72,7 +72,6 @@ impl BackoffStrategy for ExponentialBackoffRetryStrategy {
     }
 }
 
-// FIXME: make the retry strategy pluggable
 async fn retriable_request<
     TBackoffStrategy: BackoffStrategy,
     THttpClient: HttpClient,
@@ -210,7 +209,7 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
                 "Error from Google Cloud Storage: {}",
                 response.body_string().await?
             );
-            return Err("Received server errors from Google Cloud Storage".into());
+            return Err(ErrorKind::GoogleCloudStorageError("Received server errors from Google Cloud Storage").into());
         }
 
         let raw_range = response
