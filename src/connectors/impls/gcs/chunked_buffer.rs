@@ -76,11 +76,10 @@ impl ChunkedBuffer {
         self.buffer_start
     }
 
-    // TODO: Consume self instead?
-    pub fn final_block(&self) -> BufferPart {
+    pub fn final_block(self) -> BufferPart {
         BufferPart {
-            data: self.data.clone(),
-            start: self.start(),
+            data: self.data,
+            start: self.buffer_start,
         }
     }
 }

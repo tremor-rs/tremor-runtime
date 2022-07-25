@@ -19,7 +19,7 @@ use async_std::task::sleep;
 #[cfg(not(test))]
 use gouth::Token;
 use http_client::HttpClient;
-use http_types::{Method, Request};
+use http_types::{Method, Request, Response};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -35,15 +35,107 @@ pub(crate) trait ApiClient {
     ) -> Result<()>;
 }
 
-pub(crate) struct DefaultApiClient<THttpClient: HttpClient> {
+pub(crate) struct DefaultApiClient<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy> {
     #[cfg(not(test))]
     token: Token,
     sessions_per_file: HashMap<FileId, url::Url>,
     client: THttpClient,
+    backoff_strategy: TBackoffStrategy,
+}
+
+pub(crate) trait BackoffStrategy {
+    fn wait_time(&self, retry_index: u32) -> Duration;
+    fn max_retries(&self) -> u32;
+}
+
+pub(crate) struct ExponentialBackoffRetryStrategy {
+    max_retries: u32,
+    base_sleep_time: Duration,
+}
+
+impl ExponentialBackoffRetryStrategy {
+    pub fn new(max_retries: u32, base_sleep_time: Duration) -> Self {
+        Self {
+            max_retries,
+            base_sleep_time,
+        }
+    }
+}
+
+impl BackoffStrategy for ExponentialBackoffRetryStrategy {
+    fn wait_time(&self, retry_index: u32) -> Duration {
+        self.base_sleep_time * 2u32.pow(retry_index)
+    }
+
+    fn max_retries(&self) -> u32 {
+        self.max_retries
+    }
+}
+
+// FIXME: make the retry strategy pluggable
+async fn retriable_request<
+    TBackoffStrategy: BackoffStrategy,
+    THttpClient: HttpClient,
+    TMakeRequest: Fn() -> Result<Request>,
+>(
+    backoff_strategy: &TBackoffStrategy,
+    client: &mut THttpClient,
+    make_request: TMakeRequest,
+) -> Result<Response> {
+    let max_retries = backoff_strategy.max_retries();
+    for i in 0..max_retries {
+        let request = make_request();
+        let error_wait_time = backoff_strategy.wait_time(i);
+
+        match request {
+            Ok(request) => {
+                let result = client.send(request).await;
+
+                match result {
+                    Ok(mut response) => {
+                        if response.status().is_server_error() {
+                            warn!(
+                                "Request {}/{} failed - Server error: {}",
+                                i + 1,
+                                max_retries,
+                                response
+                                    .body_string()
+                                    .await
+                                    .unwrap_or_else(|_| "<unable to read body>".to_string())
+                            );
+                            sleep(error_wait_time).await;
+                            continue;
+                        }
+
+                        return Ok(response);
+                    }
+                    Err(error) => {
+                        warn!("Request {}/{} failed: {}", i + 1, max_retries, error);
+                        sleep(error_wait_time).await;
+                        continue;
+                    }
+                }
+            }
+            Err(error) => {
+                warn!(
+                    "Request {}/{} failed to be created: {}",
+                    i + 1,
+                    max_retries,
+                    error
+                );
+                sleep(error_wait_time).await;
+                continue;
+            }
+        }
+    }
+
+    Err(ErrorKind::GoogleCloudStorageError("Request still failing after retries").into())
 }
 
 #[async_trait::async_trait]
-impl<THttpClient: HttpClient> ApiClient for DefaultApiClient<THttpClient> {
+impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> ApiClient
+    for DefaultApiClient<THttpClient, TBackoffStrategy>
+{
     async fn handle_http_command(
         &mut self,
         done_until: Arc<AtomicUsize>,
@@ -59,22 +151,25 @@ impl<THttpClient: HttpClient> ApiClient for DefaultApiClient<THttpClient> {
         }
     }
 }
-
-impl<THttpClient: HttpClient> DefaultApiClient<THttpClient> {
+impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
+    DefaultApiClient<THttpClient, TBackoffStrategy>
+{
     #[cfg(test)]
-    pub fn new(client: THttpClient) -> Result<Self> {
+    pub fn new(client: THttpClient, backoff_strategy: TBackoffStrategy) -> Result<Self> {
         Ok(Self {
             sessions_per_file: HashMap::new(),
             client,
+            backoff_strategy,
         })
     }
 
     #[cfg(not(test))]
-    pub fn new(client: THttpClient) -> Result<Self> {
+    pub fn new(client: THttpClient, backoff_strategy: TBackoffStrategy) -> Result<Self> {
         Ok(Self {
             token: Token::new()?,
             sessions_per_file: HashMap::new(),
             client,
+            backoff_strategy,
         })
     }
 
@@ -84,8 +179,7 @@ impl<THttpClient: HttpClient> DefaultApiClient<THttpClient> {
         file: FileId,
         data: BufferPart,
     ) -> Result<()> {
-        let mut response = None;
-        for i in 0..3 {
+        let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
             let session_url =
                 self.sessions_per_file
                     .get(&file)
@@ -107,123 +201,117 @@ impl<THttpClient: HttpClient> DefaultApiClient<THttpClient> {
             request.insert_header("Accept", "*/*");
             request.set_body(data.data.clone());
 
-            match self.client.send(request).await {
-                Ok(request) => response = Some(request),
-                Err(e) => {
-                    warn!("Failed to send a request to GCS: {}", e);
+            Ok(request)
+        })
+        .await?;
 
-                    sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
-                    continue;
-                }
-            }
-
-            if let Some(response) = response.as_mut() {
-                if !response.status().is_server_error() && response.header("range").is_some() {
-                    break;
-                }
-
-                error!(
-                    "Error from Google Cloud Storage: {}",
-                    response.body_string().await?
-                );
-
-                sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
-            }
+        if response.status().is_server_error() {
+            error!(
+                "Error from Google Cloud Storage: {}",
+                response.body_string().await?
+            );
+            return Err("Received server errors from Google Cloud Storage".into());
         }
 
-        if let Some(mut response) = response {
-            if response.status().is_server_error() {
-                error!(
-                    "Error from Google Cloud Storage: {}",
-                    response.body_string().await?
-                );
-                return Err("Received server errors from Google Cloud Storage".into());
-            }
+        let raw_range = response
+            .header("range")
+            .ok_or(ErrorKind::GoogleCloudStorageError("No range header"))?;
+        let raw_range = raw_range
+            .get(0)
+            .ok_or(ErrorKind::GoogleCloudStorageError(
+                "Missing Range header value",
+            ))?
+            .as_str();
 
-            if let Some(raw_range) = response.header("range") {
-                let raw_range = raw_range
-                    .get(0)
+        // Range format: bytes=0-262143
+        let range_end = &raw_range
+            .get(
+                raw_range
+                    .find('-')
                     .ok_or(ErrorKind::GoogleCloudStorageError(
-                        "Missing Range header value",
+                        "Did not find a - in the Range header",
                     ))?
-                    .as_str();
+                    + 1..,
+            )
+            .ok_or(ErrorKind::GoogleCloudStorageError(
+                "Unable to get the end of the Range",
+            ))?;
 
-                // Range format: bytes=0-262143
-                let range_end = &raw_range
-                    .get(
-                        raw_range
-                            .find('-')
-                            .ok_or(ErrorKind::GoogleCloudStorageError(
-                                "Did not find a - in the Range header",
-                            ))?
-                            + 1..,
-                    )
-                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                        "Unable to get the end of the Range",
-                    ))?;
-
-                // NOTE: The data can only be thrown away to the point of the end of the Range header,
-                // since google can persist less than we send in our request.
-                //
-                // see: https://cloud.google.com/storage/docs/performing-resumable-uploads#chunked-upload
-                done_until.store(range_end.parse()?, Ordering::Release);
-            } else {
-                return Err("No range header".into());
-            }
-        } else {
-            return Err("no response from GCS".into());
-        }
+        // NOTE: The data can only be thrown away to the point of the end of the Range header,
+        // since google can persist less than we send in our request.
+        //
+        // see: https://cloud.google.com/storage/docs/performing-resumable-uploads#chunked-upload
+        // The Release ordering here means that the reads after this write will see the new value,
+        // the reads happen in the sink task.
+        done_until.store(range_end.parse()?, Ordering::Release);
 
         Ok(())
     }
 
+    #[cfg(test)]
+    fn create_upload_start_request(url: &Url<HttpsDefaults>, file: &FileId) -> Result<Request> {
+        let url = url::Url::parse(&format!(
+            "{}/b/{}/o?name={}&uploadType=resumable",
+            url, file.bucket, file.name
+        ))?;
+        let request = Request::new(Method::Post, url);
+
+        Ok(request)
+    }
+
+    #[cfg(not(test))]
+    fn create_upload_start_request(
+        token: &Token,
+        url: &Url<HttpsDefaults>,
+        file: &FileId,
+    ) -> Result<Request> {
+        let url = url::Url::parse(&format!(
+            "{}/b/{}/o?name={}&uploadType=resumable",
+            url, file.bucket, file.name
+        ))?;
+        let mut request = Request::new(Method::Post, url);
+        request.insert_header("Authorization", token.header_value()?.to_string());
+
+        Ok(request)
+    }
+
     async fn start_upload(&mut self, url: &Url<HttpsDefaults>, file: FileId) -> Result<()> {
-        for i in 0..3 {
-            let url = url::Url::parse(&format!(
-                "{}/b/{}/o?name={}&uploadType=resumable",
-                url, file.bucket, file.name
-            ))?;
-            #[cfg(not(test))]
-            let mut request = Request::new(Method::Post, url);
-            #[cfg(test)]
-            let request = Request::new(Method::Post, url);
-            #[cfg(not(test))]
-            {
-                request.insert_header("Authorization", self.token.header_value()?.to_string());
-            }
+        let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
+            Self::create_upload_start_request(
+                #[cfg(not(test))]
+                &self.token,
+                url,
+                &file,
+            )
+        })
+        .await?;
 
-            let response = self.client.send(request).await;
+        if response.status().is_server_error() {
+            error!(
+                "Error from Google Cloud Storage: {}",
+                response.body_string().await?
+            );
 
-            if let Ok(mut response) = response {
-                if !response.status().is_server_error() {
-                    self.sessions_per_file.insert(
-                        file,
-                        url::Url::parse(
-                            response
-                                .header("Location")
-                                .ok_or(ErrorKind::GoogleCloudStorageError(
-                                    "Missing Location header",
-                                ))?
-                                .get(0)
-                                .ok_or(ErrorKind::GoogleCloudStorageError(
-                                    "Missing Location header value",
-                                ))?
-                                .as_str(),
-                        )?,
-                    );
-
-                    break;
-                }
-
-                error!(
-                    "Error from Google Cloud Storage: {}",
-                    response.body_string().await?
-                );
-            }
-
-            sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
-            continue;
+            return Err(
+                ErrorKind::GoogleCloudStorageError("Failed to send a request to GCS").into(),
+            );
         }
+
+        self.sessions_per_file.insert(
+            file,
+            url::Url::parse(
+                response
+                    .header("Location")
+                    .ok_or(ErrorKind::GoogleCloudStorageError(
+                        "Missing Location header",
+                    ))?
+                    .get(0)
+                    .ok_or(ErrorKind::GoogleCloudStorageError(
+                        "Missing Location header value",
+                    ))?
+                    .as_str(),
+            )?,
+        );
 
         Ok(())
     }
@@ -236,7 +324,7 @@ impl<THttpClient: HttpClient> DefaultApiClient<THttpClient> {
                     "No session URL is available",
                 ))?;
 
-        for i in 0..3 {
+        let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
             let mut request = Request::new(Method::Put, session_url.clone());
 
             request.insert_header(
@@ -252,19 +340,19 @@ impl<THttpClient: HttpClient> DefaultApiClient<THttpClient> {
 
             request.set_body(data.data.clone());
 
-            let response = self.client.send(request).await;
+            Ok(request)
+        })
+        .await?;
 
-            if let Ok(mut response) = response {
-                if !response.status().is_server_error() {
-                    break;
-                }
-                error!(
-                    "Error from Google Cloud Storage: {}",
-                    response.body_string().await?
-                );
-            }
+        if response.status().is_server_error() {
+            error!(
+                "Error from Google Cloud Storage: {}",
+                response.body_string().await?
+            );
 
-            sleep(Duration::from_millis(25u64 * 2u64.pow(i))).await;
+            return Err(
+                ErrorKind::GoogleCloudStorageError("Failed to finalize file upload").into(),
+            );
         }
 
         Ok(())
@@ -376,6 +464,10 @@ mod tests {
         let mut api_client = DefaultApiClient {
             sessions_per_file,
             client,
+            backoff_strategy: ExponentialBackoffRetryStrategy {
+                max_retries: 3,
+                base_sleep_time: Duration::from_nanos(1),
+            },
         };
         api_client
             .handle_http_command(
@@ -415,6 +507,10 @@ mod tests {
         let mut api_client = DefaultApiClient {
             sessions_per_file,
             client,
+            backoff_strategy: ExponentialBackoffRetryStrategy {
+                max_retries: 3,
+                base_sleep_time: Duration::from_nanos(1),
+            },
         };
         api_client
             .handle_http_command(
@@ -456,6 +552,10 @@ mod tests {
         let mut api_client = DefaultApiClient {
             sessions_per_file,
             client,
+            backoff_strategy: ExponentialBackoffRetryStrategy {
+                max_retries: 3,
+                base_sleep_time: Duration::from_nanos(1),
+            },
         };
         api_client
             .handle_http_command(

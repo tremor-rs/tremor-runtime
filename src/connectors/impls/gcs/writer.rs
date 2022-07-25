@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use crate::connectors::impls::gcs::api_client::{
-    ApiClient, DefaultApiClient, FileId, HttpTaskCommand, HttpTaskRequest,
+    ApiClient, DefaultApiClient, ExponentialBackoffRetryStrategy, FileId, HttpTaskCommand,
+    HttpTaskRequest,
 };
 use crate::connectors::impls::gcs::chunked_buffer::ChunkedBuffer;
 use crate::connectors::prelude::{
@@ -47,6 +48,11 @@ pub struct Config {
     #[serde(default = "default_buffer_size")]
     buffer_size: usize,
     bucket: Option<String>,
+
+    #[serde(default = "default_max_retries")]
+    max_retries: u32,
+    #[serde(default = "default_backoff_base_time")]
+    default_backoff_base_time: u64,
 }
 
 #[allow(clippy::unwrap_used)]
@@ -61,6 +67,14 @@ fn default_connect_timeout() -> u64 {
 
 fn default_buffer_size() -> usize {
     1024 * 1024 * 8 // 8MB - the recommended minimum
+}
+
+fn default_max_retries() -> u32 {
+    3
+}
+
+fn default_backoff_base_time() -> u64 {
+    25_000_000
 }
 
 impl ConfigImpl for Config {}
@@ -274,7 +288,13 @@ impl Sink for GCSWriterSink {
         let (tx, rx) = bounded(QSIZE.load(Ordering::Relaxed));
         let client = create_client(Duration::from_nanos(self.config.connect_timeout))?;
 
-        let api_client = DefaultApiClient::new(client)?;
+        let api_client = DefaultApiClient::new(
+            client,
+            ExponentialBackoffRetryStrategy::new(
+                self.config.max_retries,
+                Duration::from_nanos(self.config.default_backoff_base_time),
+            ),
+        )?;
 
         connectors::spawn_task(
             ctx.clone(),
@@ -328,7 +348,11 @@ impl GCSWriterSink {
                     "not connected",
                 ))?;
 
-            let final_data = self.buffers.final_block();
+            let mut buffers = ChunkedBuffer::new(self.config.buffer_size);
+
+            std::mem::swap(&mut self.buffers, &mut buffers);
+
+            let final_data = buffers.final_block();
 
             let bucket = self
                 .current_bucket
@@ -349,7 +373,6 @@ impl GCSWriterSink {
                 })
                 .await?;
 
-            self.buffers = ChunkedBuffer::new(self.config.buffer_size);
             self.current_name = None;
         }
 
@@ -422,6 +445,12 @@ mod tests {
     use tremor_script::{EventPayload, ValueAndMeta};
     use tremor_value::literal;
 
+    #[test]
+    pub fn default_endpoint_does_not_panic() {
+        // This test will fail if this panics (it should never)
+        default_endpoint();
+    }
+
     #[async_std::test]
     pub async fn fails_when_buffer_size_is_not_divisible_by_256ki() {
         let raw_config = literal!({
@@ -461,6 +490,8 @@ mod tests {
                 connect_timeout: 1000000000,
                 buffer_size: 10,
                 bucket: None,
+                max_retries: 3,
+                default_backoff_base_time: 1,
             },
             buffers: ChunkedBuffer::new(10),
             current_name: None,
@@ -538,6 +569,8 @@ mod tests {
                 connect_timeout: 1000000000,
                 buffer_size: 10,
                 bucket: None,
+                max_retries: 3,
+                default_backoff_base_time: 1,
             },
             buffers: ChunkedBuffer::new(10),
             current_name: None,
@@ -622,6 +655,8 @@ mod tests {
                 connect_timeout: 1000000000,
                 buffer_size: 10,
                 bucket: None,
+                max_retries: 3,
+                default_backoff_base_time: 1,
             },
             buffers: ChunkedBuffer::new(10),
             current_name: None,
@@ -741,6 +776,8 @@ mod tests {
                 connect_timeout: 1000000000,
                 buffer_size: 10,
                 bucket: None,
+                max_retries: 3,
+                default_backoff_base_time: 1,
             },
             buffers: ChunkedBuffer::new(10),
             current_name: None,
@@ -863,6 +900,8 @@ mod tests {
                 connect_timeout: 100000000,
                 buffer_size: 1000,
                 bucket: None,
+                max_retries: 3,
+                default_backoff_base_time: 1,
             },
             &mut MockApiClient {},
             HttpTaskRequest {
@@ -899,6 +938,8 @@ mod tests {
                 connect_timeout: 10000000,
                 buffer_size: 1000,
                 bucket: None,
+                max_retries: 3,
+                default_backoff_base_time: 1,
             },
             MockApiClient {},
         ));
