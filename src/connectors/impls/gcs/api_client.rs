@@ -209,7 +209,10 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
                 "Error from Google Cloud Storage: {}",
                 response.body_string().await?
             );
-            return Err(ErrorKind::GoogleCloudStorageError("Received server errors from Google Cloud Storage").into());
+            return Err(ErrorKind::GoogleCloudStorageError(
+                "Received server errors from Google Cloud Storage",
+            )
+            .into());
         }
 
         let raw_range = response
@@ -464,7 +467,7 @@ mod tests {
             sessions_per_file,
             client,
             backoff_strategy: ExponentialBackoffRetryStrategy {
-                max_retries: 2,
+                max_retries: 3,
                 base_sleep_time: Duration::from_nanos(1),
             },
         };
@@ -507,7 +510,7 @@ mod tests {
             sessions_per_file,
             client,
             backoff_strategy: ExponentialBackoffRetryStrategy {
-                max_retries: 2,
+                max_retries: 3,
                 base_sleep_time: Duration::from_nanos(1),
             },
         };
@@ -552,7 +555,7 @@ mod tests {
             sessions_per_file,
             client,
             backoff_strategy: ExponentialBackoffRetryStrategy {
-                max_retries: 2,
+                max_retries: 3,
                 base_sleep_time: Duration::from_nanos(1),
             },
         };
@@ -571,5 +574,31 @@ mod tests {
             .await?;
 
         Ok(())
+    }
+
+    #[async_std::test]
+    async fn retries_on_server_error() {
+        let request_handled = Arc::new(AtomicBool::new(false));
+        let request_handled_clone = request_handled.clone();
+
+        let response = retriable_request(
+            &ExponentialBackoffRetryStrategy::new(3, Duration::from_nanos(1)),
+            &mut MockHttpClient {
+                config: Default::default(),
+                handle_request: Box::new(move |_req| {
+                    request_handled_clone.swap(true, Ordering::Acquire);
+
+                    Ok(Response::new(StatusCode::Ok))
+                }),
+                simulate_failure: Arc::new(AtomicBool::new(true)),
+                simulate_transport_failure: Arc::new(Default::default()),
+            },
+            || Ok(Request::new(Method::Get, "http://example.com")),
+        )
+        .await
+        .unwrap();
+
+        assert!(request_handled.load(Ordering::Acquire));
+        assert_eq!(response.status(), StatusCode::Ok);
     }
 }
