@@ -82,7 +82,7 @@ async fn retriable_request<
     make_request: TMakeRequest,
 ) -> Result<Response> {
     let max_retries = backoff_strategy.max_retries();
-    for i in 1..max_retries + 1 {
+    for i in 1..=max_retries {
         let request = make_request();
         let error_wait_time = backoff_strategy.wait_time(i);
 

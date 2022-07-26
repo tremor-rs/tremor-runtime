@@ -442,6 +442,7 @@ mod tests {
     use crate::connectors::impls::gcs::chunked_buffer::BufferPart;
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use beef::Cow;
+    use std::sync::atomic::AtomicBool;
     use tremor_script::{EventPayload, ValueAndMeta};
     use tremor_value::literal;
 
@@ -851,7 +852,9 @@ mod tests {
         assert!(response.contraflow_data.is_none());
     }
 
-    struct MockApiClient {}
+    struct MockApiClient {
+        pub inject_failure: Arc<AtomicBool>,
+    }
 
     #[async_trait::async_trait]
     impl ApiClient for MockApiClient {
@@ -861,6 +864,10 @@ mod tests {
             _url: &Url<HttpsDefaults>,
             _command: HttpTaskCommand,
         ) -> Result<()> {
+            if self.inject_failure.swap(false, Ordering::AcqRel) {
+                return Err("injected failure".into());
+            }
+
             Ok(())
         }
     }
@@ -903,7 +910,9 @@ mod tests {
                 max_retries: 3,
                 default_backoff_base_time: 1,
             },
-            &mut MockApiClient {},
+            &mut MockApiClient {
+                inject_failure: Arc::new(AtomicBool::new(false)),
+            },
             HttpTaskRequest {
                 command: HttpTaskCommand::StartUpload {
                     file: FileId::new("somebucket", "something.txt"),
@@ -941,7 +950,76 @@ mod tests {
                 max_retries: 3,
                 default_backoff_base_time: 1,
             },
-            MockApiClient {},
+            MockApiClient {
+                inject_failure: Arc::new(AtomicBool::new(true)),
+            },
+        ));
+
+        let value = literal!({});
+        let meta = literal!({
+            "gcs_writer": {
+                "name": "test.txt",
+                "bucket": "woah"
+            }
+        });
+
+        let event_payload = EventPayload::from(ValueAndMeta::from_parts(value, meta));
+
+        let event = Event {
+            id: Default::default(),
+            data: event_payload,
+            ingest_ns: 0,
+            origin_uri: None,
+            kind: None,
+            is_batch: false,
+            cb: Default::default(),
+            op_meta: Default::default(),
+            transactional: false,
+        };
+
+        let contraflow_data = ContraflowData::from(event);
+
+        command_tx
+            .send(HttpTaskRequest {
+                command: HttpTaskCommand::StartUpload {
+                    file: FileId::new("somebucket", "something.txt"),
+                },
+                contraflow_data: Some(contraflow_data.clone()),
+                start: 10,
+            })
+            .await
+            .unwrap();
+
+        let reply = reply_rx.recv().await.unwrap();
+
+        if let AsyncSinkReply::Fail(data) = reply {
+            assert_eq!(contraflow_data.into_ack(1), data.into_ack(1));
+        } else {
+            panic!("did not receive an ACK");
+        }
+    }
+
+    #[async_std::test]
+    pub async fn http_task_failure_test() {
+        let (command_tx, command_rx) = bounded(10);
+        let (reply_tx, reply_rx) = bounded(10);
+        let done_until = Arc::new(AtomicUsize::new(0));
+
+        async_std::task::spawn(http_task(
+            command_rx,
+            done_until,
+            reply_tx,
+            Config {
+                endpoint: Default::default(),
+                connect_timeout: 10000000,
+                buffer_size: 1000,
+                bucket: None,
+                max_retries: 3,
+                default_backoff_base_time: 1,
+            },
+            MockApiClient {
+                inject_failure: Arc::new(AtomicBool::new(false)),
+            },
         ));
 
         let value = literal!({});
