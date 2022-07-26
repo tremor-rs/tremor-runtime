@@ -525,9 +525,7 @@ mod tests {
         let done_until = Arc::new(AtomicUsize::new(0));
         let client = MockHttpClient {
             config: Default::default(),
-            handle_request: Box::new(|mut req| {
-                Ok(Response::new(StatusCode::InternalServerError))
-            }),
+            handle_request: Box::new(|_req| Ok(Response::new(StatusCode::InternalServerError))),
             simulate_failure: Arc::new(AtomicBool::new(true)),
             simulate_transport_failure: Arc::new(AtomicBool::new(true)),
         };
