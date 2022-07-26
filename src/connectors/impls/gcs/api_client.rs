@@ -526,13 +526,7 @@ mod tests {
         let client = MockHttpClient {
             config: Default::default(),
             handle_request: Box::new(|mut req| {
-                let body = block_on(req.body_bytes()).unwrap();
-                assert_eq!(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9], body);
-                assert_eq!(req.header("Content-Range").unwrap()[0], "bytes 0-9/*");
-
-                let mut response = Response::new(StatusCode::Ok);
-                response.insert_header("Range", "bytes=0-10");
-                Ok(response)
+                Ok(Response::new(StatusCode::InternalServerError))
             }),
             simulate_failure: Arc::new(AtomicBool::new(true)),
             simulate_transport_failure: Arc::new(AtomicBool::new(true)),
@@ -546,7 +540,7 @@ mod tests {
             sessions_per_file,
             client,
             backoff_strategy: ExponentialBackoffRetryStrategy {
-                max_retries: 1,
+                max_retries: 2,
                 base_sleep_time: Duration::from_nanos(1),
             },
         };
@@ -642,17 +636,12 @@ mod tests {
 
     #[async_std::test]
     async fn fails_when_retries_are_exhausted() {
-        let request_handled = Arc::new(AtomicBool::new(false));
-        let request_handled_clone = request_handled.clone();
-
         let response = retriable_request(
-            &ExponentialBackoffRetryStrategy::new(1, Duration::from_nanos(1)),
+            &ExponentialBackoffRetryStrategy::new(3, Duration::from_nanos(1)),
             &mut MockHttpClient {
                 config: Default::default(),
                 handle_request: Box::new(move |_req| {
-                    request_handled_clone.swap(true, Ordering::Acquire);
-
-                    Ok(Response::new(StatusCode::Ok))
+                    Ok(Response::new(StatusCode::InternalServerError))
                 }),
                 simulate_failure: Arc::new(AtomicBool::new(true)),
                 simulate_transport_failure: Arc::new(Default::default()),
