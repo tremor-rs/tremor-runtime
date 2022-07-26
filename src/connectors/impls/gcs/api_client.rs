@@ -151,18 +151,9 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> A
 impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
     DefaultApiClient<THttpClient, TBackoffStrategy>
 {
-    #[cfg(test)]
     pub fn new(client: THttpClient, backoff_strategy: TBackoffStrategy) -> Result<Self> {
         Ok(Self {
-            sessions_per_file: HashMap::new(),
-            client,
-            backoff_strategy,
-        })
-    }
-
-    #[cfg(not(test))]
-    pub fn new(client: THttpClient, backoff_strategy: TBackoffStrategy) -> Result<Self> {
-        Ok(Self {
+            #[cfg(not(test))]
             token: Token::new()?,
             sessions_per_file: HashMap::new(),
             client,
