@@ -364,6 +364,7 @@ async fn link(
             };
 
             let msg_to = crate::pipeline::MgmtMsg::ConnectInput {
+                port: to.port().to_string().into(),
                 endpoint: from.clone(),
                 target: InputTarget::Pipeline(Box::new(from_pipeline.clone())),
                 is_transactional: true,

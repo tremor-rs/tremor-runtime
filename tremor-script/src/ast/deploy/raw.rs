@@ -209,7 +209,7 @@ impl<'script> Upable<'script> for DeployEndpointRaw<'script> {
         // name should be added to meta data
         let name: String = self.alias.to_string();
         self.mid.set_name(&name);
-        Ok(DeployEndpoint {  
+        Ok(DeployEndpoint {
             alias: self.alias.to_string(),
             port: self.port.to_string(),
             mid: self.mid,

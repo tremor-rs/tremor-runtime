@@ -849,6 +849,7 @@ where
             self.ctx.swallow_err(
                 p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
                     endpoint: DeployEndpoint::new(&self.ctx.alias, &port, pipeline_url.meta()),
+                    port: Cow::from(pipeline_url.port().to_string()),
                     target: InputTarget::Source(self.addr.clone()),
                     is_transactional: self.is_transactional,
                 })
