@@ -91,7 +91,7 @@ regex = "1.6"
 rmp-serde = "1.1"
 serde = "1"
 serde_derive = "1"
-serde_yaml = "0.8"
+serde_yaml = "0.9"
 simd-json = { version = "0.6", features = ["known-key"] }
 simd-json-derive = "0.4"
 snap = "1"

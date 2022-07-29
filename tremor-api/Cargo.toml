@@ -17,7 +17,7 @@ http-types = "2.12"
 log = "0.4"
 serde = "1"
 serde_derive = "1"
-serde_yaml = "0.8"
+serde_yaml = "0.9"
 simd-json = "0.6"
 # we don't need sessions or cookies or shitty logging middleware
 tide = { version = "0.16", default-features = false, features = ["h1-server"] }
