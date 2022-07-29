@@ -230,6 +230,8 @@ pub(crate) fn spawn(
 pub(crate) enum MgmtMsg {
     /// input can only ever be connected to the `in` port, so no need to include it here
     ConnectInput {
+        /// port to connect in
+        port: Cow<'static, str>,
         /// url of the input to connect
         endpoint: DeployEndpoint,
         /// the target that connects to the `in` port
@@ -572,10 +574,15 @@ pub(crate) async fn pipeline_task(
             }
             AnyMsg::Mgmt(MgmtMsg::ConnectInput {
                 endpoint,
+                port,
                 target,
                 is_transactional,
             }) => {
-                info!("{ctx} Connecting {endpoint} to port 'in'");
+                info!("{ctx} Connecting '{endpoint}' to port '{port}'");
+                if !input_does_exist(&port, &pipeline) {
+                    error!("{ctx} Error connecting input pipeline '{port}' as it does not exist",);
+                    continue;
+                }
                 inputs.insert(endpoint, (is_transactional, target));
             }
             AnyMsg::Mgmt(MgmtMsg::ConnectOutput {
@@ -598,6 +605,7 @@ pub(crate) async fn pipeline_task(
                     if id.pipeline_alias() == endpoint.alias() {
                         if let Err(e) = pipe
                             .send_mgmt(MgmtMsg::ConnectInput {
+                                port: Cow::const_str("in"),
                                 endpoint: DeployEndpoint::new(
                                     id.pipeline_alias(),
                                     &port,
@@ -684,6 +692,10 @@ fn output_doesnt_exist(port: &Cow<'static, str>, pipeline: &ExecutableGraph) -> 
     !pipeline.outputs.contains_key(port)
 }
 
+fn input_does_exist(port: &Cow<'static, str>, pipeline: &ExecutableGraph) -> bool {
+    // function checks if port is in pipeline
+    pipeline.inputs().contains_key(port)
+}
 #[cfg(test)]
 mod tests {
 
@@ -736,6 +748,7 @@ mod tests {
         .await?;
         addr2
             .send_mgmt(MgmtMsg::ConnectInput {
+                port: Cow::const_str("in"),
                 endpoint: DeployEndpoint::new("snot", "out", &yolo_mid),
                 target: InputTarget::Pipeline(Box::new(addr.clone())),
                 is_transactional: true,
@@ -750,6 +763,7 @@ mod tests {
             .await?;
         addr3
             .send_mgmt(MgmtMsg::ConnectInput {
+                port: Cow::const_str("in"),
                 endpoint: DeployEndpoint::new("snot2", "out", &yolo_mid),
                 target: InputTarget::Pipeline(Box::new(addr2.clone())),
                 is_transactional: false,
@@ -848,6 +862,7 @@ mod tests {
         let target = InputTarget::Source(source_addr);
         let mid = NodeMeta::new(Location::yolo(), Location::yolo());
         addr.send_mgmt(MgmtMsg::ConnectInput {
+            port: IN,
             endpoint: DeployEndpoint::new(&"source_01", &OUT, &mid),
             target,
             is_transactional: true,

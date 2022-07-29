@@ -267,6 +267,11 @@ pub struct ExecutableGraph {
 pub type Returns = Vec<(Cow<'static, str>, Event)>;
 
 impl ExecutableGraph {
+    /// returns inputs of the `ExecutableGraph`
+    #[must_use]
+    pub fn inputs(&self) -> &HashMap<Cow<'static, str>, usize> {
+        &self.inputs
+    }
     /// Tries to optimise a pipeline
     pub fn optimize(&mut self) -> Option<()> {
         let mut i = 0;
