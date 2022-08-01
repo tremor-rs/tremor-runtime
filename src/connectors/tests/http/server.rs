@@ -409,25 +409,24 @@ async fn https_server_test() -> Result<()> {
     let body = response.body_string().await?;
     assert_eq!(
         format!(
-            r#"---
-meta:
+            r#"meta:
   url_parts:
     port: {port}
     scheme: https
     host: localhost
     path: /
-  url: "https://localhost:{port}/"
+  url: https://localhost:{port}/
   method: DELETE
   headers:
     content-length:
-      - "0"
+    - '0'
     content-type:
-      - application/octet-stream
+    - application/octet-stream
     host:
-      - "localhost:{port}"
+    - localhost:{port}
     connection:
-      - keep-alive
-value: ~
+    - keep-alive
+value: null
 "#
         ),
         body

@@ -37,7 +37,7 @@ impl Codec for Yaml {
             .map_err(Error::from)
     }
     fn encode(&self, data: &Value) -> Result<Vec<u8>> {
-        Ok(serde_yaml::to_vec(data)?)
+        Ok(serde_yaml::to_string(data)?.into_bytes())
     }
 
     fn boxed_clone(&self) -> Box<dyn Codec> {
