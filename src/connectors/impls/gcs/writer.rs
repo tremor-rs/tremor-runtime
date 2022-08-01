@@ -316,7 +316,7 @@ impl Sink for GCSWriterSink {
     }
 
     fn auto_ack(&self) -> bool {
-        false
+        true
     }
 }
 
