@@ -538,7 +538,7 @@ mod tests {
             sessions_per_file,
             client,
             backoff_strategy: ExponentialBackoffRetryStrategy {
-                max_retries: 2,
+                max_retries: 3,
                 base_sleep_time: Duration::from_nanos(1),
             },
         };
