@@ -35,7 +35,7 @@ log = "0.4"
 log4rs = "1.1.0"
 serde = "1"
 serde_derive = "1"
-serde_yaml = "0.8"
+serde_yaml = "0.9"
 signal-hook = "0.3"
 signal-hook-async-std = "0.2"
 simd-json = { version = "0.6", features = ["known-key"] }
