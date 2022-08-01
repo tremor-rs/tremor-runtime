@@ -13,5 +13,5 @@
 // limitations under the License.
 
 mod api_client;
+pub(crate) mod appender;
 mod chunked_buffer;
-pub(crate) mod writer;

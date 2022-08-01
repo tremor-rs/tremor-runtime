@@ -85,7 +85,7 @@ pub(crate) struct Builder {}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
-        ConnectorType("gcs_writer".into())
+        ConnectorType("gcs_appender".into())
     }
 
     async fn build_cfg(
@@ -508,7 +508,7 @@ mod tests {
         let context = SinkContext {
             uid: Default::default(),
             alias: alias.clone(),
-            connector_type: "gcs_writer".into(),
+            connector_type: "gcs_appender".into(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
@@ -516,14 +516,14 @@ mod tests {
             Some(Codec::from("json")),
             CodecReq::Required,
             vec![],
-            &"gcs_writer".into(),
+            &"gcs_appender".into(),
             &alias,
         )
         .unwrap();
 
         let value = literal!({});
         let meta = literal!({
-            "gcs_writer": {
+            "gcs_appender": {
                 "name": "test.txt",
                 "bucket": "woah"
             }
@@ -587,7 +587,7 @@ mod tests {
         let context = SinkContext {
             uid: Default::default(),
             alias: alias.clone(),
-            connector_type: "gcs_writer".into(),
+            connector_type: "gcs_appender".into(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
@@ -595,14 +595,14 @@ mod tests {
             Some(Codec::from("binary")),
             CodecReq::Required,
             vec![],
-            &"gcs_writer".into(),
+            &"gcs_appender".into(),
             &alias,
         )
         .unwrap();
 
         let value = Value::Bytes(Cow::from(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]));
         let meta = literal!({
-            "gcs_writer": {
+            "gcs_appender": {
                 "name": "test.txt",
                 "bucket": "woah"
             }
@@ -673,7 +673,7 @@ mod tests {
         let context = SinkContext {
             uid: Default::default(),
             alias: alias.clone(),
-            connector_type: "gcs_writer".into(),
+            connector_type: "gcs_appender".into(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
@@ -681,14 +681,14 @@ mod tests {
             Some(Codec::from("json")),
             CodecReq::Required,
             vec![],
-            &"gcs_writer".into(),
+            &"gcs_appender".into(),
             &alias,
         )
         .unwrap();
 
         let value = literal!({});
         let meta = literal!({
-            "gcs_writer": {
+            "gcs_appender": {
                 "name": "test.txt",
                 "bucket": "woah"
             }
@@ -712,7 +712,7 @@ mod tests {
             .unwrap();
         let value = literal!({});
         let meta = literal!({
-            "gcs_writer": {
+            "gcs_appender": {
                 "name": "test_other.txt",
                 "bucket": "woah"
             }
@@ -794,7 +794,7 @@ mod tests {
         let context = SinkContext {
             uid: Default::default(),
             alias: alias.clone(),
-            connector_type: "gcs_writer".into(),
+            connector_type: "gcs_appender".into(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
@@ -802,14 +802,14 @@ mod tests {
             Some(Codec::from("json")),
             CodecReq::Required,
             vec![],
-            &"gcs_writer".into(),
+            &"gcs_appender".into(),
             &alias,
         )
         .unwrap();
 
         let value = literal!({});
         let meta = literal!({
-            "gcs_writer": {
+            "gcs_appender": {
                 "name": "test.txt",
                 "bucket": "woah"
             }
@@ -878,7 +878,7 @@ mod tests {
 
         let value = literal!({});
         let meta = literal!({
-            "gcs_writer": {
+            "gcs_appender": {
                 "name": "test.txt",
                 "bucket": "woah"
             }
@@ -957,7 +957,7 @@ mod tests {
 
         let value = literal!({});
         let meta = literal!({
-            "gcs_writer": {
+            "gcs_appender": {
                 "name": "test.txt",
                 "bucket": "woah"
             }
@@ -1024,7 +1024,7 @@ mod tests {
 
         let value = literal!({});
         let meta = literal!({
-            "gcs_writer": {
+            "gcs_appender": {
                 "name": "test.txt",
                 "bucket": "woah"
             }
