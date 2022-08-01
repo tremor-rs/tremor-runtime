@@ -678,4 +678,21 @@ mod tests {
         assert!(request_handled.load(Ordering::Acquire));
         assert_eq!(response.status(), StatusCode::Ok);
     }
+
+    #[test]
+    pub fn mock_http_client_config() {
+        let mut client = MockHttpClient {
+            config: Default::default(),
+            handle_request: Box::new(|_| Ok(Response::new(StatusCode::Ok))),
+            simulate_failure: Arc::new(Default::default()),
+            simulate_transport_failure: Arc::new(Default::default()),
+        };
+
+        let mut config = http_client::Config::new();
+        config.timeout = Some(Duration::from_secs(1000));
+
+        client.set_config(config.clone()).unwrap();
+
+        assert_eq!(client.config().timeout, config.timeout);
+    }
 }
