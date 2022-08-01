@@ -19,6 +19,7 @@ use crate::connectors::impls::gcl::writer::sink::GclSink;
 use crate::connectors::prelude::*;
 use crate::connectors::{Alias, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
 use crate::errors::Error;
+use async_std::channel::{bounded, Sender};
 use googapis::google::api::MonitoredResource;
 use googapis::google::logging::r#type::LogSeverity;
 use serde::Deserialize;
@@ -27,6 +28,7 @@ use std::collections::HashMap;
 use tremor_pipeline::ConfigImpl;
 
 #[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     /// The default `log_name` for this configuration or `default` if not provided.
     /// The `log_name` field can be overridden in metadata.
@@ -100,6 +102,10 @@ pub(crate) struct Config {
     /// basis through metadata
     #[serde(default = "Default::default")]
     pub labels: HashMap<String, String>,
+
+    /// The number of in flight requests to the GCP logging endpoint. Defaults to 4.
+    #[serde(default = "default_concurrency")]
+    pub concurrency: usize,
 }
 
 fn default_partial_success() -> bool {
@@ -120,6 +126,10 @@ fn default_request_timeout() -> u64 {
 
 fn default_log_severity() -> i32 {
     LogSeverity::Default as i32
+}
+
+fn default_concurrency() -> usize {
+    4
 }
 
 impl Config {
@@ -222,6 +232,7 @@ pub(crate) struct Builder {}
 
 struct Gcl {
     config: Config,
+    response_tx: Sender<SourceReply>,
 }
 
 #[async_trait::async_trait]
@@ -231,7 +242,11 @@ impl Connector for Gcl {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = GclSink::new(self.config.clone());
+        let sink = GclSink::new(
+            self.config.clone(),
+            self.response_tx.clone(),
+            builder.reply_tx(),
+        );
 
         builder.spawn(sink, sink_context).map(Some)
     }
@@ -254,8 +269,10 @@ impl ConnectorBuilder for Builder {
         raw: &Value,
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
+        let (response_tx, _response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
         Ok(Box::new(Gcl {
             config: Config::new(raw)?,
+            response_tx,
         }))
     }
 }

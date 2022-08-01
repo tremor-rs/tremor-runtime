@@ -131,6 +131,33 @@ pub(crate) enum AsyncSinkReply {
     CB(ContraflowData, CbAction),
 }
 
+#[allow(dead_code)]
+impl AsyncSinkReply {
+    #[cfg(test)]
+    pub(crate) fn is_ack(&self) -> bool {
+        match self {
+            Self::Ack(_, _) => true,
+            _ => false,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_fail(&self) -> bool {
+        match self {
+            Self::Fail(_) => true,
+            _ => false,
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_cb(&self) -> bool {
+        match self {
+            Self::CB(_, _) => true,
+            _ => false,
+        }
+    }
+}
+
 /// connector sink - receiving events
 #[async_trait::async_trait]
 pub(crate) trait Sink: Send {
