@@ -91,10 +91,8 @@ async fn connector_kafka_consumer_transactional_retry() -> Result<()> {
             "topics": [
                 topic
             ],
-            "retry_failed_events": true,
-            "rdkafka_options": {
-                "enable.auto.commit": "false"
-            //    "debug": "all"
+            "mode": {
+                "transactional": {}
             }
         }
     });
@@ -331,9 +329,14 @@ async fn connector_kafka_consumer_transactional_no_retry() -> Result<()> {
             "topics": [
                 topic
             ],
-            "rdkafka_options": {
-                "enable.auto.commit": "false"
-            //    "debug": "all"
+            "mode": {
+                "custom": {
+                    "rdkafka_options": {
+                        "enable.auto.commit": "false"
+                    //    "debug": "all"
+                    },
+                    "retry_failed_events": false
+                }
             }
         }
     });
@@ -559,9 +562,7 @@ async fn connector_kafka_consumer_non_transactional() -> Result<()> {
             "topics": [
                 topic
             ],
-            "rdkafka_options": {
-            //    "debug": "all"
-            }
+            "mode": "performance"
         }
     });
     let harness = ConnectorHarness::new(
@@ -757,9 +758,7 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
             "topics": [
                 "snot"
             ],
-            "rdkafka_options": {
-            //    "debug": "all"
-            }
+            "mode": "performance"
         }
     });
     let harness = ConnectorHarness::new(
@@ -829,8 +828,13 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
             "topics": [
                 topic
             ],
-            "rdkafka_options": {
-            //    "debug": "all"
+            "mode": {
+                "custom": {
+                    "rdkafka_options": {
+                        "debug": "all"
+                    },
+                    "retry_failed_events": false
+                }
             }
         }
     });

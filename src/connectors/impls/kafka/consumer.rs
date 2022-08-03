@@ -29,13 +29,135 @@ use halfbrown::HashMap;
 use indexmap::IndexMap;
 use log::Level::Debug;
 use rdkafka::config::ClientConfig;
-use rdkafka::consumer::{Consumer, ConsumerContext, Rebalance, StreamConsumer};
+use rdkafka::consumer::{CommitMode, Consumer, ConsumerContext, Rebalance, StreamConsumer};
 use rdkafka::error::{KafkaError, KafkaResult};
 use rdkafka::message::{BorrowedMessage, Headers, Message};
 use rdkafka::{Offset, TopicPartitionList};
 use rdkafka_sys::RDKafkaErrorCode;
 
 const KAFKA_CONSUMER_META_KEY: &str = "kafka_consumer";
+
+#[derive(Deserialize, Debug, Clone, Default)]
+#[serde(deny_unknown_fields, rename_all = "lowercase")]
+enum Mode {
+    #[default]
+    /// - enable.auto.commit: true,
+    /// - enable.auto.offset.store: true,
+    /// - auto.commit.interval.ms: 5000 # 5s
+    Performance,
+    /// - enable.auto.commit: true
+    /// - enable.auto.offset.store: false
+    /// - auto.commit.interval.ms: # take the configured value
+    /// - retry_failed_events: true
+    Transactional {
+        #[serde(default = "default_commit_interval")]
+        commit_interval: u64,
+    }, // enable.auto.commit: true, enable.auto.offset.store: false, retry_failed_events: true
+    Custom {
+        /// Optional rdkafka configuration
+        ///
+        /// Can be overwritten by tremor for settings required for `auto_commit` and/or `retry_failed_events`.
+        rdkafka_options: HashMap<String, String>,
+
+        /// This config determines the behaviour of this source. DANGER: this might lead to a lot of traffic to the group-coordinator
+        /// if `enable.auto.commit` is set to `false`:
+        ///
+        /// if set to `true` this source will reset the consumer offset to a
+        /// failed message, so it will effectively retry those messages.
+        ///
+        /// If set to `false` this source will only commit the consumer offset
+        /// if the message has been successfully acknowledged.
+        ///
+        /// This might lead to events being sent multiple times.
+        /// This should not be used when persistent errors are expected (e.g. if the message content is malformed and will lead to repeated errors)
+        #[serde(default = "default_false")]
+        retry_failed_events: bool,
+    },
+}
+
+impl Mode {
+    fn retries_failed_events(&self) -> bool {
+        match self {
+            Mode::Custom {
+                retry_failed_events,
+                ..
+            } => *retry_failed_events,
+            Mode::Transactional { .. } => true,
+            Mode::Performance => false,
+        }
+    }
+
+    fn is_transactional(&self) -> bool {
+        self.stores_offsets() || self.commits_offsets()
+    }
+
+    /// returns `true` if the current mode is configured to store offsets locally
+    fn stores_offsets(&self) -> bool {
+        match self {
+            Mode::Transactional { commit_interval } => *commit_interval > 0,
+            Mode::Custom {
+                rdkafka_options, ..
+            } => {
+                rdkafka_options
+                    .get("enable.auto.commit")
+                    .map(String::as_str)
+                    == Some("true")
+                    && rdkafka_options
+                        .get("enable.auto.offset.store")
+                        .map(String::as_str)
+                        == Some("false")
+                    && rdkafka_options
+                        .get("auto.commit.interval.ms")
+                        .map(String::as_str)
+                        != Some("0")
+            }
+            Mode::Performance => false,
+        }
+    }
+
+    /// returns `true` if the current mode is configured to commit offsets for acked messages immediately to the group coordinator
+    fn commits_offsets(&self) -> bool {
+        match self {
+            Mode::Transactional { commit_interval } => *commit_interval == 0,
+            Mode::Custom {
+                rdkafka_options, ..
+            } => {
+                rdkafka_options
+                    .get("enable.auto.commit")
+                    .map(String::as_str)
+                    == Some("false")
+            }
+            Mode::Performance => false,
+        }
+    }
+
+    fn to_config(&self) -> ClientConfig {
+        let mut client_config = ClientConfig::new();
+        match self {
+            Mode::Performance => {
+                client_config
+                    .set("enable.auto.commit", "true")
+                    .set("enable.auto.offset.store", "true")
+                    .set("auto.commit.interval.ms", "5000");
+            }
+            Mode::Transactional { commit_interval } => {
+                let interval_ms = format!("{}", Duration::from_nanos(*commit_interval).as_millis());
+                client_config
+                    .set("enable.auto.commit", "true")
+                    .set("enable.auto.offset.store", "false")
+                    .set("auto.commit.interval.ms", interval_ms.as_str());
+            }
+            Mode::Custom {
+                rdkafka_options, ..
+            } => {
+                for (k, v) in rdkafka_options {
+                    client_config.set(k, v);
+                }
+            }
+        }
+        client_config
+    }
+}
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -46,37 +168,36 @@ pub(crate) struct Config {
     topics: Vec<String>,
     /// List of bootstrap brokers
     brokers: Vec<String>,
-
-    /// Whether or not to commit offsets of received messages immediately
-    /// or only upon received ack messages.
+    /// Mode of operation for this consumer
     ///
-    /// If `auto_commit` is set to `false`, events emitted from this consumer
-    /// are considered transactional, soliciting an ack/fail message upon successful or failed handling downstream.
-    #[serde(default = "default_true")]
-    auto_commit: bool,
-
-    /// The interval in nanoseconds in which this consumer sends committed offsets to the broker acting as group-coordinator
-    #[serde(default = "default_commit_interval")]
-    commit_interval: u64,
-
-    /// This config determines the behaviour of this source. DANGER: this might lead to a lot of traffic to the group-coordinator
-    /// if `auto_commit` is set to `false`:
+    /// Possible values:
+    /// - `performance`: automatically commits offsets every 5s. This pre-canned setting is tuned for maximum performance and throughput at the cost of possibl message loss.
+    /// - `transactional`: only stores the message offset if the event has been handled successfully,
+    ///        reset the offset to any failed message, this will possibly replay already handled messages.
+    ///        The default `commit_interval` (in nanoseconds) is equivalent to `5 seconds`, it can be configured.
+    ///        If set to `0`, every message will be committed immediately, this will lead to lots of traffic towards the group-coordinator, use with care!
+    ///        DANGER: This will possible replay failed messages infinitely with persistent errors (e.g. wrong message format),
+    ///                but it offers at-least-once processing guarantee from end-to-end.
     ///
-    /// if set to `true` this source will reset the consumer offset to a
-    /// failed message, so it will effectively retry those messages.
+    ///   Example:
     ///
-    /// If set to `false` this source will only commit the consumer offset
-    /// if the message has been successfully acknowledged.
+    ///   ```
+    ///     "transactional": {
+    ///         "commit_interval": nanos::from_seconds(5)    
+    ///     }
+    ///   ```
     ///
-    /// This might lead to events being sent multiple times.
-    /// This should not be used when persistent errors are expected (e.g. if the message content is malformed and will lead to repeated errors)
-    #[serde(default = "default_false")]
-    retry_failed_events: bool,
-
-    /// Optional rdkafka configuration
+    /// - `custom`: Configure the connector yourself as you like, by providing your own set of `rdkafka_options`. You should know what you are doing when using this.
     ///
-    /// Can be overwritten by tremor for settings required for `auto_commit` and/or `retry_failed_events`.
-    rdkafka_options: Option<HashMap<String, String>>,
+    ///   Example: ```
+    ///   "custom": {
+    ///     "rdkafka_options": {
+    ///         "enable.auto.commit": false
+    ///     },
+    ///     "retry_failed_events": true
+    ///   }
+    ///   ```
+    mode: Mode,
 }
 
 impl ConfigImpl for Config {}
@@ -114,59 +235,25 @@ impl ConnectorBuilder for Builder {
 
         let tid = task::current().id();
         let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, tid);
-        let mut client_config = ClientConfig::new();
-
-        // .set("enable.partition.eof", "false")
-        // .set("session.timeout.ms", "6000")
-        // .set("enable.auto.commit", "true")
-        // .set("auto.commit.interval.ms", "5000")
-        // .set("enable.auto.offset.store", "true");
-
-        config
-            .rdkafka_options
-            .iter()
-            .flat_map(halfbrown::HashMap::iter)
-            .for_each(|(k, v)| {
-                client_config.set(k, v);
-            });
+        let mut client_config = config.mode.to_config();
 
         // we do overwrite the rdkafka options to ensure a sane config
-        overwrite_client_config_with(
-            &mut client_config,
-            "group.id",
-            config.group_id.as_str(),
-            &alias,
-        );
-        overwrite_client_config_with(&mut client_config, "client.id", client_id.as_str(), &alias);
-        overwrite_client_config_with(
+        set_client_config(&mut client_config, "group.id", &config.group_id)?;
+        set_client_config(&mut client_config, "client.id", &client_id)?;
+        set_client_config(
             &mut client_config,
             "bootstrap.servers",
-            &config.brokers.join(","),
-            &alias,
-        );
-        let auto_commit_interval = Duration::from_nanos(config.commit_interval);
-        overwrite_client_config_with(
-            &mut client_config,
-            "auto.commit.interval.ms",
-            &format!("{}", auto_commit_interval.as_millis()),
-            &alias,
-        );
+            config.brokers.join(","),
+        )?;
 
         if let Some(metrics_interval_s) = metrics_interval_s {
             // enable stats collection
-            overwrite_client_config_with(
+            set_client_config(
                 &mut client_config,
                 "statistics.interval.ms",
-                &format!("{}", metrics_interval_s * 1000),
-                &alias,
-            );
+                format!("{}", metrics_interval_s * 1000),
+            )?;
         }
-        overwrite_client_config_with(
-            &mut client_config,
-            "enable.auto.offset.store",
-            &format!("{}", config.auto_commit),
-            &alias,
-        );
 
         info!("[Connector::{alias}] Kafka Consumer Config: {client_config:?}",);
 
@@ -178,18 +265,16 @@ impl ConnectorBuilder for Builder {
     }
 }
 
-fn overwrite_client_config_with<'config>(
-    client_config: &'config mut ClientConfig,
+fn set_client_config<V: Into<String>>(
+    client_config: &mut ClientConfig,
     key: &'static str,
-    value: &str,
-    alias: &Alias,
-) -> &'config mut ClientConfig {
-    if let Some(existing_value) = client_config.get(key) {
-        if existing_value != value {
-            warn!("[Connector::{alias}] Overwriting \"{key}\" in `rdkafka_options` from \"{existing_value}\" to \"{value}\".");
-        }
+    value: V,
+) -> Result<()> {
+    if client_config.get(key).is_some() {
+        return Err(format!("Provided rdkafka_option that will be overwritten: {key}").into());
     }
-    client_config.set(key, value)
+    client_config.set(key, value);
+    Ok(())
 }
 
 impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
@@ -198,20 +283,15 @@ impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
         self.last_rebalance_ts.store(nanotime(), Ordering::Release);
         match rebalance {
             Rebalance::Assign(tpl) => {
-                let offset_strings: Vec<String> = tpl
+                let partitions: Vec<String> = tpl
                     .elements()
                     .iter()
                     .map(|elem| {
-                        format!(
-                            "[Topic: {}, Partition: {}, Offset: {:?}]",
-                            elem.topic(),
-                            elem.partition(),
-                            elem.offset()
-                        )
+                        format!("[Topic: {}, Partition: {}]", elem.topic(), elem.partition(),)
                     })
                     .collect();
                 // if we got something assigned, this is a good indicator that we are connected
-                if !offset_strings.is_empty() {
+                if !partitions.is_empty() {
                     if let Err(e) = self.connect_tx.try_send(NO_ERROR)
                     // we seem to be connected, indicate success
                     {
@@ -220,30 +300,17 @@ impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
                         trace!("{} Error sending to connect channel: {e}", &self.ctx);
                     };
                 }
-                info!(
-                    "{} Rebalance Assigned: {}",
-                    &self.ctx,
-                    offset_strings.join(" ")
-                );
+                info!("{} Rebalance Assigned: {}", &self.ctx, partitions.join(" "));
             }
             Rebalance::Revoke(tpl) => {
-                let offset_strings: Vec<String> = tpl
+                let partitions: Vec<String> = tpl
                     .elements()
                     .iter()
                     .map(|elem| {
-                        format!(
-                            "[Topic: {}, Partition: {}, Offset: {:?}]",
-                            elem.topic(),
-                            elem.partition(),
-                            elem.offset()
-                        )
+                        format!("[Topic: {}, Partition: {}]", elem.topic(), elem.partition(),)
                     })
                     .collect();
-                info!(
-                    "{} Rebalance Revoked: {}",
-                    &self.ctx,
-                    offset_strings.join(" ")
-                );
+                info!("{} Rebalance Revoked: {}", &self.ctx, partitions.join(" "));
             }
             Rebalance::Error(err_info) => {
                 warn!("{} Post Rebalance error {}", &self.ctx, err_info);
@@ -348,6 +415,8 @@ struct KafkaConsumerSource {
     origin_uri: EventOriginUri,
     topics: Vec<String>,
     topic_resolver: TopicResolver,
+    // map from stream_id to offset
+    offsets: Option<HashMap<u64, i64>>,
     transactional: bool,
     retry_failed_events: bool,
     seek_timeout: Duration,
@@ -364,11 +433,7 @@ impl KafkaConsumerSource {
     const DEFAULT_SEEK_TIMEOUT: Duration = Duration::from_millis(500);
 
     fn new(config: Config, client_config: ClientConfig, origin_uri: EventOriginUri) -> Self {
-        let Config {
-            topics,
-            retry_failed_events,
-            ..
-        } = config;
+        let Config { topics, mode, .. } = config;
         let topic_resolver = TopicResolver::new(topics.clone());
         let seek_timeout = client_config
             // this will put the default from kafka if not present
@@ -379,15 +444,19 @@ impl KafkaConsumerSource {
             .unwrap_or(Self::DEFAULT_SEEK_TIMEOUT);
 
         let (source_tx, source_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-        // we only ever want to report on the latest metrics and discard old ones
-        // if no messages arrive, no metrics will be reported, so be it.
+        let offsets = if mode.stores_offsets() {
+            Some(HashMap::new())
+        } else {
+            None
+        };
         Self {
             client_config,
             origin_uri,
             topics,
             topic_resolver,
-            transactional: !config.auto_commit,
-            retry_failed_events,
+            offsets,
+            transactional: mode.is_transactional(),
+            retry_failed_events: mode.retries_failed_events(),
             seek_timeout,
             source_tx,
             source_rx,
@@ -403,7 +472,6 @@ impl KafkaConsumerSource {
     /// if we witnessed a rebalance in between
     ///
     /// This tries to avoid excess assignment calls to the group coordinator
-    // FIXME: wanted to return a `&TopicPartitionList` but failed because of the borrow checker, so i cloned it instead, fight me
     fn get_assignment(&mut self) -> KafkaResult<TopicPartitionList> {
         let KafkaConsumerSource {
             cached_assignment,
@@ -419,15 +487,15 @@ impl KafkaConsumerSource {
                 ca => {
                     // if we witnessed a new rebalance, we gotta fetch the new assignment
                     let new_assignment = consumer.assignment()?;
-                    ca.insert((new_assignment.clone(), last_rebalance_ts));
+                    *ca = Some((new_assignment.clone(), last_rebalance_ts));
                     KafkaResult::Ok(new_assignment)
                 }
             }
         } else {
             // highly unlikely
-            return KafkaResult::Err(KafkaError::ClientCreation(
+            KafkaResult::Err(KafkaError::ClientCreation(
                 "No client available".to_string(),
-            ));
+            ))
         }
     }
 }
@@ -437,18 +505,24 @@ impl Source for KafkaConsumerSource {
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
         if let Some(consumer_task) = self.consumer_task.take() {
             info!("{ctx} Reconnecting. Unsubscribing old consumer...");
+            self.cached_assignment.take(); // clear out references to the consumer
+                                           // drop the consumer
             if let Some(consumer) = self.consumer.take() {
-                consumer.unsubscribe();
                 drop(consumer);
             }
+            // terminate the consumer task
             consumer_task.cancel().await;
         }
+
         let (version_n, version_s) = rdkafka::util::get_rdkafka_version();
         info!(
             "{} Connecting using rdkafka 0x{:08x}, {}",
             &ctx, version_n, version_s
         );
         let (connect_result_tx, connect_result_rx) = bounded(1);
+
+        // we only ever want to report on the latest metrics and discard old ones
+        // if no messages arrive, no metrics will be reported, so be it.
         let (mut metrics_tx, metrics_rx) = broadcast(1);
         metrics_tx.set_overflow(true);
         self.metrics_rx = Some(metrics_rx);
@@ -520,12 +594,30 @@ impl Source for KafkaConsumerSource {
                 if let Some((topic, partition, offset)) =
                     self.topic_resolver.resolve_topic(stream_id, pull_id)
                 {
-                    // we deliberately do not send a commit to the group-coordinator by calling `consumer.commit`
-                    // but instead use the client-local memory store of committed offsets
-                    if let Some(raw_offset) = offset.to_raw() {
-                        consumer.store_offset(topic, partition, raw_offset)?;
+                    if let Some(offsets) = self.offsets.as_mut() {
+                        // we deliberately do not send a commit to the group-coordinator by calling `consumer.commit`
+                        // but instead use the client-local memory store of committed offsets
+                        //
+                        // for this we need to keep track of the maximum offset per partition
+                        if let Some(raw_offset) = offset.to_raw() {
+                            // store offset if not yet in map or if raw_offset exceeds the stored_offset for that partition
+                            if offsets
+                                .get(&stream_id)
+                                .filter(|stored_offset| raw_offset <= **stored_offset)
+                                .is_none()
+                            {
+                                offsets.insert(stream_id, raw_offset); // keep track of the maximum offset
+                                consumer.store_offset(topic, partition, raw_offset)?;
+                                // store the new maximum offset for this partition
+                            }
+                        } else {
+                            debug!("{ctx} Unable to store offset={offset:?} for event with stream={stream_id}, pull_id={pull_id}");
+                        }
                     } else {
-                        debug!("{ctx} Unable to commit offset={offset:?} for event with stream={stream_id}, pull_id={pull_id}");
+                        // the mode determines that we commit immediately, this is expensive
+                        let mut tpl = TopicPartitionList::with_capacity(1);
+                        tpl.add_partition_offset(topic, partition, offset)?;
+                        consumer.commit(&tpl, CommitMode::Async)?;
                     }
                 } else {
                     error!("{ctx} Could not ack event with stream={stream_id}, pull_id={pull_id}. Unable to detect topic from internal state.");
@@ -536,8 +628,7 @@ impl Source for KafkaConsumerSource {
     }
 
     async fn fail(&mut self, stream_id: u64, pull_id: u64, ctx: &SourceContext) -> Result<()> {
-        // FIXME: we obviously cannot simply store the offset in the local offset store, i do think rdkafka would simply ignore a smaller offset
-        // so we need to seek. But this could cause a lot of traffic in the worst case. HELP!
+        // how can we make sure we do not conflict with the store_offset handling in `ack`?
         if self.transactional && self.retry_failed_events {
             if let Some(consumer) = self.consumer.as_ref() {
                 if let Some((topic, partition, offset)) =
@@ -547,6 +638,26 @@ impl Source for KafkaConsumerSource {
                         "{} Failing: [topic={}, partition={} offset={:?}]",
                         &ctx, topic, partition, offset
                     );
+
+                    // reset the committed offset to the broker/group-coordinator, so we can pick up there upon the next restart/reconnect
+                    // this operation is expensive but necessary to ensure transactional mode
+                    let mut tpl = TopicPartitionList::with_capacity(1);
+                    tpl.add_partition_offset(topic, partition, offset)?;
+                    consumer.commit(&tpl, CommitMode::Async)?;
+
+                    // update the tracked offsets if necessary
+                    // this has the effect that newer acks on that partition will actually store the newer offsets
+                    if let Some(offsets) = self.offsets.as_mut() {
+                        if let Some(raw_offset) = offset.to_raw() {
+                            offsets
+                                .entry(stream_id)
+                                .and_modify(|stored_offset| *stored_offset = raw_offset)
+                                .or_insert(raw_offset);
+                        }
+                    }
+
+                    // reset the local in-memory pointer to the message we want to consume next
+                    // this will flush all the pre-fetched data from the partition, thus is quite expensive
                     consumer.seek(topic, partition, offset, self.seek_timeout)?;
                 } else {
                     error!("{} Could not seek back to failed event with stream={}, pull_id={}. Unable to detect topic from internal state.", &ctx, stream_id, pull_id);
@@ -588,16 +699,22 @@ impl Source for KafkaConsumerSource {
     }
 
     async fn on_stop(&mut self, ctx: &SourceContext) -> Result<()> {
+        // free references, see: https://github.com/edenhill/librdkafka/blob/master/INTRODUCTION.md#high-level-kafkaconsumer
+        self.cached_assignment.take();
+
         // clear out the consumer
         if let Some(consumer) = self.consumer.take() {
-            consumer.unsubscribe();
             drop(consumer);
         }
+
+        debug!("{ctx} Consumer dropped");
+
         // stop the consumer task
         if let Some(consumer_task) = self.consumer_task.take() {
             consumer_task.cancel().await;
-            info!("{} Consumer stopped.", &ctx);
         }
+
+        info!("{ctx} Consumer stopped.");
         Ok(())
     }
 
