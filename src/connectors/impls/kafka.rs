@@ -32,7 +32,7 @@ use tremor_value::Value;
 
 const KAFKA_CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 
-pub struct SmolRuntime;
+pub(crate) struct SmolRuntime;
 
 impl AsyncRuntime for SmolRuntime {
     type Delay = future::Map<smol::Timer, fn(Instant)>;

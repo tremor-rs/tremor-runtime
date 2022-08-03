@@ -38,14 +38,14 @@ lazy_static! {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct TLSServerConfig {
+pub(crate) struct TLSServerConfig {
     pub(crate) cert: PathBuf,
     pub(crate) key: PathBuf,
 }
 
 #[derive(Deserialize, Debug, Default, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct TLSClientConfig {
+pub(crate) struct TLSClientConfig {
     /// Path to the pem-encoded certificate file of the CA to use for verifying the servers certificate
     pub(crate) cafile: Option<PathBuf>,
     /// The DNS domain used to verify the server's certificate. If not provided the domain from the connection URL will be used.

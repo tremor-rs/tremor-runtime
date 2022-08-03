@@ -387,7 +387,7 @@ mod tests {
     use std::fmt::{Debug, Formatter};
     use std::sync::atomic::AtomicBool;
 
-    pub struct MockHttpClient {
+    pub(crate) struct MockHttpClient {
         pub config: http_client::Config,
         pub handle_request:
             Box<dyn Fn(http_client::Request) -> std::result::Result<Response, Error> + Send + Sync>,

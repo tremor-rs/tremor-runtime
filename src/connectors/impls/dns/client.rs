@@ -44,7 +44,7 @@ impl ConnectorBuilder for Builder {
     }
 }
 
-pub struct Client {
+pub(crate) struct Client {
     tx: Sender<SourceReply>,
     rx: Receiver<SourceReply>,
 }

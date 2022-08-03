@@ -127,7 +127,7 @@ impl ConnectorBuilder for Builder {
 }
 
 /// The HTTP client connector - for HTTP-based API interactions
-pub struct Client {
+pub(crate) struct Client {
     response_tx: Sender<SourceReply>,
     response_rx: Receiver<SourceReply>,
     config: Config,

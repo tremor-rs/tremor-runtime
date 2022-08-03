@@ -37,7 +37,7 @@ const KAFKA_CONSUMER_META_KEY: &str = "kafka_consumer";
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     /// consumer group id to register with
     pub group_id: String,
     /// List of topics to subscribe to
