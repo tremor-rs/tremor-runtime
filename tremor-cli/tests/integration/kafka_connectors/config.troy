@@ -105,11 +105,15 @@ flow
                 "topics": [
                     "tremor_test"
                 ],
-                "retry_failed_events": false,
-                "rdkafka_options": {
-                    "enable.auto.commit": "false",
-                    "auto.offset.reset": "beginning",
-                    "debug": "consumer"
+                "mode": {
+                    "custom": {
+                        "retry_failed_events": false,
+                        "rdkafka_options": {
+                            "enable.auto.commit": "false",
+                            "auto.offset.reset": "beginning",
+                            "debug": "consumer"
+                        }
+                    }
                 }
             }
     end;
