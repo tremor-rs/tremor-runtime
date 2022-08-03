@@ -21,7 +21,7 @@ use aws_sdk_s3 as s3;
 use s3::model::{CompletedMultipartUpload, CompletedPart};
 use s3::Client as S3Client;
 
-pub(crate) const CONNECTOR_TYPE: &str = "s3_writer";
+pub(crate) const CONNECTOR_TYPE: &str = "s3_streamer";
 
 const MORE_THEN_FIVEMBS: usize = 5 * 1024 * 1024 + 100; // Some extra bytes to keep aws happy.
 
@@ -170,7 +170,7 @@ impl Sink for S3Sink {
                 key
             } else {
                 self.current_key.clear();
-                error!("{ctx}: missing '$s3_writer.key' meta data in event");
+                error!("{ctx}: missing '$s3_streamer.key' meta data in event");
                 return Ok(SinkReply::FAIL);
             };
 
@@ -332,7 +332,7 @@ struct S3Meta<'a, 'value> {
 impl<'a, 'value> S3Meta<'a, 'value> {
     fn new(meta: &'a Value<'value>) -> Self {
         Self {
-            meta: meta.get("s3_writer"),
+            meta: meta.get("s3_streamer"),
         }
     }
 
