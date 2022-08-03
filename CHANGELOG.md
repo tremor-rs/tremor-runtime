@@ -4,11 +4,13 @@
 
 ### Breaking Changes
 
-- update grok to 0.2, optional patterns are now omitted no longer ""
-- unify to `url` instead of `endpoint` for google and s3 connectors so they're in line with every other connector
-- unify to `path` for bench connector so it's in line with file
-- 
+- Update grok to 0.2, optional patterns are now omitted no longer ""
+- Unify to `url` instead of `endpoint` for google and s3 connectors so they're in line with every other connector
+- Unify to `path` for bench connector so it's in line with file
+- Rename `s3_writer` to `s3_streamer`
+
 ### New features
+
 - Add `gcl_writer` Google Cloud Platform Cloud Logging connector for writing log entries
 - Add reverse functions and tests for arrays and strings, add sort test for arrays
 - Add a ClickHouse connector
@@ -18,6 +20,7 @@
 
 - Allow `kafka_consumer` connector to reconnect upon more error conditions and avoid stalls.
 - Include flow alias in pipeline and connector aliases reported via metrics events and logging in order to deduplicate entries
+- Rename `gcs_appender` to `gcs_streamer`
 
 ## [0.12.4]
 
