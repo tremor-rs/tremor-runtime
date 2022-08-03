@@ -37,13 +37,13 @@ use tremor_value::Value;
 use value_trait::ValueAccess;
 
 #[derive(Deserialize, Clone)]
-pub struct Config {
+pub(crate) struct Config {
     #[serde(default = "crate::connectors::impls::gpubsub::default_connect_timeout")]
     pub connect_timeout: u64,
     #[serde(default = "crate::connectors::impls::gpubsub::default_request_timeout")]
     pub request_timeout: u64,
     #[serde(default = "crate::connectors::impls::gpubsub::default_endpoint")]
-    pub endpoint: String,
+    pub url: Url<HttpsDefaults>,
     pub topic: String,
 }
 
@@ -82,11 +82,11 @@ impl Connector for GpubConnector {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let url = Url::parse(&self.config.endpoint)?;
         let sink = GpubSink {
             config: self.config.clone(),
-            url: url.clone(),
-            hostname: url
+            hostname: self
+                .config
+                .url
                 .host_str()
                 .ok_or_else(|| {
                     ErrorKind::InvalidConfiguration(
@@ -111,7 +111,6 @@ impl Connector for GpubConnector {
 
 struct GpubSink {
     config: Config,
-    url: Url<HttpsDefaults>,
     hostname: String,
 
     client: Option<PublisherClient<InterceptedService<Channel, AuthInterceptor>>>,
@@ -155,9 +154,9 @@ fn create_publisher_client(
 #[async_trait::async_trait()]
 impl Sink for GpubSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let mut channel = Channel::from_shared(self.config.endpoint.clone())?
+        let mut channel = Channel::from_shared(self.config.url.to_string())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
-        if self.url.scheme() == "https" {
+        if self.config.url.scheme() == "https" {
             let tls_config = ClientTlsConfig::new()
                 .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
                 .domain_name(self.hostname.clone());
@@ -264,10 +263,9 @@ mod tests {
             config: Config {
                 connect_timeout: 0,
                 request_timeout: 0,
-                endpoint: "".to_string(),
+                url: Default::default(),
                 topic: "".to_string(),
             },
-            url: Default::default(),
             hostname: "".to_string(),
             client: None,
         };
@@ -281,10 +279,9 @@ mod tests {
             config: Config {
                 connect_timeout: 0,
                 request_timeout: 0,
-                endpoint: "".to_string(),
+                url: Default::default(),
                 topic: "".to_string(),
             },
-            url: Default::default(),
             hostname: "".to_string(),
             client: None,
         };

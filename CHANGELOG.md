@@ -1,10 +1,13 @@
 # Changelog
+
 ## 0.13 UNRELEASED 
 
 ### Breaking Changes
 
 - update grok to 0.2, optional patterns are now omitted no longer ""
-
+- unify to `url` instead of `endpoint` for google and s3 connectors so they're in line with every other connector
+- unify to `path` for bench connector so it's in line with file
+- 
 ### New features
 - Add `gcl_writer` Google Cloud Platform Cloud Logging connector for writing log entries
 - Add reverse functions and tests for arrays and strings, add sort test for arrays

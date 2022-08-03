@@ -24,7 +24,7 @@ pub(crate) use crate::connectors::source::{
 };
 pub(crate) use crate::connectors::utils::{
     reconnect::Attempt,
-    url::{Defaults, Url},
+    url::{Defaults, HttpsDefaults, Url},
 };
 pub(crate) use crate::connectors::{
     metrics::make_metrics_payload, spawn_task, Alias, CodecReq, Connector, ConnectorBuilder,

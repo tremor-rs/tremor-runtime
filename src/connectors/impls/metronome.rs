@@ -19,7 +19,7 @@ use tremor_common::time::nanotime;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     /// Interval in nanoseconds
     pub interval: u64,
 }
@@ -58,7 +58,7 @@ impl ConnectorBuilder for Builder {
 }
 
 #[derive(Clone, Debug)]
-pub struct Metronome {
+pub(crate) struct Metronome {
     interval: u64,
     origin_uri: EventOriginUri,
 }

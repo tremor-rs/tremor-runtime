@@ -27,7 +27,7 @@ use std::time::Duration;
 /// Connector implementations handling their stuff in a separate task can use the
 /// channel obtained by `ChannelSource::sender()` to send `SourceReply`s to the
 /// runtime.
-pub struct ChannelSource {
+pub(crate) struct ChannelSource {
     rx: Receiver<SourceReply>,
     tx: SourceReplySender,
 }
@@ -58,7 +58,7 @@ impl ChannelSource {
 
 /// The runtime driving the `ChannelSource`
 #[derive(Clone)]
-pub struct ChannelSourceRuntime {
+pub(crate) struct ChannelSourceRuntime {
     sender: Sender<SourceReply>,
 }
 

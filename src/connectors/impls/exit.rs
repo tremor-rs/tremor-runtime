@@ -30,7 +30,7 @@ use value_trait::ValueAccess;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     #[serde(default)]
     delay: Option<u64>,
 
@@ -76,7 +76,7 @@ impl ConnectorBuilder for Builder {
     }
 }
 #[derive(Clone)]
-pub struct Exit {
+pub(crate) struct Exit {
     kill_switch: KillSwitch,
     config: Config,
     done: bool,

@@ -25,7 +25,7 @@ const URL_SCHEME: &str = "tremor-unix-socket-client";
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     path: String,
     #[serde(default = "default_buf_size")]
     buf_size: usize,
@@ -58,7 +58,7 @@ impl ConnectorBuilder for Builder {
     }
 }
 
-pub struct Client {
+pub(crate) struct Client {
     config: Config,
     source_tx: Sender<SourceReply>,
     source_rx: Receiver<SourceReply>,

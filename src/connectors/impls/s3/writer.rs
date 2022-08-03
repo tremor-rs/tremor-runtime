@@ -26,9 +26,9 @@ pub(crate) const CONNECTOR_TYPE: &str = "s3_writer";
 const MORE_THEN_FIVEMBS: usize = 5 * 1024 * 1024 + 100; // Some extra bytes to keep aws happy.
 
 #[derive(Deserialize, Debug, Default, Clone)]
-pub struct S3Config {
+pub(crate) struct S3Config {
     aws_region: Option<String>,
-    endpoint: Option<String>,
+    url: Option<Url<HttpsDefaults>>,
     bucket: String,
 
     #[serde(default = "S3Config::fivembs")]
@@ -133,11 +133,8 @@ struct S3Sink {
 #[async_trait::async_trait]
 impl Sink for S3Sink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let client = auth::get_client(
-            self.config.aws_region.clone(),
-            self.config.endpoint.as_ref(),
-        )
-        .await?;
+        let client =
+            auth::get_client(self.config.aws_region.clone(), self.config.url.as_ref()).await?;
 
         // Check for the existence of the bucket.
         client

@@ -14,9 +14,11 @@
 
 pub(crate) mod consumer;
 pub(crate) mod producer;
+use crate::connectors::prelude::*;
 
-fn default_endpoint() -> String {
-    "https://pubsub.googleapis.com".into()
+fn default_endpoint() -> Url<HttpsDefaults> {
+    // ALLOW: this URL is hardcoded, so the only reason for parse failing would be if it was changed
+    Url::parse("https://storage.googleapis.com/upload/storage/v1").unwrap()
 }
 fn default_connect_timeout() -> u64 {
     1_000_000_000u64 // 1 second
@@ -32,8 +34,14 @@ fn default_skip_authentication() -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::connectors::impls::gpubsub::default_connect_timeout;
+    use super::*;
     use std::time::Duration;
+
+    #[test]
+    pub fn default_endpoint_does_not_panic() {
+        // This test will fail if this panics (it should never)
+        default_endpoint();
+    }
 
     #[test]
     pub fn default_connect_timeout_is_1s() {
