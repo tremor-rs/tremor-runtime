@@ -6,6 +6,7 @@
 
 - Update grok to 0.2, optional patterns are now omitted no longer ""
 - Unify to `url` instead of `endpoint` for google and s3 connectors so they're in line with every other connector
+- Unify to `urls` for `elastic` connector
 - Unify to `path` for bench connector so it's in line with file
 - Rename `s3_writer` to `s3_streamer`
 
