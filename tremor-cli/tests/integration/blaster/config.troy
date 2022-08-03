@@ -8,7 +8,7 @@ flow
   with
     codec = "json",
     config = {
-      "source": "in.json",
+      "path": "in.json",
       "interval": 1000000,
       "iters": 1
     }

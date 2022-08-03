@@ -38,7 +38,7 @@ async fn no_connection() -> Result<()> {
     let connector_yaml = literal!({
         "codec": "binary",
         "config":{
-            "endpoint": "https://localhost:9090",
+            "url": "https://localhost:9090",
             "ack_deadline": 30000000000u64,
             "connect_timeout": 100000000,
             "subscription_id": "projects/xxx/subscriptions/test-subscription-a"
@@ -97,7 +97,7 @@ async fn simple_subscribe() -> Result<()> {
         "metrics_interval_s": 1,
         "codec": "binary",
         "config":{
-            "endpoint": endpoint,
+            "url": endpoint,
             "ack_deadline": 30000000000u64,
             "connect_timeout": 30000000000u64,
             "subscription_id": "projects/test/subscriptions/test-subscription-a",

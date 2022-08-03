@@ -60,7 +60,7 @@ flow
   define connector input from bench
   with
     config = {
-      "source": "in.json",
+      "path": "in.json",
       "interval": nanos::from_millis(3),
       "iters": 1
     }

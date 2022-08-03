@@ -162,7 +162,7 @@ fn oks(
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     dir: String,
 }
 
@@ -199,7 +199,7 @@ impl ConnectorBuilder for Builder {
 /// Key value store connector
 ///
 /// Receiving commands via its sink and emitting responses to those commands via its source.
-pub struct Kv {
+pub(crate) struct Kv {
     config: Config,
     rx: Receiver<SourceReply>,
     tx: Sender<SourceReply>,

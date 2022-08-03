@@ -28,7 +28,7 @@ const PORT: Cow<'static, str> = Cow::const_str("port");
 const CONNECTOR_EVENTS: Cow<'static, str> = Cow::const_str("connector_events");
 
 /// metrics reporter for connector sources
-pub struct SourceReporter {
+pub(crate) struct SourceReporter {
     alias: Alias,
     metrics_out: u64,
     metrics_err: u64,

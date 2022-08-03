@@ -44,7 +44,7 @@ const URL_SCHEME: &str = "tremor-unix-socket-server";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     pub path: String,
     pub permissions: Option<String>,
     /// receive buffer size

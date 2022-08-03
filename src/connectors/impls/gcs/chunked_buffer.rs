@@ -16,7 +16,7 @@ use crate::connectors::prelude::Result;
 use crate::errors::ErrorKind;
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct BufferPart {
+pub(crate) struct BufferPart {
     pub data: Vec<u8>,
     pub start: usize,
 }
@@ -32,7 +32,7 @@ impl BufferPart {
 /// `read_current_block` will return `block_size` of data, or None if there's not enough
 /// `mark_done_until` will mark the data until the given index as read and advance the internal cursor (and throw away what's unneeded)
 /// `final_block` returns all the data that has not been marked as done
-pub struct ChunkedBuffer {
+pub(crate) struct ChunkedBuffer {
     data: Vec<u8>,
     block_size: usize,
     buffer_start: usize,

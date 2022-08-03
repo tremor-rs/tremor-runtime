@@ -27,7 +27,7 @@ use std::collections::HashMap;
 use tremor_value::prelude::*;
 
 #[derive(Deserialize, Serialize, Clone, Copy, Debug)]
-pub enum Intents {
+pub(crate) enum Intents {
     /// Guilds Grouping
     Guilds,
     /// GuildMembers Grouping

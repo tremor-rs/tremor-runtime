@@ -38,7 +38,7 @@ async fn stop_after_events() -> Result<()> {
     let defn = literal!({
       "codec": "binary",
       "config": {
-        "source": path.display().to_string(),
+        "path": path.display().to_string(),
         "iters": 2
       }
     });
@@ -87,7 +87,7 @@ async fn stop_after_secs() -> Result<()> {
     let defn = literal!({
       "codec": "string",
       "config": {
-        "source": path.display().to_string(),
+        "path": path.display().to_string(),
         "stop_after_secs": 1
       }
     });

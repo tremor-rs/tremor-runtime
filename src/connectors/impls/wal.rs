@@ -22,7 +22,7 @@ use simd_json_derive::{Deserialize, Serialize};
 
 #[derive(serde::Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     dir: String,
     chunk_size: u64,
     max_chunks: usize,
