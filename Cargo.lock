@@ -2279,7 +2279,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "65e3984a414cce451bd6fa931298c2b384924ddc1b6201adec3b0c0c148dabfa"
 dependencies = [
  "prost 0.9.0",
- "prost-types",
+ "prost-types 0.9.0",
  "tonic",
 ]
 
@@ -3835,7 +3835,7 @@ dependencies = [
  "multimap",
  "petgraph",
  "prost 0.9.0",
- "prost-types",
+ "prost-types 0.9.0",
  "regex",
  "tempfile",
  "which 4.2.5",
@@ -3875,6 +3875,16 @@ checksum = "534b7a0e836e3c482d2693070f982e39e7611da9695d4d1f5a4b186b51faef0a"
 dependencies = [
  "bytes 1.2.1",
  "prost 0.9.0",
+]
+
+[[package]]
+name = "prost-types"
+version = "0.11.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4dfaa718ad76a44b3415e6c4d53b17c8f99160dcb3a99b10470fce8ad43f6e3e"
+dependencies = [
+ "bytes 1.2.1",
+ "prost 0.11.0",
 ]
 
 [[package]]
@@ -5829,7 +5839,7 @@ dependencies = [
  "pretty_assertions",
  "proptest",
  "prost 0.11.0",
- "prost-types",
+ "prost-types 0.11.1",
  "qwal",
  "rand 0.8.5",
  "rdkafka",
