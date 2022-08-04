@@ -5,5 +5,3 @@ asserts:
     contains:
       - |
         All required CB events received. 
-      - |
-        Got acks: []
