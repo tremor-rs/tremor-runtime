@@ -507,11 +507,12 @@ impl Sink for ElasticSink {
                                     .await,
                                     "Error handling ES response",
                                 );
-                                task_ctx.swallow_err(
-                                    send_ack(event, start, &reply_tx).await,
-                                    "Error sending ack CB",
-                                );
                             }
+
+                            task_ctx.swallow_err(
+                                send_ack(event, start, &reply_tx).await,
+                                "Error sending ack CB",
+                            );
                         }
                     }
                     drop(guard);
