@@ -19,6 +19,7 @@
 
 ### Fixes
 
+- Fix `elastic` sink not acking messages handles successfully if no source is connected.
 - Allow `kafka_consumer` connector to reconnect upon more error conditions and avoid stalls.
 - Include flow alias in pipeline and connector aliases reported via metrics events and logging in order to deduplicate entries
 - Rename `gcs_appender` to `gcs_streamer`
