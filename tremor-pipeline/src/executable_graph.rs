@@ -20,8 +20,7 @@ use crate::{
     errors::{Error, ErrorKind},
     metrics::value_count,
     op::prelude::IN,
-    ConfigMap, ExecPortIndexMap, LoggingMsg, LoggingSender, MetricsMsg, MetricsSender,
-    NodeLookupFn,
+    ConfigMap, ExecPortIndexMap, LoggingSender, MetricsMsg, MetricsSender, NodeLookupFn,
 };
 use crate::{op::EventAndInsights, Event, NodeKind, Operator};
 use beef::Cow;
@@ -535,18 +534,6 @@ impl ExecutableGraph {
                     error!("Failed to send metrics: {}", e);
                 };
             }
-            for value in m.to_value(metric_name, &mut tags, ingest_ns) {
-                if let Err(e) = self
-                    .logging_channel
-                    .broadcast(LoggingMsg {
-                        payload: value.into(),
-                        origin_uri: None,
-                    })
-                    .await
-                {
-                    error!("Failed to send metrics: {}", e);
-                };
-            }
         }
     }
     // Takes the output of one operator, identified by `idx` and puts them on the stack
@@ -738,7 +725,7 @@ mod test {
             config: NodeConfig::default(),
         }
     }
-
+    //RE
     fn test_metrics(mut metrics: Vec<MetricsMsg>, n: u64) {
         // out/in
         let this = metrics.pop().unwrap();

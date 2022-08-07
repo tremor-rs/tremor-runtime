@@ -1,14 +1,4 @@
-## Returns the instance name of this tremor process.
 ##
-## > ```tremor
-## > use tremor::system;
-## > match system::instance() of
-## >   case "tremor" => "default"
-## >   # Instance names can be customized by users
-## >   # TREMOR_PATH=/path/to/lib tremor -i "bob" ...
-## >   default => "changed by user"
-## > end
-## > ```
 ##
-## Returns a `string`
+##
 intrinsic fn info() as logging::info;

@@ -28,7 +28,6 @@
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
-
 use crate::errors::{ErrorKind, Result};
 use async_broadcast::{broadcast, Receiver, Sender};
 use async_std::task::block_on;
@@ -57,8 +56,8 @@ pub mod errors;
 mod event;
 mod executable_graph;
 
-/// Library functions for pluggable logging
-pub mod pluggable_logging;
+/// Library functions for pluggable-logging
+pub mod logging;
 
 /// Common metrics related code - metrics message formats etc
 /// Placed here because we need it here and in tremor-runtime, but also depend on tremor-value inside of it
@@ -78,29 +77,38 @@ pub use tremor_script::prelude::EventOriginUri;
 pub(crate) type ExecPortIndexMap =
     HashMap<(usize, Cow<'static, str>), Vec<(usize, Cow<'static, str>)>>;
 #[derive(Debug)]
-struct PluggableLoggingAppender {
-    tx: async_std::channel::Sender<LoggingMsg>,
+///Pluggable-logging Appender
+pub struct PluggableLoggingAppender {
+    /// async Sender
+    pub tx: Sender<LoggingMsg>,
 }
 
 impl Append for PluggableLoggingAppender {
     fn append(&self, record: &log::Record) -> anyhow::Result<()> {
-        //print!("hello");
-        //self.flush();*
         let vec = (r#"{"level": ""#.to_owned()
             + &record.level().to_string()
             + r#"", "args": ""#
             + &record.args().to_string()
+            + r#"", "path": ""#
+            + record.module_path().expect("")
+            + r#"", "file": ""#
+            + record.file().expect("")
+            + r#"", "line": ""#
+            + &record.line().expect("msg").to_string()
             + r#""}"#)
             .as_bytes()
             .to_vec();
 
-        let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).unwrap().into());
+        let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).expect("").into());
         let msg = LoggingMsg {
+            language: LanguageKind::Rust,
             payload: e,
             origin_uri: None,
         };
 
-        block_on(self.tx.send(msg))?;
+        block_on(LOGGING_CHANNEL.tx().broadcast(msg))?;
+        // 	dbg!(block_on(LOGGING_CHANNEL.rx().recv())?);
+        //block_on(self.tx.send(msg))?;
         Ok(())
     }
 
@@ -127,7 +135,7 @@ pub struct MetricsChannel {
     tx: Sender<MetricsMsg>,
     rx: Receiver<MetricsMsg>,
 }
-/// Channel for plugging logging messages
+/// Channel for plugging-logging messages
 pub struct LoggingChannel {
     tx: Sender<LoggingMsg>,
     rx: Receiver<LoggingMsg>,
@@ -185,13 +193,25 @@ pub struct MetricsMsg {
     /// The origin
     pub origin_uri: Option<EventOriginUri>,
 }
+
 #[derive(Debug, Clone)]
-/// Playload for ploggable logging
+/// Language from which the logs are coming (Rust, Tremor, etc.)
+pub enum LanguageKind {
+    /// The Rust language
+    Rust,
+    /// Tremor language
+    Tremor,
+}
+
+#[derive(Debug, Clone)]
+/// Playload for pluggable logging
 pub struct LoggingMsg {
     /// The payload
     pub payload: EventPayload,
     /// The origin
     pub origin_uri: Option<EventOriginUri>,
+    /// The language
+    pub language: LanguageKind,
 }
 
 impl MetricsMsg {
@@ -207,10 +227,15 @@ impl MetricsMsg {
 impl LoggingMsg {
     /// creates a new message
     #[must_use]
-    pub fn new(payload: EventPayload, origin_uri: Option<EventOriginUri>) -> Self {
+    pub fn new(
+        payload: EventPayload,
+        origin_uri: Option<EventOriginUri>,
+        language: LanguageKind,
+    ) -> Self {
         Self {
             payload,
             origin_uri,
+            language,
         }
     }
 }
@@ -219,7 +244,6 @@ impl LoggingMsg {
 pub type MetricsSender = Sender<MetricsMsg>;
 
 // TODO FIX ME NOTE Add LogsSender
-
 /// Sender for plugging logging messagers
 pub type LoggingSender = Sender<LoggingMsg>;
 
@@ -993,10 +1017,7 @@ pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, Connection>;
 
 #[cfg(test)]
 mod test {
-    //use std::{pin::Pin, sync::Arc};
-
     use super::*;
-    //use anyhow::Ok;
     use async_std::channel::bounded;
     use log::LevelFilter;
     use log4rs::{
@@ -1198,38 +1219,68 @@ mod test {
 
         assert_eq!(event_id.get_stream(99), Some(75));
     }
-    #[test]
-    fn test_channel() {
-        let _m = METRICS_CHANNEL.rx();
-        let _l = LOGGING_CHANNEL.rx();
-    }
+    // #[async_std::test]
+    // async fn test_tremor_appender() {
+    //     use async_std::channel::{Receiver, Sender};
+    //     let channel: (Sender<LoggingMsg>, Receiver<LoggingMsg>) = bounded(1);
+    //     let tx = channel.0;
+    //     let rx = channel.1;
 
-    #[async_std::test]
-    async fn test_tremor_appender() {
-        use async_std::channel::{Receiver, Sender};
-        let channel: (Sender<LoggingMsg>, Receiver<LoggingMsg>) = bounded(1);
-        let tx = channel.0;
-        let rx = channel.1;
+    //     let stdout = PluggableLoggingAppender { tx };
 
-        let stdout = PluggableLoggingAppender { tx };
+    //     let config = Config::builder()
+    //         .appender(Appender::builder().build("stdout", Box::new(stdout)))
+    //         .build(Root::builder().appender("stdout").build(LevelFilter::Info))
+    //         .unwrap();
 
-        let config = Config::builder()
-            .appender(Appender::builder().build("stdout", Box::new(stdout)))
-            .build(Root::builder().appender("stdout").build(LevelFilter::Info))
-            .unwrap();
+    //     let _handle = log4rs::init_config(config).unwrap();
 
-        let _handle = log4rs::init_config(config).unwrap();
-		let data = rx.recv().await;
-		assert!(data.is_ok());
-		let valuemeta = data.unwrap();
-		
-		//let some_variable = 12;
-		//log::warn!(" some_variable = {} ", some_variable);
-		//log::warn!("is");
-		//log::error!("here today");
-		//log::trace!("here today");
-       	log::info!("Stan is here today");
-		let _ = dbg!(rx.recv().await);
-    }
- 
+    //     info!("Stan is here today");
+    //     let data = rx.recv().await;
+    //     assert!(data.is_ok());
+    //     let valuemeta = data.unwrap();
+    //     let value = valuemeta.payload.suffix().value();
+    //     let t = &literal!({"level": "INFO", "args": "Stan is here today","path": "tremor_pipeline::test", "file":"tremor-pipeline/src/lib.rs","line": "1224"});
+    //     assert_eq!(value, t);
+
+    //     warn!("Attention");
+    //     let data = rx.recv().await;
+    //     assert!(data.is_ok());
+    //     let valuemeta = data.unwrap();
+    //     let value = valuemeta.payload.suffix().value();
+    //     let t = &literal!({"level": "WARN", "args": "Attention","path": "tremor_pipeline::test", "file":"tremor-pipeline/src/lib.rs","line": "1232"});
+    //     assert_eq!(value, t);
+
+    //     let some_variable = 12;
+    //     let t = &literal!({"level": "ERROR", "args": "2 is not equal 12","path": "tremor_pipeline::test", "file":"tremor-pipeline/src/lib.rs","line": "1242"});
+    //     error!("2 is not equal {}", some_variable);
+
+    //     let data = rx.recv().await;
+    //     assert!(data.is_ok());
+
+    //     let valuemeta = data.unwrap();
+    //     let value = valuemeta.payload.suffix().value();
+    //     assert_eq!(value, t);
+    // }
+
+    // #[async_std::test]
+    // async fn test_logging_channel () {
+    // 	let vec = (r#"{"level": ""#.to_owned()
+    // 	+ r#""}"#)
+    // 	.as_bytes()
+    // 	.to_vec();
+
+    // let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).expect("").into());
+    // let _msg = LoggingMsg {
+    // 	language: LanguageKind::Rust, /// c'est ça que tu veux ?
+    // 	payload: e,
+    // 	origin_uri: None,
+    // };
+
+    // //LOGGING_CHANNEL.tx.broadcast(msg).await.unwrap();
+    // let _m = LOGGING_CHANNEL.rx().recv().await;
+    // let _v = _m.unwrap();
+    // dbg!(_v);
+
+    // }
 }

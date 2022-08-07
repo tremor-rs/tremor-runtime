@@ -11,3 +11,4 @@ use tremor::origin;
 use tremor::system;
 use tremor::connectors;
 use tremor::pipelines;
+use tremor::logging;

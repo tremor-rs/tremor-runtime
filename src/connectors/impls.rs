@@ -40,6 +40,8 @@ pub(crate) mod http;
 pub(crate) mod kafka;
 /// KV
 pub(crate) mod kv;
+/// Logging collector
+pub(crate) mod logging;
 /// Home of the famous metrics collector
 pub(crate) mod metrics;
 /// Metronome
@@ -63,5 +65,3 @@ pub(crate) mod unix_socket;
 pub(crate) mod wal;
 /// `WebSockets`
 pub(crate) mod ws;
-/// Home of the famous logging collector (je reviens)
-pub(crate) mod logging;

@@ -5803,6 +5803,7 @@ dependencies = [
  "lazy_static",
  "libflate",
  "log",
+ "log4rs",
  "lz4",
  "mapr",
  "matches",

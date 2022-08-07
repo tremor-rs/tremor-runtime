@@ -16,7 +16,7 @@ use crate::connectors::impls::gcl;
 use crate::connectors::impls::otel;
 use crate::errors::Result;
 use crate::version::VERSION;
-use tremor_pipeline::pluggable_logging;
+use tremor_pipeline::logging;
 use tremor_script::registry::Registry;
 use tremor_script::FN_REGISTRY;
 use tremor_script::{tremor_const_fn, tremor_fn};
@@ -37,7 +37,7 @@ pub fn load() -> Result<()> {
 pub fn install(reg: &mut Registry) -> Result<()> {
     otel::load(reg);
     gcl::load(reg);
-    pluggable_logging::load(reg)?;
+    logging::load(reg)?;
     reg.insert(tremor_fn!(system|instance(_context) {
         Ok(Value::from(instance!()))
     }))

@@ -16,12 +16,7 @@
 // This isn't a external crate so we don't worry about docs
 // #![deny(missing_docs)]
 #![recursion_limit = "1024"]
-#![deny(
-    clippy::all,
-    clippy::unwrap_used,
-    clippy::unnecessary_unwrap,
-    clippy::pedantic
-)]
+#![deny(clippy::unnecessary_unwrap)]
 #[macro_use]
 extern crate serde_derive;
 
@@ -45,6 +40,7 @@ mod env;
 mod errors;
 // mod explain;
 pub(crate) mod cli;
+mod logging;
 mod report;
 mod run;
 mod server;
@@ -107,8 +103,9 @@ async fn main() -> Result<()> {
 }
 
 async fn run(cli: Cli) -> Result<()> {
-    // Logging
-    if let Some(logger_config) = &cli.logger_config {
+    if cli.pluggable_logging {
+        logging::run();
+    } else if let Some(logger_config) = &cli.logger_config {
         log4rs::init_file(logger_config, log4rs::config::Deserializers::default())
             .with_context(|| format!("Error loading logger-config from '{}'", logger_config))?;
     } else {
@@ -126,6 +123,10 @@ async fn run(cli: Cli) -> Result<()> {
         Command::Run(r) => r.run().await,
         Command::Doc(d) => d.run(),
         Command::New { name } => create_template(std::env::current_dir()?, &name),
+        Command::PluggableLogging {} => {
+            logging::run();
+            Ok(())
+        }
     }
 }
 

@@ -2,14 +2,14 @@ use crate::connectors::prelude::*;
 use async_broadcast::Receiver;
 use tremor_pipeline::{LoggingMsg, LOGGING_CHANNEL};
 
-use crate::connectors::{ConnectorBuilder, ConnectorType, prelude::KillSwitch};
+use crate::connectors::{prelude::KillSwitch, ConnectorBuilder, ConnectorType};
 
-
-struct LoggingConnector{
-	rx: Receiver<LoggingMsg>,
+#[derive()]
+pub(crate) struct PluggableLoggingConnector {
+    rx: Receiver<LoggingMsg>,
 }
 
-impl LoggingConnector {
+impl PluggableLoggingConnector {
     pub(crate) fn new() -> Self {
         Self {
             rx: LOGGING_CHANNEL.rx(),
@@ -18,9 +18,8 @@ impl LoggingConnector {
 }
 
 #[derive(Debug, Default)]
-struct Builder {
+pub(crate) struct Builder {}
 
-}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -28,15 +27,15 @@ impl ConnectorBuilder for Builder {
     }
     async fn build(
         &self,
-        _id: &str,
+        _id: &Alias,
         _config: &ConnectorConfig,
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
-        Ok(Box::new(LoggingConnector::new()))
+        Ok(Box::new(PluggableLoggingConnector::new()))
     }
 }
 #[async_trait::async_trait()]
-impl Connector for LoggingConnector {
+impl Connector for PluggableLoggingConnector {
     async fn connect(&mut self, _ctx: &ConnectorContext, _attempt: &Attempt) -> Result<bool> {
         Ok(true)
     }
@@ -55,13 +54,18 @@ impl Connector for LoggingConnector {
         &mut self,
         _sink_context: SinkContext,
         _builder: SinkManagerBuilder,
-    ) -> Result<Option<SinkAddr>> {   
+    ) -> Result<Option<SinkAddr>> {
         Ok(None)
     }
     fn codec_requirements(&self) -> CodecReq {
         CodecReq::Structured
     }
 }
+pub(crate) struct LoggingSource {
+    rx: Receiver<LoggingMsg>,
+    origin_uri: EventOriginUri,
+}
+
 impl LoggingSource {
     pub(crate) fn new(rx: Receiver<LoggingMsg>) -> Self {
         Self {
@@ -74,11 +78,6 @@ impl LoggingSource {
             },
         }
     }
-}
-
-pub(crate) struct LoggingSource {
-    rx: Receiver<LoggingMsg>,
-    origin_uri: EventOriginUri,
 }
 
 #[async_trait::async_trait()]
@@ -113,5 +112,33 @@ impl Source for LoggingSource {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+    use tremor_pipeline::{LanguageKind, LoggingMsg};
+    use tremor_script::EventPayload;
 
-//
+    use super::PluggableLoggingConnector;
+
+    #[async_std::test]
+    async fn test_tremor() {
+        let vec1 = (r#"{"level": ""#.to_owned() + r#""}"#).as_bytes().to_vec();
+
+        let e1 = EventPayload::new(vec1, |d| tremor_value::parse_to_value(d).expect("").into());
+        let _msg = LoggingMsg {
+            language: LanguageKind::Rust,
+            payload: e1,
+            origin_uri: None,
+        };
+        LOGGING_CHANNEL.tx().broadcast(_msg).await.unwrap();
+
+        let mut _c = PluggableLoggingConnector::new();
+
+        let _m = _c.rx.recv().await;
+
+        let _v = _m.unwrap();
+        dbg!(_v);
+
+        //faire des asserts
+    }
+}

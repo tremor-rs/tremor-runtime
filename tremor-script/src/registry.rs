@@ -118,7 +118,9 @@ pub fn registry() -> Registry {
         }))
         .insert(tremor_fn!(system|version(_context) {
             Ok(Value::String(VERSION.into()).into_static())
-        }));
+        }))
+        .insert(tremor_fn!(logging|info(_context) {
+            Ok(Value::from("snot"))}));
 
     crate::std_lib::load(&mut registry);
     registry
