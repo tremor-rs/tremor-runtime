@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.13 UNRELEASED 
+## Unreleased 
 
 ### Breaking Changes
 
@@ -16,7 +16,7 @@
 - Add `gcl_writer` Google Cloud Platform Cloud Logging connector for writing log entries
 - Add reverse functions and tests for arrays and strings, add sort test for arrays
 - Add a ClickHouse connector
-- Add a GCS writer connector
+- Add a GCS streamer connector
 
 ### Fixes
 
@@ -25,7 +25,6 @@
 - Fix off-by-one error in `kafka_consumer` committing offsets, thus replaying the last committed event.
 - Allow `kafka_consumer` connector to reconnect upon more error conditions and avoid stalls.
 - Include flow alias in pipeline and connector aliases reported via metrics events and logging in order to deduplicate entries
-- Rename `gcs_appender` to `gcs_streamer`
 
 ## [0.12.4]
 
