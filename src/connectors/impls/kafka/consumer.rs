@@ -16,6 +16,7 @@ use async_std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::time::Duration;
 use tremor_common::time::nanotime;
+use tremor_value::value::StaticValue;
 
 use crate::connectors::impls::kafka::{
     SmolRuntime, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT, NO_ERROR,
@@ -57,7 +58,7 @@ enum Mode {
         /// Optional rdkafka configuration
         ///
         /// Can be overwritten by tremor for settings required for `auto_commit` and/or `retry_failed_events`.
-        rdkafka_options: HashMap<String, String>,
+        rdkafka_options: HashMap<String, StaticValue>,
 
         /// This config determines what to do upon events reported as failed.
         /// It only applies if `enable.auto.commit: false` or `enable.auto.commit: false, enable.auto.offset.store: true`
@@ -77,6 +78,25 @@ enum Mode {
 }
 
 impl Mode {
+    /// returns true if the given value is either `true` or `"true"`
+    fn is_true_value(v: &StaticValue) -> bool {
+        let v = v.value();
+        v.as_bool() == Some(true) || v.as_str() == Some("true")
+    }
+
+    /// extract an int from the given value
+    fn get_int_value(v: &StaticValue) -> Result<i64> {
+        let v = v.value();
+        let res = if let Some(int) = v.as_i64() {
+            int
+        } else if let Some(str_int) = v.as_str() {
+            str_int.parse::<i64>()?
+        } else {
+            return Err("not an int value".into());
+        };
+        Ok(res)
+    }
+
     fn retries_failed_events(&self) -> bool {
         match self {
             Mode::Custom {
@@ -101,16 +121,17 @@ impl Mode {
             } => {
                 rdkafka_options
                     .get("enable.auto.commit")
-                    .map(String::as_str)
-                    == Some("true")
+                    .map(Mode::is_true_value)
+                    .unwrap_or_default()
                     && rdkafka_options
                         .get("enable.auto.offset.store")
-                        .map(String::as_str)
-                        == Some("false")
+                        .map(Mode::is_true_value)
+                        .unwrap_or_default()
                     && rdkafka_options
                         .get("auto.commit.interval.ms")
-                        .map(String::as_str)
-                        != Some("0")
+                        .map(Mode::get_int_value)
+                        .and_then(Result::ok)
+                        != Some(0)
             }
             Mode::Performance => false,
         }
@@ -122,12 +143,10 @@ impl Mode {
             Mode::Transactional { commit_interval } => *commit_interval == 0,
             Mode::Custom {
                 rdkafka_options, ..
-            } => {
-                rdkafka_options
-                    .get("enable.auto.commit")
-                    .map(String::as_str)
-                    == Some("false")
-            }
+            } => !rdkafka_options
+                .get("enable.auto.commit")
+                .map(Mode::is_true_value)
+                .unwrap_or_default(),
             Mode::Performance => false,
         }
     }
@@ -161,18 +180,18 @@ impl Mode {
                 //
                 if rdkafka_options
                     .get("enable.auto.commit")
-                    .map(String::as_str)
-                    == Some("true")
+                    .map(Mode::is_true_value)
+                    .unwrap_or_default()
                     && rdkafka_options
                         .get("enable.auto.offset.store")
-                        .map(String::as_str)
-                        == Some("true")
+                        .map(Mode::is_true_value)
+                        .unwrap_or_default()
                     && *retry_failed_events
                 {
                     return Err("Cannot enable `retry_failed_events` and `enable.auto.commit` and `enable.auto.offset.store` at the same time.".into());
                 }
                 for (k, v) in rdkafka_options {
-                    client_config.set(k, v);
+                    client_config.set(k, v.to_string());
                 }
             }
         }
@@ -956,7 +975,8 @@ impl TopicResolver {
 #[cfg(test)]
 mod test {
 
-    use super::{Offset, TopicResolver};
+    use super::{Config, Offset, TopicResolver};
+    use crate::errors::Result;
     use proptest::prelude::*;
 
     fn topics_and_index() -> BoxedStrategy<(Vec<String>, usize)> {
@@ -985,5 +1005,40 @@ mod test {
             assert_eq!(partition, resolved_partition);
             assert_eq!(Offset::Offset(offset), resolved_offset);
         }
+    }
+
+    #[test]
+    fn mode_to_config() -> Result<()> {
+        let mut config = r#"
+        {
+            "topics": ["topic"],
+            "brokers": ["broker1"],
+            "group_id": "snot",
+            "mode": {
+                "custom": {
+                    "rdkafka_options": {
+                        "snot": true,
+                        "badger": null,
+                        "float": 1.543,
+                        "int": -42,
+                        "string": "string"
+                    },
+                    "retry_failed_events": true
+                }
+            }
+        }
+        "#
+        .as_bytes()
+        .to_vec();
+        let value = tremor_value::parse_to_value(config.as_mut_slice())?;
+        let config: Config = tremor_value::structurize(value)?;
+        let mode = config.mode;
+        let client_config = mode.to_config()?;
+        assert_eq!(client_config.get("snot"), Some("true"));
+        assert_eq!(client_config.get("badger"), Some("null"));
+        assert_eq!(client_config.get("float"), Some("1.543"));
+        assert_eq!(client_config.get("int"), Some("-42"));
+        assert_eq!(client_config.get("string"), Some("string"));
+        Ok(())
     }
 }
