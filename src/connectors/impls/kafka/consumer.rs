@@ -59,17 +59,18 @@ enum Mode {
         /// Can be overwritten by tremor for settings required for `auto_commit` and/or `retry_failed_events`.
         rdkafka_options: HashMap<String, String>,
 
-        /// This config determines the behaviour of this source. DANGER: this might lead to a lot of traffic to the group-coordinator
-        /// if `enable.auto.commit` is set to `false`:
+        /// This config determines what to do upon events reported as failed.
+        /// It only applies if `enable.auto.commit: false` or `enable.auto.commit: false, enable.auto.offset.store: true`
         ///
         /// if set to `true` this source will reset the consumer offset to a
-        /// failed message, so it will effectively retry those messages.
+        /// failed message both locally and on the broker, so it will effectively retry those messages.
+        /// DANGER: this might lead to a lot of traffic to the group-coordinator
         ///
-        /// If set to `false` this source will only commit the consumer offset
-        /// if the message has been successfully acknowledged.
+        /// If set to `false` this source will do nothing on failed messages, thus only commit the consumer offset
+        /// of acknowledged messages. Failed messages will be ignored.
         ///
-        /// This might lead to events being sent multiple times.
-        /// This should not be used when persistent errors are expected (e.g. if the message content is malformed and will lead to repeated errors)
+        /// This might lead to events being sent multiple times, if no new messages are acknowledged.
+        /// DANGER: This should not be used when persistent errors are expected (e.g. if the message content is malformed and will lead to repeated errors)
         #[serde(default = "default_false")]
         retry_failed_events: bool,
     },
@@ -131,7 +132,7 @@ impl Mode {
         }
     }
 
-    fn to_config(&self) -> ClientConfig {
+    fn to_config(&self) -> Result<ClientConfig> {
         let mut client_config = ClientConfig::new();
         match self {
             Mode::Performance => {
@@ -150,14 +151,32 @@ impl Mode {
                 }
             }
             Mode::Custom {
-                rdkafka_options, ..
+                rdkafka_options,
+                retry_failed_events,
             } => {
+                // avoid combination like as it contradicts itself
+                //      enable.auto.commit = true
+                //      enable.auto.offset.store = true
+                //      retry_failed_events = true
+                //
+                if rdkafka_options
+                    .get("enable.auto.commit")
+                    .map(String::as_str)
+                    == Some("true")
+                    && rdkafka_options
+                        .get("enable.auto.offset.store")
+                        .map(String::as_str)
+                        == Some("true")
+                    && *retry_failed_events
+                {
+                    return Err("Cannot enable `retry_failed_events` and `enable.auto.commit` and `enable.auto.offset.store` at the same time.".into());
+                }
                 for (k, v) in rdkafka_options {
                     client_config.set(k, v);
                 }
             }
         }
-        client_config
+        Ok(client_config)
     }
 }
 
@@ -236,7 +255,12 @@ impl ConnectorBuilder for Builder {
         };
 
         let client_id = format!("tremor-{}-{}", hostname(), alias);
-        let mut client_config = config.mode.to_config();
+        let mut client_config = config.mode.to_config().map_err(|e| {
+            Error::from(ErrorKind::InvalidConfiguration(
+                alias.to_string(),
+                e.to_string(),
+            ))
+        })?;
 
         // we do overwrite the rdkafka options to ensure a sane config
         set_client_config(&mut client_config, "group.id", &config.group_id)?;
