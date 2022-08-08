@@ -23,7 +23,7 @@ use simd_json_derive::{Deserialize, Serialize};
 #[derive(serde::Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
-    dir: String,
+    path: String,
     chunk_size: u64,
     max_chunks: usize,
 }
@@ -56,9 +56,9 @@ impl ConnectorBuilder for Builder {
             scheme: "tremor-kv".to_string(),
             host: "localhost".to_string(),
             port: None,
-            path: config.dir.split('/').map(ToString::to_string).collect(),
+            path: config.path.split('/').map(ToString::to_string).collect(),
         };
-        let wal = qwal::Wal::open(&config.dir, config.chunk_size, config.max_chunks).await?;
+        let wal = qwal::Wal::open(&config.path, config.chunk_size, config.max_chunks).await?;
 
         Ok(Box::new(Wal {
             event_origin_uri,
