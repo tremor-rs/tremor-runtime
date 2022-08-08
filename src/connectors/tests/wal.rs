@@ -29,7 +29,7 @@ async fn wal() -> Result<()> {
 
     let config = literal!({
         "config": {
-            "dir": temp_path.display().to_string(),
+            "path": temp_path.display().to_string(),
             "chunk_size": 1024,
             "max_chunks": 100
         }
