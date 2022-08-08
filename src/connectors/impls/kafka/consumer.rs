@@ -144,8 +144,10 @@ impl Mode {
                 let interval_ms = format!("{}", Duration::from_nanos(*commit_interval).as_millis());
                 client_config
                     .set("enable.auto.commit", "true")
-                    .set("enable.auto.offset.store", "false")
-                    .set("auto.commit.interval.ms", interval_ms.as_str());
+                    .set("enable.auto.offset.store", "false");
+                if *commit_interval > 0 {
+                    client_config.set("auto.commit.interval.ms", interval_ms.as_str());
+                }
             }
             Mode::Custom {
                 rdkafka_options, ..
@@ -233,8 +235,7 @@ impl ConnectorBuilder for Builder {
             path: vec![],
         };
 
-        let tid = task::current().id();
-        let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, tid);
+        let client_id = format!("tremor-{}-{}", hostname(), alias);
         let mut client_config = config.mode.to_config();
 
         // we do overwrite the rdkafka options to ensure a sane config
@@ -300,7 +301,11 @@ impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
                         trace!("{} Error sending to connect channel: {e}", &self.ctx);
                     };
                 }
-                info!("{} Rebalance Assigned: {}", &self.ctx, partitions.join(" "));
+                info!(
+                    "{} Partitions Assigned: {}",
+                    &self.ctx,
+                    partitions.join(" ")
+                );
             }
             Rebalance::Revoke(tpl) => {
                 let partitions: Vec<String> = tpl
@@ -310,7 +315,7 @@ impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
                         format!("[Topic: {}, Partition: {}]", elem.topic(), elem.partition(),)
                     })
                     .collect();
-                info!("{} Rebalance Revoked: {}", &self.ctx, partitions.join(" "));
+                info!("{} Partitions Revoked: {}", &self.ctx, partitions.join(" "));
             }
             Rebalance::Error(err_info) => {
                 warn!("{} Post Rebalance error {}", &self.ctx, err_info);
@@ -417,7 +422,7 @@ struct KafkaConsumerSource {
     topic_resolver: TopicResolver,
     // map from stream_id to offset
     offsets: Option<HashMap<u64, i64>>,
-    transactional: bool,
+    stores_offsets: bool,
     retry_failed_events: bool,
     seek_timeout: Duration,
     source_tx: Sender<(SourceReply, Option<u64>)>,
@@ -444,7 +449,7 @@ impl KafkaConsumerSource {
             .unwrap_or(Self::DEFAULT_SEEK_TIMEOUT);
 
         let (source_tx, source_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
-        let offsets = if mode.stores_offsets() {
+        let offsets = if mode.is_transactional() {
             Some(HashMap::new())
         } else {
             None
@@ -455,7 +460,7 @@ impl KafkaConsumerSource {
             topics,
             topic_resolver,
             offsets,
-            transactional: mode.is_transactional(),
+            stores_offsets: mode.stores_offsets(),
             retry_failed_events: mode.retries_failed_events(),
             seek_timeout,
             source_tx,
@@ -504,7 +509,6 @@ impl KafkaConsumerSource {
 impl Source for KafkaConsumerSource {
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
         if let Some(consumer_task) = self.consumer_task.take() {
-            info!("{ctx} Reconnecting. Unsubscribing old consumer...");
             self.cached_assignment.take(); // clear out references to the consumer
                                            // drop the consumer
             if let Some(consumer) = self.consumer.take() {
@@ -589,35 +593,41 @@ impl Source for KafkaConsumerSource {
     }
 
     async fn ack(&mut self, stream_id: u64, pull_id: u64, ctx: &SourceContext) -> Result<()> {
-        if self.transactional {
+        if let Some(offsets) = self.offsets.as_mut() {
             if let Some(consumer) = self.consumer.as_ref() {
                 if let Some((topic, partition, offset)) =
                     self.topic_resolver.resolve_topic(stream_id, pull_id)
                 {
-                    if let Some(offsets) = self.offsets.as_mut() {
-                        // we deliberately do not send a commit to the group-coordinator by calling `consumer.commit`
-                        // but instead use the client-local memory store of committed offsets
-                        //
-                        // for this we need to keep track of the maximum offset per partition
-                        if let Some(raw_offset) = offset.to_raw() {
-                            // store offset if not yet in map or if raw_offset exceeds the stored_offset for that partition
-                            if offsets
-                                .get(&stream_id)
-                                .filter(|stored_offset| raw_offset <= **stored_offset)
-                                .is_none()
-                            {
-                                offsets.insert(stream_id, raw_offset); // keep track of the maximum offset
-                                consumer.store_offset(topic, partition, raw_offset)?;
+                    // we need to keep track of the maximum offset per partition
+                    // in order to not commit earlier offsets
+                    if let Some(raw_offset) = offset.to_raw() {
+                        // store offset if not yet in map or if raw_offset exceeds the stored_offset for that partition
+                        if offsets
+                            .get(&stream_id)
+                            .filter(|stored_offset| raw_offset < **stored_offset)
+                            .is_none()
+                        {
+                            offsets.insert(stream_id, raw_offset); // keep track of the maximum offset
+                            if self.stores_offsets {
+                                // we deliberately do not send a commit to the group-coordinator by calling `consumer.commit`
+                                // but instead use the client-local memory store of committed offsets
                                 // store the new maximum offset for this partition
+                                debug!("{ctx} Storing offset {topic} {partition}: {raw_offset}");
+                                consumer.store_offset(topic, partition, raw_offset)?;
+                            } else {
+                                // commit directly to the group coordinator
+                                let mut tpl = TopicPartitionList::with_capacity(1);
+                                // we need to commit the message offset + 1 - this is the offset we are going to continue from afterwards
+                                let offset = Offset::Offset(raw_offset + 1);
+                                debug!("{ctx} Committing offset {topic} {partition}: {offset:?}");
+                                tpl.add_partition_offset(topic, partition, offset)?;
+                                consumer.commit(&tpl, CommitMode::Async)?;
                             }
                         } else {
-                            debug!("{ctx} Unable to store offset={offset:?} for event with stream={stream_id}, pull_id={pull_id}");
+                            debug!("{ctx} Not committing {topic} {partition}: {offset:?}: {offsets:?}");
                         }
                     } else {
-                        // the mode determines that we commit immediately, this is expensive
-                        let mut tpl = TopicPartitionList::with_capacity(1);
-                        tpl.add_partition_offset(topic, partition, offset)?;
-                        consumer.commit(&tpl, CommitMode::Async)?;
+                        debug!("{ctx} Unable to store/commit offset={offset:?} for event with stream={stream_id}, pull_id={pull_id}");
                     }
                 } else {
                     error!("{ctx} Could not ack event with stream={stream_id}, pull_id={pull_id}. Unable to detect topic from internal state.");
@@ -629,7 +639,12 @@ impl Source for KafkaConsumerSource {
 
     async fn fail(&mut self, stream_id: u64, pull_id: u64, ctx: &SourceContext) -> Result<()> {
         // how can we make sure we do not conflict with the store_offset handling in `ack`?
-        if self.transactional && self.retry_failed_events {
+        if let KafkaConsumerSource {
+            retry_failed_events: true,
+            offsets: Some(offsets),
+            ..
+        } = self
+        {
             if let Some(consumer) = self.consumer.as_ref() {
                 if let Some((topic, partition, offset)) =
                     self.topic_resolver.resolve_topic(stream_id, pull_id)
@@ -647,13 +662,11 @@ impl Source for KafkaConsumerSource {
 
                     // update the tracked offsets if necessary
                     // this has the effect that newer acks on that partition will actually store the newer offsets
-                    if let Some(offsets) = self.offsets.as_mut() {
-                        if let Some(raw_offset) = offset.to_raw() {
-                            offsets
-                                .entry(stream_id)
-                                .and_modify(|stored_offset| *stored_offset = raw_offset)
-                                .or_insert(raw_offset);
-                        }
+                    if let Some(raw_offset) = offset.to_raw() {
+                        offsets
+                            .entry(stream_id)
+                            .and_modify(|stored_offset| *stored_offset = raw_offset) // avoid off by one when storing commits
+                            .or_insert(raw_offset);
                     }
 
                     // reset the local in-memory pointer to the message we want to consume next
@@ -719,7 +732,7 @@ impl Source for KafkaConsumerSource {
     }
 
     fn is_transactional(&self) -> bool {
-        self.transactional
+        self.offsets.is_some()
     }
 
     fn asynchronous(&self) -> bool {
