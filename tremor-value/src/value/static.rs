@@ -16,6 +16,7 @@ use crate::value::Value;
 
 /// avoiding lifetime issues with generics
 /// See: <https://github.com/rust-lang/rust/issues/64552>
+#[derive(Debug, Clone)]
 pub struct StaticValue(Value<'static>);
 
 impl StaticValue {
@@ -24,6 +25,12 @@ impl StaticValue {
     pub fn into_value(self) -> Value<'static> {
         self.0
     }
+
+    /// get a reference to the inner value
+    #[must_use]
+    pub fn value(&self) -> &Value<'static> {
+        &self.0
+    }
 }
 impl<'de> serde::de::Deserialize<'de> for StaticValue {
     fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
@@ -31,5 +38,11 @@ impl<'de> serde::de::Deserialize<'de> for StaticValue {
         D: serde::Deserializer<'de>,
     {
         Value::deserialize(deserializer).map(|value| StaticValue(value.into_static()))
+    }
+}
+
+impl std::fmt::Display for StaticValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
