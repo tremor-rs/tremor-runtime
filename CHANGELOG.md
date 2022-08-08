@@ -4,6 +4,7 @@
 
 ### Breaking Changes
 
+- Introduce breaking change in `kafka_consumer` configuration, by adding `mode`.
 - Update grok to 0.2, optional patterns are now omitted no longer ""
 - Unify to `url` instead of `endpoint` for google and s3 connectors so they're in line with every other connector
 - Unify to `urls` for `elastic` connector
@@ -19,7 +20,9 @@
 
 ### Fixes
 
-- Fix `elastic` sink not acking messages handles successfully if no source is connected.
+- Fix `elastic` sink not acking events handled successfully if no source is connected.
+- Fix `kafka_consumer` possibly committing earlier offsets, thus replaying events that have already been handled.
+- Fix off-by-one error in `kafka_consumer` committing offsets, thus replaying the last committed event.
 - Allow `kafka_consumer` connector to reconnect upon more error conditions and avoid stalls.
 - Include flow alias in pipeline and connector aliases reported via metrics events and logging in order to deduplicate entries
 - Rename `gcs_appender` to `gcs_streamer`
