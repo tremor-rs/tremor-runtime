@@ -18,20 +18,20 @@ use crate::{
     connectors::{impls::kafka, tests::free_port},
     errors::Result,
 };
-use async_std::task;
 use async_std::prelude::FutureExt;
+use async_std::task;
 use beef::Cow;
-use std::collections::HashMap;
 use rdkafka::{
-    Offset, error::KafkaResult,
-    consumer::{BaseConsumer, Consumer},
     admin::{AdminClient, AdminOptions, NewTopic, TopicReplication},
     config::FromClientConfig,
+    consumer::{BaseConsumer, Consumer},
+    error::KafkaResult,
     message::OwnedHeaders,
     producer::{BaseProducer, BaseRecord, Producer},
-    ClientConfig,
+    ClientConfig, Offset,
 };
 use serial_test::serial;
+use std::collections::HashMap;
 use std::time::Duration;
 use testcontainers::clients::Cli as DockerCli;
 use tremor_pipeline::CbAction;
@@ -279,21 +279,31 @@ async fn transactional_retry() -> Result<()> {
 
     // check out the committed offsets with another consumer
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
-    assert_eq!(offsets.get(&(topic.to_string(), 0)), Some(&Offset::Offset(1)));
-    assert_eq!(offsets.get(&(topic.to_string(), 1)), Some(&Offset::Offset(1)));
+    assert_eq!(
+        offsets.get(&(topic.to_string(), 0)),
+        Some(&Offset::Offset(1))
+    );
+    assert_eq!(
+        offsets.get(&(topic.to_string(), 1)),
+        Some(&Offset::Offset(1))
+    );
     assert_eq!(offsets.get(&(topic.to_string(), 2)), Some(&Offset::Invalid)); // nothing committed yet
-    
 
     // cleanup
     drop(container);
     Ok(())
 }
 
-async fn get_offsets(broker: &str, group_id: &str, topic: &str) -> KafkaResult<HashMap<(String, i32), Offset>> {
+async fn get_offsets(
+    broker: &str,
+    group_id: &str,
+    topic: &str,
+) -> KafkaResult<HashMap<(String, i32), Offset>> {
     let consumer: BaseConsumer = ClientConfig::new()
         .set("bootstrap.servers", broker)
         .set("group.id", group_id)
-        .create().expect("Error creating consumer");
+        .create()
+        .expect("Error creating consumer");
     consumer.subscribe(&[topic])?;
     let mut assignment = consumer.assignment()?;
     while assignment.count() == 0 {
@@ -302,7 +312,7 @@ async fn get_offsets(broker: &str, group_id: &str, topic: &str) -> KafkaResult<H
         assignment = consumer.assignment()?;
     }
     drop(assignment);
-    
+
     let offsets = consumer.committed(Duration::from_secs(5))?.to_topic_map();
     drop(consumer);
     Ok(offsets)
@@ -539,7 +549,10 @@ async fn transactional_no_retry() -> Result<()> {
 
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
     assert_eq!(offsets.get(&(topic.to_string(), 0)), Some(&Offset::Invalid));
-    assert_eq!(offsets.get(&(topic.to_string(), 1)), Some(&Offset::Offset(1)));
+    assert_eq!(
+        offsets.get(&(topic.to_string(), 1)),
+        Some(&Offset::Offset(1))
+    );
     assert_eq!(offsets.get(&(topic.to_string(), 2)), Some(&Offset::Invalid));
     // cleanup
     drop(container);
@@ -769,9 +782,18 @@ async fn performance() -> Result<()> {
     assert!(err_events.is_empty());
 
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
-    assert_eq!(offsets.get(&(topic.to_string(), 0)), Some(&Offset::Offset(1)));
-    assert_eq!(offsets.get(&(topic.to_string(), 1)), Some(&Offset::Offset(1)));
-    assert_eq!(offsets.get(&(topic.to_string(), 2)), Some(&Offset::Offset(2)));
+    assert_eq!(
+        offsets.get(&(topic.to_string(), 0)),
+        Some(&Offset::Offset(1))
+    );
+    assert_eq!(
+        offsets.get(&(topic.to_string(), 1)),
+        Some(&Offset::Offset(1))
+    );
+    assert_eq!(
+        offsets.get(&(topic.to_string(), 2)),
+        Some(&Offset::Offset(2))
+    );
 
     // cleanup
     drop(container);
@@ -944,7 +966,6 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     Ok(())
 }
 
-
 #[async_std::test]
 #[serial(kafka)]
 async fn transactional_store_offset_handling() -> Result<()> {
@@ -1072,7 +1093,10 @@ async fn transactional_store_offset_handling() -> Result<()> {
 
     debug!("getting offsets...");
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
-    assert_eq!(offsets.get(&(topic.to_string(), 0)), Some(&Offset::Offset(3)));
+    assert_eq!(
+        offsets.get(&(topic.to_string(), 0)),
+        Some(&Offset::Offset(3))
+    );
 
     debug!("before start");
     // start new harness
@@ -1087,7 +1111,9 @@ async fn transactional_store_offset_handling() -> Result<()> {
     debug!("connected");
 
     // fail message 2
-    harness.send_contraflow(CbAction::Fail, event2.id.clone()).await?;
+    harness
+        .send_contraflow(CbAction::Fail, event2.id.clone())
+        .await?;
 
     debug!("failed event2");
 
@@ -1096,7 +1122,10 @@ async fn transactional_store_offset_handling() -> Result<()> {
 
     // check that fail did reset the offset correctly
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
-    assert_eq!(offsets.get(&(topic.to_string(), 0)), Some(&Offset::Offset(1)));
+    assert_eq!(
+        offsets.get(&(topic.to_string(), 0)),
+        Some(&Offset::Offset(1))
+    );
     drop(offsets);
 
     // start new harness
@@ -1119,12 +1148,17 @@ async fn transactional_store_offset_handling() -> Result<()> {
         data = event_again.data.suffix().value();
     }
     assert_eq!(&Value::from(3), data);
-    
+
     // ack message 3 only
-    harness.send_contraflow(CbAction::Ack, event_again.id.clone()).await?;
+    harness
+        .send_contraflow(CbAction::Ack, event_again.id.clone())
+        .await?;
 
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
-    assert_eq!(offsets.get(&(topic.to_string(), 0)), Some(&Offset::Offset(3)));
+    assert_eq!(
+        offsets.get(&(topic.to_string(), 0)),
+        Some(&Offset::Offset(3))
+    );
 
     // stop harness
     let _ = harness.stop().await?;
@@ -1265,9 +1299,11 @@ async fn transactional_commit_offset_handling() -> Result<()> {
     assert!(out_events.is_empty());
     assert!(err_events.is_empty());
 
-
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
-    assert_eq!(offsets.get(&(topic.to_string(), 0)), Some(&Offset::Offset(3)));
+    assert_eq!(
+        offsets.get(&(topic.to_string(), 0)),
+        Some(&Offset::Offset(3))
+    );
 
     // start new harness
     let harness = ConnectorHarness::new(
@@ -1281,11 +1317,17 @@ async fn transactional_commit_offset_handling() -> Result<()> {
     harness.wait_for_connected().await?;
 
     // ensure no message is received
-    assert!(out.get_event().timeout(Duration::from_millis(200)).await.is_err());
+    assert!(out
+        .get_event()
+        .timeout(Duration::from_millis(200))
+        .await
+        .is_err());
 
     // fail message 2
-    harness.send_contraflow(CbAction::Fail, event2.id.clone()).await?;
-    
+    harness
+        .send_contraflow(CbAction::Fail, event2.id.clone())
+        .await?;
+
     // ensure message 2 is the next - seek was effective
     let event2_again = out.get_event().await?;
     assert_eq!(&Value::from(2), event2_again.data.suffix().value());
@@ -1295,7 +1337,10 @@ async fn transactional_commit_offset_handling() -> Result<()> {
 
     // check that fail did reset the offset correctly - commit was effective
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
-    assert_eq!(offsets.get(&(topic.to_string(), 0)), Some(&Offset::Offset(1)));
+    assert_eq!(
+        offsets.get(&(topic.to_string(), 0)),
+        Some(&Offset::Offset(1))
+    );
 
     // start new harness
     let harness = ConnectorHarness::new(
@@ -1319,15 +1364,19 @@ async fn transactional_commit_offset_handling() -> Result<()> {
     assert_eq!(&Value::from(3), data);
 
     // ack message 3 only
-    harness.send_contraflow(CbAction::Ack, event_again.id.clone()).await?;
+    harness
+        .send_contraflow(CbAction::Ack, event_again.id.clone())
+        .await?;
 
     // stop harness
     let _ = harness.stop().await?;
 
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
-    assert_eq!(offsets.get(&(topic.to_string(), 0)), Some(&Offset::Offset(3)));
+    assert_eq!(
+        offsets.get(&(topic.to_string(), 0)),
+        Some(&Offset::Offset(3))
+    );
 
     drop(container);
     Ok(())
-    
 }

@@ -624,7 +624,9 @@ impl Source for KafkaConsumerSource {
                                 consumer.commit(&tpl, CommitMode::Async)?;
                             }
                         } else {
-                            debug!("{ctx} Not committing {topic} {partition}: {offset:?}: {offsets:?}");
+                            debug!(
+                                "{ctx} Not committing {topic} {partition}: {offset:?}: {offsets:?}"
+                            );
                         }
                     } else {
                         debug!("{ctx} Unable to store/commit offset={offset:?} for event with stream={stream_id}, pull_id={pull_id}");
