@@ -181,6 +181,7 @@ impl<'script> BaseExpr for ImutExpr<'script> {
             ImutExpr::Unary(e) => e.meta(),
             ImutExpr::Bytes(e) => e.meta(),
             ImutExpr::String(e) => e.meta(),
+            ImutExpr::BinaryBoolean(e) => e.meta(),
         }
     }
 }
@@ -262,6 +263,7 @@ impl<'script> BaseExpr for ImutExprRaw<'script> {
             ImutExprRaw::String(e) => &e.mid,
             ImutExprRaw::Unary(e) => &e.mid,
             ImutExprRaw::Bytes(e) => &e.mid,
+            ImutExprRaw::BinaryBoolean(e) => &e.mid,
         }
     }
 }

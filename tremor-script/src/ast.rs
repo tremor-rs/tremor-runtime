@@ -637,6 +637,8 @@ pub enum ImutExpr<'script> {
     List(List<'script>),
     /// Binary operation
     Binary(Box<BinExpr<'script>>),
+    /// Binary operation for booleans
+    BinaryBoolean(Box<BooleanBinExpr<'script>>),
     /// Unary operation
     Unary(Box<UnaryExpr<'script>>),
     /// Patch
@@ -2056,13 +2058,6 @@ impl_expr!(StatePath);
 /// we're forced to make this pub because of lalrpop
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 pub enum BinOpKind {
-    /// we're forced to make this pub because of lalrpop
-    Or,
-    /// we're forced to make this pub because of lalrpop
-    Xor,
-    /// we're forced to make this pub because of lalrpop
-    And,
-
     // NOT IMPLEMENTED /// we're forced to make this pub because of lalrpop
     // BitOr,
     /// we're forced to make this pub because of lalrpop
@@ -2103,6 +2098,18 @@ pub enum BinOpKind {
     Mod,
 }
 
+// BooleanBinOpKind
+/// we're forced to make this pub because of lalrpop
+#[derive(Copy, Clone, Debug, PartialEq, Serialize)]
+pub enum BooleanBinOpKind {
+    /// we're forced to make this pub because of lalrpop
+    Or,
+    /// we're forced to make this pub because of lalrpop
+    Xor,
+    /// we're forced to make this pub because of lalrpop
+    And,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulates a binary expression form
 pub struct BinExpr<'script> {
@@ -2116,6 +2123,20 @@ pub struct BinExpr<'script> {
     pub rhs: ImutExpr<'script>,
 }
 impl_expr!(BinExpr);
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+/// Encapsulates a binary expression form
+pub struct BooleanBinExpr<'script> {
+    /// Id
+    pub(crate) mid: Box<NodeMeta>,
+    /// The operation kind
+    pub kind: BooleanBinOpKind,
+    /// The Left-hand-side operand
+    pub lhs: ImutExpr<'script>,
+    /// The Right-hand-side operand
+    pub rhs: ImutExpr<'script>,
+}
+impl_expr!(BooleanBinExpr);
 
 /// we're forced to make this pub because of lalrpop
 #[derive(Copy, Clone, Debug, PartialEq, Serialize)]

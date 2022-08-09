@@ -124,6 +124,11 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script
                 }
             }
 
+            ImutExpr::BinaryBoolean(b) => {
+                // FIXME: This should check for literals the same way ::Binary does!
+                ImutExpr::BinaryBoolean(b)
+            }
+
             ImutExpr::Unary(b) => {
                 if let UnaryExpr {
                     kind,

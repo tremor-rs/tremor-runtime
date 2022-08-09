@@ -16,7 +16,7 @@ use crate::ast::raw::*;
 use crate::ast::deploy::raw::*;
 use crate::ast::query::raw::*;
 use crate::ast::module::*;
-use crate::ast::{BinOpKind, UnaryOpKind, NodeId};
+use crate::ast::{BooleanBinOpKind, BinOpKind, UnaryOpKind, NodeId};
 use crate::lexer::Token;
 use crate::pos::Location;
 use crate::Value;
@@ -592,19 +592,19 @@ ExprImut: ImutExprRaw<'input> = {
 /// Logical or
 OrExprImut: ImutExprRaw<'input> = {
     /// TODO should be OrExprImut?
-    <o:BinOp<BinOr, ExprImut, XorExprImut>> => <>,
+    <o:BooleanBinOp<BinOr, ExprImut, XorExprImut>> => <>,
     XorExprImut => <>,
 }
 
 /// Logical xor
 XorExprImut: ImutExprRaw<'input> = {
-    <o:BinOp<BinXor, XorExprImut, AndExprImut>> => <>,
+    <o:BooleanBinOp<BinXor, XorExprImut, AndExprImut>> => <>,
     AndExprImut => <>,
 }
 
 /// Logical and
 AndExprImut: ImutExprRaw<'input> = {
-    BinOp<BinAnd, AndExprImut, BitOrExprImut> => <>,
+    BooleanBinOp<BinAnd, AndExprImut, BitOrExprImut> => <>,
     BitOrExprImut => <>,
 }
 
@@ -1453,6 +1453,15 @@ BinOp<Op, Current, Next>: ImutExprRaw<'input> = {
         mid: NodeMeta::new_box(start, end)
     })),
 }
+#[inline]
+BooleanBinOp<Op, Current, Next>: ImutExprRaw<'input> = {
+    <start:@L> <lhs:(<Current>)> <op:(<Op>)> @L <rhs:Next> <end:@L> => ImutExprRaw::BinaryBoolean(Box::new(BooleanBinExprRaw {
+        kind: op,
+        lhs: lhs,
+        rhs: rhs,
+        mid: NodeMeta::new_box(start, end)
+    })),
+}
 
 
 BinCmpEq: BinOpKind = {
@@ -1460,14 +1469,14 @@ BinCmpEq: BinOpKind = {
     BinCmp => <>
 }
 
-BinOr: BinOpKind = {
-    "or" => BinOpKind::Or,
+BinOr: BooleanBinOpKind = {
+    "or" => BooleanBinOpKind::Or,
 }
-BinXor: BinOpKind = {
-    "xor" => BinOpKind::Xor,
+BinXor: BooleanBinOpKind = {
+    "xor" => BooleanBinOpKind::Xor,
 }
-BinAnd: BinOpKind = {
-    "and" => BinOpKind::And,
+BinAnd: BooleanBinOpKind = {
+    "and" => BooleanBinOpKind::And,
 }
 // BinBitOr: BinOpKind = {
 //    "|" => BinOpKind::BitOr,

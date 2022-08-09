@@ -31,9 +31,6 @@ impl<'script> PartialEq for InvokeAggrFn<'script> {
 impl BinOpKind {
     fn operator_name(self) -> &'static str {
         match self {
-            Self::Or => "or",
-            Self::Xor => "xor",
-            Self::And => "and",
             // not implemented Self::BitOr => "|",
             Self::BitXor => "^",
             Self::BitAnd => "&",
