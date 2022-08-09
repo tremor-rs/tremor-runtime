@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::ast::{BooleanBinExpr, BooleanBinOpKind};
 use crate::{
     ast::{
         base_expr::Ranged, binary::extend_bytes_from_value, BaseExpr, BinExpr, Comprehension,
@@ -36,6 +37,7 @@ use std::{
     borrow::{Borrow, Cow},
     iter, mem,
 };
+use value_trait::StaticNode;
 
 fn owned_val<'val, T>(v: T) -> Cow<'val, Value<'val>>
 where
@@ -240,6 +242,9 @@ impl<'script> ImutExpr<'script> {
 
             ImutExpr::Unary(ref expr) => self.unary(opts, env, event, state, meta, local, expr),
             ImutExpr::Binary(ref expr) => self.binary(opts, env, event, state, meta, local, expr),
+            ImutExpr::BinaryBoolean(ref expr) => {
+                Self::binary_boolean(opts, env, event, state, meta, local, expr)
+            }
             ImutExpr::Match(ref expr) => {
                 self.match_expr(opts, env, event, state, meta, local, expr)
             }
@@ -453,6 +458,79 @@ impl<'script> ImutExpr<'script> {
         let lhs = stry!(expr.lhs.run(opts, env, event, state, meta, local));
         let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
         exec_binary(self, expr, expr.kind, &lhs, &rhs)
+    }
+
+    fn binary_boolean<'run, 'event>(
+        opts: ExecOpts,
+        env: &'run Env<'run, 'event>,
+        event: &'run Value<'event>,
+        state: &'run Value<'static>,
+        meta: &'run Value<'event>,
+        local: &'run LocalStack<'event>,
+        expr: &'run BooleanBinExpr<'event>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
+        let lhs = stry!(expr.lhs.run(opts, env, event, state, meta, local));
+
+        match (expr.kind, lhs.as_ref()) {
+            (BooleanBinOpKind::Or, Value::Static(StaticNode::Bool(lval))) => {
+                if *lval {
+                    return Ok(Cow::Borrowed(&TRUE));
+                }
+
+                let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
+
+                if let Some(rval) = rhs.as_bool() {
+                    return if *lval || rval {
+                        Ok(Cow::Borrowed(&TRUE))
+                    } else {
+                        Ok(Cow::Borrowed(&FALSE))
+                    };
+                }
+
+                // FIXME: Return error
+                return Ok(Cow::Borrowed(&FALSE));
+            }
+
+            // FIXME: The cases below are placeholders, fill them in
+            (BooleanBinOpKind::And, Value::Static(StaticNode::Bool(lval))) => {
+                if !*lval {
+                    return Ok(Cow::Borrowed(&FALSE));
+                }
+
+                let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
+
+                if let Some(rval) = rhs.as_bool() {
+                    return if *lval && rval {
+                        Ok(Cow::Borrowed(&TRUE))
+                    } else {
+                        Ok(Cow::Borrowed(&FALSE))
+                    };
+                }
+
+                // FIXME: Return error
+                return Ok(Cow::Borrowed(&FALSE));
+            }
+            (BooleanBinOpKind::Xor, Value::Static(StaticNode::Bool(lval))) => {
+                let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
+
+                if let Some(rval) = rhs.as_bool() {
+                    return if *lval ^ rval {
+                        Ok(Cow::Borrowed(&TRUE))
+                    } else {
+                        Ok(Cow::Borrowed(&FALSE))
+                    };
+                }
+
+                // FIXME: Return error
+                return Ok(Cow::Borrowed(&FALSE));
+            }
+            (BooleanBinOpKind::And | BooleanBinOpKind::Or | BooleanBinOpKind::Xor, _) => {
+                Ok(Cow::Borrowed(&FALSE))
+            }
+        }
     }
 
     fn unary<'run, 'event>(

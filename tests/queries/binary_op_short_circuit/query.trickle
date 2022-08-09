@@ -1,0 +1,9 @@
+select {
+    "a": true or event.this_field_does_not_exist,
+    "b": false and event.this_field_does_not_exist,
+    "c": false or event.field_true,
+    "d": true and event.field_false,
+    "e": true and event.field_true,
+    "f": true xor false,
+    "g": true xor true
+} from in into out;

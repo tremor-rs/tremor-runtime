@@ -89,6 +89,7 @@ macro_rules! test_cases {
 }
 
 test_cases!(
+    binary_op_short_circuit,
     default_rule,
     dimensions,
     example_rule,

@@ -368,7 +368,7 @@ where
 {
     // Lazy Heinz doesn't want to write that 10000 times
     // - snot badger - Darach
-    use BinOpKind::{Add, And, BitAnd, BitXor, Eq, Gt, Gte, Lt, Lte, NotEq, Or, Xor};
+    use BinOpKind::{Add, BitAnd, BitXor, Eq, Gt, Gte, Lt, Lte, NotEq};
     use StaticNode::Bool;
     use Value::{Bytes, Static, String};
     match (op, lhs, rhs) {
@@ -380,10 +380,9 @@ where
         (NotEq, l, r) => Ok(static_bool!(!val_eq(l, r))),
 
         // Bool
-        (And | BitAnd, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l && *r)),
+        (BitAnd, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l && *r)),
         // error_invalid_bitshift(outer, inner) missing as we don't have it implemented
-        (Or, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l || *r)),
-        (Xor | BitXor, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l != *r)),
+        (BitXor, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l != *r)),
 
         // Binary
         (Gt, Bytes(l), Bytes(r)) => Ok(static_bool!(l > r)),

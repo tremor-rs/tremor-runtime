@@ -16,6 +16,7 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
+use crate::ast::{BooleanBinExpr, BooleanBinOpKind};
 use crate::{
     ast::{
         base_expr, query, upable::Upable, visitors::ConstFolder, walkers::ExprWalker, ArrayPattern,
@@ -821,6 +822,8 @@ pub enum ImutExprRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Binary(Box<BinExprRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
+    BinaryBoolean(Box<BooleanBinExprRaw<'script>>),
+    /// we're forced to make this pub because of lalrpop
     Unary(Box<UnaryExprRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
     Literal(LiteralRaw<'script>),
@@ -853,6 +856,7 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                 ImutExpr::Recur(r.up(helper)?)
             }
             ImutExprRaw::Binary(b) => ImutExpr::Binary(Box::new(b.up(helper)?)),
+            ImutExprRaw::BinaryBoolean(b) => ImutExpr::BinaryBoolean(Box::new(b.up(helper)?)),
             ImutExprRaw::Unary(u) => ImutExpr::Unary(Box::new(u.up(helper)?)),
             ImutExprRaw::String(s) => ImutExpr::String(s.up(helper)?),
             ImutExprRaw::Record(r) => ImutExpr::Record(r.up(helper)?),
@@ -1961,6 +1965,27 @@ impl<'script> Upable<'script> for BinExprRaw<'script> {
     type Target = BinExpr<'script>;
     fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
         Ok(BinExpr {
+            mid: self.mid,
+            kind: self.kind,
+            lhs: self.lhs.up(helper)?,
+            rhs: self.rhs.up(helper)?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct BooleanBinExprRaw<'script> {
+    pub(crate) kind: BooleanBinOpKind,
+    pub(crate) lhs: ImutExprRaw<'script>,
+    pub(crate) rhs: ImutExprRaw<'script>,
+    pub(crate) mid: Box<NodeMeta>,
+}
+
+impl<'script> Upable<'script> for BooleanBinExprRaw<'script> {
+    type Target = BooleanBinExpr<'script>;
+
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        Ok(BooleanBinExpr {
             mid: self.mid,
             kind: self.kind,
             lhs: self.lhs.up(helper)?,
