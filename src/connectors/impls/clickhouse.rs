@@ -46,7 +46,7 @@ impl ConnectorBuilder for Builder {
     }
 }
 
-pub struct Clickhouse {
+pub(crate) struct Clickhouse {
     config: ClickhouseConfig,
 }
 

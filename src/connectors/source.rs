@@ -17,7 +17,7 @@
 /// A simple source that is fed with `SourceReply` via a channel.
 pub mod channel_source;
 
-pub use channel_source::{ChannelSource, ChannelSourceRuntime};
+pub(crate) use channel_source::{ChannelSource, ChannelSourceRuntime};
 
 use async_std::channel::unbounded;
 use async_std::task;
@@ -92,7 +92,7 @@ pub(crate) enum SourceMsg {
 
 /// reply from `Source::on_event`
 #[derive(Debug)]
-pub enum SourceReply {
+pub(crate) enum SourceReply {
     /// A normal data event with a `Vec<u8>` for data
     Data {
         /// origin uri
@@ -143,7 +143,7 @@ pub enum SourceReply {
 }
 
 /// sender for source reply
-pub type SourceReplySender = Sender<SourceReply>;
+pub(crate) type SourceReplySender = Sender<SourceReply>;
 
 /// source part of a connector
 #[async_trait::async_trait]
@@ -336,7 +336,7 @@ impl SourceAddr {
 
 /// Builder for the `SourceManager`
 #[allow(clippy::module_name_repetitions)]
-pub struct SourceManagerBuilder {
+pub(crate) struct SourceManagerBuilder {
     qsize: usize,
     streams: Streams,
     source_metrics_reporter: SourceReporter,

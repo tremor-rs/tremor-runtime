@@ -21,14 +21,14 @@ use aws_sdk_s3 as s3;
 use s3::model::{CompletedMultipartUpload, CompletedPart};
 use s3::Client as S3Client;
 
-pub(crate) const CONNECTOR_TYPE: &str = "s3_writer";
+pub(crate) const CONNECTOR_TYPE: &str = "s3_streamer";
 
 const MORE_THEN_FIVEMBS: usize = 5 * 1024 * 1024 + 100; // Some extra bytes to keep aws happy.
 
 #[derive(Deserialize, Debug, Default, Clone)]
-pub struct S3Config {
+pub(crate) struct S3Config {
     aws_region: Option<String>,
-    endpoint: Option<String>,
+    url: Option<Url<HttpsDefaults>>,
     bucket: String,
 
     #[serde(default = "S3Config::fivembs")]
@@ -133,11 +133,8 @@ struct S3Sink {
 #[async_trait::async_trait]
 impl Sink for S3Sink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let client = auth::get_client(
-            self.config.aws_region.clone(),
-            self.config.endpoint.as_ref(),
-        )
-        .await?;
+        let client =
+            auth::get_client(self.config.aws_region.clone(), self.config.url.as_ref()).await?;
 
         // Check for the existence of the bucket.
         client
@@ -173,7 +170,7 @@ impl Sink for S3Sink {
                 key
             } else {
                 self.current_key.clear();
-                error!("{ctx}: missing '$s3_writer.key' meta data in event");
+                error!("{ctx}: missing '$s3_streamer.key' meta data in event");
                 return Ok(SinkReply::FAIL);
             };
 
@@ -335,7 +332,7 @@ struct S3Meta<'a, 'value> {
 impl<'a, 'value> S3Meta<'a, 'value> {
     fn new(meta: &'a Value<'value>) -> Self {
         Self {
-            meta: meta.get("s3_writer"),
+            meta: meta.get("s3_streamer"),
         }
     }
 

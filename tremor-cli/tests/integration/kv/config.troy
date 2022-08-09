@@ -6,7 +6,7 @@ flow
 
   define connector kv from kv
   with
-    config =  {"dir": "data"}
+    config =  {"path": "data"}
   end;
 
   create connector kv from kv;

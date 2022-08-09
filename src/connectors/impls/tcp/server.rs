@@ -39,7 +39,7 @@ const URL_SCHEME: &str = "tremor-tcp-server";
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     url: Url<TcpDefaults>,
     tls: Option<TLSServerConfig>,
     // TCP: receive buffer size
@@ -50,7 +50,7 @@ pub struct Config {
 impl ConfigImpl for Config {}
 
 #[allow(clippy::module_name_repetitions)]
-pub struct TcpServer {
+pub(crate) struct TcpServer {
     config: Config,
     tls_server_config: Option<ServerConfig>,
     sink_tx: Sender<ChannelSinkMsg<ConnectionMeta>>,

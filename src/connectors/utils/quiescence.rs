@@ -40,7 +40,7 @@ impl Default for Inner {
 /// use this beacon to check if tasks reading or writing from external connections should stop
 #[derive(Debug, Clone, Default)]
 #[allow(clippy::module_name_repetitions)]
-pub struct QuiescenceBeacon(Arc<Inner>);
+pub(crate) struct QuiescenceBeacon(Arc<Inner>);
 
 impl QuiescenceBeacon {
     // we have max 2 listeners at a time, checking this beacon

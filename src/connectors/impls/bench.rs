@@ -29,10 +29,11 @@ use xz2::read::XzDecoder;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     /// source file to read data from, it will be iterated over repeatedly,
     /// can be xz compressed
-    pub source: String,
+    pub(crate) path: String,
+
     /// Interval in nanoseconds for coordinated emission testing
     pub interval: Option<u64>,
 
@@ -89,9 +90,9 @@ impl ConnectorBuilder for Builder {
         kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
-        let mut source_data_file = file::open(&config.source)?;
+        let mut source_data_file = file::open(&config.path)?;
         let mut data = vec![];
-        let ext = file::extension(&config.source);
+        let ext = file::extension(&config.path);
         if ext == Some("xz") {
             XzDecoder::new(source_data_file).read_to_end(&mut data)?;
         } else {
@@ -101,7 +102,7 @@ impl ConnectorBuilder for Builder {
             scheme: "tremor-blaster".to_string(),
             host: hostname(),
             port: None,
-            path: vec![config.source.clone()],
+            path: vec![config.path.clone()],
         };
         let elements: Vec<Vec<u8>> = if let Some(chunk_size) = config.chunk_size {
             // split into sized chunks
@@ -163,7 +164,7 @@ impl Acc {
 }
 
 #[derive(Clone)]
-pub struct Bench {
+pub(crate) struct Bench {
     config: Config,
     acc: Acc,
     origin_uri: EventOriginUri,

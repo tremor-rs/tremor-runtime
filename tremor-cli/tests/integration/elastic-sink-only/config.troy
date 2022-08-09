@@ -36,6 +36,15 @@ flow
         "refresh": "wait_for",
         "retry_on_conflict": 2
       };
+      match event of
+        case %{ present num } =>
+          match event["num"] % 2 of
+            case 0 =>
+              let $elastic["_id"] = "#{event["num"]}"
+            default => null
+          end
+        default => null
+      end;
       # payload
       emit {"doc": event, "doc_as_upsert": true};
     end;
@@ -46,9 +55,12 @@ flow
     select event from add_meta/err into err;
   end;
   create pipeline elastic_meta;
+  create connector console from connectors::console;
 
   connect /connector/input to /pipeline/elastic_meta;
-  connect /pipeline/elastic_meta to /connector/elastic_sink;
+  connect /pipeline/elastic_meta/out to /connector/elastic_sink;
+  #connect /pipeline/elastic_meta/out to /connector/console/stdout;
+  connect /pipeline/elastic_meta/err to /connector/console/stderr;
 end;
 
 deploy flow elastic_sink_only;

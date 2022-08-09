@@ -49,7 +49,7 @@ lazy_static! {
 }
 
 /// connector handling 1 std stream (stdout, stderr or stdin)
-pub struct StdStreamConnector {}
+pub(crate) struct StdStreamConnector {}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -70,7 +70,7 @@ impl ConnectorBuilder for Builder {
 }
 
 /// stdstream source (stdin)
-pub struct StdStreamSource {
+pub(crate) struct StdStreamSource {
     stdin: Option<Receiver<Vec<u8>>>,
     origin_uri: EventOriginUri,
     done: bool,
@@ -134,7 +134,7 @@ impl Source for StdStreamSource {
 }
 
 /// stdstream sink
-pub struct StdStreamSink {
+pub(crate) struct StdStreamSink {
     stderr: Stderr,
     stdout: Stdout,
 }

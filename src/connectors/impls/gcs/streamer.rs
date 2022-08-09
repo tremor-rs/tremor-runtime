@@ -17,15 +17,8 @@ use crate::connectors::impls::gcs::api_client::{
     HttpTaskRequest,
 };
 use crate::connectors::impls::gcs::chunked_buffer::ChunkedBuffer;
-use crate::connectors::prelude::{
-    Attempt, ErrorKind, EventSerializer, Result, SinkAddr, SinkContext, SinkManagerBuilder,
-    SinkReply, Url,
-};
+use crate::connectors::prelude::*;
 use crate::connectors::sink::{AsyncSinkReply, ContraflowData, Sink};
-use crate::connectors::utils::url::HttpsDefaults;
-use crate::connectors::{
-    Alias, CodecReq, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType, Context,
-};
 use crate::system::KillSwitch;
 use crate::{connectors, QSIZE};
 use async_std::channel::{bounded, Receiver, Sender};
@@ -40,9 +33,9 @@ use tremor_value::Value;
 use value_trait::ValueAccess;
 
 #[derive(Deserialize, Debug, Clone)]
-pub struct Config {
+pub(crate) struct Config {
     #[serde(default = "default_endpoint")]
-    endpoint: Url<HttpsDefaults>,
+    url: Url<HttpsDefaults>,
     #[serde(default = "default_connect_timeout")]
     connect_timeout: u64,
     #[serde(default = "default_buffer_size")]
@@ -85,7 +78,7 @@ pub(crate) struct Builder {}
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
-        ConnectorType("gcs_appender".into())
+        ConnectorType("gcs_streamer".into())
     }
 
     async fn build_cfg(
@@ -175,7 +168,7 @@ async fn execute_http_call(
     request: HttpTaskRequest,
 ) -> Result<()> {
     let result = api_client
-        .handle_http_command(done_until.clone(), &config.endpoint, request.command)
+        .handle_http_command(done_until.clone(), &config.url, request.command)
         .await;
 
     match result {
@@ -437,6 +430,7 @@ fn get_bucket_name(
 
 #[cfg(test)]
 mod tests {
+    use super::Builder;
     use super::*;
     use crate::config::Codec;
     use crate::connectors::impls::gcs::chunked_buffer::BufferPart;
@@ -487,7 +481,7 @@ mod tests {
         let mut sink = GCSWriterSink {
             client_tx: Some(client_tx),
             config: Config {
-                endpoint: Default::default(),
+                url: Default::default(),
                 connect_timeout: 1000000000,
                 buffer_size: 10,
                 bucket: None,
@@ -508,7 +502,7 @@ mod tests {
         let context = SinkContext {
             uid: Default::default(),
             alias: alias.clone(),
-            connector_type: "gcs_appender".into(),
+            connector_type: "gcs_streamer".into(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
@@ -516,14 +510,14 @@ mod tests {
             Some(Codec::from("json")),
             CodecReq::Required,
             vec![],
-            &"gcs_appender".into(),
+            &"gcs_streamer".into(),
             &alias,
         )
         .unwrap();
 
         let value = literal!({});
         let meta = literal!({
-            "gcs_appender": {
+            "gcs_streamer": {
                 "name": "test.txt",
                 "bucket": "woah"
             }
@@ -566,7 +560,7 @@ mod tests {
         let mut sink = GCSWriterSink {
             client_tx: Some(client_tx),
             config: Config {
-                endpoint: Default::default(),
+                url: Default::default(),
                 connect_timeout: 1000000000,
                 buffer_size: 10,
                 bucket: None,
@@ -587,7 +581,7 @@ mod tests {
         let context = SinkContext {
             uid: Default::default(),
             alias: alias.clone(),
-            connector_type: "gcs_appender".into(),
+            connector_type: "gcs_streamer".into(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
@@ -595,14 +589,14 @@ mod tests {
             Some(Codec::from("binary")),
             CodecReq::Required,
             vec![],
-            &"gcs_appender".into(),
+            &"gcs_streamer".into(),
             &alias,
         )
         .unwrap();
 
         let value = Value::Bytes(Cow::from(vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]));
         let meta = literal!({
-            "gcs_appender": {
+            "gcs_streamer": {
                 "name": "test.txt",
                 "bucket": "woah"
             }
@@ -652,7 +646,7 @@ mod tests {
         let mut sink = GCSWriterSink {
             client_tx: Some(client_tx),
             config: Config {
-                endpoint: Default::default(),
+                url: Default::default(),
                 connect_timeout: 1000000000,
                 buffer_size: 10,
                 bucket: None,
@@ -673,7 +667,7 @@ mod tests {
         let context = SinkContext {
             uid: Default::default(),
             alias: alias.clone(),
-            connector_type: "gcs_appender".into(),
+            connector_type: "gcs_streamer".into(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
@@ -681,14 +675,14 @@ mod tests {
             Some(Codec::from("json")),
             CodecReq::Required,
             vec![],
-            &"gcs_appender".into(),
+            &"gcs_streamer".into(),
             &alias,
         )
         .unwrap();
 
         let value = literal!({});
         let meta = literal!({
-            "gcs_appender": {
+            "gcs_streamer": {
                 "name": "test.txt",
                 "bucket": "woah"
             }
@@ -712,7 +706,7 @@ mod tests {
             .unwrap();
         let value = literal!({});
         let meta = literal!({
-            "gcs_appender": {
+            "gcs_streamer": {
                 "name": "test_other.txt",
                 "bucket": "woah"
             }
@@ -773,7 +767,7 @@ mod tests {
         let mut sink = GCSWriterSink {
             client_tx: Some(client_tx),
             config: Config {
-                endpoint: Default::default(),
+                url: Default::default(),
                 connect_timeout: 1000000000,
                 buffer_size: 10,
                 bucket: None,
@@ -794,7 +788,7 @@ mod tests {
         let context = SinkContext {
             uid: Default::default(),
             alias: alias.clone(),
-            connector_type: "gcs_appender".into(),
+            connector_type: "gcs_streamer".into(),
             quiescence_beacon: Default::default(),
             notifier: ConnectionLostNotifier::new(connection_lost_tx),
         };
@@ -802,14 +796,14 @@ mod tests {
             Some(Codec::from("json")),
             CodecReq::Required,
             vec![],
-            &"gcs_appender".into(),
+            &"gcs_streamer".into(),
             &alias,
         )
         .unwrap();
 
         let value = literal!({});
         let meta = literal!({
-            "gcs_appender": {
+            "gcs_streamer": {
                 "name": "test.txt",
                 "bucket": "woah"
             }
@@ -878,7 +872,7 @@ mod tests {
 
         let value = literal!({});
         let meta = literal!({
-            "gcs_appender": {
+            "gcs_streamer": {
                 "name": "test.txt",
                 "bucket": "woah"
             }
@@ -903,7 +897,7 @@ mod tests {
             Arc::new(Default::default()),
             reply_tx,
             &Config {
-                endpoint: Default::default(),
+                url: Default::default(),
                 connect_timeout: 100000000,
                 buffer_size: 1000,
                 bucket: None,
@@ -943,7 +937,7 @@ mod tests {
             done_until,
             reply_tx,
             Config {
-                endpoint: Default::default(),
+                url: Default::default(),
                 connect_timeout: 10000000,
                 buffer_size: 1000,
                 bucket: None,
@@ -957,7 +951,7 @@ mod tests {
 
         let value = literal!({});
         let meta = literal!({
-            "gcs_appender": {
+            "gcs_streamer": {
                 "name": "test.txt",
                 "bucket": "woah"
             }
@@ -1010,7 +1004,7 @@ mod tests {
             done_until,
             reply_tx,
             Config {
-                endpoint: Default::default(),
+                url: Default::default(),
                 connect_timeout: 10000000,
                 buffer_size: 1000,
                 bucket: None,
@@ -1024,7 +1018,7 @@ mod tests {
 
         let value = literal!({});
         let meta = literal!({
-            "gcs_appender": {
+            "gcs_streamer": {
                 "name": "test.txt",
                 "bucket": "woah"
             }

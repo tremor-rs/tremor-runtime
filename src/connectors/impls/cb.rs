@@ -14,7 +14,7 @@
 
 // #![cfg_attr(coverage, no_coverage)] // This is for benchmarking and testing
 
-use std::time::Duration;
+use std::{path::PathBuf, time::Duration};
 
 use crate::system::{KillSwitch, ShutdownMode};
 use crate::{connectors::prelude::*, errors::err_connector_def};
@@ -25,9 +25,9 @@ use tremor_common::asy::file::open;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     /// path to file to load data from
-    path: Option<String>,
+    path: Option<PathBuf>,
     // timeout in nanoseconds
     #[serde(default = "default_timeout")]
     timeout: u64,
@@ -78,7 +78,7 @@ impl ConnectorBuilder for Builder {
 ///
 /// * In case the connected pipeline drops events no ack or fail is received with the current runtime.
 /// * In case the pipeline branches off, it copies the event and it reaches two offramps, we might receive more than 1 ack or fail for an event with the current runtime.
-pub struct Cb {
+pub(crate) struct Cb {
     config: Config,
     kill_switch: KillSwitch,
 }
