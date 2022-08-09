@@ -234,6 +234,8 @@ pub(crate) enum MgmtMsg {
         port: Cow<'static, str>,
         /// url of the input to connect
         endpoint: DeployEndpoint,
+        /// sends the result
+        tx: Sender<Result<()>>,
         /// the target that connects to the `in` port
         target: InputTarget,
         /// should we send insights to this input
@@ -575,15 +577,26 @@ pub(crate) async fn pipeline_task(
             AnyMsg::Mgmt(MgmtMsg::ConnectInput {
                 endpoint,
                 port,
+                tx,
                 target,
                 is_transactional,
             }) => {
                 info!("{ctx} Connecting '{endpoint}' to port '{port}'");
                 if !input_does_exist(&port, &pipeline) {
                     error!("{ctx} Error connecting input pipeline '{port}' as it does not exist",);
+                    if tx
+                        .send(Err("input port doesn't exist".into()))
+                        .await
+                        .is_err()
+                    {
+                        error!("{ctx} Error sending status report.");
+                    }
                     continue;
                 }
                 inputs.insert(endpoint, (is_transactional, target));
+                if tx.send(Ok(())).await.is_err() {
+                    error!("{ctx} Status report sent.");
+                }
             }
             AnyMsg::Mgmt(MgmtMsg::ConnectOutput {
                 port,
@@ -603,6 +616,7 @@ pub(crate) async fn pipeline_task(
                     // In general this does not avoid cycles via more complex constructs.
                     //
                     if id.pipeline_alias() == endpoint.alias() {
+                        let (tx, rx) = bounded(1);
                         if let Err(e) = pipe
                             .send_mgmt(MgmtMsg::ConnectInput {
                                 port: Cow::const_str("in"),
@@ -611,6 +625,7 @@ pub(crate) async fn pipeline_task(
                                     &port,
                                     endpoint.meta(),
                                 ),
+                                tx,
                                 target: InputTarget::Pipeline(Box::new(addr.clone())),
                                 is_transactional: true,
                             })
@@ -618,6 +633,7 @@ pub(crate) async fn pipeline_task(
                         {
                             error!("{ctx} Error connecting input pipeline {endpoint}: {e}",);
                         }
+                        rx.recv().await??;
                     }
                 }
 
@@ -739,6 +755,7 @@ mod tests {
         )?;
         println!("{:?}", addr); // coverage
         let yolo_mid = NodeMeta::new(Location::yolo(), Location::yolo());
+        let (tx, rx) = bounded(1);
         // interconnect 3 pipelines
         addr.send_mgmt(MgmtMsg::ConnectOutput {
             port: Cow::const_str("out"),
@@ -750,10 +767,12 @@ mod tests {
             .send_mgmt(MgmtMsg::ConnectInput {
                 port: Cow::const_str("in"),
                 endpoint: DeployEndpoint::new("snot", "out", &yolo_mid),
+                tx,
                 target: InputTarget::Pipeline(Box::new(addr.clone())),
                 is_transactional: true,
             })
             .await?;
+        rx.recv().await??;
         addr2
             .send_mgmt(MgmtMsg::ConnectOutput {
                 port: Cow::const_str("out"),
@@ -761,14 +780,17 @@ mod tests {
                 target: OutputTarget::Pipeline(Box::new(addr3.clone())),
             })
             .await?;
+        let (tx, rx) = bounded(1);
         addr3
             .send_mgmt(MgmtMsg::ConnectInput {
                 port: Cow::const_str("in"),
                 endpoint: DeployEndpoint::new("snot2", "out", &yolo_mid),
+                tx,
                 target: InputTarget::Pipeline(Box::new(addr2.clone())),
                 is_transactional: false,
             })
             .await?;
+        rx.recv().await??;
         // get a status report from every single one
         let (tx, rx) = unbounded();
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
@@ -861,14 +883,18 @@ mod tests {
         let source_addr = SourceAddr { addr: source_tx };
         let target = InputTarget::Source(source_addr);
         let mid = NodeMeta::new(Location::yolo(), Location::yolo());
+        let (tx, rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::ConnectInput {
             port: IN,
             endpoint: DeployEndpoint::new(&"source_01", &OUT, &mid),
+            tx,
             target,
             is_transactional: true,
         })
         .await?;
+        rx.recv().await??;
 
+        let (tx, rx) = unbounded();
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
         let report = rx.recv().await?;
         assert_eq!(1, report.inputs.len());

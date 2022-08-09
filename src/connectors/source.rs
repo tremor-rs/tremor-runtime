@@ -19,7 +19,8 @@ pub mod channel_source;
 
 pub(crate) use channel_source::{ChannelSource, ChannelSourceRuntime};
 
-use async_std::channel::unbounded;
+// use async_std::channel::unbounded;
+use async_std::channel::{bounded, unbounded};
 use async_std::task;
 use hashbrown::HashSet;
 use simd_json::Mutable;
@@ -623,7 +624,7 @@ where
     }
 
     /// Handle a control plane message
-    async fn handle_control_plane_msg(&mut self, msg: SourceMsg) -> Control {
+    async fn handle_control_plane_msg(&mut self, msg: SourceMsg) -> Result<Control> {
         use SourceState::{Initialized, Paused, Running, Stopped};
         let state = self.state;
         match msg {
@@ -635,7 +636,7 @@ where
                     .swallow_err(self.source.on_start(&self.ctx).await, "on_start failed");
                 let res = self.send_signal(Event::signal_start(self.ctx.uid)).await;
                 self.ctx.swallow_err(res, "Error sending start signal");
-                Control::Continue
+                Ok(Control::Continue)
             }
 
             SourceMsg::Connect(sender, attempt) => {
@@ -650,13 +651,13 @@ where
                 let res = sender.send(connect_result).await;
                 self.ctx
                     .swallow_err(res, "Error sending source connect result");
-                Control::Continue
+                Ok(Control::Continue)
             }
             SourceMsg::Resume if self.state == Paused => {
                 self.state = Running;
                 let res = self.source.on_resume(&self.ctx).await;
                 self.ctx.swallow_err(res, "on_resume failed");
-                Control::Continue
+                Ok(Control::Continue)
             }
 
             SourceMsg::Pause if self.state == Running => {
@@ -665,39 +666,39 @@ where
                 self.state = Paused;
                 let res = self.source.on_pause(&self.ctx).await;
                 self.ctx.swallow_err(res, "on_pause failed");
-                Control::Continue
+                Ok(Control::Continue)
             }
             SourceMsg::Stop(sender) => {
                 info!("{} Stopping...", self.ctx);
                 self.state = Stopped;
                 let res = sender.send(self.source.on_stop(&self.ctx).await).await;
                 self.ctx.swallow_err(res, "Error sending Stop reply");
-                Control::Terminate
+                Ok(Control::Terminate)
             }
-            SourceMsg::Drain(drained_sender) => self.handle_drain(drained_sender).await,
+            SourceMsg::Drain(drained_sender) => Ok(self.handle_drain(drained_sender).await),
             SourceMsg::ConnectionLost => {
                 self.connectivity = Connectivity::Disconnected;
                 let res = self.source.on_connection_lost(&self.ctx).await;
                 self.ctx.swallow_err(res, "on_connection_lost failed");
-                Control::Continue
+                Ok(Control::Continue)
             }
             SourceMsg::ConnectionEstablished => {
                 self.connectivity = Connectivity::Connected;
                 let res = self.source.on_connection_established(&self.ctx).await;
                 self.ctx
                     .swallow_err(res, "on_connection_established failed");
-                Control::Continue
+                Ok(Control::Continue)
             }
-            SourceMsg::Cb(cb, id) => self.handle_cb(cb, id).await,
+            SourceMsg::Cb(cb, id) => Ok(self.handle_cb(cb, id).await),
             #[cfg(test)]
             SourceMsg::Ping(sender) => {
                 self.ctx
                     .swallow_err(sender.send(()).await, "Error sending Pong");
-                Control::Continue
+                Ok(Control::Continue)
             }
             m @ (SourceMsg::Start | SourceMsg::Resume | SourceMsg::Pause) => {
                 info!("{} Ignoring {m:?} msg in {state} state", self.ctx);
-                Control::Continue
+                Ok(Control::Continue)
             }
         }
     }
@@ -835,30 +836,33 @@ where
         &mut self,
         port: Cow<'static, str>,
         mut pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
-    ) -> Control {
+    ) -> Result<Control> {
         let pipes = if port.eq_ignore_ascii_case(OUT.as_ref()) {
             &mut self.pipelines_out
         } else if port.eq_ignore_ascii_case(ERR.as_ref()) {
             &mut self.pipelines_err
         } else {
             error!("{} Tried to connect to invalid port: {}", &self.ctx, &port);
-            return Control::Continue;
+            return Ok(Control::Continue);
         };
         // We can not move this to the system flow since we need to know about transactionality
+        let (tx, rx) = bounded(1);
         for (pipeline_url, p) in &pipelines {
             self.ctx.swallow_err(
                 p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
                     endpoint: DeployEndpoint::new(&self.ctx.alias, &port, pipeline_url.meta()),
                     port: Cow::from(pipeline_url.port().to_string()),
+                    tx: tx.clone(),
                     target: InputTarget::Source(self.addr.clone()),
                     is_transactional: self.is_transactional,
                 })
                 .await,
                 &format!("Failed sending ConnectInput to pipeline {}", pipeline_url),
             );
+            rx.recv().await??;
         }
         pipes.append(&mut pipelines);
-        Control::Continue
+        Ok(Control::Continue)
     }
 
     /// send a signal to all connected pipelines
@@ -1225,7 +1229,7 @@ where
             while !self.should_pull_data() {
                 match f1.take().unwrap_or_else(|| rx.recv()).await {
                     Ok(msg) => {
-                        if self.handle_control_plane_msg(msg).await == Control::Terminate {
+                        if self.handle_control_plane_msg(msg).await? == Control::Terminate {
                             debug!("{} Terminating source task...", self.ctx);
                             return Ok(());
                         }
@@ -1254,7 +1258,7 @@ where
             };
 
             let ctrl = match r {
-                Either::Left(msg) => self.handle_control_plane_msg(msg).await,
+                Either::Left(msg) => self.handle_control_plane_msg(msg).await?,
                 Either::Right(data) => {
                     if let Err(e) = self.handle_source_reply(data, pull_id).await {
                         error!("{} Error handling source reply: {}", self.ctx, e);

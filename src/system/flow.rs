@@ -362,10 +362,11 @@ async fn link(
                 endpoint: to.clone(),
                 target: to_pipeline.clone().into(),
             };
-
+            let (tx, rx) = bounded(1);
             let msg_to = crate::pipeline::MgmtMsg::ConnectInput {
                 port: to.port().to_string().into(),
                 endpoint: from.clone(),
+                tx,
                 target: InputTarget::Pipeline(Box::new(from_pipeline.clone())),
                 is_transactional: true,
             };
@@ -379,6 +380,7 @@ async fn link(
                 .send_mgmt(msg_to)
                 .await
                 .map_err(|e| -> Error { format!("Could not send to pipeline: {}", e).into() })?;
+            rx.recv().await??;
         }
     }
     Ok(())
