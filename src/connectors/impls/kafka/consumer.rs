@@ -221,7 +221,7 @@ pub(crate) struct Config {
     ///
     ///   Example:
     ///
-    ///   ```
+    ///   ```json
     ///     "transactional": {
     ///         "commit_interval": nanos::from_seconds(5)    
     ///     }
@@ -229,7 +229,7 @@ pub(crate) struct Config {
     ///
     /// - `custom`: Configure the connector yourself as you like, by providing your own set of `rdkafka_options`. You should know what you are doing when using this.
     ///
-    ///   Example: ```
+    ///   Example: ```json
     ///   "custom": {
     ///     "rdkafka_options": {
     ///         "enable.auto.commit": false
