@@ -30,6 +30,7 @@ use error_chain::error_chain;
 use lalrpop_util::ParseError as LalrpopError;
 use simd_json::{ExtendedValueType, TryTypeError};
 
+use crate::errors::ErrorKind::InvalidBinaryBoolean;
 use std::num;
 use std::ops::{Range as RangeExclusive, RangeInclusive};
 
@@ -248,6 +249,7 @@ impl ErrorKind {
             | Generic(outer, inner, _)
             | InvalidAssign(outer, inner)
             | InvalidBinary(outer, inner, _, _, _)
+            | InvalidBinaryBoolean(outer, inner, _, _, _)
             | InvalidBitshift(outer, inner)
             | InvalidConst(outer, inner)
             | InvalidDrop(outer, inner)
@@ -814,6 +816,10 @@ error_chain! {
         InvalidBinary(expr: Span, inner: Span, op: ast::BinOpKind, left: ValueType, right: ValueType) {
             description("Invalid binary operation")
                 display("The binary operation `{}` is not defined for the type `{}` and `{}`", op, t2s(*left), t2s(*right))
+        }
+        InvalidBinaryBoolean(expr: Span, inner: Span, op: ast::BooleanBinOpKind, left: ValueType, right: Option<ValueType>) {
+            description("Invalid binary operation")
+                display("The binary operation `{}` is not defined for the type `{}` and `{}`", op, t2s(*left), if let Some(r) = right { t2s(*r) } else { "<not executed>" })
         }
         InvalidBitshift(expr: Span, inner: Span) {
             description("Invalid value for bitshift")
