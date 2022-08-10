@@ -372,7 +372,7 @@ where
     // - snot badger - Darach
     use BinOpKind::{Add, BitAnd, BitXor, Eq, Gt, Gte, Lt, Lte, NotEq};
     use StaticNode::Bool;
-    use Value::{Bytes, Static, String};
+    use Value::{Array, Bytes, Static, String};
     match (op, lhs, rhs) {
         (Eq, Static(StaticNode::Null), Static(StaticNode::Null)) => Ok(static_bool!(true)),
         (NotEq, Static(StaticNode::Null), Static(StaticNode::Null)) => Ok(static_bool!(false)),
@@ -435,6 +435,14 @@ where
         (Lt, String(l), String(r)) => Ok(static_bool!(l < r)),
         (Lte, String(l), String(r)) => Ok(static_bool!(l <= r)),
         (Add, String(l), String(r)) => Ok(Cow::Owned(format!("{}{}", *l, *r).into())),
+
+        // Array
+        (Add, Array(l), Array(r)) => {
+            let mut result = l.clone();
+            result.extend_from_slice(r);
+            Ok(Cow::Owned(Value::from(result)))
+        }
+
         // Errors
         (op, Bytes(_) | String(_), Bytes(_) | String(_))
         | (op, Static(Bool(_)), Static(Bool(_))) => {
