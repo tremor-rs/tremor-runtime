@@ -66,6 +66,8 @@ pub const FALSE: Value<'static> = Value::Static(StaticNode::Bool(false));
 /// constant `null` value
 pub const NULL: Value<'static> = Value::Static(StaticNode::Null);
 
+#[macro_export]
+/// Static boolean `Value` from Rust `bool`
 macro_rules! static_bool {
     ($e:expr) => {
         #[allow(clippy::if_not_else)]
