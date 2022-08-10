@@ -1,0 +1,55 @@
+use consts;
+
+define flow test
+args
+  interval = consts::default_interval
+flow
+  use other_consts;
+
+  define connector metronome from metronome
+  args
+    interval = other_consts::other_interval
+  with
+    config = {
+      "interval": args.interval
+    }
+  end;
+  define connector exit from exit;
+  
+
+  define pipeline identity
+  args
+    interval = other_consts::other_interval
+  pipeline
+    use inner_consts;
+
+    define script with_args
+    args
+      interval = inner_consts::inner_interval
+    script
+      args.interval
+    end;
+    create script with_args
+    with
+      interval = args.interval
+    end;
+
+    select event from in into with_args;
+    select event from with_args into out;
+  end;
+  create connector metronome
+  with
+    interval = args.interval
+  end;
+  create connector exit;
+
+  create pipeline identity
+  with
+    interval = args.interval
+  end;
+  
+  connect /connector/metronome to /pipeline/identity;
+  connect /pipeline/identity to /connector/exit;
+end;
+
+deploy flow test
