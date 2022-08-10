@@ -81,3 +81,67 @@ where
 }
 
 pub use crate::file::extension;
+
+#[cfg(test)]
+mod test {
+    use crate::errors::Error;
+
+    #[async_std::test]
+    async fn canonicalize() -> Result<(), Error> {
+        let path = std::env::current_dir().unwrap();
+        let path = path.join("Cargo.toml");
+        let path = super::canonicalize(&path).await?;
+        assert!(path.exists().await);
+        let path = path.join("really.does.not.exist");
+        let p = path.to_string_lossy().to_string();
+        let path = super::canonicalize(&path).await;
+        assert!(path.is_err());
+        let err = path.err().unwrap();
+        assert!(matches!(err, Error::FileCanonicalize(_, bad) if bad == p));
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn create() -> Result<(), Error> {
+        let path = std::env::current_dir().unwrap();
+        let path = path.join(".a.file.that.will.get.deleted");
+        super::create(&path).await?;
+        let path = path.join("this.does.not.work");
+        let p = path.to_string_lossy().to_string();
+        let r = super::create(&path).await;
+        assert!(r.is_err());
+        let err = r.err().unwrap();
+        assert!(matches!(err, Error::FileCreate(_, bad) if bad == p));
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn open() -> Result<(), Error> {
+        let path = std::env::current_dir().unwrap();
+        let path = path.join("Cargo.toml");
+        super::open(&path).await?;
+        let path = path.join("this.does.not.work");
+        let p = path.to_string_lossy().to_string();
+        let r = super::open(&path).await;
+        assert!(r.is_err());
+        let err = r.err().unwrap();
+        assert!(matches!(err, Error::FileOpen(_, bad) if bad == p));
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn open_with() -> Result<(), Error> {
+        let path = std::env::current_dir().unwrap();
+        let path = path.join("Cargo.toml");
+        let mut opt = super::OpenOptions::new();
+        opt.read(true);
+        super::open_with(&path, &mut opt).await?;
+        let path = path.join("this.does.not.work");
+        let p = path.to_string_lossy().to_string();
+        let r = super::open_with(&path, &mut opt).await;
+        assert!(r.is_err());
+        let err = r.err().unwrap();
+        assert!(matches!(err, Error::FileOpen(_, bad) if bad == p));
+        Ok(())
+    }
+}
