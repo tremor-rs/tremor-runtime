@@ -344,8 +344,9 @@ impl<'script> Upable<'script> for FlowDefinitionRaw<'script> {
         let docs = self
             .doc
             .map(|d| d.iter().map(|l| l.trim()).collect::<Vec<_>>().join("\n"));
-        let params = self.params.up(helper)?;
         helper.leave_scope()?;
+        // we need to evaluate args in the outer scope
+        let params = self.params.up(helper)?;
 
         let flow_defn = FlowDefinition {
             mid,
