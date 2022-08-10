@@ -819,7 +819,7 @@ error_chain! {
         }
         InvalidBinaryBoolean(expr: Span, inner: Span, op: ast::BooleanBinOpKind, left: ValueType, right: Option<ValueType>) {
             description("Invalid binary operation")
-                display("The binary operation `{}` is not defined for the type `{}` and `{}`", op, t2s(*left), r.map_or_else("<not executed>", |r| t2s(*r)))
+                display("The binary operation `{}` is not defined for the type `{}` and `{}`", op, t2s(*left), right.map_or_else(|| "<not executed>", t2s))
         }
         InvalidBitshift(expr: Span, inner: Span) {
             description("Invalid value for bitshift")
