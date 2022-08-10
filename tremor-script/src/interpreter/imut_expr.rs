@@ -493,26 +493,20 @@ impl<'script> ImutExpr<'script> {
         'script: 'event,
     {
         let lhs = stry!(expr.lhs.run(opts, env, event, state, meta, local));
-        let lval = lhs.try_as_bool().map_err(|_| {
-            ErrorKind::InvalidBinaryBoolean(
-                expr.extent(),
-                expr.extent(),
-                expr.kind,
-                lhs.value_type(),
-                None,
-            )
+        let lval = lhs.try_as_bool().map_err(|e| {
+            ErrorKind::InvalidBinaryBoolean(expr.extent(), expr.extent(), expr.kind, e.got, None)
         })?;
 
         match expr.kind {
             BooleanBinOpKind::Or if lval => Ok(static_bool!(true)),
             BooleanBinOpKind::Or => {
                 let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
-                let rval = rhs.try_as_bool().map_err(|_| {
+                let rval = rhs.try_as_bool().map_err(|e| {
                     ErrorKind::InvalidBinaryBoolean(
                         expr.extent(),
                         expr.extent(),
                         expr.kind,
-                        lhs.value_type(),
+                        e.got,
                         Some(rhs.value_type()),
                     )
                 })?;
@@ -522,12 +516,12 @@ impl<'script> ImutExpr<'script> {
             BooleanBinOpKind::And if !lval => Ok(static_bool!(false)),
             BooleanBinOpKind::And => {
                 let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
-                let rval = rhs.try_as_bool().map_err(|_| {
+                let rval = rhs.try_as_bool().map_err(|e| {
                     ErrorKind::InvalidBinaryBoolean(
                         expr.extent(),
                         expr.extent(),
                         expr.kind,
-                        lhs.value_type(),
+                        e.got,
                         Some(rhs.value_type()),
                     )
                 })?;
@@ -536,12 +530,12 @@ impl<'script> ImutExpr<'script> {
             }
             BooleanBinOpKind::Xor => {
                 let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
-                let rval = rhs.try_as_bool().map_err(|_| {
+                let rval = rhs.try_as_bool().map_err(|e| {
                     ErrorKind::InvalidBinaryBoolean(
                         expr.extent(),
                         expr.extent(),
                         expr.kind,
-                        lhs.value_type(),
+                        e.got,
                         Some(rhs.value_type()),
                     )
                 })?;
