@@ -494,7 +494,13 @@ impl<'script> ImutExpr<'script> {
     {
         let lhs = stry!(expr.lhs.run(opts, env, event, state, meta, local));
         let lval = lhs.try_as_bool().map_err(|e| {
-            ErrorKind::InvalidBinaryBoolean(expr.extent(), expr.extent(), expr.kind, e.got, None)
+            ErrorKind::InvalidBinaryBoolean(
+                expr.extent(),
+                expr.lhs.extent(),
+                expr.kind,
+                e.got,
+                None,
+            )
         })?;
 
         match expr.kind {
@@ -504,10 +510,10 @@ impl<'script> ImutExpr<'script> {
                 let rval = rhs.try_as_bool().map_err(|e| {
                     ErrorKind::InvalidBinaryBoolean(
                         expr.extent(),
-                        expr.extent(),
+                        expr.rhs.extent(),
                         expr.kind,
-                        e.got,
-                        Some(rhs.value_type()),
+                        ValueType::Bool,
+                        Some(e.got),
                     )
                 })?;
 
@@ -519,10 +525,10 @@ impl<'script> ImutExpr<'script> {
                 let rval = rhs.try_as_bool().map_err(|e| {
                     ErrorKind::InvalidBinaryBoolean(
                         expr.extent(),
-                        expr.extent(),
+                        expr.rhs.extent(),
                         expr.kind,
-                        e.got,
-                        Some(rhs.value_type()),
+                        ValueType::Bool,
+                        Some(e.got),
                     )
                 })?;
 
@@ -533,10 +539,10 @@ impl<'script> ImutExpr<'script> {
                 let rval = rhs.try_as_bool().map_err(|e| {
                     ErrorKind::InvalidBinaryBoolean(
                         expr.extent(),
-                        expr.extent(),
+                        expr.rhs.extent(),
                         expr.kind,
-                        e.got,
-                        Some(rhs.value_type()),
+                        ValueType::Bool,
+                        Some(e.got),
                     )
                 })?;
 
