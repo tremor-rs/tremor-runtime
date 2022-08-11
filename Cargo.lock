@@ -4581,7 +4581,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92761393ee4dc3ff8f4af487bd58f4307c9329bbedea02cac0089ad9c411e153"
 dependencies = [
- "dashmap 5.3.4",
+ "dashmap 5.4.0",
  "futures",
  "lazy_static",
  "log",

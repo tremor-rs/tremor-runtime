@@ -219,7 +219,7 @@ macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[async_std::test]
-            #[serial(query)]
+            #[serial(query, timeout_ms = 120000)]
             async fn $file() -> Result<()> {
 				// println!("[PATH BEFORE] ======== \"{}\" ========", get_cwd());
 				main_config(stringify!($file)).await
