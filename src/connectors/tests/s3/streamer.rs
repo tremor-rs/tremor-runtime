@@ -22,22 +22,21 @@ use super::{
 use crate::connectors::impls::s3;
 use crate::connectors::utils::EnvHelper;
 use crate::errors::Result;
+use async_std::prelude::FutureExt;
 use aws_sdk_s3::Client;
 use bytes::Buf;
 use rand::{distributions::Alphanumeric, Rng};
 use serial_test::serial;
+use std::time::Duration;
 use testcontainers::clients;
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value};
 use value_trait::{Builder, Mutable, ValueAccess};
-use std::time::Duration;
-use async_std::prelude::FutureExt;
 
 #[async_std::test]
 #[serial(s3, timeout_ms = 600000)]
 async fn no_connection() -> Result<()> {
-
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-connection");
     let mut env = EnvHelper::new();
@@ -65,7 +64,6 @@ async fn no_connection() -> Result<()> {
 #[async_std::test]
 #[serial(s3, timeout_ms = 600000)]
 async fn no_credentials() -> Result<()> {
-
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-credentials");
 
@@ -102,7 +100,6 @@ async fn no_credentials() -> Result<()> {
 #[async_std::test]
 #[serial(s3, timeout_ms = 600000)]
 async fn no_region() -> Result<()> {
-
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-region");
 
@@ -175,7 +172,6 @@ async fn no_bucket() -> Result<()> {
 #[async_std::test]
 #[serial(s3, timeout_ms = 600000)]
 async fn connector_s3() -> Result<()> {
-
     let _ = env_logger::try_init();
 
     let bucket_name = random_bucket_name("tremor");
@@ -218,14 +214,14 @@ async fn connector_s3() -> Result<()> {
     let (unbatched_event, unbatched_value) = get_unbatched_event();
     send_to_sink(&harness, &unbatched_event).await?;
     // upload not yet finished, hence no ack, also not transactional
-    let res = in_pipe.get_contraflow_events()?; 
+    let res = in_pipe.get_contraflow_events()?;
     assert!(res.is_empty(), "Expected no contraflow, got: {:?}", &res);
 
     // batched event with 3 new keys, but not transactional
     let (batched_event, batched_value_0, batched_value_1, batched_value_2) = get_batched_event();
     send_to_sink(&harness, &batched_event).await?;
 
-    let res = in_pipe.get_contraflow_events()?; 
+    let res = in_pipe.get_contraflow_events()?;
     assert!(res.is_empty(), "Expected no contraflow, got: {:?}", &res);
 
     // first transactional event
@@ -233,13 +229,16 @@ async fn connector_s3() -> Result<()> {
     send_to_sink(&harness, &large_unbatched_event).await?;
 
     // upload not yet finished, no ack yet
-    let res = in_pipe.get_contraflow_events()?; 
+    let res = in_pipe.get_contraflow_events()?;
     assert!(res.is_empty(), "Expected no contraflow, got: {:?}", &res);
 
     let (large_batched_event, large_batched_value) = large_batched_event();
     send_to_sink(&harness, &large_batched_event).await?;
 
-    let cf_event = in_pipe.get_contraflow().timeout(Duration::from_secs(5)).await??;
+    let cf_event = in_pipe
+        .get_contraflow()
+        .timeout(Duration::from_secs(5))
+        .await??;
     assert_eq!(CbAction::Ack, cf_event.cb);
     assert!(cf_event.id.is_tracking(&large_unbatched_event.id));
     assert!(!cf_event.id.is_tracking(&large_batched_event.id)); // not yet
@@ -275,10 +274,7 @@ async fn connector_s3() -> Result<()> {
     Ok(())
 }
 
-async fn send_to_sink(
-    harness: &ConnectorHarness,
-    event: &Event,
-) -> Result<()> {
+async fn send_to_sink(harness: &ConnectorHarness, event: &Event) -> Result<()> {
     harness.send_to_sink(event.clone(), IN).await?;
     Ok(())
 }
@@ -391,7 +387,10 @@ fn get_batched_event() -> (
 
     let batched_meta = literal!({});
     let batched_id = EventId::new(0, 0, 2, 2);
-    ( Event { id: batched_id, is_batch: true,
+    (
+        Event {
+            id: batched_id,
+            is_batch: true,
             transactional: false,
             data: (batched_data.clone(), batched_meta).into(),
             ..Event::default()

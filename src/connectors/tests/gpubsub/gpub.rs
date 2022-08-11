@@ -75,7 +75,6 @@ async fn no_hostname() -> Result<()> {
 #[async_std::test]
 #[serial(gpubsub, timeout_ms = 600000)]
 async fn simple_publish() -> Result<()> {
-
     let _ = env_logger::try_init();
 
     let runner = Cli::docker();
@@ -183,7 +182,6 @@ async fn simple_publish() -> Result<()> {
 #[async_std::test]
 #[serial(gpubsub, timeout_ms = 600000)]
 async fn simple_publish_with_timeout() -> Result<()> {
-
     let _ = env_logger::try_init();
 
     let runner = Cli::docker();
