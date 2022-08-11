@@ -216,7 +216,7 @@ impl Sink for GpubSink {
             .await
         {
             if let Err(error) = inner_result {
-                error!("Failed to publish a message: {}", error);
+                error!("{ctx} Failed to publish a message: {}", error);
 
                 if matches!(
                     error.code(),
@@ -235,12 +235,12 @@ impl Sink for GpubSink {
                     );
                 }
 
-                Ok(SinkReply::FAIL)
+                Ok(SinkReply::fail_or_none(event.transactional))
             } else {
-                Ok(SinkReply::ACK)
+                Ok(SinkReply::ack_or_none(event.transactional))
             }
         } else {
-            Ok(SinkReply::FAIL)
+            Ok(SinkReply::fail_or_none(event.transactional))
         }
     }
 

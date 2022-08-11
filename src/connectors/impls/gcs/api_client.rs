@@ -354,7 +354,6 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
 pub(crate) struct HttpTaskRequest {
     pub command: HttpTaskCommand,
     pub contraflow_data: Option<ContraflowData>,
-    pub start: u64,
 }
 
 #[derive(Debug, PartialEq)]

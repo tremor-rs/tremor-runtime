@@ -44,9 +44,8 @@ use tremor_value::{literal, Value};
 use value_trait::Builder;
 
 #[async_std::test]
-#[serial(kafka)]
+#[serial(kafka, timeout_ms = 600000)]
 async fn transactional_retry() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
 
     let _ = env_logger::try_init();
 
@@ -276,10 +275,8 @@ async fn transactional_retry() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(kafka)]
+#[serial(kafka, timeout_ms = 600000)]
 async fn custom_no_retry() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
@@ -491,9 +488,8 @@ async fn custom_no_retry() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(kafka)]
+#[serial(kafka, timeout_ms = 600000)]
 async fn performance() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
 
     let _ = env_logger::try_init();
 
@@ -707,6 +703,7 @@ async fn performance() -> Result<()> {
 }
 
 #[async_std::test]
+#[serial(kafka, timeout_ms = 600000)]
 async fn connector_kafka_consumer_unreachable() -> Result<()> {
     let kafka_port = free_port::find_free_tcp_port().await?;
     let _ = env_logger::try_init();
@@ -789,10 +786,8 @@ async fn invalid_rdkafka_options() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(kafka)]
+#[serial(kafka, timeout_ms = 600000)]
 async fn connector_kafka_consumer_pause_resume() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
@@ -887,9 +882,8 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(kafka)]
+#[serial(kafka, timeout_ms = 600000)]
 async fn transactional_store_offset_handling() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
 
     let _ = env_logger::try_init();
 
@@ -1097,10 +1091,8 @@ async fn transactional_store_offset_handling() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(kafka)]
+#[serial(kafka, timeout_ms = 600000)]
 async fn transactional_commit_offset_handling() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();

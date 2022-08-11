@@ -32,10 +32,8 @@ use tremor_pipeline::EventId;
 use tremor_value::literal;
 
 #[async_std::test]
-#[serial(kafka)]
+#[serial(kafka, timeout_ms = 600000)]
 async fn connector_kafka_producer() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
     let _ = env_logger::try_init();
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;

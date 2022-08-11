@@ -156,7 +156,7 @@ impl Sink for DnsSink {
             let (port, payload) = match self.query(name, record_type, m.get("correlation")).await {
                 Ok(payload) => (OUT, payload),
                 Err(err) => {
-                    error!("{} DNS Error: {}", &ctx, err);
+                    error!("{ctx} DNS Error: {err}");
                     // TODO: check for errors that require a reconnect
                     let data = literal!({
                         "request": m.get("dns").map(Value::clone_static).unwrap_or_default(),
