@@ -10,6 +10,7 @@ name = "tremor-runtime"
 readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
 version = "0.12.4"
+rust-version = "1.62"
 
 [workspace]
 
