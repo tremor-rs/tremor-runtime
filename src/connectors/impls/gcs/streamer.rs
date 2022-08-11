@@ -511,6 +511,7 @@ mod tests {
     use crate::config::Codec;
     use crate::connectors::impls::gcs::chunked_buffer::BufferPart;
     use crate::connectors::reconnect::ConnectionLostNotifier;
+    use async_std::prelude::FutureExt;
     use beef::Cow;
     use std::sync::atomic::AtomicBool;
     use tremor_script::{EventPayload, ValueAndMeta};
