@@ -150,7 +150,7 @@ impl<'stack> LocalStack<'stack> {
 }
 
 /// The type of an aggregation
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AggrType {
     /// This is a normal execution
     Tick,
@@ -939,7 +939,7 @@ fn patch_value<'run, 'event>(
                 } else {
                     return error_patch_merge_type_conflict(
                         patch_expr,
-                        &*mid,
+                        mid,
                         "<target>".into(),
                         &mvalue,
                     );

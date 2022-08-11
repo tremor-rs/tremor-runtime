@@ -49,7 +49,7 @@ use super::{
     Const, NodeId, NodeMeta,
 };
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct UseRaw {
     pub alias: Option<String>,
     pub module: NodeId,
@@ -156,7 +156,7 @@ impl<'script> ScriptRaw<'script> {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Clone, Copy)]
+#[derive(Debug, PartialEq, Serialize, Clone, Copy, Eq)]
 pub enum BytesDataType {
     SignedInteger,
     UnsignedInteger,
@@ -169,7 +169,7 @@ impl Default for BytesDataType {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Clone, Copy)]
+#[derive(Debug, PartialEq, Serialize, Clone, Copy, Eq)]
 pub enum Endian {
     Little,
     Big,
@@ -266,7 +266,7 @@ impl<'script> Upable<'script> for BytesRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Debug, PartialEq, Serialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Clone, Eq)]
 pub struct IdentRaw<'script> {
     pub(crate) mid: Box<NodeMeta>,
     pub id: beef::Cow<'script, str>,
@@ -365,7 +365,7 @@ impl<'script> Upable<'script> for ListRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct LiteralRaw<'script> {
     pub(crate) value: Value<'script>,
     pub(crate) mid: Box<NodeMeta>,
@@ -2310,7 +2310,7 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct TestExprRaw {
     pub(crate) id: String,
     pub(crate) test: String,

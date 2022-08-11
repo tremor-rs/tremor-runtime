@@ -971,7 +971,7 @@ impl Drainage {
 }
 
 /// describes connectivity state of the connector
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Connectivity {
     /// connector is connected

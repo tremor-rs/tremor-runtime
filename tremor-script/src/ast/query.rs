@@ -150,7 +150,7 @@ impl SelectStmt<'_> {
 }
 
 /// Operator kind identifier
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct OperatorKind {
     pub(crate) mid: Box<NodeMeta>,
     /// Module of the operator
@@ -320,7 +320,7 @@ impl<'script> BaseExpr for PipelineCreate<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub enum WindowKind {
     /// we're forced to make this pub because of lalrpop
     Sliding,
@@ -404,7 +404,7 @@ pub enum GroupBy<'script> {
 }
 
 /// A stream statement
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct StreamStmt {
     pub(crate) mid: Box<NodeMeta>,
     /// ID if the stream

@@ -93,7 +93,7 @@ pub struct ModuleRaw<'script> {
 impl_expr!(ModuleRaw);
 
 /// module id
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Id(Vec<u8>);
 
 type NamedEnteties<T> = HashMap<String, T>;

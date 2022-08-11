@@ -42,7 +42,7 @@ impl FromStr for Algorithm {
             "snappy" => Ok(Algorithm::Snappy),
             "lz4" => Ok(Algorithm::Lz4),
             "zstd" => Ok(Algorithm::Zstd),
-            other => return Err(format!("Unknown compression algorithm: {other}").into()),
+            other => Err(format!("Unknown compression algorithm: {other}").into()),
         }
     }
 }
