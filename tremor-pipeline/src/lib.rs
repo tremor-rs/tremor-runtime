@@ -224,6 +224,11 @@ impl OpMeta {
     pub fn merge(&mut self, mut other: Self) {
         self.0.append(&mut other.0);
     }
+
+    /// Returns `true` if this instance contains no values
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
 }
 
 pub(crate) fn common_cow(s: &str) -> beef::Cow<'static, str> {

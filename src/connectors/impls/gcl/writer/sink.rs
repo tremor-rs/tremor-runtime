@@ -115,7 +115,7 @@ impl Sink for GclSink {
             .await?;
 
         if let Err(error) = log_entries_response {
-            error!("Failed to write a log entries: {}", error);
+            error!("{ctx} Failed to write log entries: {error}");
 
             if matches!(
                 error.code(),

@@ -224,7 +224,7 @@ impl Sink for KafkaProducerSink {
                         delivery_futures.push(delivery_future);
                     }
                     Err((e, _)) => {
-                        error!("{ctx} Failed to enqueue message: {e}");
+                        error!("{ctx} Failed to produce message: {e}");
                         if is_fatal_error(&e) {
                             error!("{ctx} Fatal Kafka Error: {e}. Attempting a reconnect.");
                             ctx.notifier.connection_lost().await?;

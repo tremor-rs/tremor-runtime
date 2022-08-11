@@ -13,7 +13,10 @@
 // limitations under the License.
 use crate::Event;
 use crate::{connectors::prelude::*, errors::err_connector_def};
+use async_std::channel::Sender;
 use std::mem;
+use tremor_common::time::nanotime;
+use tremor_pipeline::{EventId, OpMeta};
 use value_trait::ValueAccess;
 
 use super::auth;
@@ -95,17 +98,7 @@ impl Connector for S3Connector {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let s3_sink = S3Sink {
-            config: self.config.clone(),
-            client: None,
-            buffer: Vec::with_capacity(self.config.min_part_size),
-            current_key: String::from(""),
-            parts: Vec::new(),
-            upload_id: "".to_owned(),
-            part_number: 0,
-            min_part_size: self.config.min_part_size,
-        };
-
+        let s3_sink = S3Sink::new(self.config.clone(), builder.reply_tx());
         let addr = builder.spawn(s3_sink, sink_context)?;
         Ok(Some(addr))
     }
@@ -122,12 +115,40 @@ struct S3Sink {
     /// an empty string is not a valid s3 key, so we encode an unset key like this.
     /// When this is empty, there is no upload running at the moment.
     current_key: String,
+    /// tracking the ids for all accumulated events
+    current_event_id: EventId,
+    /// tracking the traversed operators for each accumulated event for correct sink-reply handling
+    current_op_meta: OpMeta,
+    /// tracking the transactional status of the accumulated events
+    /// if any one of them is transactional, we send an ack for all
+    current_transactional: bool,
 
     // bookkeeping for multipart uploads.
     upload_id: String,
     part_number: i32,
     min_part_size: usize,
     parts: Vec<CompletedPart>,
+    reply_tx: Sender<AsyncSinkReply>,
+}
+
+impl S3Sink {
+    fn new(config: S3Config, reply_tx: Sender<AsyncSinkReply>) -> Self {
+        let min_part_size = config.min_part_size;
+        Self {
+            config,
+            client: None,
+            buffer: Vec::with_capacity(min_part_size),
+            current_key: String::from(""),
+            current_event_id: EventId::default(),
+            current_op_meta: OpMeta::default(),
+            current_transactional: false,
+            upload_id: "".to_owned(),
+            part_number: 0,
+            min_part_size,
+            parts: Vec::new(),
+            reply_tx,
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -160,51 +181,47 @@ impl Sink for S3Sink {
         _start: u64,
     ) -> Result<SinkReply> {
         let ingest_id = event.ingest_ns;
-
-        for (event, meta) in event.value_meta_iter() {
-            // Handle no key in meta.
-
-            let s3_meta = S3Meta::new(meta);
+        let mut event_tracked = false;
+        for (value, meta) in event.value_meta_iter() {
+            let s3_meta = S3Meta::new(ctx.extract_meta(meta));
 
             let object_key = if let Some(key) = s3_meta.get_object_key().map(ToString::to_string) {
                 key
             } else {
-                self.current_key.clear();
-                error!("{ctx}: missing '$s3_streamer.key' meta data in event");
+                // Handle no key in meta.
+                error!("{ctx}: missing '${CONNECTOR_TYPE}.key' meta data in event");
                 return Ok(SinkReply::FAIL);
             };
 
             if object_key != self.current_key {
                 // we switched keys:
                 // 1. finish the current upload, if any
-                // 2. initiate a new upload
-                self.prepare_new_multipart(object_key, ctx).await?;
+                // 2. initiate a new upload and start trackign the new event
+                self.prepare_new_multipart(object_key, &event, ctx).await?;
+            } else if !event_tracked {
+                // track event
+                self.current_event_id.track(&event.id);
+                if !event.op_meta.is_empty() {
+                    self.current_op_meta.merge(event.op_meta.clone());
+                }
+                self.current_transactional |= event.transactional;
+                event_tracked = true;
             }
 
             // Handle the aggregation.
-            for data in serializer.serialize(event, ingest_id)? {
+            for data in serializer.serialize(value, ingest_id)? {
                 self.buffer.extend(data);
                 if self.buffer.len() >= self.min_part_size {
                     self.upload_part(ctx).await?;
                 }
             }
         }
-        Ok(SinkReply::NONE)
-    }
-
-    // Required later
-    async fn on_signal(
-        &mut self,
-        _signal: Event,
-        _ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
-        Ok(SinkReply::default())
+        Ok(SinkReply::NONE) //acks for completed uploads are sent when the upload is completed
     }
 
     async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
         // Commit the final upload.
-        self.complete_multipart(ctx).await?;
+        self.complete_multipart(nanotime(), ctx).await?;
         Ok(())
     }
 
@@ -213,9 +230,7 @@ impl Sink for S3Sink {
     }
 
     fn auto_ack(&self) -> bool {
-        // TODO: record all the events we currently buffer for a multipart
-        // and only ever ack them all once the multipart is uploaded
-        true
+        false
     }
 }
 
@@ -226,14 +241,24 @@ impl S3Sink {
             .ok_or_else(|| ErrorKind::S3Error("no s3 client available".to_string()).into())
     }
 
-    async fn prepare_new_multipart(&mut self, key: String, ctx: &SinkContext) -> Result<()> {
+    async fn prepare_new_multipart(
+        &mut self,
+        key: String,
+        event: &Event,
+        ctx: &SinkContext,
+    ) -> Result<()> {
         // Finish the previous multipart upload if any.
         if !self.current_key.is_empty() {
-            self.complete_multipart(ctx).await?;
+            self.complete_multipart(event.ingest_ns, ctx).await?;
         }
 
         if !key.is_empty() {
             self.initiate_multipart(key).await?;
+
+            // start tracking the new event
+            self.current_event_id = event.id.clone();
+            self.current_op_meta = event.op_meta.clone();
+            self.current_transactional = event.transactional;
         }
         // NOTE: The buffers are cleared when the stuff is committed.
         Ok(())
@@ -296,7 +321,7 @@ impl S3Sink {
         Ok(())
     }
 
-    async fn complete_multipart(&mut self, ctx: &SinkContext) -> Result<()> {
+    async fn complete_multipart(&mut self, ingest_ns: u64, ctx: &SinkContext) -> Result<()> {
         // Upload the last part if any.
         if !self.buffer.is_empty() {
             self.upload_part(ctx).await?;
@@ -320,6 +345,22 @@ impl S3Sink {
             "{}: completed multipart upload for key: {}",
             &ctx, self.current_key
         );
+        // send an ack for all the accumulated events in the finished upload
+        if self.current_transactional {
+            let data = ContraflowData::new(
+                self.current_event_id.clone(),
+                ingest_ns,
+                self.current_op_meta.clone(),
+            );
+            // the duration of handling in the sink is a little bit meaningless here
+            // as a) the actual duration from the first event to the actual finishing of the upload
+            //       is horribly long, and shouldn ot be considered the actual event handling time
+            //    b) It will vary a lot e.g. when an actual upload call is made
+            let duration = 0;
+            self.reply_tx
+                .send(AsyncSinkReply::Ack(data, duration))
+                .await?;
+        }
         Ok(())
     }
 }
@@ -330,13 +371,13 @@ struct S3Meta<'a, 'value> {
 }
 
 impl<'a, 'value> S3Meta<'a, 'value> {
-    fn new(meta: &'a Value<'value>) -> Self {
-        Self {
-            meta: meta.get("s3_streamer"),
-        }
+    const KEY: &'static str = "key";
+
+    fn new(meta: Option<&'a Value<'value>>) -> Self {
+        Self { meta }
     }
 
     fn get_object_key(&self) -> Option<&str> {
-        self.meta.get_str("key")
+        self.meta.get_str(Self::KEY)
     }
 }

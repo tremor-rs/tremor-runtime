@@ -31,9 +31,8 @@ use tremor_pipeline::{Event, EventId};
 use tremor_value::{literal, Value};
 
 #[async_std::test]
-#[serial(gpubsub)]
+#[serial(gpubsub, timeout_ms = 600000)]
 async fn no_connection() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
     let _ = env_logger::try_init();
     let connector_yaml = literal!({
         "codec": "binary",
@@ -52,9 +51,8 @@ async fn no_connection() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(gpubsub)]
+#[serial(gpubsub, timeout_ms = 600000)]
 async fn no_hostname() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
     let _ = env_logger::try_init();
     let connector_yaml = literal!({
         "codec": "binary",
@@ -75,9 +73,8 @@ async fn no_hostname() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(gpubsub)]
+#[serial(gpubsub, timeout_ms = 600000)]
 async fn simple_publish() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
 
     let _ = env_logger::try_init();
 
@@ -184,9 +181,8 @@ async fn simple_publish() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(gpubsub)]
+#[serial(gpubsub, timeout_ms = 600000)]
 async fn simple_publish_with_timeout() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
 
     let _ = env_logger::try_init();
 

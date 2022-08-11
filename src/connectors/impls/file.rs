@@ -293,14 +293,14 @@ impl Sink for FileSink {
             let data = serializer.serialize(value, ingest_ns)?;
             for chunk in data {
                 if let Err(e) = file.write_all(&chunk).await {
-                    error!("{} Error writing to file: {}", &ctx, &e);
+                    error!("{ctx} Error writing to file: {e}");
                     self.file = None;
                     ctx.notifier().connection_lost().await?;
                     return Err(e.into());
                 }
             }
             if let Err(e) = file.flush().await {
-                error!("{} Error flushing file: {}", &ctx, &e);
+                error!("{ctx} Error flushing file: {e}");
                 self.file = None;
                 ctx.notifier().connection_lost().await?;
                 return Err(e.into());

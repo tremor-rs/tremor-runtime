@@ -168,12 +168,14 @@ impl Sink for DiscordSink {
         _start: u64,
     ) -> Result<SinkReply> {
         for v in event.value_iter() {
-            if let Err(_e) = self.tx.send(v.clone_static()).await {
+            if let Err(_) = self.tx.send(v.clone_static()).await {
                 error!(
                     "{} Discord Client unreachable. Initiating Reconnect...",
                     &ctx
                 );
                 ctx.notifier().connection_lost().await?;
+                // return here to avoid notifying the notifier multiple times
+                return Err("Discord unreachable.".into());
             }
         }
         Ok(SinkReply::NONE)

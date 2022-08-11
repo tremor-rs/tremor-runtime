@@ -22,13 +22,13 @@ use crate::connectors::sink::{AsyncSinkReply, ContraflowData, Sink};
 use crate::system::KillSwitch;
 use crate::{connectors, QSIZE};
 use async_std::channel::{bounded, Receiver, Sender};
+use async_std::prelude::FutureExt;
 use http_client::h1::H1Client;
 use http_client::HttpClient;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tremor_common::time::nanotime;
-use tremor_pipeline::{ConfigImpl, Event};
+use tremor_pipeline::{ConfigImpl, Event, EventId, OpMeta};
 use tremor_value::Value;
 use value_trait::ValueAccess;
 
@@ -109,21 +109,9 @@ impl Connector for GCSWriterConnector {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let default_bucket = self.config.bucket.as_ref().cloned().map(Value::from);
-
         let reply_tx = builder.reply_tx();
 
-        let sink = GCSWriterSink {
-            client_tx: None,
-            config: self.config.clone(),
-            buffers: ChunkedBuffer::new(self.config.buffer_size),
-            current_name: None,
-            current_bucket: None,
-            default_bucket,
-            done_until: Arc::new(AtomicUsize::new(0)),
-            reply_tx,
-        };
-
+        let sink = GCSWriterSink::new(self.config.clone(), reply_tx);
         builder.spawn(sink, sink_context).map(Some)
     }
 
@@ -139,22 +127,35 @@ fn create_client(connect_timeout: Duration) -> Result<H1Client> {
     Ok(client)
 }
 
+/// msg handled by the `http_task`
+enum HttpTaskMsg {
+    /// execute the request
+    Request(HttpTaskRequest),
+    /// stop the task
+    Shutdown,
+}
+
 async fn http_task(
-    command_rx: Receiver<HttpTaskRequest>,
+    command_rx: Receiver<HttpTaskMsg>,
     done_until: Arc<AtomicUsize>,
     reply_tx: Sender<AsyncSinkReply>,
     config: Config,
     mut api_client: impl ApiClient,
 ) -> Result<()> {
-    while let Ok(request) = command_rx.recv().await {
-        execute_http_call(
-            done_until.clone(),
-            reply_tx.clone(),
-            &config,
-            &mut api_client,
-            request,
-        )
-        .await?;
+    while let Ok(msg) = command_rx.recv().await {
+        match msg {
+            HttpTaskMsg::Request(request) => {
+                execute_http_call(
+                    done_until.clone(),
+                    reply_tx.clone(),
+                    &config,
+                    &mut api_client,
+                    request,
+                )
+                .await?
+            }
+            HttpTaskMsg::Shutdown => break,
+        };
     }
 
     Ok(())
@@ -167,19 +168,27 @@ async fn execute_http_call(
     api_client: &mut impl ApiClient,
     request: HttpTaskRequest,
 ) -> Result<()> {
+    let send_ack = matches!(request.command, HttpTaskCommand::FinishUpload { .. });
     let result = api_client
         .handle_http_command(done_until.clone(), &config.url, request.command)
         .await;
 
     match result {
         Ok(_) => {
-            if let Some(contraflow_data) = request.contraflow_data {
-                reply_tx
-                    .send(AsyncSinkReply::Ack(
-                        contraflow_data,
-                        nanotime() - request.start,
-                    ))
-                    .await?;
+            if send_ack {
+                // we only ack the event upon the finished upload, not before
+                // as we cannot be sure yet that it was actually uploaded
+                if let Some(contraflow_data) = request.contraflow_data {
+                    reply_tx
+                        .send(AsyncSinkReply::Ack(
+                            contraflow_data,
+                            0, // duration of event handling is a little bit meaningless for this sink
+                               // the actual duration will be very long due to the accumulating nature of this sink
+                               // it will vary a lot when we do an actual upload vs. when we only accumulate
+                               // ergo we don't track it here
+                        ))
+                        .await?;
+                }
             }
         }
         Err(e) => {
@@ -194,14 +203,40 @@ async fn execute_http_call(
 }
 
 struct GCSWriterSink {
-    client_tx: Option<Sender<HttpTaskRequest>>,
+    client_tx: Option<Sender<HttpTaskMsg>>,
     config: Config,
     buffers: ChunkedBuffer,
     current_name: Option<String>,
     current_bucket: Option<String>,
+    /// tracking the ids for all accumulated events
+    current_event_id: EventId,
+    /// tracking the traversed operators for each accumulated event for correct sink-reply handling
+    current_op_meta: OpMeta,
+    /// tracking transactional status of events
+    current_transactional: bool,
     default_bucket: Option<Value<'static>>,
     done_until: Arc<AtomicUsize>,
     reply_tx: Sender<AsyncSinkReply>,
+}
+
+impl GCSWriterSink {
+    fn new(config: Config, reply_tx: Sender<AsyncSinkReply>) -> Self {
+        let buffers = ChunkedBuffer::new(config.buffer_size);
+        let default_bucket = config.bucket.as_ref().cloned().map(Value::from);
+        Self {
+            client_tx: None,
+            config,
+            buffers,
+            current_name: None,
+            current_bucket: None,
+            current_event_id: EventId::default(), // dummy - will be replaced with an actual sensible value
+            current_op_meta: OpMeta::default(), // dummy - will be replaced with an actual sensible value
+            current_transactional: false,
+            default_bucket,
+            done_until: Arc::new(AtomicUsize::new(0)),
+            reply_tx,
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -212,12 +247,11 @@ impl Sink for GCSWriterSink {
         event: Event,
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
-        start: u64,
+        _start: u64,
     ) -> Result<SinkReply> {
         self.buffers
             .mark_done_until(self.done_until.load(Ordering::Acquire))?;
-        let contraflow_data = ContraflowData::from(&event);
-
+        let mut event_tracked = false;
         for (value, meta) in event.value_meta_iter() {
             let meta = ctx.extract_meta(meta);
 
@@ -231,11 +265,24 @@ impl Sink for GCSWriterSink {
                     "The file name in metadata is not a string",
                 ))?;
 
-            self.finish_upload_if_needed(name, Some(contraflow_data.clone()), start)
-                .await?;
+            self.finish_upload_if_needed(name, event.ingest_ns).await?;
 
-            self.start_upload_if_needed(meta, name, contraflow_data.clone(), start)
-                .await?;
+            if self.needs_new_upload() {
+                self.start_upload(meta, name, &event).await?;
+            } else if !event_tracked {
+                // only track the current event if we didn't do it already and we didn't just start a new upload
+                // as in that case we just tracked this event
+                //
+                // this should only happen upon the first element in the event when we didn't start a new upload
+                // we cannot do it once before looping over the event value iter,
+                // as then a finish_upload call would ack/fail this event as well, which would be wrong
+                self.current_event_id.track(&event.id);
+                if !event.op_meta.is_empty() {
+                    self.current_op_meta.merge(event.op_meta.clone());
+                }
+                self.current_transactional |= event.transactional;
+                event_tracked = true;
+            }
 
             let serialized_data = serializer.serialize(value, event.ingest_ns)?;
             for item in serialized_data {
@@ -258,12 +305,16 @@ impl Sink for GCSWriterSink {
                     file: FileId::new(bucket, name),
                     data,
                 };
+                let contraflow_data = if event.transactional {
+                    Some(ContraflowData::from(&event))
+                } else {
+                    None
+                };
                 client_tx
-                    .send(HttpTaskRequest {
+                    .send(HttpTaskMsg::Request(HttpTaskRequest {
                         command,
-                        start,
-                        contraflow_data: Some(contraflow_data.clone()),
-                    })
+                        contraflow_data,
+                    }))
                     .await?;
             }
         }
@@ -272,8 +323,13 @@ impl Sink for GCSWriterSink {
     }
 
     async fn on_stop(&mut self, _ctx: &SinkContext) -> Result<()> {
-        self.finish_upload(None, nanotime()).await?;
-
+        // we finish the upload with acking/failing it
+        // it would most likely not be handled at this point in the shutdown process
+        self.finish_upload(None).await?;
+        // shutdown the task
+        if let Some(tx) = self.client_tx.take() {
+            tx.send(HttpTaskMsg::Shutdown).await?;
+        }
         Ok(())
     }
 
@@ -288,6 +344,11 @@ impl Sink for GCSWriterSink {
                 Duration::from_nanos(self.config.default_backoff_base_time),
             ),
         )?;
+
+        // stop the previous task
+        if let Some(tx) = self.client_tx.take() {
+            tx.send(HttpTaskMsg::Shutdown).await?;
+        }
 
         connectors::spawn_task(
             ctx.clone(),
@@ -309,29 +370,35 @@ impl Sink for GCSWriterSink {
     }
 
     fn auto_ack(&self) -> bool {
-        true
+        false // we only ever ack events once their upload has finished
     }
 }
 
 impl GCSWriterSink {
-    async fn finish_upload_if_needed(
-        &mut self,
-        name: &str,
-        contraflow_data: Option<ContraflowData>,
-        start: u64,
-    ) -> Result<()> {
-        if self.current_name.as_deref() != Some(name) && self.current_name.is_some() {
-            return self.finish_upload(contraflow_data, start).await;
+    async fn finish_upload_if_needed(&mut self, name: &str, ingest_ns: u64) -> Result<()> {
+        if self
+            .current_name
+            .as_ref()
+            .map_or(false, |current_name| current_name.as_str() != name)
+        {
+            // only send ack/fail if any of the accumulated events was transactional
+            let contraflow_data = if self.current_transactional {
+                // we have to use the accumulated event ids and op_meta here, so the right events get acked/failed
+                Some(ContraflowData::new(
+                    self.current_event_id.clone(),
+                    ingest_ns,
+                    self.current_op_meta.clone(),
+                ))
+            } else {
+                None
+            };
+            return self.finish_upload(contraflow_data).await;
         }
 
         Ok(())
     }
 
-    async fn finish_upload(
-        &mut self,
-        contraflow_data: Option<ContraflowData>,
-        start: u64,
-    ) -> Result<()> {
+    async fn finish_upload(&mut self, contraflow_data: Option<ContraflowData>) -> Result<()> {
         if let Some(current_name) = self.current_name.as_ref() {
             let client_tx = self
                 .client_tx
@@ -357,13 +424,11 @@ impl GCSWriterSink {
                 file: FileId::new(bucket, current_name),
                 data: final_data,
             };
-
             client_tx
-                .send(HttpTaskRequest {
+                .send(HttpTaskMsg::Request(HttpTaskRequest {
                     command,
                     contraflow_data,
-                    start,
-                })
+                }))
                 .await?;
 
             self.current_name = None;
@@ -372,12 +437,16 @@ impl GCSWriterSink {
         Ok(())
     }
 
-    async fn start_upload_if_needed(
+    fn needs_new_upload(&self) -> bool {
+        self.current_name.is_none()
+    }
+
+    /// Starts a new upload
+    async fn start_upload(
         &mut self,
         meta: Option<&Value<'_>>,
         name: &str,
-        contraflow_data: ContraflowData,
-        start: u64,
+        event: &Event,
     ) -> Result<()> {
         let client_tx = self
             .client_tx
@@ -387,23 +456,31 @@ impl GCSWriterSink {
                 "not connected",
             ))?;
 
-        if self.current_name.is_none() {
-            let bucket = get_bucket_name(self.default_bucket.as_ref(), meta)?;
-            self.current_bucket = Some(bucket.clone());
+        let bucket = get_bucket_name(self.default_bucket.as_ref(), meta)?;
+        self.current_bucket = Some(bucket.clone());
+        // first event of the new buffer, overwrite the `current_event_id` with the current one
+        self.current_event_id = event.id.clone();
+        // and overwrite the current_op_meta with the one from the current event
+        self.current_op_meta = event.op_meta.clone();
+        // overwrite the transactional status of the accumulated events
+        self.current_transactional = event.transactional;
 
-            let command = HttpTaskCommand::StartUpload {
-                file: FileId::new(bucket, name),
-            };
-            client_tx
-                .send(HttpTaskRequest {
-                    command,
-                    start,
-                    contraflow_data: Some(contraflow_data),
-                })
-                .await?;
+        let command = HttpTaskCommand::StartUpload {
+            file: FileId::new(bucket, name),
+        };
+        let contraflow_data = if event.transactional {
+            Some(ContraflowData::from(event))
+        } else {
+            None
+        };
+        client_tx
+            .send(HttpTaskMsg::Request(HttpTaskRequest {
+                command,
+                contraflow_data,
+            }))
+            .await?;
 
-            self.current_name = Some(name.to_string());
-        }
+        self.current_name = Some(name.to_string());
 
         Ok(())
     }
@@ -473,6 +550,16 @@ mod tests {
         assert!(result.is_err());
     }
 
+    // panic if we don't get one
+    fn expect_request(rx: &Receiver<HttpTaskMsg>) -> HttpTaskRequest {
+        if let HttpTaskMsg::Request(request) = rx.try_recv().unwrap() {
+            Some(request)
+        } else {
+            None
+        }
+        .expect("Expected a HttpTaskRequest")
+    }
+
     #[async_std::test]
     pub async fn starts_upload_on_first_event() {
         let (client_tx, client_rx) = bounded(10);
@@ -491,6 +578,9 @@ mod tests {
             buffers: ChunkedBuffer::new(10),
             current_name: None,
             current_bucket: None,
+            current_event_id: EventId::default(),
+            current_op_meta: OpMeta::default(),
+            current_transactional: false,
             default_bucket: None,
             done_until: Arc::new(Default::default()),
             reply_tx,
@@ -540,16 +630,14 @@ mod tests {
             .await
             .unwrap();
 
-        let response = client_rx.try_recv().unwrap();
-
+        let response = expect_request(&client_rx);
         assert_eq!(
             response.command,
             HttpTaskCommand::StartUpload {
                 file: FileId::new("woah", "test.txt")
             }
         );
-        assert_eq!(response.start, 1234);
-        assert!(response.contraflow_data.is_some());
+        assert!(response.contraflow_data.is_none()); // event is not transactional
     }
 
     #[async_std::test]
@@ -570,6 +658,9 @@ mod tests {
             buffers: ChunkedBuffer::new(10),
             current_name: None,
             current_bucket: None,
+            current_event_id: EventId::default(),
+            current_op_meta: OpMeta::default(),
+            current_transactional: false,
             default_bucket: None,
             done_until: Arc::new(Default::default()),
             reply_tx,
@@ -613,7 +704,7 @@ mod tests {
             is_batch: false,
             cb: Default::default(),
             op_meta: Default::default(),
-            transactional: false,
+            transactional: true,
         };
         sink.on_event("", event.clone(), &context, &mut serializer, 1234)
             .await
@@ -622,7 +713,7 @@ mod tests {
         // ignore the upload start
         let _ = client_rx.try_recv().unwrap();
 
-        let response = client_rx.try_recv().unwrap();
+        let response = expect_request(&client_rx);
 
         assert_eq!(
             response.command,
@@ -634,8 +725,7 @@ mod tests {
                 }
             }
         );
-        assert_eq!(response.start, 1234);
-        assert!(response.contraflow_data.is_some());
+        assert!(response.contraflow_data.is_some()); // event is transactional
     }
 
     #[async_std::test]
@@ -656,6 +746,9 @@ mod tests {
             buffers: ChunkedBuffer::new(10),
             current_name: None,
             current_bucket: None,
+            current_event_id: EventId::default(),
+            current_op_meta: OpMeta::default(),
+            current_transactional: false,
             default_bucket: None,
             done_until: Arc::new(Default::default()),
             reply_tx,
@@ -691,7 +784,7 @@ mod tests {
         let event_payload = EventPayload::from(ValueAndMeta::from_parts(value, meta));
 
         let event = Event {
-            id: Default::default(),
+            id: EventId::from_id(0, 0, 1),
             data: event_payload,
             ingest_ns: 0,
             origin_uri: None,
@@ -715,7 +808,7 @@ mod tests {
         let event_payload = EventPayload::from(ValueAndMeta::from_parts(value, meta));
 
         let event = Event {
-            id: Default::default(),
+            id: EventId::from_id(0, 0, 2),
             data: event_payload,
             ingest_ns: 0,
             origin_uri: None,
@@ -723,7 +816,7 @@ mod tests {
             is_batch: false,
             cb: Default::default(),
             op_meta: Default::default(),
-            transactional: false,
+            transactional: true,
         };
         sink.on_event("", event.clone(), &context, &mut serializer, 1234)
             .await
@@ -732,7 +825,7 @@ mod tests {
         // ignore the first event - upload start
         let _ = client_rx.try_recv().unwrap();
 
-        let response = client_rx.try_recv().unwrap();
+        let response = expect_request(&client_rx);
 
         assert_eq!(
             response.command,
@@ -744,10 +837,14 @@ mod tests {
                 }
             }
         );
-        assert_eq!(response.start, 1234);
-        assert!(response.contraflow_data.is_some());
+        // second event is transactional
+        assert!(
+            response.contraflow_data.is_none(),
+            "Expected no contraflow_data, got {:?}",
+            &response.contraflow_data
+        );
 
-        let response = client_rx.try_recv().unwrap();
+        let response = expect_request(&client_rx);
 
         assert_eq!(
             response.command,
@@ -755,8 +852,10 @@ mod tests {
                 file: FileId::new("woah", "test_other.txt")
             }
         );
-        assert_eq!(response.start, 1234);
         assert!(response.contraflow_data.is_some());
+        let cf = response.contraflow_data.expect("something is very off");
+        let id = cf.into_ack(0).id;
+        assert!(id.is_tracking(&EventId::from_id(0, 0, 2)));
     }
 
     #[async_std::test]
@@ -777,6 +876,9 @@ mod tests {
             buffers: ChunkedBuffer::new(10),
             current_name: None,
             current_bucket: None,
+            current_event_id: EventId::default(),
+            current_op_meta: OpMeta::default(),
+            current_transactional: false,
             default_bucket: None,
             done_until: Arc::new(Default::default()),
             reply_tx,
@@ -831,7 +933,7 @@ mod tests {
         // ignore the first event - upload start
         let _ = client_rx.try_recv().unwrap();
 
-        let response = client_rx.try_recv().unwrap();
+        let response = expect_request(&client_rx);
 
         assert_eq!(
             response.command,
@@ -867,7 +969,7 @@ mod tests {
     }
 
     #[async_std::test]
-    pub async fn sends_event_reply_after_http_response() {
+    pub async fn sends_event_reply_after_finish_upload() {
         let (reply_tx, reply_rx) = bounded(10);
 
         let value = literal!({});
@@ -881,29 +983,24 @@ mod tests {
         let event_payload = EventPayload::from(ValueAndMeta::from_parts(value, meta));
 
         let event = Event {
-            id: Default::default(),
             data: event_payload,
-            ingest_ns: 0,
-            origin_uri: None,
-            kind: None,
-            is_batch: false,
-            cb: Default::default(),
-            op_meta: Default::default(),
-            transactional: false,
+            transactional: true,
+            ..Event::default()
+        };
+        let config = Config {
+            url: Default::default(),
+            connect_timeout: 100000000,
+            buffer_size: 1000,
+            bucket: None,
+            max_retries: 3,
+            default_backoff_base_time: 1,
         };
 
         let contraflow_data = ContraflowData::from(event);
         execute_http_call(
             Arc::new(Default::default()),
-            reply_tx,
-            &Config {
-                url: Default::default(),
-                connect_timeout: 100000000,
-                buffer_size: 1000,
-                bucket: None,
-                max_retries: 3,
-                default_backoff_base_time: 1,
-            },
+            reply_tx.clone(),
+            &config,
             &mut MockApiClient {
                 inject_failure: Arc::new(AtomicBool::new(false)),
             },
@@ -912,7 +1009,29 @@ mod tests {
                     file: FileId::new("somebucket", "something.txt"),
                 },
                 contraflow_data: Some(contraflow_data.clone()),
-                start: 10,
+            },
+        )
+        .await
+        .unwrap();
+        // no ack on start upload
+        assert!(reply_rx.is_empty());
+
+        execute_http_call(
+            Arc::new(Default::default()),
+            reply_tx,
+            &config,
+            &mut MockApiClient {
+                inject_failure: Arc::new(AtomicBool::new(false)),
+            },
+            HttpTaskRequest {
+                command: HttpTaskCommand::FinishUpload {
+                    file: FileId::new("somebucket", "something.txt"),
+                    data: BufferPart {
+                        data: vec![],
+                        start: 0,
+                    },
+                },
+                contraflow_data: Some(contraflow_data.clone()),
             },
         )
         .await
@@ -974,13 +1093,12 @@ mod tests {
         let contraflow_data = ContraflowData::from(event);
 
         command_tx
-            .send(HttpTaskRequest {
+            .send(HttpTaskMsg::Request(HttpTaskRequest {
                 command: HttpTaskCommand::StartUpload {
                     file: FileId::new("somebucket", "something.txt"),
                 },
                 contraflow_data: Some(contraflow_data.clone()),
-                start: 10,
-            })
+            }))
             .await
             .unwrap();
 
@@ -994,7 +1112,7 @@ mod tests {
     }
 
     #[async_std::test]
-    pub async fn http_task_failure_test() {
+    pub async fn http_task_failure_test() -> Result<()> {
         let (command_tx, command_rx) = bounded(10);
         let (reply_tx, reply_rx) = bounded(10);
         let done_until = Arc::new(AtomicUsize::new(0));
@@ -1012,7 +1130,7 @@ mod tests {
                 default_backoff_base_time: 1,
             },
             MockApiClient {
-                inject_failure: Arc::new(AtomicBool::new(false)),
+                inject_failure: Arc::new(AtomicBool::new(true)),
             },
         ));
 
@@ -1041,22 +1159,22 @@ mod tests {
         let contraflow_data = ContraflowData::from(event);
 
         command_tx
-            .send(HttpTaskRequest {
+            .send(HttpTaskMsg::Request(HttpTaskRequest {
                 command: HttpTaskCommand::StartUpload {
                     file: FileId::new("somebucket", "something.txt"),
                 },
                 contraflow_data: Some(contraflow_data.clone()),
-                start: 10,
-            })
+            }))
             .await
             .unwrap();
 
-        let reply = reply_rx.recv().await.unwrap();
+        let reply = reply_rx.recv().timeout(Duration::from_secs(5)).await??;
 
-        if let AsyncSinkReply::Ack(data, duration) = reply {
-            assert_eq!(contraflow_data.into_ack(duration), data.into_ack(duration));
+        if let AsyncSinkReply::Fail(data) = reply {
+            assert_eq!(contraflow_data.into_fail(), data.into_fail());
         } else {
             panic!("did not receive an ACK");
         }
+        Ok(())
     }
 }
