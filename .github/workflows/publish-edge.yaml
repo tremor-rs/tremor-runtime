@@ -9,7 +9,7 @@ jobs:
     steps:
       - uses: actions/checkout@master
       - name: Publish to GH Registry
-        uses: elgohr/Publish-Docker-Github-Action@master
+        uses: elgohr/Publish-Docker-Github-Action@v4
         with:
           name: tremor-rs/tremor-runtime/tremor
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -17,7 +17,7 @@ jobs:
           tags: edge
           registry: docker.pkg.github.com
       - name: Publish to Docker Registry
-        uses: elgohr/Publish-Docker-Github-Action@master
+        uses: elgohr/Publish-Docker-Github-Action@v4
         with:
           name: tremorproject/tremor
           username: ${{ secrets.DOCKER_USERNAME }}
