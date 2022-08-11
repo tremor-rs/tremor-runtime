@@ -35,9 +35,8 @@ macro_rules! test_cases {
             use super::*;
             $(
                 #[async_std::test]
-                #[serial(flow)]
+                #[serial(flow, timeout_ms = 600000)]
                 async fn $file() -> Result<()> {
-                    serial_test::set_max_wait(Duration::from_secs(600));
 
                     let deploy_dir = concat!("tests/flows/", stringify!($file), "/").to_string();
                     let deploy_file = concat!("tests/flows/", stringify!($file), "/flow.troy");
