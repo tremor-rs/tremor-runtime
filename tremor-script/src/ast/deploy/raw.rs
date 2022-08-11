@@ -372,7 +372,7 @@ pub(crate) enum FlowStmtRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub enum CreateKind {
     /// Reference to a connector definition
     Connector,

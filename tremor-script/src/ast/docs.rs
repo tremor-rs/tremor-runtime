@@ -43,7 +43,7 @@ impl ToString for ConstDoc {
 }
 
 /// Documentation from function
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FnDoc {
     /// Function name
     pub name: String,
@@ -72,7 +72,7 @@ impl ToString for FnDoc {
 }
 
 /// Documentation from a module
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Eq)]
 pub struct ModDoc {
     /// Module name
     pub name: String,
@@ -97,7 +97,7 @@ impl ModDoc {
 }
 
 /// Documentation from a query statement
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryDoc {
     /// Statment name
     pub name: String,
@@ -120,7 +120,7 @@ impl ToString for QueryDoc {
 }
 
 /// Documentation from a flow statement
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FlowDoc {
     /// Statment name
     pub name: String,

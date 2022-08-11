@@ -43,7 +43,7 @@ use std::str::FromStr;
 use tremor_influx as influx;
 use tremor_kv as kv;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExtractorResult<'result> {
     // a match without a value
     MatchNull,
@@ -287,7 +287,7 @@ impl Clone for SnotCombiner {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)] // , Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExtractorError {
     pub msg: String,
 }

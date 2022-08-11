@@ -454,7 +454,7 @@ impl<'script> Upable<'script> for WindowDefinitionRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct WindowName {
     /// Identity of the window definition
     pub id: NodeId,
@@ -597,7 +597,7 @@ impl<'script> Upable<'script> for GroupByRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct OperatorKindRaw {
     pub(crate) mid: Box<NodeMeta>,
     pub(crate) module: String,
@@ -618,7 +618,7 @@ impl<'script> Upable<'script> for OperatorKindRaw {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct StreamStmtRaw {
     pub(crate) mid: Box<NodeMeta>,
     pub(crate) id: String,

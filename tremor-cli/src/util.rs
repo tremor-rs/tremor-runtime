@@ -84,7 +84,7 @@ pub(crate) fn visit_path<'a>(base: &Path, path: &Path, visitor: &'a PathVisitor)
     Ok(())
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Eq)]
 pub enum SourceKind {
     /// A tremor source file
     Tremor,

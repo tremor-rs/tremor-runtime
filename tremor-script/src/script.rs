@@ -34,7 +34,7 @@ use serde::Serialize;
 use std::io;
 
 /// Return of a script execution
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub enum Return<'event> {
     /// This script should emit the returned
     /// value

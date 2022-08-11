@@ -236,7 +236,7 @@ where
 }
 
 /// Constants and special keyword values
-#[derive(Debug, Default, Clone, PartialEq, Serialize)]
+#[derive(Debug, Default, Clone, PartialEq, Serialize, Eq)]
 pub struct Consts<'script> {
     // always present 'special' constants
     /// the `args` keyword
@@ -382,7 +382,7 @@ impl<'script> Script<'script> {
 }
 
 /// An ident
-#[derive(Debug, PartialEq, Serialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Clone, Eq)]
 pub struct Ident<'script> {
     pub(crate) mid: Box<NodeMeta>,
     /// the text of the ident
@@ -476,7 +476,7 @@ pub struct List<'script> {
 impl_expr!(List);
 
 /// A Literal
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct Literal<'script> {
     /// Id
     pub mid: Box<NodeMeta>,
@@ -513,7 +513,7 @@ pub struct FnDefn<'script> {
 impl_expr!(FnDefn);
 
 /// A Constant
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct Const<'script> {
     /// the ast node identifier
     pub mid: Box<NodeMeta>,
@@ -958,7 +958,7 @@ pub struct Recur<'script> {
 }
 impl_expr!(Recur);
 
-#[derive(Clone, Serialize, PartialEq)]
+#[derive(Clone, Serialize, PartialEq, Eq)]
 /// Encapsulates an Aggregate function invocation
 pub struct InvokeAggr {
     /// Id
@@ -1001,7 +1001,7 @@ pub struct TestExpr {
 impl_expr_no_lt!(TestExpr);
 
 /// default case for a match expression
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub enum DefaultCase<Ex: Expression> {
     /// No default case
     None,
@@ -2056,7 +2056,7 @@ pub struct StatePath<'script> {
 impl_expr!(StatePath);
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Copy, Clone, Debug, PartialEq, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Eq)]
 pub enum BinOpKind {
     // NOT IMPLEMENTED /// we're forced to make this pub because of lalrpop
     // BitOr,
@@ -2100,7 +2100,7 @@ pub enum BinOpKind {
 
 // BooleanBinOpKind
 /// we're forced to make this pub because of lalrpop
-#[derive(Copy, Clone, Debug, PartialEq, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Eq)]
 pub enum BooleanBinOpKind {
     /// we're forced to make this pub because of lalrpop
     Or,
@@ -2139,7 +2139,7 @@ pub struct BooleanBinExpr<'script> {
 impl_expr!(BooleanBinExpr);
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Copy, Clone, Debug, PartialEq, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Eq)]
 pub enum UnaryOpKind {
     /// we're forced to make this pub because of lalrpop
     Plus,
