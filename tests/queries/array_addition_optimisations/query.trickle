@@ -1,0 +1,7 @@
+select
+    [
+        event + [4, 5],
+        [4, 5] + event
+    ]
+from in
+into out;

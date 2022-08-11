@@ -5856,6 +5856,7 @@ dependencies = [
  "dissect",
  "distance",
  "downcast-rs",
+ "either",
  "error-chain",
  "float-cmp",
  "fxhash",
