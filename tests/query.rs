@@ -91,6 +91,7 @@ macro_rules! test_cases {
 test_cases!(
     binary_op_short_circuit,
     array_addition,
+    array_addition_optimisations,
     default_rule,
     dimensions,
     example_rule,
