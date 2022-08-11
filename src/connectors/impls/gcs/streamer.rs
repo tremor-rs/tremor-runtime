@@ -391,10 +391,10 @@ impl GCSWriterSink {
             } else {
                 None
             };
-            return self.finish_upload(contraflow_data).await;
+            self.finish_upload(contraflow_data).await
+        } else {
+            Ok(())
         }
-
-        Ok(())
     }
 
     async fn finish_upload(&mut self, contraflow_data: Option<ContraflowData>) -> Result<()> {
