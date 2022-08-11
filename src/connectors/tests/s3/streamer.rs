@@ -14,7 +14,7 @@
 
 use std::io::Read;
 
-use super::super::{ConnectorHarness, TestPipeline};
+use super::super::ConnectorHarness;
 use super::{
     create_bucket, get_client, random_bucket_name, spawn_docker, wait_for_s3, MINIO_REGION,
     MINIO_ROOT_PASSWORD, MINIO_ROOT_USER,
@@ -26,17 +26,17 @@ use aws_sdk_s3::Client;
 use bytes::Buf;
 use rand::{distributions::Alphanumeric, Rng};
 use serial_test::serial;
-use std::time::Duration;
 use testcontainers::clients;
 use tremor_common::ports::IN;
 use tremor_pipeline::{CbAction, Event, EventId};
 use tremor_value::{literal, value};
 use value_trait::{Builder, Mutable, ValueAccess};
+use std::time::Duration;
+use async_std::prelude::FutureExt;
 
 #[async_std::test]
-#[serial(s3)]
-async fn connector_s3_no_connection() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
+#[serial(s3, timeout_ms = 600000)]
+async fn no_connection() -> Result<()> {
 
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-connection");
@@ -63,9 +63,8 @@ async fn connector_s3_no_connection() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(s3)]
-async fn connector_s3_no_credentials() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
+#[serial(s3, timeout_ms = 600000)]
+async fn no_credentials() -> Result<()> {
 
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-credentials");
@@ -101,9 +100,8 @@ async fn connector_s3_no_credentials() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(s3)]
-async fn connector_s3_no_region() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
+#[serial(s3, timeout_ms = 600000)]
+async fn no_region() -> Result<()> {
 
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-region");
@@ -141,10 +139,8 @@ async fn connector_s3_no_region() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(s3)]
-async fn connector_s3_no_bucket() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
+#[serial(s3, timeout_ms = 600000)]
+async fn no_bucket() -> Result<()> {
     let _ = env_logger::try_init();
     let bucket_name = random_bucket_name("no-bucket");
 
@@ -177,9 +173,8 @@ async fn connector_s3_no_bucket() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(s3)]
+#[serial(s3, timeout_ms = 600000)]
 async fn connector_s3() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
 
     let _ = env_logger::try_init();
 
@@ -221,18 +216,36 @@ async fn connector_s3() -> Result<()> {
     harness.consume_initial_sink_contraflow().await?;
 
     let (unbatched_event, unbatched_value) = get_unbatched_event();
-    send_to_sink(&harness, &unbatched_event, in_pipe).await?;
+    send_to_sink(&harness, &unbatched_event).await?;
+    // upload not yet finished, hence no ack, also not transactional
+    let res = in_pipe.get_contraflow_events()?; 
+    assert!(res.is_empty(), "Expected no contraflow, got: {:?}", &res);
 
+    // batched event with 3 new keys, but not transactional
     let (batched_event, batched_value_0, batched_value_1, batched_value_2) = get_batched_event();
-    send_to_sink(&harness, &batched_event, in_pipe).await?;
+    send_to_sink(&harness, &batched_event).await?;
 
+    let res = in_pipe.get_contraflow_events()?; 
+    assert!(res.is_empty(), "Expected no contraflow, got: {:?}", &res);
+
+    // first transactional event
     let (large_unbatched_event, large_unbatched_bytes) = large_unbatched_event();
-    send_to_sink(&harness, &large_unbatched_event, in_pipe).await?;
+    send_to_sink(&harness, &large_unbatched_event).await?;
+
+    // upload not yet finished, no ack yet
+    let res = in_pipe.get_contraflow_events()?; 
+    assert!(res.is_empty(), "Expected no contraflow, got: {:?}", &res);
 
     let (large_batched_event, large_batched_value) = large_batched_event();
-    send_to_sink(&harness, &large_batched_event, in_pipe).await?;
+    send_to_sink(&harness, &large_batched_event).await?;
+
+    let cf_event = in_pipe.get_contraflow().timeout(Duration::from_secs(5)).await??;
+    assert_eq!(CbAction::Ack, cf_event.cb);
+    assert!(cf_event.id.is_tracking(&large_unbatched_event.id));
+    assert!(!cf_event.id.is_tracking(&large_batched_event.id)); // not yet
 
     harness.stop().await?;
+
     // fetch the commited events from mock s3
 
     // verify a small unbatched event.
@@ -265,14 +278,8 @@ async fn connector_s3() -> Result<()> {
 async fn send_to_sink(
     harness: &ConnectorHarness,
     event: &Event,
-    in_pipe: &TestPipeline,
 ) -> Result<()> {
     harness.send_to_sink(event.clone(), IN).await?;
-    if event.transactional {
-        let cf_event = in_pipe.get_contraflow().await?;
-        assert!(cf_event.id.is_tracking(&event.id));
-        assert_eq!(CbAction::Ack, cf_event.cb);
-    }
     Ok(())
 }
 
@@ -384,10 +391,7 @@ fn get_batched_event() -> (
 
     let batched_meta = literal!({});
     let batched_id = EventId::new(0, 0, 2, 2);
-    (
-        Event {
-            id: batched_id,
-            is_batch: true,
+    ( Event { id: batched_id, is_batch: true,
             transactional: false,
             data: (batched_data.clone(), batched_meta).into(),
             ..Event::default()
@@ -464,7 +468,7 @@ fn large_batched_event() -> (Event, Vec<u8>) {
 
     (
         Event {
-            id: EventId::from_id(0, 0, 3),
+            id: EventId::from_id(0, 0, 4),
             data: (batched_data, batched_meta).into(),
             transactional: true,
             is_batch: true,

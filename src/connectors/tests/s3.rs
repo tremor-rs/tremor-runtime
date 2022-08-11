@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 mod reader;
-mod writer;
+mod streamer;
 
 use crate::errors::{Error, Result};
 use aws_sdk_s3::{Client, Config, Credentials, Endpoint, Region};

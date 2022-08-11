@@ -21,7 +21,6 @@ use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage, Subscription, Topic};
 use serial_test::serial;
 use std::collections::HashMap;
-use std::time::Duration;
 use testcontainers::clients::Cli;
 use testcontainers::RunnableImage;
 use tonic::transport::Channel;
@@ -30,9 +29,8 @@ use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
 
 #[async_std::test]
-#[serial(gpubsub)]
+#[serial(gpubsub, timeout_ms = 600000)]
 async fn no_connection() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
 
     let _ = env_logger::try_init();
     let connector_yaml = literal!({
@@ -52,9 +50,8 @@ async fn no_connection() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(gpubsub)]
+#[serial(gpubsub, timeout_ms = 600000)]
 async fn no_token() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
 
     let _ = env_logger::try_init();
     let mut env = EnvHelper::new();
@@ -75,9 +72,8 @@ async fn no_token() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(gpubsub)]
+#[serial(gpubsub, timeout_ms = 600000)]
 async fn simple_subscribe() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
 
     let _ = env_logger::try_init();
 

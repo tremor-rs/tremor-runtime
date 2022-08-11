@@ -174,8 +174,11 @@ impl Sink for OtelSink {
                     None
                 };
                 if let Some(e) = err {
-                    error!("Failed to dispatch otel/gRPC logs message: {}", e);
-                    ctx.notifier().connection_lost().await?;
+                    error!("{ctx} Failed to dispatch otel event: {e}");
+                    ctx.swallow_err(
+                        ctx.notifier().connection_lost().await,
+                        "Error notifying the runtime of connection loss",
+                    );
                     return Ok(SinkReply::fail_or_none(event.transactional));
                 }
             }

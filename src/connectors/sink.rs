@@ -775,9 +775,11 @@ where
                                     )
                                     .await;
                                 }
-                                Err(_e) => {
+                                Err(e) => {
                                     // sink error that is not signalled via SinkReply::Fail (not handled)
-                                    // TODO: error logging? This could fill the logs quickly. Rather emit a metrics event with the logging info?
+                                    // This could fill the logs quickly.
+                                    // TODO: Rather emit a metrics event with the logging info?
+                                    error!("{} Error: {e}", &self.ctx);
                                     if transactional {
                                         let cf = cf_builder.into_fail();
                                         send_contraflow(&self.pipelines, &self.ctx, cf).await;
@@ -881,6 +883,13 @@ pub(crate) struct ContraflowData {
 }
 
 impl ContraflowData {
+    pub(crate) fn new(event_id: EventId, ingest_ns: u64, op_meta: OpMeta) -> Self {
+        Self {
+            event_id,
+            ingest_ns,
+            op_meta,
+        }
+    }
     pub(crate) fn into_ack(self, duration: u64) -> Event {
         Event::cb_ack_with_timing(self.ingest_ns, self.event_id, self.op_meta, duration)
     }
