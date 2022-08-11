@@ -168,7 +168,7 @@ impl Sink for DiscordSink {
         _start: u64,
     ) -> Result<SinkReply> {
         for v in event.value_iter() {
-            if let Err(_) = self.tx.send(v.clone_static()).await {
+            if self.tx.send(v.clone_static()).await.is_err() {
                 error!(
                     "{} Discord Client unreachable. Initiating Reconnect...",
                     &ctx
