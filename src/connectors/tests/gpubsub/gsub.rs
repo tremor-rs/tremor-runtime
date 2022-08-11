@@ -31,7 +31,6 @@ use value_trait::ValueAccess;
 #[async_std::test]
 #[serial(gpubsub, timeout_ms = 600000)]
 async fn no_connection() -> Result<()> {
-
     let _ = env_logger::try_init();
     let connector_yaml = literal!({
         "codec": "binary",
@@ -52,7 +51,6 @@ async fn no_connection() -> Result<()> {
 #[async_std::test]
 #[serial(gpubsub, timeout_ms = 600000)]
 async fn no_token() -> Result<()> {
-
     let _ = env_logger::try_init();
     let mut env = EnvHelper::new();
     env.remove_var("GOOGLE_APPLICATION_CREDENTIALS");
@@ -74,7 +72,6 @@ async fn no_token() -> Result<()> {
 #[async_std::test]
 #[serial(gpubsub, timeout_ms = 600000)]
 async fn simple_subscribe() -> Result<()> {
-
     let _ = env_logger::try_init();
 
     let runner = Cli::docker();

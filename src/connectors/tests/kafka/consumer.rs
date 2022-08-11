@@ -46,7 +46,6 @@ use value_trait::Builder;
 #[async_std::test]
 #[serial(kafka, timeout_ms = 600000)]
 async fn transactional_retry() -> Result<()> {
-
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
@@ -490,7 +489,6 @@ async fn custom_no_retry() -> Result<()> {
 #[async_std::test]
 #[serial(kafka, timeout_ms = 600000)]
 async fn performance() -> Result<()> {
-
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
@@ -884,7 +882,6 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
 #[async_std::test]
 #[serial(kafka, timeout_ms = 600000)]
 async fn transactional_store_offset_handling() -> Result<()> {
-
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
