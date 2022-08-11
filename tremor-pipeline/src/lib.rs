@@ -226,6 +226,7 @@ impl OpMeta {
     }
 
     /// Returns `true` if this instance contains no values
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }

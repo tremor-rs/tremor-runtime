@@ -398,6 +398,7 @@ impl Sink for ElasticSink {
         vec![]
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn on_event(
         &mut self,
         _input: &str,

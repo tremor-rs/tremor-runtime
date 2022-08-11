@@ -22,7 +22,6 @@ use crate::connectors::sink::{AsyncSinkReply, ContraflowData, Sink};
 use crate::system::KillSwitch;
 use crate::{connectors, QSIZE};
 use async_std::channel::{bounded, Receiver, Sender};
-use async_std::prelude::FutureExt;
 use http_client::h1::H1Client;
 use http_client::HttpClient;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -152,7 +151,7 @@ async fn http_task(
                     &mut api_client,
                     request,
                 )
-                .await?
+                .await?;
             }
             HttpTaskMsg::Shutdown => break,
         };
