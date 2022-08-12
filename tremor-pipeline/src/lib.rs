@@ -19,7 +19,6 @@
 #![recursion_limit = "1024"]
 #![deny(
     clippy::all,
-    clippy::unwrap_used,
     clippy::unnecessary_unwrap,
     clippy::pedantic
 )]
@@ -94,7 +93,7 @@ impl Append for PluggableLoggingAppender {
             + r#"", "file": ""#
             + record.file().expect("")
             + r#"", "line": ""#
-            + &record.line().expect("msg").to_string()
+            + &record.line().expect("").to_string()
             + r#""}"#)
             .as_bytes()
             .to_vec();
@@ -106,9 +105,7 @@ impl Append for PluggableLoggingAppender {
             origin_uri: None,
         };
 
-        block_on(LOGGING_CHANNEL.tx().broadcast(msg))?;
-        // 	dbg!(block_on(LOGGING_CHANNEL.rx().recv())?);
-        //block_on(self.tx.send(msg))?;
+        block_on(self.tx.broadcast(msg))?;
         Ok(())
     }
 
@@ -137,8 +134,10 @@ pub struct MetricsChannel {
 }
 /// Channel for plugging-logging messages
 pub struct LoggingChannel {
-    tx: Sender<LoggingMsg>,
-    rx: Receiver<LoggingMsg>,
+    /// tx Sender
+    pub tx: Sender<LoggingMsg>,
+    /// rx Serveur
+    pub rx: Receiver<LoggingMsg>,
 }
 
 impl MetricsChannel {
@@ -1018,12 +1017,6 @@ pub(crate) type ConfigGraph = graph::DiGraph<NodeConfig, Connection>;
 #[cfg(test)]
 mod test {
     use super::*;
-    use async_std::channel::bounded;
-    use log::LevelFilter;
-    use log4rs::{
-        config::{Appender, Root},
-        Config,
-    };
     use simd_json_derive::{Deserialize, Serialize};
     #[test]
     fn prim_str() {
@@ -1219,68 +1212,4 @@ mod test {
 
         assert_eq!(event_id.get_stream(99), Some(75));
     }
-    // #[async_std::test]
-    // async fn test_tremor_appender() {
-    //     use async_std::channel::{Receiver, Sender};
-    //     let channel: (Sender<LoggingMsg>, Receiver<LoggingMsg>) = bounded(1);
-    //     let tx = channel.0;
-    //     let rx = channel.1;
-
-    //     let stdout = PluggableLoggingAppender { tx };
-
-    //     let config = Config::builder()
-    //         .appender(Appender::builder().build("stdout", Box::new(stdout)))
-    //         .build(Root::builder().appender("stdout").build(LevelFilter::Info))
-    //         .unwrap();
-
-    //     let _handle = log4rs::init_config(config).unwrap();
-
-    //     info!("Stan is here today");
-    //     let data = rx.recv().await;
-    //     assert!(data.is_ok());
-    //     let valuemeta = data.unwrap();
-    //     let value = valuemeta.payload.suffix().value();
-    //     let t = &literal!({"level": "INFO", "args": "Stan is here today","path": "tremor_pipeline::test", "file":"tremor-pipeline/src/lib.rs","line": "1224"});
-    //     assert_eq!(value, t);
-
-    //     warn!("Attention");
-    //     let data = rx.recv().await;
-    //     assert!(data.is_ok());
-    //     let valuemeta = data.unwrap();
-    //     let value = valuemeta.payload.suffix().value();
-    //     let t = &literal!({"level": "WARN", "args": "Attention","path": "tremor_pipeline::test", "file":"tremor-pipeline/src/lib.rs","line": "1232"});
-    //     assert_eq!(value, t);
-
-    //     let some_variable = 12;
-    //     let t = &literal!({"level": "ERROR", "args": "2 is not equal 12","path": "tremor_pipeline::test", "file":"tremor-pipeline/src/lib.rs","line": "1242"});
-    //     error!("2 is not equal {}", some_variable);
-
-    //     let data = rx.recv().await;
-    //     assert!(data.is_ok());
-
-    //     let valuemeta = data.unwrap();
-    //     let value = valuemeta.payload.suffix().value();
-    //     assert_eq!(value, t);
-    // }
-
-    // #[async_std::test]
-    // async fn test_logging_channel () {
-    // 	let vec = (r#"{"level": ""#.to_owned()
-    // 	+ r#""}"#)
-    // 	.as_bytes()
-    // 	.to_vec();
-
-    // let e = EventPayload::new(vec, |d| tremor_value::parse_to_value(d).expect("").into());
-    // let _msg = LoggingMsg {
-    // 	language: LanguageKind::Rust, /// c'est ça que tu veux ?
-    // 	payload: e,
-    // 	origin_uri: None,
-    // };
-
-    // //LOGGING_CHANNEL.tx.broadcast(msg).await.unwrap();
-    // let _m = LOGGING_CHANNEL.rx().recv().await;
-    // let _v = _m.unwrap();
-    // dbg!(_v);
-
-    // }
 }

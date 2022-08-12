@@ -1,3 +1,17 @@
+// Copyright 2021, The Tremor Team
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use crate::connectors::prelude::*;
 use async_broadcast::Receiver;
 use tremor_pipeline::{LoggingMsg, LOGGING_CHANNEL};
@@ -109,36 +123,5 @@ impl Source for LoggingSource {
     /// and one connector quiescing should not lead to logging being stopped for each and every other connector.
     fn asynchronous(&self) -> bool {
         false
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-    use tremor_pipeline::{LanguageKind, LoggingMsg};
-    use tremor_script::EventPayload;
-
-    use super::PluggableLoggingConnector;
-
-    #[async_std::test]
-    async fn test_tremor() {
-        let vec1 = (r#"{"level": ""#.to_owned() + r#""}"#).as_bytes().to_vec();
-
-        let e1 = EventPayload::new(vec1, |d| tremor_value::parse_to_value(d).expect("").into());
-        let _msg = LoggingMsg {
-            language: LanguageKind::Rust,
-            payload: e1,
-            origin_uri: None,
-        };
-        LOGGING_CHANNEL.tx().broadcast(_msg).await.unwrap();
-
-        let mut _c = PluggableLoggingConnector::new();
-
-        let _m = _c.rx.recv().await;
-
-        let _v = _m.unwrap();
-        dbg!(_v);
-
-        //faire des asserts
     }
 }
