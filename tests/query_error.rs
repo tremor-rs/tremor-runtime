@@ -35,10 +35,8 @@ macro_rules! test_cases {
     ($($file:ident),* ,) => {
         $(
             #[test]
-            #[serial(query_error)]
+            #[serial(query_error, timeout_ms = 120000)]
             fn $file() -> Result<()> {
-                serial_test::set_max_wait(std::time::Duration::from_secs(120));
-
                 tremor_runtime::functions::load()?;
                 let query_dir = concat!("tests/query_errors/", stringify!($file), "/").to_string();
                 let query_file = concat!("tests/query_errors/", stringify!($file), "/query.trickle");

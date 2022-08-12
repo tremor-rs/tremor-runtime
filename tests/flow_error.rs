@@ -30,7 +30,7 @@ macro_rules! test_cases {
             use pretty_assertions::assert_eq;
         $(
             #[test]
-            #[serial(flow_error, timeous_ms = 120000)]
+            #[serial(flow_error, timeout_ms = 120000)]
             fn $file() -> Result<()> {
                 let deploy_dir = concat!("tests/flow_errors/", stringify!($file), "/").to_string();
                 let deploy_file = concat!("tests/flow_errors/", stringify!($file), "/flow.troy");
