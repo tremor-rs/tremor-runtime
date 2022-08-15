@@ -683,6 +683,15 @@ pub enum ImutExpr<'script> {
     Recur(Recur<'script>),
     /// Bytes
     Bytes(Bytes<'script>),
+    /// Array append
+    ArrayAppend {
+        /// Left side
+        left: Box<ImutExpr<'script>>,
+        /// Expressions to be appended to the left side
+        right: ImutExprs<'script>,
+        /// Id
+        mid: Box<NodeMeta>,
+    },
 }
 
 impl<'script> ImutExpr<'script> {

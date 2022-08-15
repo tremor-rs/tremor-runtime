@@ -26,6 +26,7 @@ pub mod imut_expr;
 pub mod query;
 
 pub use impls::args_rewriter::ArgsRewriter;
+pub use impls::array_addition_optimizer::ArrayAdditionOptimizer;
 pub use impls::const_folder::ConstFolder;
 pub(crate) use impls::group_by_extractor::GroupByExprExtractor;
 pub(crate) use impls::is_const::IsConstFn;

@@ -27,6 +27,7 @@ use super::{
     ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamStmt, Upable,
     WindowDefinition, WindowKind,
 };
+use crate::ast::visitors::ArrayAdditionOptimizer;
 use crate::{ast::NodeMeta, impl_expr};
 use crate::{
     ast::{
@@ -64,6 +65,7 @@ impl<'script> QueryRaw<'script> {
             .collect::<Result<_>>()?;
         for stmt in &mut stmts {
             ConstFolder::new(helper).walk_stmt(stmt)?;
+            ArrayAdditionOptimizer {}.walk_stmt(stmt)?;
         }
         let mut from = Vec::new();
         let mut into = Vec::new();

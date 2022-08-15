@@ -257,6 +257,23 @@ impl<'script> ImutExpr<'script> {
             ImutExpr::Comprehension(ref expr) => {
                 self.comprehension(opts, env, event, state, meta, local, expr)
             }
+            ImutExpr::ArrayAppend { left, right, mid } => {
+                let left = stry!(left.run(opts, env, event, state, meta, local));
+
+                if let Some(left_val) = left.as_array() {
+                    let mut new_left = left_val.clone();
+                    new_left.reserve(right.len());
+
+                    for expr in right {
+                        let expr_result = stry!(expr.run(opts, env, event, state, meta, local));
+                        new_left.push(expr_result.into_owned());
+                    }
+
+                    Ok(Cow::Owned(Value::from(new_left)))
+                } else {
+                    todo!("Handle type mismatch!")
+                }
+            }
         }
     }
 
@@ -448,44 +465,6 @@ impl<'script> ImutExpr<'script> {
         }
     }
 
-    fn try_optimized_array_add<'run, 'event>(
-        opts: ExecOpts,
-        env: &'run Env<'run, 'event>,
-        event: &'run Value<'event>,
-        state: &'run Value<'static>,
-        meta: &'run Value<'event>,
-        local: &'run LocalStack<'event>,
-        expr: &'run BinExpr<'event>,
-    ) -> Result<Either<Cow<'run, Value<'event>>, ExpressionSidesExecutionResult<'run, 'event>>>
-    {
-        if expr.kind == BinOpKind::Add {
-            // NOTE: This optimisation only matters for `x + [1,2,3]`, in case of `[1,2,3] + x`,
-            // we'd have to do vec merge either way, as we'd have to prepend the results at the beginning
-            if let ImutExpr::List(ref rhs) = expr.rhs {
-                let lhs: Cow<Value> = stry!(expr.lhs.run(opts, env, event, state, meta, local));
-
-                if lhs.value_type() == ValueType::Array {
-                    let mut result = lhs.try_as_array()?.clone();
-                    result.reserve(rhs.exprs.len());
-
-                    for expr in &rhs.exprs {
-                        result.push(
-                            stry!(expr.run(opts, env, event, state, meta, local)).into_owned(),
-                        );
-                    }
-
-                    return Ok(Either::Left(Cow::Owned(Value::from(result))));
-                }
-
-                return Ok(Either::Right((Some(lhs), None)));
-            }
-
-            return Ok(Either::Right((None, None)));
-        }
-
-        Ok(Either::Right((None, None)))
-    }
-
     fn binary<'run, 'event>(
         &'run self,
         opts: ExecOpts,
@@ -499,23 +478,10 @@ impl<'script> ImutExpr<'script> {
     where
         'script: 'event,
     {
-        let result = stry!(Self::try_optimized_array_add(
-            opts, env, event, state, meta, local, expr
-        ));
+        let lhs = stry!(expr.lhs.run(opts, env, event, state, meta, local));
+        let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
 
-        match result {
-            Either::Left(result) => Ok(result),
-            Either::Right((lhs, rhs)) => {
-                let lhs = stry!(
-                    lhs.map_or_else(|| expr.lhs.run(opts, env, event, state, meta, local), Ok)
-                );
-                let rhs = stry!(
-                    rhs.map_or_else(|| expr.rhs.run(opts, env, event, state, meta, local), Ok)
-                );
-
-                exec_binary(self, expr, expr.kind, &lhs, &rhs)
-            }
-        }
+        exec_binary(self, expr, expr.kind, &lhs, &rhs)
     }
 
     fn binary_boolean<'run, 'event>(

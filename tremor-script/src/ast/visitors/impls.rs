@@ -13,6 +13,7 @@
 // limitations under the License.
 
 pub(crate) mod args_rewriter;
+pub(crate) mod array_addition_optimizer;
 pub(crate) mod const_folder;
 pub(crate) mod group_by_extractor;
 pub(crate) mod is_const;
