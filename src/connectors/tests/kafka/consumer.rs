@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::super::ConnectorHarness;
-use super::redpanda_container;
 use crate::{
-    connectors::{impls::kafka, tests::free_port},
+    connectors::{
+        impls::kafka, 
+        tests::{free_port, ConnectorHarness, kafka::{redpanda_container, PRODUCE_TIMEOUT}},
+    },
     errors::Result,
 };
 use async_std::prelude::FutureExt;
@@ -27,7 +28,7 @@ use rdkafka::{
     consumer::{BaseConsumer, Consumer},
     error::KafkaResult,
     message::OwnedHeaders,
-    producer::{BaseProducer, BaseRecord, Producer},
+    producer::{FutureProducer, FutureRecord},
     ClientConfig, Offset,
 };
 use serial_test::serial;
@@ -74,7 +75,7 @@ async fn transactional_retry() -> Result<()> {
             }
         }
     }
-    let producer: BaseProducer = ClientConfig::new()
+    let producer: FutureProducer = ClientConfig::new()
         .set("bootstrap.servers", &broker)
         .create()
         .expect("Producer creation error");
@@ -97,6 +98,9 @@ async fn transactional_retry() -> Result<()> {
             ],
             "mode": {
                 "transactional": {}
+            },
+            "test_options": {
+                "auto.offset.reset": "beginning"
             }
         }
     });
@@ -111,20 +115,15 @@ async fn transactional_retry() -> Result<()> {
     harness.start().await?;
     harness.wait_for_connected().await?;
 
-    // TODO: it seems to work reliably which hints at a timeout inside redpanda
-    // TODO: verify
-    task::sleep(Duration::from_secs(5)).await;
-
-    let record = BaseRecord::to(topic)
+    let record = FutureRecord::to(topic)
         .payload("{\"snot\":\"badger\"}\n")
         .key("foo")
         .partition(1)
         .timestamp(42)
         .headers(OwnedHeaders::new().add("header", "snot"));
-    if producer.send(record).is_err() {
+    if producer.send(record, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
 
     let e1 = out.get_event().await?;
     assert_eq!(
@@ -155,15 +154,14 @@ async fn transactional_retry() -> Result<()> {
         .await?;
 
     // second event
-    let record2 = BaseRecord::to(topic)
+    let record2 = FutureRecord::to(topic)
         .key("snot")
         .payload("null\n")
         .partition(0)
         .timestamp(12);
-    if producer.send(record2).is_err() {
+    if producer.send(record2, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Could not send to kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
     let e2 = out.get_event().await?;
     assert_eq!(Value::null(), e2.data.suffix().value());
     assert_eq!(
@@ -209,15 +207,14 @@ async fn transactional_retry() -> Result<()> {
         .await?;
 
     // send another event and check that the previous one isn't replayed
-    let record3 = BaseRecord::to(topic)
+    let record3 = FutureRecord::to(topic)
         .key("trigger")
         .payload("false\n")
         .partition(2)
         .timestamp(123);
-    if producer.send(record3).is_err() {
+    if producer.send(record3, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Could not send to kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
 
     // next event
     let e4 = out.get_event().await?;
@@ -238,15 +235,14 @@ async fn transactional_retry() -> Result<()> {
     );
 
     // test failing logic
-    let record4 = BaseRecord::to(topic)
+    let record4 = FutureRecord::to(topic)
         .key("failure")
         .payload("}\n")
         .partition(2)
         .timestamp(1234);
-    if producer.send(record4).is_err() {
+    if producer.send(record4, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Could not send to kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
 
     let e5 = err.get_event().await?;
     assert_eq!(
@@ -272,6 +268,8 @@ async fn transactional_retry() -> Result<()> {
         }),
         e5.data.suffix().meta()
     );
+
+    
 
     let (out_events, err_events) = harness.stop().await?;
     assert!(out_events.is_empty());
@@ -318,15 +316,18 @@ async fn get_offsets(
     Ok(offsets)
 }
 
+
 #[async_std::test]
 #[serial(kafka)]
-async fn transactional_no_retry() -> Result<()> {
+async fn custom_no_retry() -> Result<()> {
+
     serial_test::set_max_wait(Duration::from_secs(600));
 
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
+
 
     let port = container.get_host_port_ipv4(9092);
     let mut admin_config = ClientConfig::new();
@@ -374,8 +375,9 @@ async fn transactional_no_retry() -> Result<()> {
             "mode": {
                 "custom": {
                     "rdkafka_options": {
-                        "enable.auto.commit": "false"
-                    //    "debug": "all"
+                        "enable.auto.commit": "false",
+                        "auto.offset.reset": "beginning",
+                        //"debug": "all"
                     },
                     "retry_failed_events": false
                 }
@@ -392,25 +394,22 @@ async fn transactional_no_retry() -> Result<()> {
     let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
     harness.wait_for_connected().await?;
-
-    // TODO: it seems to work reliably which hints at a timeout inside redpanda
-    // TODO: verify
-    task::sleep(Duration::from_secs(5)).await;
-
-    let producer: BaseProducer = ClientConfig::new()
+    
+    let producer: FutureProducer = ClientConfig::new()
         .set("bootstrap.servers", &broker)
+        .set("debug", "all")
         .create()
         .expect("Producer creation error");
-    let record = BaseRecord::to(topic)
+    let record = FutureRecord::to(topic)
         .payload("{\"snot\":\"badger\"}\n")
         .key("foo")
         .partition(1)
         .timestamp(42)
         .headers(OwnedHeaders::new().add("header", "snot"));
-    if producer.send(record).is_err() {
+    if producer.send(record, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
+    
 
     let e1 = out.get_event().await?;
     assert_eq!(
@@ -441,15 +440,14 @@ async fn transactional_no_retry() -> Result<()> {
         .await?;
 
     // produce second event
-    let record2 = BaseRecord::to(topic)
+    let record2 = FutureRecord::to(topic)
         .key("snot")
         .payload("null\n")
         .partition(0)
         .timestamp(12);
-    if producer.send(record2).is_err() {
+    if producer.send(record2, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Could not send to kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
 
     // get second event
     let e2 = out.get_event().await?;
@@ -479,15 +477,14 @@ async fn transactional_no_retry() -> Result<()> {
         .is_ok());
 
     // send another event and check that the previous one isn't replayed
-    let record3 = BaseRecord::to(topic)
+    let record3 = FutureRecord::to(topic)
         .key("trigger")
         .payload("false\n")
         .partition(2)
         .timestamp(123);
-    if producer.send(record3).is_err() {
+    if producer.send(record3, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Could not send to kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
 
     // we only get the next event, no previous one
     let e3 = out.get_event().await?;
@@ -508,21 +505,20 @@ async fn transactional_no_retry() -> Result<()> {
     );
 
     // test failing logic
-    let record4 = BaseRecord::to(topic)
+    let record4 = FutureRecord::to(topic)
         .key("failure")
         .payload("}\n")
         .partition(2)
         .timestamp(1234);
-    if producer.send(record4).is_err() {
+    if producer.send(record4, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Could not send to kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
 
     let e5 = err.get_event().await?;
     assert_eq!(
         &literal!({
             "error": "SIMD JSON error: InternalError at character 0 ('}')",
-            "source": "test::transactional_no_retry",
+            "source": "test::custom_no_retry",
             "stream_id": 8589934592_u64,
             "pull_id": 1u64
         }),
@@ -612,7 +608,10 @@ async fn performance() -> Result<()> {
             "topics": [
                 topic
             ],
-            "mode": "performance"
+            "mode": "performance",
+            "test_options": {
+                "auto.offset.reset": "beginning"
+            }
         }
     });
     let harness = ConnectorHarness::new(
@@ -626,24 +625,19 @@ async fn performance() -> Result<()> {
     harness.start().await?;
     harness.wait_for_connected().await?;
 
-    // TODO: it seems to work reliably which hints at a timeout inside redpanda
-    // TODO: verify
-    task::sleep(Duration::from_secs(5)).await;
-
-    let producer: BaseProducer = ClientConfig::new()
+    let producer: FutureProducer = ClientConfig::new()
         .set("bootstrap.servers", &broker)
         .create()
         .expect("Producer creation error");
-    let record = BaseRecord::to(topic)
+    let record = FutureRecord::to(topic)
         .payload("{\"snot\":\"badger\"}\n")
         .key("foo")
         .partition(1)
         .timestamp(42)
         .headers(OwnedHeaders::new().add("header", "snot"));
-    if producer.send(record).is_err() {
+    if producer.send(record, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
 
     let e1 = out.get_event().await?;
     assert_eq!(
@@ -674,15 +668,14 @@ async fn performance() -> Result<()> {
         .await?;
 
     // produce second event
-    let record2 = BaseRecord::to(topic)
+    let record2 = FutureRecord::to(topic)
         .key("snot")
         .payload("null\n")
         .partition(0)
         .timestamp(12);
-    if producer.send(record2).is_err() {
+    if producer.send(record2, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Could not send to kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
 
     // get second event
     let e2 = out.get_event().await?;
@@ -713,15 +706,14 @@ async fn performance() -> Result<()> {
         .is_ok());
 
     // send another event and check that the previous one isn't replayed
-    let record3 = BaseRecord::to(topic)
+    let record3 = FutureRecord::to(topic)
         .key("trigger")
         .payload("false\n")
         .partition(2)
         .timestamp(123);
-    if producer.send(record3).is_err() {
+    if producer.send(record3, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Could not send to kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
 
     // we only get the next event, no previous one
     let e3 = out.get_event().await?;
@@ -742,15 +734,14 @@ async fn performance() -> Result<()> {
     );
 
     // test failing logic
-    let record4 = BaseRecord::to(topic)
+    let record4 = FutureRecord::to(topic)
         .key("failure")
         .payload("}\n")
         .partition(2)
         .timestamp(1234);
-    if producer.send(record4).is_err() {
+    if producer.send(record4, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Could not send to kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
 
     let e5 = err.get_event().await?;
     assert_eq!(
@@ -801,9 +792,7 @@ async fn performance() -> Result<()> {
 }
 
 #[async_std::test]
-#[serial(kafka)]
 async fn connector_kafka_consumer_unreachable() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
 
     let kafka_port = free_port::find_free_tcp_port().await?;
     let _ = env_logger::try_init();
@@ -837,6 +826,49 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
     let (out_events, err_events) = harness.stop().await?;
     assert!(out_events.is_empty());
     assert!(err_events.is_empty());
+    Ok(())
+}
+
+#[async_std::test]
+async fn invalid_rdkafka_options() -> Result<()> {
+    let _ = env_logger::try_init();
+    let kafka_port = free_port::find_free_tcp_port().await?;
+    let broker = format!("127.0.0.1:{kafka_port}");
+    let topic = "tremor_test_pause_resume";
+    let group_id = "invalid_rdkafka_options";
+
+    let connector_config = literal!({
+        "reconnect": {
+            "retry": {
+                "interval_ms": 100_u64,
+                "max_retries": 5_u64
+            }
+        },
+        "codec": "json-sorted",
+        "config": {
+            "brokers": [
+                broker.clone()
+            ],
+            "group_id": group_id,
+            "topics": [
+                topic
+            ],
+            "mode": {
+                "custom": {
+                    "rdkafka_options": {
+                        "enable.auto.commit": false,
+                        "hotzen": "PLOTZ"
+                    },
+                    "retry_failed_events": false
+                }
+            }
+        }
+    });
+    assert!(ConnectorHarness::new(
+        function_name!(),
+        &kafka::consumer::Builder::default(),
+        &connector_config,
+    ).await.is_err());
     Ok(())
 }
 
@@ -879,7 +911,7 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
         }
     }
 
-    let producer: BaseProducer = ClientConfig::new()
+    let producer: FutureProducer = ClientConfig::new()
         .set("bootstrap.servers", &broker)
         .create()
         .expect("Producer creation error");
@@ -893,14 +925,11 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
             "topics": [
                 topic
             ],
-            "mode": {
-                "custom": {
-                    "rdkafka_options": {
-                        "debug": "all"
-                    },
-                    "retry_failed_events": false
-                }
+            "mode": "performance",
+            "test_options": {
+                "auto.offset.reset": "beginning"
             }
+
         }
     });
     let harness = ConnectorHarness::new(
@@ -913,17 +942,14 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     harness.start().await?;
     harness.wait_for_connected().await?;
 
-    task::sleep(Duration::from_secs(5)).await;
-
-    let record = BaseRecord::to(topic)
+    let record = FutureRecord::to(topic)
         .key("badger")
         .payload("{\"snot\": true}")
         .partition(1)
         .timestamp(0);
-    if producer.send(record).is_err() {
+    if producer.send(record, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to Kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
     debug!("BEFORE GET EVENT 1");
     let e1 = out.get_event().await?;
     assert_eq!(
@@ -936,15 +962,14 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
 
     harness.pause().await?;
 
-    let record2 = BaseRecord::to(topic)
+    let record2 = FutureRecord::to(topic)
         .key("waiting around to die")
         .payload("\"R.I.P.\"")
         .partition(0)
         .timestamp(1);
-    if producer.send(record2).is_err() {
+    if producer.send(record2, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to Kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
     // we didn't receive shit because we are paused
     assert!(out
         .expect_no_event_for(Duration::from_millis(200))
@@ -1004,7 +1029,7 @@ async fn transactional_store_offset_handling() -> Result<()> {
             }
         }
     }
-    let producer: BaseProducer = ClientConfig::new()
+    let producer: FutureProducer = ClientConfig::new()
         .set("bootstrap.servers", &broker)
         .create()
         .expect("Producer creation error");
@@ -1023,6 +1048,9 @@ async fn transactional_store_offset_handling() -> Result<()> {
                 "transactional": {
                     "commit_interval": commit_interval
                 }
+            },
+            "test_options": {
+                "auto.offset.reset": "beginning"
             }
         }
     });
@@ -1036,38 +1064,34 @@ async fn transactional_store_offset_handling() -> Result<()> {
     harness.start().await?;
     harness.wait_for_connected().await?;
 
-    task::sleep(Duration::from_secs(5)).await;
-
     // send message 1
-    let record1 = BaseRecord::to(topic)
+    let record1 = FutureRecord::to(topic)
         .key("1")
         .payload("1")
         .partition(0)
         .timestamp(1);
-    if producer.send(record1).is_err() {
+    if producer.send(record1, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to Kafka".into());
     }
     // send message 2
-    let record2 = BaseRecord::to(topic)
+    let record2 = FutureRecord::to(topic)
         .key("2")
         .payload("2")
         .partition(0)
         .timestamp(2);
-    if producer.send(record2).is_err() {
+    if producer.send(record2, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to Kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
 
     // send message 3
-    let record3 = BaseRecord::to(topic)
+    let record3 = FutureRecord::to(topic)
         .key("3")
         .payload("3")
         .partition(0)
         .timestamp(3);
-    if producer.send(record3).is_err() {
+    if producer.send(record3, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to Kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
 
     // receive events
     let event1 = out.get_event().await?;
@@ -1099,6 +1123,25 @@ async fn transactional_store_offset_handling() -> Result<()> {
     );
 
     debug!("before start");
+    // no offset reset
+    let connector_config = literal!({
+        "codec": "json-sorted",
+        "config": {
+            "brokers": [
+                broker.clone()
+            ],
+            "group_id": group_id,
+            "topics": [
+                topic
+            ],
+            "mode": {
+                "transactional": {
+                    "commit_interval": commit_interval
+                }
+            }
+        }
+    });
+
     // start new harness
     let harness = ConnectorHarness::new(
         function_name!(),
@@ -1106,6 +1149,7 @@ async fn transactional_store_offset_handling() -> Result<()> {
         &connector_config,
     )
     .await?;
+    let out = harness.out().expect("No pipe connected to port OUT");
     harness.start().await?;
     harness.wait_for_connected().await?;
     debug!("connected");
@@ -1116,6 +1160,16 @@ async fn transactional_store_offset_handling() -> Result<()> {
         .await?;
 
     debug!("failed event2");
+
+    // ensure message 2 and 3 are received
+    // for some strange reason rdkafka might consumer event2 twice
+    let mut event_again = out.get_event().await?;
+    let mut data = event_again.data.suffix().value();
+    while data == &Value::from(2) {
+        event_again = out.get_event().await?;
+        data = event_again.data.suffix().value();
+    }
+    assert_eq!(&Value::from(3), data);
 
     // stop harness
     let _ = harness.stop().await?;
@@ -1139,7 +1193,7 @@ async fn transactional_store_offset_handling() -> Result<()> {
     harness.start().await?;
     harness.wait_for_connected().await?;
 
-    // ensure message 2 and 3 are received
+    // ensure message 2 and 3 are received - yet again
     // for some strange reason rdkafka might consumer event2 twice
     let mut event_again = out.get_event().await?;
     let mut data = event_again.data.suffix().value();
@@ -1205,7 +1259,7 @@ async fn transactional_commit_offset_handling() -> Result<()> {
             }
         }
     }
-    let producer: BaseProducer = ClientConfig::new()
+    let producer: FutureProducer = ClientConfig::new()
         .set("bootstrap.servers", &broker)
         .create()
         .expect("Producer creation error");
@@ -1220,17 +1274,12 @@ async fn transactional_commit_offset_handling() -> Result<()> {
                 topic
             ],
             "mode": {
-                // "custom": {
-                //     "retry_failed_events": true,
-                //     "rdkafka_options": {
-                //         "enable.auto.commit": "true",
-                //         "enable.auto.offset.store": "false",
-                //         "debug": "all"
-                //     }
-                // }
                 "transactional": {
                    "commit_interval": 0 // trigger direct commits
                 }
+            },
+            "test_options": {
+                "auto.offset.reset": "beginning"
             }
         }
     });
@@ -1244,38 +1293,34 @@ async fn transactional_commit_offset_handling() -> Result<()> {
     harness.start().await?;
     harness.wait_for_connected().await?;
 
-    task::sleep(Duration::from_secs(5)).await;
-
     // send message 1
-    let record1 = BaseRecord::to(topic)
+    let record1 = FutureRecord::to(topic)
         .key("1")
         .payload("1")
         .partition(0)
         .timestamp(1);
-    if producer.send(record1).is_err() {
+    if producer.send(record1, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to Kafka".into());
     }
     // send message 2
-    let record2 = BaseRecord::to(topic)
+    let record2 = FutureRecord::to(topic)
         .key("2")
         .payload("2")
         .partition(0)
         .timestamp(2);
-    if producer.send(record2).is_err() {
+    if producer.send(record2, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to Kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
 
     // send message 3
-    let record3 = BaseRecord::to(topic)
+    let record3 = FutureRecord::to(topic)
         .key("3")
         .payload("3")
         .partition(0)
         .timestamp(3);
-    if producer.send(record3).is_err() {
+    if producer.send(record3, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to Kafka".into());
     }
-    producer.flush(Duration::from_secs(1));
 
     // receive events
     let event1 = out.get_event().await?;
@@ -1305,6 +1350,24 @@ async fn transactional_commit_offset_handling() -> Result<()> {
         Some(&Offset::Offset(3))
     );
 
+    // no offset reset, pick up where we left off
+    let connector_config = literal!({
+        "codec": "json-sorted",
+        "config": {
+            "brokers": [
+                broker.clone()
+            ],
+            "group_id": group_id,
+            "topics": [
+                topic
+            ],
+            "mode": {
+                "transactional": {
+                   "commit_interval": 0 // trigger direct commits
+                }
+            }
+        }
+    });
     // start new harness
     let harness = ConnectorHarness::new(
         function_name!(),
@@ -1319,7 +1382,7 @@ async fn transactional_commit_offset_handling() -> Result<()> {
     // ensure no message is received
     assert!(out
         .get_event()
-        .timeout(Duration::from_millis(200))
+        .timeout(Duration::from_secs(3))
         .await
         .is_err());
 
@@ -1368,9 +1431,41 @@ async fn transactional_commit_offset_handling() -> Result<()> {
         .send_contraflow(CbAction::Ack, event_again.id.clone())
         .await?;
 
+    // expected order of things: event5, event6, ack6, fail5, event5, event6
+    let record5 = FutureRecord::to(topic)
+        .key("snot")
+        .payload("8\n")
+        .partition(0)
+        .timestamp(5678);
+    if producer.send(record5, PRODUCE_TIMEOUT).await.is_err() {
+        return Err("Could not send to kafka".into());
+    }
+    let record6 = FutureRecord::to(topic)
+        .key("snot")
+        .payload("9\n")
+        .partition(0)
+        .timestamp(5679);
+    if producer.send(record6, PRODUCE_TIMEOUT).await.is_err() {
+        return Err("Could not send to kafka".into());
+    }
+    let event5 = out.get_event().await?;
+    assert_eq!(&Value::from(8), event5.data.suffix().value());
+    let event6 = out.get_event().await?;
+    assert_eq!(&Value::from(9), event6.data.suffix().value());
+
+    harness.send_contraflow(CbAction::Ack, event6.id.clone()).await?;
+
+    harness.send_contraflow(CbAction::Fail, event5.id.clone()).await?;
+
+    let event5_again = out.get_event().await?;
+    assert_eq!(&Value::from(8), event5_again.data.suffix().value());
+    let event6_again = out.get_event().await?;
+    assert_eq!(&Value::from(9), event6_again.data.suffix().value());
+
     // stop harness
     let _ = harness.stop().await?;
 
+    // offset should be back to where it was before
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
     assert_eq!(
         offsets.get(&(topic.to_string(), 0)),
