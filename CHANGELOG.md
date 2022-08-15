@@ -20,6 +20,8 @@
 
 ### Fixes
 
+- Fix custom metrics for `kafka_consumer`, `kafka_producer` not being reported in the requestedi nterval
+- Fix `metrics` connector not emitting all metrics it did receive.
 - Fix invalid scope handling for `flow` definition default arguments
 - Fix `elastic` sink not acking events handled successfully if no source is connected.
 - Fix `kafka_consumer` possibly committing earlier offsets, thus replaying events that have already been handled.

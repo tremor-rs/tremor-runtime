@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::connectors::prelude::*;
-use async_broadcast::{Receiver, Sender, TrySendError};
+use async_broadcast::{Receiver, RecvError, Sender, TrySendError};
 use beef::Cow;
 use tremor_pipeline::{MetricsMsg, METRICS_CHANNEL};
 use tremor_script::utils::hostname;
@@ -117,17 +117,22 @@ impl MetricsSource {
 #[async_trait::async_trait()]
 impl Source for MetricsSource {
     async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        let msg = self
-            .rx
-            .recv()
-            .await
-            .map_err(|e| Error::from(format!("error: {}", e)))?;
-        Ok(SourceReply::Structured {
-            payload: msg.payload,
-            origin_uri: msg.origin_uri.unwrap_or_else(|| self.origin_uri.clone()),
-            stream: DEFAULT_STREAM_ID,
-            port: None,
-        })
+        loop {
+            match self.rx.recv().await {
+                Ok(msg) => {
+                    break Ok(SourceReply::Structured {
+                        payload: msg.payload,
+                        origin_uri: msg.origin_uri.unwrap_or_else(|| self.origin_uri.clone()),
+                        stream: DEFAULT_STREAM_ID,
+                        port: None,
+                    })
+                }
+                Err(RecvError::Overflowed(_)) => continue, // try again, this is expected
+                Err(e) => {
+                    break Err(e.into());
+                }
+            }
+        }
     }
 
     fn is_transactional(&self) -> bool {

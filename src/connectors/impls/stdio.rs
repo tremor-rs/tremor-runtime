@@ -13,7 +13,7 @@
 // limitations under the License.
 use crate::connectors::prelude::*;
 use crate::utils::hostname;
-use async_broadcast::{broadcast, Receiver};
+use async_broadcast::{broadcast, Receiver, RecvError};
 use async_std::io::{stderr, stdin, stdout, ReadExt, Stderr, Stdout};
 use beef::Cow;
 use futures::AsyncWriteExt;
@@ -98,24 +98,30 @@ impl Source for StdStreamSource {
             SourceReply::Finished
         } else {
             let stdin = self.stdin.get_or_insert_with(|| STDIN.clone());
-            if let Ok(data) = stdin.recv().await {
-                SourceReply::Data {
-                    origin_uri: self.origin_uri.clone(),
-                    data,
-                    meta: None,
-                    stream: Some(DEFAULT_STREAM_ID),
-                    port: None,
-                    codec_overwrite: None,
-                }
-            } else {
-                // receive error from broadcast channel
-                // either the stream is done (in case of a pipe)
-                // or everything is very broken. Either way, ending the stream seems appropriate.
-                self.done = true;
-                SourceReply::EndStream {
-                    origin_uri: self.origin_uri.clone(),
-                    stream: DEFAULT_STREAM_ID,
-                    meta: None,
+            loop {
+                match stdin.recv().await {
+                    Ok(data) => {
+                        break SourceReply::Data {
+                            origin_uri: self.origin_uri.clone(),
+                            data,
+                            meta: None,
+                            stream: Some(DEFAULT_STREAM_ID),
+                            port: None,
+                            codec_overwrite: None,
+                        }
+                    }
+                    Err(RecvError::Overflowed(_)) => continue, // retry, this is expected
+                    Err(RecvError::Closed) => {
+                        // receive error from broadcast channel
+                        // either the stream is done (in case of a pipe)
+                        // or everything is very broken. Either way, ending the stream seems appropriate.
+                        self.done = true;
+                        break SourceReply::EndStream {
+                            origin_uri: self.origin_uri.clone(),
+                            stream: DEFAULT_STREAM_ID,
+                            meta: None,
+                        };
+                    }
                 }
             }
         };
