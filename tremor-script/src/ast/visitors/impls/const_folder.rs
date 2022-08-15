@@ -247,7 +247,8 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script
             | ImutExpr::Invoke3(_)
             | ImutExpr::Literal(_)
             | ImutExpr::InvokeAggr(_)
-            | ImutExpr::Recur(_)) => e,
+            | ImutExpr::Recur(_)
+            | ImutExpr::ArrayAppend { .. }) => e,
         };
         Ok(())
     }

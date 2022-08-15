@@ -755,6 +755,9 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
             ImutExpr::Literal(lit) => {
                 self.walk_literal(lit)?;
             }
+            ImutExpr::ArrayAppend { .. } => {
+                // FIXME: self.walk_array_append(..)
+            }
         }
         self.leave_expr(e)
     }

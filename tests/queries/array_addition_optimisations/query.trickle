@@ -1,7 +1,9 @@
+use std::math;
+
 select
     [
-        event + [4, 5],
-        [4, 5] + event
+        event.a + [4, event.b],
+        [4, event.b] + event.a
     ]
 from in
 into out;
