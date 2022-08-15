@@ -398,7 +398,16 @@ error_chain! {
             description("Google cloud storage error")
                 display("Google cloud storage error: {}", msg)
         }
+        PipelineSendError(s: String) {
+            description("Pipeline send error")
+                display("Pipeline send error: {}", s)
+        }
     }
+}
+
+#[allow(clippy::needless_pass_by_value)]
+pub(crate) fn pipe_send_e<T>(e: async_std::channel::SendError<T>) -> Error {
+    ErrorKind::PipelineSendError(e.to_string()).into()
 }
 
 pub(crate) fn err_connector_def<C: ToString + ?Sized, E: ToString + ?Sized>(c: &C, e: &E) -> Error {
