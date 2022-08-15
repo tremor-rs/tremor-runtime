@@ -324,10 +324,7 @@ async fn link(
                 endpoint: to.clone(),
                 target: connector.clone().try_into()?,
             };
-            pipeline
-                .send_mgmt(msg)
-                .await
-                .map_err(|e| -> Error { format!("Could not send to pipeline: {}", e).into() })?;
+            pipeline.send_mgmt(msg).await?;
 
             // then link the connector to the pipeline
             // this is some odd stuff to have here
@@ -371,15 +368,9 @@ async fn link(
                 is_transactional: true,
             };
 
-            from_pipeline
-                .send_mgmt(msg_from)
-                .await
-                .map_err(|e| -> Error { format!("Could not send to pipeline: {}", e).into() })?;
+            from_pipeline.send_mgmt(msg_from).await?;
 
-            to_pipeline
-                .send_mgmt(msg_to)
-                .await
-                .map_err(|e| -> Error { format!("Could not send to pipeline: {}", e).into() })?;
+            to_pipeline.send_mgmt(msg_to).await?;
             rx.recv().await??;
         }
     }

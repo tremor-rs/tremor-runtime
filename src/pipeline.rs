@@ -13,7 +13,7 @@
 // limitations under the License.
 use crate::{
     connectors::{self, sink::SinkMsg, source::SourceMsg},
-    errors::Result,
+    errors::{pipe_send_e, Result},
     instance::State,
     primerge::PriorityMerge,
     system::flow,
@@ -95,16 +95,17 @@ impl Addr {
 
     /// send a contraflow insight message back down the pipeline
     pub(crate) async fn send_insight(&self, event: Event) -> Result<()> {
-        Ok(self.cf_addr.send(CfMsg::Insight(event)).await?)
+        use CfMsg::Insight;
+        self.cf_addr.send(Insight(event)).await.map_err(pipe_send_e)
     }
 
     /// send a data-plane message to the pipeline
     pub(crate) async fn send(&self, msg: Box<Msg>) -> Result<()> {
-        Ok(self.addr.send(msg).await?)
+        self.addr.send(msg).await.map_err(pipe_send_e)
     }
 
     pub(crate) async fn send_mgmt(&self, msg: MgmtMsg) -> Result<()> {
-        Ok(self.mgmt_addr.send(msg).await?)
+        self.mgmt_addr.send(msg).await.map_err(pipe_send_e)
     }
 
     pub(crate) async fn stop(&self) -> Result<()> {
