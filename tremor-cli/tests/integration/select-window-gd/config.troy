@@ -6,7 +6,7 @@ flow
   with
     codec = "json",
     config = {
-      "path": "in.json",
+      "paths": ["in.json"],
       "timeout": nanos::from_seconds(1),
       "expect_batched": true
     }

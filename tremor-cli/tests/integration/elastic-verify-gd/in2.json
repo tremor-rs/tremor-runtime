@@ -1,0 +1,6 @@
+{"snot": "foo", "action": null}
+{"snot": "bar", "tremor": [true, true, true, false], "action": null}
+{"snot": "baz", "tremor": 12, "cause": "this one has a different type underneath the same key and thus will fail elastic", "action": null}
+{"snot": "fop", "action": "delete", "doc_id": "badger"}
+{"snot": "snoop", "action": "index", "doc_id": "badger"}
+{"snot": "dogg", "action": "update", "doc_id": "badger"}

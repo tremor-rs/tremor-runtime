@@ -16,11 +16,11 @@ mod producer;
 
 use crate::connectors::tests::free_port::find_free_tcp_port;
 use crate::errors::Result;
+use std::time::Duration;
 use testcontainers::{
     clients::Cli as DockerCli, core::WaitFor, images::generic::GenericImage, Container,
     RunnableImage,
 };
-use std::time::Duration;
 
 const IMAGE: &str = "vectorized/redpanda";
 const VERSION: &str = "v22.1.7";

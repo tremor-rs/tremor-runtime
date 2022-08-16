@@ -659,20 +659,22 @@ impl Source for KafkaConsumerSource {
                     // in order to not commit earlier offsets
                     if let Some(raw_offset) = offset.to_raw() {
                         // store offset if not yet in map or if raw_offset exceeds the stored_offset for that partition
+
                         if offsets
                             .get(&stream_id)
-                            .filter(|stored_offset| raw_offset < **stored_offset)
+                            .filter(|stored_offset| *stored_offset > &raw_offset)
                             .is_none()
                         {
-                            offsets.insert(stream_id, raw_offset); // keep track of the maximum offset
                             if self.stores_offsets {
-                                // we deliberately do not send a commit to the group-coordinator by calling `consumer.commit`
-                                // but instead use the client-local memory store of committed offsets
-                                // store the new maximum offset for this partition
+                                offsets.insert(stream_id, raw_offset); // keep track of the maximum offset
+                                                                       // we deliberately do not send a commit to the group-coordinator by calling `consumer.commit`
+                                                                       // but instead use the client-local memory store of committed offsets
+                                                                       // store the new maximum offset for this partition
                                 debug!("{ctx} Storing offset {topic} {partition}: {raw_offset}");
                                 consumer.store_offset(topic, partition, raw_offset)?;
                             } else {
-                                // commit directly to the group coordinator
+                                offsets.insert(stream_id, raw_offset + 1); // keep track of the maximum offset
+                                                                           // commit directly to the group coordinator
                                 let mut tpl = TopicPartitionList::with_capacity(1);
                                 // we need to commit the message offset + 1 - this is the offset we are going to continue from afterwards
                                 let offset = Offset::Offset(raw_offset + 1);
@@ -705,7 +707,7 @@ impl Source for KafkaConsumerSource {
             ..
         } = self
         {
-            if let (Some(consumer), true) = (self.consumer.as_ref(), self.retry_failed_events) {
+            if let Some(consumer) = self.consumer.as_ref() {
                 if let Some((topic, partition, offset)) =
                     self.topic_resolver.resolve_topic(stream_id, pull_id)
                 {
