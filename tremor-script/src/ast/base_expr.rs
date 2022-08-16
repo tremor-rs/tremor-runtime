@@ -176,13 +176,14 @@ impl<'script> BaseExpr for ImutExpr<'script> {
             ImutExpr::Patch(e) => e.meta(),
             ImutExpr::Path(e) => e.meta(),
             ImutExpr::Recur(e) => e.meta(),
-            ImutExpr::Local { mid, .. } | ImutExpr::Present { mid, .. } => mid,
+            ImutExpr::Local { mid, .. }
+            | ImutExpr::Present { mid, .. }
+            | ImutExpr::ArrayAppend { mid, .. } => mid,
             ImutExpr::Record(e) => e.meta(),
             ImutExpr::Unary(e) => e.meta(),
             ImutExpr::Bytes(e) => e.meta(),
             ImutExpr::String(e) => e.meta(),
             ImutExpr::BinaryBoolean(e) => e.meta(),
-            ImutExpr::ArrayAppend { mid, .. } => mid,
         }
     }
 }
