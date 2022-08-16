@@ -27,14 +27,13 @@ use super::{
     ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamStmt, Upable,
     WindowDefinition, WindowKind,
 };
-use crate::ast::visitors::ArrayAdditionOptimizer;
+use crate::ast::optimizer::Optimizer;
 use crate::{ast::NodeMeta, impl_expr};
 use crate::{
     ast::{
         node_id::NodeId,
         raw::UseRaw,
-        visitors::{ConstFolder, GroupByExprExtractor, TargetEventRef},
-        walkers::{ImutExprWalker, QueryWalker},
+        visitors::{GroupByExprExtractor, TargetEventRef},
         Consts, Ident,
     },
     errors::{Error, Kind as ErrorKind},
@@ -64,14 +63,13 @@ impl<'script> QueryRaw<'script> {
             .filter_map(|stmt| stmt.up(helper).transpose())
             .collect::<Result<_>>()?;
         for stmt in &mut stmts {
-            ConstFolder::new(helper).walk_stmt(stmt)?;
-            ArrayAdditionOptimizer {}.walk_stmt(stmt)?;
+            Optimizer::new(helper).walk_stmt(stmt)?;
         }
         let mut from = Vec::new();
         let mut into = Vec::new();
         let mut config = HashMap::new();
         for (k, mut v) in self.config.up(helper)? {
-            ConstFolder::new(helper).walk_expr(&mut v)?;
+            Optimizer::new(helper).walk_imut_expr(&mut v)?;
             let mid = v.meta().clone();
             let v = v.try_into_value(helper)?;
             match (k.as_str(), v.as_str()) {

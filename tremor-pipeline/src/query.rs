@@ -37,13 +37,12 @@ use rand::Rng;
 use std::collections::BTreeSet;
 use std::iter;
 use tremor_common::ids::{OperatorId, OperatorIdGen};
+use tremor_script::ast::optimizer::Optimizer;
 use tremor_script::{
     ast::{
-        self,
-        visitors::{ArgsRewriter, ConstFolder},
-        walkers::QueryWalker,
-        Helper, Ident, OperatorDefinition, PipelineCreate, PipelineDefinition, ScriptDefinition,
-        SelectType, Stmt, WindowDefinition, WindowKind,
+        self, visitors::ArgsRewriter, walkers::QueryWalker, Helper, Ident, OperatorDefinition,
+        PipelineCreate, PipelineDefinition, ScriptDefinition, SelectType, Stmt, WindowDefinition,
+        WindowKind,
     },
     errors::{
         err_generic, not_defined_err, query_node_duplicate_name_err,
@@ -442,11 +441,11 @@ impl Query {
                         .ok_or_else(|| not_defined_err(o, "script"))?;
                     defn.params.ingest_creational_with(&o.params)?;
                     // we const fold twice to ensure that we are able
-                    ConstFolder::new(&helper).walk_definitional_args(&mut defn.params)?;
+                    Optimizer::new(&helper).walk_definitional_args(&mut defn.params)?;
                     let inner_args = defn.params.render()?;
                     ArgsRewriter::new(inner_args, &mut helper, defn.params.meta())
                         .walk_script_defn(&mut defn)?;
-                    ConstFolder::new(&helper).walk_script_defn(&mut defn)?;
+                    Optimizer::new(&helper).walk_script_defn(&mut defn)?;
 
                     let e = defn.extent();
                     let mut h = Dumb::new();
@@ -764,7 +763,7 @@ fn select(
                             )))
                         })
                         .and_then(|mut imp| {
-                            ConstFolder::new(helper).walk_window_defn(&mut imp)?;
+                            Optimizer::new(helper).walk_window_defn(&mut imp)?;
                             Ok((w.id.id().to_string(), window_defn_to_impl(&imp)?))
                         })
                 })

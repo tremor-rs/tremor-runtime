@@ -12,12 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::ast::optimizer::Optimizer;
 use crate::lexer;
 use crate::{arena, errors::Result};
 use crate::{arena::Arena, highlighter::Highlighter};
 use crate::{ast::base_expr::Ranged, prelude::*};
 use crate::{
-    ast::{self, helper::Warning, visitors::ConstFolder, walkers::QueryWalker},
+    ast::{self, helper::Warning},
     lexer::Lexer,
 };
 use std::collections::BTreeSet;
@@ -112,7 +113,7 @@ where
         let filtered_tokens = tokens.into_iter().filter(|t| !t.value.is_ignorable());
         let query_stage_1 = crate::parser::g::QueryParser::new().parse(filtered_tokens)?;
         let mut query = query_stage_1.up_script(&mut helper)?;
-        ConstFolder::new(&helper).walk_query(&mut query)?;
+        Optimizer::new(&helper).walk_query(&mut query)?;
         Ok(Self {
             query,
             warnings: helper.warnings,

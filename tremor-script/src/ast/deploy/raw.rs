@@ -19,6 +19,7 @@ use super::{
     BaseExpr, ConnectStmt, ConnectorDefinition, CreateStmt, CreateTargetDefinition, DeployEndpoint,
     DeployFlow, FlowDefinition, Value,
 };
+use crate::ast::optimizer::Optimizer;
 use crate::{
     ast::{
         base_expr::Ranged,
@@ -30,8 +31,6 @@ use crate::{
             PipelineDefinitionRaw,
         },
         raw::{IdentRaw, UseRaw},
-        visitors::ConstFolder,
-        walkers::{ImutExprWalker, QueryWalker},
         Deploy, DeployStmt, Helper, NodeMeta, Script, Upable,
     },
     errors::{Error, Kind as ErrorKind, Result},
@@ -92,7 +91,7 @@ impl<'script> DeployRaw<'script> {
 
         let mut config = HashMap::new();
         for (k, mut v) in self.config.up(helper)? {
-            ConstFolder::new(helper).walk_expr(&mut v)?;
+            Optimizer::new(helper).walk_imut_expr(&mut v)?;
             config.insert(k.to_string(), v.try_into_value(helper)?);
         }
         Ok(Deploy {
@@ -500,7 +499,7 @@ impl<'script> Upable<'script> for DeployFlowRaw<'script> {
         };
         let upped_params = self.params.up(helper)?;
         defn.params.ingest_creational_with(&upped_params)?;
-        ConstFolder::new(helper).walk_definitional_args(&mut defn.params)?;
+        Optimizer::new(helper).walk_definitional_args(&mut defn.params)?;
         let defn_args = defn.params.render()?;
 
         for c in &mut defn.creates {

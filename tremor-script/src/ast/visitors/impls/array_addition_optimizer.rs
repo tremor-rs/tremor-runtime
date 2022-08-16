@@ -12,22 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::visitors::{ExprVisitor, ImutExprVisitor, QueryVisitor};
-use crate::ast::walkers::{ExprWalker, ImutExprWalker, QueryWalker};
+use crate::ast::visitors::{DeployVisitor, ExprVisitor, ImutExprVisitor, QueryVisitor};
+use crate::ast::walkers::{DeployWalker, ExprWalker, ImutExprWalker, QueryWalker};
 use crate::ast::{ArrayAppend, BaseExpr, BinOpKind, ImutExpr, List, Literal};
 use tremor_value::Value;
 
 /// Optimizes array addition
 pub struct ArrayAdditionOptimizer {}
 
-impl<'script> ImutExprWalker<'script> for ArrayAdditionOptimizer {}
-
-impl<'script> ExprVisitor<'script> for ArrayAdditionOptimizer {}
-impl<'script> ExprWalker<'script> for ArrayAdditionOptimizer {}
-
-impl<'script> QueryVisitor<'script> for ArrayAdditionOptimizer {}
-
+impl<'script> DeployWalker<'script> for ArrayAdditionOptimizer {}
 impl<'script> QueryWalker<'script> for ArrayAdditionOptimizer {}
+impl<'script> ExprWalker<'script> for ArrayAdditionOptimizer {}
+impl<'script> ImutExprWalker<'script> for ArrayAdditionOptimizer {}
+impl<'script> DeployVisitor<'script> for ArrayAdditionOptimizer {}
+impl<'script> QueryVisitor<'script> for ArrayAdditionOptimizer {}
+impl<'script> ExprVisitor<'script> for ArrayAdditionOptimizer {}
 
 impl<'script> ImutExprVisitor<'script> for ArrayAdditionOptimizer {
     fn leave_expr(&mut self, e: &mut ImutExpr<'script>) -> crate::Result<()> {
