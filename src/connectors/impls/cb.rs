@@ -191,7 +191,8 @@ struct ReceivedCbs {
 
 impl ReceivedCbs {
     fn count(&self) -> usize {
-        self.ack.len() + self.fail.len()
+        self.ack.values().map(Vec::len).sum::<usize>()
+            + self.fail.values().map(Vec::len).sum::<usize>()
     }
 
     fn max(&self) -> HashMap<u64, u64> {
@@ -211,7 +212,7 @@ impl ReceivedCbs {
                 acks.insert(k, v);
             }
         }
-        acks
+        dbg!(acks)
     }
 }
 
