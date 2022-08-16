@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{BinOpKind, BooleanBinExpr, BooleanBinOpKind};
+use crate::ast::{BooleanBinExpr, BooleanBinOpKind};
 use crate::static_bool;
 use crate::{
     ast::{
@@ -34,11 +34,11 @@ use crate::{
     registry::{Registry, TremorAggrFnWrapper, RECUR_REF},
     stry, Object, Value,
 };
-use either::Either;
 use std::{
     borrow::{Borrow, Cow},
     iter, mem,
 };
+use value_trait::ValueInto;
 
 fn owned_val<'val, T>(v: T) -> Cow<'val, Value<'val>>
 where
@@ -49,11 +49,6 @@ where
 }
 
 type Bi<'v, 'r> = (usize, Box<dyn Iterator<Item = (Value<'v>, Value<'v>)> + 'r>);
-
-type ExpressionSidesExecutionResult<'run, 'event> = (
-    Option<Cow<'run, Value<'event>>>,
-    Option<Cow<'run, Value<'event>>>,
-);
 
 impl<'script> ImutExpr<'script> {
     /// Checks if the expression is a literal expression
@@ -257,22 +252,23 @@ impl<'script> ImutExpr<'script> {
             ImutExpr::Comprehension(ref expr) => {
                 self.comprehension(opts, env, event, state, meta, local, expr)
             }
-            ImutExpr::ArrayAppend { left, right, mid } => {
-                let left = stry!(left.run(opts, env, event, state, meta, local));
+            ImutExpr::ArrayAppend {
+                left,
+                right,
+                mid: _,
+            } => {
+                let left = stry!(left.run(opts, env, event, state, meta, local)).into_owned();
 
-                if let Some(left_val) = left.as_array() {
-                    let mut new_left = left_val.clone();
-                    new_left.reserve(right.len());
+                let mut new_left = left.try_into_array()?;
 
-                    for expr in right {
-                        let expr_result = stry!(expr.run(opts, env, event, state, meta, local));
-                        new_left.push(expr_result.into_owned());
-                    }
+                new_left.reserve(right.len());
 
-                    Ok(Cow::Owned(Value::from(new_left)))
-                } else {
-                    todo!("Handle type mismatch!")
+                for expr in right {
+                    let expr_result = stry!(expr.run(opts, env, event, state, meta, local));
+                    new_left.push(expr_result.into_owned());
                 }
+
+                Ok(Cow::Owned(Value::from(new_left)))
             }
         }
     }

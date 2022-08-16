@@ -53,7 +53,7 @@ pub use value::{parse_to_value, parse_to_value_with_buffers, to_value, Object, V
 
 use simd_json::Node;
 use simd_json_derive::{Deserialize, Serialize, Tape};
-use value_trait::Writable;
+use value_trait::{ValueAccess, ValueInto, Writable};
 
 impl<'value> Serialize for Value<'value> {
     fn json_write<W>(&self, writer: &mut W) -> std::io::Result<()>
@@ -61,6 +61,31 @@ impl<'value> Serialize for Value<'value> {
         W: std::io::Write,
     {
         self.write(writer)
+    }
+}
+
+impl<'value> ValueInto for Value<'value> {
+    type String = String;
+
+    fn into_string(self) -> Option<<Value<'value> as ValueInto>::String> {
+        match self {
+            Self::String(s) => Some(s.into_owned()),
+            _ => None,
+        }
+    }
+
+    fn into_array(self) -> Option<<Value<'value> as ValueAccess>::Array> {
+        match self {
+            Self::Array(a) => Some(a),
+            _ => None,
+        }
+    }
+
+    fn into_object(self) -> Option<<Value<'value> as ValueAccess>::Object> {
+        match self {
+            Self::Object(o) => Some(*o),
+            _ => None,
+        }
     }
 }
 

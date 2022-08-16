@@ -1,7 +1,7 @@
-use crate::ast::visitors::query::Visitor;
 use crate::ast::visitors::{ExprVisitor, ImutExprVisitor, QueryVisitor};
 use crate::ast::walkers::{ExprWalker, ImutExprWalker, QueryWalker};
-use crate::ast::{BinOpKind, ImutExpr, List};
+use crate::ast::{BaseExpr, BinOpKind, ImutExpr, List, Literal};
+use tremor_value::Value;
 
 /// Optimizes array addition
 pub struct ArrayAdditionOptimizer {}
@@ -9,31 +9,35 @@ pub struct ArrayAdditionOptimizer {}
 impl<'script> ImutExprWalker<'script> for ArrayAdditionOptimizer {}
 
 impl<'script> ExprVisitor<'script> for ArrayAdditionOptimizer {}
-impl<'script, 'registry, 'meta> ExprWalker<'script> for ArrayAdditionOptimizer {}
+impl<'script> ExprWalker<'script> for ArrayAdditionOptimizer {}
 
 impl<'script> QueryVisitor<'script> for ArrayAdditionOptimizer {}
 
 impl<'script> QueryWalker<'script> for ArrayAdditionOptimizer {}
 
-impl<'script, 'registry, 'meta> ImutExprVisitor<'script> for ArrayAdditionOptimizer {
+impl<'script> ImutExprVisitor<'script> for ArrayAdditionOptimizer {
     fn leave_expr(&mut self, e: &mut ImutExpr<'script>) -> crate::Result<()> {
-        if let ImutExpr::Binary(binary) = e {
-            if binary.kind != BinOpKind::Add {
-                return Ok(());
+        let mut buf = ImutExpr::Literal(Literal {
+            value: Value::const_null(),
+            mid: Box::new(e.meta().clone()),
+        });
+        std::mem::swap(&mut buf, e);
+
+        *e = match buf {
+            ImutExpr::Binary(binary) if binary.kind == BinOpKind::Add => {
+                if let ImutExpr::List(List { exprs, mid: _ }) = binary.rhs {
+                    ImutExpr::ArrayAppend {
+                        left: Box::new(binary.lhs),
+                        right: exprs,
+                        mid: binary.mid,
+                    }
+                } else {
+                    ImutExpr::Binary(binary)
+                }
             }
+            other => other,
+        };
 
-            if let ImutExpr::List(List { ref exprs, mid: _ }) = binary.rhs {
-                // FIXME: get rid of the clones!
-                *e = ImutExpr::ArrayAppend {
-                    left: Box::new(binary.lhs.clone()),
-                    right: exprs.clone(),
-                    mid: binary.mid.clone(),
-                };
-
-                return Ok(());
-            }
-        }
-
-        return Ok(());
+        Ok(())
     }
 }
