@@ -4,6 +4,7 @@
 
 ### Breaking Changes
 
+- `cb` connector config `path` changed to `paths`.
 - Introduce breaking change in `kafka_consumer` configuration, by adding `mode`.
 - Update grok to 0.2, optional patterns are now omitted no longer ""
 - Unify to `url` instead of `endpoint` for google and s3 connectors so they're in line with every other connector
@@ -20,7 +21,8 @@
 
 ### Fixes
 
-- Fix custom metrics for `kafka_consumer`, `kafka_producer` not being reported in the requestedi nterval
+- Fix bug in the runtime, swallowing some event acknowledgements and fails for batched events from multiple streams
+- Fix custom metrics for `kafka_consumer`, `kafka_producer` not being reported in the requested interval
 - Fix `metrics` connector not emitting all metrics it did receive.
 - Fix invalid scope handling for `flow` definition default arguments
 - Fix `elastic` sink not acking events handled successfully if no source is connected.

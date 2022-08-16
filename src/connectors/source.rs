@@ -765,14 +765,17 @@ where
         let ctx = &self.ctx;
         match cb {
             CbAction::Fail => {
-                if let Some((stream_id, id)) = id.get_min_by_source(self.ctx.uid.id()) {
-                    ctx.swallow_err(self.source.fail(stream_id, id, ctx).await, "fail failed");
+                for (stream_id, pull_id) in id.get_min_streams_by_source(self.ctx.uid.id()) {
+                    ctx.swallow_err(
+                        self.source.fail(stream_id, pull_id, ctx).await,
+                        "fail failed",
+                    );
                 }
                 Control::Continue
             }
             CbAction::Ack => {
-                if let Some((stream_id, id)) = id.get_max_by_source(self.ctx.uid.id()) {
-                    ctx.swallow_err(self.source.ack(stream_id, id, ctx).await, "ack failed");
+                for (stream_id, pull_id) in id.get_max_streams_by_source(self.ctx.uid.id()) {
+                    ctx.swallow_err(self.source.ack(stream_id, pull_id, ctx).await, "ack failed");
                 }
                 Control::Continue
             }

@@ -5709,6 +5709,7 @@ dependencies = [
  "base64 0.13.0",
  "beef",
  "criterion",
+ "either",
  "error-chain",
  "halfbrown",
  "indexmap",

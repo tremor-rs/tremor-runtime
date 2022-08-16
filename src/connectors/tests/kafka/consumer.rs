@@ -14,8 +14,12 @@
 
 use crate::{
     connectors::{
-        impls::kafka, 
-        tests::{free_port, ConnectorHarness, kafka::{redpanda_container, PRODUCE_TIMEOUT}},
+        impls::kafka,
+        tests::{
+            free_port,
+            kafka::{redpanda_container, PRODUCE_TIMEOUT},
+            ConnectorHarness,
+        },
     },
     errors::Result,
 };
@@ -269,8 +273,6 @@ async fn transactional_retry() -> Result<()> {
         e5.data.suffix().meta()
     );
 
-    
-
     let (out_events, err_events) = harness.stop().await?;
     assert!(out_events.is_empty());
     assert!(err_events.is_empty());
@@ -316,18 +318,15 @@ async fn get_offsets(
     Ok(offsets)
 }
 
-
 #[async_std::test]
 #[serial(kafka)]
 async fn custom_no_retry() -> Result<()> {
-
     serial_test::set_max_wait(Duration::from_secs(600));
 
     let _ = env_logger::try_init();
 
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
-
 
     let port = container.get_host_port_ipv4(9092);
     let mut admin_config = ClientConfig::new();
@@ -394,7 +393,7 @@ async fn custom_no_retry() -> Result<()> {
     let err = harness.err().expect("No pipe connected to port ERR");
     harness.start().await?;
     harness.wait_for_connected().await?;
-    
+
     let producer: FutureProducer = ClientConfig::new()
         .set("bootstrap.servers", &broker)
         .set("debug", "all")
@@ -409,7 +408,6 @@ async fn custom_no_retry() -> Result<()> {
     if producer.send(record, PRODUCE_TIMEOUT).await.is_err() {
         return Err("Unable to send record to kafka".into());
     }
-    
 
     let e1 = out.get_event().await?;
     assert_eq!(
@@ -793,7 +791,6 @@ async fn performance() -> Result<()> {
 
 #[async_std::test]
 async fn connector_kafka_consumer_unreachable() -> Result<()> {
-
     let kafka_port = free_port::find_free_tcp_port().await?;
     let _ = env_logger::try_init();
     let connector_config = literal!({
@@ -868,7 +865,9 @@ async fn invalid_rdkafka_options() -> Result<()> {
         function_name!(),
         &kafka::consumer::Builder::default(),
         &connector_config,
-    ).await.is_err());
+    )
+    .await
+    .is_err());
     Ok(())
 }
 
@@ -1453,9 +1452,13 @@ async fn transactional_commit_offset_handling() -> Result<()> {
     let event6 = out.get_event().await?;
     assert_eq!(&Value::from(9), event6.data.suffix().value());
 
-    harness.send_contraflow(CbAction::Ack, event6.id.clone()).await?;
+    harness
+        .send_contraflow(CbAction::Ack, event6.id.clone())
+        .await?;
 
-    harness.send_contraflow(CbAction::Fail, event5.id.clone()).await?;
+    harness
+        .send_contraflow(CbAction::Fail, event5.id.clone())
+        .await?;
 
     let event5_again = out.get_event().await?;
     assert_eq!(&Value::from(8), event5_again.data.suffix().value());
