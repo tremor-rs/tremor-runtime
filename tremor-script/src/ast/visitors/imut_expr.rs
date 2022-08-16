@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{BooleanBinExpr, Const};
+use crate::ast::{ArrayAppend, BooleanBinExpr, Const};
 
 use super::prelude::*;
 use super::VisitRes;
@@ -761,6 +761,22 @@ pub trait Visitor<'script> {
     /// if the walker function fails
     fn visit_const(&mut self, _e: &mut Const<'script>) -> Result<VisitRes> {
         Ok(Walk)
+    }
+
+    /// Visit an `ArrayAppend`
+    ///
+    /// # Errors
+    /// If the walker function fails
+    fn visit_array_append(&mut self, _a: &mut ArrayAppend<'script>) -> Result<VisitRes> {
+        Ok(Walk)
+    }
+
+    /// Leave an `ArrayAppend`
+    ///
+    /// # Errors
+    /// If the walker function fails
+    fn leave_array_append(&mut self, _a: &mut ArrayAppend<'script>) -> Result<()> {
+        Ok(())
     }
 
     /// leave a generic `Const`

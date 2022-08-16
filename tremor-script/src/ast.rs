@@ -422,6 +422,19 @@ pub struct Field<'script> {
 impl_expr!(Field);
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
+/// Encapsulation of an array append expression
+pub struct ArrayAppend<'script> {
+    /// Left side
+    pub(crate) left: Box<ImutExpr<'script>>,
+    /// Expressions to be appended to the left side
+    pub(crate) right: ImutExprs<'script>,
+    /// Id
+    pub(crate) mid: Box<NodeMeta>,
+}
+
+impl_expr!(ArrayAppend);
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
 /// Encapsulation of a record structure
 pub struct Record<'script> {
     /// Id
@@ -684,14 +697,7 @@ pub enum ImutExpr<'script> {
     /// Bytes
     Bytes(Bytes<'script>),
     /// Array append
-    ArrayAppend {
-        /// Left side
-        left: Box<ImutExpr<'script>>,
-        /// Expressions to be appended to the left side
-        right: ImutExprs<'script>,
-        /// Id
-        mid: Box<NodeMeta>,
-    },
+    ArrayAppend(ArrayAppend<'script>),
 }
 
 impl<'script> ImutExpr<'script> {
