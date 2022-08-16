@@ -16,17 +16,18 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
+use crate::ast::optimizer::Optimizer;
 use crate::ast::{BooleanBinExpr, BooleanBinOpKind};
 use crate::{
     ast::{
-        base_expr, query, upable::Upable, visitors::ConstFolder, walkers::ExprWalker, ArrayPattern,
-        ArrayPredicatePattern, AssignPattern, BinExpr, BinOpKind, Bytes, BytesPart, ClauseGroup,
-        Comprehension, ComprehensionCase, Costly, DefaultCase, EmitExpr, EventPath, Expr, ExprPath,
-        Expression, Field, FnDefn, Helper, Ident, IfElse, ImutExpr, Invocable, Invoke, InvokeAggr,
-        InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath, Patch, PatchOperation,
-        Path, Pattern, PredicateClause, PredicatePattern, Record, RecordPattern, Recur,
-        ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit, TestExpr, TuplePattern,
-        UnaryExpr, UnaryOpKind,
+        base_expr, query, upable::Upable, ArrayPattern, ArrayPredicatePattern, AssignPattern,
+        BinExpr, BinOpKind, Bytes, BytesPart, ClauseGroup, Comprehension, ComprehensionCase,
+        Costly, DefaultCase, EmitExpr, EventPath, Expr, ExprPath, Expression, Field, FnDefn,
+        Helper, Ident, IfElse, ImutExpr, Invocable, Invoke, InvokeAggr, InvokeAggrFn, List,
+        Literal, LocalPath, Match, Merge, MetadataPath, Patch, PatchOperation, Path, Pattern,
+        PredicateClause, PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Script,
+        Segment, StatePath, StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr,
+        UnaryOpKind,
     },
     errors::{
         err_generic, error_generic, error_missing_effector, Error, Kind as ErrorKind, Result,
@@ -105,7 +106,8 @@ impl<'script> ScriptRaw<'script> {
                 }
                 TopLevelExprRaw::FnDefn(f) => {
                     let mut f = f.up(helper)?;
-                    ExprWalker::walk_fn_defn(&mut ConstFolder::new(helper), &mut f)?;
+                    Optimizer::new(helper).walk_fn_defn(&mut f)?;
+
                     helper.scope.insert_function(f)?;
                 }
                 TopLevelExprRaw::Expr(expr) => {

@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::ast::optimizer::Optimizer;
 pub use crate::interpreter::AggrType;
 use crate::{
     arena::{self, Arena},
     ast::{
         docs::Docs,
         helper::{Warning, Warnings},
-        visitors::ConstFolder,
-        walkers::QueryWalker,
         Helper,
     },
     ctx::EventContext,
@@ -126,7 +125,7 @@ impl Script {
         let mut helper = Helper::new(reg, &fake_aggr_reg);
         // helper.consts.args = args.clone_static();
         let mut script = script_raw.up_script(&mut helper)?;
-        ConstFolder::new(&helper).walk_script(&mut script)?;
+        Optimizer::new(&helper).walk_script(&mut script)?;
         let script = script;
 
         Ok(Self {

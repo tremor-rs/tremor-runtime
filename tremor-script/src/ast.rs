@@ -2180,3 +2180,6 @@ impl_expr!(UnaryExpr);
 
 #[cfg(test)]
 mod test;
+
+/// The AST-level optimiser
+pub mod optimizer;
