@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::{BooleanBinExpr, BooleanBinOpKind};
+use crate::ast::{ArrayAppend, BooleanBinExpr, BooleanBinOpKind};
 use crate::static_bool;
 use crate::{
     ast::{
@@ -252,11 +252,11 @@ impl<'script> ImutExpr<'script> {
             ImutExpr::Comprehension(ref expr) => {
                 self.comprehension(opts, env, event, state, meta, local, expr)
             }
-            ImutExpr::ArrayAppend {
+            ImutExpr::ArrayAppend(ArrayAppend {
                 left,
                 right,
                 mid: _,
-            } => {
+            }) => {
                 let left = stry!(left.run(opts, env, event, state, meta, local)).into_owned();
 
                 let mut new_left = left.try_into_array()?;
