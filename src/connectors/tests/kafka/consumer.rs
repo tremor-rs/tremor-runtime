@@ -275,8 +275,6 @@ async fn transactional_retry() -> Result<()> {
     Ok(())
 }
 
-
-
 #[async_std::test]
 #[serial(kafka)]
 async fn custom_no_retry() -> Result<()> {
@@ -1368,7 +1366,12 @@ async fn transactional_commit_offset_handling() -> Result<()> {
     Ok(())
 }
 
-async fn create_topic(broker: impl Into<String>, topic: &str, partitions: i32, repl: TopicReplication<'_>) -> Result<()> {
+async fn create_topic(
+    broker: impl Into<String>,
+    topic: &str,
+    partitions: i32,
+    repl: TopicReplication<'_>,
+) -> Result<()> {
     let mut admin_config = ClientConfig::new();
     admin_config
         .set("client.id", "test-admin")
@@ -1376,10 +1379,7 @@ async fn create_topic(broker: impl Into<String>, topic: &str, partitions: i32, r
     let admin_client = AdminClient::from_config(&admin_config)?;
     let options = AdminOptions::default();
     let res = admin_client
-        .create_topics(
-            vec![&NewTopic::new(topic, partitions, repl)],
-            &options,
-        )
+        .create_topics(vec![&NewTopic::new(topic, partitions, repl)], &options)
         .await?;
     for r in res {
         match r {
