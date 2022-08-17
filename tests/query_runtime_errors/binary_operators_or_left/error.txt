@@ -1,0 +1,3 @@
+Error: 
+    1 | select event.a or event.b from in into out;
+      |        ^^^^^^^ The binary operation `or` is not defined for the type `string` and `<not executed>`

@@ -1,0 +1,1 @@
+select event.a or event.b from in into out;
