@@ -30,11 +30,11 @@ pub(crate) const CONNECTOR_TYPE: &str = "s3_reader";
 const URL_SCHEME: &str = "tremor-s3";
 
 #[derive(Deserialize, Debug, Default)]
-pub struct S3SourceConfig {
+pub(crate) struct S3SourceConfig {
     // if not provided here explicitly, the region is taken from environment variable or local AWS config
     // NOTE: S3 will fail if NO region could be found.
     aws_region: Option<String>,
-    endpoint: Option<String>,
+    url: Option<Url<HttpsDefaults>>,
     bucket: String,
 
     /// prefix filter - if provided, it will fetch all keys with this prefix
@@ -127,11 +127,8 @@ impl Connector for S3SourceConnector {
         for handle in self.handles.drain(..) {
             handle.cancel().await;
         }
-        let client = auth::get_client(
-            self.config.aws_region.clone(),
-            self.config.endpoint.as_ref(),
-        )
-        .await?;
+        let client =
+            auth::get_client(self.config.aws_region.clone(), self.config.url.as_ref()).await?;
 
         // Check the existence of the bucket.
         client

@@ -302,7 +302,13 @@ impl<'input> simd_json_derive::Deserialize<'input> for EventPayload {
 
 /// Combined struct for an event value and metadata
 #[derive(
-    Clone, Debug, PartialEq, Serialize, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Clone,
+    Debug,
+    PartialEq,
+    Serialize,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+    Eq,
 )]
 pub struct ValueAndMeta<'event> {
     v: Value<'event>,

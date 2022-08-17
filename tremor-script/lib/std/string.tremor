@@ -107,7 +107,7 @@ intrinsic fn from_utf8_lossy(bytes) as string::from_utf8_lossy;
 ## Returns a `binary`
 intrinsic fn into_binary(bytes) as string::into_binary;
 
-## Reverses a `string` 
+## Reverses a `string`
 ##
 ## Returns a `string`
 intrinsic fn reverse(input) as string::reverse;

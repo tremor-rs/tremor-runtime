@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::ast::Const;
+use crate::ast::{ArrayAppend, BooleanBinExpr, Const};
 
 use super::super::visitors::prelude::*;
 macro_rules! stop {
@@ -63,6 +63,20 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
         self.walk_expr(&mut binary.lhs)?;
         self.walk_expr(&mut binary.rhs)?;
         self.leave_binary(binary)
+    }
+
+    /// walk a binary
+    ///
+    /// # Errors
+    /// if the walker function fails
+    fn walk_binary_boolean(&mut self, binary: &mut BooleanBinExpr<'script>) -> Result<()> {
+        stop!(
+            self.visit_binary_boolean(binary),
+            self.leave_binary_boolean(binary)
+        );
+        self.walk_expr(&mut binary.lhs)?;
+        self.walk_expr(&mut binary.rhs)?;
+        self.leave_binary_boolean(binary)
     }
 
     /// walk a unary
@@ -696,6 +710,9 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
             ImutExpr::Binary(binary) => {
                 self.walk_binary(binary.as_mut())?;
             }
+            ImutExpr::BinaryBoolean(binary_boolean) => {
+                self.walk_binary_boolean(binary_boolean.as_mut())?;
+            }
             ImutExpr::Unary(unary) => {
                 self.walk_unary(unary.as_mut())?;
             }
@@ -738,6 +755,9 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
             ImutExpr::Literal(lit) => {
                 self.walk_literal(lit)?;
             }
+            ImutExpr::ArrayAppend(app) => {
+                self.walk_array_append(app)?;
+            }
         }
         self.leave_expr(e)
     }
@@ -749,5 +769,15 @@ pub trait Walker<'script>: ImutExprVisitor<'script> {
     fn walk_const(&mut self, c: &mut Const<'script>) -> Result<()> {
         stop!(self.visit_const(c), self.leave_const(c));
         self.leave_const(c)
+    }
+
+    /// Walk an `ArrayAppend`
+    ///
+    /// # Errors
+    /// If the walker function fails
+    fn walk_array_append(&mut self, a: &mut ArrayAppend<'script>) -> Result<()> {
+        stop!(self.visit_array_append(a), self.leave_array_append(a));
+
+        self.leave_array_append(a)
     }
 }

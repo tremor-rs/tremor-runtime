@@ -1,13 +1,30 @@
 # Changelog
 
+## Unreleased 
+
+### Breaking Changes
+
+- Introduce breaking change in `kafka_consumer` configuration, by adding `mode`.
+- Update grok to 0.2, optional patterns are now omitted no longer ""
+- Unify to `url` instead of `endpoint` for google and s3 connectors so they're in line with every other connector
+- Unify to `urls` for `elastic` connector
+- Unify to `path` for `bench`, `kv` and `wal` connector so it's in line with file
+- Rename `s3_writer` to `s3_streamer`
+
 ### New features
+
 - Add `gcl_writer` Google Cloud Platform Cloud Logging connector for writing log entries
 - Add reverse functions and tests for arrays and strings, add sort test for arrays
 - Add a ClickHouse connector
 - Add a Logging connector
+- Add a GCS streamer connector
 
 ### Fixes
 
+- Fix invalid scope handling for `flow` definition default arguments
+- Fix `elastic` sink not acking events handled successfully if no source is connected.
+- Fix `kafka_consumer` possibly committing earlier offsets, thus replaying events that have already been handled.
+- Fix off-by-one error in `kafka_consumer` committing offsets, thus replaying the last committed event.
 - Allow `kafka_consumer` connector to reconnect upon more error conditions and avoid stalls.
 - Include flow alias in pipeline and connector aliases reported via metrics events and logging in order to deduplicate entries
 

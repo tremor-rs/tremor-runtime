@@ -19,7 +19,7 @@ use crate::errors::Result;
 /// Authorization methods
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(rename_all = "lowercase")]
-pub enum Auth {
+pub(crate) enum Auth {
     #[serde(alias = "basic")]
     Basic { username: String, password: String },
     #[serde(alias = "bearer")]

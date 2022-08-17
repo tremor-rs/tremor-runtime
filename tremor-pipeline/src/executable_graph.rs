@@ -255,10 +255,12 @@ pub struct ExecutableGraph {
     pub(crate) last_metrics: u64,
     pub(crate) metric_interval: Option<u64>,
     pub(crate) metrics_channel: MetricsSender,
-
+    
     #[allow(dead_code)]
     // TODO fix
     pub(crate) logging_channel: LoggingSender,
+    /// outputs in pipeline
+    pub outputs: HashMap<Cow<'static, str>, usize>,
     /// snot
     pub insights: Vec<(usize, Event)>,
     /// the dot representation of the graph
@@ -790,6 +792,9 @@ mod test {
         let mut inputs = HashMap::new();
         inputs.insert("in".into(), 0);
 
+        let mut outputs = HashMap::new();
+        outputs.insert("out".into(), 3);
+
         let mut port_indexes = ExecPortIndexMap::new();
         // link out from
         port_indexes.insert((0, "out".into()), vec![(1, "in".into())]);
@@ -819,6 +824,7 @@ mod test {
             contraflow: vec![3, 2],
             port_indexes,
             metrics,
+            outputs,
             // The index of the metrics node in our pipeline
             last_metrics: 0,
             metric_interval: Some(1),
@@ -882,6 +888,9 @@ mod test {
         let mut inputs = HashMap::new();
         inputs.insert("in".into(), 0);
 
+        let mut outputs = HashMap::new();
+        outputs.insert("out".into(), 4);
+
         let mut port_indexes = ExecPortIndexMap::new();
         // link out from
         port_indexes.insert((0, "out".into()), vec![(1, "in".into())]);
@@ -917,6 +926,7 @@ mod test {
             contraflow: vec![3, 2],
             port_indexes,
             metrics,
+            outputs,
             // The index of the metrics node in our pipeline
             last_metrics: 0,
             metric_interval: None,

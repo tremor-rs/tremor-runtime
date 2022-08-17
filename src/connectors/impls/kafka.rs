@@ -24,7 +24,10 @@ use halfbrown::HashMap;
 use rdkafka::{error::KafkaError, util::AsyncRuntime, ClientContext, Statistics};
 use rdkafka_sys::RDKafkaErrorCode;
 use std::{
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        atomic::{AtomicBool, AtomicU64, Ordering},
+        Arc,
+    },
     time::{Duration, Instant},
 };
 use tremor_script::EventPayload;
@@ -32,7 +35,7 @@ use tremor_value::Value;
 
 const KAFKA_CONNECT_TIMEOUT: Duration = Duration::from_secs(1);
 
-pub struct SmolRuntime;
+pub(crate) struct SmolRuntime;
 
 impl AsyncRuntime for SmolRuntime {
     type Delay = future::Map<smol::Timer, fn(Instant)>;
@@ -94,6 +97,8 @@ where
     connect_tx: Sender<KafkaError>,
     metrics_tx: BroadcastSender<EventPayload>,
     active: AtomicBool,
+    // for synchronizing when the consumer should clear its assignment cache
+    last_rebalance_ts: Arc<AtomicU64>,
 }
 
 impl<Ctx> TremorRDKafkaContext<Ctx>
@@ -114,7 +119,22 @@ where
     const CONSUMER_LAG: Cow<'static, str> = Cow::const_str("consumer_lag");
     const KAFKA_CONSUMER_STATS: &'static str = "kafka_consumer_stats";
 
-    fn new(
+    fn consumer(
+        ctx: Ctx,
+        connect_tx: Sender<KafkaError>,
+        metrics_tx: BroadcastSender<EventPayload>,
+        last_rebalance_ts: Arc<AtomicU64>,
+    ) -> Self {
+        Self {
+            ctx,
+            connect_tx,
+            metrics_tx,
+            active: AtomicBool::new(true),
+            last_rebalance_ts,
+        }
+    }
+
+    fn producer(
         ctx: Ctx,
         connect_tx: Sender<KafkaError>,
         metrics_tx: BroadcastSender<EventPayload>,
@@ -124,6 +144,7 @@ where
             connect_tx,
             metrics_tx,
             active: AtomicBool::new(true),
+            last_rebalance_ts: Arc::new(AtomicU64::new(0)), // not used for the producer, just a dummy here
         }
     }
 
@@ -280,6 +301,8 @@ fn is_fatal_error(e: &KafkaError) -> bool {
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
+    use std::sync::atomic::AtomicU64;
+    use std::sync::Arc;
     use std::time::Duration;
 
     use super::{ClientContext, TremorRDKafkaContext};
@@ -298,7 +321,12 @@ mod tests {
         let (connect_tx, _connect_rx) = bounded(1);
         let (metrics_tx, _metrics_rx) = broadcast(1);
         let fake_ctx = FakeContext::new(ctx_tx);
-        let ctx = TremorRDKafkaContext::new(fake_ctx, connect_tx, metrics_tx);
+        let ctx = TremorRDKafkaContext::consumer(
+            fake_ctx,
+            connect_tx,
+            metrics_tx,
+            Arc::new(AtomicU64::new(0)),
+        );
         ctx.on_connection_lost().await;
         let msg = ctx_rx.recv().timeout(Duration::from_secs(1)).await??;
         assert!(matches!(msg, Msg::ConnectionLost));
@@ -316,7 +344,12 @@ mod tests {
         let (connect_tx, _connect_rx) = bounded(1);
         let (metrics_tx, mut metrics_rx) = broadcast(1);
         let fake_ctx = FakeContext::new(ctx_tx);
-        let ctx = TremorRDKafkaContext::new(fake_ctx, connect_tx, metrics_tx);
+        let ctx = TremorRDKafkaContext::consumer(
+            fake_ctx,
+            connect_tx,
+            metrics_tx,
+            Arc::new(AtomicU64::new(0)),
+        );
 
         let s = Statistics {
             name: "snot".to_string(),
@@ -372,7 +405,12 @@ mod tests {
         let (metrics_tx, metrics_rx) = broadcast(1);
         metrics_rx.close();
         let fake_ctx = FakeContext::new(ctx_tx);
-        let ctx = TremorRDKafkaContext::new(fake_ctx, connect_tx, metrics_tx);
+        let ctx = TremorRDKafkaContext::consumer(
+            fake_ctx,
+            connect_tx,
+            metrics_tx,
+            Arc::new(AtomicU64::new(0)),
+        );
 
         let s = Statistics {
             name: "snot".to_string(),
@@ -411,7 +449,12 @@ mod tests {
         let (connect_tx, _connect_rx) = bounded(1);
         let (metrics_tx, metrics_rx) = broadcast(1);
         let fake_ctx = FakeContext::new(ctx_tx);
-        let ctx = TremorRDKafkaContext::new(fake_ctx, connect_tx, metrics_tx);
+        let ctx = TremorRDKafkaContext::consumer(
+            fake_ctx,
+            connect_tx,
+            metrics_tx,
+            Arc::new(AtomicU64::new(0)),
+        );
         let s = Statistics::default();
         ctx.stats(s);
         assert!(metrics_rx.is_empty());
@@ -425,7 +468,12 @@ mod tests {
         let (connect_tx, _connect_rx) = bounded(1);
         let (metrics_tx, _metrics_rx) = broadcast(1);
         let fake_ctx = FakeContext::new(ctx_tx);
-        let ctx = TremorRDKafkaContext::new(fake_ctx, connect_tx, metrics_tx);
+        let ctx = TremorRDKafkaContext::consumer(
+            fake_ctx,
+            connect_tx,
+            metrics_tx,
+            Arc::new(AtomicU64::new(0)),
+        );
 
         ctx.log(rdkafka::config::RDKafkaLogLevel::Emerg, "consumer", "snot");
         ctx.log(rdkafka::config::RDKafkaLogLevel::Alert, "consumer", "snot");

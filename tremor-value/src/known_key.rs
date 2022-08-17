@@ -21,7 +21,7 @@ use value_trait::{Mutable, ValueAccess, ValueType};
 
 /// Well known key that can be looked up in a `Value` faster.
 /// It achives this by memorizing the hash.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KnownKey<'key> {
     key: Cow<'key, str>,
     hash: u64,

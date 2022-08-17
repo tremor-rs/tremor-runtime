@@ -48,7 +48,7 @@ pub const DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// default timeout for interrogating operations, like listing deployments
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 /// shutdown mode - controls how we shutdown Tremor
 pub enum ShutdownMode {
     /// shut down by stopping all binding instances and wait for quiescence

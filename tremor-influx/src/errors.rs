@@ -49,7 +49,7 @@ impl PartialEq for EncoderError {
 }
 
 /// Influx parser error
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum DecoderError {
     /// an `=` in a value was found
     EqInTagValue(usize),

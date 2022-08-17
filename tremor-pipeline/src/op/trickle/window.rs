@@ -438,7 +438,7 @@ impl From<TumblingOnTime> for Impl {
     }
 }
 
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq, Default, Eq)]
 pub struct Actions {
     /// Include the current event in the window event to be emitted
     pub include: bool,

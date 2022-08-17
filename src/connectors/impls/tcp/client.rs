@@ -32,7 +32,7 @@ const URL_SCHEME: &str = "tremor-tcp-client";
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
+pub(crate) struct Config {
     url: Url<super::TcpDefaults>,
     // IP_TTL for ipv4 and hop limit for ipv6
     //ttl: Option<u32>,
@@ -46,7 +46,7 @@ pub struct Config {
 
 impl ConfigImpl for Config {}
 
-pub struct TcpClient {
+pub(crate) struct TcpClient {
     config: Config,
     tls_connector: Option<TlsConnector>,
     tls_domain: Option<String>,

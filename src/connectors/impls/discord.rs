@@ -31,7 +31,7 @@ use std::sync::atomic::AtomicBool;
 use utils::Intents;
 
 #[derive(Deserialize, Clone)]
-pub struct Config {
+pub(crate) struct Config {
     pub token: String,
     #[serde(default)]
     pub intents: Vec<Intents>,
@@ -74,7 +74,7 @@ impl ConnectorBuilder for Builder {
     }
 }
 
-pub struct Discord {
+pub(crate) struct Discord {
     config: Config,
     origin_uri: EventOriginUri,
     client_task: Option<JoinHandle<()>>,

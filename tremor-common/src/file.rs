@@ -79,3 +79,65 @@ where
 pub fn extension(path: &str) -> Option<&str> {
     Path::new(path).extension().and_then(OsStr::to_str)
 }
+
+#[cfg(test)]
+mod test {
+    use crate::errors::Error;
+
+    #[test]
+    fn set_current_dir() -> Result<(), Error> {
+        let path = std::env::current_dir().unwrap();
+        super::set_current_dir(&path)?;
+        let path = path.join("really.does.not.exist");
+        let p = path.to_string_lossy().to_string();
+        let r = super::set_current_dir(&path);
+        assert!(r.is_err());
+        let err = r.err().unwrap();
+        assert!(matches!(err, Error::Cwd(_, bad) if bad == p));
+
+        Ok(())
+    }
+
+    #[test]
+    fn canonicalize() -> Result<(), Error> {
+        let path = std::env::current_dir().unwrap();
+        let path = path.join("Cargo.toml");
+        let path = super::canonicalize(&path)?;
+        assert!(path.exists());
+        let path = path.join("really.does.not.exist");
+        let p = path.to_string_lossy().to_string();
+        let path = super::canonicalize(&path);
+        assert!(path.is_err());
+        let err = path.err().unwrap();
+        assert!(matches!(err, Error::FileCanonicalize(_, bad) if bad == p));
+        Ok(())
+    }
+
+    #[test]
+    fn create() -> Result<(), Error> {
+        let path = std::env::current_dir().unwrap();
+        let path = path.join(".a.file.that.will.get.deleted");
+        super::create(&path)?;
+        let path = path.join("this.does.not.work");
+        let p = path.to_string_lossy().to_string();
+        let r = super::create(&path);
+        assert!(r.is_err());
+        let err = r.err().unwrap();
+        assert!(matches!(err, Error::FileCreate(_, bad) if bad == p));
+        Ok(())
+    }
+
+    #[test]
+    fn open() -> Result<(), Error> {
+        let path = std::env::current_dir().unwrap();
+        let path = path.join("Cargo.toml");
+        super::open(&path)?;
+        let path = path.join("this.does.not.work");
+        let p = path.to_string_lossy().to_string();
+        let r = super::open(&path);
+        assert!(r.is_err());
+        let err = r.err().unwrap();
+        assert!(matches!(err, Error::FileOpen(_, bad) if bad == p));
+        Ok(())
+    }
+}

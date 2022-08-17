@@ -162,8 +162,8 @@ fn oks(
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
-pub struct Config {
-    dir: String,
+pub(crate) struct Config {
+    path: String,
 }
 
 impl ConfigImpl for Config {}
@@ -187,7 +187,7 @@ impl ConnectorBuilder for Builder {
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config: Config = Config::new(config)?;
-        if !PathBuf::from(&config.dir).is_dir().await {
+        if !PathBuf::from(&config.path).is_dir().await {
             return Err(err_connector_def(id, Builder::INVALID_DIR));
         }
 
@@ -199,7 +199,7 @@ impl ConnectorBuilder for Builder {
 /// Key value store connector
 ///
 /// Receiving commands via its sink and emitting responses to those commands via its source.
-pub struct Kv {
+pub(crate) struct Kv {
     config: Config,
     rx: Receiver<SourceReply>,
     tx: Sender<SourceReply>,
@@ -221,7 +221,7 @@ impl Connector for Kv {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let db = sled::open(&self.config.dir)?;
+        let db = sled::open(&self.config.path)?;
         let codec = Json::default();
         let origin_uri = EventOriginUri {
             scheme: "tremor-kv".to_string(),
@@ -229,7 +229,7 @@ impl Connector for Kv {
             port: None,
             path: self
                 .config
-                .dir
+                .path
                 .split('/')
                 .map(ToString::to_string)
                 .collect(),

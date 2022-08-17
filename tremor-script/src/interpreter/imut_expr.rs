@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::ast::{ArrayAppend, BooleanBinExpr, BooleanBinOpKind};
+use crate::static_bool;
 use crate::{
     ast::{
         base_expr::Ranged, binary::extend_bytes_from_value, BaseExpr, BinExpr, Comprehension,
@@ -36,6 +38,7 @@ use std::{
     borrow::{Borrow, Cow},
     iter, mem,
 };
+use value_trait::ValueInto;
 
 fn owned_val<'val, T>(v: T) -> Cow<'val, Value<'val>>
 where
@@ -240,11 +243,32 @@ impl<'script> ImutExpr<'script> {
 
             ImutExpr::Unary(ref expr) => self.unary(opts, env, event, state, meta, local, expr),
             ImutExpr::Binary(ref expr) => self.binary(opts, env, event, state, meta, local, expr),
+            ImutExpr::BinaryBoolean(ref expr) => {
+                Self::binary_boolean(opts, env, event, state, meta, local, expr)
+            }
             ImutExpr::Match(ref expr) => {
                 self.match_expr(opts, env, event, state, meta, local, expr)
             }
             ImutExpr::Comprehension(ref expr) => {
                 self.comprehension(opts, env, event, state, meta, local, expr)
+            }
+            ImutExpr::ArrayAppend(ArrayAppend {
+                left,
+                right,
+                mid: _,
+            }) => {
+                let left = stry!(left.run(opts, env, event, state, meta, local)).into_owned();
+
+                let mut new_left = left.try_into_array()?;
+
+                new_left.reserve(right.len());
+
+                for expr in right {
+                    let expr_result = stry!(expr.run(opts, env, event, state, meta, local));
+                    new_left.push(expr_result.into_owned());
+                }
+
+                Ok(Cow::Owned(Value::from(new_left)))
             }
         }
     }
@@ -452,7 +476,46 @@ impl<'script> ImutExpr<'script> {
     {
         let lhs = stry!(expr.lhs.run(opts, env, event, state, meta, local));
         let rhs = stry!(expr.rhs.run(opts, env, event, state, meta, local));
+
         exec_binary(self, expr, expr.kind, &lhs, &rhs)
+    }
+
+    fn binary_boolean<'run, 'event>(
+        opts: ExecOpts,
+        env: &'run Env<'run, 'event>,
+        event: &'run Value<'event>,
+        state: &'run Value<'static>,
+        meta: &'run Value<'event>,
+        local: &'run LocalStack<'event>,
+        expr: &'run BooleanBinExpr<'event>,
+    ) -> Result<Cow<'run, Value<'event>>>
+    where
+        'script: 'event,
+    {
+        let lval = stry!(expr.lhs.run(opts, env, event, state, meta, local)).try_as_bool()?;
+
+        match expr.kind {
+            BooleanBinOpKind::Or if lval => Ok(static_bool!(true)),
+            BooleanBinOpKind::Or => {
+                let rval =
+                    stry!(expr.rhs.run(opts, env, event, state, meta, local)).try_as_bool()?;
+
+                Ok(static_bool!(lval || rval))
+            }
+            BooleanBinOpKind::And if !lval => Ok(static_bool!(false)),
+            BooleanBinOpKind::And => {
+                let rval =
+                    stry!(expr.rhs.run(opts, env, event, state, meta, local)).try_as_bool()?;
+
+                Ok(static_bool!(lval && rval))
+            }
+            BooleanBinOpKind::Xor => {
+                let rval =
+                    stry!(expr.rhs.run(opts, env, event, state, meta, local)).try_as_bool()?;
+
+                Ok(static_bool!(lval ^ rval))
+            }
+        }
     }
 
     fn unary<'run, 'event>(

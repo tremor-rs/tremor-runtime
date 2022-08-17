@@ -37,7 +37,7 @@ use tremor_common::time::nanotime;
 const KAFKA_PRODUCER_META_KEY: &str = "kafka_producer";
 
 #[derive(Deserialize, Clone)]
-pub struct Config {
+pub(crate) struct Config {
     /// list of brokers forming a cluster. 1 is enough
     brokers: Vec<String>,
     /// the topic to send to
@@ -55,7 +55,7 @@ pub struct Config {
     /// * `message.timeout.ms` - `"5000"`
     /// * `queue.buffering.max.ms` - `"0"` - don't buffer for lower latency (high)
     #[serde(default = "Default::default")]
-    pub rdkafka_options: Option<HashMap<String, String>>,
+    rdkafka_options: Option<HashMap<String, String>>,
 }
 
 impl ConfigImpl for Config {}
@@ -263,7 +263,7 @@ impl Sink for KafkaProducerSink {
         let (mut metrics_tx, metrics_rx) = broadcast(1);
         metrics_tx.set_overflow(true);
         self.metrics_rx = Some(metrics_rx);
-        let context = TremorRDKafkaContext::new(ctx.clone(), tx, metrics_tx);
+        let context = TremorRDKafkaContext::producer(ctx.clone(), tx, metrics_tx);
         let (version_n, version_s) = rdkafka::util::get_rdkafka_version();
         info!("{ctx} Connecting kafka producer with rdkafka 0x{version_n:08x} {version_s}");
 

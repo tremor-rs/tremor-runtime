@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::super::prelude::*;
+use crate::ast::{BooleanBinExpr, BooleanBinOpKind};
 use crate::{
     ast::{base_expr::Ranged, binary::extend_bytes_from_value, NodeMeta},
     errors::{
@@ -124,6 +125,34 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script
                 }
             }
 
+            ImutExpr::BinaryBoolean(b) => {
+                if let BooleanBinExpr {
+                    mid,
+                    kind,
+                    lhs: Lit(Literal { value: lhs, .. }),
+                    rhs: Lit(Literal { value: rhs, .. }),
+                } = b.as_ref()
+                {
+                    let lhs = lhs.as_bool();
+                    let rhs = rhs.as_bool();
+
+                    match (kind, lhs, rhs) {
+                        (BooleanBinOpKind::Or, Some(lhs), Some(rhs)) => {
+                            ImutExpr::literal(mid.clone(), Value::from(lhs || rhs))
+                        }
+                        (BooleanBinOpKind::Xor, Some(lhs), Some(rhs)) => {
+                            ImutExpr::literal(mid.clone(), Value::from(lhs ^ rhs))
+                        }
+                        (BooleanBinOpKind::And, Some(lhs), Some(rhs)) => {
+                            ImutExpr::literal(mid.clone(), Value::from(lhs && rhs))
+                        }
+                        _ => ImutExpr::BinaryBoolean(b),
+                    }
+                } else {
+                    ImutExpr::BinaryBoolean(b)
+                }
+            }
+
             ImutExpr::Unary(b) => {
                 if let UnaryExpr {
                     kind,
@@ -218,7 +247,8 @@ impl<'run, 'script: 'run> ImutExprVisitor<'script> for ConstFolder<'run, 'script
             | ImutExpr::Invoke3(_)
             | ImutExpr::Literal(_)
             | ImutExpr::InvokeAggr(_)
-            | ImutExpr::Recur(_)) => e,
+            | ImutExpr::Recur(_)
+            | ImutExpr::ArrayAppend { .. }) => e,
         };
         Ok(())
     }

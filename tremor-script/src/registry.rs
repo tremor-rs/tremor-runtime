@@ -135,7 +135,7 @@ pub fn aggr() -> Aggr {
 }
 
 /// Module Function Arity triple
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Mfa {
     m: String,
     f: String,

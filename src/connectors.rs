@@ -971,7 +971,7 @@ impl Drainage {
 }
 
 /// describes connectivity state of the connector
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Copy, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Connectivity {
     /// connector is connected
@@ -1248,7 +1248,7 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         Box::new(impls::ws::server::Builder::default()),
         Box::new(impls::elastic::Builder::default()),
         Box::new(impls::crononome::Builder::default()),
-        Box::new(impls::s3::writer::Builder::default()),
+        Box::new(impls::s3::streamer::Builder::default()),
         Box::new(impls::s3::reader::Builder::default()),
         Box::new(impls::kafka::consumer::Builder::default()),
         Box::new(impls::kafka::producer::Builder::default()),
@@ -1266,6 +1266,7 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         Box::new(impls::clickhouse::Builder::default()),
         Box::new(impls::gcl::writer::Builder::default()),
         Box::new(impls::logging::Builder::default()),
+        Box::new(impls::gcs::streamer::Builder::default()),
     ]
 }
 

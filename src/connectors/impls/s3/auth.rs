@@ -32,7 +32,13 @@ use s3::Endpoint;
 /// 3. Web Identity Tokens
 /// 4. ECS (IAM Roles for Tasks) & General HTTP credentials
 /// 5. EC2 `IMDSv2`
-pub async fn get_client(region: Option<String>, endpoint: Option<&String>) -> Result<S3Client> {
+pub(crate) async fn get_client<D>(
+    region: Option<String>,
+    endpoint: Option<&Url<D>>,
+) -> Result<S3Client>
+where
+    D: Defaults,
+{
     let region_provider =
         RegionProviderChain::first_try(region.map(Region::new)).or_default_provider();
     let region = region_provider.region().await;
@@ -40,8 +46,9 @@ pub async fn get_client(region: Option<String>, endpoint: Option<&String>) -> Re
     let mut config_builder = s3::config::Builder::from(&config).region(region);
 
     if let Some(endpoint) = endpoint {
-        config_builder =
-            config_builder.endpoint_resolver(Endpoint::immutable(endpoint.parse::<http::Uri>()?));
+        config_builder = config_builder.endpoint_resolver(Endpoint::immutable(
+            endpoint.to_string().parse::<http::Uri>()?,
+        ));
     }
 
     Ok(S3Client::from_conf(config_builder.build()))

@@ -44,7 +44,7 @@ async fn connector_s3_no_connection() -> Result<()> {
         "config":{
             "aws_region": MINIO_REGION,
             "bucket": bucket_name.clone(),
-            "endpoint": "http://localhost:9090",
+            "url": "http://localhost:9090",
         }
     });
 
@@ -81,7 +81,7 @@ async fn connector_s3_no_credentials() -> Result<()> {
         "codec": "binary",
         "config":{
             "bucket": bucket_name.clone(),
-            "endpoint": endpoint,
+            "url": endpoint,
         }
     });
 
@@ -121,7 +121,7 @@ async fn connector_s3_no_region() -> Result<()> {
         "codec": "binary",
         "config":{
             "bucket": bucket_name.clone(),
-            "endpoint": endpoint,
+            "url": endpoint,
         }
     });
 
@@ -158,7 +158,7 @@ async fn connector_s3_no_bucket() -> Result<()> {
         "config": {
             "aws_region": MINIO_REGION,
             "bucket": bucket_name.clone(),
-            "endpoint": endpoint
+            "url": endpoint
         }
     });
     let harness = ConnectorHarness::new(
@@ -219,7 +219,7 @@ async fn connector_s3_reader() -> Result<()> {
         "config": {
             "aws_region": MINIO_REGION,
             "bucket": bucket_name.clone(),
-            "endpoint": endpoint,
+            "url": endpoint,
             "multipart_threshold": 1000,
             "multipart_chunksize": 1000,
             "max_connections": 2

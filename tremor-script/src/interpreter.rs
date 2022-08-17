@@ -66,6 +66,8 @@ pub const FALSE: Value<'static> = Value::Static(StaticNode::Bool(false));
 /// constant `null` value
 pub const NULL: Value<'static> = Value::Static(StaticNode::Null);
 
+#[macro_export]
+/// Static boolean `Value` from Rust `bool`
 macro_rules! static_bool {
     ($e:expr) => {
         #[allow(clippy::if_not_else)]
@@ -148,7 +150,7 @@ impl<'stack> LocalStack<'stack> {
 }
 
 /// The type of an aggregation
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AggrType {
     /// This is a normal execution
     Tick,
@@ -368,9 +370,9 @@ where
 {
     // Lazy Heinz doesn't want to write that 10000 times
     // - snot badger - Darach
-    use BinOpKind::{Add, And, BitAnd, BitXor, Eq, Gt, Gte, Lt, Lte, NotEq, Or, Xor};
+    use BinOpKind::{Add, BitAnd, BitXor, Eq, Gt, Gte, Lt, Lte, NotEq};
     use StaticNode::Bool;
-    use Value::{Bytes, Static, String};
+    use Value::{Array, Bytes, Static, String};
     match (op, lhs, rhs) {
         (Eq, Static(StaticNode::Null), Static(StaticNode::Null)) => Ok(static_bool!(true)),
         (NotEq, Static(StaticNode::Null), Static(StaticNode::Null)) => Ok(static_bool!(false)),
@@ -380,10 +382,9 @@ where
         (NotEq, l, r) => Ok(static_bool!(!val_eq(l, r))),
 
         // Bool
-        (And | BitAnd, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l && *r)),
+        (BitAnd, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l && *r)),
         // error_invalid_bitshift(outer, inner) missing as we don't have it implemented
-        (Or, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l || *r)),
-        (Xor | BitXor, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l != *r)),
+        (BitXor, Static(Bool(l)), Static(Bool(r))) => Ok(static_bool!(*l != *r)),
 
         // Binary
         (Gt, Bytes(l), Bytes(r)) => Ok(static_bool!(l > r)),
@@ -434,6 +435,14 @@ where
         (Lt, String(l), String(r)) => Ok(static_bool!(l < r)),
         (Lte, String(l), String(r)) => Ok(static_bool!(l <= r)),
         (Add, String(l), String(r)) => Ok(Cow::Owned(format!("{}{}", *l, *r).into())),
+
+        // Array
+        (Add, Array(l), Array(r)) => {
+            let mut result = l.clone();
+            result.extend_from_slice(r);
+            Ok(Cow::Owned(Value::from(result)))
+        }
+
         // Errors
         (op, Bytes(_) | String(_), Bytes(_) | String(_))
         | (op, Static(Bool(_)), Static(Bool(_))) => {
@@ -938,7 +947,7 @@ fn patch_value<'run, 'event>(
                 } else {
                     return error_patch_merge_type_conflict(
                         patch_expr,
-                        &*mid,
+                        mid,
                         "<target>".into(),
                         &mvalue,
                     );

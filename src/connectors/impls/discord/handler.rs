@@ -66,7 +66,7 @@ impl EventHandler for Handler {
     // We use the cache_ready event just in case some cache operation is required in whatever use
     // case you have for this.
     async fn cache_ready(&self, ctx: Context, _guilds: Vec<GuildId>) {
-        println!("Cache built successfully!");
+        info!("Cache built successfully!");
 
         if !self.is_loop_running.load(Ordering::Relaxed) {
             // We have to clone the Arc, as it gets moved into the new thread.
@@ -137,7 +137,7 @@ impl EventHandler for Handler {
     }
 
     async fn ready(&self, _: Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
+        info!("{} is connected!", ready.user.name);
     }
 
     async fn typing_start(&self, _ctx: Context, e: TypingStartEvent) {

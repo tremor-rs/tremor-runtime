@@ -42,7 +42,7 @@ flow
         metrics_interval_s = 5,
         codec = "json",
         config = {
-            "source": "/data/data.json.xz",
+            "path": "/data/data.json.xz",
             "interval": nanos::from_millis(4)
         }
     end;

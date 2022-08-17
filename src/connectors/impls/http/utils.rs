@@ -29,7 +29,9 @@ pub use tide::{Request as TideRequest, Response as TideResponse, Result as TideR
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(transparent)]
-pub struct Header(#[serde(with = "either::serde_untagged")] pub(crate) Either<Vec<String>, String>);
+pub(crate) struct Header(
+    #[serde(with = "either::serde_untagged")] pub(crate) Either<Vec<String>, String>,
+);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct RequestId(u64);

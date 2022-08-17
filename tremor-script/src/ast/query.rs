@@ -24,7 +24,8 @@ use super::{
     Serialize, Stmts, Upable, Value,
 };
 use super::{raw::BaseExpr, Consts};
-use crate::ast::{walkers::ImutExprWalker, Literal};
+use crate::ast::optimizer::Optimizer;
+use crate::ast::Literal;
 use crate::{errors::err_generic, impl_expr};
 use raw::WindowName;
 use simd_json::{Builder, Mutable, ValueAccess};
@@ -150,7 +151,7 @@ impl SelectStmt<'_> {
 }
 
 /// Operator kind identifier
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct OperatorKind {
     pub(crate) mid: Box<NodeMeta>,
     /// Module of the operator
@@ -256,7 +257,7 @@ impl<'script> PipelineDefinition<'script> {
         helper: &mut Helper<'script, 'registry>,
     ) -> Result<Query<'script>> {
         let mut create = create.clone();
-        ConstFolder::new(helper).walk_creational_with(&mut create)?;
+        Optimizer::new(helper).walk_creational_with(&mut create)?;
         let mut args = create.render()?;
 
         let mut config = HashMap::new();
@@ -279,7 +280,7 @@ impl<'script> PipelineDefinition<'script> {
         if let Some(k) = args.as_object().and_then(|o| o.keys().next()) {
             return error_generic(&create, &create, &format!("Unknown parameter {k}"));
         }
-        ConstFolder::new(helper).walk_definitional_args(&mut params)?;
+        Optimizer::new(helper).walk_definitional_args(&mut params)?;
         let inner_args = params.render()?;
         let stmts = self
             .stmts
@@ -320,7 +321,7 @@ impl<'script> BaseExpr for PipelineCreate<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub enum WindowKind {
     /// we're forced to make this pub because of lalrpop
     Sliding,
@@ -404,7 +405,7 @@ pub enum GroupBy<'script> {
 }
 
 /// A stream statement
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct StreamStmt {
     pub(crate) mid: Box<NodeMeta>,
     /// ID if the stream
@@ -603,7 +604,7 @@ impl<'script> WithExprs<'script> {
             .into_iter()
             .map(|(name, mut value_expr)| {
                 ArgsRewriter::new(args.clone(), helper, mid).rewrite_expr(&mut value_expr)?;
-                ImutExprWalker::walk_expr(&mut ConstFolder::new(helper), &mut value_expr)?;
+                Optimizer::new(helper).walk_imut_expr(&mut value_expr)?;
                 Ok((name, value_expr))
             })
             .collect::<Result<_>>()?;
@@ -635,7 +636,7 @@ impl<'script> Stmt<'script> {
             | Stmt::StreamStmt(_) => (),
             Stmt::SelectStmt(s) => {
                 ArgsRewriter::new(args.clone(), helper, mid).walk_select_stmt(s)?;
-                ConstFolder::new(helper).walk_select_stmt(s)?;
+                Optimizer::new(helper).walk_select_stmt(s)?;
             }
             Stmt::OperatorCreate(d) => d.params.substitute_args(args, helper)?,
             Stmt::ScriptCreate(d) => d.params.substitute_args(args, helper)?,

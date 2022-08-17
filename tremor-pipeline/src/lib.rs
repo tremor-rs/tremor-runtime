@@ -20,7 +20,8 @@
 #![deny(
     clippy::all,
     clippy::unnecessary_unwrap,
-    clippy::pedantic
+    clippy::pedantic,
+    clippy::mod_module_files
 )]
 
 #[macro_use]
@@ -379,7 +380,7 @@ impl Default for NodeKind {
 
 /// A circuit breaker action
 #[derive(
-    Debug, Clone, Copy, PartialEq, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Debug, Clone, Copy, PartialEq, simd_json_derive::Serialize, simd_json_derive::Deserialize, Eq,
 )]
 pub enum CbAction {
     /// Nothing of note
@@ -444,7 +445,7 @@ impl CbAction {
 /// `EventId` also tracks min and max event ids for other events in order to support batched and grouped events
 /// and facilitate CB mechanics
 #[derive(
-    Debug, Clone, PartialEq, Default, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Debug, Clone, PartialEq, Default, simd_json_derive::Serialize, simd_json_derive::Deserialize, Eq,
 )]
 pub struct EventId {
     /// can be a `SourceId` or an `OperatorId`
@@ -746,7 +747,7 @@ impl fmt::Display for EventId {
 }
 
 #[derive(
-    Debug, Clone, PartialEq, Default, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Debug, Clone, PartialEq, Default, simd_json_derive::Serialize, simd_json_derive::Deserialize, Eq,
 )]
 /// tracked min and max pull id for a given source and stream
 ///
@@ -932,7 +933,7 @@ impl EventIdGenerator {
 
 /// The kind of signal this is
 #[derive(
-    Debug, Clone, Copy, PartialEq, simd_json_derive::Serialize, simd_json_derive::Deserialize,
+    Debug, Clone, Copy, PartialEq, simd_json_derive::Serialize, simd_json_derive::Deserialize, Eq,
 )]
 pub enum SignalKind {
     // Lifecycle

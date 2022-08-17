@@ -48,7 +48,7 @@ struct Config {
     pub ack_deadline: u64,
     pub subscription_id: String,
     #[serde(default = "crate::connectors::impls::gpubsub::default_endpoint")]
-    pub endpoint: String,
+    pub url: Url<HttpsDefaults>,
     #[cfg(test)]
     #[serde(default = "crate::connectors::impls::gpubsub::default_skip_authentication")]
     pub skip_authentication: bool,
@@ -76,7 +76,7 @@ impl ConnectorBuilder for Builder {
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw)?;
-        let url = Url::<HttpsDefaults>::parse(config.endpoint.as_str())?;
+        let url = Url::<HttpsDefaults>::parse(config.url.as_str())?;
         let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, task::current().id());
 
         Ok(Box::new(GSub {
@@ -256,7 +256,7 @@ fn pubsub_metadata(
 #[async_trait::async_trait]
 impl Source for GSubSource {
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
-        let mut channel = Channel::from_shared(self.config.endpoint.clone())?
+        let mut channel = Channel::from_shared(self.config.url.to_string())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
         if self.url.scheme() == "https" {
             let tls_config = ClientTlsConfig::new()

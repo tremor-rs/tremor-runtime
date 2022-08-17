@@ -16,16 +16,18 @@
 // We want to keep the names here
 #![allow(clippy::module_name_repetitions)]
 
+use crate::ast::optimizer::Optimizer;
+use crate::ast::{BooleanBinExpr, BooleanBinOpKind};
 use crate::{
     ast::{
-        base_expr, query, upable::Upable, visitors::ConstFolder, walkers::ExprWalker, ArrayPattern,
-        ArrayPredicatePattern, AssignPattern, BinExpr, BinOpKind, Bytes, BytesPart, ClauseGroup,
-        Comprehension, ComprehensionCase, Costly, DefaultCase, EmitExpr, EventPath, Expr, ExprPath,
-        Expression, Field, FnDefn, Helper, Ident, IfElse, ImutExpr, Invocable, Invoke, InvokeAggr,
-        InvokeAggrFn, List, Literal, LocalPath, Match, Merge, MetadataPath, Patch, PatchOperation,
-        Path, Pattern, PredicateClause, PredicatePattern, Record, RecordPattern, Recur,
-        ReservedPath, Script, Segment, StatePath, StrLitElement, StringLit, TestExpr, TuplePattern,
-        UnaryExpr, UnaryOpKind,
+        base_expr, query, upable::Upable, ArrayPattern, ArrayPredicatePattern, AssignPattern,
+        BinExpr, BinOpKind, Bytes, BytesPart, ClauseGroup, Comprehension, ComprehensionCase,
+        Costly, DefaultCase, EmitExpr, EventPath, Expr, ExprPath, Expression, Field, FnDefn,
+        Helper, Ident, IfElse, ImutExpr, Invocable, Invoke, InvokeAggr, InvokeAggrFn, List,
+        Literal, LocalPath, Match, Merge, MetadataPath, Patch, PatchOperation, Path, Pattern,
+        PredicateClause, PredicatePattern, Record, RecordPattern, Recur, ReservedPath, Script,
+        Segment, StatePath, StrLitElement, StringLit, TestExpr, TuplePattern, UnaryExpr,
+        UnaryOpKind,
     },
     errors::{
         err_generic, error_generic, error_missing_effector, Error, Kind as ErrorKind, Result,
@@ -48,7 +50,7 @@ use super::{
     Const, NodeId, NodeMeta,
 };
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct UseRaw {
     pub alias: Option<String>,
     pub module: NodeId,
@@ -104,7 +106,8 @@ impl<'script> ScriptRaw<'script> {
                 }
                 TopLevelExprRaw::FnDefn(f) => {
                     let mut f = f.up(helper)?;
-                    ExprWalker::walk_fn_defn(&mut ConstFolder::new(helper), &mut f)?;
+                    Optimizer::new(helper).walk_fn_defn(&mut f)?;
+
                     helper.scope.insert_function(f)?;
                 }
                 TopLevelExprRaw::Expr(expr) => {
@@ -155,7 +158,7 @@ impl<'script> ScriptRaw<'script> {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Clone, Copy)]
+#[derive(Debug, PartialEq, Serialize, Clone, Copy, Eq)]
 pub enum BytesDataType {
     SignedInteger,
     UnsignedInteger,
@@ -168,7 +171,7 @@ impl Default for BytesDataType {
     }
 }
 
-#[derive(Debug, PartialEq, Serialize, Clone, Copy)]
+#[derive(Debug, PartialEq, Serialize, Clone, Copy, Eq)]
 pub enum Endian {
     Little,
     Big,
@@ -265,7 +268,7 @@ impl<'script> Upable<'script> for BytesRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Debug, PartialEq, Serialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Clone, Eq)]
 pub struct IdentRaw<'script> {
     pub(crate) mid: Box<NodeMeta>,
     pub id: beef::Cow<'script, str>,
@@ -364,7 +367,7 @@ impl<'script> Upable<'script> for ListRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct LiteralRaw<'script> {
     pub(crate) value: Value<'script>,
     pub(crate) mid: Box<NodeMeta>,
@@ -821,6 +824,8 @@ pub enum ImutExprRaw<'script> {
     /// we're forced to make this pub because of lalrpop
     Binary(Box<BinExprRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
+    BinaryBoolean(Box<BooleanBinExprRaw<'script>>),
+    /// we're forced to make this pub because of lalrpop
     Unary(Box<UnaryExprRaw<'script>>),
     /// we're forced to make this pub because of lalrpop
     Literal(LiteralRaw<'script>),
@@ -853,6 +858,7 @@ impl<'script> Upable<'script> for ImutExprRaw<'script> {
                 ImutExpr::Recur(r.up(helper)?)
             }
             ImutExprRaw::Binary(b) => ImutExpr::Binary(Box::new(b.up(helper)?)),
+            ImutExprRaw::BinaryBoolean(b) => ImutExpr::BinaryBoolean(Box::new(b.up(helper)?)),
             ImutExprRaw::Unary(u) => ImutExpr::Unary(Box::new(u.up(helper)?)),
             ImutExprRaw::String(s) => ImutExpr::String(s.up(helper)?),
             ImutExprRaw::Record(r) => ImutExpr::Record(r.up(helper)?),
@@ -1969,6 +1975,27 @@ impl<'script> Upable<'script> for BinExprRaw<'script> {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct BooleanBinExprRaw<'script> {
+    pub(crate) kind: BooleanBinOpKind,
+    pub(crate) lhs: ImutExprRaw<'script>,
+    pub(crate) rhs: ImutExprRaw<'script>,
+    pub(crate) mid: Box<NodeMeta>,
+}
+
+impl<'script> Upable<'script> for BooleanBinExprRaw<'script> {
+    type Target = BooleanBinExpr<'script>;
+
+    fn up<'registry>(self, helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        Ok(BooleanBinExpr {
+            mid: self.mid,
+            kind: self.kind,
+            lhs: self.lhs.up(helper)?,
+            rhs: self.rhs.up(helper)?,
+        })
+    }
+}
+
 /// we're forced to make this pub because of lalrpop
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct UnaryExprRaw<'script> {
@@ -2285,7 +2312,7 @@ impl<'script> Upable<'script> for InvokeAggrRaw<'script> {
 }
 
 /// we're forced to make this pub because of lalrpop
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Eq)]
 pub struct TestExprRaw {
     pub(crate) id: String,
     pub(crate) test: String,

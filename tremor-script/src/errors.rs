@@ -178,7 +178,7 @@ pub(crate) fn best_hint(
 }
 pub(crate) type ErrorLocation = (Option<Span>, Option<Span>);
 
-#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, Eq)]
 pub struct UnfinishedToken {
     pub(crate) range: Span,
     pub(crate) value: String,

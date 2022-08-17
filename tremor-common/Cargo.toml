@@ -9,7 +9,7 @@ readme = "README.md"
 version = "0.12.4"
 
 [dependencies]
-async-std = "1"
+async-std = { version = "1", features = ["attributes"] }
 rand = { version = "0.8", features = ["small_rng"] }
 beef = { version = "0.5", features = ["impl_serde"] }
 url = "2.2"

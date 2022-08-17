@@ -35,7 +35,6 @@ use elasticsearch::{
     http::{
         response::Response,
         transport::{SingleNodeConnectionPool, TransportBuilder},
-        Url,
     },
     params::{Refresh, VersionType},
     Bulk, BulkDeleteOperation, BulkOperation, BulkOperations, BulkParts, Elasticsearch,
@@ -52,7 +51,7 @@ use super::http::auth::Auth;
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     /// list of elasticsearch cluster nodes
-    nodes: Vec<String>,
+    nodes: Vec<Url>,
 
     /// index to write events to, can be overwritten by metadata `$elastic["_index"]`
     index: Option<String>,
@@ -108,18 +107,13 @@ impl ConnectorBuilder for Builder {
         if config.nodes.is_empty() {
             Err(err_connector_def(id, "empty nodes provided"))
         } else {
-            let node_urls = config
-                .nodes
-                .iter()
-                .map(|s| Url::parse(s.as_str()).map_err(|e| err_connector_def(id, &e)))
-                .collect::<Result<Vec<Url>>>()?;
             let tls_config = match config.tls.as_ref() {
                 Some(Either::Left(tls_config)) => Some(tls_config.clone()),
                 Some(Either::Right(true)) => Some(TLSClientConfig::default()),
                 Some(Either::Right(false)) | None => None,
             };
             if tls_config.is_some() {
-                for node_url in &node_urls {
+                for node_url in &config.nodes {
                     if node_url.scheme() != "https" {
                         let e = format!("Node URL '{node_url}' needs 'https' scheme with tls.");
                         return Err(err_connector_def(id, &e));
@@ -160,7 +154,6 @@ impl ConnectorBuilder for Builder {
             let (response_tx, response_rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
             let source_is_connected = Arc::new(AtomicBool::new(false));
             Ok(Box::new(Elastic {
-                node_urls,
                 config,
                 cert_validation,
                 credentials,
@@ -174,7 +167,6 @@ impl ConnectorBuilder for Builder {
 
 /// the elasticsearch connector - for sending stuff to elasticsearch
 struct Elastic {
-    node_urls: Vec<Url>,
     config: Config,
     cert_validation: CertValidation,
     credentials: Option<Credentials>,
@@ -207,7 +199,6 @@ impl Connector for Elastic {
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         let sink = ElasticSink::new(
-            self.node_urls.clone(),
             self.response_tx.clone(),
             builder.reply_tx(),
             self.source_is_connected.clone(),
@@ -300,7 +291,6 @@ impl ElasticClients {
 }
 
 struct ElasticSink {
-    node_urls: Vec<Url>,
     clients: ElasticClients,
     response_tx: Sender<SourceReply>,
     reply_tx: Sender<AsyncSinkReply>,
@@ -314,7 +304,6 @@ struct ElasticSink {
 
 impl ElasticSink {
     fn new(
-        node_urls: Vec<Url>,
         response_tx: Sender<SourceReply>,
         reply_tx: Sender<AsyncSinkReply>,
         source_is_connected: Arc<AtomicBool>,
@@ -323,7 +312,6 @@ impl ElasticSink {
         cert_validation: CertValidation,
     ) -> Self {
         Self {
-            node_urls,
             clients: ElasticClients::new(vec![]),
             response_tx,
             reply_tx: reply_tx.clone(),
@@ -345,9 +333,9 @@ impl ElasticSink {
 #[async_trait::async_trait()]
 impl Sink for ElasticSink {
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let mut clients = Vec::with_capacity(self.node_urls.len());
-        for node in &self.node_urls {
-            let conn_pool = SingleNodeConnectionPool::new(node.clone());
+        let mut clients = Vec::with_capacity(self.config.nodes.len());
+        for node in &self.config.nodes {
+            let conn_pool = SingleNodeConnectionPool::new(node.url().clone());
             let mut transport_builder = TransportBuilder::new(conn_pool).enable_meta_header(false); // no meta header, that's just overhead
             if let Some(timeout_ns) = self.config.timeout.as_ref() {
                 let duration = Duration::from_nanos(*timeout_ns);
@@ -507,11 +495,12 @@ impl Sink for ElasticSink {
                                     .await,
                                     "Error handling ES response",
                                 );
-                                task_ctx.swallow_err(
-                                    send_ack(event, start, &reply_tx).await,
-                                    "Error sending ack CB",
-                                );
                             }
+
+                            task_ctx.swallow_err(
+                                send_ack(event, start, &reply_tx).await,
+                                "Error sending ack CB",
+                            );
                         }
                     }
                     drop(guard);
@@ -979,9 +968,7 @@ mod tests {
             ConnectorConfig::from_config(&alias, builder.connector_type(), &config)?;
         let kill_switch = KillSwitch::dummy();
         assert_eq!(
-            String::from(
-                "Invalid Definition for connector \"snot::my_elastic\": relative URL without a base"
-            ),
+            String::from("empty host"),
             builder
                 .build(&alias, &connector_config, &kill_switch)
                 .await
