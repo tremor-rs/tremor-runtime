@@ -6,7 +6,7 @@
 # - exit the flow when we collected metrics for a certain amount of events that passed through source, pipeline and sink
 define flow main
 flow
- 	use integration;
+  use integration;
   use std::time::nanos;
   use tremor::connectors;
 
