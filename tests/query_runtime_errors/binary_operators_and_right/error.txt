@@ -1,0 +1,3 @@
+Error: 
+    1 | select event.a and event.b from in into out;
+      |                    ^^^^^^^ The binary operation `and` is not defined for the type `bool` and `string`
