@@ -727,7 +727,6 @@ mod test {
             config: NodeConfig::default(),
         }
     }
-    //RE
     fn test_metrics(mut metrics: Vec<MetricsMsg>, n: u64) {
         // out/in
         let this = metrics.pop().unwrap();
