@@ -347,16 +347,14 @@ impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
                         format!("[Topic: {}, Partition: {}]", elem.topic(), elem.partition(),)
                     })
                     .collect();
-                // if we got something assigned, this is a good indicator that we are connected
-                if !partitions.is_empty() {
-                    if let Err(e) = self.connect_tx.try_send(NO_ERROR)
-                    // we seem to be connected, indicate success
-                    {
-                        // we can safely ignore errors here as they will happen after the first connector
-                        // as we only have &self here, we cannot switch out the connector
-                        trace!("{} Error sending to connect channel: {e}", &self.ctx);
-                    };
-                }
+                // if we got an assignment, this is a good indicator that we are connected
+                if let Err(e) = self.connect_tx.try_send(NO_ERROR)
+                // we seem to be connected, indicate success
+                {
+                    // we can safely ignore errors here as they will happen after the first connector
+                    // as we only have &self here, we cannot switch out the connector
+                    trace!("{} Error sending to connect channel: {e}", &self.ctx);
+                };
                 info!(
                     "{} Partitions Assigned: {}",
                     &self.ctx,
@@ -629,14 +627,18 @@ impl Source for KafkaConsumerSource {
         match res {
             Err(_timeout) => {
                 // all good, we didn't receive an error, so let's assume we are fine
+                debug!("{ctx} Waiting for initial assignment timed out...");
                 Ok(true)
             }
             Ok(Err(e)) => {
                 // receive error - bail out
                 Err(e.into())
             }
-            Ok(Ok(KafkaError::Global(RDKafkaErrorCode::NoError))) => Ok(true), // connected
-            Ok(Ok(err)) => Err(err.into()),                                    // any other error
+            Ok(Ok(KafkaError::Global(RDKafkaErrorCode::NoError))) => {
+                debug!("{ctx} Consumer connected.");
+                Ok(true) // connected
+            }
+            Ok(Ok(err)) => Err(err.into()), // any other error
         }
     }
 
@@ -827,7 +829,7 @@ async fn consumer_task(
     source_tx: Sender<(SourceReply, Option<u64>)>,
     source_ctx: SourceContext,
 ) {
-    info!("{} Consumer started.", &source_ctx);
+    info!("{source_ctx} Consumer started.");
     let mut stream = task_consumer.stream();
     let mut connect_result_channel = Some(connect_result_tx);
 
