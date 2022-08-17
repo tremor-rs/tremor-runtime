@@ -21,7 +21,8 @@
     clippy::all,
     clippy::unwrap_used,
     clippy::unnecessary_unwrap,
-    clippy::pedantic
+    clippy::pedantic,
+    clippy::mod_module_files
 )]
 #![allow(clippy::missing_errors_doc)]
 

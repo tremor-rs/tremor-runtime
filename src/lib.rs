@@ -21,7 +21,8 @@
     clippy::all,
     clippy::unwrap_used,
     clippy::unnecessary_unwrap,
-    clippy::pedantic
+    clippy::pedantic,
+    clippy::mod_module_files
 )]
 // TODO this is needed due to a false positive in clippy
 // https://github.com/rust-lang/rust/issues/83125

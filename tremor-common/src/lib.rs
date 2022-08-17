@@ -19,7 +19,8 @@
     clippy::all,
     clippy::unwrap_used,
     clippy::unnecessary_unwrap,
-    clippy::pedantic
+    clippy::pedantic,
+    clippy::mod_module_files
 )]
 
 /// functions for async related code
