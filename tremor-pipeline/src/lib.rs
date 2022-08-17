@@ -422,15 +422,14 @@ impl EventId {
         // and insert it with binary search
         // this makes searching the tracked id easier
         // as we only need to look at the tracked_pull_ids then
-        let (min, max) =
-            if self.source_id() == other.source_id() && self.stream_id() == other.stream_id() {
-                (
-                    self.pull_id().min(other.pull_id()),
-                    self.pull_id().max(other.pull_id()),
-                )
-            } else {
-                (other.pull_id, other.pull_id)
-            };
+        let (min, max) = if self.is_same_stream(other.source_id(), other.stream_id()) {
+            (
+                self.pull_id().min(other.pull_id()),
+                self.pull_id().max(other.pull_id()),
+            )
+        } else {
+            (other.pull_id(), other.pull_id())
+        };
         self.track_ids(other.source_id, other.stream_id, min, max);
 
         for other_tracked in &other.tracked_pull_ids {
@@ -488,8 +487,7 @@ impl EventId {
         // if we track something in tracked_pull_ids, and it is the same source_id, stream_id as the event id
         // it contains the min/max and we don't need to consider self.pull_id anymore
         if self.tracked_pull_ids.is_empty() {
-            self.source_id() == event_id.source_id()
-                && self.stream_id() == event_id.stream_id()
+            self.is_same_stream(event_id.source_id(), event_id.stream_id())
                 && self.pull_id == event_id.pull_id
                 && self.event_id == event_id.event_id
         } else {
@@ -507,13 +505,19 @@ impl EventId {
         }
     }
 
+    /// returns true if the event is from the same source and stream
+    #[must_use]
+    fn is_same_stream(&self, source_id: u64, stream_id: u64) -> bool {
+        self.source_id() == source_id && self.stream_id() == stream_id
+    }
+
     #[must_use]
     /// get minimum pull id for a given source and stream, if it is tracked
     ///
     /// This also always checks the actual eventId, not only the tracked ones, this way we can save allocations when used within insights
     pub fn get_min_by_stream(&self, source_id: u64, stream_id: u64) -> Option<u64> {
         if self.tracked_pull_ids.is_empty() {
-            (self.source_id() == source_id && self.stream_id() == stream_id)
+            self.is_same_stream(source_id, stream_id)
                 .then_some(self.pull_id())
         } else {
             self.tracked_pull_ids.iter().find_map(|teid| {
@@ -532,7 +536,7 @@ impl EventId {
     /// This also always checks the actual eventId, not only the tracked ones
     pub fn get_max_by_stream(&self, source_id: u64, stream_id: u64) -> Option<u64> {
         if self.tracked_pull_ids.is_empty() {
-            (self.source_id() == source_id && self.stream_id() == stream_id)
+            self.is_same_stream(source_id, stream_id)
                 .then_some(self.pull_id())
         } else {
             self.tracked_pull_ids.iter().find_map(|teid| {
