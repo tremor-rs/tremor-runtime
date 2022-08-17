@@ -132,4 +132,6 @@ test_cases!(
     binary_operators_or_right,
     binary_operators_and_left,
     binary_operators_and_right,
+    binary_operators_xor_left,
+    binary_operators_xor_right,
 );
