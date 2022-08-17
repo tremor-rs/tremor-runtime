@@ -16,6 +16,7 @@ mod producer;
 
 use crate::connectors::tests::free_port::find_free_tcp_port;
 use crate::errors::Result;
+use std::time::Duration;
 use testcontainers::{
     clients::Cli as DockerCli, core::WaitFor, images::generic::GenericImage, Container,
     RunnableImage,
@@ -23,6 +24,7 @@ use testcontainers::{
 
 const IMAGE: &str = "vectorized/redpanda";
 const VERSION: &str = "v22.1.7";
+pub(crate) const PRODUCE_TIMEOUT: Duration = Duration::from_secs(5);
 
 async fn redpanda_container<'d>(docker: &'d DockerCli) -> Result<Container<'d, GenericImage>> {
     let kafka_port = find_free_tcp_port().await?;
@@ -35,10 +37,16 @@ async fn redpanda_container<'d>(docker: &'d DockerCli) -> Result<Container<'d, G
         "--memory",
         "512M",
         "--reserve-memory=0M",
-        "--node-id=0",
+        "--node-id=1",
         "--check=false",
         "--kafka-addr=0.0.0.0:9092",
         &format!("--advertise-kafka-addr=127.0.0.1:{kafka_port}"),
+        "--set",
+        "redpanda.disable_metrics=true",
+        "--set",
+        "redpanda.enable_admin_api=false",
+        "--set",
+        "redpanda.developer_mode=true",
     ]
     .into_iter()
     .map(ToString::to_string)

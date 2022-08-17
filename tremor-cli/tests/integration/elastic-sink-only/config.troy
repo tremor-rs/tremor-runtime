@@ -16,7 +16,8 @@ flow
   define connector input from cb
   with
     config =  {
-      "path": "in.json",
+      "paths": ["in.json"],
+      "expect_batched": true,
       "timeout": nanos::from_seconds(8),
 
     }

@@ -80,7 +80,7 @@ flow
   define connector input from cb
   with
     config =  {
-      "path": "in.json",
+      "paths": ["in1.json", "in2.json"],
       "timeout": nanos::from_seconds(5),
       "expect_batched": true,
 

@@ -21,7 +21,7 @@ use crate::connectors::impls::kafka::{
     is_fatal_error, SmolRuntime, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT,
 };
 use crate::connectors::prelude::*;
-use async_broadcast::{broadcast, Receiver as BroadcastReceiver};
+use async_broadcast::{broadcast, Receiver as BroadcastReceiver, TryRecvError};
 use async_std::channel::{bounded, Sender};
 use async_std::prelude::FutureExt;
 use async_std::task;
@@ -99,6 +99,9 @@ impl ConnectorBuilder for Builder {
                 format!("{}", metrics_interval_s * 1000),
             );
         }
+        // verify that the config is valid
+        producer_config.create_native_config()?;
+
         config
             .rdkafka_options
             .iter()
@@ -306,8 +309,13 @@ impl Sink for KafkaProducerSink {
     async fn metrics(&mut self, _timestamp: u64, _ctx: &SinkContext) -> Vec<EventPayload> {
         if let Some(metrics_rx) = self.metrics_rx.as_mut() {
             let mut vec = Vec::with_capacity(metrics_rx.len());
-            while let Ok(payload) = metrics_rx.try_recv() {
-                vec.push(payload);
+
+            loop {
+                match metrics_rx.try_recv() {
+                    Ok(payload) => vec.push(payload),
+                    Err(TryRecvError::Overflowed(_)) => continue, // try again
+                    Err(_) => break,                              // on all other errors, stop
+                }
             }
             vec
         } else {

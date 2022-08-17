@@ -1,5 +1,10 @@
 {"action":"index","correlation":"badger","doc":"my_little_doc","index":"my_little_index","payload":{"action":null,"snot":"badger"},"success":true}
+{"action":"index","correlation":"foo","doc":"my_little_doc","index":"my_little_index","payload":{"action":null,"snot":"foo"},"success":true}
 {"action":"index","correlation":"racoon","doc":"my_little_doc","index":"my_little_index","payload":{"action":null,"snot":"racoon","tremor":[true,true,true,false]},"success":true}
+{"action":"index","correlation":"bar","doc":"my_little_doc","index":"my_little_index","payload":{"action":null,"snot":"bar","tremor":[true,true,true,false]},"success":true}
 {"action":"delete","correlation":"badger","doc":"my_little_doc","index":"my_little_index","payload":{"action":"delete","doc_id":"badger","snot":"badger"},"success":true}
+{"action":"delete","correlation":"fop","doc":"my_little_doc","index":"my_little_index","payload":{"action":"delete","doc_id":"badger","snot":"fop"},"success":true}
 {"action":"index","correlation":"badger","doc":"my_little_doc","index":"my_little_index","payload":{"action":"index","doc_id":"badger","snot":"badger"},"success":true}
+{"action":"index","correlation":"snoop","doc":"my_little_doc","index":"my_little_index","payload":{"action":"index","doc_id":"badger","snot":"snoop"},"success":true}
 {"action":"update","correlation":"badger","doc":"my_little_doc","index":"my_little_index","payload":{"action":"update","doc_id":"badger","snot":"badger"},"success":true}
+{"action":"update","correlation":"dogg","doc":"my_little_doc","index":"my_little_index","payload":{"action":"update","doc_id":"badger","snot":"dogg"},"success":true}

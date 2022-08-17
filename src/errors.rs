@@ -104,6 +104,12 @@ impl From<async_broadcast::TryRecvError> for Error {
     }
 }
 
+impl From<async_broadcast::RecvError> for Error {
+    fn from(e: async_broadcast::RecvError) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
+
 impl<P> From<std::sync::PoisonError<P>> for Error {
     fn from(e: std::sync::PoisonError<P>) -> Self {
         Self::from(format!("Poison Error: {:?}", e))
