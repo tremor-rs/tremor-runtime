@@ -44,7 +44,6 @@ use std::fmt;
 use std::fmt::Display;
 use std::iter::Iterator;
 use std::str::FromStr;
-//use std::{fmt::Debug, mem, pin::Pin, sync::Arc};
 use tremor_common::ids::{Id, OperatorId, SinkId, SourceId};
 use tremor_script::{
     ast::{self, Helper},
