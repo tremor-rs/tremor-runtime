@@ -69,7 +69,7 @@ clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", rev = "553f
 ] }
 csv = "1.1"
 dashmap = "5.3"
-either = { version = "1.7", features = ["serde"] }
+either = { version = "1.8", features = ["serde"] }
 error-chain = "0.12"
 file-mode = "0.1"
 futures = "0.3.23"
