@@ -635,6 +635,14 @@ pub(crate) async fn pipeline_task(
                             error!("{ctx} Error connecting input pipeline {endpoint}: {e}",);
                         }
                         rx.recv().await??;
+                        // fix me
+                        // rx.recv().await?.map_err(|e|{
+                        //     err_generic(
+                        //         &msg,
+                        //         &endpoint,
+                        //         &e,
+                        //     )
+                        // })?;
                     }
                 }
 

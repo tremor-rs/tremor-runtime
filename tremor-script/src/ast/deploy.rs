@@ -162,7 +162,15 @@ pub enum ConnectStmt {
         to: DeployEndpoint,
     },
 }
-
+impl BaseExpr for ConnectStmt {
+    fn meta(&self) -> &NodeMeta {
+        match self {
+            ConnectStmt::ConnectorToPipeline { mid, .. }
+            | ConnectStmt::PipelineToConnector { mid, .. }
+            | ConnectStmt::PipelineToPipeline { mid, .. } => mid,
+        }
+    }
+}
 impl ConnectStmt {
     // we get the field called 'from'  as muttable
     #[allow(clippy::wrong_self_convention)]
