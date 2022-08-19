@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased 
+## Unreleased
+
+## [0.13.0-rc.1] 
 
 ### Breaking Changes
 
@@ -482,6 +484,11 @@
 - Allow using err for errors in tremor run [#592](https://github.com/tremor-rs/tremor-runtime/pull/592)
 - Update to rust toolchain 1.48
 
+[0.13.0-rc.1]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.4...v0.13.0-rc.1
+[0.12.4]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.3...v0.12.4
+[0.12.3]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.2...v0.12.3
+[0.12.2]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.1...v0.12.2
+[0.12.1]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/tremor-rs/tremor-runtime/compare/v0.11.12...v0.12.0
 [0.11.12]: https://github.com/tremor-rs/tremor-runtime/compare/v0.11.10...v0.11.12
 [0.11.10]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.9...v0.11.10
