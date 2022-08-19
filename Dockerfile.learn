@@ -2,7 +2,7 @@ FROM rust:1.62-bullseye as builder
 
 RUN cargo install --features=ssl websocat
 
-FROM tremorproject/tremor:0.13.0
+FROM tremorproject/tremor:0.13.0-rc.1
 
 COPY --from=builder /usr/local/cargo/bin/websocat /usr/local/bin/websocat
 
