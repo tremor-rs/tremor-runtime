@@ -4,7 +4,7 @@ description = "Tremor Api Callbacks"
 edition = "2021"
 license = "Apache-2.0"
 name = "tremor-api"
-version = "0.12.4"
+version = "0.13.0"
 
 [dependencies]
 async-std = { version = "1.12.0", features = [
@@ -21,11 +21,11 @@ serde_yaml = "0.9"
 simd-json = "0.6"
 # we don't need sessions or cookies or shitty logging middleware
 tide = { version = "0.16", default-features = false, features = ["h1-server"] }
-tremor-pipeline = { version = "0.12.4", path = "../tremor-pipeline" }
-tremor-runtime = { version = "0.12.4", path = "../" }
-tremor-script = { version = "0.12.4", path = "../tremor-script" }
-tremor-value = { version = "0.12.4", path = "../tremor-value" }
-tremor-common = { version = "0.12.4", path = "../tremor-common" }
+tremor-pipeline = { version = "0.13.0", path = "../tremor-pipeline" }
+tremor-runtime = { version = "0.13.0", path = "../" }
+tremor-script = { version = "0.13.0", path = "../tremor-script" }
+tremor-value = { version = "0.13.0", path = "../tremor-value" }
+tremor-common = { version = "0.13.0", path = "../tremor-common" }
 
 [dev-dependencies]
 surf = { version = "2.3", default-features = false, features = [
