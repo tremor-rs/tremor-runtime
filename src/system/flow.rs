@@ -265,7 +265,7 @@ fn key_list<K: ToString, V>(h: &HashMap<K, V>) -> String {
         .collect::<Vec<_>>()
         .join(", ")
 }
-
+#[allow(clippy::too_many_lines)]
 async fn link(
     connectors: &HashMap<String, connectors::Addr>,
     pipelines: &HashMap<String, pipeline::Addr>,
@@ -321,12 +321,18 @@ async fn link(
                 .clone();
 
             // first link the pipeline to the connector
+            let (tx, rx) = bounded(1);
             let msg = crate::pipeline::MgmtMsg::ConnectOutput {
+                tx,
                 port: from.port().to_string().into(),
                 endpoint: to.clone(),
                 target: connector.clone().try_into()?,
             };
             pipeline.send_mgmt(msg).await?;
+            rx.recv()
+                .timeout(timeout)
+                .await??
+                .map_err(|e| err_generic(link, from, &e))?;
 
             // then link the connector to the pipeline
 
@@ -357,24 +363,31 @@ async fn link(
                 from.alias(),
                 key_list(pipelines)
             ))?;
+            let (tx_from, rx_from) = bounded(1);
             let msg_from = crate::pipeline::MgmtMsg::ConnectOutput {
                 port: from.port().to_string().into(),
                 endpoint: to.clone(),
+                tx: tx_from,
                 target: to_pipeline.clone().into(),
             };
-            let (tx, rx) = bounded(1);
+            let (tx_to, rx_to) = bounded(1);
             let msg_to = crate::pipeline::MgmtMsg::ConnectInput {
                 port: to.port().to_string().into(),
                 endpoint: from.clone(),
-                tx,
+                tx: tx_to,
                 target: InputTarget::Pipeline(Box::new(from_pipeline.clone())),
                 is_transactional: true,
             };
 
             from_pipeline.send_mgmt(msg_from).await?;
-
+            rx_from
+                .recv()
+                .timeout(timeout)
+                .await??
+                .map_err(|e| err_generic(link, to, &e))?;
             to_pipeline.send_mgmt(msg_to).await?;
-            rx.recv()
+            rx_to
+                .recv()
                 .timeout(timeout)
                 .await??
                 .map_err(|e| err_generic(link, from, &e))?;

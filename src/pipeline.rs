@@ -248,6 +248,8 @@ pub(crate) enum MgmtMsg {
         port: Cow<'static, str>,
         /// the url of the output instance
         endpoint: DeployEndpoint,
+        /// sends the result
+        tx: Sender<Result<()>>,
         /// the actual target addr
         target: OutputTarget,
     },
@@ -599,15 +601,24 @@ pub(crate) async fn pipeline_task(
                     error!("{ctx} Status report sent.");
                 }
             }
+
             AnyMsg::Mgmt(MgmtMsg::ConnectOutput {
                 port,
                 endpoint,
                 target,
+                tx,
             }) => {
                 info!("{ctx} Connecting port '{port}' to {endpoint}",);
                 // add error statement for port out in pipeline, currently no error messages
                 if output_doesnt_exist(&port, &pipeline) {
                     error!("{ctx} Error connecting output pipeline {port}");
+                    if tx
+                        .send(Err("output port doesn't exist".into()))
+                        .await
+                        .is_err()
+                    {
+                        error!("{ctx} Error sending status report.");
+                    }
                     continue;
                 }
                 // notify other pipeline about a new input
@@ -769,9 +780,12 @@ mod tests {
         addr.send_mgmt(MgmtMsg::ConnectOutput {
             port: Cow::const_str("out"),
             endpoint: DeployEndpoint::new("snot2", "in", &yolo_mid),
+            tx,
             target: OutputTarget::Pipeline(Box::new(addr2.clone())),
         })
         .await?;
+        rx.recv().await??;
+        let (tx, rx) = bounded(1);
         addr2
             .send_mgmt(MgmtMsg::ConnectInput {
                 port: Cow::const_str("in"),
@@ -782,13 +796,16 @@ mod tests {
             })
             .await?;
         rx.recv().await??;
+        let (tx, rx) = bounded(1);
         addr2
             .send_mgmt(MgmtMsg::ConnectOutput {
+                tx,
                 port: Cow::const_str("out"),
                 endpoint: DeployEndpoint::new("snot3", "in", &yolo_mid),
                 target: OutputTarget::Pipeline(Box::new(addr3.clone())),
             })
             .await?;
+        rx.recv().await??;
         let (tx, rx) = bounded(1);
         addr3
             .send_mgmt(MgmtMsg::ConnectInput {
@@ -919,12 +936,17 @@ mod tests {
         let (sink_tx, sink_rx) = unbounded();
         let sink_addr = SinkAddr { addr: sink_tx };
         let target = OutputTarget::Sink(sink_addr);
+        let (tx, rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::ConnectOutput {
             endpoint: DeployEndpoint::new(&"sink_01", &IN, &mid),
             port: OUT,
+            tx,
             target,
         })
         .await?;
+        rx.recv().await??;
+
+        let (tx, rx) = unbounded();
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
         let report = rx.recv().await?;
         assert_eq!(1, report.outputs.len());
