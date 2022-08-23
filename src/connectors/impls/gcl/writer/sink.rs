@@ -13,7 +13,11 @@
 // limitations under the License.
 
 use super::meta;
-use crate::connectors::google::AuthInterceptor;
+#[cfg(not(test))]
+use crate::connectors::google::GouthTokenProvider;
+#[cfg(test)]
+use crate::connectors::google::TestTokenProvider;
+use crate::connectors::google::{AuthInterceptor, DefaultTokenProvider};
 use crate::connectors::impls::gcl::writer::Config;
 use crate::connectors::prelude::*;
 use crate::connectors::utils::pb;
@@ -21,15 +25,18 @@ use async_std::prelude::FutureExt;
 use googapis::google::logging::v2::log_entry::Payload;
 use googapis::google::logging::v2::logging_service_v2_client::LoggingServiceV2Client;
 use googapis::google::logging::v2::{LogEntry, WriteLogEntriesRequest};
-use gouth::Token;
 use prost_types::Timestamp;
+#[cfg(test)]
+use std::sync::Arc;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
-use tonic::{Code, Status};
+use tonic::Code;
 
 pub(crate) struct GclSink {
-    client: Option<LoggingServiceV2Client<InterceptedService<Channel, AuthInterceptor>>>,
+    client: Option<
+        LoggingServiceV2Client<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>>,
+    >,
     config: Config,
 }
 
@@ -68,7 +75,9 @@ impl GclSink {
     #[cfg(test)]
     pub fn set_client(
         &mut self,
-        client: LoggingServiceV2Client<InterceptedService<Channel, AuthInterceptor>>,
+        client: LoggingServiceV2Client<
+            InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>,
+        >,
     ) {
         self.client = Some(client);
     }
@@ -142,8 +151,6 @@ impl Sink for GclSink {
 
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         info!("{} Connecting to Google Cloud Logging", ctx);
-        let token = Token::new()?;
-
         let tls_config = ClientTlsConfig::new()
             .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
             .domain_name("logging.googleapis.com");
@@ -157,20 +164,14 @@ impl Sink for GclSink {
         let client = LoggingServiceV2Client::with_interceptor(
             channel,
             AuthInterceptor {
-                token: Box::new(move || match token.header_value() {
-                    Ok(val) => Ok(val),
-                    Err(e) => {
-                        error!("Failed to get token for Google Logging Client: {}", e);
-
-                        Err(Status::unavailable(
-                            "Failed to retrieve authentication token.",
-                        ))
-                    }
-                }),
+                #[cfg(not(test))]
+                token_provider: GouthTokenProvider::new(),
+                #[cfg(test)]
+                token_provider: TestTokenProvider::new(Arc::new("".to_string())),
             },
         );
 
-        self.client = Some(client);
+        self.client = Some(client.clone());
 
         Ok(true)
     }
@@ -183,6 +184,7 @@ impl Sink for GclSink {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::connectors::google::TestTokenProvider;
     use crate::connectors::impls::gcl;
     use crate::connectors::tests::ConnectorHarness;
     use crate::connectors::ConnectionLostNotifier;
@@ -277,7 +279,7 @@ mod test {
         sink.set_client(LoggingServiceV2Client::with_interceptor(
             Channel::from_static("http://example.com").connect_lazy(),
             AuthInterceptor {
-                token: Box::new(|| Ok(Arc::new(String::new()))),
+                token_provider: TestTokenProvider::new(Arc::new("".to_string())),
             },
         ));
 
