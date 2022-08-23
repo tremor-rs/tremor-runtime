@@ -12,18 +12,89 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use gouth::Token;
 use std::sync::Arc;
 use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
 use tonic::{Request, Status};
 
-pub(crate) struct AuthInterceptor {
-    pub token: Box<dyn Fn() -> ::std::result::Result<Arc<String>, Status> + Send>,
+pub trait TokenProvider: Clone {
+    fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status>;
 }
 
-impl Interceptor for AuthInterceptor {
+#[cfg(not(test))]
+pub type DefaultTokenProvider = GouthTokenProvider;
+#[cfg(test)]
+pub type DefaultTokenProvider = TestTokenProvider;
+
+#[derive(Clone)]
+#[cfg(test)]
+pub struct TestTokenProvider {
+    token: Arc<String>,
+}
+
+#[cfg(test)]
+impl TestTokenProvider {
+    pub fn new(token: Arc<String>) -> Self {
+        Self { token }
+    }
+}
+
+#[cfg(test)]
+impl TokenProvider for TestTokenProvider {
+    fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status> {
+        Ok(self.token.clone())
+    }
+}
+
+pub struct GouthTokenProvider {
+    gouth_token: Option<Token>,
+}
+
+impl Clone for GouthTokenProvider {
+    fn clone(&self) -> Self {
+        Self { gouth_token: None }
+    }
+}
+
+#[cfg(not(test))]
+impl GouthTokenProvider {
+    pub fn new() -> Self {
+        GouthTokenProvider { gouth_token: None }
+    }
+}
+
+impl TokenProvider for GouthTokenProvider {
+    fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status> {
+        let token = if let Some(ref token) = self.gouth_token {
+            token
+        } else {
+            let new_token =
+                Token::new().map_err(|_| Status::unavailable("Failed to read Google Token"))?;
+            self.gouth_token = Some(new_token);
+            self.gouth_token.as_ref().unwrap()
+        };
+
+        Ok(token
+            .header_value()
+            .map_err(|_e| Status::unavailable("Failed to read the Google Token header value"))?)
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct AuthInterceptor<T>
+where
+    T: TokenProvider,
+{
+    pub token_provider: T,
+}
+
+impl<T> Interceptor for AuthInterceptor<T>
+where
+    T: TokenProvider,
+{
     fn call(&mut self, mut request: Request<()>) -> ::std::result::Result<Request<()>, Status> {
-        let header_value = (self.token)()?;
+        let header_value = self.token_provider.get_token()?;
         let metadata_value = match MetadataValue::from_str(header_value.as_str()) {
             Ok(val) => val,
             Err(e) => {
@@ -49,7 +120,7 @@ mod tests {
     #[test]
     fn interceptor_can_add_the_auth_header() {
         let mut interceptor = AuthInterceptor {
-            token: Box::new(|| Ok(Arc::new("test".into()))),
+            token_provider: TestTokenProvider::new(Arc::new("test".to_string())),
         };
         let request = Request::new(());
 
@@ -58,10 +129,19 @@ mod tests {
         assert_eq!(result.metadata().get("authorization").unwrap(), "test");
     }
 
+    #[derive(Clone)]
+    struct FailingTokenProvider {}
+
+    impl TokenProvider for FailingTokenProvider {
+        fn get_token(&mut self) -> Result<Arc<String>, Status> {
+            Err(Status::unavailable("boo"))
+        }
+    }
+
     #[test]
     fn interceptor_will_pass_token_error() {
         let mut interceptor = AuthInterceptor {
-            token: Box::new(|| Err(Status::unavailable("boo"))),
+            token_provider: FailingTokenProvider {},
         };
         let request = Request::new(());
 
@@ -74,7 +154,7 @@ mod tests {
     fn interceptor_fails_on_invalid_token_value() {
         let mut interceptor = AuthInterceptor {
             // control characters (ASCII < 32) are not allowed
-            token: Box::new(|| Ok(Arc::new("\r\n".into()))),
+            token_provider: TestTokenProvider::new(Arc::new("\r\n".into())),
         };
         let request = Request::new(());
 
