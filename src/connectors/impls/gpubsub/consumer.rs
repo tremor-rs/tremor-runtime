@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::google::AuthInterceptor;
+#[cfg(not(test))]
+use crate::connectors::google::GouthTokenProvider;
+use crate::connectors::google::{AuthInterceptor, DefaultTokenProvider};
+
 use crate::connectors::prelude::*;
 use crate::connectors::utils::url::HttpsDefaults;
 use async_std::channel::{Receiver, Sender};
@@ -23,7 +26,6 @@ use async_std::task::JoinHandle;
 use beef::generic::Cow;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use googapis::google::pubsub::v1::{PubsubMessage, ReceivedMessage, StreamingPullRequest};
-use gouth::Token;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -94,7 +96,8 @@ struct GSub {
     client_id: String,
 }
 
-type PubSubClient = SubscriberClient<InterceptedService<Channel, AuthInterceptor>>;
+type PubSubClient =
+    SubscriberClient<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>>;
 type AsyncTaskMessage = Result<(u64, PubsubMessage)>;
 
 struct GSubSource {
@@ -257,6 +260,9 @@ fn pubsub_metadata(
 #[async_trait::async_trait]
 impl Source for GSubSource {
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
+        #[cfg(test)]
+        use crate::connectors::google::TestTokenProvider;
+
         let mut channel = Channel::from_shared(self.config.url.to_string())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
         if self.url.scheme() == "https" {
@@ -284,21 +290,18 @@ impl Source for GSubSource {
                 return Ok(SubscriberClient::with_interceptor(
                     channel.clone(),
                     AuthInterceptor {
-                        token: Box::new(|| Ok(Arc::new(String::new()))),
+                        token_provider: TestTokenProvider::new(Arc::new(String::new())),
                     },
                 ));
             }
 
-            let token = Token::new()?;
-
             Ok(SubscriberClient::with_interceptor(
                 channel.clone(),
                 AuthInterceptor {
-                    token: Box::new(move || {
-                        token.header_value().map_err(|_| {
-                            Status::unavailable("Failed to retrieve authentication token.")
-                        })
-                    }),
+                    #[cfg(not(test))]
+                    token_provider: GouthTokenProvider::new(),
+                    #[cfg(test)]
+                    token_provider: TestTokenProvider::new(Arc::new(String::new())),
                 },
             ))
         };

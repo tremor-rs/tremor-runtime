@@ -12,7 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::google::AuthInterceptor;
+#[cfg(not(test))]
+use crate::connectors::google::GouthTokenProvider;
+#[cfg(test)]
+use crate::connectors::google::TestTokenProvider;
+use crate::connectors::google::{AuthInterceptor, DefaultTokenProvider};
+
 use crate::connectors::prelude::{
     Alias, Attempt, ErrorKind, EventSerializer, KillSwitch, SinkAddr, SinkContext,
     SinkManagerBuilder, SinkReply, Url,
@@ -114,26 +119,18 @@ struct GpubSink {
     config: Config,
     hostname: String,
 
-    client: Option<PublisherClient<InterceptedService<Channel, AuthInterceptor>>>,
+    client:
+        Option<PublisherClient<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>>>,
 }
 
 #[cfg(not(test))]
 fn create_publisher_client(
     channel: Channel,
-) -> Result<PublisherClient<InterceptedService<Channel, AuthInterceptor>>> {
-    use gouth::Token;
-    use tonic::Status;
-
-    let token = Token::new()?;
-
+) -> Result<PublisherClient<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>>> {
     Ok(PublisherClient::with_interceptor(
         channel,
         AuthInterceptor {
-            token: Box::new(move || {
-                token
-                    .header_value()
-                    .map_err(|_| Status::unavailable("Failed to retrieve authentication token."))
-            }),
+            token_provider: GouthTokenProvider::new(),
         },
     ))
 }
@@ -141,13 +138,13 @@ fn create_publisher_client(
 #[cfg(test)]
 fn create_publisher_client(
     channel: Channel,
-) -> Result<PublisherClient<InterceptedService<Channel, AuthInterceptor>>> {
+) -> Result<PublisherClient<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>>> {
     use std::sync::Arc;
 
     Ok(PublisherClient::with_interceptor(
         channel,
         AuthInterceptor {
-            token: Box::new(|| Ok(Arc::new(String::new()))),
+            token_provider: TestTokenProvider::new(Arc::new("".to_string())),
         },
     ))
 }

@@ -12,7 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::google::AuthInterceptor;
+#[cfg(not(test))]
+use crate::connectors::google::GouthTokenProvider;
+#[cfg(test)]
+use crate::connectors::google::TestTokenProvider;
+use crate::connectors::google::{AuthInterceptor, DefaultTokenProvider};
 use crate::connectors::impls::gbq::writer::Config;
 use crate::connectors::prelude::*;
 use async_std::prelude::{FutureExt, StreamExt};
@@ -24,17 +28,19 @@ use googapis::google::cloud::bigquery::storage::v1::{
     append_rows_request, table_field_schema, write_stream, AppendRowsRequest,
     CreateWriteStreamRequest, ProtoRows, ProtoSchema, TableFieldSchema, WriteStream,
 };
-use gouth::Token;
 use prost::encoding::WireType;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
 use std::collections::HashMap;
+#[cfg(test)]
+use std::sync::Arc;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
-use tonic::Status;
 
 pub(crate) struct GbqSink {
-    client: Option<BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor>>>,
+    client: Option<
+        BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>>,
+    >,
     write_stream: Option<WriteStream>,
     mapping: Option<JsonToProtobufMapping>,
     config: Config,
@@ -291,7 +297,9 @@ impl GbqSink {
     #[cfg(test)]
     pub fn set_client(
         &mut self,
-        client: BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor>>,
+        client: BigQueryWriteClient<
+            InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>,
+        >,
     ) {
         self.client = Some(client);
     }
@@ -386,7 +394,6 @@ impl Sink for GbqSink {
 
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         info!("{ctx} Connecting to BigQuery");
-        let token = Token::new()?;
 
         let tls_config = ClientTlsConfig::new()
             .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
@@ -398,20 +405,13 @@ impl Sink for GbqSink {
             .connect()
             .await?;
 
-        let interceptor_ctx = ctx.clone();
         let mut client = BigQueryWriteClient::with_interceptor(
             channel,
             AuthInterceptor {
-                token: Box::new(move || match token.header_value() {
-                    Ok(val) => Ok(val),
-                    Err(e) => {
-                        error!("{interceptor_ctx} Failed to get token for BigQuery: {}", e);
-
-                        Err(Status::unavailable(
-                            "Failed to retrieve authentication token.",
-                        ))
-                    }
-                }),
+                #[cfg(not(test))]
+                token_provider: GouthTokenProvider::new(),
+                #[cfg(test)]
+                token_provider: TestTokenProvider::new(Arc::new("".to_string())),
             },
         );
 
@@ -455,6 +455,7 @@ impl Sink for GbqSink {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::connectors::google::TestTokenProvider;
     use crate::connectors::impls::gbq;
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use crate::connectors::tests::ConnectorHarness;
@@ -1123,7 +1124,7 @@ mod test {
         sink.set_client(BigQueryWriteClient::with_interceptor(
             Channel::from_static("http://example.com").connect_lazy(),
             AuthInterceptor {
-                token: Box::new(|| Ok(Arc::new(String::new()))),
+                token_provider: TestTokenProvider::new(Arc::new("".to_string())),
             },
         ));
 
