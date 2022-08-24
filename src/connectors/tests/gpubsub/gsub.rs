@@ -73,7 +73,6 @@ async fn no_token() -> Result<()> {
     Ok(())
 }
 
-#[async_std::test]
 #[serial(gpubsub, timeout_ms = 600000)]
 async fn simple_subscribe() -> Result<()> {
     let _ = env_logger::try_init();
