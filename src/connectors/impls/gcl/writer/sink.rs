@@ -171,7 +171,7 @@ impl Sink for GclSink {
             },
         );
 
-        self.client = Some(client.clone());
+        self.client = Some(client);
 
         Ok(true)
     }

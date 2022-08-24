@@ -126,27 +126,27 @@ struct GpubSink {
 #[cfg(not(test))]
 fn create_publisher_client(
     channel: Channel,
-) -> Result<PublisherClient<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>>> {
-    Ok(PublisherClient::with_interceptor(
+) -> PublisherClient<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>> {
+    PublisherClient::with_interceptor(
         channel,
         AuthInterceptor {
             token_provider: GouthTokenProvider::new(),
         },
-    ))
+    )
 }
 
 #[cfg(test)]
 fn create_publisher_client(
     channel: Channel,
-) -> Result<PublisherClient<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>>> {
+) -> PublisherClient<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>> {
     use std::sync::Arc;
 
-    Ok(PublisherClient::with_interceptor(
+    PublisherClient::with_interceptor(
         channel,
         AuthInterceptor {
             token_provider: TestTokenProvider::new(Arc::new("".to_string())),
         },
-    ))
+    )
 }
 
 #[async_trait::async_trait()]
@@ -164,7 +164,7 @@ impl Sink for GpubSink {
 
         let channel = channel.connect().await?;
 
-        self.client = Some(create_publisher_client(channel)?);
+        self.client = Some(create_publisher_client(channel));
 
         Ok(true)
     }
