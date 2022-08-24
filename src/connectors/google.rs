@@ -71,13 +71,13 @@ impl TokenProvider for GouthTokenProvider {
         } else {
             let new_token =
                 Token::new().map_err(|_| Status::unavailable("Failed to read Google Token"))?;
-            self.gouth_token = Some(new_token);
-            self.gouth_token.as_ref().unwrap()
+
+            self.gouth_token.get_or_insert(new_token)
         };
 
-        Ok(token
+        token
             .header_value()
-            .map_err(|_e| Status::unavailable("Failed to read the Google Token header value"))?)
+            .map_err(|_e| Status::unavailable("Failed to read the Google Token header value"))
     }
 }
 
