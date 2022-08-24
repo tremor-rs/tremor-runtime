@@ -20,7 +20,9 @@ use crate::connectors::google::TestTokenProvider;
 use crate::connectors::google::{AuthInterceptor, DefaultTokenProvider};
 use crate::connectors::impls::gcl::writer::Config;
 use crate::connectors::prelude::*;
+use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
 use crate::connectors::utils::pb;
+use async_std::channel::Sender;
 use async_std::prelude::FutureExt;
 use googapis::google::logging::v2::log_entry::Payload;
 use googapis::google::logging::v2::logging_service_v2_client::LoggingServiceV2Client;
@@ -32,12 +34,15 @@ use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Code;
+use tremor_common::time::nanotime;
 
 pub(crate) struct GclSink {
     client: Option<
         LoggingServiceV2Client<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>>,
     >,
     config: Config,
+    concurrency_cap: ConcurrencyCap,
+    reply_tx: Sender<AsyncSinkReply>,
 }
 
 fn value_to_log_entry(
@@ -65,21 +70,14 @@ fn value_to_log_entry(
 }
 
 impl GclSink {
-    pub fn new(config: Config) -> Self {
+    pub fn new(config: Config, reply_tx: Sender<AsyncSinkReply>) -> Self {
+        let concurrency_cap = ConcurrencyCap::new(config.concurrency_cap, reply_tx.clone());
         Self {
             client: None,
             config,
+            concurrency_cap,
+            reply_tx,
         }
-    }
-
-    #[cfg(test)]
-    pub fn set_client(
-        &mut self,
-        client: LoggingServiceV2Client<
-            InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>,
-        >,
-    ) {
-        self.client = Some(client);
     }
 }
 
@@ -91,7 +89,7 @@ impl Sink for GclSink {
         event: Event,
         ctx: &SinkContext,
         _serializer: &mut EventSerializer,
-        _start: u64,
+        start: u64,
     ) -> Result<SinkReply> {
         let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
             "Google Cloud Logging",
@@ -111,42 +109,67 @@ impl Sink for GclSink {
             entries.push(value_to_log_entry(timestamp, &self.config, data, meta)?);
         }
 
-        let log_entries_response = client
-            .write_log_entries(WriteLogEntriesRequest {
-                log_name: self.config.log_name(None),
-                resource: super::value_to_monitored_resource(self.config.resource.as_ref())?,
-                labels: self.config.labels.clone(),
-                entries,
-                partial_success: self.config.partial_success,
-                dry_run: self.config.dry_run,
-            })
-            .timeout(Duration::from_nanos(self.config.request_timeout))
-            .await?;
+        let reply_tx = self.reply_tx.clone();
+        let guard = self.concurrency_cap.inc_for(&event).await?;
+        let log_name = self.config.log_name(None);
+        let resource = super::value_to_monitored_resource(self.config.resource.as_ref())?;
+        let labels = self.config.labels.clone();
+        let partial_success = self.config.partial_success;
+        let dry_run = self.config.dry_run;
+        let request_timeout = Duration::from_nanos(self.config.request_timeout);
+        let task_ctx = ctx.clone();
+        let mut task_client = client.clone();
 
-        if let Err(error) = log_entries_response {
-            error!("{ctx} Failed to write log entries: {error}");
+        spawn_task(ctx.clone(), async move {
+            let log_entries_response = task_client
+                .write_log_entries(WriteLogEntriesRequest {
+                    log_name,
+                    resource,
+                    labels,
+                    entries,
+                    partial_success,
+                    dry_run,
+                })
+                .timeout(request_timeout)
+                .await?;
 
-            if matches!(
-                error.code(),
-                Code::Aborted
-                    | Code::Cancelled
-                    | Code::DataLoss
-                    | Code::DeadlineExceeded
-                    | Code::Internal
-                    | Code::ResourceExhausted
-                    | Code::Unavailable
-                    | Code::Unknown
-            ) {
-                ctx.swallow_err(
-                    ctx.notifier.connection_lost().await,
-                    "Failed to notify about Google Cloud Logging connection loss",
-                );
+            if let Err(error) = log_entries_response {
+                error!("Failed to write a log entries: {}", error);
+
+                if matches!(
+                    error.code(),
+                    Code::Aborted
+                        | Code::Cancelled
+                        | Code::DataLoss
+                        | Code::DeadlineExceeded
+                        | Code::Internal
+                        | Code::ResourceExhausted
+                        | Code::Unavailable
+                        | Code::Unknown
+                ) {
+                    task_ctx.swallow_err(
+                        task_ctx.notifier.connection_lost().await,
+                        "Failed to notify about Google Cloud Logging connection loss",
+                    );
+                }
+
+                reply_tx
+                    .send(AsyncSinkReply::Fail(ContraflowData::from(event)))
+                    .await?;
+            } else {
+                reply_tx
+                    .send(AsyncSinkReply::Ack(
+                        ContraflowData::from(event),
+                        nanotime() - start,
+                    ))
+                    .await?;
             }
 
-            Ok(SinkReply::FAIL)
-        } else {
-            Ok(SinkReply::ACK)
-        }
+            drop(guard);
+            Ok(())
+        });
+
+        Ok(SinkReply::NONE)
     }
 
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
@@ -179,17 +202,19 @@ impl Sink for GclSink {
     fn auto_ack(&self) -> bool {
         false
     }
+
+    fn asynchronous(&self) -> bool {
+        true
+    }
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::connectors::google::TestTokenProvider;
     use crate::connectors::impls::gcl;
     use crate::connectors::tests::ConnectorHarness;
     use crate::connectors::ConnectionLostNotifier;
     use googapis::google::logging::r#type::LogSeverity;
-    use std::sync::Arc;
     use tremor_value::{literal, structurize};
 
     #[test]
@@ -232,12 +257,13 @@ mod test {
     #[async_std::test]
     async fn on_event_fails_if_client_is_not_conected() -> Result<()> {
         let (rx, _tx) = async_std::channel::unbounded();
+        let (reply_tx, _reply_rx) = async_std::channel::unbounded();
         let config = Config::new(&literal!({
             "connect_timeout": 1_000_000
         }))
         .unwrap();
 
-        let mut sink = GclSink::new(config);
+        let mut sink = GclSink::new(config, reply_tx);
 
         let result = sink
             .on_event(
@@ -262,51 +288,6 @@ mod test {
             )
             .await;
 
-        assert!(result.is_err());
-        Ok(())
-    }
-
-    #[async_std::test]
-    async fn on_event_fails_if_write_stream_is_not_connected() -> Result<()> {
-        let (rx, _tx) = async_std::channel::unbounded();
-        let config = Config::new(&literal!({
-            "connect_timeout": 1_000_000,
-            "request_timeout": 1_000_000
-        }))
-        .unwrap();
-
-        let mut sink = GclSink::new(config);
-        sink.set_client(LoggingServiceV2Client::with_interceptor(
-            Channel::from_static("http://example.com").connect_lazy(),
-            AuthInterceptor {
-                token_provider: TestTokenProvider::new(Arc::new("".to_string())),
-            },
-        ));
-
-        assert!(!sink.auto_ack());
-
-        let result = sink
-            .on_event(
-                "",
-                Event::signal_tick(),
-                &SinkContext {
-                    uid: Default::default(),
-                    alias: Alias::new("", ""),
-                    connector_type: Default::default(),
-                    quiescence_beacon: Default::default(),
-                    notifier: ConnectionLostNotifier::new(rx),
-                },
-                &mut EventSerializer::new(
-                    None,
-                    CodecReq::Structured,
-                    vec![],
-                    &ConnectorType::from(""),
-                    &Alias::new("", ""),
-                )
-                .unwrap(),
-                0,
-            )
-            .await;
         assert!(result.is_err());
         Ok(())
     }
