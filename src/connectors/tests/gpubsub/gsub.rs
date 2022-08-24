@@ -27,6 +27,7 @@ use tonic::transport::Channel;
 use tremor_pipeline::CbAction;
 use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
+use crate::instance::State;
 
 #[async_std::test]
 #[serial(gpubsub, timeout_ms = 600000)]
@@ -65,7 +66,10 @@ async fn no_token() -> Result<()> {
 
     let harness =
         ConnectorHarness::new(function_name!(), &Builder::default(), &connector_yaml).await?;
-    assert!(harness.start().await.is_err());
+
+    harness.consume_initial_sink_contraflow().await?;
+    harness.wait_for_state(State::Failed).await?;
+
     Ok(())
 }
 
