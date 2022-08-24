@@ -101,6 +101,9 @@ pub(crate) struct Config {
     /// basis through metadata
     #[serde(default = "Default::default")]
     pub labels: HashMap<String, String>,
+
+    #[serde(default = "default_concurrency_cap")]
+    pub concurrency_cap: usize,
 }
 
 fn default_partial_success() -> bool {
@@ -121,6 +124,10 @@ fn default_request_timeout() -> u64 {
 
 fn default_log_severity() -> i32 {
     LogSeverity::Default as i32
+}
+
+fn default_concurrency_cap() -> usize {
+    4
 }
 
 impl Config {
@@ -232,7 +239,7 @@ impl Connector for Gcl {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = GclSink::new(self.config.clone());
+        let sink = GclSink::new(self.config.clone(), builder.reply_tx());
 
         builder.spawn(sink, sink_context).map(Some)
     }
