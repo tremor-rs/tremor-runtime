@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Fixes
+- Added a new port in ConnectOutput and weaved them together
+- Fixed linking pipelines to pipelines
+- Fixed error reporting in ConnectOutput and ConnectInput functions
+- Fixed kv test cases
+
 ## [0.13.0-rc.1] 
 
 ### Breaking Changes

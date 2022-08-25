@@ -627,8 +627,7 @@ pub(crate) async fn pipeline_task(
                     // as this will create a nasty circle filling up queues.
                     // In general this does not avoid cycles via more complex constructs.
                     //
-                    if id.pipeline_alias() == endpoint.alias() {
-                        let (tx, rx) = bounded(1);
+                    if id.pipeline_alias() != endpoint.alias() {
                         if let Err(e) = pipe
                             .send_mgmt(MgmtMsg::ConnectInput {
                                 port: Cow::const_str("in"),
@@ -645,15 +644,22 @@ pub(crate) async fn pipeline_task(
                         {
                             error!("{ctx} Error connecting input pipeline {endpoint}: {e}",);
                         }
-                        rx.recv().await??;
-                        // fix me
-                        // rx.recv().await?.map_err(|e|{
-                        //     err_generic(
-                        //         &msg,
-                        //         &endpoint,
-                        //         &e,
-                        //     )
-                        // })?;
+                    }
+                    else{
+                        error!("{ctx} Error connecting output pipeline {port}");
+                        if tx
+                            .send(Err("Avoid linking the same pipeline as input to itself".into()))
+                            .await
+                            .is_err()
+                        {
+                            error!("{ctx} Error sending status report.");
+                        }
+                        continue;
+                        }
+                }
+                else{
+                    if tx.send(Ok(())).await.is_err() {
+                        error!("{ctx} Status report sent.");
                     }
                 }
 

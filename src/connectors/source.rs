@@ -19,8 +19,7 @@ pub mod channel_source;
 
 pub(crate) use channel_source::{ChannelSource, ChannelSourceRuntime};
 
-// use async_std::channel::unbounded;
-use async_std::channel::{bounded, unbounded};
+use async_std::channel::unbounded;
 use async_std::task;
 use hashbrown::HashSet;
 use simd_json::Mutable;
@@ -66,6 +65,8 @@ pub(crate) enum SourceMsg {
     Link {
         /// port
         port: Cow<'static, str>,
+        /// sends the result
+        tx: Sender<Result<()>>,
         /// pipelines to connect
         pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
     },
@@ -628,7 +629,7 @@ where
         use SourceState::{Initialized, Paused, Running, Stopped};
         let state = self.state;
         match msg {
-            SourceMsg::Link { port, pipelines } => self.handle_link(port, pipelines).await,
+            SourceMsg::Link { port, tx, pipelines } => self.handle_link(port, tx, pipelines).await,
             SourceMsg::Start if self.state == Initialized => {
                 info!("{} Starting...", self.ctx);
                 self.state = Running;
@@ -835,6 +836,7 @@ where
     async fn handle_link(
         &mut self,
         port: Cow<'static, str>,
+        tx: Sender<Result<()>>,
         mut pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
     ) -> Result<Control> {
         let pipes = if port.eq_ignore_ascii_case(OUT.as_ref()) {
@@ -846,7 +848,6 @@ where
             return Ok(Control::Continue);
         };
         // We can not move this to the system flow since we need to know about transactionality
-        let (tx, rx) = bounded(1);
         for (pipeline_url, p) in &pipelines {
             self.ctx.swallow_err(
                 p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
@@ -859,7 +860,6 @@ where
                 .await,
                 &format!("Failed sending ConnectInput to pipeline {}", pipeline_url),
             );
-            rx.recv().await??;
         }
         pipes.append(&mut pipelines);
         Ok(Control::Continue)
