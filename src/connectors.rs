@@ -632,6 +632,7 @@ async fn connector_task(
                                 .addr
                                 .send(SourceMsg::Link {
                                     port,
+                                    tx: result_tx.clone(),
                                     pipelines: pipelines_to_link,
                                 })
                                 .await
