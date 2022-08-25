@@ -7,7 +7,7 @@
     codec = args.codec,
     config = {
       "base64": args.base64,
-      "source":  "../../../../demo/data/#{args.file}",
+      "path":  "../../../../demo/data/#{args.file}",
       "warmup_secs": 5,
       "stop_after_secs": 25,
       "significant_figures": 2,
