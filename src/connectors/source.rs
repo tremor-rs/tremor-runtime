@@ -629,7 +629,11 @@ where
         use SourceState::{Initialized, Paused, Running, Stopped};
         let state = self.state;
         match msg {
-            SourceMsg::Link { port, tx, pipelines } => self.handle_link(port, tx, pipelines).await,
+            SourceMsg::Link {
+                port,
+                tx,
+                pipelines,
+            } => self.handle_link(port, tx, pipelines).await,
             SourceMsg::Start if self.state == Initialized => {
                 info!("{} Starting...", self.ctx);
                 self.state = Running;

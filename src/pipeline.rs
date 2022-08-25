@@ -627,40 +627,36 @@ pub(crate) async fn pipeline_task(
                     // as this will create a nasty circle filling up queues.
                     // In general this does not avoid cycles via more complex constructs.
                     //
-                    if id.pipeline_alias() != endpoint.alias() {
-                        if let Err(e) = pipe
-                            .send_mgmt(MgmtMsg::ConnectInput {
-                                port: Cow::const_str("in"),
-                                endpoint: DeployEndpoint::new(
-                                    id.pipeline_alias(),
-                                    &port,
-                                    endpoint.meta(),
-                                ),
-                                tx,
-                                target: InputTarget::Pipeline(Box::new(addr.clone())),
-                                is_transactional: true,
-                            })
-                            .await
-                        {
-                            error!("{ctx} Error connecting input pipeline {endpoint}: {e}",);
-                        }
-                    }
-                    else{
+                    if id.pipeline_alias() == endpoint.alias() {
                         error!("{ctx} Error connecting output pipeline {port}");
                         if tx
-                            .send(Err("Avoid linking the same pipeline as input to itself".into()))
+                            .send(Err(
+                                "Avoid linking the same pipeline as input to itself".into()
+                            ))
                             .await
                             .is_err()
                         {
                             error!("{ctx} Error sending status report.");
                         }
                         continue;
-                        }
-                }
-                else{
-                    if tx.send(Ok(())).await.is_err() {
-                        error!("{ctx} Status report sent.");
+                    } else if let Err(e) = pipe
+                        .send_mgmt(MgmtMsg::ConnectInput {
+                            port: Cow::const_str("in"),
+                            endpoint: DeployEndpoint::new(
+                                id.pipeline_alias(),
+                                &port,
+                                endpoint.meta(),
+                            ),
+                            tx,
+                            target: InputTarget::Pipeline(Box::new(addr.clone())),
+                            is_transactional: true,
+                        })
+                        .await
+                    {
+                        error!("{ctx} Error connecting input pipeline {endpoint}: {e}",);
                     }
+                } else if tx.send(Ok(())).await.is_err() {
+                    error!("{ctx} Status report sent.");
                 }
 
                 if let Some(output_dests) = dests.get_mut(&port) {
