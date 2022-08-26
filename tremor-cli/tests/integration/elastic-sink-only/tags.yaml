@@ -1,1 +1,1 @@
-["elastic", "sink", "source"]
+["elastic", "sink", "source", "docker"]
