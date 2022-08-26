@@ -29,7 +29,7 @@ use tremor_common::{ids::OperatorIdGen, time::nanotime};
 use tremor_pipeline::{
     errors::ErrorKind as PipelineErrorKind, CbAction, Event, ExecutableGraph, SignalKind,
 };
-use tremor_script::{ast::DeployEndpoint, highlighter::Dumb, prelude::BaseExpr};
+use tremor_script::{ast::DeployEndpoint, highlighter::Dumb};
 
 const TICK_MS: u64 = 100;
 type Inputs = halfbrown::HashMap<DeployEndpoint, (bool, InputTarget)>;
@@ -217,7 +217,6 @@ pub(crate) fn spawn(
         .spawn(pipeline_task(
             pipeline_alias,
             pipeline,
-            addr.clone(),
             rx,
             cf_rx,
             mgmt_rx,
@@ -514,7 +513,6 @@ impl From<Alias> for PipelineContext {
 pub(crate) async fn pipeline_task(
     id: Alias,
     mut pipeline: ExecutableGraph,
-    addr: Addr,
     rx: Receiver<Box<Msg>>,
     cf_rx: Receiver<CfMsg>,
     mgmt_rx: Receiver<MgmtMsg>,
@@ -622,40 +620,41 @@ pub(crate) async fn pipeline_task(
                     continue;
                 }
                 // notify other pipeline about a new input
-                if let OutputTarget::Pipeline(pipe) = &target {
-                    // avoid linking the same pipeline as input to itself
-                    // as this will create a nasty circle filling up queues.
-                    // In general this does not avoid cycles via more complex constructs.
-                    //
-                    if id.pipeline_alias() == endpoint.alias() {
-                        error!("{ctx} Error connecting output pipeline {port}");
-                        if tx
-                            .send(Err(
-                                "Avoid linking the same pipeline as input to itself".into()
-                            ))
-                            .await
-                            .is_err()
-                        {
-                            error!("{ctx} Error sending status report.");
-                        }
-                        continue;
-                    } else if let Err(e) = pipe
-                        .send_mgmt(MgmtMsg::ConnectInput {
-                            port: Cow::const_str("in"),
-                            endpoint: DeployEndpoint::new(
-                                id.pipeline_alias(),
-                                &port,
-                                endpoint.meta(),
-                            ),
-                            tx,
-                            target: InputTarget::Pipeline(Box::new(addr.clone())),
-                            is_transactional: true,
-                        })
-                        .await
-                    {
-                        error!("{ctx} Error connecting input pipeline {endpoint}: {e}",);
-                    }
-                } else if tx.send(Ok(())).await.is_err() {
+                // if let OutputTarget::Pipeline(pipe) = &target {
+                //     // avoid linking the same pipeline as input to itself
+                //     // as this will create a nasty circle filling up queues.
+                //     // In general this does not avoid cycles via more complex constructs.
+                //     //
+                //     if id.pipeline_alias() == endpoint.alias() {
+                //         error!("{ctx} Error connecting output pipeline {port}");
+                //         if tx
+                //             .send(Err(
+                //                 "Avoid linking the same pipeline as input to itself".into()
+                //             ))
+                //             .await
+                //             .is_err()
+                //         {
+                //             error!("{ctx} Error sending status report.");
+                //         }
+                //         continue;
+                //     } else if let Err(e) = pipe
+                //         .send_mgmt(MgmtMsg::ConnectInput {
+                //             port: Cow::const_str("in"),
+                //             endpoint: DeployEndpoint::new(
+                //                 id.pipeline_alias(),
+                //                 &port,
+                //                 endpoint.meta(),
+                //             ),
+                //             tx,
+                //             target: InputTarget::Pipeline(Box::new(addr.clone())),
+                //             is_transactional: true,
+                //         })
+                //         .await
+                //     {
+                //         error!("{ctx} Error connecting input pipeline {endpoint}: {e}",);
+                //     }
+                // } else
+                if tx.send(Ok(())).await.is_err() {
                     error!("{ctx} Status report sent.");
                 }
 
