@@ -35,7 +35,13 @@ pub struct TestTokenProvider {
 
 #[cfg(test)]
 impl TestTokenProvider {
-    pub fn new(token: Arc<String>) -> Self {
+    pub fn new() -> Self {
+        Self {
+            token: Arc::new(String::new()),
+        }
+    }
+
+    pub fn new_with_token(token: Arc<String>) -> Self {
         Self { token }
     }
 }
@@ -120,7 +126,7 @@ mod tests {
     #[test]
     fn interceptor_can_add_the_auth_header() {
         let mut interceptor = AuthInterceptor {
-            token_provider: TestTokenProvider::new(Arc::new("test".to_string())),
+            token_provider: TestTokenProvider::new_with_token(Arc::new("test".to_string())),
         };
         let request = Request::new(());
 
@@ -154,7 +160,7 @@ mod tests {
     fn interceptor_fails_on_invalid_token_value() {
         let mut interceptor = AuthInterceptor {
             // control characters (ASCII < 32) are not allowed
-            token_provider: TestTokenProvider::new(Arc::new("\r\n".into())),
+            token_provider: TestTokenProvider::new_with_token(Arc::new("\r\n".into())),
         };
         let request = Request::new(());
 
