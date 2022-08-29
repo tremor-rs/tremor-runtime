@@ -12,10 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(not(test))]
-use crate::connectors::google::GouthTokenProvider;
-#[cfg(test)]
-use crate::connectors::google::TestTokenProvider;
 use crate::connectors::google::{AuthInterceptor, DefaultTokenProvider};
 use crate::connectors::impls::gbq::writer::Config;
 use crate::connectors::prelude::*;
@@ -31,8 +27,6 @@ use googapis::google::cloud::bigquery::storage::v1::{
 use prost::encoding::WireType;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
 use std::collections::HashMap;
-#[cfg(test)]
-use std::sync::Arc;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
@@ -408,10 +402,7 @@ impl Sink for GbqSink {
         let mut client = BigQueryWriteClient::with_interceptor(
             channel,
             AuthInterceptor {
-                #[cfg(not(test))]
-                token_provider: GouthTokenProvider::new(),
-                #[cfg(test)]
-                token_provider: TestTokenProvider::new(Arc::new("".to_string())),
+                token_provider: DefaultTokenProvider::new(),
             },
         );
 
@@ -460,7 +451,6 @@ mod test {
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use crate::connectors::tests::ConnectorHarness;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
-    use std::sync::Arc;
     use value_trait::StaticNode;
 
     #[test]
@@ -1124,7 +1114,7 @@ mod test {
         sink.set_client(BigQueryWriteClient::with_interceptor(
             Channel::from_static("http://example.com").connect_lazy(),
             AuthInterceptor {
-                token_provider: TestTokenProvider::new(Arc::new("".to_string())),
+                token_provider: TestTokenProvider::new(),
             },
         ));
 
