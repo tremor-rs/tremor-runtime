@@ -14,7 +14,7 @@
 
 use super::meta;
 
-use crate::connectors::google::{AuthInterceptor, DefaultTokenProvider};
+use crate::connectors::google::{AuthInterceptor, TokenProvider};
 use crate::connectors::impls::gcl::writer::Config;
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
@@ -31,10 +31,11 @@ use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Code;
 use tremor_common::time::nanotime;
 
-pub(crate) struct GclSink {
-    client: Option<
-        LoggingServiceV2Client<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>>,
-    >,
+pub(crate) struct GclSink<T>
+where
+    T: TokenProvider,
+{
+    client: Option<LoggingServiceV2Client<InterceptedService<Channel, AuthInterceptor<T>>>>,
     config: Config,
     concurrency_cap: ConcurrencyCap,
     reply_tx: Sender<AsyncSinkReply>,
@@ -64,7 +65,7 @@ fn value_to_log_entry(
     })
 }
 
-impl GclSink {
+impl<T: TokenProvider> GclSink<T> {
     pub fn new(config: Config, reply_tx: Sender<AsyncSinkReply>) -> Self {
         let concurrency_cap = ConcurrencyCap::new(config.concurrency_cap, reply_tx.clone());
         Self {
@@ -77,7 +78,7 @@ impl GclSink {
 }
 
 #[async_trait::async_trait]
-impl Sink for GclSink {
+impl<T: TokenProvider + 'static> Sink for GclSink<T> {
     async fn on_event(
         &mut self,
         _input: &str,
@@ -182,7 +183,7 @@ impl Sink for GclSink {
         let client = LoggingServiceV2Client::with_interceptor(
             channel,
             AuthInterceptor {
-                token_provider: DefaultTokenProvider::new(),
+                token_provider: T::default(),
             },
         );
 
@@ -203,6 +204,7 @@ impl Sink for GclSink {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::connectors::google::tests::TestTokenProvider;
     use crate::connectors::impls::gcl;
     use crate::connectors::tests::ConnectorHarness;
     use crate::connectors::ConnectionLostNotifier;
@@ -255,7 +257,7 @@ mod test {
         }))
         .unwrap();
 
-        let mut sink = GclSink::new(config, reply_tx);
+        let mut sink = GclSink::<TestTokenProvider>::new(config, reply_tx);
 
         let result = sink
             .on_event(

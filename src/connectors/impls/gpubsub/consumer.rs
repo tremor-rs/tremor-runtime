@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::google::{AuthInterceptor, DefaultTokenProvider};
+use crate::connectors::google::{AuthInterceptor, GouthTokenProvider, TokenProvider};
 
 use crate::connectors::prelude::*;
 use crate::connectors::utils::url::HttpsDefaults;
@@ -91,13 +91,12 @@ struct GSub {
     client_id: String,
 }
 
-type PubSubClient =
-    SubscriberClient<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>>;
+type PubSubClient<T> = SubscriberClient<InterceptedService<Channel, AuthInterceptor<T>>>;
 type AsyncTaskMessage = Result<(u64, PubsubMessage)>;
 
-struct GSubSource {
+struct GSubSource<T: TokenProvider> {
     config: Config,
-    client: Option<PubSubClient>,
+    client: Option<PubSubClient<T>>,
     receiver: Option<Receiver<AsyncTaskMessage>>,
     ack_sender: Option<Sender<u64>>,
     task_handle: Option<JoinHandle<()>>,
@@ -105,7 +104,7 @@ struct GSubSource {
     client_id: String,
 }
 
-impl GSubSource {
+impl<T: TokenProvider> GSubSource<T> {
     pub fn new(config: Config, url: Url<HttpsDefaults>, client_id: String) -> Self {
         GSubSource {
             config,
@@ -119,8 +118,8 @@ impl GSubSource {
     }
 }
 
-async fn consumer_task(
-    mut client: PubSubClient,
+async fn consumer_task<T: TokenProvider>(
+    mut client: PubSubClient<T>,
     ctx: SourceContext,
     client_id: String,
     sender: Sender<AsyncTaskMessage>,
@@ -253,7 +252,7 @@ fn pubsub_metadata(
 }
 
 #[async_trait::async_trait]
-impl Source for GSubSource {
+impl<T: TokenProvider + 'static> Source for GSubSource<T> {
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
         let mut channel = Channel::from_shared(self.config.url.to_string())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
@@ -272,22 +271,18 @@ impl Source for GSubSource {
 
         let channel = channel.connect().await?;
 
-        let connect_to_pubsub = move || -> Result<PubSubClient> {
-            Ok(SubscriberClient::with_interceptor(
-                channel.clone(),
-                AuthInterceptor {
-                    token_provider: DefaultTokenProvider::new(),
-                },
-            ))
-        };
-
         if let Some(task_handle) = self.task_handle.take() {
             task_handle.cancel().await;
         }
 
-        let client = connect_to_pubsub()?;
+        let client = SubscriberClient::with_interceptor(
+            channel.clone(),
+            AuthInterceptor {
+                token_provider: T::default(),
+            },
+        );
 
-        let client_background = connect_to_pubsub()?;
+        let client_background = client.clone();
 
         let (tx, rx) = async_std::channel::bounded(QSIZE.load(Ordering::Relaxed));
         let (ack_tx, ack_rx) = async_std::channel::bounded(QSIZE.load(Ordering::Relaxed));
@@ -374,7 +369,7 @@ impl Connector for GSub {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = GSubSource::new(
+        let source = GSubSource::<GouthTokenProvider>::new(
             self.config.clone(),
             self.url.clone(),
             self.client_id.clone(),

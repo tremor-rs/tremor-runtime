@@ -18,39 +18,8 @@ use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
 use tonic::{Request, Status};
 
-pub trait TokenProvider: Clone {
+pub trait TokenProvider: Clone + Default + Send {
     fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status>;
-}
-
-#[cfg(not(test))]
-pub type DefaultTokenProvider = GouthTokenProvider;
-#[cfg(test)]
-pub type DefaultTokenProvider = TestTokenProvider;
-
-#[derive(Clone)]
-#[cfg(test)]
-pub struct TestTokenProvider {
-    token: Arc<String>,
-}
-
-#[cfg(test)]
-impl TestTokenProvider {
-    pub fn new() -> Self {
-        Self {
-            token: Arc::new(String::new()),
-        }
-    }
-
-    pub fn new_with_token(token: Arc<String>) -> Self {
-        Self { token }
-    }
-}
-
-#[cfg(test)]
-impl TokenProvider for TestTokenProvider {
-    fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status> {
-        Ok(self.token.clone())
-    }
 }
 
 pub struct GouthTokenProvider {
@@ -63,7 +32,12 @@ impl Clone for GouthTokenProvider {
     }
 }
 
-#[cfg(not(test))]
+impl Default for GouthTokenProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GouthTokenProvider {
     pub fn new() -> Self {
         GouthTokenProvider { gouth_token: None }
@@ -120,8 +94,37 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    #[derive(Clone)]
+    pub struct TestTokenProvider {
+        token: Arc<String>,
+    }
+
+    impl Default for TestTokenProvider {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
+    impl TestTokenProvider {
+        pub fn new() -> Self {
+            Self {
+                token: Arc::new(String::new()),
+            }
+        }
+
+        pub fn new_with_token(token: Arc<String>) -> Self {
+            Self { token }
+        }
+    }
+
+    impl TokenProvider for TestTokenProvider {
+        fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status> {
+            Ok(self.token.clone())
+        }
+    }
 
     #[test]
     fn interceptor_can_add_the_auth_header() {
@@ -137,6 +140,12 @@ mod tests {
 
     #[derive(Clone)]
     struct FailingTokenProvider {}
+
+    impl Default for FailingTokenProvider {
+        fn default() -> Self {
+            Self {}
+        }
+    }
 
     impl TokenProvider for FailingTokenProvider {
         fn get_token(&mut self) -> Result<Arc<String>, Status> {

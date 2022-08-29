@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::google::{AuthInterceptor, DefaultTokenProvider};
+use crate::connectors::google::{AuthInterceptor, TokenProvider};
 use crate::connectors::impls::gbq::writer::Config;
 use crate::connectors::prelude::*;
 use async_std::prelude::{FutureExt, StreamExt};
@@ -31,10 +31,8 @@ use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 
-pub(crate) struct GbqSink {
-    client: Option<
-        BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>>,
-    >,
+pub(crate) struct GbqSink<T: TokenProvider> {
+    client: Option<BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor<T>>>>,
     write_stream: Option<WriteStream>,
     mapping: Option<JsonToProtobufMapping>,
     config: Config,
@@ -278,7 +276,7 @@ impl JsonToProtobufMapping {
         &self.descriptor
     }
 }
-impl GbqSink {
+impl<T: TokenProvider> GbqSink<T> {
     pub fn new(config: Config) -> Self {
         Self {
             client: None,
@@ -291,16 +289,14 @@ impl GbqSink {
     #[cfg(test)]
     pub fn set_client(
         &mut self,
-        client: BigQueryWriteClient<
-            InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>,
-        >,
+        client: BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor<T>>>,
     ) {
         self.client = Some(client);
     }
 }
 
 #[async_trait::async_trait]
-impl Sink for GbqSink {
+impl<T: TokenProvider + 'static> Sink for GbqSink<T> {
     async fn on_event(
         &mut self,
         _input: &str,
@@ -402,7 +398,7 @@ impl Sink for GbqSink {
         let mut client = BigQueryWriteClient::with_interceptor(
             channel,
             AuthInterceptor {
-                token_provider: DefaultTokenProvider::new(),
+                token_provider: T::default(),
             },
         );
 
@@ -446,7 +442,7 @@ impl Sink for GbqSink {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::connectors::google::TestTokenProvider;
+    use crate::connectors::google::tests::TestTokenProvider;
     use crate::connectors::impls::gbq;
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use crate::connectors::tests::ConnectorHarness;
@@ -1071,7 +1067,7 @@ mod test {
         }))
         .unwrap();
 
-        let mut sink = GbqSink::new(config);
+        let mut sink = GbqSink::<TestTokenProvider>::new(config);
 
         let result = sink
             .on_event(
