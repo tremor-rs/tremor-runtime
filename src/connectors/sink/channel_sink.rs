@@ -14,22 +14,29 @@
 
 //! Sink implementation that keeps track of multiple streams and keeps channels to send to each stream
 
-use crate::connectors::prelude::*;
-use crate::connectors::{Context, StreamDone};
-use crate::errors::Result;
-use crate::QSIZE;
-use async_std::channel::{bounded, Receiver, Sender};
-use async_std::prelude::FutureExt;
-use async_std::task::{self, JoinHandle};
+use crate::{
+    connectors::{prelude::*, Context, StreamDone},
+    errors::Result,
+    QSIZE,
+};
+use async_std::{
+    channel::{bounded, Receiver, Sender},
+    prelude::FutureExt,
+    task::{self, JoinHandle},
+};
 use bimap::BiMap;
 use either::Either;
 use hashbrown::HashMap;
-use std::hash::Hash;
-use std::marker::PhantomData;
-use std::sync::atomic::Ordering;
-use std::time::Duration;
-use tremor_common::ids::Id;
-use tremor_common::time::nanotime;
+use std::{
+    hash::Hash,
+    marker::PhantomData,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+use tremor_common::{ids::Id, time::nanotime};
 use tremor_pipeline::{CbAction, Event, SignalKind};
 use tremor_value::Value;
 use value_trait::ValueAccess;
@@ -100,6 +107,7 @@ where
     tx: Sender<ChannelSinkMsg<M>>,
     rx: Receiver<ChannelSinkMsg<M>>,
     reply_tx: Sender<AsyncSinkReply>,
+    sink_is_connected: Arc<AtomicBool>,
 }
 
 impl<T, F> ChannelSink<T, F, NoMeta>
@@ -113,8 +121,9 @@ where
         reply_tx: Sender<AsyncSinkReply>,
         tx: Sender<ChannelSinkMsg<T>>,
         rx: Receiver<ChannelSinkMsg<T>>,
+        sink_is_connected: Arc<AtomicBool>,
     ) -> Self {
-        ChannelSink::new(resolver, reply_tx, tx, rx)
+        ChannelSink::new(resolver, reply_tx, tx, rx, sink_is_connected)
     }
 }
 
@@ -128,9 +137,10 @@ where
         qsize: usize,
         resolver: F,
         reply_tx: Sender<AsyncSinkReply>,
+        sink_is_connected: Arc<AtomicBool>,
     ) -> Self {
         let (tx, rx) = bounded(qsize);
-        ChannelSink::new(resolver, reply_tx, tx, rx)
+        ChannelSink::new(resolver, reply_tx, tx, rx, sink_is_connected)
     }
 }
 
@@ -148,6 +158,7 @@ where
         reply_tx: Sender<AsyncSinkReply>,
         tx: Sender<ChannelSinkMsg<T>>,
         rx: Receiver<ChannelSinkMsg<T>>,
+        sink_is_connected: Arc<AtomicBool>,
     ) -> Self {
         let streams = HashMap::with_capacity(8);
         let streams_meta = BiMap::with_capacity(8);
@@ -159,6 +170,7 @@ where
             rx,
             reply_tx,
             _b: PhantomData::default(),
+            sink_is_connected,
         }
     }
 
@@ -206,7 +218,9 @@ where
     }
 
     fn remove_stream(&mut self, stream_id: u64) {
-        self.streams.remove(&stream_id);
+        if let Some(sender) = self.streams.remove(&stream_id) {
+            sender.close();
+        }
         self.streams_meta.remove_by_right(&stream_id);
     }
 
@@ -438,7 +452,6 @@ where
             trace!("{ctx} Removing stream {stream_id}");
             self.remove_stream(stream_id);
             serializer.drop_stream(stream_id);
-            // TODO: stream based CB
         }
         Ok(reply) // empty vec in case of success
     }
@@ -449,8 +462,15 @@ where
         ctx: &SinkContext,
         serializer: &mut EventSerializer,
     ) -> Result<SinkReply> {
-        if let Some(SignalKind::Tick) = signal.kind {
-            self.handle_channels(ctx, serializer, true);
+        match signal.kind.as_ref() {
+            Some(SignalKind::Tick) => {
+                self.handle_channels(ctx, serializer, true);
+            }
+            Some(SignalKind::Start(_)) => {
+                // store that fact that there is something connected to this sink
+                self.sink_is_connected.store(true, Ordering::Release);
+            }
+            _ => {}
         }
         Ok(SinkReply::default())
     }

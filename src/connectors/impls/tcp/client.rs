@@ -280,6 +280,7 @@ impl Sink for TcpClientSink {
                 ctx.alias.clone(),
                 origin_uri,
                 meta,
+                None, // we don't need to notify any writer, we know if shit goes south from on_event here
             );
             self.source_runtime
                 .register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);

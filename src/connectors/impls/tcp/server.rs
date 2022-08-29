@@ -33,7 +33,7 @@ use async_tls::TlsAcceptor;
 use futures::io::AsyncReadExt;
 use rustls::ServerConfig;
 use simd_json::ValueAccess;
-use std::sync::Arc;
+use std::sync::{atomic::AtomicBool, Arc};
 
 const URL_SCHEME: &str = "tremor-tcp-server";
 
@@ -55,6 +55,8 @@ pub(crate) struct TcpServer {
     tls_server_config: Option<ServerConfig>,
     sink_tx: Sender<ChannelSinkMsg<ConnectionMeta>>,
     sink_rx: Receiver<ChannelSinkMsg<ConnectionMeta>>,
+    /// marker that the sink is connected
+    sink_is_connected: Arc<AtomicBool>,
 }
 
 #[derive(Debug, Default)]
@@ -87,6 +89,7 @@ impl ConnectorBuilder for Builder {
             tls_server_config,
             sink_tx,
             sink_rx,
+            sink_is_connected: Arc::default(),
         }))
     }
 }
@@ -115,6 +118,7 @@ impl Connector for TcpServer {
             self.config.clone(),
             self.tls_server_config.clone(),
             sink_runtime,
+            self.sink_is_connected.clone(),
         );
         builder.spawn(source, ctx).map(Some)
     }
@@ -130,6 +134,7 @@ impl Connector for TcpServer {
             builder.reply_tx(),
             self.sink_tx.clone(),
             self.sink_rx.clone(),
+            self.sink_is_connected.clone(),
         );
         builder.spawn(sink, ctx).map(Some)
     }
@@ -146,6 +151,7 @@ struct TcpServerSource {
     connection_rx: Receiver<SourceReply>,
     runtime: ChannelSourceRuntime,
     sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
+    sink_is_connected: Arc<AtomicBool>,
 }
 
 impl TcpServerSource {
@@ -153,6 +159,7 @@ impl TcpServerSource {
         config: Config,
         tls_server_config: Option<ServerConfig>,
         sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
+        sink_is_connected: Arc<AtomicBool>,
     ) -> Self {
         let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
         let runtime = ChannelSourceRuntime::new(tx);
@@ -163,6 +170,7 @@ impl TcpServerSource {
             connection_rx: rx,
             runtime,
             sink_runtime,
+            sink_is_connected,
         }
     }
 }
@@ -189,6 +197,7 @@ impl Source for TcpServerSource {
 
         let runtime = self.runtime.clone();
         let sink_runtime = self.sink_runtime.clone();
+        let sink_is_connected = self.sink_is_connected.clone();
         // accept task
         self.accept_task = Some(spawn_task(ctx.clone(), async move {
             let mut stream_id_gen = StreamIdGen::default();
@@ -221,23 +230,32 @@ impl Source for TcpServerSource {
                                     "port": peer_addr.port()
                                 }
                             }));
+
+                            // we only register a writer when we actually have something connected to the sink
+                            // the connected sink will not be driven by the sink task anyways (no calls to on_event/on_signal)
+                            let reader_runtime = if sink_is_connected.load(Ordering::Acquire) {
+                                sink_runtime
+                                    .register_stream_writer(
+                                        stream_id,
+                                        Some(connection_meta.clone()),
+                                        &ctx,
+                                        TcpWriter::tls_server(tls_write_sink, stream.clone()),
+                                    )
+                                    .await;
+                                Some(sink_runtime.clone())
+                            } else {
+                                debug!("{ctx} Sink not connected, not offering writing to TCP connections.");
+                                None
+                            };
                             let tls_reader = TcpReader::tls_server(
                                 tls_read_stream,
-                                stream.clone(),
+                                stream,
                                 vec![0; buf_size],
                                 ctx.alias.clone(),
                                 origin_uri.clone(),
                                 meta,
+                                reader_runtime,
                             );
-
-                            sink_runtime
-                                .register_stream_writer(
-                                    stream_id,
-                                    Some(connection_meta.clone()),
-                                    &ctx,
-                                    TcpWriter::tls_server(tls_write_sink, stream),
-                                )
-                                .await;
 
                             runtime.register_stream_reader(stream_id, &ctx, tls_reader);
                         } else {
@@ -248,22 +266,31 @@ impl Source for TcpServerSource {
                                     "port": peer_addr.port()
                                 }
                             }));
+
+                            // we only register a writer when we actually have something connected to the sink
+                            // the connected sink will not be driven by the sink task anyways (no calls to on_event/on_signal)
+                            let reader_runtime = if sink_is_connected.load(Ordering::Acquire) {
+                                sink_runtime
+                                    .register_stream_writer(
+                                        stream_id,
+                                        Some(connection_meta.clone()),
+                                        &ctx,
+                                        TcpWriter::new(stream.clone()),
+                                    )
+                                    .await;
+                                Some(sink_runtime.clone())
+                            } else {
+                                debug!("{ctx} Sink not connected, not offering writing to TCP connections.");
+                                None
+                            };
                             let tcp_reader = TcpReader::new(
-                                stream.clone(),
+                                stream,
                                 vec![0; buf_size],
                                 ctx.alias.clone(),
                                 origin_uri.clone(),
                                 meta,
+                                reader_runtime,
                             );
-
-                            sink_runtime
-                                .register_stream_writer(
-                                    stream_id,
-                                    Some(connection_meta.clone()),
-                                    &ctx,
-                                    TcpWriter::new(stream),
-                                )
-                                .await;
 
                             runtime.register_stream_reader(stream_id, &ctx, tcp_reader);
                         }

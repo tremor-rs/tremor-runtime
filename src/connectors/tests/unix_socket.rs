@@ -71,8 +71,8 @@ async fn unix_socket() -> Result<()> {
     let client_out = client_harness
         .out()
         .expect("No pipeline connected to 'out' port of unix_socket_server connector");
-
     client_harness.start().await?;
+
     client_harness.wait_for_connected().await?;
 
     // connect 2 client sockets

@@ -184,8 +184,13 @@ impl Connector for WsClient {
 
             sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer);
 
-            let ws_reader =
-                WsReader::new(reader, sink_runtime.clone(), origin_uri, meta, ctx.clone());
+            let ws_reader = WsReader::new(
+                reader,
+                Some(sink_runtime.clone()),
+                origin_uri,
+                meta,
+                ctx.clone(),
+            );
             source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
         } else {
             // No TLS
@@ -203,8 +208,13 @@ impl Connector for WsClient {
             let ws_writer = WsWriter::new_tungstenite_client(writer);
             sink_runtime.register_stream_writer(DEFAULT_STREAM_ID, ctx, ws_writer);
 
-            let ws_reader =
-                WsReader::new(reader, sink_runtime.clone(), origin_uri, meta, ctx.clone());
+            let ws_reader = WsReader::new(
+                reader,
+                Some(sink_runtime.clone()),
+                origin_uri,
+                meta,
+                ctx.clone(),
+            );
             source_runtime.register_stream_reader(DEFAULT_STREAM_ID, ctx, ws_reader);
         }
 
