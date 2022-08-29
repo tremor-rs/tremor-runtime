@@ -15,6 +15,7 @@
 pub(crate) mod meta;
 mod sink;
 
+use crate::connectors::google::GouthTokenProvider;
 use crate::connectors::impls::gcl::writer::sink::GclSink;
 use crate::connectors::prelude::*;
 use crate::connectors::{Alias, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
@@ -239,7 +240,7 @@ impl Connector for Gcl {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = GclSink::new(self.config.clone(), builder.reply_tx());
+        let sink = GclSink::<GouthTokenProvider>::new(self.config.clone(), builder.reply_tx());
 
         builder.spawn(sink, sink_context).map(Some)
     }
