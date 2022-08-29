@@ -12,10 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(not(test))]
-use crate::connectors::google::GouthTokenProvider;
-#[cfg(test)]
-use crate::connectors::google::TestTokenProvider;
 use crate::connectors::google::{AuthInterceptor, DefaultTokenProvider};
 
 use crate::connectors::prelude::{
@@ -123,32 +119,6 @@ struct GpubSink {
         Option<PublisherClient<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>>>,
 }
 
-#[cfg(not(test))]
-fn create_publisher_client(
-    channel: Channel,
-) -> PublisherClient<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>> {
-    PublisherClient::with_interceptor(
-        channel,
-        AuthInterceptor {
-            token_provider: GouthTokenProvider::new(),
-        },
-    )
-}
-
-#[cfg(test)]
-fn create_publisher_client(
-    channel: Channel,
-) -> PublisherClient<InterceptedService<Channel, AuthInterceptor<DefaultTokenProvider>>> {
-    use std::sync::Arc;
-
-    PublisherClient::with_interceptor(
-        channel,
-        AuthInterceptor {
-            token_provider: TestTokenProvider::new(Arc::new("".to_string())),
-        },
-    )
-}
-
 #[async_trait::async_trait()]
 impl Sink for GpubSink {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
@@ -164,7 +134,12 @@ impl Sink for GpubSink {
 
         let channel = channel.connect().await?;
 
-        self.client = Some(create_publisher_client(channel));
+        self.client = Some(PublisherClient::with_interceptor(
+            channel,
+            AuthInterceptor {
+                token_provider: DefaultTokenProvider::new(),
+            },
+        ));
 
         Ok(true)
     }

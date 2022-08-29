@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(not(test))]
-use crate::connectors::google::GouthTokenProvider;
 use crate::connectors::google::{AuthInterceptor, DefaultTokenProvider};
 
 use crate::connectors::prelude::*;
@@ -52,9 +50,6 @@ struct Config {
     pub subscription_id: String,
     #[serde(default = "crate::connectors::impls::gpubsub::default_endpoint")]
     pub url: Url<HttpsDefaults>,
-    #[cfg(test)]
-    #[serde(default = "crate::connectors::impls::gpubsub::default_skip_authentication")]
-    pub skip_authentication: bool,
 }
 impl ConfigImpl for Config {}
 
@@ -260,9 +255,6 @@ fn pubsub_metadata(
 #[async_trait::async_trait]
 impl Source for GSubSource {
     async fn connect(&mut self, ctx: &SourceContext, _attempt: &Attempt) -> Result<bool> {
-        #[cfg(test)]
-        use crate::connectors::google::TestTokenProvider;
-
         let mut channel = Channel::from_shared(self.config.url.to_string())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
         if self.url.scheme() == "https" {
@@ -280,28 +272,11 @@ impl Source for GSubSource {
 
         let channel = channel.connect().await?;
 
-        #[cfg(test)]
-        let skip_authentication = self.config.skip_authentication;
-
         let connect_to_pubsub = move || -> Result<PubSubClient> {
-            #[cfg(test)]
-            if skip_authentication {
-                info!("Skipping auth...");
-                return Ok(SubscriberClient::with_interceptor(
-                    channel.clone(),
-                    AuthInterceptor {
-                        token_provider: TestTokenProvider::new(Arc::new(String::new())),
-                    },
-                ));
-            }
-
             Ok(SubscriberClient::with_interceptor(
                 channel.clone(),
                 AuthInterceptor {
-                    #[cfg(not(test))]
-                    token_provider: GouthTokenProvider::new(),
-                    #[cfg(test)]
-                    token_provider: TestTokenProvider::new(Arc::new(String::new())),
+                    token_provider: DefaultTokenProvider::new(),
                 },
             ))
         };

@@ -13,10 +13,7 @@
 // limitations under the License.
 
 use super::meta;
-#[cfg(not(test))]
-use crate::connectors::google::GouthTokenProvider;
-#[cfg(test)]
-use crate::connectors::google::TestTokenProvider;
+
 use crate::connectors::google::{AuthInterceptor, DefaultTokenProvider};
 use crate::connectors::impls::gcl::writer::Config;
 use crate::connectors::prelude::*;
@@ -28,8 +25,6 @@ use googapis::google::logging::v2::log_entry::Payload;
 use googapis::google::logging::v2::logging_service_v2_client::LoggingServiceV2Client;
 use googapis::google::logging::v2::{LogEntry, WriteLogEntriesRequest};
 use prost_types::Timestamp;
-#[cfg(test)]
-use std::sync::Arc;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
@@ -187,10 +182,7 @@ impl Sink for GclSink {
         let client = LoggingServiceV2Client::with_interceptor(
             channel,
             AuthInterceptor {
-                #[cfg(not(test))]
-                token_provider: GouthTokenProvider::new(),
-                #[cfg(test)]
-                token_provider: TestTokenProvider::new(Arc::new("".to_string())),
+                token_provider: DefaultTokenProvider::new(),
             },
         );
 

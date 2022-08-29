@@ -29,11 +29,6 @@ fn default_request_timeout() -> u64 {
 }
 
 #[cfg(test)]
-fn default_skip_authentication() -> bool {
-    false
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
     use std::time::Duration;
