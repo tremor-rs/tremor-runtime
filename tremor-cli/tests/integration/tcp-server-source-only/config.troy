@@ -1,0 +1,74 @@
+# test the tcp_server not echoing back but simply sending the data on
+#
+# in.json -> tcp_client -> tcp_server -> out.log
+
+define flow source_only_server
+flow
+  use tremor::connectors;
+  use integration;
+  use std::time::nanos;
+
+  define connector server from tcp_server
+  with
+    codec = "msgpack",
+    preprocessors = ["length-prefixed"],
+    config = {
+      "url": "localhost:65535",
+      "buf_size": 16384
+    }
+  end;
+  create connector server;
+
+  create connector exit from connectors::exit;
+
+  create connector server_out from integration::write_file
+  with
+    file = "out.log"
+  end;
+
+  create pipeline out_or_exit from integration::out_or_exit
+  with
+    delay = nanos::from_seconds(1)
+  end;
+
+  connect /connector/server to /pipeline/out_or_exit;
+  connect /pipeline/out_or_exit/out to /connector/server_out;
+  connect /pipeline/out_or_exit/exit to /connector/exit;
+end;
+
+define flow source_only_client
+flow
+  use tremor::pipelines;
+  use tremor::connectors;
+  use integration;
+
+  define connector client from tcp_client
+  with
+    reconnect = {
+      "retry": {
+        "max_retries": 10,
+        "interval_ms": 1000
+      }
+    },
+    codec = "msgpack",
+    postprocessors = ["length-prefixed"],
+    config = {
+      "url": "localhost:65535",
+      "no_delay": true,
+      "tls": false
+    } 
+  end;
+  create connector client;
+
+  create connector client_in from integration::read_file;
+  create connector console from connectors::console;
+
+  create pipeline passthrough from pipelines::passthrough;
+
+  connect /connector/client_in to /pipeline/passthrough;
+  connect /pipeline/passthrough to /connector/client;
+  connect /pipeline/passthrough to /connector/console;
+end;
+
+deploy flow source_only_server;
+deploy flow source_only_client;

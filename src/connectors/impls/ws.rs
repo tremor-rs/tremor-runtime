@@ -37,7 +37,7 @@ where
 {
     stream: SplitStream<WebSocketStream<Stream>>,
     // we keep this around for closing the writing part if the reader is done
-    sink_runtime: Runtime,
+    sink_runtime: Option<Runtime>,
     origin_uri: EventOriginUri,
     meta: Value<'static>,
     ctx: Ctx,
@@ -51,7 +51,7 @@ where
 {
     fn new(
         stream: SplitStream<WebSocketStream<Stream>>,
-        sink_runtime: Runtime,
+        sink_runtime: Option<Runtime>,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
         ctx: Ctx,
@@ -131,10 +131,12 @@ where
 
     async fn on_done(&mut self, stream: u64) -> StreamDone {
         // make the writer stop, otherwise the underlying socket will never be closed
-        self.ctx.swallow_err(
-            self.sink_runtime.unregister_stream_writer(stream).await,
-            "Error unregistering stream",
-        );
+        if let Some(sink_runtime) = self.sink_runtime.as_ref() {
+            self.ctx.swallow_err(
+                sink_runtime.unregister_stream_writer(stream).await,
+                "Error unregistering stream",
+            );
+        }
         StreamDone::StreamClosed
     }
 }

@@ -23,6 +23,7 @@
 
 ### Fixes
 
+- Fix `tcp_server`, `ws_server` and `unix_socket_server` to properly close sockets when a client disconnects.
 - Fix bug in the runtime, swallowing some event acknowledgements and fails for batched events from multiple streams
 - Fix custom metrics for `kafka_consumer`, `kafka_producer` not being reported in the requested interval
 - Fix `metrics` connector not emitting all metrics it did receive.

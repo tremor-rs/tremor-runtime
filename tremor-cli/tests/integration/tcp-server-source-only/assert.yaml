@@ -1,0 +1,5 @@
+status: 0
+name: tcp_server source only
+asserts:
+  - source: out.log
+    equals_file: expected_out.json

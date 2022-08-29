@@ -412,7 +412,7 @@ impl Sink for ElasticSink {
         }
         // we need to check if the source is actually connected
         // we should not send response events if it isn't
-        // as this would fille the response_tx channel and block the send tasks
+        // as this would fill the response_tx channel and block the send tasks
         // and keep them from completing
         // The result is a complete hang and no progress. :(
         let source_is_connected = self.source_is_connected.load(Ordering::Relaxed);

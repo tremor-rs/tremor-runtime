@@ -1266,6 +1266,7 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         Box::new(impls::clickhouse::Builder::default()),
         Box::new(impls::gcl::writer::Builder::default()),
         Box::new(impls::gcs::streamer::Builder::default()),
+        Box::new(impls::null::Builder::default()),
     ]
 }
 
@@ -1276,7 +1277,6 @@ pub(crate) fn debug_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>
     vec![
         Box::new(impls::cb::Builder::default()),
         Box::new(impls::bench::Builder::default()),
-        Box::new(impls::null::Builder::default()),
         Box::new(impls::exit::Builder::default()),
     ]
 }

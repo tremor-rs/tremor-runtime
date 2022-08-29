@@ -77,7 +77,7 @@ use log::{debug, info};
 use std::{collections::HashMap, time::Instant};
 use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::{
-    ids::ConnectorIdGen,
+    ids::{ConnectorIdGen, Id, SourceId},
     ports::{ERR, IN, OUT},
 };
 use tremor_pipeline::{CbAction, EventId};
@@ -193,7 +193,14 @@ impl ConnectorHarness {
         let cr = rx.recv().await?;
         cr.res?;
 
-        // send a CBAction::open to the connector, so it starts pulling data
+        // ensure we notify the connector that its sink part is connected
+        self.addr
+            .send_sink(SinkMsg::Signal {
+                signal: Event::signal_start(SourceId::new(1)),
+            })
+            .await?;
+
+        // send a `CBAction::Restore` to the connector, so it starts pulling data
         self.addr
             .send_source(SourceMsg::Cb(CbAction::Restore, EventId::default()))
             .await?;
