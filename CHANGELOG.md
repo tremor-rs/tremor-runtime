@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Fixes
+- Add clear error messages for pipelines for console in, pipeline out, pipeline in
+- Added a new port in ConnectInput and weaved them together
 - Added a new port in ConnectOutput and weaved them together
 - Fixed linking pipelines to pipelines
 - Fixed error reporting in ConnectOutput and ConnectInput functions
@@ -39,8 +41,6 @@
 - Fix off-by-one error in `kafka_consumer` committing offsets, thus replaying the last committed event.
 - Allow `kafka_consumer` connector to reconnect upon more error conditions and avoid stalls.
 - Include flow alias in pipeline and connector aliases reported via metrics events and logging in order to deduplicate entries
-- Add clear error messages for pipelines for console in, pipeline out, pipeline in
-- Added a new port in ConnectInput and weaved them together
 
 ## [0.12.4]
 

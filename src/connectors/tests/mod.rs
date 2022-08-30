@@ -149,7 +149,7 @@ impl ConnectorHarness {
             connector_addr
                 .send(connectors::Msg::LinkOutput {
                     port: port.clone(),
-                    pipelines: vec![(pipeline_id, pipeline.addr.clone())],
+                    pipeline: (pipeline_id, pipeline.addr.clone()),
                     result_tx: link_tx.clone(),
                 })
                 .await?;

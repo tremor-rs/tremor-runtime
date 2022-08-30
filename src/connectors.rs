@@ -185,8 +185,8 @@ pub(crate) enum Msg {
     LinkOutput {
         /// port to which to connect
         port: Cow<'static, str>,
-        /// pipelines to connect
-        pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
+        /// pipeline to connect to
+        pipeline: (DeployEndpoint, pipeline::Addr),
         /// result receiver
         result_tx: Sender<Result<()>>,
     },
@@ -613,50 +613,56 @@ async fn connector_task(
                 }
                 Msg::LinkOutput {
                     port,
-                    pipelines: pipelines_to_link,
+                    pipeline: pipeline_to_link,
                     result_tx,
                 } => {
-                    for (url, _) in &pipelines_to_link {
-                        info!("{ctx} Connecting {url} via port {port}");
-                    }
+                    let (url, _) = &pipeline_to_link;
+                    info!("{ctx} Connecting {url} via port {port}");
 
                     if let Some(port_pipes) = connected_pipelines.get_mut(&port) {
-                        port_pipes.extend(pipelines_to_link.iter().cloned());
+                        port_pipes.push(pipeline_to_link.clone());
                     } else {
-                        connected_pipelines.insert(port.clone(), pipelines_to_link.clone());
+                        connected_pipelines.insert(port.clone(), vec![pipeline_to_link.clone()]);
                     }
-                    let res = if connector.is_valid_output_port(&port) {
+                    if connector.is_valid_output_port(&port) {
                         // connect to source part
                         if let Some(source) = connector_addr.source.as_ref() {
-                            source
+                            // delegate error reporting to source
+                            let res = source
                                 .addr
                                 .send(SourceMsg::Link {
                                     port,
-                                    tx: result_tx.clone(),
-                                    pipelines: pipelines_to_link,
+                                    tx: result_tx,
+                                    pipeline: pipeline_to_link,
                                 })
-                                .await
-                                .map_err(Into::into)
+                                .await;
+                            log_error!(res, "{ctx} Error sending to source: {e}");
                         } else {
-                            Err(ErrorKind::InvalidConnect(
-                                connector_addr.alias.to_string(),
-                                port.clone(),
-                            )
-                            .into())
+                            log_error!(
+                                result_tx
+                                    .send(Err(ErrorKind::InvalidConnect(
+                                        connector_addr.alias.to_string(),
+                                        port.clone(),
+                                    )
+                                    .into()))
+                                    .await,
+                                "{ctx} Error sending connect result: {e}"
+                            );
                         }
                     } else {
                         error!("{ctx} Tried to connect to unsupported port: \"{port}\"");
-                        Err(ErrorKind::InvalidConnect(
-                            connector_addr.alias.to_string(),
-                            port.clone(),
-                        )
-                        .into())
+                        // send back the connect result
+                        log_error!(
+                            result_tx
+                                .send(Err(ErrorKind::InvalidConnect(
+                                    connector_addr.alias.to_string(),
+                                    port.clone(),
+                                )
+                                .into()))
+                                .await,
+                            "{ctx} Error sending connect result: {e}"
+                        );
                     };
-                    // send back the connect result
-                    log_error!(
-                        result_tx.send(res).await,
-                        "{ctx} Error sending connect result: {e}"
-                    );
                 }
                 Msg::ConnectionLost => {
                     // react on the connection being lost
