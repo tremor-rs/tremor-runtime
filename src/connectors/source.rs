@@ -67,8 +67,8 @@ pub(crate) enum SourceMsg {
         port: Cow<'static, str>,
         /// sends the result
         tx: Sender<Result<()>>,
-        /// pipelines to connect
-        pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
+        /// pipeline to connect to
+        pipeline: (DeployEndpoint, pipeline::Addr),
     },
     /// Connect to the outside world and send the result back
     Connect(Sender<Result<bool>>, Attempt),
@@ -629,11 +629,7 @@ where
         use SourceState::{Initialized, Paused, Running, Stopped};
         let state = self.state;
         match msg {
-            SourceMsg::Link {
-                port,
-                tx,
-                pipelines,
-            } => self.handle_link(port, tx, pipelines).await,
+            SourceMsg::Link { port, tx, pipeline } => self.handle_link(port, tx, pipeline).await,
             SourceMsg::Start if self.state == Initialized => {
                 info!("{} Starting...", self.ctx);
                 self.state = Running;
@@ -841,7 +837,7 @@ where
         &mut self,
         port: Cow<'static, str>,
         tx: Sender<Result<()>>,
-        mut pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
+        pipeline: (DeployEndpoint, pipeline::Addr),
     ) -> Result<Control> {
         let pipes = if port.eq_ignore_ascii_case(OUT.as_ref()) {
             &mut self.pipelines_out
@@ -849,23 +845,25 @@ where
             &mut self.pipelines_err
         } else {
             error!("{} Tried to connect to invalid port: {}", &self.ctx, &port);
+            tx.send(Err("Connecting to invalid port".into())).await?;
             return Ok(Control::Continue);
         };
         // We can not move this to the system flow since we need to know about transactionality
-        for (pipeline_url, p) in &pipelines {
-            self.ctx.swallow_err(
-                p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
-                    endpoint: DeployEndpoint::new(&self.ctx.alias, &port, pipeline_url.meta()),
-                    port: Cow::from(pipeline_url.port().to_string()),
-                    tx: tx.clone(),
-                    target: InputTarget::Source(self.addr.clone()),
-                    is_transactional: self.is_transactional,
-                })
-                .await,
-                &format!("Failed sending ConnectInput to pipeline {}", pipeline_url),
-            );
-        }
-        pipes.append(&mut pipelines);
+        let (pipeline_url, p) = &pipeline;
+        // delegate error reporting to pipeline
+        self.ctx.swallow_err(
+            p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
+                endpoint: DeployEndpoint::new(&self.ctx.alias, &port, pipeline_url.meta()),
+                port: Cow::from(pipeline_url.port().to_string()),
+                tx,
+                target: InputTarget::Source(self.addr.clone()),
+                is_transactional: self.is_transactional,
+            })
+            .await,
+            &format!("Failed sending ConnectInput to pipeline {}", pipeline_url),
+        );
+
+        pipes.push(pipeline);
         Ok(Control::Continue)
     }
 

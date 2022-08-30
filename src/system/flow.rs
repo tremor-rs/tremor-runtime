@@ -292,7 +292,7 @@ async fn link(
 
             let msg = connectors::Msg::LinkOutput {
                 port: from.port().to_string().into(),
-                pipelines: vec![(to.clone(), pipeline.clone())],
+                pipeline: (to.clone(), pipeline.clone()),
                 result_tx: tx.clone(),
             };
             connector

@@ -228,7 +228,7 @@ pub(crate) fn spawn(
 /// control plane message
 #[derive(Debug)]
 pub(crate) enum MgmtMsg {
-    /// input can only ever be connected to the `in` port, so no need to include it here
+    /// connect a target to an input port
     ConnectInput {
         /// port to connect in
         port: Cow<'static, str>,
@@ -620,40 +620,7 @@ pub(crate) async fn pipeline_task(
                     continue;
                 }
                 // notify other pipeline about a new input
-                // if let OutputTarget::Pipeline(pipe) = &target {
-                //     // avoid linking the same pipeline as input to itself
-                //     // as this will create a nasty circle filling up queues.
-                //     // In general this does not avoid cycles via more complex constructs.
-                //     //
-                //     if id.pipeline_alias() == endpoint.alias() {
-                //         error!("{ctx} Error connecting output pipeline {port}");
-                //         if tx
-                //             .send(Err(
-                //                 "Avoid linking the same pipeline as input to itself".into()
-                //             ))
-                //             .await
-                //             .is_err()
-                //         {
-                //             error!("{ctx} Error sending status report.");
-                //         }
-                //         continue;
-                //     } else if let Err(e) = pipe
-                //         .send_mgmt(MgmtMsg::ConnectInput {
-                //             port: Cow::const_str("in"),
-                //             endpoint: DeployEndpoint::new(
-                //                 id.pipeline_alias(),
-                //                 &port,
-                //                 endpoint.meta(),
-                //             ),
-                //             tx,
-                //             target: InputTarget::Pipeline(Box::new(addr.clone())),
-                //             is_transactional: true,
-                //         })
-                //         .await
-                //     {
-                //         error!("{ctx} Error connecting input pipeline {endpoint}: {e}",);
-                //     }
-                // } else
+
                 if tx.send(Ok(())).await.is_err() {
                     error!("{ctx} Status report sent.");
                 }
