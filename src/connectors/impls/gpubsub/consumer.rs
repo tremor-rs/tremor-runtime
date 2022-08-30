@@ -27,6 +27,7 @@ use googapis::google::pubsub::v1::{PubsubMessage, ReceivedMessage, StreamingPull
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tonic::codegen::InterceptedService;
@@ -60,6 +61,12 @@ fn default_ack_deadline() -> u64 {
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
 
+#[cfg(test)]
+type GSubWithTokenProvider = GSub<crate::connectors::google::tests::TestTokenProvider>;
+
+#[cfg(not(test))]
+type GSubWithTokenProvider = GSub<crate::connectors::google::GouthTokenProvider>;
+
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -77,18 +84,20 @@ impl ConnectorBuilder for Builder {
         let url = Url::<HttpsDefaults>::parse(config.url.as_str())?;
         let client_id = format!("tremor-{}-{}-{:?}", hostname(), alias, task::current().id());
 
-        Ok(Box::new(GSub {
+        Ok(Box::new(GSubWithTokenProvider {
             config,
             url,
             client_id,
+            _phantom: PhantomData::default(),
         }))
     }
 }
 
-struct GSub {
+struct GSub<T> {
     config: Config,
     url: Url<HttpsDefaults>,
     client_id: String,
+    _phantom: PhantomData<T>,
 }
 
 type PubSubClient<T> = SubscriberClient<InterceptedService<Channel, AuthInterceptor<T>>>;
@@ -362,19 +371,14 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
     }
 }
 
-#[cfg(not(test))]
-type CurrentTokenProvider = crate::connectors::google::GouthTokenProvider;
-#[cfg(test)]
-type CurrentTokenProvider = crate::connectors::google::tests::TestTokenProvider;
-
 #[async_trait::async_trait]
-impl Connector for GSub {
+impl<T: TokenProvider + 'static> Connector for GSub<T> {
     async fn create_source(
         &mut self,
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = GSubSource::<CurrentTokenProvider>::new(
+        let source = GSubSource::<T>::new(
             self.config.clone(),
             self.url.clone(),
             self.client_id.clone(),
