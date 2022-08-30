@@ -12,12 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(not(test))]
-use crate::connectors::google::GouthTokenProvider;
 use crate::connectors::google::{AuthInterceptor, TokenProvider};
 
-#[cfg(test)]
-use crate::connectors::google::tests::TestTokenProvider;
 use crate::connectors::prelude::{
     Alias, Attempt, ErrorKind, EventSerializer, KillSwitch, SinkAddr, SinkContext,
     SinkManagerBuilder, SinkReply, Url,
@@ -33,6 +29,7 @@ use async_std::prelude::FutureExt;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage};
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
@@ -58,6 +55,12 @@ impl ConfigImpl for Config {}
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
 
+#[cfg(not(test))]
+type GpubConnectorWithTokenProvider = GpubConnector<crate::connectors::google::GouthTokenProvider>;
+#[cfg(test)]
+type GpubConnectorWithTokenProvider =
+    GpubConnector<crate::connectors::google::tests::TestTokenProvider>;
+
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -73,27 +76,26 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
 
-        Ok(Box::new(GpubConnector { config }))
+        Ok(Box::new(GpubConnectorWithTokenProvider {
+            config,
+            _phantom: PhantomData::default(),
+        }))
     }
 }
 
-struct  GpubConnector {
+struct GpubConnector<T> {
     config: Config,
+    _phantom: PhantomData<T>,
 }
 
-#[cfg(not(test))]
-type CurrentTokenProvider = GouthTokenProvider;
-#[cfg(test)]
-type CurrentTokenProvider = TestTokenProvider;
-
 #[async_trait::async_trait()]
-impl Connector for GpubConnector {
+impl<T: TokenProvider + 'static> Connector for GpubConnector<T> {
     async fn create_sink(
         &mut self,
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = GpubSink::<CurrentTokenProvider> {
+        let sink = GpubSink::<T> {
             config: self.config.clone(),
             hostname: self
                 .config
