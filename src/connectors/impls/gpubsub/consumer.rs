@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::google::{AuthInterceptor, GouthTokenProvider, TokenProvider};
+use crate::connectors::google::{AuthInterceptor, TokenProvider};
 
 use crate::connectors::prelude::*;
 use crate::connectors::utils::url::HttpsDefaults;
@@ -362,6 +362,11 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
     }
 }
 
+#[cfg(not(test))]
+type CurrentTokenProvider = crate::connectors::google::GouthTokenProvider;
+#[cfg(test)]
+type CurrentTokenProvider = crate::connectors::google::tests::TestTokenProvider;
+
 #[async_trait::async_trait]
 impl Connector for GSub {
     async fn create_source(
@@ -369,7 +374,7 @@ impl Connector for GSub {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = GSubSource::<GouthTokenProvider>::new(
+        let source = GSubSource::<CurrentTokenProvider>::new(
             self.config.clone(),
             self.url.clone(),
             self.client_id.clone(),
