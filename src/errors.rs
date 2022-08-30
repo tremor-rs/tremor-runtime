@@ -409,6 +409,10 @@ error_chain! {
 pub(crate) fn pipe_send_e<T>(e: async_std::channel::SendError<T>) -> Error {
     ErrorKind::PipelineSendError(e.to_string()).into()
 }
+#[allow(clippy::needless_pass_by_value)]
+pub(crate) fn connector_send_err<T>(e: async_std::channel::SendError<T>) -> Error {
+    format!("could not send to connector: {e}").into()
+}
 
 pub(crate) fn err_connector_def<C: ToString + ?Sized, E: ToString + ?Sized>(c: &C, e: &E) -> Error {
     ErrorKind::InvalidConnectorDefinition(c.to_string(), e.to_string()).into()

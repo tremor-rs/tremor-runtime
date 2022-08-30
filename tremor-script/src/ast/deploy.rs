@@ -171,6 +171,7 @@ impl BaseExpr for ConnectStmt {
         }
     }
 }
+
 impl ConnectStmt {
     // we get the field called 'from'  as muttable
     #[allow(clippy::wrong_self_convention)]
@@ -298,5 +299,32 @@ impl_expr!(DeployFlow);
 impl crate::ast::node_id::BaseRef for DeployFlow<'_> {
     fn fqn(&self) -> String {
         self.instance_alias.clone()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[test]
+    fn connect_stmt_mid() {
+        let mid = NodeMeta::dummy();
+        let stmt = ConnectStmt::ConnectorToPipeline {
+            mid: mid.clone(),
+            from: DeployEndpoint::new("from", "from", &mid),
+            to: DeployEndpoint::new("to", "to", &mid),
+        };
+        assert_eq!(stmt.meta(), &*mid);
+        let stmt = ConnectStmt::PipelineToConnector {
+            mid: mid.clone(),
+            from: DeployEndpoint::new("from", "from", &mid),
+            to: DeployEndpoint::new("to", "to", &mid),
+        };
+        assert_eq!(stmt.meta(), &*mid);
+        let stmt = ConnectStmt::PipelineToPipeline {
+            mid: mid.clone(),
+            from: DeployEndpoint::new("from", "from", &mid),
+            to: DeployEndpoint::new("to", "to", &mid),
+        };
+        assert_eq!(stmt.meta(), &*mid);
     }
 }

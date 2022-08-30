@@ -851,15 +851,15 @@ where
         // We can not move this to the system flow since we need to know about transactionality
         let (pipeline_url, p) = &pipeline;
         // delegate error reporting to pipeline
+        let msg = pipeline::MgmtMsg::ConnectInput {
+            endpoint: DeployEndpoint::new(&self.ctx.alias, &port, pipeline_url.meta()),
+            port: Cow::from(pipeline_url.port().to_string()),
+            tx,
+            target: InputTarget::Source(self.addr.clone()),
+            is_transactional: self.is_transactional,
+        };
         self.ctx.swallow_err(
-            p.send_mgmt(pipeline::MgmtMsg::ConnectInput {
-                endpoint: DeployEndpoint::new(&self.ctx.alias, &port, pipeline_url.meta()),
-                port: Cow::from(pipeline_url.port().to_string()),
-                tx,
-                target: InputTarget::Source(self.addr.clone()),
-                is_transactional: self.is_transactional,
-            })
-            .await,
+            p.send_mgmt(msg).await,
             &format!("Failed sending ConnectInput to pipeline {}", pipeline_url),
         );
 

@@ -295,10 +295,8 @@ async fn link(
                 pipeline: (to.clone(), pipeline.clone()),
                 result_tx: tx.clone(),
             };
-            connector
-                .send(msg)
-                .await
-                .map_err(|e| -> Error { format!("Could not send to connector: {}", e).into() })?;
+            connector.send(msg).await?;
+
             rx.recv()
                 .timeout(timeout)
                 .await??
@@ -343,10 +341,7 @@ async fn link(
                 pipelines: vec![(from.clone(), pipeline.clone())],
                 result_tx: tx.clone(),
             };
-            connector
-                .send(msg)
-                .await
-                .map_err(|e| -> Error { format!("Could not send to connector: {}", e).into() })?;
+            connector.send(msg).await?;
             rx.recv()
                 .timeout(timeout)
                 .await??
