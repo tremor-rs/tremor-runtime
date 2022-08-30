@@ -12,8 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::google::{AuthInterceptor, GouthTokenProvider, TokenProvider};
+#[cfg(not(test))]
+use crate::connectors::google::GouthTokenProvider;
+use crate::connectors::google::{AuthInterceptor, TokenProvider};
 
+#[cfg(test)]
+use crate::connectors::google::tests::TestTokenProvider;
 use crate::connectors::prelude::{
     Alias, Attempt, ErrorKind, EventSerializer, KillSwitch, SinkAddr, SinkContext,
     SinkManagerBuilder, SinkReply, Url,
@@ -77,6 +81,11 @@ struct GpubConnector {
     config: Config,
 }
 
+#[cfg(not(test))]
+type CurrentTokenProvider = GouthTokenProvider;
+#[cfg(test)]
+type CurrentTokenProvider = TestTokenProvider;
+
 #[async_trait::async_trait()]
 impl Connector for GpubConnector {
     async fn create_sink(
@@ -84,7 +93,7 @@ impl Connector for GpubConnector {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = GpubSink::<GouthTokenProvider> {
+        let sink = GpubSink::<CurrentTokenProvider> {
             config: self.config.clone(),
             hostname: self
                 .config
