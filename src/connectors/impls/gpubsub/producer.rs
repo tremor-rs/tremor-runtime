@@ -77,7 +77,7 @@ impl ConnectorBuilder for Builder {
     }
 }
 
-struct GpubConnector {
+struct  GpubConnector {
     config: Config,
 }
 
