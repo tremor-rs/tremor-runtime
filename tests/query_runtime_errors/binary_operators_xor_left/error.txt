@@ -1,0 +1,3 @@
+Error: 
+    1 | select event.a xor event.b from in into out;
+      |        ^^^^^^^ The binary operation `xor` is not defined for the type `string` and `<not executed>`

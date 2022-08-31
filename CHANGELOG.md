@@ -1,9 +1,20 @@
 # Changelog
 
-## Unreleased 
+## Unreleased
+
+### Fixes
+- Add clear error messages for pipelines for console in, pipeline out, pipeline in
+- Added a new port in ConnectInput and weaved them together
+- Added a new port in ConnectOutput and weaved them together
+- Fixed linking pipelines to pipelines
+- Fixed error reporting in ConnectOutput and ConnectInput functions
+- Fixed kv test cases
+
+## [0.13.0-rc.1] 
 
 ### Breaking Changes
 
+- `cb` connector config `path` changed to `paths`.
 - Introduce breaking change in `kafka_consumer` configuration, by adding `mode`.
 - Update grok to 0.2, optional patterns are now omitted no longer ""
 - Unify to `url` instead of `endpoint` for google and s3 connectors so they're in line with every other connector
@@ -21,6 +32,10 @@
 
 ### Fixes
 
+- Fix `tcp_server`, `ws_server` and `unix_socket_server` to properly close sockets when a client disconnects.
+- Fix bug in the runtime, swallowing some event acknowledgements and fails for batched events from multiple streams
+- Fix custom metrics for `kafka_consumer`, `kafka_producer` not being reported in the requested interval
+- Fix `metrics` connector not emitting all metrics it did receive.
 - Fix invalid scope handling for `flow` definition default arguments
 - Fix `elastic` sink not acking events handled successfully if no source is connected.
 - Fix `kafka_consumer` possibly committing earlier offsets, thus replaying events that have already been handled.
@@ -479,6 +494,11 @@
 - Allow using err for errors in tremor run [#592](https://github.com/tremor-rs/tremor-runtime/pull/592)
 - Update to rust toolchain 1.48
 
+[0.13.0-rc.1]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.4...v0.13.0-rc.1
+[0.12.4]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.3...v0.12.4
+[0.12.3]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.2...v0.12.3
+[0.12.2]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.1...v0.12.2
+[0.12.1]: https://github.com/tremor-rs/tremor-runtime/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/tremor-rs/tremor-runtime/compare/v0.11.12...v0.12.0
 [0.11.12]: https://github.com/tremor-rs/tremor-runtime/compare/v0.11.10...v0.11.12
 [0.11.10]:https://github.com/tremor-rs/tremor-runtime/compare/v0.11.9...v0.11.10

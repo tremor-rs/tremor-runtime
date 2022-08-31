@@ -22,7 +22,7 @@ use crate::connectors::impls::kafka::{
     SmolRuntime, TremorRDKafkaContext, KAFKA_CONNECT_TIMEOUT, NO_ERROR,
 };
 use crate::connectors::prelude::*;
-use async_broadcast::{broadcast, Receiver as BroadcastReceiver};
+use async_broadcast::{broadcast, Receiver as BroadcastReceiver, TryRecvError};
 use async_std::channel::{bounded, Receiver, Sender};
 use async_std::prelude::{FutureExt, StreamExt};
 use async_std::task::{self, JoinHandle};
@@ -238,6 +238,9 @@ pub(crate) struct Config {
     ///   }
     ///   ```
     mode: Mode,
+    #[cfg(test)]
+    #[serde(default = "Default::default")]
+    test_options: HashMap<String, String>,
 }
 
 impl ConfigImpl for Config {}
@@ -299,6 +302,16 @@ impl ConnectorBuilder for Builder {
             )?;
         }
 
+        #[cfg(test)]
+        {
+            for (k, v) in &config.test_options {
+                set_client_config(&mut client_config, k.as_str(), v)?;
+            }
+        }
+
+        // verify that the produced kafka client config is valid
+        client_config.create_native_config()?;
+
         info!("[Connector::{alias}] Kafka Consumer Config: {client_config:?}",);
 
         Ok(Box::new(KafkaConsumerConnector {
@@ -311,7 +324,7 @@ impl ConnectorBuilder for Builder {
 
 fn set_client_config<V: Into<String>>(
     client_config: &mut ClientConfig,
-    key: &'static str,
+    key: &str,
     value: V,
 ) -> Result<()> {
     if client_config.get(key).is_some() {
@@ -334,16 +347,14 @@ impl ConsumerContext for TremorRDKafkaContext<SourceContext> {
                         format!("[Topic: {}, Partition: {}]", elem.topic(), elem.partition(),)
                     })
                     .collect();
-                // if we got something assigned, this is a good indicator that we are connected
-                if !partitions.is_empty() {
-                    if let Err(e) = self.connect_tx.try_send(NO_ERROR)
-                    // we seem to be connected, indicate success
-                    {
-                        // we can safely ignore errors here as they will happen after the first connector
-                        // as we only have &self here, we cannot switch out the connector
-                        trace!("{} Error sending to connect channel: {e}", &self.ctx);
-                    };
-                }
+                // if we got an assignment, this is a good indicator that we are connected
+                if let Err(e) = self.connect_tx.try_send(NO_ERROR)
+                // we seem to be connected, indicate success
+                {
+                    // we can safely ignore errors here as they will happen after the first connector
+                    // as we only have &self here, we cannot switch out the connector
+                    trace!("{} Error sending to connect channel: {e}", &self.ctx);
+                };
                 info!(
                     "{} Partitions Assigned: {}",
                     &self.ctx,
@@ -616,14 +627,18 @@ impl Source for KafkaConsumerSource {
         match res {
             Err(_timeout) => {
                 // all good, we didn't receive an error, so let's assume we are fine
+                debug!("{ctx} Waiting for initial assignment timed out...");
                 Ok(true)
             }
             Ok(Err(e)) => {
                 // receive error - bail out
                 Err(e.into())
             }
-            Ok(Ok(KafkaError::Global(RDKafkaErrorCode::NoError))) => Ok(true), // connected
-            Ok(Ok(err)) => Err(err.into()),                                    // any other error
+            Ok(Ok(KafkaError::Global(RDKafkaErrorCode::NoError))) => {
+                debug!("{ctx} Consumer connected.");
+                Ok(true) // connected
+            }
+            Ok(Ok(err)) => Err(err.into()), // any other error
         }
     }
 
@@ -636,6 +651,7 @@ impl Source for KafkaConsumerSource {
     }
 
     async fn ack(&mut self, stream_id: u64, pull_id: u64, ctx: &SourceContext) -> Result<()> {
+        debug!("{ctx} ACK {stream_id} {pull_id}");
         if let Some(offsets) = self.offsets.as_mut() {
             if let Some(consumer) = self.consumer.as_ref() {
                 if let Some((topic, partition, offset)) =
@@ -645,20 +661,22 @@ impl Source for KafkaConsumerSource {
                     // in order to not commit earlier offsets
                     if let Some(raw_offset) = offset.to_raw() {
                         // store offset if not yet in map or if raw_offset exceeds the stored_offset for that partition
+
                         if offsets
                             .get(&stream_id)
-                            .filter(|stored_offset| raw_offset < **stored_offset)
+                            .filter(|stored_offset| *stored_offset > &raw_offset)
                             .is_none()
                         {
-                            offsets.insert(stream_id, raw_offset); // keep track of the maximum offset
                             if self.stores_offsets {
-                                // we deliberately do not send a commit to the group-coordinator by calling `consumer.commit`
-                                // but instead use the client-local memory store of committed offsets
-                                // store the new maximum offset for this partition
+                                offsets.insert(stream_id, raw_offset); // keep track of the maximum offset
+                                                                       // we deliberately do not send a commit to the group-coordinator by calling `consumer.commit`
+                                                                       // but instead use the client-local memory store of committed offsets
+                                                                       // store the new maximum offset for this partition
                                 debug!("{ctx} Storing offset {topic} {partition}: {raw_offset}");
                                 consumer.store_offset(topic, partition, raw_offset)?;
                             } else {
-                                // commit directly to the group coordinator
+                                offsets.insert(stream_id, raw_offset + 1); // keep track of the maximum offset
+                                                                           // commit directly to the group coordinator
                                 let mut tpl = TopicPartitionList::with_capacity(1);
                                 // we need to commit the message offset + 1 - this is the offset we are going to continue from afterwards
                                 let offset = Offset::Offset(raw_offset + 1);
@@ -683,6 +701,7 @@ impl Source for KafkaConsumerSource {
     }
 
     async fn fail(&mut self, stream_id: u64, pull_id: u64, ctx: &SourceContext) -> Result<()> {
+        debug!("{ctx} FAIL {stream_id} {pull_id}");
         // how can we make sure we do not conflict with the store_offset handling in `ack`?
         if let KafkaConsumerSource {
             retry_failed_events: true,
@@ -705,6 +724,10 @@ impl Source for KafkaConsumerSource {
                     tpl.add_partition_offset(topic, partition, offset)?;
                     consumer.commit(&tpl, CommitMode::Async)?;
 
+                    // reset the local in-memory pointer to the message we want to consume next
+                    // this will flush all the pre-fetched data from the partition, thus is quite expensive
+                    consumer.seek(topic, partition, offset, self.seek_timeout)?;
+
                     // update the tracked offsets if necessary
                     // this has the effect that newer acks on that partition will actually store the newer offsets
                     if let Some(raw_offset) = offset.to_raw() {
@@ -713,10 +736,6 @@ impl Source for KafkaConsumerSource {
                             .and_modify(|stored_offset| *stored_offset = raw_offset) // avoid off by one when storing commits
                             .or_insert(raw_offset);
                     }
-
-                    // reset the local in-memory pointer to the message we want to consume next
-                    // this will flush all the pre-fetched data from the partition, thus is quite expensive
-                    consumer.seek(topic, partition, offset, self.seek_timeout)?;
                 } else {
                     error!("{} Could not seek back to failed event with stream={}, pull_id={}. Unable to detect topic from internal state.", &ctx, stream_id, pull_id);
                 }
@@ -787,8 +806,12 @@ impl Source for KafkaConsumerSource {
     fn metrics(&mut self, _timestamp: u64, _ctx: &SourceContext) -> Vec<EventPayload> {
         if let Some(metrics_rx) = self.metrics_rx.as_mut() {
             let mut vec = Vec::with_capacity(metrics_rx.len());
-            while let Ok(payload) = metrics_rx.try_recv() {
-                vec.push(payload);
+            loop {
+                match metrics_rx.try_recv() {
+                    Ok(payload) => vec.push(payload),
+                    Err(TryRecvError::Overflowed(_)) => continue, // try again, this is expected
+                    Err(_) => break,                              // on all other errors, stop
+                }
             }
             vec
         } else {
@@ -806,7 +829,7 @@ async fn consumer_task(
     source_tx: Sender<(SourceReply, Option<u64>)>,
     source_ctx: SourceContext,
 ) {
-    info!("{} Consumer started.", &source_ctx);
+    info!("{source_ctx} Consumer started.");
     let mut stream = task_consumer.stream();
     let mut connect_result_channel = Some(connect_result_tx);
 
@@ -1039,6 +1062,35 @@ mod test {
         assert_eq!(client_config.get("float"), Some("1.543"));
         assert_eq!(client_config.get("int"), Some("-42"));
         assert_eq!(client_config.get("string"), Some("string"));
+        Ok(())
+    }
+
+    #[test]
+    fn custom_mode() -> Result<()> {
+        let mut config = r#"
+        {
+            "topics": ["topic"],
+            "brokers": ["broker1"],
+            "group_id": "snot",
+            "mode": {
+                "custom": {
+                    "rdkafka_options": {
+                        "enable.auto.commit": false,
+                        "debug": "all"
+                    },
+                    "retry_failed_events": false
+                }
+            }
+        }
+        "#
+        .as_bytes()
+        .to_vec();
+        let value = tremor_value::parse_to_value(config.as_mut_slice())?;
+        let config: Config = tremor_value::structurize(value)?;
+        let mode = config.mode;
+        assert!(mode.commits_offsets());
+        assert!(!mode.stores_offsets());
+        assert!(mode.is_transactional());
         Ok(())
     }
 }

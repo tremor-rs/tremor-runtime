@@ -15,7 +15,10 @@
 pub(crate) mod client;
 pub(crate) mod server;
 
-use crate::connectors::prelude::*;
+use crate::{
+    connectors::{prelude::*, utils::ConnectionMeta},
+    log_error,
+};
 use async_std::net::TcpStream;
 use futures::{
     io::{ReadHalf, WriteHalf},
@@ -39,6 +42,9 @@ where
     alias: Alias,
     origin_uri: EventOriginUri,
     meta: Value<'static>,
+    // notify the writer when the connection is done,
+    // otherwise the socket will never close
+    sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
 }
 
 impl TcpReader<TcpStream> {
@@ -48,6 +54,7 @@ impl TcpReader<TcpStream> {
         alias: Alias,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
+        sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
     ) -> Self {
         Self {
             wrapped_stream: stream.clone(),
@@ -56,6 +63,7 @@ impl TcpReader<TcpStream> {
             alias,
             origin_uri,
             meta,
+            sink_runtime,
         }
     }
 }
@@ -68,6 +76,7 @@ impl TcpReader<ReadHalf<async_tls::server::TlsStream<TcpStream>>> {
         alias: Alias,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
+        sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
     ) -> Self {
         Self {
             wrapped_stream: stream,
@@ -76,6 +85,7 @@ impl TcpReader<ReadHalf<async_tls::server::TlsStream<TcpStream>>> {
             alias,
             origin_uri,
             meta,
+            sink_runtime,
         }
     }
 }
@@ -96,6 +106,7 @@ impl TcpReader<ReadHalf<async_tls::client::TlsStream<TcpStream>>> {
             alias,
             origin_uri,
             meta,
+            sink_runtime: None,
         }
     }
 }
@@ -142,6 +153,13 @@ where
             warn!(
                 "[Connector::{}] Error shutting down reading half of stream {}: {}",
                 &self.alias, stream, e
+            );
+        }
+        // notify the writer that we are closed, otherwise the socket will never be correctly closed on our side
+        if let Some(sink_runtime) = self.sink_runtime.as_ref() {
+            log_error!(
+                sink_runtime.unregister_stream_writer(stream).await,
+                "Error notifying the tcp_writer to close the socket: {e}"
             );
         }
         StreamDone::StreamClosed

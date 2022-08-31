@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::{BinOpKind, Invoke, InvokeAggr, InvokeAggrFn, UnaryOpKind};
+use crate::ast::BooleanBinOpKind;
 use std::fmt;
 
 impl<'script> fmt::Debug for InvokeAggrFn<'script> {
@@ -53,6 +54,22 @@ impl BinOpKind {
 }
 
 impl fmt::Display for BinOpKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(self.operator_name())
+    }
+}
+
+impl BooleanBinOpKind {
+    fn operator_name(self) -> &'static str {
+        match self {
+            BooleanBinOpKind::Or => "or",
+            BooleanBinOpKind::Xor => "xor",
+            BooleanBinOpKind::And => "and",
+        }
+    }
+}
+
+impl fmt::Display for BooleanBinOpKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(self.operator_name())
     }

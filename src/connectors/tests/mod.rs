@@ -71,13 +71,14 @@ use crate::{
 use async_std::{
     channel::{bounded, Receiver},
     prelude::FutureExt,
+    task,
 };
 use beef::Cow;
 use log::{debug, info};
 use std::{collections::HashMap, time::Instant};
 use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::{
-    ids::ConnectorIdGen,
+    ids::{ConnectorIdGen, Id, SourceId},
     ports::{ERR, IN, OUT},
 };
 use tremor_pipeline::{CbAction, EventId};
@@ -148,7 +149,7 @@ impl ConnectorHarness {
             connector_addr
                 .send(connectors::Msg::LinkOutput {
                     port: port.clone(),
-                    pipelines: vec![(pipeline_id, pipeline.addr.clone())],
+                    pipeline: (pipeline_id, pipeline.addr.clone()),
                     result_tx: link_tx.clone(),
                 })
                 .await?;
@@ -193,7 +194,14 @@ impl ConnectorHarness {
         let cr = rx.recv().await?;
         cr.res?;
 
-        // send a CBAction::open to the connector, so it starts pulling data
+        // ensure we notify the connector that its sink part is connected
+        self.addr
+            .send_sink(SinkMsg::Signal {
+                signal: Event::signal_start(SourceId::new(1)),
+            })
+            .await?;
+
+        // send a `CBAction::Restore` to the connector, so it starts pulling data
         self.addr
             .send_source(SourceMsg::Cb(CbAction::Restore, EventId::default()))
             .await?;
@@ -228,6 +236,9 @@ impl ConnectorHarness {
             .map(TestPipeline::get_events)
             .unwrap_or(Ok(vec![]))
             .unwrap_or_default();
+        for (_, p) in self.pipes {
+            p.stop().await?;
+        }
         Ok((out_events, err_events))
     }
 
@@ -351,6 +362,9 @@ pub(crate) struct TestPipeline {
 }
 
 impl TestPipeline {
+    pub(crate) async fn stop(&self) -> Result<()> {
+        self.addr.send_mgmt(pipeline::MgmtMsg::Stop).await
+    }
     pub(crate) fn new(alias: String) -> Self {
         let flow_id = FlowAlias::new("test");
         let qsize = QSIZE.load(Ordering::Relaxed);
@@ -359,6 +373,25 @@ impl TestPipeline {
         let (tx_mgmt, rx_mgmt) = bounded(qsize);
         let pipeline_id = pipeline::Alias::new(flow_id, alias);
         let addr = pipeline::Addr::new(tx, tx_cf, tx_mgmt, pipeline_id);
+
+        let task_rx = rx_mgmt.clone();
+        task::spawn(async move {
+            while let Ok(msg) = task_rx.recv().await {
+                match dbg!(msg) {
+                    pipeline::MgmtMsg::Stop => {
+                        dbg!();
+                        break;
+                    }
+                    pipeline::MgmtMsg::ConnectInput { tx, .. } => {
+                        if let Err(e) = tx.send(Ok(())).await {
+                            error!("Oh no error in test: {e}");
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        });
+
         Self {
             rx,
             rx_cf,

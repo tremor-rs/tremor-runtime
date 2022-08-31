@@ -104,6 +104,12 @@ impl From<async_broadcast::TryRecvError> for Error {
     }
 }
 
+impl From<async_broadcast::RecvError> for Error {
+    fn from(e: async_broadcast::RecvError) -> Self {
+        Self::from(format!("{:?}", e))
+    }
+}
+
 impl<P> From<std::sync::PoisonError<P>> for Error {
     fn from(e: std::sync::PoisonError<P>) -> Self {
         Self::from(format!("Poison Error: {:?}", e))
@@ -392,7 +398,20 @@ error_chain! {
             description("Google cloud storage error")
                 display("Google cloud storage error: {}", msg)
         }
+        PipelineSendError(s: String) {
+            description("Pipeline send error")
+                display("Pipeline send error: {}", s)
+        }
     }
+}
+
+#[allow(clippy::needless_pass_by_value)]
+pub(crate) fn pipe_send_e<T>(e: async_std::channel::SendError<T>) -> Error {
+    ErrorKind::PipelineSendError(e.to_string()).into()
+}
+#[allow(clippy::needless_pass_by_value)]
+pub(crate) fn connector_send_err<T>(e: async_std::channel::SendError<T>) -> Error {
+    format!("could not send to connector: {e}").into()
 }
 
 pub(crate) fn err_connector_def<C: ToString + ?Sized, E: ToString + ?Sized>(c: &C, e: &E) -> Error {

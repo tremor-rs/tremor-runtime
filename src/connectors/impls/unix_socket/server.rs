@@ -28,6 +28,9 @@
 //! ```
 //!
 //! We try to route the event to the connection with `stream_id` `123`.
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+
 use crate::connectors::prelude::*;
 use crate::connectors::sink::channel_sink::ChannelSinkMsg;
 use async_std::os::unix::net::UnixListener;
@@ -77,13 +80,14 @@ impl ConnectorBuilder for Builder {
             config,
             sink_tx,
             sink_rx,
+            sink_is_connected: Arc::default(),
         }))
     }
 }
 
 /// just a `stream_id`
 #[derive(PartialEq, Eq, Hash, Debug, Clone, Copy)]
-struct ConnectionMeta(u64);
+pub(super) struct ConnectionMeta(u64);
 
 ///
 /// Expect connection meta as:
@@ -102,6 +106,7 @@ struct UnixSocketServer {
     config: Config,
     sink_tx: Sender<ChannelSinkMsg<ConnectionMeta>>,
     sink_rx: Receiver<ChannelSinkMsg<ConnectionMeta>>,
+    sink_is_connected: Arc<AtomicBool>,
 }
 
 #[async_trait::async_trait()]
@@ -116,7 +121,11 @@ impl Connector for UnixSocketServer {
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let sink_runtime = ChannelSinkRuntime::new(self.sink_tx.clone());
-        let source = UnixSocketSource::new(self.config.clone(), sink_runtime);
+        let source = UnixSocketSource::new(
+            self.config.clone(),
+            sink_runtime,
+            self.sink_is_connected.clone(),
+        );
         builder.spawn(source, source_context).map(Some)
     }
 
@@ -130,6 +139,7 @@ impl Connector for UnixSocketServer {
             builder.reply_tx(),
             self.sink_tx.clone(),
             self.sink_rx.clone(),
+            self.sink_is_connected.clone(),
         );
         builder.spawn(sink, ctx).map(Some)
     }
@@ -141,10 +151,15 @@ struct UnixSocketSource {
     connection_rx: Receiver<SourceReply>,
     runtime: ChannelSourceRuntime,
     sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
+    sink_is_connected: Arc<AtomicBool>,
 }
 
 impl UnixSocketSource {
-    fn new(config: Config, sink_runtime: ChannelSinkRuntime<ConnectionMeta>) -> Self {
+    fn new(
+        config: Config,
+        sink_runtime: ChannelSinkRuntime<ConnectionMeta>,
+        sink_is_connected: Arc<AtomicBool>,
+    ) -> Self {
         let (tx, rx) = bounded(crate::QSIZE.load(Ordering::Relaxed));
         let runtime = ChannelSourceRuntime::new(tx);
         Self {
@@ -153,6 +168,7 @@ impl UnixSocketSource {
             connection_rx: rx,
             runtime,
             sink_runtime,
+            sink_is_connected,
         }
     }
 }
@@ -177,6 +193,8 @@ impl Source for UnixSocketSource {
         let ctx = ctx.clone();
         let runtime = self.runtime.clone();
         let sink_runtime = self.sink_runtime.clone();
+        let sink_is_connected = self.sink_is_connected.clone();
+
         self.listener_task = Some(spawn_task(ctx.clone(), async move {
             let mut stream_id_gen = StreamIdGen::default();
             let origin_uri = EventOriginUri {
@@ -197,25 +215,37 @@ impl Source for UnixSocketSource {
                                     "peer": 123
                                 }
                             }
-
-                            let $unix_socket_server = { "peer": 123 };
                         */
                         let meta = ctx.meta(literal!({ "peer": stream_id }));
+
+                        // only register a writer, if any pipeline is connected to the sink
+                        // otherwise we have a dead sink not consuming from channels and possibly dead-locking the source or other tasks
+                        // complex shit...
+                        let reader_runtime = if sink_is_connected.load(Ordering::Acquire) {
+                            sink_runtime
+                                .register_stream_writer(
+                                    stream_id,
+                                    Some(connection_meta),
+                                    &ctx,
+                                    UnixSocketWriter::new(stream.clone()),
+                                )
+                                .await;
+                            Some(sink_runtime.clone())
+                        } else {
+                            info!(
+                                "{ctx} Nothing connected to IN port, not starting a stream writer."
+                            );
+                            None
+                        };
+
                         let reader = UnixSocketReader::new(
-                            stream.clone(),
+                            stream,
                             vec![0; buf_size],
                             ctx.alias().to_string(),
                             origin_uri.clone(),
                             meta,
+                            reader_runtime,
                         );
-                        sink_runtime
-                            .register_stream_writer(
-                                stream_id,
-                                Some(connection_meta),
-                                &ctx,
-                                UnixSocketWriter::new(stream),
-                            )
-                            .await;
                         runtime.register_stream_reader(stream_id, &ctx, reader);
                     }
                     Ok(Err(e)) => return Err(e.into()),

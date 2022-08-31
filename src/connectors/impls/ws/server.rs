@@ -23,6 +23,7 @@ use futures::StreamExt;
 use rustls::ServerConfig;
 use simd_json::ValueAccess;
 use std::net::SocketAddr;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 const URL_SCHEME: &str = "tremor-ws-server";
@@ -44,6 +45,8 @@ pub(crate) struct WsServer {
     sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
     source_runtime: Option<ChannelSourceRuntime>,
     tls_server_config: Option<ServerConfig>,
+    /// marker that the sink is actually connected to some pipeline
+    sink_is_connected: Arc<AtomicBool>,
 }
 
 #[derive(Debug, Default)]
@@ -75,6 +78,7 @@ impl ConnectorBuilder for Builder {
             sink_runtime: None, // replaced in create_sink()
             source_runtime: None,
             tls_server_config,
+            sink_is_connected: Arc::default(),
         }))
     }
 }
@@ -137,6 +141,7 @@ impl Connector for WsServer {
             builder.qsize(),
             resolve_connection_meta,
             builder.reply_tx(),
+            self.sink_is_connected.clone(),
         );
 
         self.sink_runtime = Some(sink.runtime());
@@ -178,6 +183,7 @@ impl Connector for WsServer {
 
         let ctx = ctx.clone();
         let tls_server_config = self.tls_server_config.clone();
+        let sink_is_connected = self.sink_is_connected.clone();
 
         // accept task
         self.accept_task = Some(spawn_task(ctx.clone(), async move {
@@ -188,8 +194,6 @@ impl Connector for WsServer {
                         let stream_id: u64 = stream_id_gen.next_stream_id();
                         let connection_meta: ConnectionMeta = peer_addr.into();
 
-                        // Async<T> allows us to read in one thread and write in another concurrently - see its documentation
-                        // So we don't need no BiLock like we would when using `.split()`
                         let origin_uri = EventOriginUri {
                             scheme: URL_SCHEME.to_string(),
                             host: peer_addr.ip().to_string(),
@@ -209,19 +213,24 @@ impl Connector for WsServer {
 
                             let (ws_write, ws_read) = ws_stream.split();
 
-                            let ws_writer = WsWriter::new_tls_server(ws_write);
-                            sink_runtime
-                                .register_stream_writer(
-                                    stream_id,
-                                    Some(connection_meta.clone()),
-                                    &ctx,
-                                    ws_writer,
-                                )
-                                .await;
+                            let reader_runtime = if sink_is_connected.load(Ordering::Acquire) {
+                                let ws_writer = WsWriter::new_tls_server(ws_write);
+                                sink_runtime
+                                    .register_stream_writer(
+                                        stream_id,
+                                        Some(connection_meta.clone()),
+                                        &ctx,
+                                        ws_writer,
+                                    )
+                                    .await;
+                                Some(sink_runtime.clone())
+                            } else {
+                                None
+                            };
 
                             let ws_reader = WsReader::new(
                                 ws_read,
-                                sink_runtime.clone(),
+                                reader_runtime,
                                 origin_uri.clone(),
                                 meta,
                                 ctx.clone(),
@@ -241,20 +250,25 @@ impl Connector for WsServer {
 
                             let meta = ctx.meta(WsServer::meta(peer_addr, false));
 
-                            let ws_writer = WsWriter::new(ws_write);
+                            let reader_runtime = if sink_is_connected.load(Ordering::Acquire) {
+                                let ws_writer = WsWriter::new(ws_write);
 
-                            sink_runtime
-                                .register_stream_writer(
-                                    stream_id,
-                                    Some(connection_meta.clone()),
-                                    &ctx,
-                                    ws_writer,
-                                )
-                                .await;
+                                sink_runtime
+                                    .register_stream_writer(
+                                        stream_id,
+                                        Some(connection_meta.clone()),
+                                        &ctx,
+                                        ws_writer,
+                                    )
+                                    .await;
+                                Some(sink_runtime.clone())
+                            } else {
+                                None
+                            };
 
                             let ws_reader = WsReader::new(
                                 ws_read,
-                                sink_runtime.clone(),
+                                reader_runtime,
                                 origin_uri.clone(),
                                 meta,
                                 ctx.clone(),

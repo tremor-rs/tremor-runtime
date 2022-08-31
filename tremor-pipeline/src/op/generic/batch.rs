@@ -150,7 +150,7 @@ impl Operator for Batch {
         Ok(self
             .max_delay_ns
             .map_or_else(EventAndInsights::default, |delay_ns| {
-                if signal.ingest_ns - self.first_ns > delay_ns {
+                if (signal.ingest_ns - self.first_ns) > delay_ns {
                     // We don't want to modify the original signal we clone it to
                     // create a new event.
 

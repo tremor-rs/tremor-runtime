@@ -205,7 +205,10 @@ pub(crate) struct DeployEndpointRaw<'script> {
 
 impl<'script> Upable<'script> for DeployEndpointRaw<'script> {
     type Target = DeployEndpoint;
-    fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+    fn up<'registry>(mut self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
+        // name should be added to meta data
+        let name: String = self.alias.to_string();
+        self.mid.set_name(&name);
         Ok(DeployEndpoint {
             alias: self.alias.to_string(),
             port: self.port.to_string(),

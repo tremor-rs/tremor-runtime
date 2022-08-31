@@ -8,4 +8,4 @@ asserts:
   - source: "fg.err.log"
     contains:
       - "All required CB events received."
-      - "Got acks: [0, 1, 2, 3]"
+      - "Got acks: {0: [0, 1, 2, 3]}"

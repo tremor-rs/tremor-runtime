@@ -32,7 +32,7 @@ use std::{sync::atomic::Ordering, time::Duration};
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
 use tremor_script::{
     ast::{self, ConnectStmt, DeployFlow, Helper},
-    errors::not_defined_err,
+    errors::{err_generic, not_defined_err},
 };
 
 /// unique identifier of a flow instance within a tremor instance
@@ -265,12 +265,14 @@ fn key_list<K: ToString, V>(h: &HashMap<K, V>) -> String {
         .collect::<Vec<_>>()
         .join(", ")
 }
-
+#[allow(clippy::too_many_lines)]
 async fn link(
     connectors: &HashMap<String, connectors::Addr>,
     pipelines: &HashMap<String, pipeline::Addr>,
     link: &ConnectStmt,
 ) -> Result<()> {
+    // this is some odd stuff to have here
+    let timeout = Duration::from_secs(2);
     match link {
         ConnectStmt::ConnectorToPipeline { from, to, .. } => {
             let connector = connectors
@@ -286,21 +288,19 @@ async fn link(
                 ))?
                 .clone();
 
-            // this is some odd stuff to have here
-            let timeout = Duration::from_secs(2);
-
             let (tx, rx) = bounded(1);
 
             let msg = connectors::Msg::LinkOutput {
                 port: from.port().to_string().into(),
-                pipelines: vec![(to.clone(), pipeline.clone())],
+                pipeline: (to.clone(), pipeline.clone()),
                 result_tx: tx.clone(),
             };
-            connector
-                .send(msg)
-                .await
-                .map_err(|e| -> Error { format!("Could not send to connector: {}", e).into() })?;
-            rx.recv().timeout(timeout).await???;
+            connector.send(msg).await?;
+
+            rx.recv()
+                .timeout(timeout)
+                .await??
+                .map_err(|e| err_generic(link, from, &e))?;
         }
         ConnectStmt::PipelineToConnector { from, to, .. } => {
             let pipeline = pipelines.get(from.alias()).ok_or(format!(
@@ -319,19 +319,20 @@ async fn link(
                 .clone();
 
             // first link the pipeline to the connector
+            let (tx, rx) = bounded(1);
             let msg = crate::pipeline::MgmtMsg::ConnectOutput {
+                tx,
                 port: from.port().to_string().into(),
                 endpoint: to.clone(),
                 target: connector.clone().try_into()?,
             };
-            pipeline
-                .send_mgmt(msg)
-                .await
-                .map_err(|e| -> Error { format!("Could not send to pipeline: {}", e).into() })?;
+            pipeline.send_mgmt(msg).await?;
+            rx.recv()
+                .timeout(timeout)
+                .await??
+                .map_err(|e| err_generic(link, from, &e))?;
 
             // then link the connector to the pipeline
-            // this is some odd stuff to have here
-            let timeout = Duration::from_secs(2);
 
             let (tx, rx) = bounded(1);
 
@@ -340,11 +341,11 @@ async fn link(
                 pipelines: vec![(from.clone(), pipeline.clone())],
                 result_tx: tx.clone(),
             };
-            connector
-                .send(msg)
-                .await
-                .map_err(|e| -> Error { format!("Could not send to connector: {}", e).into() })?;
-            rx.recv().timeout(timeout).await???;
+            connector.send(msg).await?;
+            rx.recv()
+                .timeout(timeout)
+                .await??
+                .map_err(|e| err_generic(link, to, &e))?;
         }
         ConnectStmt::PipelineToPipeline { from, to, .. } => {
             let from_pipeline = pipelines.get(from.alias()).ok_or(format!(
@@ -357,27 +358,34 @@ async fn link(
                 from.alias(),
                 key_list(pipelines)
             ))?;
+            let (tx_from, rx_from) = bounded(1);
             let msg_from = crate::pipeline::MgmtMsg::ConnectOutput {
                 port: from.port().to_string().into(),
                 endpoint: to.clone(),
+                tx: tx_from,
                 target: to_pipeline.clone().into(),
             };
-
+            let (tx_to, rx_to) = bounded(1);
             let msg_to = crate::pipeline::MgmtMsg::ConnectInput {
+                port: to.port().to_string().into(),
                 endpoint: from.clone(),
+                tx: tx_to,
                 target: InputTarget::Pipeline(Box::new(from_pipeline.clone())),
                 is_transactional: true,
             };
 
-            from_pipeline
-                .send_mgmt(msg_from)
-                .await
-                .map_err(|e| -> Error { format!("Could not send to pipeline: {}", e).into() })?;
-
-            to_pipeline
-                .send_mgmt(msg_to)
-                .await
-                .map_err(|e| -> Error { format!("Could not send to pipeline: {}", e).into() })?;
+            from_pipeline.send_mgmt(msg_from).await?;
+            rx_from
+                .recv()
+                .timeout(timeout)
+                .await??
+                .map_err(|e| err_generic(link, to, &e))?;
+            to_pipeline.send_mgmt(msg_to).await?;
+            rx_to
+                .recv()
+                .timeout(timeout)
+                .await??
+                .map_err(|e| err_generic(link, from, &e))?;
         }
     }
     Ok(())

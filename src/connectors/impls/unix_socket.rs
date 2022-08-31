@@ -30,6 +30,7 @@ struct UnixSocketReader {
     alias: String,
     origin_uri: EventOriginUri,
     meta: Value<'static>,
+    sink_runtime: Option<ChannelSinkRuntime<server::ConnectionMeta>>,
 }
 
 impl UnixSocketReader {
@@ -39,6 +40,7 @@ impl UnixSocketReader {
         alias: String,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
+        sink_runtime: Option<ChannelSinkRuntime<server::ConnectionMeta>>,
     ) -> Self {
         Self {
             stream,
@@ -46,6 +48,7 @@ impl UnixSocketReader {
             alias,
             origin_uri,
             meta,
+            sink_runtime,
         }
     }
 }
@@ -90,12 +93,16 @@ impl StreamReader for UnixSocketReader {
     }
 
     async fn on_done(&mut self, stream: u64) -> StreamDone {
-        // THIS IS SHUTDOWN!
         if let Err(e) = self.stream.shutdown(std::net::Shutdown::Read) {
             warn!(
                 "[Connector::{}] Error shutting down reading half of stream {stream}: {e}",
                 &self.alias
             );
+        }
+        if let Some(sink_runtime) = self.sink_runtime.as_ref() {
+            if let Err(e) = sink_runtime.unregister_stream_writer(stream).await {
+                warn!("[Connector::{}] Error notifying the unix_socket_server sink to close stream {stream}: {e}", &self.alias);
+            }
         }
         StreamDone::StreamClosed
     }

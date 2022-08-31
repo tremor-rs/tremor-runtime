@@ -112,3 +112,51 @@ async fn server_event_routing() -> Result<()> {
     assert!(err.is_empty());
     Ok(())
 }
+
+#[async_std::test]
+async fn client_disconnect() -> Result<()> {
+    let _ = env_logger::try_init();
+
+    let free_port = free_port::find_free_tcp_port().await?;
+
+    let server_addr = format!("127.0.0.1:{}", free_port);
+
+    let defn = literal!({
+      "codec": "string",
+      "preprocessors": ["separate"],
+      "config": {
+        "url": format!("tcp://127.0.0.1:{free_port}"),
+        "buf_size": 4096
+      }
+    });
+    let harness =
+        ConnectorHarness::new(function_name!(), &tcp::server::Builder::default(), &defn).await?;
+    let out_pipeline = harness
+        .out()
+        .expect("No pipeline connected to 'out' port of tcp_server connector");
+    harness.start().await?;
+    harness.wait_for_connected().await?;
+
+    let num_events = 129_usize;
+    for i in 0..num_events {
+        debug!("{i}");
+        let mut socket = TcpStream::connect(&server_addr).await?;
+        let msg = format!("snot{i}\n");
+        socket.write_all(msg.as_bytes()).await?;
+
+        let event = out_pipeline
+            .get_event()
+            .timeout(Duration::from_secs(1))
+            .await??;
+        let (data, _meta) = event.data.parts();
+        assert_eq!(&Value::from(msg.trim_end()), data);
+
+        // the sink needs to clear out the incoming queue for managing channels
+        // so we simulate the tick here
+        harness.signal_tick_to_sink().await?;
+    }
+    //cleanup
+    let (_out, err) = harness.stop().await?;
+    assert!(err.is_empty());
+    Ok(())
+}

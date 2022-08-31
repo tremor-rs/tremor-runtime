@@ -34,10 +34,10 @@ use self::sink::{SinkAddr, SinkContext, SinkMsg};
 use self::source::{SourceAddr, SourceContext, SourceMsg};
 use self::utils::quiescence::QuiescenceBeacon;
 pub(crate) use crate::config::Connector as ConnectorConfig;
-use crate::instance::State;
 use crate::pipeline;
 use crate::system::flow;
 use crate::system::{KillSwitch, World};
+use crate::{errors::connector_send_err, instance::State};
 use crate::{
     errors::{Error, Kind as ErrorKind, Result},
     log_error,
@@ -87,7 +87,7 @@ impl Addr {
     /// # Errors
     ///  * If sending failed
     pub(crate) async fn send(&self, msg: Msg) -> Result<()> {
-        Ok(self.sender.send(msg).await?)
+        self.sender.send(msg).await.map_err(connector_send_err)
     }
 
     /// send a message to the sink part of the connector.
@@ -97,7 +97,7 @@ impl Addr {
     ///   * if sending failed
     pub(crate) async fn send_sink(&self, msg: SinkMsg) -> Result<()> {
         if let Some(sink) = self.sink.as_ref() {
-            sink.addr.send(msg).await?;
+            sink.addr.send(msg).await.map_err(connector_send_err)?;
         }
         Ok(())
     }
@@ -109,7 +109,7 @@ impl Addr {
     ///   * if sending failed
     pub(crate) async fn send_source(&self, msg: SourceMsg) -> Result<()> {
         if let Some(source) = self.source.as_ref() {
-            source.addr.send(msg).await?;
+            source.addr.send(msg).await.map_err(connector_send_err)?;
         }
         Ok(())
     }
@@ -185,8 +185,8 @@ pub(crate) enum Msg {
     LinkOutput {
         /// port to which to connect
         port: Cow<'static, str>,
-        /// pipelines to connect
-        pipelines: Vec<(DeployEndpoint, pipeline::Addr)>,
+        /// pipeline to connect to
+        pipeline: (DeployEndpoint, pipeline::Addr),
         /// result receiver
         result_tx: Sender<Result<()>>,
     },
@@ -613,49 +613,45 @@ async fn connector_task(
                 }
                 Msg::LinkOutput {
                     port,
-                    pipelines: pipelines_to_link,
+                    pipeline: pipeline_to_link,
                     result_tx,
                 } => {
-                    for (url, _) in &pipelines_to_link {
-                        info!("{ctx} Connecting {url} via port {port}");
-                    }
+                    let (url, _) = &pipeline_to_link;
+                    info!("{ctx} Connecting {url} via port {port}");
 
                     if let Some(port_pipes) = connected_pipelines.get_mut(&port) {
-                        port_pipes.extend(pipelines_to_link.iter().cloned());
+                        port_pipes.push(pipeline_to_link.clone());
                     } else {
-                        connected_pipelines.insert(port.clone(), pipelines_to_link.clone());
+                        connected_pipelines.insert(port.clone(), vec![pipeline_to_link.clone()]);
                     }
-                    let res = if connector.is_valid_output_port(&port) {
+                    if connector.is_valid_output_port(&port) {
                         // connect to source part
                         if let Some(source) = connector_addr.source.as_ref() {
-                            source
-                                .addr
-                                .send(SourceMsg::Link {
-                                    port,
-                                    pipelines: pipelines_to_link,
-                                })
-                                .await
-                                .map_err(Into::into)
+                            // delegate error reporting to source
+                            let m = SourceMsg::Link {
+                                port,
+                                tx: result_tx,
+                                pipeline: pipeline_to_link,
+                            };
+                            let res = source.addr.send(m).await;
+                            log_error!(res, "{ctx} Error sending to source: {e}");
                         } else {
-                            Err(ErrorKind::InvalidConnect(
+                            let e = Err(ErrorKind::InvalidConnect(
                                 connector_addr.alias.to_string(),
                                 port.clone(),
                             )
-                            .into())
+                            .into());
+                            let res = result_tx.send(e).await;
+                            log_error!(res, "{ctx} Error sending connect result: {e}");
                         }
                     } else {
                         error!("{ctx} Tried to connect to unsupported port: \"{port}\"");
-                        Err(ErrorKind::InvalidConnect(
-                            connector_addr.alias.to_string(),
-                            port.clone(),
-                        )
-                        .into())
+                        // send back the connect result
+                        let addr = connector_addr.alias.to_string();
+                        let e = Err(ErrorKind::InvalidConnect(addr, port.clone()).into());
+                        let res = result_tx.send(e).await;
+                        log_error!(res, "{ctx} Error sending connect result: {e}");
                     };
-                    // send back the connect result
-                    log_error!(
-                        result_tx.send(res).await,
-                        "{ctx} Error sending connect result: {e}"
-                    );
                 }
                 Msg::ConnectionLost => {
                     // react on the connection being lost
@@ -1267,6 +1263,7 @@ pub(crate) fn builtin_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'stati
         Box::new(impls::gcl::writer::Builder::default()),
         Box::new(impls::logging::Builder::default()),
         Box::new(impls::gcs::streamer::Builder::default()),
+        Box::new(impls::null::Builder::default()),
     ]
 }
 
@@ -1277,7 +1274,6 @@ pub(crate) fn debug_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>
     vec![
         Box::new(impls::cb::Builder::default()),
         Box::new(impls::bench::Builder::default()),
-        Box::new(impls::null::Builder::default()),
         Box::new(impls::exit::Builder::default()),
     ]
 }

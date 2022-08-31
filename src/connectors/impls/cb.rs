@@ -16,18 +16,20 @@
 
 use std::{path::PathBuf, time::Duration};
 
+use crate::connectors::prelude::*;
 use crate::system::{KillSwitch, ShutdownMode};
-use crate::{connectors::prelude::*, errors::err_connector_def};
 use async_std::io::prelude::BufReadExt;
 use async_std::stream::StreamExt;
 use async_std::{fs::File, io};
+use halfbrown::HashMap;
 use tremor_common::asy::file::open;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Config {
-    /// path to file to load data from
-    path: Option<PathBuf>,
+    /// paths to files to load data from
+    #[serde(default = "Default::default")]
+    paths: Vec<PathBuf>,
     // timeout in nanoseconds
     #[serde(default = "default_timeout")]
     timeout: u64,
@@ -94,6 +96,13 @@ impl Connector for Cb {
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
+        if self.config.paths.is_empty() {
+            return Err(ErrorKind::InvalidConfiguration(
+                source_context.alias().to_string(),
+                "\"paths\" config missing".to_string(),
+            )
+            .into());
+        }
         let source = CbSource::new(
             &self.config,
             source_context.alias(),
@@ -174,31 +183,44 @@ impl Sink for CbSink {
 
 #[derive(Default, Debug)]
 struct ReceivedCbs {
-    ack: Vec<u64>,  // collect ids of acks
-    fail: Vec<u64>, // collect ids of fails
-    trigger: u64,   // counter
-    restore: u64,   // counter
+    ack: HashMap<u64, Vec<u64>>,  // collect ids of acks
+    fail: HashMap<u64, Vec<u64>>, // collect ids of fails
+    trigger: u64,                 // counter
+    restore: u64,                 // counter
 }
 
 impl ReceivedCbs {
     fn count(&self) -> usize {
-        self.ack.len() + self.fail.len()
+        self.ack.values().map(Vec::len).sum::<usize>()
+            + self.fail.values().map(Vec::len).sum::<usize>()
     }
 
-    fn max(&self) -> Option<u64> {
-        self.ack
+    fn max(&self) -> HashMap<u64, u64> {
+        let mut acks = self
+            .ack
             .iter()
-            .copied()
-            .max()
-            .max(self.fail.iter().copied().max())
+            .filter_map(|(stream_id, pull_ids)| pull_ids.iter().max().map(|max| (*stream_id, *max)))
+            .collect::<HashMap<_, _>>();
+        let fails = self.fail.iter().filter_map(|(stream_id, pull_ids)| {
+            pull_ids.iter().max().map(|max| (*stream_id, *max))
+        });
+        // gather max pull_ids from fails and overwrite if bigger
+        for (k, v) in fails {
+            if let Some(ack) = acks.get_mut(&k) {
+                *ack = (*ack).max(v);
+            } else {
+                acks.insert(k, v);
+            }
+        }
+        acks
     }
 }
 
 #[derive(Debug)]
 struct CbSource {
-    file: io::Lines<io::BufReader<File>>,
+    files: Vec<io::Lines<io::BufReader<File>>>,
     num_sent: usize,
-    last_sent: u64,
+    last_sent: HashMap<u64, u64>,
     received_cbs: ReceivedCbs,
     finished: bool,
     config: Config,
@@ -209,83 +231,100 @@ struct CbSource {
 impl CbSource {
     fn did_receive_all(&self) -> bool {
         let all_received = if self.config.expect_batched {
-            self.received_cbs
-                .max()
-                .map(|m| m == self.last_sent)
-                .unwrap_or_default()
+            let mut received = 0;
+            for (stream, max_pull_id) in self.received_cbs.max() {
+                if let Some(last_sent_pull_id) = self.last_sent.get(&stream) {
+                    received += if *last_sent_pull_id == max_pull_id {
+                        1
+                    } else {
+                        0
+                    }
+                }
+            }
+            received == self.last_sent.len()
         } else {
             self.received_cbs.count() == self.num_sent
         };
         self.finished && all_received
     }
-    async fn new(config: &Config, alias: &Alias, kill_switch: KillSwitch) -> Result<Self> {
-        if let Some(path) = config.path.as_ref() {
+    async fn new(config: &Config, _alias: &Alias, kill_switch: KillSwitch) -> Result<Self> {
+        let mut files = vec![];
+        for path in &config.paths {
             let file = open(path).await?;
-            Ok(Self {
-                file: io::BufReader::new(file).lines(),
-                num_sent: 0,
-                last_sent: 0,
-                received_cbs: ReceivedCbs::default(),
-                finished: false,
-                config: config.clone(),
-                origin_uri: EventOriginUri {
-                    scheme: String::from("tremor-cb"),
-                    host: hostname(),
-                    ..EventOriginUri::default()
-                },
-                kill_switch,
-            })
-        } else {
-            Err(err_connector_def(alias, "Missing path key."))
+            files.push(io::BufReader::new(file).lines());
         }
+
+        Ok(Self {
+            files,
+            num_sent: 0,
+            last_sent: HashMap::new(),
+            received_cbs: ReceivedCbs::default(),
+            finished: false,
+            config: config.clone(),
+            origin_uri: EventOriginUri {
+                scheme: String::from("tremor-cb"),
+                host: hostname(),
+                ..EventOriginUri::default()
+            },
+            kill_switch,
+        })
     }
 }
 
 #[async_trait::async_trait()]
 impl Source for CbSource {
     async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        if let Some(line) = self.file.next().await {
-            self.num_sent += 1;
-            self.last_sent = self.last_sent.max(*pull_id);
+        let idx: usize = self.num_sent % self.files.len();
+        // ALLOW: the modulo makes this safe
+        if let Some(file) = self.files.get_mut(idx) {
+            if let Some(line) = file.next().await {
+                self.num_sent += 1;
+                self.last_sent
+                    .entry(idx as u64)
+                    .and_modify(|last_sent| *last_sent = *last_sent.max(pull_id))
+                    .or_insert(*pull_id);
 
-            Ok(SourceReply::Data {
-                data: line?.into_bytes(),
-                meta: None,
-                stream: Some(DEFAULT_STREAM_ID),
-                port: None,
-                origin_uri: self.origin_uri.clone(),
-                codec_overwrite: None,
-            })
-        } else if self.finished {
-            let kill_switch = self.kill_switch.clone();
+                Ok(SourceReply::Data {
+                    data: line?.into_bytes(),
+                    meta: None,
+                    stream: Some(idx as u64),
+                    port: None,
+                    origin_uri: self.origin_uri.clone(),
+                    codec_overwrite: None,
+                })
+            } else if self.finished {
+                let kill_switch = self.kill_switch.clone();
 
-            if self.config.timeout > 0 && !self.did_receive_all() {
-                async_std::task::sleep(Duration::from_nanos(self.config.timeout)).await;
-            }
+                if self.config.timeout > 0 && !self.did_receive_all() {
+                    async_std::task::sleep(Duration::from_nanos(self.config.timeout)).await;
+                }
 
-            if self.did_receive_all() {
-                eprintln!("All required CB events received.");
-                eprintln!("Got acks: {:?}", self.received_cbs.ack);
-                eprintln!("Got fails: {:?}", self.received_cbs.fail);
+                if self.did_receive_all() {
+                    eprintln!("All required CB events received.");
+                    eprintln!("Got acks: {:?}", self.received_cbs.ack);
+                    eprintln!("Got fails: {:?}", self.received_cbs.fail);
+                } else {
+                    // report failures to stderr and exit with 1
+                    eprintln!("Expected CB events up to id {:?}.", self.last_sent);
+                    eprintln!("Got acks: {:?}", self.received_cbs.ack);
+                    eprintln!("Got fails: {:?}", self.received_cbs.fail);
+                }
+                async_std::task::spawn::<_, Result<()>>(async move {
+                    kill_switch.stop(ShutdownMode::Graceful).await?;
+                    Ok(())
+                });
+
+                Ok(SourceReply::Finished)
             } else {
-                // report failures to stderr and exit with 1
-                eprintln!("Expected CB events up to id {}.", self.last_sent);
-                eprintln!("Got acks: {:?}", self.received_cbs.ack);
-                eprintln!("Got fails: {:?}", self.received_cbs.fail);
+                self.finished = true;
+                Ok(SourceReply::EndStream {
+                    stream: idx as u64,
+                    origin_uri: self.origin_uri.clone(),
+                    meta: None,
+                })
             }
-            async_std::task::spawn::<_, Result<()>>(async move {
-                kill_switch.stop(ShutdownMode::Graceful).await?;
-                Ok(())
-            });
-
-            Ok(SourceReply::Finished)
         } else {
-            self.finished = true;
-            Ok(SourceReply::EndStream {
-                stream: DEFAULT_STREAM_ID,
-                origin_uri: self.origin_uri.clone(),
-                meta: None,
-            })
+            return Err(ErrorKind::ClientNotAvailable("cb", "No file available").into());
         }
     }
 
@@ -298,13 +337,21 @@ impl Source for CbSource {
         Ok(())
     }
 
-    async fn ack(&mut self, _stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
-        self.received_cbs.ack.push(pull_id);
+    async fn ack(&mut self, stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
+        self.received_cbs
+            .ack
+            .entry(stream_id)
+            .and_modify(|pull_ids| pull_ids.push(pull_id))
+            .or_insert_with(|| vec![pull_id]);
         Ok(())
     }
 
-    async fn fail(&mut self, _stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
-        self.received_cbs.fail.push(pull_id);
+    async fn fail(&mut self, stream_id: u64, pull_id: u64, _ctx: &SourceContext) -> Result<()> {
+        self.received_cbs
+            .fail
+            .entry(stream_id)
+            .and_modify(|pull_ids| pull_ids.push(pull_id))
+            .or_insert_with(|| vec![pull_id]);
         Ok(())
     }
 

@@ -13,7 +13,7 @@
 // limitations under the License.
 use crate::{
     connectors::{self, sink::SinkMsg, source::SourceMsg},
-    errors::Result,
+    errors::{pipe_send_e, Result},
     instance::State,
     primerge::PriorityMerge,
     system::flow,
@@ -29,7 +29,7 @@ use tremor_common::{ids::OperatorIdGen, time::nanotime};
 use tremor_pipeline::{
     errors::ErrorKind as PipelineErrorKind, CbAction, Event, ExecutableGraph, SignalKind,
 };
-use tremor_script::{ast::DeployEndpoint, highlighter::Dumb, prelude::BaseExpr};
+use tremor_script::{ast::DeployEndpoint, highlighter::Dumb};
 
 const TICK_MS: u64 = 100;
 type Inputs = halfbrown::HashMap<DeployEndpoint, (bool, InputTarget)>;
@@ -95,16 +95,17 @@ impl Addr {
 
     /// send a contraflow insight message back down the pipeline
     pub(crate) async fn send_insight(&self, event: Event) -> Result<()> {
-        Ok(self.cf_addr.send(CfMsg::Insight(event)).await?)
+        use CfMsg::Insight;
+        self.cf_addr.send(Insight(event)).await.map_err(pipe_send_e)
     }
 
     /// send a data-plane message to the pipeline
     pub(crate) async fn send(&self, msg: Box<Msg>) -> Result<()> {
-        Ok(self.addr.send(msg).await?)
+        self.addr.send(msg).await.map_err(pipe_send_e)
     }
 
     pub(crate) async fn send_mgmt(&self, msg: MgmtMsg) -> Result<()> {
-        Ok(self.mgmt_addr.send(msg).await?)
+        self.mgmt_addr.send(msg).await.map_err(pipe_send_e)
     }
 
     pub(crate) async fn stop(&self) -> Result<()> {
@@ -216,7 +217,6 @@ pub(crate) fn spawn(
         .spawn(pipeline_task(
             pipeline_alias,
             pipeline,
-            addr.clone(),
             rx,
             cf_rx,
             mgmt_rx,
@@ -228,10 +228,14 @@ pub(crate) fn spawn(
 /// control plane message
 #[derive(Debug)]
 pub(crate) enum MgmtMsg {
-    /// input can only ever be connected to the `in` port, so no need to include it here
+    /// connect a target to an input port
     ConnectInput {
+        /// port to connect in
+        port: Cow<'static, str>,
         /// url of the input to connect
         endpoint: DeployEndpoint,
+        /// sends the result
+        tx: Sender<Result<()>>,
         /// the target that connects to the `in` port
         target: InputTarget,
         /// should we send insights to this input
@@ -243,6 +247,8 @@ pub(crate) enum MgmtMsg {
         port: Cow<'static, str>,
         /// the url of the output instance
         endpoint: DeployEndpoint,
+        /// sends the result
+        tx: Sender<Result<()>>,
         /// the actual target addr
         target: OutputTarget,
     },
@@ -507,7 +513,6 @@ impl From<Alias> for PipelineContext {
 pub(crate) async fn pipeline_task(
     id: Alias,
     mut pipeline: ExecutableGraph,
-    addr: Addr,
     rx: Receiver<Box<Msg>>,
     cf_rx: Receiver<CfMsg>,
     mgmt_rx: Receiver<MgmtMsg>,
@@ -572,45 +577,52 @@ pub(crate) async fn pipeline_task(
             }
             AnyMsg::Mgmt(MgmtMsg::ConnectInput {
                 endpoint,
+                port,
+                tx,
                 target,
                 is_transactional,
             }) => {
-                info!("{ctx} Connecting {endpoint} to port 'in'");
+                info!("{ctx} Connecting '{endpoint}' to port '{port}'");
+                if !input_does_exist(&port, &pipeline) {
+                    error!("{ctx} Error connecting input pipeline '{port}' as it does not exist",);
+                    if tx
+                        .send(Err("input port doesn't exist".into()))
+                        .await
+                        .is_err()
+                    {
+                        error!("{ctx} Error sending status report.");
+                    }
+                    continue;
+                }
                 inputs.insert(endpoint, (is_transactional, target));
+                if tx.send(Ok(())).await.is_err() {
+                    error!("{ctx} Status report sent.");
+                }
             }
+
             AnyMsg::Mgmt(MgmtMsg::ConnectOutput {
                 port,
                 endpoint,
                 target,
+                tx,
             }) => {
                 info!("{ctx} Connecting port '{port}' to {endpoint}",);
                 // add error statement for port out in pipeline, currently no error messages
                 if output_doesnt_exist(&port, &pipeline) {
                     error!("{ctx} Error connecting output pipeline {port}");
+                    if tx
+                        .send(Err("output port doesn't exist".into()))
+                        .await
+                        .is_err()
+                    {
+                        error!("{ctx} Error sending status report.");
+                    }
                     continue;
                 }
                 // notify other pipeline about a new input
-                if let OutputTarget::Pipeline(pipe) = &target {
-                    // avoid linking the same pipeline as input to itself
-                    // as this will create a nasty circle filling up queues.
-                    // In general this does not avoid cycles via more complex constructs.
-                    //
-                    if id.pipeline_alias() == endpoint.alias() {
-                        if let Err(e) = pipe
-                            .send_mgmt(MgmtMsg::ConnectInput {
-                                endpoint: DeployEndpoint::new(
-                                    id.pipeline_alias(),
-                                    &port,
-                                    endpoint.meta(),
-                                ),
-                                target: InputTarget::Pipeline(Box::new(addr.clone())),
-                                is_transactional: true,
-                            })
-                            .await
-                        {
-                            error!("{ctx} Error connecting input pipeline {endpoint}: {e}",);
-                        }
-                    }
+
+                if tx.send(Ok(())).await.is_err() {
+                    error!("{ctx} Status report sent.");
                 }
 
                 if let Some(output_dests) = dests.get_mut(&port) {
@@ -684,6 +696,10 @@ fn output_doesnt_exist(port: &Cow<'static, str>, pipeline: &ExecutableGraph) -> 
     !pipeline.outputs.contains_key(port)
 }
 
+fn input_does_exist(port: &Cow<'static, str>, pipeline: &ExecutableGraph) -> bool {
+    // function checks if port is in pipeline
+    pipeline.inputs().contains_key(port)
+}
 #[cfg(test)]
 mod tests {
 
@@ -727,34 +743,48 @@ mod tests {
         )?;
         println!("{:?}", addr); // coverage
         let yolo_mid = NodeMeta::new(Location::yolo(), Location::yolo());
+        let (tx, rx) = bounded(1);
         // interconnect 3 pipelines
         addr.send_mgmt(MgmtMsg::ConnectOutput {
             port: Cow::const_str("out"),
             endpoint: DeployEndpoint::new("snot2", "in", &yolo_mid),
+            tx,
             target: OutputTarget::Pipeline(Box::new(addr2.clone())),
         })
         .await?;
+        rx.recv().await??;
+        let (tx, rx) = bounded(1);
         addr2
             .send_mgmt(MgmtMsg::ConnectInput {
+                port: Cow::const_str("in"),
                 endpoint: DeployEndpoint::new("snot", "out", &yolo_mid),
+                tx,
                 target: InputTarget::Pipeline(Box::new(addr.clone())),
                 is_transactional: true,
             })
             .await?;
+        rx.recv().await??;
+        let (tx, rx) = bounded(1);
         addr2
             .send_mgmt(MgmtMsg::ConnectOutput {
+                tx,
                 port: Cow::const_str("out"),
                 endpoint: DeployEndpoint::new("snot3", "in", &yolo_mid),
                 target: OutputTarget::Pipeline(Box::new(addr3.clone())),
             })
             .await?;
+        rx.recv().await??;
+        let (tx, rx) = bounded(1);
         addr3
             .send_mgmt(MgmtMsg::ConnectInput {
+                port: Cow::const_str("in"),
                 endpoint: DeployEndpoint::new("snot2", "out", &yolo_mid),
+                tx,
                 target: InputTarget::Pipeline(Box::new(addr2.clone())),
                 is_transactional: false,
             })
             .await?;
+        rx.recv().await??;
         // get a status report from every single one
         let (tx, rx) = unbounded();
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
@@ -847,13 +877,18 @@ mod tests {
         let source_addr = SourceAddr { addr: source_tx };
         let target = InputTarget::Source(source_addr);
         let mid = NodeMeta::new(Location::yolo(), Location::yolo());
+        let (tx, rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::ConnectInput {
+            port: IN,
             endpoint: DeployEndpoint::new(&"source_01", &OUT, &mid),
+            tx,
             target,
             is_transactional: true,
         })
         .await?;
+        rx.recv().await??;
 
+        let (tx, rx) = unbounded();
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
         let report = rx.recv().await?;
         assert_eq!(1, report.inputs.len());
@@ -869,12 +904,17 @@ mod tests {
         let (sink_tx, sink_rx) = unbounded();
         let sink_addr = SinkAddr { addr: sink_tx };
         let target = OutputTarget::Sink(sink_addr);
+        let (tx, rx) = bounded(1);
         addr.send_mgmt(MgmtMsg::ConnectOutput {
             endpoint: DeployEndpoint::new(&"sink_01", &IN, &mid),
             port: OUT,
+            tx,
             target,
         })
         .await?;
+        rx.recv().await??;
+
+        let (tx, rx) = unbounded();
         addr.send_mgmt(MgmtMsg::Inspect(tx.clone())).await?;
         let report = rx.recv().await?;
         assert_eq!(1, report.outputs.len());

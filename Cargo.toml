@@ -9,7 +9,7 @@ license = "Apache-2.0"
 name = "tremor-runtime"
 readme = "README.md"
 repository = "https://github.com/tremor-rs/tremor-runtime"
-version = "0.12.4"
+version = "0.13.0-rc.1"
 rust-version = "1.62"
 
 [workspace]
@@ -68,11 +68,11 @@ clickhouse-rs = { git = "https://github.com/suharev7/clickhouse-rs", rev = "553f
   "async_std",
 ] }
 csv = "1.1"
-dashmap = "5.3"
-either = { version = "1.7", features = ["serde"] }
+dashmap = "5.4"
+either = { version = "1.8", features = ["serde"] }
 error-chain = "0.12"
 file-mode = "0.1"
-futures = "0.3.23"
+futures = "0.3.24"
 event-listener = "2.5"
 glob = "0.3"
 halfbrown = "0.1"
@@ -85,7 +85,7 @@ lazy_static = "1"
 libflate = "1.2"
 log = { version = "0.4", features = ["kv_unstable"] }
 log4rs = "1"
-lz4 = "1.23.3"
+lz4 = "1.24.0"
 memchr = "2.5"
 pin-project-lite = "0.2"
 rand = "0.8.5"
@@ -107,8 +107,6 @@ tremor-value = { path = "tremor-value" }
 url = "2.2"
 value-trait = "0.4"
 zstd = "0.11"
-
-mapr = "0.8"
 
 # blaster / blackhole
 hdrhistogram = "7"
@@ -249,7 +247,7 @@ serial_test = { version = "=0.8", features = ["logging"] }
 # path = "../serial_test/serial_test" 
 env_logger = "0.9.0"
 matches = "0.1"
-pretty_assertions = "1.2.0"
+pretty_assertions = "1.3.0"
 proptest = "1.0"
 regex = "1"
 # We downgraded to 0.6 because:

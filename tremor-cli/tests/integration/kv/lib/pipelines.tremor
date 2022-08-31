@@ -39,7 +39,7 @@ pipeline
 end;
 
 define pipeline out
-into out, exit
+into out, exit, err
 pipeline
     use std::string;
     use helpers;

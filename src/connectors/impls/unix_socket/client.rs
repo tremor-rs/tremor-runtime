@@ -156,6 +156,7 @@ impl Sink for UnixSocketSink {
             ctx.alias().to_string(),
             origin_uri,
             meta,
+            None,
         );
         self.source_runtime
             .register_stream_reader(DEFAULT_STREAM_ID, ctx, reader);

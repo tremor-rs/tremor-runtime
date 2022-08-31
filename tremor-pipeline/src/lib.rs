@@ -32,6 +32,7 @@ use crate::errors::{ErrorKind, Result};
 use async_broadcast::{broadcast, Receiver, Sender};
 use async_std::task::block_on;
 use beef::Cow;
+use either::Either;
 use executable_graph::NodeConfig;
 use halfbrown::HashMap;
 use lazy_static::lazy_static;
@@ -530,12 +531,19 @@ impl EventId {
     /// track the min and max of the given `event_id`
     /// and also include all event ids `event_id` was tracking
     pub fn track(&mut self, other: &EventId) {
-        self.track_ids(
-            other.source_id,
-            other.stream_id,
-            other.pull_id,
-            other.pull_id,
-        );
+        // if self.source_id and self.stream_id are the same, calculate the max from the given pull_id and the one in other
+        // and insert it with binary search
+        // this makes searching the tracked id easier
+        // as we only need to look at the tracked_pull_ids then
+        let (min, max) = if self.is_same_stream(other.source_id(), other.stream_id()) {
+            (
+                self.pull_id().min(other.pull_id()),
+                self.pull_id().max(other.pull_id()),
+            )
+        } else {
+            (other.pull_id(), other.pull_id())
+        };
+        self.track_ids(other.source_id, other.stream_id, min, max);
 
         for other_tracked in &other.tracked_pull_ids {
             match self
@@ -547,13 +555,14 @@ impl EventId {
                     unsafe { self.tracked_pull_ids.get_unchecked_mut(idx) }
                         .track_ids(other_tracked.min_pull_id, other_tracked.max_pull_id);
                 }
-                Err(idx) => self.tracked_pull_ids.insert(idx, other_tracked.clone()),
+                Err(idx) => self.tracked_pull_ids.insert(idx, *other_tracked),
             }
         }
     }
 
+    #[cfg(test)]
     /// track the given event id by its raw numeric ids
-    pub fn track_id(&mut self, source_id: u64, stream_id: u64, pull_id: u64) {
+    fn track_id(&mut self, source_id: u64, stream_id: u64, pull_id: u64) {
         self.track_ids(source_id, stream_id, pull_id, pull_id);
     }
 
@@ -572,6 +581,7 @@ impl EventId {
             .binary_search_by(|probe| probe.compare_ids(source_id, stream_id))
         {
             Ok(idx) => {
+                // binary_search_by guarantees us that this index exists
                 unsafe { self.tracked_pull_ids.get_unchecked_mut(idx) }
                     .track_ids(min_pull_id, max_pull_id);
             }
@@ -583,15 +593,45 @@ impl EventId {
     }
 
     #[must_use]
+    /// checks if the given `EventId` is tracked by this one.
+    /// Also returns true, if the `event_id` has the same id as `self`.
+    pub fn is_tracking(&self, event_id: &EventId) -> bool {
+        // this logic works, because the api of `.track` is garuanteeing us that
+        // if we track something in tracked_pull_ids, and it is the same source_id, stream_id as the event id
+        // it contains the min/max and we don't need to consider self.pull_id anymore
+        if self.tracked_pull_ids.is_empty() {
+            self.is_same_stream(event_id.source_id(), event_id.stream_id())
+                && self.pull_id == event_id.pull_id
+                && self.event_id == event_id.event_id
+        } else {
+            match self.tracked_pull_ids.binary_search_by(|probe| {
+                probe.compare_ids(event_id.source_id(), event_id.stream_id())
+            }) {
+                Ok(idx) => {
+                    // ALLOW: binary search ensures this index is available
+                    let entry = unsafe { self.tracked_pull_ids.get_unchecked(idx) };
+                    // this is only a heuristic, but is good enough for now
+                    (entry.min_pull_id..=entry.max_pull_id).contains(&event_id.pull_id)
+                }
+                Err(_) => false,
+            }
+        }
+    }
+
+    /// returns true if the event is from the same source and stream
+    #[must_use]
+    fn is_same_stream(&self, source_id: u64, stream_id: u64) -> bool {
+        self.source_id() == source_id && self.stream_id() == stream_id
+    }
+
+    #[must_use]
     /// get minimum pull id for a given source and stream, if it is tracked
     ///
     /// This also always checks the actual eventId, not only the tracked ones, this way we can save allocations when used within insights
     pub fn get_min_by_stream(&self, source_id: u64, stream_id: u64) -> Option<u64> {
-        if self.tracked_pull_ids.is_empty()
-            && self.source_id == source_id
-            && self.stream_id == stream_id
-        {
-            Some(self.pull_id)
+        if self.tracked_pull_ids.is_empty() {
+            self.is_same_stream(source_id, stream_id)
+                .then_some(self.pull_id())
         } else {
             self.tracked_pull_ids.iter().find_map(|teid| {
                 if (source_id, stream_id) == (teid.source_id, teid.stream_id) {
@@ -604,37 +644,13 @@ impl EventId {
     }
 
     #[must_use]
-    /// checks if the given `EventId` is tracked by this one.
-    /// Also returns true, if the `event_id` has the same id as `self`.
-    pub fn is_tracking(&self, event_id: &EventId) -> bool {
-        let is_same = self.source_id() == event_id.source_id()
-            && self.stream_id() == event_id.stream_id()
-            && self.pull_id == event_id.pull_id
-            && self.event_id == event_id.event_id;
-        is_same
-            || match self.tracked_pull_ids.binary_search_by(|probe| {
-                probe.compare_ids(event_id.source_id(), event_id.stream_id())
-            }) {
-                Ok(idx) => {
-                    let entry = unsafe { self.tracked_pull_ids.get_unchecked(idx) };
-                    // this is only a heuristic, but is good enough for now
-                    (entry.min_pull_id <= event_id.pull_id)
-                        && (event_id.pull_id <= entry.max_pull_id)
-                }
-                Err(_) => false,
-            }
-    }
-
-    #[must_use]
     /// get maximum pull id for a given source and stream if we have it here
     ///
     /// This also always checks the actual eventId, not only the tracked ones
     pub fn get_max_by_stream(&self, source_id: u64, stream_id: u64) -> Option<u64> {
-        if self.tracked_pull_ids.is_empty()
-            && self.source_id == source_id
-            && self.stream_id == stream_id
-        {
-            Some(self.pull_id)
+        if self.tracked_pull_ids.is_empty() {
+            self.is_same_stream(source_id, stream_id)
+                .then_some(self.pull_id())
         } else {
             self.tracked_pull_ids.iter().find_map(|teid| {
                 if (source_id, stream_id) == (teid.source_id, teid.stream_id) {
@@ -646,39 +662,43 @@ impl EventId {
         }
     }
 
-    #[must_use]
-    /// get the minimum tracked (`stream_id`, `pull_id`)
-    /// by chosing events with smaller stream id
+    /// get the minimum tracked `pull_id` for each stream of the source with `source_id`
     ///
     /// This also always checks the actual eventId, not only the tracked ones
-    pub fn get_min_by_source(&self, source_id: u64) -> Option<(u64, u64)> {
-        // TODO: change the return type to an iterator, so we make sure to return all values for all streams
-        if self.tracked_pull_ids.is_empty() && self.source_id == source_id {
-            Some((self.stream_id, self.pull_id))
+    pub fn get_min_streams_by_source(
+        &self,
+        source_id: u64,
+    ) -> impl Iterator<Item = (u64, u64)> + '_ {
+        if self.tracked_pull_ids.is_empty() {
+            Either::Left(
+                (self.source_id() == source_id)
+                    .then_some((self.stream_id(), self.pull_id()))
+                    .into_iter(),
+            )
         } else {
-            self.tracked_pull_ids
-                .iter()
-                .filter(|teid| teid.source_id == source_id)
-                .min_by(|teid1, teid2| teid1.stream_id.cmp(&teid2.stream_id))
-                .map(|teid| (teid.stream_id, teid.min_pull_id))
+            Either::Right(self.tracked_pull_ids.iter().filter_map(move |teid| {
+                (teid.source_id == source_id).then_some((teid.stream_id, teid.min_pull_id))
+            }))
         }
     }
 
-    #[must_use]
-    /// get the maximum tracked (`stream_id`, `pull_id`)
-    /// by chosing events with bigger stream id
+    /// get the maximum tracked `pull_id` for each stream of the source with `source_id`
     ///
     /// This also always checks the actual eventId, not only the tracked ones
-    pub fn get_max_by_source(&self, source_id: u64) -> Option<(u64, u64)> {
-        // TODO: change the return type to an iterator, so we make sure to return all values for all streams
-        if self.tracked_pull_ids.is_empty() && self.source_id == source_id {
-            Some((self.stream_id, self.pull_id))
+    pub fn get_max_streams_by_source(
+        &self,
+        source_id: u64,
+    ) -> impl Iterator<Item = (u64, u64)> + '_ {
+        if self.tracked_pull_ids.is_empty() {
+            Either::Left(
+                (self.source_id() == source_id)
+                    .then_some((self.stream_id(), self.pull_id()))
+                    .into_iter(),
+            )
         } else {
-            self.tracked_pull_ids
-                .iter()
-                .filter(|teid| teid.source_id == source_id)
-                .max_by(|teid1, teid2| teid1.stream_id.cmp(&teid2.stream_id))
-                .map(|teid| (teid.stream_id, teid.max_pull_id))
+            Either::Right(self.tracked_pull_ids.iter().filter_map(move |teid| {
+                (teid.source_id == source_id).then_some((teid.stream_id, teid.max_pull_id))
+            }))
         }
     }
 
@@ -686,15 +706,17 @@ impl EventId {
     #[must_use]
     pub fn get_streams(&self, source_id: u64) -> HashSet<u64> {
         let mut v = HashSet::new();
-        if self.source_id == source_id {
-            v.insert(self.stream_id);
+        if self.tracked_pull_ids.is_empty() {
+            if self.source_id() == source_id {
+                v.insert(self.stream_id);
+            }
+        } else {
+            let iter = self
+                .tracked_pull_ids
+                .iter()
+                .filter_map(|tids| (tids.source_id == source_id).then_some(tids.stream_id));
+            v.extend(iter);
         }
-        let iter = self
-            .tracked_pull_ids
-            .iter()
-            .filter(|tids| tids.source_id == source_id)
-            .map(|tids| tids.stream_id);
-        v.extend(iter);
         v
     }
 
@@ -746,7 +768,14 @@ impl fmt::Display for EventId {
 }
 
 #[derive(
-    Debug, Clone, PartialEq, Default, simd_json_derive::Serialize, simd_json_derive::Deserialize, Eq,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Default,
+    simd_json_derive::Serialize,
+    simd_json_derive::Deserialize,
+    Eq,
 )]
 /// tracked min and max pull id for a given source and stream
 ///
@@ -1098,20 +1127,50 @@ mod test {
         ids1.track_id(2, DEFAULT_STREAM_ID, 1);
         ids2.track_id(2, DEFAULT_STREAM_ID, 3);
 
-        assert_eq!(ids1.get_max_by_source(1), Some((1, 1)));
-        assert_eq!(ids1.get_max_by_source(2), Some((DEFAULT_STREAM_ID, 1)));
+        assert_eq!(
+            ids1.get_max_streams_by_source(1).collect::<Vec<_>>(),
+            vec![(1, 1)]
+        );
+        assert_eq!(
+            ids1.get_max_streams_by_source(2).collect::<Vec<_>>(),
+            vec![(DEFAULT_STREAM_ID, 1)]
+        );
 
-        assert_eq!(ids2.get_min_by_source(1), Some((1, 2)));
-        assert_eq!(ids2.get_min_by_source(2), Some((DEFAULT_STREAM_ID, 3)));
+        assert_eq!(
+            ids2.get_min_streams_by_source(1).collect::<Vec<_>>(),
+            vec![(1, 2)]
+        );
+        assert_eq!(
+            ids2.get_min_streams_by_source(2).collect::<Vec<_>>(),
+            vec![(DEFAULT_STREAM_ID, 3)]
+        );
 
         ids1.track(&ids2);
 
-        assert_eq!(ids1.get_max_by_source(1), Some((1, 2)));
-        assert_eq!(ids1.get_min_by_source(1), Some((1, 1)));
-        assert_eq!(ids1.get_min_by_source(3), None);
-        assert_eq!(ids1.get_max_by_source(3), None);
-        assert_eq!(ids1.get_max_by_source(2), Some((DEFAULT_STREAM_ID, 3)));
-        assert_eq!(ids1.get_min_by_source(2), Some((DEFAULT_STREAM_ID, 1)));
+        assert_eq!(
+            ids1.get_max_streams_by_source(1).collect::<Vec<_>>(),
+            vec![(1, 2)]
+        );
+        assert_eq!(
+            ids1.get_min_streams_by_source(1).collect::<Vec<_>>(),
+            vec![(1, 1)]
+        );
+        assert_eq!(
+            ids1.get_min_streams_by_source(3).collect::<Vec<_>>(),
+            vec![]
+        );
+        assert_eq!(
+            ids1.get_max_streams_by_source(3).collect::<Vec<_>>(),
+            vec![]
+        );
+        assert_eq!(
+            ids1.get_max_streams_by_source(2).collect::<Vec<_>>(),
+            vec![(DEFAULT_STREAM_ID, 3)]
+        );
+        assert_eq!(
+            ids1.get_min_streams_by_source(2).collect::<Vec<_>>(),
+            vec![(DEFAULT_STREAM_ID, 1)]
+        );
 
         assert_eq!(ids1.get_max_by_stream(1, 1), Some(2));
         assert_eq!(ids1.get_max_by_stream(1, 2), None);
@@ -1183,6 +1242,7 @@ mod test {
     fn event_id_pull_id_tracking() {
         let source = 1_u64;
         let stream = 2_u64;
+        let stream2 = 3_u64;
         let mut e1 = EventId::from((source, stream, 0, 0));
         let e2 = EventId::from((source, stream, 1, 0));
 
@@ -1190,12 +1250,166 @@ mod test {
         assert_eq!(Some(0), e1.get_max_by_stream(source, stream)); // we track pull id, not event id
 
         let e3 = EventId::from((source, stream, 2, 1));
-        let e4 = EventId::from((source, stream + 1, 3, 2));
+        let e4 = EventId::from((source, stream2, 3, 2));
         e1.track(&e3);
         e1.track(&e4);
 
         assert_eq!(Some(1), e1.get_max_by_stream(source, stream));
-        assert_eq!(Some((stream + 1, 2)), e1.get_max_by_source(source));
+        assert_eq!(
+            vec![(stream, 1), (stream2, 2)],
+            e1.get_max_streams_by_source(source).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn event_id_is_tracking() {
+        let source = 1_u64;
+        let source2 = 5_u64;
+        let stream = 2_u64;
+        let mut e1 = EventId::from((source, stream, 0, 1));
+
+        // every id tracks itself by definition
+        assert!(e1.is_tracking(&e1));
+
+        let mut e2 = EventId::from((source, stream, 1, 2));
+        let e3 = EventId::from((source2, stream, 5, 5));
+        e2.track(&e3);
+
+        e1.track(&e2);
+
+        assert!(e1.is_tracking(&e1));
+        assert!(e1.is_tracking(&e2));
+        assert!(e1.is_tracking(&e3));
+    }
+
+    #[test]
+    fn get_min_streams_by_source() {
+        let source = 1;
+        let source2 = 2;
+        let source3 = 3;
+        let stream = 42;
+        let stream2 = 69;
+        let mut e1 = EventId::new(source, stream, 1, 1);
+        // get its own pull id when nothing is tracked
+        assert_eq!(
+            vec![(stream, 1)],
+            e1.get_min_streams_by_source(source).collect::<Vec<_>>()
+        );
+        // different source
+        let e2 = EventId::new(source2, DEFAULT_STREAM_ID, 42, 42);
+        e1.track(&e2);
+        assert_eq!(
+            vec![(stream, 1)],
+            e1.get_min_streams_by_source(source).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            vec![(DEFAULT_STREAM_ID, 42)],
+            e1.get_min_streams_by_source(source2).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            e1.get_min_streams_by_source(source3).collect::<Vec<_>>(),
+            vec![]
+        );
+
+        // same source, different stream
+        let e3 = EventId::new(source, stream2, 1000, 1000);
+        e1.track(&e3);
+
+        assert_eq!(
+            vec![(stream, 1), (stream2, 1000)],
+            e1.get_min_streams_by_source(source).collect::<Vec<_>>()
+        );
+
+        // same stream, bigger pull_id
+        let e4 = EventId::new(source, stream, 9, 7);
+        e1.track(&e4);
+
+        assert_eq!(
+            vec![(stream, 1), (stream2, 1000)],
+            e1.get_min_streams_by_source(source).collect::<Vec<_>>()
+        );
+
+        // same stream, smaller pull_id
+        let e5 = EventId::new(source, stream, 0, 0);
+        e1.track(&e5);
+
+        assert_eq!(
+            vec![(stream, 0), (stream2, 1000)],
+            e1.get_min_streams_by_source(source).collect::<Vec<_>>()
+        );
+
+        // same source, different stream, smaller pull_id
+        let e6 = EventId::new(source, stream2, 999, 999);
+        e1.track(&e6);
+        assert_eq!(
+            vec![(stream, 0), (stream2, 999)],
+            e1.get_min_streams_by_source(source).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn get_max_streams_by_source() {
+        let source = 1;
+        let source2 = 2;
+        let source3 = 3;
+        let stream = 42;
+        let stream2 = 69;
+        let mut e1 = EventId::new(source, stream, 1, 1);
+        // get its own pull id when nothing is tracked
+        assert_eq!(
+            vec![(stream, 1)],
+            e1.get_max_streams_by_source(source).collect::<Vec<_>>()
+        );
+        // different source
+        let e2 = EventId::new(source2, DEFAULT_STREAM_ID, 42, 42);
+        e1.track(&e2);
+        assert_eq!(
+            vec![(stream, 1)],
+            e1.get_max_streams_by_source(source).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            vec![(DEFAULT_STREAM_ID, 42)],
+            e1.get_max_streams_by_source(source2).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            e1.get_max_streams_by_source(source3).collect::<Vec<_>>(),
+            vec![]
+        );
+
+        // same source, different stream
+        let e3 = EventId::new(source, stream2, 1000, 1000);
+        e1.track(&e3);
+
+        assert_eq!(
+            vec![(stream, 1), (stream2, 1000)],
+            e1.get_max_streams_by_source(source).collect::<Vec<_>>()
+        );
+
+        // same stream, smaller pull_id
+        let e4 = EventId::new(source, stream, 0, 0);
+        e1.track(&e4);
+
+        assert_eq!(
+            vec![(stream, 1), (stream2, 1000)],
+            e1.get_max_streams_by_source(source).collect::<Vec<_>>()
+        );
+
+        // same stream, bigger pull_id
+        let e5 = EventId::new(source, stream, 2, 2);
+        e1.track(&e5);
+
+        assert_eq!(
+            vec![(stream, 2), (stream2, 1000)],
+            e1.get_max_streams_by_source(source).collect::<Vec<_>>()
+        );
+
+        // same source, different stream, bigger pull_id
+        let e6 = EventId::new(source, stream2, 888, 1001);
+        e1.track(&e6);
+        assert_eq!(
+            vec![(stream, 2), (stream2, 1001)],
+            e1.get_max_streams_by_source(source).collect::<Vec<_>>()
+        );
     }
 
     #[test]
