@@ -30,6 +30,7 @@ pub(crate) const CONNECTOR_TYPE: &str = "s3_reader";
 const URL_SCHEME: &str = "tremor-s3";
 
 #[derive(Deserialize, Debug, Default)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct S3SourceConfig {
     // if not provided here explicitly, the region is taken from environment variable or local AWS config
     // NOTE: S3 will fail if NO region could be found.
