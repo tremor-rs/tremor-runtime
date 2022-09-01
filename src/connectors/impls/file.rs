@@ -27,7 +27,7 @@ const URL_SCHEME: &str = "tremor-file";
 
 /// how to open the given file for writing
 #[derive(Deserialize, Debug, Clone, PartialEq)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "lowercase", deny_unknown_fields)]
 pub(crate) enum Mode {
     /// read from file
     Read,

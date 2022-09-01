@@ -31,6 +31,7 @@ use std::sync::atomic::AtomicBool;
 use utils::Intents;
 
 #[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     pub token: String,
     #[serde(default)]

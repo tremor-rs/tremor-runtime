@@ -27,6 +27,7 @@ const CONNECTOR_TYPE: &str = "otel_client";
 // TODO Consider concurrency cap?
 
 #[derive(Debug, Clone, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     /// The hostname or IP address for the remote OpenTelemetry collector endpoint
     #[serde(default = "Default::default")]

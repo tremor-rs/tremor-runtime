@@ -41,6 +41,7 @@ const RETRY_WAIT_INTERVAL: Duration = Duration::from_secs(1);
 const MAX_RETRIES: u64 = 5;
 
 #[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 struct Config {
     #[serde(default = "crate::connectors::impls::gpubsub::default_connect_timeout")]
     pub connect_timeout: u64,

@@ -37,6 +37,7 @@ use tremor_value::Value;
 use value_trait::ValueAccess;
 
 #[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     #[serde(default = "crate::connectors::impls::gpubsub::default_connect_timeout")]
     pub connect_timeout: u64,

@@ -29,6 +29,7 @@ pub(crate) const CONNECTOR_TYPE: &str = "s3_streamer";
 const MORE_THEN_FIVEMBS: usize = 5 * 1024 * 1024 + 100; // Some extra bytes to keep aws happy.
 
 #[derive(Deserialize, Debug, Default, Clone)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct S3Config {
     aws_region: Option<String>,
     url: Option<Url<HttpsDefaults>>,
