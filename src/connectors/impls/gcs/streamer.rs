@@ -32,9 +32,9 @@ use tremor_pipeline::ConfigImpl;
 use tremor_value::Value;
 use value_trait::ValueAccess;
 
-const CONNECTOR_TYPE: &'static str = "gcs_streamer";
+const CONNECTOR_TYPE: &str = "gcs_streamer";
 
-/// mode of operation for the gcs_streamer
+/// mode of operation for the `gcs_streamer`
 #[derive(Debug, Default, Deserialize, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Mode {
@@ -194,8 +194,8 @@ impl Connector for GCSStreamerConnector {
     }
 }
 
-pub(crate) const NAME: &'static str = "name";
-pub(crate) const BUCKET: &'static str = "bucket";
+pub(crate) const NAME: &str = "name";
+pub(crate) const BUCKET: &str = "bucket";
 
 pub(crate) trait GCSCommons<Client: ResumableUploadClient> {
     fn default_bucket(&self) -> Option<&Value<'_>>;
@@ -204,14 +204,14 @@ pub(crate) trait GCSCommons<Client: ResumableUploadClient> {
     fn get_bucket_name(&self, meta: Option<&Value>) -> Result<String> {
         let bucket = meta
             .get(BUCKET)
-            .or(self.default_bucket())
-            .ok_or(err_gcs(format!(
-                "Metadata `${CONNECTOR_TYPE}.{BUCKET}` missing",
-            )))
+            .or_else(|| self.default_bucket())
+            .ok_or_else(|| err_gcs(format!("Metadata `${CONNECTOR_TYPE}.{BUCKET}` missing",)))
             .as_str()
-            .ok_or(err_gcs(format!(
-                "Metadata `${CONNECTOR_TYPE}.{BUCKET}` is not a string.",
-            )))?
+            .ok_or_else(|| {
+                err_gcs(format!(
+                    "Metadata `${CONNECTOR_TYPE}.{BUCKET}` is not a string.",
+                ))
+            })?
             .to_string();
 
         Ok(bucket)
@@ -220,13 +220,13 @@ pub(crate) trait GCSCommons<Client: ResumableUploadClient> {
     fn get_file_id(&self, meta: Option<&Value<'_>>) -> Result<FileId> {
         let name = meta
             .get(NAME)
-            .ok_or(err_gcs(format!(
-                "`${CONNECTOR_TYPE}.{NAME}` metadata is missing",
-            )))?
+            .ok_or_else(|| err_gcs(format!("`${CONNECTOR_TYPE}.{NAME}` metadata is missing",)))?
             .as_str()
-            .ok_or(err_gcs(format!(
-                "`${CONNECTOR_TYPE}.{NAME}` metadata is not a string",
-            )))?;
+            .ok_or_else(|| {
+                err_gcs(format!(
+                    "`${CONNECTOR_TYPE}.{NAME}` metadata is not a string",
+                ))
+            })?;
         let bucket = self.get_bucket_name(meta)?;
         Ok(FileId::new(bucket, name))
     }

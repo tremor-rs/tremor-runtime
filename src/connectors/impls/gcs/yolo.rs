@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! gcs_streamer sink implementation that is blindly acking all events it receives
+//! `gcs_streamer` sink implementation that is blindly acking all events it receives
 //!
 //! Only exceptions are if we can't find out where to upload the event due to invalid metadata
 //! or if we fail serializing the event payload.
@@ -194,7 +194,7 @@ impl<Client: ResumableUploadClient> GCSYoloSink<Client> {
         } = self
             .current_upload
             .as_ref()
-            .ok_or(err_gcs("Invalid state: No current Upload available."))?;
+            .ok_or_else(|| err_gcs("Invalid state: No current Upload available."))?;
         debug!(
             "{ctx} Uploading Bytes {}-{} for {file_id}",
             data.start,
