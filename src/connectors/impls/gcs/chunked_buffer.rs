@@ -51,15 +51,14 @@ impl ChunkedBuffer {
         if position < self.buffer_start {
             return Err(err_gcs(format!(
                 "Buffer was marked as done at index {position} which is not in memory anymore"
-            ))
-            .into());
+            )));
         }
 
         let bytes_to_remove = position - self.buffer_start;
         self.data = Vec::from(
             self.data
                 .get(bytes_to_remove..)
-                .ok_or(err_gcs(format!("Not enough data in the buffer")))?,
+                .ok_or_else(|| err_gcs("Not enough data in the buffer"))?,
         );
         self.buffer_start += bytes_to_remove;
 
