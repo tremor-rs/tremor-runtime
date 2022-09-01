@@ -335,7 +335,7 @@ macro_rules! literal_internal {
     // Any Serialize type: numbers, strings, struct literals, variables etc.
     // Must be below every other rule.
     ($other:expr) => {
-        $other.into()
+        $crate::Value::from($other)
     };
 }
 
