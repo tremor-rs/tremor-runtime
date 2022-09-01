@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! gcs_streamer sink implementation that ensures that an upload is completely finished
+//! `gcs_streamer` sink implementation that ensures that an upload is completely finished
 //! and contains all received events and all uploaded parts
 //! at the cost of possibly lost uploads.
 //!
@@ -181,8 +181,8 @@ impl<Client: ResumableUploadClient> GCSConsistentSink<Client> {
                 if file_id == current_upload.file_id {
                     // track the event as being part of the current upload
                     if !event_tracked {
-                        current_upload.track(&event);
-                        event_tracked = true
+                        current_upload.track(event);
+                        event_tracked = true;
                     }
                     if current_upload.failed {
                         // same file_id for a failed upload ==> ignore and continue with the next event
@@ -195,11 +195,11 @@ impl<Client: ResumableUploadClient> GCSConsistentSink<Client> {
                     // new file_id, current upload not failed ==> FINISH UPLOAD ______/
                     self.fail_or_finish_upload(ctx).await?;
 
-                    self.start_upload(&file_id, &event, ctx).await?;
+                    self.start_upload(&file_id, event, ctx).await?;
                 }
             } else {
                 // no current upload available ==> START UPLOAD
-                self.start_upload(&file_id, &event, ctx).await?;
+                self.start_upload(&file_id, event, ctx).await?;
             }
 
             // At this point we defo have a healthy upload
@@ -327,7 +327,7 @@ impl<Client: ResumableUploadClient> GCSConsistentSink<Client> {
         } = self
             .current_upload
             .as_ref()
-            .ok_or(err_gcs("Invalid state, no current upload running."))?;
+            .ok_or_else(|| err_gcs("Invalid state, no current upload running."))?;
         debug!(
             "{ctx} Uploading Bytes {}-{} for {file_id}",
             data.start,

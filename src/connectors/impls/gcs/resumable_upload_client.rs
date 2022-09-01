@@ -192,7 +192,7 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> R
         Ok(url::Url::parse(
             response
                 .header("Location")
-                .ok_or(err_gcs("Missing Location header".to_string()))?
+                .ok_or_else(|| err_gcs("Missing Location header".to_string()))?
                 .last()
                 .as_str(),
         )?)
@@ -230,10 +230,12 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> R
             )));
         }
 
-        let raw_range = response.header("range").ok_or(err_gcs("No range header"))?;
+        let raw_range = response
+            .header("range")
+            .ok_or_else(|| err_gcs("No range header"))?;
         let raw_range = raw_range
             .get(0)
-            .ok_or(err_gcs("Missing Range header value"))?
+            .ok_or_else(|| err_gcs("Missing Range header value"))?
             .as_str();
 
         // Range format: bytes=0-262143
@@ -241,10 +243,10 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> R
             .get(
                 raw_range
                     .find('-')
-                    .ok_or(err_gcs("Did not find a - in the Range header"))?
+                    .ok_or_else(|| err_gcs("Did not find a - in the Range header"))?
                     + 1..,
             )
-            .ok_or(err_gcs("Unable to get the end of the Range"))?;
+            .ok_or_else(|| err_gcs("Unable to get the end of the Range"))?;
         Ok(range_end.parse()?)
     }
 
@@ -256,7 +258,7 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> R
         })
         .await?;
         // dont ask me, see: https://cloud.google.com/storage/docs/performing-resumable-uploads#cancel-upload
-        if response.status() as u32 != 499 {
+        if response.status() as u32 == 499 {
             Ok(())
         } else {
             error!(
