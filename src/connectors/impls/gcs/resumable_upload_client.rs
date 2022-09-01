@@ -13,34 +13,24 @@
 // limitations under the License.
 
 use crate::connectors::impls::gcs::chunked_buffer::BufferPart;
-use crate::connectors::prelude::{ContraflowData, ErrorKind, Result, Url};
+use crate::connectors::prelude::{Result, Url};
 use crate::connectors::utils::url::HttpsDefaults;
+use crate::errors::err_gcs;
 use async_std::task::sleep;
 #[cfg(not(test))]
 use gouth::Token;
 use http_client::HttpClient;
-use http_types::{Method, Request, Response};
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use http_types::{Body, Method, Request, Response, StatusCode};
 use std::time::Duration;
 
 #[async_trait::async_trait]
-pub(crate) trait ApiClient {
-    async fn handle_http_command(
-        &mut self,
-        done_until: Arc<AtomicUsize>,
-        url: &Url<HttpsDefaults>,
-        command: HttpTaskCommand,
-    ) -> Result<()>;
-}
-
-pub(crate) struct DefaultApiClient<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy> {
-    #[cfg(not(test))]
-    token: Token,
-    sessions_per_file: HashMap<FileId, url::Url>,
-    client: THttpClient,
-    backoff_strategy: TBackoffStrategy,
+pub(crate) trait ResumableUploadClient {
+    async fn start_upload(&mut self, url: &Url<HttpsDefaults>, file_id: FileId)
+        -> Result<url::Url>;
+    async fn upload_data(&mut self, url: &url::Url, part: BufferPart) -> Result<usize>;
+    async fn finish_upload(&mut self, url: &url::Url, part: BufferPart) -> Result<()>;
+    async fn delete_upload(&mut self, url: &url::Url) -> Result<()>;
+    async fn bucket_exists(&mut self, url: &Url<HttpsDefaults>, bucket: &str) -> Result<bool>;
 }
 
 pub(crate) trait BackoffStrategy {
@@ -126,68 +116,104 @@ async fn retriable_request<
         }
     }
 
-    Err(ErrorKind::GoogleCloudStorageError("Request still failing after retries").into())
+    Err(err_gcs(format!(
+        "Request still failing after {max_retries} retries"
+    )))
+}
+
+pub(crate) struct DefaultClient<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy> {
+    #[cfg(not(test))]
+    token: Token,
+    client: THttpClient,
+    backoff_strategy: TBackoffStrategy,
 }
 
 #[async_trait::async_trait]
-impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> ApiClient
-    for DefaultApiClient<THttpClient, TBackoffStrategy>
+impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> ResumableUploadClient
+    for DefaultClient<THttpClient, TBackoffStrategy>
 {
-    async fn handle_http_command(
-        &mut self,
-        done_until: Arc<AtomicUsize>,
-        url: &Url<HttpsDefaults>,
-        command: HttpTaskCommand,
-    ) -> Result<()> {
-        match command {
-            HttpTaskCommand::FinishUpload { file, data } => self.finish_upload(file, data).await,
-            HttpTaskCommand::StartUpload { file } => self.start_upload(url, file).await,
-            HttpTaskCommand::UploadData { file, data } => {
-                self.upload_data(done_until, file, data).await
-            }
+    async fn bucket_exists(&mut self, url: &Url<HttpsDefaults>, bucket: &str) -> Result<bool> {
+        let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
+            let url = url::Url::parse(&format!("{}/b/{}", url, bucket))?;
+            Ok(Request::new(Method::Get, url))
+        })
+        .await?;
+        let status = response.status();
+        if status.is_server_error() {}
+        if status == StatusCode::NotFound {
+            Ok(false)
+        } else if status.is_success() {
+            debug!(
+                "Bucket {bucket} metadata: {}",
+                response.body_string().await?
+            );
+            Ok(true)
+        } else {
+            // assuming error
+            error!(
+                "Error checking that bucket exists: {}",
+                response.body_string().await?
+            );
+            return Err(err_gcs(format!(
+                "Check if bucket {} exists failed with {} status",
+                bucket,
+                response.status()
+            )));
         }
     }
-}
-impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
-    DefaultApiClient<THttpClient, TBackoffStrategy>
-{
-    pub fn new(client: THttpClient, backoff_strategy: TBackoffStrategy) -> Result<Self> {
-        Ok(Self {
-            #[cfg(not(test))]
-            token: Token::new()?,
-            sessions_per_file: HashMap::new(),
-            client,
-            backoff_strategy,
+
+    async fn start_upload(
+        &mut self,
+        url: &Url<HttpsDefaults>,
+        file_id: FileId,
+    ) -> Result<url::Url> {
+        let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
+            Self::create_upload_start_request(
+                #[cfg(not(test))]
+                &self.token,
+                url,
+                &file_id,
+            )
         })
+        .await?;
+
+        if response.status().is_server_error() {
+            error!(
+                "Error from Google Cloud Storage: {}",
+                response.body_string().await?
+            );
+
+            return Err(err_gcs(format!(
+                "Start upload failed with {} status",
+                response.status()
+            )));
+        }
+
+        Ok(url::Url::parse(
+            response
+                .header("Location")
+                .ok_or(err_gcs("Missing Location header".to_string()))?
+                .last()
+                .as_str(),
+        )?)
     }
 
-    async fn upload_data(
-        &mut self,
-        done_until: Arc<AtomicUsize>,
-        file: FileId,
-        data: BufferPart,
-    ) -> Result<()> {
+    async fn upload_data(&mut self, url: &url::Url, part: BufferPart) -> Result<usize> {
         let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
-            let session_url =
-                self.sessions_per_file
-                    .get(&file)
-                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                        "No session URL is available",
-                    ))?;
-            let mut request = Request::new(Method::Put, session_url.clone());
+            let mut request = Request::new(Method::Put, url.clone());
 
             request.insert_header(
                 "Content-Range",
                 format!(
                     "bytes {}-{}/*",
-                    data.start,
+                    part.start,
                     // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
-                    data.start + data.len() - 1
+                    part.start + part.len() - 1
                 ),
             );
             request.insert_header("User-Agent", "Tremor");
             request.insert_header("Accept", "*/*");
-            request.set_body(data.data.clone());
+            request.set_body(part.data.clone());
 
             Ok(request)
         })
@@ -198,20 +224,16 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
                 "Error from Google Cloud Storage: {}",
                 response.body_string().await?
             );
-            return Err(ErrorKind::GoogleCloudStorageError(
-                "Received server errors from Google Cloud Storage",
-            )
-            .into());
+            return Err(err_gcs(format!(
+                "Start upload failed with status {}",
+                response.status()
+            )));
         }
 
-        let raw_range = response
-            .header("range")
-            .ok_or(ErrorKind::GoogleCloudStorageError("No range header"))?;
+        let raw_range = response.header("range").ok_or(err_gcs("No range header"))?;
         let raw_range = raw_range
             .get(0)
-            .ok_or(ErrorKind::GoogleCloudStorageError(
-                "Missing Range header value",
-            ))?
+            .ok_or(err_gcs("Missing Range header value"))?
             .as_str();
 
         // Range format: bytes=0-262143
@@ -219,24 +241,81 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
             .get(
                 raw_range
                     .find('-')
-                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                        "Did not find a - in the Range header",
-                    ))?
+                    .ok_or(err_gcs("Did not find a - in the Range header"))?
                     + 1..,
             )
-            .ok_or(ErrorKind::GoogleCloudStorageError(
-                "Unable to get the end of the Range",
-            ))?;
+            .ok_or(err_gcs("Unable to get the end of the Range"))?;
+        Ok(range_end.parse()?)
+    }
 
-        // NOTE: The data can only be thrown away to the point of the end of the Range header,
-        // since google can persist less than we send in our request.
-        //
-        // see: https://cloud.google.com/storage/docs/performing-resumable-uploads#chunked-upload
-        // The Release ordering here means that the reads after this write will see the new value,
-        // the reads happen in the sink task.
-        done_until.store(range_end.parse()?, Ordering::Release);
+    async fn delete_upload(&mut self, url: &url::Url) -> Result<()> {
+        let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
+            let mut request = Request::new(Method::Delete, url.clone());
+            request.set_body(Body::empty()); // ensure content-range: 0 header
+            Ok(request)
+        })
+        .await?;
+        // dont ask me, see: https://cloud.google.com/storage/docs/performing-resumable-uploads#cancel-upload
+        if response.status() as u32 != 499 {
+            Ok(())
+        } else {
+            error!(
+                "Error from Google Cloud Storage while cancelling an upload: {}",
+                response.body_string().await?
+            );
+            Err(err_gcs(format!(
+                "Delete upload failed with status {}",
+                response.status()
+            )))
+        }
+    }
+
+    async fn finish_upload(&mut self, url: &url::Url, part: BufferPart) -> Result<()> {
+        let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
+            let mut request = Request::new(Method::Put, url.clone());
+
+            request.insert_header(
+                "Content-Range",
+                format!(
+                    "bytes {}-{}/{}",
+                    part.start,
+                    // -1 on the end is here, because Content-Range is inclusive
+                    part.start + part.len() - 1,
+                    part.start + part.len()
+                ),
+            );
+
+            request.set_body(part.data.clone());
+
+            Ok(request)
+        })
+        .await?;
+
+        if response.status().is_server_error() {
+            error!(
+                "Error from Google Cloud Storage: {}",
+                response.body_string().await?
+            );
+
+            return Err(err_gcs(format!(
+                "Finish upload failed with status {}",
+                response.status()
+            )));
+        }
 
         Ok(())
+    }
+}
+impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
+    DefaultClient<THttpClient, TBackoffStrategy>
+{
+    pub fn new(client: THttpClient, backoff_strategy: TBackoffStrategy) -> Result<Self> {
+        Ok(Self {
+            #[cfg(not(test))]
+            token: Token::new()?,
+            client,
+            backoff_strategy,
+        })
     }
 
     #[cfg(test)]
@@ -265,116 +344,26 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
 
         Ok(request)
     }
-
-    async fn start_upload(&mut self, url: &Url<HttpsDefaults>, file: FileId) -> Result<()> {
-        let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
-            Self::create_upload_start_request(
-                #[cfg(not(test))]
-                &self.token,
-                url,
-                &file,
-            )
-        })
-        .await?;
-
-        if response.status().is_server_error() {
-            error!(
-                "Error from Google Cloud Storage: {}",
-                response.body_string().await?
-            );
-
-            return Err(
-                ErrorKind::GoogleCloudStorageError("Failed to send a request to GCS").into(),
-            );
-        }
-
-        self.sessions_per_file.insert(
-            file,
-            url::Url::parse(
-                response
-                    .header("Location")
-                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                        "Missing Location header",
-                    ))?
-                    .get(0)
-                    .ok_or(ErrorKind::GoogleCloudStorageError(
-                        "Missing Location header value",
-                    ))?
-                    .as_str(),
-            )?,
-        );
-
-        Ok(())
-    }
-
-    async fn finish_upload(&mut self, file: FileId, data: BufferPart) -> Result<()> {
-        let session_url: url::Url =
-            self.sessions_per_file
-                .remove(&file)
-                .ok_or(ErrorKind::GoogleCloudStorageError(
-                    "No session URL is available",
-                ))?;
-
-        let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
-            let mut request = Request::new(Method::Put, session_url.clone());
-
-            request.insert_header(
-                "Content-Range",
-                format!(
-                    "bytes {}-{}/{}",
-                    data.start,
-                    // -1 on the end is here, because Content-Range is inclusive
-                    data.start + data.len() - 1,
-                    data.start + data.len()
-                ),
-            );
-
-            request.set_body(data.data.clone());
-
-            Ok(request)
-        })
-        .await?;
-
-        if response.status().is_server_error() {
-            error!(
-                "Error from Google Cloud Storage: {}",
-                response.body_string().await?
-            );
-
-            return Err(
-                ErrorKind::GoogleCloudStorageError("Failed to finalize file upload").into(),
-            );
-        }
-
-        Ok(())
-    }
 }
 
-#[derive(Debug)]
-pub(crate) struct HttpTaskRequest {
-    pub command: HttpTaskCommand,
-    pub contraflow_data: Option<ContraflowData>,
-}
-
-#[derive(Debug, PartialEq)]
-pub(crate) enum HttpTaskCommand {
-    FinishUpload { file: FileId, data: BufferPart },
-    StartUpload { file: FileId },
-    UploadData { file: FileId, data: BufferPart },
-}
-
-#[derive(Hash, PartialEq, Eq, Debug)]
+#[derive(Hash, PartialEq, Eq, Debug, Clone)]
 pub(crate) struct FileId {
     pub bucket: String,
     pub name: String,
 }
 
 impl FileId {
-    pub fn new(bucket: impl Into<String>, name: impl Into<String>) -> Self {
+    pub(super) fn new(bucket: impl Into<String>, name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             bucket: bucket.into(),
         }
+    }
+}
+
+impl std::fmt::Display for FileId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "gs://{}/{}", self.bucket, self.name)
     }
 }
 
@@ -384,7 +373,8 @@ mod tests {
     use async_std::task::block_on;
     use http_types::{Error, Response, StatusCode};
     use std::fmt::{Debug, Formatter};
-    use std::sync::atomic::AtomicBool;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
 
     pub(crate) struct MockHttpClient {
         pub config: http_client::Config,
@@ -449,10 +439,7 @@ mod tests {
             simulate_failure: Arc::new(AtomicBool::new(true)),
             simulate_transport_failure: Arc::new(AtomicBool::new(true)),
         };
-        let sessions_per_file = HashMap::new();
-        let done_until = Arc::new(AtomicUsize::new(0));
-        let mut api_client = DefaultApiClient {
-            sessions_per_file,
+        let mut api_client = DefaultClient {
             client,
             backoff_strategy: ExponentialBackoffRetryStrategy {
                 max_retries: 3,
@@ -460,21 +447,16 @@ mod tests {
             },
         };
         api_client
-            .handle_http_command(
-                done_until,
-                &Url::parse("http://example.com/upload").unwrap(),
-                HttpTaskCommand::StartUpload {
-                    file: FileId::new("bucket", "somefile"),
-                },
+            .start_upload(
+                &Url::parse("http://example.com/upload").expect("static url did not parse"),
+                FileId::new("bucket", "somefile"),
             )
             .await?;
-
         Ok(())
     }
 
     #[async_std::test]
     pub async fn can_upload_data() -> Result<()> {
-        let done_until = Arc::new(AtomicUsize::new(0));
         let client = MockHttpClient {
             config: Default::default(),
             handle_request: Box::new(|mut req| {
@@ -489,80 +471,52 @@ mod tests {
             simulate_failure: Arc::new(AtomicBool::new(true)),
             simulate_transport_failure: Arc::new(AtomicBool::new(true)),
         };
-        let mut sessions_per_file = HashMap::new();
-        sessions_per_file.insert(
-            FileId::new("bucket", "my_file"),
-            url::Url::parse("https://example.com/session").unwrap(),
-        );
-        let mut api_client = DefaultApiClient {
-            sessions_per_file,
+        let session_url = url::Url::parse("https://example.com/session").unwrap();
+        let mut api_client = DefaultClient {
             client,
             backoff_strategy: ExponentialBackoffRetryStrategy {
                 max_retries: 3,
                 base_sleep_time: Duration::from_nanos(1),
             },
         };
-        api_client
-            .handle_http_command(
-                done_until,
-                &Url::parse("http://example.com/upload").unwrap(),
-                HttpTaskCommand::UploadData {
-                    file: FileId::new("bucket", "my_file"),
-                    data: BufferPart {
-                        data: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-                        start: 0,
-                    },
-                },
-            )
-            .await?;
+        let data = BufferPart {
+            data: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            start: 0,
+        };
 
+        let res = api_client.upload_data(&session_url, data).await?;
+        assert_eq!(10, res);
         Ok(())
     }
 
     #[async_std::test]
     pub async fn upload_data_fails_on_failed_request() -> Result<()> {
-        let done_until = Arc::new(AtomicUsize::new(0));
         let client = MockHttpClient {
             config: Default::default(),
             handle_request: Box::new(|_req| Ok(Response::new(StatusCode::InternalServerError))),
             simulate_failure: Arc::new(AtomicBool::new(true)),
             simulate_transport_failure: Arc::new(AtomicBool::new(true)),
         };
-        let mut sessions_per_file = HashMap::new();
-        sessions_per_file.insert(
-            FileId::new("bucket", "my_file"),
-            url::Url::parse("https://example.com/session").unwrap(),
-        );
-        let mut api_client = DefaultApiClient {
-            sessions_per_file,
+        let session_url = url::Url::parse("https://example.com/session").unwrap();
+        let mut api_client = DefaultClient {
             client,
             backoff_strategy: ExponentialBackoffRetryStrategy {
                 max_retries: 3,
                 base_sleep_time: Duration::from_nanos(1),
             },
         };
-        let result = api_client
-            .handle_http_command(
-                done_until,
-                &Url::parse("http://example.com/upload").unwrap(),
-                HttpTaskCommand::UploadData {
-                    file: FileId::new("bucket", "my_file"),
-                    data: BufferPart {
-                        data: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
-                        start: 0,
-                    },
-                },
-            )
-            .await;
+        let data = BufferPart {
+            data: vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            start: 0,
+        };
+        let result = api_client.upload_data(&session_url, data).await;
 
         assert!(result.is_err());
-
         Ok(())
     }
 
     #[async_std::test]
     pub async fn can_finish_upload() -> Result<()> {
-        let done_until = Arc::new(AtomicUsize::new(0));
         let client = MockHttpClient {
             config: Default::default(),
             handle_request: Box::new(|req| {
@@ -574,34 +528,19 @@ mod tests {
             simulate_transport_failure: Arc::new(AtomicBool::new(true)),
         };
 
-        let mut sessions_per_file = HashMap::new();
-        sessions_per_file.insert(
-            FileId::new("somebucket", "somefile"),
-            url::Url::parse("https://example.com/session").unwrap(),
-        );
-
-        let mut api_client = DefaultApiClient {
-            sessions_per_file,
+        let session_url = url::Url::parse("https://example.com/session").unwrap();
+        let mut api_client = DefaultClient {
             client,
             backoff_strategy: ExponentialBackoffRetryStrategy {
                 max_retries: 3,
                 base_sleep_time: Duration::from_nanos(1),
             },
         };
-        api_client
-            .handle_http_command(
-                done_until,
-                &Url::parse("http://example.com/upload").unwrap(),
-                HttpTaskCommand::FinishUpload {
-                    file: FileId::new("somebucket", "somefile"),
-                    data: BufferPart {
-                        data: vec![1, 2, 3],
-                        start: 10,
-                    },
-                },
-            )
-            .await?;
-
+        let data = BufferPart {
+            data: vec![1, 2, 3],
+            start: 10,
+        };
+        api_client.finish_upload(&session_url, data).await?;
         Ok(())
     }
 
