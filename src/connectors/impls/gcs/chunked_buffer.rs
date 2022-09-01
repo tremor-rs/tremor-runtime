@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use crate::connectors::prelude::Result;
-use crate::errors::ErrorKind;
+use crate::errors::err_gcs;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) struct BufferPart {
     pub data: Vec<u8>,
     pub start: usize,
@@ -39,7 +39,7 @@ pub(crate) struct ChunkedBuffer {
 }
 
 impl ChunkedBuffer {
-    pub fn new(size: usize) -> Self {
+    pub(crate) fn new(size: usize) -> Self {
         Self {
             data: Vec::with_capacity(size * 2),
             block_size: size,
@@ -47,36 +47,41 @@ impl ChunkedBuffer {
         }
     }
 
-    pub fn mark_done_until(&mut self, position: usize) -> Result<()> {
+    pub(crate) fn mark_done_until(&mut self, position: usize) -> Result<()> {
         if position < self.buffer_start {
-            return Err("Buffer was marked as done at index which is not in memory anymore".into());
+            return Err(err_gcs(format!(
+                "Buffer was marked as done at index {position} which is not in memory anymore"
+            ))
+            .into());
         }
 
         let bytes_to_remove = position - self.buffer_start;
-        self.data = Vec::from(self.data.get(bytes_to_remove..).ok_or(
-            ErrorKind::GoogleCloudStorageError("Not enough data in the buffer"),
-        )?);
+        self.data = Vec::from(
+            self.data
+                .get(bytes_to_remove..)
+                .ok_or(err_gcs(format!("Not enough data in the buffer")))?,
+        );
         self.buffer_start += bytes_to_remove;
 
         Ok(())
     }
 
-    pub fn read_current_block(&self) -> Option<BufferPart> {
+    pub(crate) fn read_current_block(&self) -> Option<BufferPart> {
         self.data.get(..self.block_size).map(|raw_data| BufferPart {
             data: raw_data.to_vec(),
             start: self.start(),
         })
     }
 
-    pub fn write(&mut self, data: &[u8]) {
+    pub(crate) fn write(&mut self, data: &[u8]) {
         self.data.extend_from_slice(data);
     }
 
-    pub fn start(&self) -> usize {
+    pub(crate) fn start(&self) -> usize {
         self.buffer_start
     }
 
-    pub fn final_block(self) -> BufferPart {
+    pub(crate) fn final_block(self) -> BufferPart {
         BufferPart {
             data: self.data,
             start: self.buffer_start,
