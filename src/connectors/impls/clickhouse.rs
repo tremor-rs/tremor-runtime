@@ -93,6 +93,7 @@ impl Clickhouse {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ClickhouseConfig {
     url: Url<ClickHouseDefaults>,
     #[serde(default)]

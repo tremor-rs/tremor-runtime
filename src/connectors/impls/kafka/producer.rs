@@ -37,6 +37,8 @@ use tremor_common::time::nanotime;
 const KAFKA_PRODUCER_META_KEY: &str = "kafka_producer";
 
 #[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+
 pub(crate) struct Config {
     /// list of brokers forming a cluster. 1 is enough
     brokers: Vec<String>,
