@@ -907,6 +907,11 @@ impl ContraflowData {
     fn into_cb(self, cb: CbAction) -> Event {
         Event::insight(cb, self.event_id, self.ingest_ns, self.op_meta)
     }
+
+    #[cfg(test)]
+    pub(crate) fn event_id(&self) -> &EventId {
+        &self.event_id
+    }
 }
 
 impl From<&Event> for ContraflowData {
