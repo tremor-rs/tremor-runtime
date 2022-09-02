@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.13.0-rc.2]
 
 ### Fixes
 - Add clear error messages for pipelines for console in, pipeline out, pipeline in
