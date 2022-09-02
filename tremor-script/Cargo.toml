@@ -74,5 +74,9 @@ proptest = "1.0"
 tempfile = "3"
 
 [features]
+# this is required for the erlang EQC tests of the language
 erlang-float-testing = []
+# This is required for the language server to prevent unbounded growth of the area
 arena-delete = []
+# This is required for the language server as w3e want to allow the use of it without platfor specific flags
+allow-non-simd = ["simd-json/allow-non-simd"]
