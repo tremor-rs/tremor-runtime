@@ -398,6 +398,10 @@ error_chain! {
             description("Google cloud storage error")
                 display("Google cloud storage error: {}", msg)
         }
+        ObjectStorageError(msg: String) {
+            description("Object storage error")
+                display("{}", msg)
+        }
         PipelineSendError(s: String) {
             description("Pipeline send error")
                 display("Pipeline send error: {}", s)
@@ -420,6 +424,10 @@ pub(crate) fn err_connector_def<C: ToString + ?Sized, E: ToString + ?Sized>(c: &
 
 pub(crate) fn err_gcs(msg: impl Into<String>) -> Error {
     ErrorKind::GoogleCloudStorageError(msg.into()).into()
+}
+
+pub(crate) fn err_object_storage(msg: impl Into<String>) -> Error {
+    ErrorKind::ObjectStorageError(msg.into()).into()
 }
 
 #[cfg(test)]

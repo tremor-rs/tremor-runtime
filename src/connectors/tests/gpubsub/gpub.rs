@@ -40,7 +40,6 @@ async fn no_connection() -> Result<()> {
             "url": "https://localhost:9090",
             "connect_timeout": 100000000,
             "topic": "projects/xxx/topics/test-a",
-            "skip_authentication": false
         }
     });
 
@@ -60,7 +59,6 @@ async fn no_hostname() -> Result<()> {
             "url": "file:///etc/passwd",
             "connect_timeout": 100000000,
             "topic": "projects/xxx/topics/test-a",
-            "skip_authentication": false
         }
     });
 
@@ -95,7 +93,6 @@ async fn simple_publish() -> Result<()> {
             "url": endpoint,
             "connect_timeout": 30000000000u64,
             "topic": "projects/test/topics/test",
-            "skip_authentication": true
         }
     });
 
@@ -202,7 +199,6 @@ async fn simple_publish_with_timeout() -> Result<()> {
             "url": endpoint,
             "connect_timeout": 30000000000u64,
             "topic": "projects/test/topics/test",
-            "skip_authentication": true
         }
     });
 

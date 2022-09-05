@@ -12,21 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::impls::gcs::chunked_buffer::BufferPart;
-use crate::connectors::prelude::{Result, Url};
-use crate::connectors::utils::url::HttpsDefaults;
-use crate::errors::err_gcs;
+use crate::{
+    connectors::{
+        impls::object_storage::{BufferPart, ObjectId},
+        prelude::{Result, Url},
+        utils::url::HttpsDefaults,
+    },
+    errors::err_gcs,
+};
 use async_std::task::sleep;
 #[cfg(not(test))]
 use gouth::Token;
-use http_client::HttpClient;
+use http_client::{h1::H1Client, HttpClient};
 use http_types::{Body, Method, Request, Response, StatusCode};
 use std::time::Duration;
 
 #[async_trait::async_trait]
 pub(crate) trait ResumableUploadClient {
-    async fn start_upload(&mut self, url: &Url<HttpsDefaults>, file_id: FileId)
-        -> Result<url::Url>;
+    async fn start_upload(
+        &mut self,
+        url: &Url<HttpsDefaults>,
+        file_id: ObjectId,
+    ) -> Result<url::Url>;
     async fn upload_data(&mut self, url: &url::Url, part: BufferPart) -> Result<usize>;
     async fn finish_upload(&mut self, url: &url::Url, part: BufferPart) -> Result<()>;
     async fn delete_upload(&mut self, url: &url::Url) -> Result<()>;
@@ -165,7 +172,7 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> R
     async fn start_upload(
         &mut self,
         url: &Url<HttpsDefaults>,
-        file_id: FileId,
+        file_id: ObjectId,
     ) -> Result<url::Url> {
         let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
             Self::create_upload_start_request(
@@ -206,9 +213,9 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> R
                 "Content-Range",
                 format!(
                     "bytes {}-{}/*",
-                    part.start,
+                    part.start(),
                     // -1 on the end is here, because Content-Range is inclusive and our range is exclusive
-                    part.start + part.len() - 1
+                    part.end() - 1
                 ),
             );
             request.insert_header("User-Agent", "Tremor");
@@ -280,10 +287,10 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> R
                 "Content-Range",
                 format!(
                     "bytes {}-{}/{}",
-                    part.start,
+                    part.start(),
                     // -1 on the end is here, because Content-Range is inclusive
-                    part.start + part.len() - 1,
-                    part.start + part.len()
+                    part.end() - 1,
+                    part.end()
                 ),
             );
 
@@ -308,6 +315,7 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> R
         Ok(())
     }
 }
+
 impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
     DefaultClient<THttpClient, TBackoffStrategy>
 {
@@ -321,10 +329,12 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
     }
 
     #[cfg(test)]
-    fn create_upload_start_request(url: &Url<HttpsDefaults>, file: &FileId) -> Result<Request> {
+    fn create_upload_start_request(url: &Url<HttpsDefaults>, file: &ObjectId) -> Result<Request> {
         let url = url::Url::parse(&format!(
             "{}/b/{}/o?name={}&uploadType=resumable",
-            url, file.bucket, file.name
+            url,
+            file.bucket(),
+            file.name()
         ))?;
         let request = Request::new(Method::Post, url);
 
@@ -335,11 +345,13 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
     fn create_upload_start_request(
         token: &Token,
         url: &Url<HttpsDefaults>,
-        file: &FileId,
+        file: &ObjectId,
     ) -> Result<Request> {
         let url = url::Url::parse(&format!(
             "{}/b/{}/o?name={}&uploadType=resumable",
-            url, file.bucket, file.name
+            url,
+            file.bucket(),
+            file.name()
         ))?;
         let mut request = Request::new(Method::Post, url);
         request.insert_header("Authorization", token.header_value()?.to_string());
@@ -348,25 +360,15 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy>
     }
 }
 
-#[derive(Hash, PartialEq, Eq, Debug, Clone)]
-pub(crate) struct FileId {
-    pub bucket: String,
-    pub name: String,
-}
+pub(crate) fn create_client(connect_timeout: Duration) -> Result<H1Client> {
+    let mut client = H1Client::new();
+    client.set_config(
+        http_client::Config::new()
+            .set_timeout(Some(connect_timeout))
+            .set_http_keep_alive(true),
+    )?;
 
-impl FileId {
-    pub(super) fn new(bucket: impl Into<String>, name: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            bucket: bucket.into(),
-        }
-    }
-}
-
-impl std::fmt::Display for FileId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "gs://{}/{}", self.bucket, self.name)
-    }
+    Ok(client)
 }
 
 #[cfg(test)]
@@ -451,7 +453,7 @@ mod tests {
         api_client
             .start_upload(
                 &Url::parse("http://example.com/upload").expect("static url did not parse"),
-                FileId::new("bucket", "somefile"),
+                ObjectId::new("bucket", "somefile"),
             )
             .await?;
         Ok(())
