@@ -48,6 +48,7 @@ async fn no_connection() -> Result<()> {
         "config":{
             "bucket": bucket_name.clone(),
             "url": "http://localhost:9090",
+            "mode": "yolo"
         }
     });
 
@@ -83,6 +84,7 @@ async fn no_credentials() -> Result<()> {
         "config":{
             "bucket": bucket_name.clone(),
             "url": endpoint,
+            "mode": "consistent"
         }
     });
 
@@ -121,6 +123,7 @@ async fn no_region() -> Result<()> {
         "config":{
             "bucket": bucket_name.clone(),
             "url": endpoint,
+            "mode": "yolo"
         }
     });
 
@@ -155,7 +158,8 @@ async fn no_bucket() -> Result<()> {
         "codec": "binary",
         "config": {
             "bucket": bucket_name.clone(),
-            "url": endpoint
+            "url": endpoint,
+            "mode": "consistent"
         }
     });
     let harness = ConnectorHarness::new(
@@ -171,7 +175,7 @@ async fn no_bucket() -> Result<()> {
 
 #[async_std::test]
 #[serial(s3, timeout_ms = 600000)]
-async fn connector_s3() -> Result<()> {
+async fn connector_s3_consistent() -> Result<()> {
     let _ = env_logger::try_init();
 
     let bucket_name = random_bucket_name("tremor");
@@ -195,6 +199,7 @@ async fn connector_s3() -> Result<()> {
         "config":{
             "bucket": bucket_name.clone(),
             "url": format!("http://localhost:{http_port}"),
+            "mode": "consistent"
         }
     });
 
@@ -318,8 +323,8 @@ fn get_unbatched_event() -> (Event, value::Value<'static>) {
     });
     let meta = literal!({
         "s3_streamer": {
-                "key": "unbatched_key"
-            }
+            "name": "unbatched_key"
+        }
     });
 
     (
@@ -340,7 +345,8 @@ fn get_batched_event() -> (
     value::Value<'static>,
     value::Value<'static>,
 ) {
-    let batched_data = literal!([{
+    let batched_data = literal!([
+        {
             "data": {
                 "value": {
                     "field1": 0.1,
@@ -349,7 +355,7 @@ fn get_batched_event() -> (
                 },
                 "meta": {
                     "s3_streamer": {
-                        "key": "batched_key0"
+                        "name": "batched_key0"
                     }
                 }
             }
@@ -365,7 +371,7 @@ fn get_batched_event() -> (
                 },
                 "meta": {
                     "s3_streamer": {
-                        "key": "batched_key1"
+                        "name": "batched_key1"
                     }
                 }
             }
@@ -378,7 +384,7 @@ fn get_batched_event() -> (
                 },
                 "meta": {
                     "s3_streamer": {
-                        "key": "batched_key2"
+                        "name": "batched_key2"
                     }
                 }
             }
@@ -423,7 +429,7 @@ fn large_unbatched_event() -> (Event, Vec<u8>) {
 
     let large_meta = literal!({
         "s3_streamer": {
-            "key": "large_unbatched_event"
+            "name": "large_unbatched_event"
         }
     });
 
@@ -456,7 +462,7 @@ fn large_batched_event() -> (Event, Vec<u8>) {
                 "value": lit,
                 "meta" : {
                     "s3_streamer" : {
-                        "key": "large_batched_event",
+                        "name": "large_batched_event",
                     }
                 }
             }
