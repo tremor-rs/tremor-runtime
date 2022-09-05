@@ -159,7 +159,7 @@ rustls = "0.19"
 rustls-native-certs = "0.6"
 
 # dns
-async-std-resolver = "0.21"
+async-std-resolver = "0.22"
 
 # kafka. cmake is the encouraged way to build this and also the one that works on windows/with musl.
 # we stick with git until we have a release with https://github.com/fede1024/rust-rdkafka/pull/417
