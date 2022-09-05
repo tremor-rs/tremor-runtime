@@ -14,43 +14,33 @@
 
 use crate::{
     connectors::{
-        impls::gcs::{
-            consistent::GCSConsistentSink,
-            resumable_upload_client::{
-                DefaultClient, ExponentialBackoffRetryStrategy, FileId, ResumableUploadClient,
+        impls::{
+            gcs::{
+                chunked_buffer::ChunkedBuffer,
+                resumable_upload_client::{
+                    create_client, DefaultClient, ExponentialBackoffRetryStrategy,
+                },
             },
-            yolo::GCSYoloSink,
+            object_storage::{
+                BufferPart, ConsistentSink, Mode, ObjectId, ObjectStorageCommon,
+                ObjectStorageSinkImpl, ObjectStorageUpload, YoloSink,
+            },
         },
         prelude::*,
     },
     errors::err_gcs,
     system::KillSwitch,
 };
-use http_client::{h1::H1Client, HttpClient};
+use async_std::channel::Sender;
+use http_client::h1::H1Client;
 use std::time::Duration;
-use tremor_pipeline::ConfigImpl;
+use tremor_common::time::nanotime;
+use tremor_pipeline::{ConfigImpl, EventId, OpMeta};
 use tremor_value::Value;
-use value_trait::ValueAccess;
+
+use super::resumable_upload_client::ResumableUploadClient;
 
 const CONNECTOR_TYPE: &str = "gcs_streamer";
-
-/// mode of operation for the `gcs_streamer`
-#[derive(Debug, Default, Deserialize, Clone, Copy)]
-#[serde(rename_all = "lowercase")]
-pub(crate) enum Mode {
-    /// automatically ack all incoming events regardless
-    /// of delivery success or not
-    #[default]
-    Yolo,
-    /// only ack events when their upload was completely finished
-    /// and it is completely visible in gcs.
-    /// Whenever an upload fails for whatever reason the whole current upload
-    /// and any further events for that upload are discarded
-    /// until a new upload is started for another bucket-pair combination.
-    ///
-    /// This mode ensures consistent results on GCS, no file will ever be uploaded with wrong order or missing parts.
-    Consistent,
-}
 
 impl std::fmt::Display for Mode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -165,12 +155,14 @@ impl Connector for GCSStreamerConnector {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let http_client = create_client(Duration::from_nanos(self.config.connect_timeout))?;
-        let backoff_strategy = ExponentialBackoffRetryStrategy::new(
-            self.config.max_retries,
-            Duration::from_nanos(self.config.default_backoff_base_time),
-        );
-        let upload_client = DefaultClient::new(http_client, backoff_strategy)?;
+        let client_factory = Box::new(|config: &Config| {
+            let http_client = create_client(Duration::from_nanos(config.connect_timeout))?;
+            let backoff_strategy = ExponentialBackoffRetryStrategy::new(
+                config.max_retries,
+                Duration::from_nanos(config.default_backoff_base_time),
+            );
+            DefaultClient::new(http_client, backoff_strategy)
+        });
 
         info!(
             "{sink_context} Starting {CONNECTOR_TYPE} in {} mode",
@@ -178,12 +170,29 @@ impl Connector for GCSStreamerConnector {
         );
         match self.config.mode {
             Mode::Yolo => {
-                let sink = GCSYoloSink::new(self.config.clone(), upload_client);
+                let sink_impl = GCSObjectStorageSinkImpl::yolo(self.config.clone(), client_factory);
+                let sink: YoloSink<
+                    GCSObjectStorageSinkImpl<
+                        DefaultClient<H1Client, ExponentialBackoffRetryStrategy>,
+                    >,
+                    GCSUpload,
+                    ChunkedBuffer,
+                > = YoloSink::new(sink_impl);
                 builder.spawn(sink, sink_context).map(Some)
             }
             Mode::Consistent => {
-                let reply_tx = builder.reply_tx();
-                let sink = GCSConsistentSink::new(self.config.clone(), upload_client, reply_tx);
+                let sink_impl = GCSObjectStorageSinkImpl::consistent(
+                    self.config.clone(),
+                    client_factory,
+                    builder.reply_tx(),
+                );
+                let sink: ConsistentSink<
+                    GCSObjectStorageSinkImpl<
+                        DefaultClient<H1Client, ExponentialBackoffRetryStrategy>,
+                    >,
+                    GCSUpload,
+                    ChunkedBuffer,
+                > = ConsistentSink::new(sink_impl);
                 builder.spawn(sink, sink_context).map(Some)
             }
         }
@@ -194,87 +203,254 @@ impl Connector for GCSStreamerConnector {
     }
 }
 
-pub(crate) const NAME: &str = "name";
-pub(crate) const BUCKET: &str = "bucket";
+struct GCSUpload {
+    /// upload identifiers
+    object_id: ObjectId,
+    session_uri: url::Url,
+    /// event tracking
+    event_id: EventId,
+    op_meta: OpMeta,
+    transactional: bool,
+    /// current state
+    failed: bool,
+}
 
-pub(crate) trait GCSCommons<Client: ResumableUploadClient> {
-    fn default_bucket(&self) -> Option<&Value<'_>>;
-    fn client(&self) -> &Client;
-
-    fn get_bucket_name(&self, meta: Option<&Value>) -> Result<String> {
-        let bucket = meta
-            .get(BUCKET)
-            .or_else(|| self.default_bucket())
-            .ok_or_else(|| err_gcs(format!("Metadata `${CONNECTOR_TYPE}.{BUCKET}` missing",)))
-            .as_str()
-            .ok_or_else(|| {
-                err_gcs(format!(
-                    "Metadata `${CONNECTOR_TYPE}.{BUCKET}` is not a string.",
-                ))
-            })?
-            .to_string();
-
-        Ok(bucket)
-    }
-
-    fn get_file_id(&self, meta: Option<&Value<'_>>) -> Result<FileId> {
-        let name = meta
-            .get(NAME)
-            .ok_or_else(|| err_gcs(format!("`${CONNECTOR_TYPE}.{NAME}` metadata is missing",)))?
-            .as_str()
-            .ok_or_else(|| {
-                err_gcs(format!(
-                    "`${CONNECTOR_TYPE}.{NAME}` metadata is not a string",
-                ))
-            })?;
-        let bucket = self.get_bucket_name(meta)?;
-        Ok(FileId::new(bucket, name))
+impl GCSUpload {
+    fn new(object_id: ObjectId, session_uri: url::Url, event: &Event) -> Self {
+        Self {
+            object_id,
+            session_uri,
+            event_id: event.id.clone(),
+            op_meta: event.op_meta.clone(),
+            transactional: event.transactional,
+            failed: false,
+        }
     }
 }
 
-fn create_client(connect_timeout: Duration) -> Result<H1Client> {
-    let mut client = H1Client::new();
-    client.set_config(
-        http_client::Config::new()
-            .set_timeout(Some(connect_timeout))
-            .set_http_keep_alive(true),
-    )?;
+impl ObjectStorageUpload for GCSUpload {
+    fn object_id(&self) -> &ObjectId {
+        &self.object_id
+    }
+    fn is_failed(&self) -> bool {
+        self.failed
+    }
+    fn mark_as_failed(&mut self) {
+        self.failed = true;
+    }
+    fn track(&mut self, event: &Event) {
+        self.event_id.track(&event.id);
+        if !event.op_meta.is_empty() {
+            self.op_meta.merge(event.op_meta.clone());
+        }
+        self.transactional |= event.transactional;
+    }
+}
 
-    Ok(client)
+type UploadClientFactory<Client> = Box<dyn Fn(&Config) -> Result<Client> + Send + Sync>;
+
+struct GCSObjectStorageSinkImpl<Client: ResumableUploadClient> {
+    config: Config,
+    upload_client: Option<Client>,
+    upload_client_factory: UploadClientFactory<Client>,
+    reply_tx: Option<Sender<AsyncSinkReply>>,
+}
+
+impl<Client: ResumableUploadClient + Send> GCSObjectStorageSinkImpl<Client> {
+    fn yolo(config: Config, upload_client_factory: UploadClientFactory<Client>) -> Self {
+        Self {
+            config,
+            upload_client: None,
+            upload_client_factory,
+            reply_tx: None,
+        }
+    }
+    fn consistent(
+        config: Config,
+        upload_client_factory: UploadClientFactory<Client>,
+        reply_tx: Sender<AsyncSinkReply>,
+    ) -> Self {
+        Self {
+            config,
+            upload_client: None,
+            upload_client_factory,
+            reply_tx: Some(reply_tx),
+        }
+    }
+}
+
+impl<Client: ResumableUploadClient> ObjectStorageCommon for GCSObjectStorageSinkImpl<Client> {
+    fn connector_type(&self) -> &str {
+        CONNECTOR_TYPE
+    }
+
+    fn default_bucket(&self) -> Option<&String> {
+        self.config.bucket.as_ref()
+    }
+}
+
+#[async_trait::async_trait]
+impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUpload>
+    for GCSObjectStorageSinkImpl<Client>
+{
+    fn buffer_size(&self) -> usize {
+        self.config.buffer_size
+    }
+    async fn connect(&mut self, _ctx: &SinkContext) -> Result<()> {
+        self.upload_client = Some((self.upload_client_factory)(&self.config)?);
+        Ok(())
+    }
+    async fn bucket_exists(&mut self, bucket: &str) -> Result<bool> {
+        let client = self
+            .upload_client
+            .as_mut()
+            .ok_or_else(|| err_gcs("No client available"))?;
+        client.bucket_exists(&self.config.url, bucket).await
+    }
+    async fn start_upload(
+        &mut self,
+        object_id: &ObjectId,
+        event: &Event,
+        _ctx: &SinkContext,
+    ) -> Result<GCSUpload> {
+        let client = self
+            .upload_client
+            .as_mut()
+            .ok_or_else(|| err_gcs("No client available"))?;
+        let session_uri = client
+            .start_upload(&self.config.url, object_id.clone())
+            .await?;
+        let upload = GCSUpload::new(object_id.clone(), session_uri, event);
+        Ok(upload)
+    }
+
+    async fn upload_data(
+        &mut self,
+        data: BufferPart,
+        upload: &mut GCSUpload,
+        ctx: &SinkContext,
+    ) -> Result<usize> {
+        let client = self
+            .upload_client
+            .as_mut()
+            .ok_or_else(|| err_gcs("No client available"))?;
+        debug!(
+            "{ctx} Uploading bytes {}-{} for {}",
+            data.start(),
+            data.end(),
+            upload.object_id()
+        );
+        client.upload_data(&upload.session_uri, data).await
+    }
+    async fn finish_upload(
+        &mut self,
+        upload: GCSUpload,
+        part: BufferPart,
+        ctx: &SinkContext,
+    ) -> Result<()> {
+        debug_assert!(
+            !upload.failed,
+            "finish may only be called for non-failed uploads"
+        );
+        let client = self
+            .upload_client
+            .as_mut()
+            .ok_or_else(|| err_gcs("No client available"))?;
+
+        let GCSUpload {
+            object_id,
+            session_uri,
+            event_id,
+            op_meta,
+            transactional,
+            ..
+        } = upload;
+        debug!("{ctx} Finishing upload for {}", object_id);
+        let res = client.finish_upload(&session_uri, part).await;
+        // only ack here if we have reply_tx and the upload is transactional
+        if let (Some(reply_tx), true) = (self.reply_tx.as_ref(), transactional) {
+            let cf_data = ContraflowData::new(event_id, nanotime(), op_meta);
+            let reply = if res.is_ok() {
+                AsyncSinkReply::Ack(cf_data, 0)
+            } else {
+                AsyncSinkReply::Fail(cf_data)
+            };
+            ctx.swallow_err(
+                reply_tx.send(reply).await,
+                &format!("Error sending ack/fail for upload to {object_id}"),
+            );
+        }
+        res
+    }
+    async fn fail_upload(&mut self, upload: GCSUpload, ctx: &SinkContext) -> Result<()> {
+        let GCSUpload {
+            object_id,
+            session_uri,
+            event_id,
+            op_meta,
+            transactional,
+            ..
+        } = upload;
+        let client = self
+            .upload_client
+            .as_mut()
+            .ok_or_else(|| err_gcs("No client available"))?;
+        if let (Some(reply_tx), true) = (self.reply_tx.as_ref(), transactional) {
+            ctx.swallow_err(
+                reply_tx
+                    .send(AsyncSinkReply::Fail(ContraflowData::new(
+                        event_id,
+                        nanotime(),
+                        op_meta,
+                    )))
+                    .await,
+                &format!("Error sending fail for upload for {object_id}"),
+            );
+        }
+        ctx.swallow_err(
+            client.delete_upload(&session_uri).await,
+            &format!("Error deleting upload for {object_id}"),
+        );
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+    use crate::{
+        config::Codec as CodecConfig,
+        connectors::{impls::gcs::streamer::Mode, reconnect::ConnectionLostNotifier},
+    };
+    use async_std::channel::bounded;
     use halfbrown::HashMap;
+    use tremor_pipeline::EventId;
     use tremor_value::literal;
 
-    use crate::connectors::impls::gcs::chunked_buffer::BufferPart;
-    // use crate::connectors::reconnect::ConnectionLostNotifier;
-    // use crate::{config::Codec, connectors::impls::gcs::chunked_buffer::ChunkedBuffer};
-    // use async_std::channel::bounded;
+    use crate::connectors::impls::gcs::resumable_upload_client::ResumableUploadClient;
+    use crate::connectors::impls::object_storage::{BufferPart, ObjectId};
+    use crate::errors::err_gcs;
     use std::sync::atomic::AtomicUsize;
-    // use tremor_script::EventPayload;
 
     #[derive(Debug, Default)]
     pub(crate) struct TestUploadClient {
         counter: AtomicUsize,
-        running: HashMap<url::Url, (FileId, Vec<BufferPart>)>,
-        finished: HashMap<url::Url, (FileId, Vec<BufferPart>)>,
-        deleted: HashMap<url::Url, (FileId, Vec<BufferPart>)>,
+        running: HashMap<url::Url, (ObjectId, Vec<BufferPart>)>,
+        finished: HashMap<url::Url, (ObjectId, Vec<BufferPart>)>,
+        deleted: HashMap<url::Url, (ObjectId, Vec<BufferPart>)>,
         inject_failure: bool,
     }
 
     impl TestUploadClient {
-        pub(crate) fn running_uploads(&self) -> Vec<(FileId, Vec<BufferPart>)> {
+        pub(crate) fn running_uploads(&self) -> Vec<(ObjectId, Vec<BufferPart>)> {
             self.running.values().cloned().collect()
         }
 
-        pub(crate) fn finished_uploads(&self) -> Vec<(FileId, Vec<BufferPart>)> {
+        pub(crate) fn finished_uploads(&self) -> Vec<(ObjectId, Vec<BufferPart>)> {
             self.finished.values().cloned().collect()
         }
 
-        pub(crate) fn deleted_uploads(&self) -> Vec<(FileId, Vec<BufferPart>)> {
+        pub(crate) fn deleted_uploads(&self) -> Vec<(ObjectId, Vec<BufferPart>)> {
             self.deleted.values().cloned().collect()
         }
 
@@ -292,7 +468,7 @@ pub(crate) mod tests {
         async fn start_upload(
             &mut self,
             url: &Url<HttpsDefaults>,
-            file_id: FileId,
+            file_id: ObjectId,
         ) -> Result<url::Url> {
             if self.inject_failure {
                 return Err(err_gcs("Error on start_upload"));
@@ -366,5 +542,834 @@ pub(crate) mod tests {
         let alias = Alias::new("flow", "conn");
         config.normalize(&alias);
         assert_eq!(256 * 1024, config.buffer_size);
+    }
+
+    fn upload_client(
+        sink: &mut YoloSink<GCSObjectStorageSinkImpl<TestUploadClient>, GCSUpload, ChunkedBuffer>,
+    ) -> &mut TestUploadClient {
+        sink.sink_impl
+            .upload_client
+            .as_mut()
+            .expect("No upload client available")
+    }
+
+    #[async_std::test]
+    async fn yolo_happy_path() -> Result<()> {
+        _ = env_logger::try_init();
+        let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
+
+        let config = Config {
+            url: Default::default(),
+            bucket: None,
+            mode: Mode::Yolo,
+            connect_timeout: 1000000000,
+            buffer_size: 10,
+            max_retries: 3,
+            default_backoff_base_time: 1,
+        };
+
+        let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
+
+        let mut sink: YoloSink<
+            GCSObjectStorageSinkImpl<TestUploadClient>,
+            GCSUpload,
+            ChunkedBuffer,
+        > = YoloSink::new(sink_impl);
+
+        let (connection_lost_tx, _) = bounded(10);
+
+        let alias = Alias::new("a", "b");
+        let context = SinkContext {
+            uid: Default::default(),
+            alias: alias.clone(),
+            connector_type: "gcs_streamer".into(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(connection_lost_tx),
+        };
+        let mut serializer = EventSerializer::new(
+            Some(CodecConfig::from("json")),
+            CodecReq::Required,
+            vec![],
+            &"gcs_streamer".into(),
+            &alias,
+        )
+        .unwrap();
+
+        // simulate sink lifecycle
+        sink.on_start(&context).await?;
+        sink.connect(&context, &Attempt::default()).await?;
+
+        let id1 = EventId::from_id(1, 1, 1);
+        let event = Event {
+            id: id1.clone(),
+            data: (
+                literal!({
+                    "snot": ["badg", "er"]
+                }),
+                literal!({
+                    "gcs_streamer": {
+                        "name": "happy.txt",
+                        "bucket": "yolo"
+                    }
+                }),
+            )
+                .into(),
+            transactional: true,
+            ..Event::default()
+        };
+        let reply = sink
+            .on_event("", event, &context, &mut serializer, 0)
+            .await?;
+        assert_eq!(SinkReply::ACK, reply);
+        assert_eq!(1, upload_client(&mut sink).count());
+        let mut uploads = upload_client(&mut sink).running_uploads();
+        assert_eq!(1, uploads.len());
+        let (file_id, mut buffers) = uploads.pop().unwrap();
+        assert_eq!(ObjectId::new("yolo", "happy.txt"), file_id);
+        assert_eq!(2, buffers.len());
+        let buffer = buffers.pop().unwrap();
+        assert_eq!(10, buffer.start);
+        assert_eq!(10, buffer.len());
+        assert_eq!("badg\",\"er\"".as_bytes(), &buffer.data);
+
+        let buffer = buffers.pop().unwrap();
+        assert_eq!(0, buffer.start);
+        assert_eq!(10, buffer.len());
+        assert_eq!("{\"snot\":[\"".as_bytes(), &buffer.data);
+
+        assert!(upload_client(&mut sink).finished_uploads().is_empty());
+        assert!(upload_client(&mut sink).deleted_uploads().is_empty());
+
+        // batched event with intermitten new upload
+        let id2 = EventId::from_id(1, 1, 2);
+        let event = Event {
+            id: id2.clone(),
+            data: (
+                literal!([
+                {
+                    "data": {
+                        "value": "snot",
+                        "meta": {
+                            "gcs_streamer": {
+                                "name": "happy.txt",
+                                "bucket": "yolo"
+                            }
+                        }
+                    }
+                },
+                {
+                    "data": {
+                        "value": "badger",
+                        "meta": {
+                            "gcs_streamer": {
+                                "name": "happy.txt",
+                                "bucket": "yolo"
+                            }
+                        }
+                    }
+                },
+                {
+                    "data": {
+                        "value": [1,2,3,true,false,null],
+                        "meta": {
+                            "gcs_streamer": {
+                                "name": "sad.txt",
+                                "bucket": "yolo"
+                            }
+                        }
+                    }
+                }
+                ]),
+                literal!({}),
+            )
+                .into(),
+            transactional: true,
+            is_batch: true,
+            ..Event::default()
+        };
+        let reply = sink
+            .on_event("", event, &context, &mut serializer, 0)
+            .await?;
+        assert_eq!(SinkReply::ACK, reply);
+
+        assert_eq!(2, upload_client(&mut sink).count());
+        let mut uploads = upload_client(&mut sink).running_uploads();
+        assert_eq!(1, uploads.len());
+        let (file_id, mut buffers) = uploads.pop().unwrap();
+        assert_eq!(ObjectId::new("yolo", "sad.txt"), file_id);
+        assert_eq!(2, buffers.len());
+
+        let buffer = buffers.pop().unwrap();
+        assert_eq!(10, buffer.start);
+        assert_eq!(10, buffer.len());
+        assert_eq!("e,false,nu".as_bytes(), &buffer.data);
+
+        let buffer = buffers.pop().unwrap();
+        assert_eq!(0, buffer.start);
+        assert_eq!(10, buffer.len());
+        assert_eq!("[1,2,3,tru".as_bytes(), &buffer.data);
+
+        let mut finished = upload_client(&mut sink).finished_uploads();
+        assert_eq!(1, finished.len());
+        let (file_id, mut buffers) = finished.pop().unwrap();
+        assert_eq!(ObjectId::new("yolo", "happy.txt"), file_id);
+        assert_eq!(4, buffers.len());
+        let buffer = buffers.pop().unwrap();
+        assert_eq!(30, buffer.start);
+        assert_eq!("adger\"".as_bytes(), &buffer.data);
+
+        let buffer = buffers.pop().unwrap();
+        assert_eq!(20, buffer.start);
+        assert_eq!("]}\"snot\"\"b".as_bytes(), &buffer.data);
+
+        assert!(upload_client(&mut sink).deleted_uploads().is_empty());
+
+        sink.on_stop(&context).await?;
+
+        // we finish outstanding upload upon stop
+        let mut finished = upload_client(&mut sink).finished_uploads();
+        assert_eq!(2, finished.len());
+        let (file_id, mut buffers) = finished.pop().unwrap();
+        assert_eq!(ObjectId::new("yolo", "sad.txt"), file_id);
+        assert_eq!(3, buffers.len());
+        let last = buffers.pop().unwrap();
+        assert_eq!(20, last.start);
+        assert_eq!("ll]".as_bytes(), &last.data);
+
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn yolo_on_failure() -> Result<()> {
+        // ensure that failures on calls to google don't fail events
+        _ = env_logger::try_init();
+        let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
+        let config = Config {
+            url: Default::default(),
+            bucket: None,
+            mode: Mode::Yolo,
+            connect_timeout: 1000000000,
+            buffer_size: 10,
+            max_retries: 3,
+            default_backoff_base_time: 1,
+        };
+
+        let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
+        let mut sink: YoloSink<
+            GCSObjectStorageSinkImpl<TestUploadClient>,
+            GCSUpload,
+            ChunkedBuffer,
+        > = YoloSink::new(sink_impl);
+
+        let (connection_lost_tx, _) = bounded(10);
+
+        let alias = Alias::new("a", "b");
+        let context = SinkContext {
+            uid: Default::default(),
+            alias: alias.clone(),
+            connector_type: "gcs_streamer".into(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(connection_lost_tx),
+        };
+        let mut serializer = EventSerializer::new(
+            Some(CodecConfig::from("json")),
+            CodecReq::Required,
+            vec![],
+            &"gcs_streamer".into(),
+            &alias,
+        )
+        .unwrap();
+
+        // simulate sink lifecycle
+        sink.on_start(&context).await?;
+        sink.connect(&context, &Attempt::default()).await?;
+
+        upload_client(&mut sink).inject_failure(true);
+
+        // send first event
+        let id1 = EventId::from_id(1, 1, 1);
+        let event = Event {
+            id: id1.clone(),
+            data: (
+                literal!(["snot", 1]),
+                literal!({
+                    "gcs_streamer": {
+                        "bucket": "failure",
+                        "name": "test.txt"
+                    }
+                }),
+            )
+                .into(),
+            ..Event::default()
+        };
+        assert_eq!(
+            SinkReply::NONE,
+            sink.on_event("", event, &context, &mut serializer, 0)
+                .await?
+        );
+        assert_eq!(0, upload_client(&mut sink).count());
+
+        upload_client(&mut sink).inject_failure(false);
+
+        // second event - let it succeed, as we want to fail that running upload
+        let id2 = EventId::from_id(1, 1, 2);
+        let event = Event {
+            id: id2.clone(),
+            data: (
+                literal!({ "": null }),
+                literal!({
+                    "gcs_streamer": {
+                        "bucket": "failure",
+                        "name": "test.txt"
+                    }
+                }),
+            )
+                .into(),
+            transactional: true,
+            ..Event::default()
+        };
+        assert_eq!(
+            SinkReply::ACK,
+            sink.on_event("", event, &context, &mut serializer, 0)
+                .await?
+        );
+        assert_eq!(1, upload_client(&mut sink).count());
+        let mut uploads = upload_client(&mut sink).running_uploads();
+        assert_eq!(1, uploads.len());
+        let (file_id, buffers) = uploads.pop().unwrap();
+        assert_eq!(ObjectId::new("failure", "test.txt"), file_id);
+        assert!(buffers.is_empty());
+        assert!(upload_client(&mut sink).finished_uploads().is_empty());
+        assert!(upload_client(&mut sink).deleted_uploads().is_empty());
+
+        // fail the next event
+        upload_client(&mut sink).inject_failure(true);
+
+        let id3 = EventId::from_id(1, 2, 3);
+        let event = Event {
+            id: id3.clone(),
+            data: (
+                literal!(42.9),
+                literal!({
+                    "gcs_streamer": {
+                        "bucket": "failure",
+                        "name": "test.txt"
+                    }
+                }),
+            )
+                .into(),
+            ..Event::default()
+        };
+        assert_eq!(
+            SinkReply::NONE,
+            sink.on_event("", event, &context, &mut serializer, 0)
+                .await?
+        );
+        // nothing changed - we just failed in the sink
+        assert_eq!(1, upload_client(&mut sink).count());
+        let mut uploads = upload_client(&mut sink).running_uploads();
+        assert_eq!(1, uploads.len());
+        let (file_id, buffers) = uploads.pop().unwrap();
+        assert_eq!(ObjectId::new("failure", "test.txt"), file_id);
+        assert!(buffers.is_empty());
+        assert!(upload_client(&mut sink).finished_uploads().is_empty());
+        assert!(upload_client(&mut sink).deleted_uploads().is_empty());
+
+        let event = Event {
+            data: (
+                literal!("snot"),
+                literal!({
+                    "gcs_streamer": {
+                        "bucket": "failure",
+                        "name": "next.txt"
+                    }
+                }),
+            )
+                .into(),
+            transactional: true,
+            ..Event::default()
+        };
+        assert_eq!(
+            SinkReply::ACK,
+            sink.on_event("", event, &context, &mut serializer, 0)
+                .await?
+        );
+        // nothing changed - we just failed in the sink
+        assert_eq!(1, upload_client(&mut sink).count());
+        let mut uploads = upload_client(&mut sink).running_uploads();
+        assert_eq!(1, uploads.len());
+        let (file_id, buffers) = uploads.pop().unwrap();
+        assert_eq!(ObjectId::new("failure", "test.txt"), file_id);
+        assert!(buffers.is_empty());
+        assert!(upload_client(&mut sink).finished_uploads().is_empty());
+        assert!(upload_client(&mut sink).deleted_uploads().is_empty());
+
+        // everything works on stop
+        upload_client(&mut sink).inject_failure(false);
+        sink.on_stop(&context).await?;
+
+        // nothing changed, because we have no running upload
+        assert_eq!(1, upload_client(&mut sink).count());
+
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn yolo_invalid_event() -> Result<()> {
+        _ = env_logger::try_init();
+        let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
+        let config = Config {
+            url: Default::default(),
+            bucket: None,
+            mode: Mode::Yolo,
+            connect_timeout: 1000000000,
+            buffer_size: 10,
+            max_retries: 3,
+            default_backoff_base_time: 1,
+        };
+
+        let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
+        let mut sink: YoloSink<
+            GCSObjectStorageSinkImpl<TestUploadClient>,
+            GCSUpload,
+            ChunkedBuffer,
+        > = YoloSink::new(sink_impl);
+
+        let (connection_lost_tx, _) = bounded(10);
+
+        let alias = Alias::new("a", "b");
+        let context = SinkContext {
+            uid: Default::default(),
+            alias: alias.clone(),
+            connector_type: "gcs_streamer".into(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(connection_lost_tx),
+        };
+        let mut serializer = EventSerializer::new(
+            Some(CodecConfig::from("json")),
+            CodecReq::Required,
+            vec![],
+            &"gcs_streamer".into(),
+            &alias,
+        )
+        .unwrap();
+
+        // simulate sink lifecycle
+        sink.on_start(&context).await?;
+        sink.connect(&context, &Attempt::default()).await?;
+
+        let event = Event {
+            data: (literal!({}), literal!({})).into(), // no gcs_streamer meta
+            ..Event::default()
+        };
+        assert!(sink
+            .on_event("", event, &context, &mut serializer, 0)
+            .await
+            .is_err());
+        assert_eq!(0, upload_client(&mut sink).count());
+        assert!(upload_client(&mut sink).running_uploads().is_empty());
+        Ok(())
+    }
+
+    fn test_client(
+        sink: &mut ConsistentSink<
+            GCSObjectStorageSinkImpl<TestUploadClient>,
+            GCSUpload,
+            ChunkedBuffer,
+        >,
+    ) -> &mut TestUploadClient {
+        sink.sink_impl
+            .upload_client
+            .as_mut()
+            .expect("No upload client available")
+    }
+
+    #[async_std::test]
+    pub async fn consistent_happy_path() -> Result<()> {
+        _ = env_logger::try_init();
+        let (reply_tx, reply_rx) = bounded(10);
+        let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
+        let config = Config {
+            url: Default::default(),
+            bucket: None,
+            mode: Mode::Consistent,
+            connect_timeout: 1000000000,
+            buffer_size: 10,
+            max_retries: 3,
+            default_backoff_base_time: 1,
+        };
+
+        let sink_impl =
+            GCSObjectStorageSinkImpl::consistent(config, upload_client_factory, reply_tx);
+        let mut sink: ConsistentSink<
+            GCSObjectStorageSinkImpl<TestUploadClient>,
+            GCSUpload,
+            ChunkedBuffer,
+        > = ConsistentSink::new(sink_impl);
+
+        let (connection_lost_tx, _) = bounded(10);
+
+        let alias = Alias::new("a", "b");
+        let context = SinkContext {
+            uid: Default::default(),
+            alias: alias.clone(),
+            connector_type: "gcs_streamer".into(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(connection_lost_tx),
+        };
+        let mut serializer = EventSerializer::new(
+            Some(CodecConfig::from("json")),
+            CodecReq::Required,
+            vec![],
+            &"gcs_streamer".into(),
+            &alias,
+        )
+        .unwrap();
+
+        // simulate standard sink lifecycle
+        sink.on_start(&context).await?;
+        sink.connect(&context, &Attempt::default()).await?;
+
+        let id1 = EventId::from_id(0, 0, 1);
+        let event = Event {
+            id: id1.clone(),
+            data: (
+                literal!({}),
+                literal!({
+                    "gcs_streamer": {
+                        "name": "test.txt",
+                        "bucket": "woah"
+                    }
+                }),
+            )
+                .into(),
+            ..Event::default()
+        };
+        sink.on_event("", event.clone(), &context, &mut serializer, 1234)
+            .await
+            .unwrap();
+
+        // verify it started the upload upon first request
+        let mut uploads = test_client(&mut sink).running_uploads();
+        assert_eq!(1, uploads.len());
+        let (file_id, buffers) = uploads.pop().unwrap();
+        assert_eq!(ObjectId::new("woah", "test.txt"), file_id);
+        assert!(buffers.is_empty());
+        assert_eq!(1, test_client(&mut sink).count());
+        assert!(test_client(&mut sink).finished_uploads().is_empty());
+        assert!(test_client(&mut sink).deleted_uploads().is_empty());
+        assert!(reply_rx.is_empty()); // no ack/fail sent by now
+
+        let id2 = EventId::from_id(0, 0, 2);
+        let event = Event {
+            id: id2.clone(),
+            data: (
+                literal!(["abcdefghijklmnopqrstuvwxyz"]),
+                literal!({
+                    "gcs_streamer": {
+                        "name": "test.txt",
+                        "bucket": "woah"
+                    }
+                }),
+            )
+                .into(),
+            transactional: true,
+            ..Event::default()
+        };
+        sink.on_event("", event.clone(), &context, &mut serializer, 1234)
+            .await
+            .unwrap();
+
+        // verify it did upload some parts
+        let mut uploads = test_client(&mut sink).running_uploads();
+        assert_eq!(1, uploads.len());
+        let (file_id, mut buffers) = uploads.pop().unwrap();
+        assert_eq!(ObjectId::new("woah", "test.txt"), file_id);
+        assert_eq!(3, buffers.len());
+        let part = buffers.pop().unwrap();
+        assert_eq!(20, part.start);
+        assert_eq!(10, part.len());
+        assert_eq!("qrstuvwxyz".as_bytes(), &part.data);
+        let part = buffers.pop().unwrap();
+        assert_eq!(10, part.start);
+        assert_eq!(10, part.len());
+        assert_eq!("ghijklmnop".as_bytes(), &part.data);
+        let part = buffers.pop().unwrap();
+        assert_eq!(0, part.start);
+        assert_eq!(10, part.len());
+        assert_eq!("{}[\"abcdef".as_bytes(), &part.data);
+
+        assert_eq!(1, test_client(&mut sink).count());
+        assert!(test_client(&mut sink).finished_uploads().is_empty());
+        assert!(test_client(&mut sink).deleted_uploads().is_empty());
+        assert!(reply_rx.is_empty()); // no ack/fail sent by now
+
+        // finishes upload on filename change - bucket changes
+        let id3 = EventId::from_id(1, 1, 1);
+        let event = Event {
+            id: id3.clone(),
+            data: (
+                Value::from(42_u64),
+                literal!({
+                    "gcs_streamer": {
+                        "name": "test.txt",
+                        "bucket": "woah2"
+                    }
+                }),
+            )
+                .into(),
+            transactional: true,
+            ..Event::default()
+        };
+        sink.on_event("", event.clone(), &context, &mut serializer, 1234)
+            .await
+            .unwrap();
+
+        let mut uploads = test_client(&mut sink).running_uploads();
+        assert_eq!(1, uploads.len());
+        let (file_id, buffers) = uploads.pop().unwrap();
+        assert_eq!(ObjectId::new("woah2", "test.txt"), file_id);
+        assert!(buffers.is_empty());
+
+        assert_eq!(2, test_client(&mut sink).count());
+
+        // 1 finished upload
+        let mut finished = test_client(&mut sink).finished_uploads();
+        assert_eq!(1, finished.len());
+        let (file_id, mut buffers) = finished.pop().unwrap();
+
+        assert_eq!(ObjectId::new("woah", "test.txt"), file_id);
+        assert_eq!(4, buffers.len());
+        let last = buffers.pop().unwrap();
+        assert_eq!(30, last.start);
+        assert_eq!(2, last.len());
+        assert_eq!("\"]".as_bytes(), &last.data);
+
+        assert!(test_client(&mut sink).deleted_uploads().is_empty());
+        let res = reply_rx.try_recv();
+        if let Ok(AsyncSinkReply::Ack(cf_data, _duration)) = res {
+            let id = cf_data.event_id();
+            assert!(id.is_tracking(&id1));
+            assert!(id.is_tracking(&id2));
+            assert!(!id.is_tracking(&id3));
+        } else {
+            assert!(false, "Expected an ack, got {res:?}");
+        }
+
+        // finishes upload on filename change - name changes
+        let id4 = EventId::from_id(2, 2, 2);
+        let event = Event {
+            id: id4.clone(),
+            data: (
+                literal!(true),
+                literal!({
+                    "gcs_streamer": {
+                        "name": "test5.txt",
+                        "bucket": "woah2"
+                    }
+                }),
+            )
+                .into(),
+            transactional: true,
+            ..Event::default()
+        };
+        sink.on_event("", event.clone(), &context, &mut serializer, 1234)
+            .await
+            .unwrap();
+
+        let mut uploads = test_client(&mut sink).running_uploads();
+        assert_eq!(1, uploads.len());
+        let (file_id, buffers) = uploads.pop().unwrap();
+        assert_eq!(ObjectId::new("woah2", "test5.txt"), file_id);
+        assert!(buffers.is_empty());
+
+        assert_eq!(3, test_client(&mut sink).count());
+
+        // 2 finished uploads
+        let mut finished = test_client(&mut sink).finished_uploads();
+        assert_eq!(2, finished.len());
+        let (file_id, mut buffers) = finished.pop().unwrap();
+
+        assert_eq!(ObjectId::new("woah2", "test.txt"), file_id);
+        assert_eq!(1, buffers.len());
+        let last = buffers.pop().unwrap();
+        assert_eq!(0, last.start);
+        assert_eq!(2, last.len());
+        assert_eq!("42".as_bytes(), &last.data);
+
+        assert!(test_client(&mut sink).deleted_uploads().is_empty());
+        let res = reply_rx.try_recv();
+        if let Ok(AsyncSinkReply::Ack(cf_data, _duration)) = res {
+            let id = cf_data.event_id();
+            assert!(id.is_tracking(&id3));
+            assert!(!id.is_tracking(&id4));
+        } else {
+            assert!(false, "Expected an ack, got {res:?}");
+        }
+
+        // finishes upload on stop
+        sink.on_stop(&context)
+            .await
+            .expect("Expected on_stop to work, lol");
+        assert_eq!(3, test_client(&mut sink).finished_uploads().len());
+
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn consistent_on_failure() -> Result<()> {
+        _ = env_logger::try_init();
+        let (reply_tx, reply_rx) = bounded(10);
+        let upload_client_factory = Box::new(|_config: &Config| Ok(TestUploadClient::default()));
+        let config = Config {
+            url: Default::default(),
+            bucket: None,
+            mode: Mode::Consistent,
+            connect_timeout: 1000000000,
+            buffer_size: 10,
+            max_retries: 3,
+            default_backoff_base_time: 1,
+        };
+
+        let sink_impl =
+            GCSObjectStorageSinkImpl::consistent(config, upload_client_factory, reply_tx);
+        let mut sink: ConsistentSink<
+            GCSObjectStorageSinkImpl<TestUploadClient>,
+            GCSUpload,
+            ChunkedBuffer,
+        > = ConsistentSink::new(sink_impl);
+
+        let (connection_lost_tx, _) = bounded(10);
+
+        let alias = Alias::new("a", "b");
+        let context = SinkContext {
+            uid: Default::default(),
+            alias: alias.clone(),
+            connector_type: "gcs_streamer".into(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(connection_lost_tx),
+        };
+        let mut serializer = EventSerializer::new(
+            Some(CodecConfig::from("json")),
+            CodecReq::Required,
+            vec![],
+            &"gcs_streamer".into(),
+            &alias,
+        )
+        .unwrap();
+
+        // simulate standard sink lifecycle
+        sink.on_start(&context).await?;
+        sink.connect(&context, &Attempt::default()).await?;
+
+        let id1 = EventId::from_id(1, 1, 1);
+        let event = Event {
+            id: id1.clone(),
+            data: (
+                literal!({"snot": "badger"}),
+                literal!({
+                    "gcs_streamer": {
+                        "name": "woah.txt",
+                        "bucket": "failure"
+                    }
+                }),
+            )
+                .into(),
+            ..Event::default()
+        };
+        sink.on_event("", event, &context, &mut serializer, 0)
+            .await?;
+
+        assert_eq!(1, test_client(&mut sink).running_uploads().len());
+        assert_eq!(1, test_client(&mut sink).count());
+
+        // make the client fail requests
+        debug!("INJECT FAILURE");
+        test_client(&mut sink).inject_failure(true);
+
+        let id2 = EventId::from_id(3, 3, 3);
+        let event = Event {
+            id: id2.clone(),
+            data: (
+                literal!([1, 2, 3, 4, 5, 6, 7, 8, 9, 0]),
+                literal!({
+                    "gcs_streamer": {
+                        "name": "woah.txt",
+                        "bucket": "failure"
+                    }
+                }),
+            )
+                .into(),
+            ..Event::default()
+        };
+        sink.on_event("", event, &context, &mut serializer, 0)
+            .await?;
+        assert_eq!(1, test_client(&mut sink).count());
+        assert_eq!(1, test_client(&mut sink).running_uploads().len());
+        assert_eq!(0, test_client(&mut sink).deleted_uploads().len());
+
+        test_client(&mut sink).inject_failure(false);
+        // trigger deletion of the old failed upload, trigger a fail for the old upload
+        // and start a new one for the second batch element
+        let id3 = EventId::from_id(4, 4, 100);
+        let event = Event {
+            id: id3.clone(),
+            data: (
+                literal!([
+                    {
+                        "data": {
+                            "meta": {
+                                "gcs_streamer": {
+                                    "name": "woah.txt",
+                                    "bucket": "failure"
+                                }
+                            },
+                            "value": "snot"
+                        }
+                    },
+                    {
+                        "data": {
+                            "meta": {
+                                "gcs_streamer": {
+                                    "name": "woah2.txt",
+                                    "bucket": "failure"
+                                }
+                            },
+                            "value": "badger"
+                        }
+                    }
+                ]),
+                literal!({}),
+            )
+                .into(),
+            transactional: true,
+            is_batch: true,
+            ..Event::default()
+        };
+        sink.on_event("", event, &context, &mut serializer, 0)
+            .await?;
+
+        assert_eq!(1, test_client(&mut sink).running_uploads().len());
+        assert_eq!(2, test_client(&mut sink).count());
+        assert_eq!(1, test_client(&mut sink).deleted_uploads().len());
+        assert_eq!(0, test_client(&mut sink).finished_uploads().len());
+
+        let reply = reply_rx.try_recv();
+        if let Ok(AsyncSinkReply::Fail(cf)) = reply {
+            let id = cf.event_id();
+            assert!(id.is_tracking(&id1));
+            assert!(id.is_tracking(&id2));
+            assert!(id.is_tracking(&id3));
+        } else {
+            assert!(false, "Expected a fail, got {reply:?}");
+        }
+
+        sink.on_stop(&context).await?;
+
+        assert_eq!(0, test_client(&mut sink).running_uploads().len());
+        assert_eq!(2, test_client(&mut sink).count());
+        assert_eq!(1, test_client(&mut sink).deleted_uploads().len());
+        assert_eq!(1, test_client(&mut sink).finished_uploads().len());
+        Ok(())
     }
 }

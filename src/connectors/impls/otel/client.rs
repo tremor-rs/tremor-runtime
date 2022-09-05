@@ -215,8 +215,7 @@ mod tests {
         let alias = Alias::new("flow", "my_otel_client");
         let with_processors = literal!({
             "config": {
-                "host": "localhost",
-                "port": 4317,
+                "url": "localhost:4317",
             },
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(

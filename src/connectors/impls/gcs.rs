@@ -13,7 +13,5 @@
 // limitations under the License.
 
 mod chunked_buffer;
-pub(crate) mod consistent;
 mod resumable_upload_client;
 pub(crate) mod streamer;
-pub(crate) mod yolo;
