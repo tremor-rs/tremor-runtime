@@ -24,6 +24,7 @@ jobs:
         env:
           PROPTEST_CASES: 2500
           RUSTFLAGS: -D warnings -C target-feature=+avx,+avx2,+sse4.2
+          RUST_LOG: debug
           RUST_BACKTRACE: 1
         run: cargo llvm-cov --workspace --lcov --output-path lcov.txt --features integration
       - uses: codecov/codecov-action@v3
