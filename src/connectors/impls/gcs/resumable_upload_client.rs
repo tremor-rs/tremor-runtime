@@ -141,7 +141,7 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> R
 {
     async fn bucket_exists(&mut self, url: &Url<HttpsDefaults>, bucket: &str) -> Result<bool> {
         let mut response = retriable_request(&self.backoff_strategy, &mut self.client, || {
-            let url = url::Url::parse(&format!("{}/b/{}", url, bucket))?;
+            let url = url::Url::parse(&format!("{}b/{}", url, bucket))?;
             Ok(Request::new(Method::Get, url))
         })
         .await?;
@@ -265,7 +265,8 @@ impl<THttpClient: HttpClient, TBackoffStrategy: BackoffStrategy + Send + Sync> R
         })
         .await?;
         // dont ask me, see: https://cloud.google.com/storage/docs/performing-resumable-uploads#cancel-upload
-        if response.status() as u32 == 499 {
+        let status = response.status() as u32;
+        if status == 499 || status == 204 {
             Ok(())
         } else {
             error!(
@@ -426,6 +427,34 @@ mod tests {
     }
 
     #[async_std::test]
+    async fn can_bucket_exists() -> Result<()> {
+        let client = MockHttpClient {
+            config: Default::default(),
+            handle_request: Box::new(|req| {
+                assert_eq!(req.url().path(), "/b/snot");
+                assert_eq!(req.method(), Method::Get);
+
+                let response = Response::new(StatusCode::Ok);
+                Ok(response)
+            }),
+            simulate_failure: Arc::new(AtomicBool::new(true)),
+            simulate_transport_failure: Arc::new(AtomicBool::new(true)),
+        };
+        let mut api_client = DefaultClient {
+            client,
+            backoff_strategy: ExponentialBackoffRetryStrategy {
+                max_retries: 3,
+                base_sleep_time: Duration::from_nanos(1),
+            },
+        };
+        let bucket_exists = api_client
+            .bucket_exists(&Url::parse("http://example.com")?, "snot")
+            .await?;
+        assert!(bucket_exists);
+        Ok(())
+    }
+
+    #[async_std::test]
     pub async fn can_start_upload() -> Result<()> {
         let client = MockHttpClient {
             config: Default::default(),
@@ -454,6 +483,36 @@ mod tests {
             .start_upload(
                 &Url::parse("http://example.com/upload").expect("static url did not parse"),
                 ObjectId::new("bucket", "somefile"),
+            )
+            .await?;
+        Ok(())
+    }
+
+    #[async_std::test]
+    pub async fn can_delete_upload() -> Result<()> {
+        let client = MockHttpClient {
+            config: Default::default(),
+            handle_request: Box::new(|req| {
+                assert_eq!(req.method(), Method::Delete);
+                assert_eq!(req.url().path(), "/upload_session");
+
+                let response = Response::new(StatusCode::NoContent);
+                Ok(response)
+            }),
+            simulate_failure: Arc::new(AtomicBool::new(true)),
+            simulate_transport_failure: Arc::new(AtomicBool::new(true)),
+        };
+        let mut api_client = DefaultClient::new(
+            client,
+            ExponentialBackoffRetryStrategy {
+                max_retries: 3,
+                base_sleep_time: Duration::from_nanos(1),
+            },
+        )?;
+        api_client
+            .delete_upload(
+                &url::Url::parse("http://example.com/upload_session")
+                    .expect("static url did not parse"),
             )
             .await?;
         Ok(())
