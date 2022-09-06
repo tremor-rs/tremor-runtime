@@ -253,8 +253,8 @@ async fn transactional_retry() -> Result<()> {
     );
 
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
 
     // check out the committed offsets with another consumer
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
@@ -471,8 +471,8 @@ async fn custom_no_retry() -> Result<()> {
     );
 
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
 
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
     assert_eq!(offsets.get(&(topic.to_string(), 0)), Some(&Offset::Invalid));
@@ -678,8 +678,8 @@ async fn performance() -> Result<()> {
     );
 
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
 
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
     assert_eq!(
@@ -733,8 +733,8 @@ async fn connector_kafka_consumer_unreachable() -> Result<()> {
     assert!(harness.start().await.is_err());
 
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
     Ok(())
 }
 
@@ -871,8 +871,8 @@ async fn connector_kafka_consumer_pause_resume() -> Result<()> {
     assert_eq!(Value::from("R.I.P."), e2.data.suffix().value());
 
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
 
     // cleanup
     drop(container);
@@ -978,8 +978,8 @@ async fn transactional_store_offset_handling() -> Result<()> {
 
     // stop harness
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
 
     debug!("getting offsets...");
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
@@ -1185,8 +1185,8 @@ async fn transactional_commit_offset_handling() -> Result<()> {
 
     // stop harness
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
 
     let offsets = get_offsets(broker.as_str(), group_id, topic).await?;
     assert_eq!(

@@ -39,7 +39,7 @@ async fn file_connector() -> Result<()> {
     assert!(harness.start().await.is_err());
 
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
     Ok(())
 }
