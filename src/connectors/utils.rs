@@ -69,7 +69,7 @@ pub(crate) mod url {
         const PORT: u16;
     }
 
-    // Default HTTP
+    /// Default HTTP
     pub(crate) struct HttpDefaults;
     impl Defaults for HttpDefaults {
         const HOST: &'static str = "localhost";

@@ -41,6 +41,7 @@ pub(crate) struct Config {
     url: Option<Url<HttpsDefaults>>,
     /// optional default bucket
     bucket: Option<String>,
+    #[serde(default = "Default::default")]
     mode: Mode,
 
     #[serde(default = "Config::fivembs")]
@@ -451,5 +452,23 @@ impl ObjectStorageUpload for S3Upload {
             self.op_meta.merge(event.op_meta.clone());
         }
         self.transactional |= event.transactional;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tremor_value::literal;
+
+    #[test]
+    fn config_defaults() -> Result<()> {
+        let config = literal!({});
+        let res = Config::new(&config)?;
+        assert!(res.aws_region.is_none());
+        assert!(res.url.is_none());
+        assert!(res.bucket.is_none());
+        assert_eq!(Mode::Yolo, res.mode);
+        assert_eq!(5242980, res.buffer_size);
+        Ok(())
     }
 }

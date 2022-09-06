@@ -64,6 +64,7 @@ pub(super) struct Config {
     /// Optional default bucket
     pub(super) bucket: Option<String>,
     /// Mode of operation for this sink
+    #[serde(default)]
     pub(super) mode: Mode,
     #[serde(default = "default_connect_timeout")]
     pub(super) connect_timeout: u64,
