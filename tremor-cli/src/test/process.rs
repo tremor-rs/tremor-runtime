@@ -30,6 +30,7 @@ use async_std::sync::Arc;
 use globwalk::GlobWalkerBuilder;
 use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook_async_std::Signals;
+use simd_json::ValueAccess;
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
@@ -54,6 +55,15 @@ fn test_env(tests_root_dir: &Path, test_dir: &Path) -> HashMap<String, String> {
     } else {
         format!("{}:{}", tremor_path, test_lib)
     };
+    if let Ok(env_content) = slurp_string("env.yaml") {
+        // ALLOW: We don't use the string anymore after this
+        let env_value = serde_yaml::from_str::<HashMap<String, String>>(env_content.as_str())
+            .expect("Expected json map in `env` file");
+        for (k, v) in env_value {
+            debug!("Adding env var {k}={v}");
+            env.insert(k, v);
+        }
+    }
     env.insert(String::from("TREMOR_PATH"), tremor_path);
     env
 }

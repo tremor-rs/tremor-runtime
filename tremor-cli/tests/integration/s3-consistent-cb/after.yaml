@@ -1,0 +1,6 @@
+dir: "."
+cmd: "docker"
+args:
+  - "rm"
+  - "-f"
+  - "tremor-minio-consistent-unique"
