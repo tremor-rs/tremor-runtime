@@ -267,8 +267,8 @@ async fn connector_kafka_producer() -> Result<()> {
 
     // shutdown
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
     // cleanup
     drop(container);
     Ok(())
