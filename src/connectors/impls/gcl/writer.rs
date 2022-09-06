@@ -16,7 +16,7 @@ pub(crate) mod meta;
 mod sink;
 
 use crate::connectors::google::GouthTokenProvider;
-use crate::connectors::impls::gcl::writer::sink::GclSink;
+use crate::connectors::impls::gcl::writer::sink::{GclSink, TonicChannelFactory};
 use crate::connectors::prelude::*;
 use crate::connectors::{Alias, Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
 use crate::errors::Error;
@@ -25,6 +25,7 @@ use googapis::google::logging::r#type::LogSeverity;
 use serde::Deserialize;
 use simd_json::OwnedValue;
 use std::collections::HashMap;
+use tonic::transport::Channel;
 use tremor_pipeline::ConfigImpl;
 
 #[derive(Deserialize, Clone)]
@@ -240,7 +241,11 @@ impl Connector for Gcl {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = GclSink::<GouthTokenProvider>::new(self.config.clone(), builder.reply_tx());
+        let sink = GclSink::<GouthTokenProvider, Channel>::new(
+            self.config.clone(),
+            builder.reply_tx(),
+            TonicChannelFactory,
+        );
 
         builder.spawn(sink, sink_context).map(Some)
     }
