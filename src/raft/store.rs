@@ -8,8 +8,8 @@ use openraft::{
     async_trait::async_trait,
     storage::{LogState, Snapshot},
     AnyError, EffectiveMembership, Entry, EntryPayload, ErrorSubject, ErrorVerb, LogId, NodeId,
-    RaftLogReader, RaftSnapshotBuilder, RaftStorage, SnapshotMeta, StateMachineChanges,
-    StorageError, StorageIOError, Vote,
+    RaftLogReader, RaftSnapshotBuilder, RaftStorage, SnapshotMeta, StorageError, StorageIOError,
+    Vote,
 };
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Direction, FlushOptions, Options, DB};
 use serde::{Deserialize, Serialize};
@@ -998,7 +998,7 @@ impl RaftStorage<TremorTypeConfig> for Arc<TremorStore> {
         &mut self,
         meta: &SnapshotMeta<TremorNodeId, TremorNode>,
         snapshot: Box<Self::SnapshotData>,
-    ) -> StorageResult<StateMachineChanges<TremorTypeConfig>> {
+    ) -> StorageResult<()> {
         info!(
             "decoding snapshot for installation size: {} ",
             snapshot.get_ref().len()
@@ -1029,10 +1029,7 @@ impl RaftStorage<TremorTypeConfig> for Arc<TremorStore> {
         }
 
         self.set_current_snapshot_(new_snapshot)?;
-        Ok(StateMachineChanges {
-            last_applied: meta.last_log_id,
-            is_snapshot: true,
-        })
+        Ok(())
     }
 
     // #[tracing::instrument(level = "trace", skip(self))]

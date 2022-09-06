@@ -136,6 +136,7 @@ async fn build_archive(name: &str, entrypoint: &str) -> Result<Vec<u8>> {
         .collect::<Result<_>>()?;
     if !flows.contains_key(&FlowId("main".to_string())) {
         let w = Warning {
+            class: Class::Behaviour,
             outer: d.extent(),
             inner: d.extent(),
             msg: "No main flow found".to_string(),

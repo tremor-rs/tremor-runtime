@@ -123,7 +123,7 @@ async fn stop_after_secs() -> Result<()> {
     // the bench connector should trigger the kill switch
     let two_secs = Duration::from_secs(2);
     let msg = timeout(two_secs, rx.recv()).await?.expect("failed to recv");
-    assert!(matches!(msg, flow_supervisor::Msg::Stop));
+    assert!(matches!(msg, flow_supervisor::Msg::Terminate));
     info!("Flow supervisor finished");
     info!("Harness stopped");
     handle.abort(); // stopping the pipeline after the connector to ensure it is draining the source

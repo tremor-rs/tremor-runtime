@@ -248,7 +248,7 @@ impl FlowSupervisor {
                             .await;
                     }
                     Msg::GetFlows(reply_tx) => self.handle_get_flows(reply_tx),
-                    Msg::GetFlow(id, reply_tx) => self.handle_get_flow(id, reply_tx),
+                    Msg::GetFlow(id, reply_tx) => self.handle_get_flow(&id, reply_tx),
                     Msg::Terminate => {
                         self.handle_terminate().await?;
                         break;
