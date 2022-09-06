@@ -406,11 +406,12 @@ impl<Client: ResumableUploadClient + Send + Sync> ObjectStorageSinkImpl<GCSUploa
 pub(crate) mod tests {
     use super::*;
     use crate::{
-        config::Codec as CodecConfig,
+        config::{Codec as CodecConfig, Reconnect},
         connectors::{impls::gcs::streamer::Mode, reconnect::ConnectionLostNotifier},
     };
     use async_std::channel::bounded;
     use halfbrown::HashMap;
+    use tremor_common::ids::ConnectorIdGen;
     use tremor_pipeline::EventId;
     use tremor_value::literal;
 
@@ -1433,6 +1434,66 @@ pub(crate) mod tests {
         assert_eq!(2, test_client(&mut sink).count());
         assert_eq!(1, test_client(&mut sink).deleted_uploads().len());
         assert_eq!(1, test_client(&mut sink).finished_uploads().len());
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn connector_yolo_mode() -> Result<()> {
+        _ = env_logger::try_init();
+        let config = literal!({
+            "mode": "yolo"
+        });
+        let builder = super::Builder::default();
+        let cfg = ConnectorConfig {
+            connector_type: CONNECTOR_TYPE.into(),
+            codec: Some("json".into()),
+            config: Some(config),
+            preprocessors: None,
+            postprocessors: None,
+            reconnect: Reconnect::None,
+            metrics_interval_s: None,
+        };
+        let kill_switch = KillSwitch::dummy();
+        let alias = Alias::new("snot", "badger");
+        let mut connector_id_gen = ConnectorIdGen::default();
+
+        // lets cover create-sink here
+        let addr =
+            crate::connectors::spawn(&alias, &mut connector_id_gen, &builder, cfg, &kill_switch)
+                .await?;
+        let (tx, rx) = bounded(1);
+        addr.stop(tx).await?;
+        assert!(rx.recv().await?.res.is_ok());
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn connector_consistent_mode() -> Result<()> {
+        _ = env_logger::try_init();
+        let config = literal!({
+            "mode": "consistent"
+        });
+        let builder = super::Builder::default();
+        let cfg = ConnectorConfig {
+            connector_type: CONNECTOR_TYPE.into(),
+            codec: Some("json".into()),
+            config: Some(config),
+            preprocessors: None,
+            postprocessors: None,
+            reconnect: Reconnect::None,
+            metrics_interval_s: None,
+        };
+        let kill_switch = KillSwitch::dummy();
+        let alias = Alias::new("snot", "badger");
+        let mut connector_id_gen = ConnectorIdGen::default();
+
+        // lets cover create-sink here
+        let addr =
+            crate::connectors::spawn(&alias, &mut connector_id_gen, &builder, cfg, &kill_switch)
+                .await?;
+        let (tx, rx) = bounded(1);
+        addr.stop(tx).await?;
+        assert!(rx.recv().await?.res.is_ok());
         Ok(())
     }
 }
