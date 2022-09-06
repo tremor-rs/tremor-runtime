@@ -23,7 +23,7 @@ use tremor_value::Value;
 use value_trait::ValueAccess;
 
 /// mode of operation for object storage connectors
-#[derive(Debug, Default, Deserialize, Clone, Copy)]
+#[derive(Debug, Default, Deserialize, Clone, Copy, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum Mode {
     /// automatically ack all incoming events regardless
