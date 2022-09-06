@@ -30,7 +30,6 @@ use async_std::sync::Arc;
 use globwalk::GlobWalkerBuilder;
 use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook_async_std::Signals;
-use simd_json::ValueAccess;
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
@@ -38,7 +37,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use tremor_common::{file::canonicalize, time::nanotime};
 
-fn test_env(tests_root_dir: &Path, test_dir: &Path) -> HashMap<String, String> {
+fn test_env(tests_root_dir: &Path, test_dir: &Path) -> Result<HashMap<String, String>> {
     let mut env = HashMap::with_capacity(1);
     env.insert(
         String::from("RUST_LOG"),
@@ -57,15 +56,13 @@ fn test_env(tests_root_dir: &Path, test_dir: &Path) -> HashMap<String, String> {
     };
     if let Ok(env_content) = slurp_string("env.yaml") {
         // ALLOW: We don't use the string anymore after this
-        let env_value = serde_yaml::from_str::<HashMap<String, String>>(env_content.as_str())
-            .expect("Expected json map in `env` file");
+        let env_value = serde_yaml::from_str::<HashMap<String, String>>(env_content.as_str())?;
         for (k, v) in env_value {
-            debug!("Adding env var {k}={v}");
             env.insert(k, v);
         }
     }
     env.insert(String::from("TREMOR_PATH"), tremor_path);
-    env
+    Ok(env)
 }
 
 async fn handle_signals(
@@ -124,7 +121,7 @@ pub(crate) async fn run_process(
     let process_start = nanotime();
 
     // enable info level logging
-    let env = test_env(tests_root_dir, test_dir);
+    let env = test_env(tests_root_dir, test_dir)?;
 
     let mut before = before::BeforeController::new(test_dir, &env);
     let mut after = after::AfterController::new(test_dir, &env);
