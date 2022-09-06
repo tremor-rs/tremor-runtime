@@ -1,0 +1,9 @@
+status: 0
+name: s3_streamer yolo mode
+asserts:
+  - source: fg.err.log
+    contains:
+      - "All required CB events received."
+      - "Got acks: {0: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]}"
+      - "Got fails: {}"
+          
