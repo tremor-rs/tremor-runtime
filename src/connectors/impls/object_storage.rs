@@ -40,6 +40,19 @@ pub(crate) enum Mode {
     Consistent,
 }
 
+impl std::fmt::Display for Mode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Mode::Yolo => "yolo",
+                Mode::Consistent => "consistent",
+            }
+        )
+    }
+}
+
 #[derive(Hash, PartialEq, Eq, Debug, Clone)]
 pub(crate) struct ObjectId {
     bucket: String,

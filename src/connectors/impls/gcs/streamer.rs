@@ -19,6 +19,7 @@ use crate::{
                 chunked_buffer::ChunkedBuffer,
                 resumable_upload_client::{
                     create_client, DefaultClient, ExponentialBackoffRetryStrategy,
+                    ResumableUploadClient,
                 },
             },
             object_storage::{
@@ -38,22 +39,7 @@ use tremor_common::time::nanotime;
 use tremor_pipeline::{ConfigImpl, EventId, OpMeta};
 use tremor_value::Value;
 
-use super::resumable_upload_client::ResumableUploadClient;
-
 const CONNECTOR_TYPE: &str = "gcs_streamer";
-
-impl std::fmt::Display for Mode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Yolo => "yolo",
-                Self::Consistent => "consistent",
-            }
-        )
-    }
-}
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
@@ -561,7 +547,7 @@ pub(crate) mod tests {
 
         let config = Config {
             url: Default::default(),
-            bucket: None,
+            bucket: Some("bucket".to_string()),
             mode: Mode::Yolo,
             connect_timeout: 1000000000,
             buffer_size: 10,
@@ -967,8 +953,84 @@ pub(crate) mod tests {
             .on_event("", event, &context, &mut serializer, 0)
             .await
             .is_err());
+        let event = Event {
+            data: (
+                literal!({}),
+                literal!({
+                    "gcs_streamer": {
+                        "bucket": null, // invalid bucket
+                        "name": "42.24"
+                    }
+                }),
+            )
+                .into(), // no gcs_streamer meta
+            ..Event::default()
+        };
+        assert!(sink
+            .on_event("", event, &context, &mut serializer, 0)
+            .await
+            .is_err());
+        let event = Event {
+            data: (
+                literal!({}),
+                literal!({
+                    "gcs_streamer": {
+                        "bucket": "null",
+                        "name": 42.24 // invalid name
+                    }
+                }),
+            )
+                .into(), // no gcs_streamer meta
+            ..Event::default()
+        };
+        assert!(sink
+            .on_event("", event, &context, &mut serializer, 0)
+            .await
+            .is_err());
         assert_eq!(0, upload_client(&mut sink).count());
         assert!(upload_client(&mut sink).running_uploads().is_empty());
+        Ok(())
+    }
+
+    #[async_std::test]
+    async fn yolo_bucket_exists_error() -> Result<()> {
+        _ = env_logger::try_init();
+        let upload_client_factory = Box::new(|_config: &Config| {
+            let mut client = TestUploadClient::default();
+            client.inject_failure(true);
+            Ok(client)
+        });
+        let config = Config {
+            url: Default::default(),
+            bucket: Some("bucket".to_string()),
+            mode: Mode::Yolo,
+            connect_timeout: 1000000000,
+            buffer_size: 10,
+            max_retries: 3,
+            default_backoff_base_time: 1,
+        };
+
+        let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
+        let mut sink: YoloSink<
+            GCSObjectStorageSinkImpl<TestUploadClient>,
+            GCSUpload,
+            ChunkedBuffer,
+        > = YoloSink::new(sink_impl);
+
+        let (connection_lost_tx, _) = bounded(10);
+
+        let alias = Alias::new("a", "b");
+        let context = SinkContext {
+            uid: Default::default(),
+            alias: alias.clone(),
+            connector_type: "gcs_streamer".into(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(connection_lost_tx),
+        };
+
+        // simulate sink lifecycle
+        sink.on_start(&context).await?;
+        assert!(sink.connect(&context, &Attempt::default()).await.is_err());
         Ok(())
     }
 
