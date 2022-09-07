@@ -159,7 +159,6 @@ pub trait Highlighter {
             .0
             .and_then(|r| Some((r, r.aid(), Arena::io_get(r.aid()).ok()?)))
         {
-            // i wanna use map_while here, but it is still unstable :(
             let tokens: Vec<_> = lexer::Lexer::new(script, aid)
                 .tokenize_until_err()
                 .collect();

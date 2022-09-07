@@ -343,7 +343,7 @@ impl Sink for Blackhole {
                     if let Ok(bufs) = event_serializer.serialize(value, event.ingest_ns) {
                         self.bytes += bufs.iter().map(Vec::len).sum::<usize>();
                     } else {
-                        error!("failed to encode");
+                        error!("{ctx} failed to encode");
                     };
                     self.count += 1;
                     self.buf.clear();
@@ -358,34 +358,52 @@ impl Sink for Blackhole {
                     .iter()
                     .any(|stop_after_events| self.count >= *stop_after_events)
             {
-                self.finished = true;
-                if self.structured {
-                    let v = self.to_value(2);
-                    v.write(&mut stdout())?;
-                } else {
-                    self.write_text(stdout(), 5, 2)?;
-                }
-                let kill_switch = self.kill_switch.clone();
-                let stop_ctx = ctx.clone();
-                info!("Bench done");
-
-                // this should stop the whole server process
-                // we spawn this out into another task, so we don't block the sink loop handling control plane messages
-                async_std::task::spawn(async move {
-                    info!("{stop_ctx} Exiting...");
-                    stop_ctx.swallow_err(
-                        kill_switch.stop(ShutdownMode::Forceful).await,
-                        "Error stopping the world",
-                    );
-                });
+                self.finish(ctx)?;
             };
         }
 
         Ok(SinkReply::default())
     }
+
+    async fn on_signal(
+        &mut self,
+        _signal: Event,
+        ctx: &SinkContext,
+        _serializer: &mut EventSerializer,
+    ) -> Result<SinkReply> {
+        let now_ns = nanotime();
+        if self.stop_at.iter().any(|stop_at| now_ns >= *stop_at) {
+            self.finish(ctx)?;
+        }
+        Ok(SinkReply::default())
+    }
 }
 
 impl Blackhole {
+    fn finish(&mut self, ctx: &SinkContext) -> Result<()> {
+        self.finished = true;
+        if self.structured {
+            let v = self.to_value(2);
+            v.write(&mut stdout())?;
+        } else {
+            self.write_text(stdout(), 5, 2)?;
+        }
+        let kill_switch = self.kill_switch.clone();
+        let stop_ctx = ctx.clone();
+        info!("{ctx} Bench done");
+
+        // this should stop the whole server process
+        // we spawn this out into another task, so we don't block the sink loop handling control plane messages
+        async_std::task::spawn(async move {
+            info!("{stop_ctx} Exiting...");
+            stop_ctx.swallow_err(
+                kill_switch.stop(ShutdownMode::Forceful).await,
+                "Error stopping the world",
+            );
+        });
+        Ok(())
+    }
+
     #[allow(clippy::cast_precision_loss)] // This is for reporting only we're fine with some precision loss
     fn write_text<W: Write>(
         &self,

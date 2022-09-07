@@ -380,7 +380,8 @@ impl Sink for HttpRequestSink {
                                 );
                             }
                         }
-                        Err(_e) => {
+                        Err(e) => {
+                            error!("{send_ctx} Error sending HTTP request: {e}");
                             if let Some(contraflow_data) = contraflow_data {
                                 send_ctx.swallow_err(
                                     reply_tx.send(AsyncSinkReply::Fail(contraflow_data)).await,

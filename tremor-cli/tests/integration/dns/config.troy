@@ -1,0 +1,53 @@
+define flow dns
+flow
+  use integration;
+  use tremor::connectors;
+  use tremor::pipelines;
+
+  create connector input from integration::read_file;
+  create connector output from integration::write_file;
+  create connector console from connectors::console;
+  create connector exit from integration::exit;
+
+  define connector dns from dns_client;
+  create connector dns;
+
+  define pipeline request
+  pipeline
+    define script dns_meta
+    script
+      let $dns = {
+        "lookup": {
+          "name": event,
+          "type": "A"
+        }
+      };
+      emit event;
+    end;
+    create script dns_meta;
+
+    select event from in where event != "exit" into dns_meta;
+    select event from in where event == "exit" into out;
+    select event from dns_meta into out;
+    select event from dns_meta/err into err;
+  end;
+  create pipeline request;
+  define pipeline response
+  into out, exit
+  pipeline
+    use std::array;
+
+    select group[0]["A"] from in group by each(event) into out;
+    select event from in where array::len(event) > 0 into exit;
+  end;
+  create pipeline response;
+
+  connect /connector/input to /pipeline/request;
+  connect /pipeline/request to /connector/dns;
+  connect /pipeline/request/err to /connector/console;
+
+  connect /connector/dns to /pipeline/response;
+  connect /pipeline/response/out to /connector/output;
+  connect /pipeline/response/exit to /connector/exit;
+end;
+deploy flow dns;

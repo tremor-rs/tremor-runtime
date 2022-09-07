@@ -27,6 +27,7 @@ use std::collections::HashMap;
 use tremor_pipeline::ConfigImpl;
 
 #[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     /// The default `log_name` for this configuration or `default` if not provided.
     /// The `log_name` field can be overridden in metadata.

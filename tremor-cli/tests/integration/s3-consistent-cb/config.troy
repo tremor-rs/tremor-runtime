@@ -1,0 +1,59 @@
+define flow consistent
+flow
+  use std::time::nanos;
+  use tremor::connectors;
+
+  define connector cb from cb
+  with
+    config = {
+      "paths": [
+        "in.json"
+      ],
+      "timeout": nanos::from_seconds(1),
+      "expect_batched": true
+    }
+  end;
+  create connector cb;
+
+  define connector s3 from s3_streamer
+  with
+    codec = "json-sorted",
+    postprocessors = [
+      "separate"
+    ],
+    config = {
+      "aws_region": "eu-central-1",
+      "url": "http://127.0.0.1:9000",
+      "mode": "consistent",
+      "bucket": "bucket"
+    }
+  end;
+  create connector s3;
+
+  define pipeline main
+  pipeline
+    define script s3_meta
+    script
+      let $s3_streamer = {
+        "name": event.name
+      };
+      emit event.payload;
+    end;
+    create script s3_meta;
+
+    select event from in into s3_meta;
+    select event from s3_meta/out into out;
+    select event from s3_meta/err into err;
+  end;
+  create pipeline main;
+
+  create connector console from connectors::console;
+
+  connect /connector/cb to /pipeline/main;
+  connect /pipeline/main/out to /connector/s3;
+  connect /pipeline/main/err to /connector/console/stdout;
+
+end;
+
+
+deploy flow consistent;

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Fix output of `dns_client` being empty for any lookup.
+
 ## [0.13.0-rc.2]
 
 ### Fixes
@@ -14,6 +20,7 @@
 
 ### Breaking Changes
 
+- Change `gcs_streamer` and `s3_streamer` to only ack events upon finished uploads.
 - `cb` connector config `path` changed to `paths`.
 - Introduce breaking change in `kafka_consumer` configuration, by adding `mode`.
 - Update grok to 0.2, optional patterns are now omitted no longer ""

@@ -14,6 +14,7 @@
 
 use super::super::ConnectorHarness;
 use super::redpanda_container;
+use crate::connectors::tests::free_port::find_free_tcp_port;
 use crate::{connectors::impls::kafka, errors::Result, Event};
 use async_std::prelude::FutureExt;
 use futures::StreamExt;
@@ -32,10 +33,8 @@ use tremor_pipeline::EventId;
 use tremor_value::literal;
 
 #[async_std::test]
-#[serial(kafka)]
+#[serial(kafka, timeout_ms = 600000)]
 async fn connector_kafka_producer() -> Result<()> {
-    serial_test::set_max_wait(Duration::from_secs(600));
-
     let _ = env_logger::try_init();
     let docker = DockerCli::default();
     let container = redpanda_container(&docker).await?;
@@ -268,9 +267,69 @@ async fn connector_kafka_producer() -> Result<()> {
 
     // shutdown
     let (out_events, err_events) = harness.stop().await?;
-    assert!(out_events.is_empty());
-    assert!(err_events.is_empty());
+    assert_eq!(out_events, vec![]);
+    assert_eq!(err_events, vec![]);
     // cleanup
     drop(container);
+    Ok(())
+}
+
+#[async_std::test]
+#[serial(kafka, timeout_ms = 600000)]
+async fn producer_unreachable() -> Result<()> {
+    let _ = env_logger::try_init();
+    let port = find_free_tcp_port().await?;
+    let broker = format!("127.0.0.1:{port}");
+    let topic = "unreachable";
+    let connector_config = literal!({
+        "codec": "json-sorted",
+        "config": {
+            "brokers": [
+                broker.clone()
+            ],
+            "topic": topic,
+            "key": "snot",
+            "rdkafka_options": {
+                "debug": "all"
+            }
+        }
+    });
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &kafka::producer::Builder::default(),
+        &connector_config,
+    )
+    .await?;
+    assert!(harness.start().await.is_err());
+    Ok(())
+}
+
+#[async_std::test]
+#[serial(kafka, timeout_ms = 600000)]
+async fn producer_unresolvable() -> Result<()> {
+    let _ = env_logger::try_init();
+    let port = find_free_tcp_port().await?;
+    let broker = format!("i_do_not_resolve:{port}");
+    let topic = "unresolvable";
+    let connector_config = literal!({
+        "codec": "json-sorted",
+        "config": {
+            "brokers": [
+                broker.clone()
+            ],
+            "topic": topic,
+            "key": "snot",
+            "rdkafka_options": {
+                "debug": "all"
+            }
+        }
+    });
+    let harness = ConnectorHarness::new(
+        function_name!(),
+        &kafka::producer::Builder::default(),
+        &connector_config,
+    )
+    .await?;
+    assert!(harness.start().await.is_err());
     Ok(())
 }

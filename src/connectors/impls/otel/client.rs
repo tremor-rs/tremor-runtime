@@ -27,6 +27,7 @@ const CONNECTOR_TYPE: &str = "otel_client";
 // TODO Consider concurrency cap?
 
 #[derive(Debug, Clone, Deserialize, Default)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     /// The hostname or IP address for the remote OpenTelemetry collector endpoint
     #[serde(default = "Default::default")]
@@ -174,8 +175,11 @@ impl Sink for OtelSink {
                     None
                 };
                 if let Some(e) = err {
-                    error!("Failed to dispatch otel/gRPC logs message: {}", e);
-                    ctx.notifier().connection_lost().await?;
+                    error!("{ctx} Failed to dispatch otel event: {e}");
+                    ctx.swallow_err(
+                        ctx.notifier().connection_lost().await,
+                        "Error notifying the runtime of connection loss",
+                    );
                     return Ok(SinkReply::fail_or_none(event.transactional));
                 }
             }
@@ -211,8 +215,7 @@ mod tests {
         let alias = Alias::new("flow", "my_otel_client");
         let with_processors = literal!({
             "config": {
-                "host": "localhost",
-                "port": 4317,
+                "url": "localhost:4317",
             },
         });
         let config: ConnectorConfig = crate::config::Connector::from_config(

@@ -1,0 +1,9 @@
+name: s3_streamer consistent mode
+status: 0
+asserts:
+  - source: fg.err.log
+    contains:
+      # we will not get acks for the last event. That one will only be uploaded upon stop
+      - "Expected CB events up to id {0: 16}."
+      - "Got acks: {0: [5, 11, 15]}"
+      - "Got fails: {}"

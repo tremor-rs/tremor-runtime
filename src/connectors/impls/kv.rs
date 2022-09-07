@@ -348,7 +348,10 @@ impl Sink for KvSink {
                     self.execute(cmd, name, v, ingest_ns)
                         .map_err(|e| (Some(name), key, e))
                 }
-                Err(e) => Err((None, None, e)),
+                Err(e) => {
+                    error!("{ctx} Invalid KV command: {e}");
+                    Err((None, None, e))
+                }
             };
             match executed {
                 Ok(res) => {
@@ -363,11 +366,12 @@ impl Sink for KvSink {
                             port: Some(OUT),
                         };
                         if let Err(e) = self.tx.send(reply).await {
-                            error!("{}, Failed to send to source: {}", &ctx, e);
+                            error!("{ctx}, Failed to send to source: {e}");
                         };
                     }
                 }
                 Err((op, key, e)) => {
+                    error!("{ctx} Error: {e}");
                     // send ERR response and log err
                     let mut meta = literal!({
                         "error": e.to_string(),
@@ -382,9 +386,7 @@ impl Sink for KvSink {
                         stream: DEFAULT_STREAM_ID,
                         port: Some(ERR),
                     };
-                    if let Err(e) = self.tx.send(reply).await {
-                        error!("{}, Failed to send to source: {}", &ctx, e);
-                    };
+                    ctx.swallow_err(self.tx.send(reply).await, "Failed to send to source");
 
                     r = SinkReply::FAIL;
                 }

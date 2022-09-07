@@ -12,26 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::prelude::Result;
-use crate::errors::ErrorKind;
-
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct BufferPart {
-    pub data: Vec<u8>,
-    pub start: usize,
-}
-
-impl BufferPart {
-    pub fn len(&self) -> usize {
-        self.data.len()
-    }
-}
+use crate::connectors::impls::object_storage::{BufferPart, ObjectStorageBuffer};
+use crate::errors::{err_gcs, Result};
 
 /// This structure is similar to a Vec<u8>, but with some special methods.
 /// `write` will add data (any size of data is accepted)
 /// `read_current_block` will return `block_size` of data, or None if there's not enough
 /// `mark_done_until` will mark the data until the given index as read and advance the internal cursor (and throw away what's unneeded)
 /// `final_block` returns all the data that has not been marked as done
+#[derive(Debug)]
 pub(crate) struct ChunkedBuffer {
     data: Vec<u8>,
     block_size: usize,
@@ -39,7 +28,13 @@ pub(crate) struct ChunkedBuffer {
 }
 
 impl ChunkedBuffer {
-    pub fn new(size: usize) -> Self {
+    pub(crate) fn start(&self) -> usize {
+        self.buffer_start
+    }
+}
+
+impl ObjectStorageBuffer for ChunkedBuffer {
+    fn new(size: usize) -> Self {
         Self {
             data: Vec::with_capacity(size * 2),
             block_size: size,
@@ -47,40 +42,43 @@ impl ChunkedBuffer {
         }
     }
 
-    pub fn mark_done_until(&mut self, position: usize) -> Result<()> {
-        if position < self.buffer_start {
-            return Err("Buffer was marked as done at index which is not in memory anymore".into());
-        }
-
-        let bytes_to_remove = position - self.buffer_start;
-        self.data = Vec::from(self.data.get(bytes_to_remove..).ok_or(
-            ErrorKind::GoogleCloudStorageError("Not enough data in the buffer"),
-        )?);
-        self.buffer_start += bytes_to_remove;
-
-        Ok(())
+    fn write(&mut self, mut data: Vec<u8>) {
+        self.data.append(&mut data);
     }
 
-    pub fn read_current_block(&self) -> Option<BufferPart> {
+    fn read_current_block(&mut self) -> Option<BufferPart> {
         self.data.get(..self.block_size).map(|raw_data| BufferPart {
             data: raw_data.to_vec(),
             start: self.start(),
         })
     }
 
-    pub fn write(&mut self, data: &[u8]) {
-        self.data.extend_from_slice(data);
-    }
-
-    pub fn start(&self) -> usize {
-        self.buffer_start
-    }
-
-    pub fn final_block(self) -> BufferPart {
-        BufferPart {
-            data: self.data,
-            start: self.buffer_start,
+    fn mark_done_until(&mut self, position: usize) -> Result<()> {
+        if position < self.buffer_start {
+            return Err(err_gcs(format!(
+                "Buffer was marked as done at index {position} which is not in memory anymore"
+            )));
         }
+
+        let bytes_to_remove = position - self.buffer_start;
+        self.data = Vec::from(
+            self.data
+                .get(bytes_to_remove..)
+                .ok_or_else(|| err_gcs("Not enough data in the buffer"))?,
+        );
+        self.buffer_start += bytes_to_remove;
+
+        Ok(())
+    }
+
+    fn reset(&mut self) -> BufferPart {
+        // extract current state
+        let data = self.data.clone(); // only clone up to len, not up to capacity
+        let start = self.buffer_start;
+        // reset
+        self.data.clear();
+        self.buffer_start = 0;
+        BufferPart { data, start }
     }
 }
 
@@ -91,7 +89,7 @@ mod tests {
     #[test]
     pub fn chunked_buffer_can_add_data() {
         let mut buffer = ChunkedBuffer::new(10);
-        buffer.write(&(1..=10).collect::<Vec<u8>>());
+        buffer.write((1..=10).collect::<Vec<u8>>());
 
         assert_eq!(0, buffer.start());
 
@@ -107,7 +105,7 @@ mod tests {
     #[test]
     pub fn chunked_buffer_will_not_return_a_block_which_is_not_full() {
         let mut buffer = ChunkedBuffer::new(10);
-        buffer.write(&(1..=5).collect::<Vec<u8>>());
+        buffer.write((1..=5).collect::<Vec<u8>>());
 
         assert!(buffer.read_current_block().is_none());
     }
@@ -115,7 +113,7 @@ mod tests {
     #[test]
     pub fn chunked_buffer_marking_as_done_removes_data() {
         let mut buffer = ChunkedBuffer::new(10);
-        buffer.write(&(1..=15).collect::<Vec<u8>>());
+        buffer.write((1..=15).collect::<Vec<u8>>());
 
         buffer.mark_done_until(5).unwrap();
 
@@ -131,7 +129,7 @@ mod tests {
     #[test]
     pub fn chunked_buffer_returns_all_the_data_in_the_final_block() {
         let mut buffer = ChunkedBuffer::new(10);
-        buffer.write(&(1..=16).collect::<Vec<u8>>());
+        buffer.write((1..=16).collect::<Vec<u8>>());
 
         buffer.mark_done_until(5).unwrap();
         assert_eq!(
@@ -139,7 +137,7 @@ mod tests {
                 data: (6..=16).collect::<Vec<u8>>(),
                 start: 5,
             },
-            buffer.final_block()
+            buffer.reset()
         );
     }
 }

@@ -1,0 +1,77 @@
+define flow main
+flow
+  use tremor::connectors;
+  use tremor::pipelines;
+  use std::time::nanos;
+  use bench;
+
+  # connectors
+  define connector client from tcp_client
+  with
+    metrics_interval_s = 2,
+    reconnect = {
+      "retry": {
+        "interval_ms": 1000,
+        "max_retries": 10
+      }
+    },
+    codec = "json",
+    postprocessors = [ "separate" ],
+    config = {
+      "url": "localhost:12345",
+      "buf_size": 32768
+    }
+  end;
+  create connector client;
+
+  define connector server from tcp_server
+  with
+    metrics_interval_s = 2,
+    reconnect = {
+      "retry": {
+        "interval_ms": 1000,
+        "max_retries": 10
+      }
+    },
+    codec = "json",
+    preprocessors = [
+      {
+        "name": "separate",
+        "config": {
+          "separator": "\n",
+          "max_length": 32768,
+          "buffered": true
+        }
+      }
+    ],
+    config = {
+      "url": "0.0.0.0:12345",
+      "buf_size": 32768
+    }
+  end;
+  create connector server;
+  create connector console from connectors::console;
+  create connector metrics from connectors::metrics;
+  create connector bench from bench::bench;
+
+  # pipelines
+  create pipeline to_client from pipelines::passthrough;
+  create pipeline from_server from pipelines::passthrough;
+  create pipeline metrics from pipelines::passthrough;
+
+  # from bench to tcp_client
+  connect /connector/bench to /pipeline/to_client;
+  connect /pipeline/to_client to /connector/client;
+
+  # from tcp_server to bench
+  connect /connector/server to /pipeline/from_server;
+  connect /pipeline/from_server to /connector/bench;
+  connect /pipeline/from_server/err to /connector/console/stderr;
+
+  #connect /connector/metrics to /pipeline/metrics;
+  #connect /pipeline/metrics to /connector/console/stdout;
+
+
+end;
+
+deploy flow main;
