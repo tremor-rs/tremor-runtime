@@ -103,7 +103,7 @@ tremor-influx = { path = "tremor-influx" }
 tremor-pipeline = { path = "tremor-pipeline" }
 tremor-script = { path = "tremor-script" }
 tremor-value = { path = "tremor-value" }
-url = "2.2"
+url = "2.3"
 value-trait = "0.4"
 zstd = "0.11"
 
