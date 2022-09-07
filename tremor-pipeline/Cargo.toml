@@ -30,7 +30,7 @@ sled = "0.34"
 tremor-common = { version = "0.13.0-rc.2", path = "../tremor-common" }
 tremor-script = { version = "0.13.0-rc.2", path = "../tremor-script" }
 tremor-value = { version = "0.13.0-rc.2", path = "../tremor-value" }
-url = "2.2.2"
+url = "2.3.0"
 value-trait = "0.4"
 window = { git = "https://github.com/tremor-rs/window.git", tag = "v0.1.1" }
 anyhow = "1.0.58"
