@@ -143,7 +143,7 @@ impl Sink for DnsSink {
             let name = lookup
                 .as_str()
                 .or_else(|| lookup.get_str("name"))
-                .ok_or("Invalid DNS request: `dns.lookup` missing")?;
+                .ok_or("Invalid DNS request: Metadata `$dns.lookup` missing")?;
             let record_type = lookup.get_str("type").map(str_to_record_type).transpose()?;
             // issue DNS query
             let (port, payload) = match self.query(name, record_type, m.get("correlation")).await {
@@ -241,9 +241,10 @@ fn lookup_to_value(l: &Lookup) -> Value<'static> {
     l.record_iter()
         .filter_map(|r| {
             let ttl = r.ttl();
-            r.data()
-                .and_then(rdata_to_value)
-                .and_then(|mut v| v.try_insert("ttl", ttl))
+            r.data().and_then(rdata_to_value).map(|mut v| {
+                v.try_insert("ttl", ttl);
+                v
+            })
         })
         .collect()
 }
