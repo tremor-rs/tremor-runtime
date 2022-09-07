@@ -59,7 +59,7 @@ pub(super) struct Config {
     #[serde(default = "default_max_retries")]
     pub(super) max_retries: u32,
     #[serde(default = "default_backoff_base_time")]
-    pub(super) default_backoff_base_time: u64,
+    pub(super) backoff_base_time: u64,
 }
 
 #[allow(clippy::unwrap_used)]
@@ -146,7 +146,7 @@ impl Connector for GCSStreamerConnector {
             let http_client = create_client(Duration::from_nanos(config.connect_timeout))?;
             let backoff_strategy = ExponentialBackoffRetryStrategy::new(
                 config.max_retries,
-                Duration::from_nanos(config.default_backoff_base_time),
+                Duration::from_nanos(config.backoff_base_time),
             );
             DefaultClient::new(http_client, backoff_strategy)
         });
@@ -553,7 +553,7 @@ pub(crate) mod tests {
             connect_timeout: 1000000000,
             buffer_size: 10,
             max_retries: 3,
-            default_backoff_base_time: 1,
+            backoff_base_time: 1,
         };
 
         let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
@@ -739,7 +739,7 @@ pub(crate) mod tests {
             connect_timeout: 1000000000,
             buffer_size: 10,
             max_retries: 3,
-            default_backoff_base_time: 1,
+            backoff_base_time: 1,
         };
 
         let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
@@ -913,7 +913,7 @@ pub(crate) mod tests {
             connect_timeout: 1000000000,
             buffer_size: 10,
             max_retries: 3,
-            default_backoff_base_time: 1,
+            backoff_base_time: 1,
         };
 
         let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
@@ -1008,7 +1008,7 @@ pub(crate) mod tests {
             connect_timeout: 1000000000,
             buffer_size: 10,
             max_retries: 3,
-            default_backoff_base_time: 1,
+            backoff_base_time: 1,
         };
 
         let sink_impl = GCSObjectStorageSinkImpl::yolo(config, upload_client_factory);
@@ -1060,7 +1060,7 @@ pub(crate) mod tests {
             connect_timeout: 1000000000,
             buffer_size: 10,
             max_retries: 3,
-            default_backoff_base_time: 1,
+            backoff_base_time: 1,
         };
 
         let sink_impl =
@@ -1292,7 +1292,7 @@ pub(crate) mod tests {
             connect_timeout: 1000000000,
             buffer_size: 10,
             max_retries: 3,
-            default_backoff_base_time: 1,
+            backoff_base_time: 1,
         };
 
         let sink_impl =
