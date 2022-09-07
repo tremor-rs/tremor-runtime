@@ -1,0 +1,5 @@
+name: dns_client
+status: 0
+asserts:
+  - source: out.log
+    equals_file: expected_out.json
