@@ -37,6 +37,7 @@ use tremor_value::Value;
 use value_trait::ValueAccess;
 
 #[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Config {
     #[serde(default = "crate::connectors::impls::gpubsub::default_connect_timeout")]
     pub connect_timeout: u64,
@@ -216,7 +217,7 @@ impl Sink for GpubSink {
             .await
         {
             if let Err(error) = inner_result {
-                error!("Failed to publish a message: {}", error);
+                error!("{ctx} Failed to publish a message: {}", error);
 
                 if matches!(
                     error.code(),
@@ -235,12 +236,12 @@ impl Sink for GpubSink {
                     );
                 }
 
-                Ok(SinkReply::FAIL)
+                Ok(SinkReply::fail_or_none(event.transactional))
             } else {
-                Ok(SinkReply::ACK)
+                Ok(SinkReply::ack_or_none(event.transactional))
             }
         } else {
-            Ok(SinkReply::FAIL)
+            Ok(SinkReply::fail_or_none(event.transactional))
         }
     }
 

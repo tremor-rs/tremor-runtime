@@ -72,7 +72,7 @@ fn map_field(
             if let Some(table_type) = table_field_schema::Type::from_i32(raw_field.r#type) {
                 table_type
             } else {
-                warn!("Found a field of unknown type: {}", raw_field.name);
+                warn!("{ctx} Found a field of unknown type: {}", raw_field.name);
 
                 continue;
             };
@@ -340,36 +340,44 @@ impl Sink for GbqSink {
                 rows: Some(ProtoRows { serialized_rows }),
             })),
         };
-
+        let req_timeout = Duration::from_nanos(self.config.request_timeout);
         let append_response = client
             .append_rows(stream::iter(vec![request]))
-            .timeout(Duration::from_nanos(self.config.request_timeout))
+            .timeout(req_timeout)
             .await;
 
         let append_response = if let Ok(append_response) = append_response {
             append_response
         } else {
+            // timeout sending append rows request
+            error!(
+                "{ctx} GBQ request timed out after {}ms",
+                req_timeout.as_millis()
+            );
             ctx.notifier.connection_lost().await?;
 
             return Ok(SinkReply::FAIL);
         };
-
         if let Ok(x) = append_response?
             .into_inner()
             .next()
-            .timeout(Duration::from_nanos(self.config.request_timeout))
+            .timeout(req_timeout)
             .await
         {
             match x {
                 Some(Ok(_)) => Ok(SinkReply::ACK),
                 Some(Err(e)) => {
-                    error!("BigQuery error: {}", e);
-
+                    error!("{ctx} GBQ Error: {}", e);
                     Ok(SinkReply::FAIL)
                 }
                 None => Ok(SinkReply::NONE),
             }
         } else {
+            // timeout receiving response
+            error!(
+                "{ctx} Receiving GBQ response timeout after {}ms",
+                req_timeout.as_millis()
+            );
             ctx.notifier.connection_lost().await?;
 
             Ok(SinkReply::FAIL)

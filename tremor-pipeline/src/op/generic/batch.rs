@@ -21,7 +21,7 @@ use tremor_script::prelude::*;
 pub struct Config {
     /// Name of the event history ( path ) to track
     pub count: usize,
-    /// The amount time between messags to flush in nanoseconds
+    /// The amount of time between messages to flush in nanoseconds
     #[serde(default = "Default::default")]
     pub timeout: Option<u64>,
 }

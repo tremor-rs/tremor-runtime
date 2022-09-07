@@ -37,6 +37,8 @@ use tremor_common::time::nanotime;
 const KAFKA_PRODUCER_META_KEY: &str = "kafka_producer";
 
 #[derive(Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
+
 pub(crate) struct Config {
     /// list of brokers forming a cluster. 1 is enough
     brokers: Vec<String>,
@@ -224,7 +226,7 @@ impl Sink for KafkaProducerSink {
                         delivery_futures.push(delivery_future);
                     }
                     Err((e, _)) => {
-                        error!("{ctx} Failed to enqueue message: {e}");
+                        error!("{ctx} Failed to produce message: {e}");
                         if is_fatal_error(&e) {
                             error!("{ctx} Fatal Kafka Error: {e}. Attempting a reconnect.");
                             ctx.notifier.connection_lost().await?;

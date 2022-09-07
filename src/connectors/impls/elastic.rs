@@ -398,6 +398,7 @@ impl Sink for ElasticSink {
         vec![]
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -507,22 +508,27 @@ impl Sink for ElasticSink {
 
                     Ok(())
                 })?;
+            Ok(SinkReply::NONE)
         } else {
+            // shouldn't happen actually
             error!("{} No elasticsearch client available.", &ctx);
             handle_error(
-                Error::from("No elasticsearch client available."),
+                Error::from(ErrorKind::ClientNotAvailable(
+                    "elastic",
+                    "No elasticsearch client available.",
+                )),
                 &event,
                 &self.origin_uri,
                 &self.response_tx,
                 self.config.include_payload_in_response,
             )
             .await?;
-            ctx.bail_err(
-                send_fail(event, &self.reply_tx).await,
-                "Error sending fail CB",
-            )?;
+            ctx.swallow_err(
+                ctx.notifier().connection_lost().await,
+                "Error notifying about lost connection",
+            );
+            Ok(SinkReply::FAIL)
         }
-        Ok(SinkReply::NONE)
     }
 
     fn auto_ack(&self) -> bool {

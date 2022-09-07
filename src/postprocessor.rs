@@ -246,7 +246,7 @@ mod test {
     #[test]
     fn test_lookup_compression() -> Result<()> {
         for c in COMPRESSION {
-            let config = literal!({"name": "compress", "config":{"algorithm": *c}});
+            let config = literal!({"name": "compress", "config":{"algorithm": c}});
             let config = NameWithConfig::try_from(&config)?;
             assert!(lookup_with_config(&config).is_ok());
         }

@@ -394,9 +394,13 @@ error_chain! {
             description("Type in the message does not match Google Cloud Logging API type")
             display("Type in the message does not match Google Cloud Logging API type. Expected: {}, actual: {:?}", expected, actual)
         }
-        GoogleCloudStorageError(msg: &'static str) {
+        GoogleCloudStorageError(msg: String) {
             description("Google cloud storage error")
                 display("Google cloud storage error: {}", msg)
+        }
+        ObjectStorageError(msg: String) {
+            description("Object storage error")
+                display("{}", msg)
         }
         PipelineSendError(s: String) {
             description("Pipeline send error")
@@ -416,6 +420,14 @@ pub(crate) fn connector_send_err<T>(e: async_std::channel::SendError<T>) -> Erro
 
 pub(crate) fn err_connector_def<C: ToString + ?Sized, E: ToString + ?Sized>(c: &C, e: &E) -> Error {
     ErrorKind::InvalidConnectorDefinition(c.to_string(), e.to_string()).into()
+}
+
+pub(crate) fn err_gcs(msg: impl Into<String>) -> Error {
+    ErrorKind::GoogleCloudStorageError(msg.into()).into()
+}
+
+pub(crate) fn err_object_storage(msg: impl Into<String>) -> Error {
+    ErrorKind::ObjectStorageError(msg.into()).into()
 }
 
 #[cfg(test)]

@@ -1,0 +1,5 @@
+[
+  "throughput",
+  "codec:json",
+  "tcp"
+]

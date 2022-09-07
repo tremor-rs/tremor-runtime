@@ -19,6 +19,12 @@
     - "--check=false"
     - "--kafka-addr=0.0.0.0:9092"
     - "--advertise-kafka-addr=127.0.0.1:9092"
+    - "--set"
+    - "redpanda.disable_metrics=true"
+    - "--set"
+    - "redpanda.enable_admin_api=false"
+    - "--set"
+    - "redpanda.developer_mode=true"
   await:
     "port-open":
       - "9092"

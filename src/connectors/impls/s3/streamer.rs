@@ -11,45 +11,61 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::Event;
-use crate::{connectors::prelude::*, errors::err_connector_def};
-use std::mem;
-use value_trait::ValueAccess;
 
-use super::auth;
+use crate::connectors::impls::{
+    object_storage::{
+        BufferPart, ObjectId, ObjectStorageBuffer, ObjectStorageCommon, ObjectStorageSinkImpl,
+        ObjectStorageUpload,
+    },
+    s3::auth,
+};
+use crate::connectors::prelude::*;
+use async_std::channel::Sender;
+use tremor_common::time::nanotime;
+use tremor_pipeline::{Event, EventId, OpMeta};
+
 use aws_sdk_s3 as s3;
 use s3::model::{CompletedMultipartUpload, CompletedPart};
 use s3::Client as S3Client;
+
+use crate::connectors::impls::object_storage::{ConsistentSink, Mode, YoloSink};
 
 pub(crate) const CONNECTOR_TYPE: &str = "s3_streamer";
 
 const MORE_THEN_FIVEMBS: usize = 5 * 1024 * 1024 + 100; // Some extra bytes to keep aws happy.
 
-#[derive(Deserialize, Debug, Default, Clone)]
-pub(crate) struct S3Config {
+#[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Config {
     aws_region: Option<String>,
     url: Option<Url<HttpsDefaults>>,
-    bucket: String,
+    /// optional default bucket
+    bucket: Option<String>,
+    #[serde(default = "Default::default")]
+    mode: Mode,
 
-    #[serde(default = "S3Config::fivembs")]
-    min_part_size: usize,
+    #[serde(default = "Config::fivembs")]
+    buffer_size: usize,
 }
 
 // Defaults for the config.
-impl S3Config {
+impl Config {
     fn fivembs() -> usize {
         MORE_THEN_FIVEMBS
     }
+
+    fn normalize(&mut self, alias: &Alias) {
+        if self.buffer_size < MORE_THEN_FIVEMBS {
+            warn!("[Connector::{alias}] Setting `buffer_size` up to minimum of 5MB.");
+            self.buffer_size = MORE_THEN_FIVEMBS;
+        }
+    }
 }
 
-impl ConfigImpl for S3Config {}
+impl ConfigImpl for Config {}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
-
-impl Builder {
-    const PART_SIZE: &'static str = "S3 doesn't allow `min_part_size` smaller than 5MB.";
-}
 
 #[async_trait::async_trait]
 impl ConnectorBuilder for Builder {
@@ -64,50 +80,39 @@ impl ConnectorBuilder for Builder {
         config: &Value,
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
-        let config = S3Config::new(config)?;
-
-        // Maintain the minimum size of 5 MBs.
-        if config.min_part_size < MORE_THEN_FIVEMBS {
-            return Err(err_connector_def(id, Self::PART_SIZE));
-        }
+        let mut config = Config::new(config)?;
+        config.normalize(id);
         Ok(Box::new(S3Connector { config }))
     }
 }
 
 struct S3Connector {
-    config: S3Config,
+    config: Config,
 }
 
 #[async_trait::async_trait]
 impl Connector for S3Connector {
-    /// Currently no source
-    async fn create_source(
-        &mut self,
-        _source_context: SourceContext,
-        _builder: SourceManagerBuilder,
-    ) -> Result<Option<SourceAddr>> {
-        Ok(None)
-    }
-
     /// Stream the events to the bucket
     async fn create_sink(
         &mut self,
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let s3_sink = S3Sink {
-            config: self.config.clone(),
-            client: None,
-            buffer: Vec::with_capacity(self.config.min_part_size),
-            current_key: String::from(""),
-            parts: Vec::new(),
-            upload_id: "".to_owned(),
-            part_number: 0,
-            min_part_size: self.config.min_part_size,
-        };
-
-        let addr = builder.spawn(s3_sink, sink_context)?;
-        Ok(Some(addr))
+        match self.config.mode {
+            Mode::Yolo => {
+                let sink_impl = S3ObjectStorageSinkImpl::yolo(self.config.clone());
+                let sink: YoloSink<S3ObjectStorageSinkImpl, S3Upload, S3Buffer> =
+                    YoloSink::new(sink_impl);
+                builder.spawn(sink, sink_context).map(Some)
+            }
+            Mode::Consistent => {
+                let sink_impl =
+                    S3ObjectStorageSinkImpl::consistent(self.config.clone(), builder.reply_tx());
+                let sink: ConsistentSink<S3ObjectStorageSinkImpl, S3Upload, S3Buffer> =
+                    ConsistentSink::new(sink_impl);
+                builder.spawn(sink, sink_context).map(Some)
+            }
+        }
     }
 
     fn codec_requirements(&self) -> CodecReq {
@@ -115,228 +120,355 @@ impl Connector for S3Connector {
     }
 }
 
-struct S3Sink {
-    config: S3Config,
+// TODO: Maybe: https://docs.rs/object_store/latest/object_store/ is the better abstraction ?
+pub(super) struct S3ObjectStorageSinkImpl {
+    config: Config,
     client: Option<S3Client>,
-    buffer: Vec<u8>,
-    /// an empty string is not a valid s3 key, so we encode an unset key like this.
-    /// When this is empty, there is no upload running at the moment.
-    current_key: String,
-
-    // bookkeeping for multipart uploads.
-    upload_id: String,
-    part_number: i32,
-    min_part_size: usize,
-    parts: Vec<CompletedPart>,
+    reply_tx: Option<Sender<AsyncSinkReply>>,
 }
 
-#[async_trait::async_trait]
-impl Sink for S3Sink {
-    async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        let client =
-            auth::get_client(self.config.aws_region.clone(), self.config.url.as_ref()).await?;
-
-        // Check for the existence of the bucket.
-        client
-            .head_bucket()
-            .bucket(self.config.bucket.clone())
-            .send()
-            .await
-            .map_err(|e| {
-                let bkt = &self.config.bucket;
-                let msg = format!("Failed to access Bucket `{bkt}`: {e}");
-                Error::from(ErrorKind::S3Error(msg))
-            })?;
-
-        self.client = Some(client);
-        Ok(true)
+impl ObjectStorageCommon for S3ObjectStorageSinkImpl {
+    fn default_bucket(&self) -> Option<&String> {
+        self.config.bucket.as_ref()
     }
-    async fn on_event(
-        &mut self,
-        _input: &str,
-        event: Event,
-        ctx: &SinkContext,
-        serializer: &mut EventSerializer,
-        _start: u64,
-    ) -> Result<SinkReply> {
-        let ingest_id = event.ingest_ns;
 
-        for (event, meta) in event.value_meta_iter() {
-            // Handle no key in meta.
+    fn connector_type(&self) -> &str {
+        CONNECTOR_TYPE
+    }
+}
 
-            let s3_meta = S3Meta::new(meta);
-
-            let object_key = if let Some(key) = s3_meta.get_object_key().map(ToString::to_string) {
-                key
-            } else {
-                self.current_key.clear();
-                error!("{ctx}: missing '$s3_streamer.key' meta data in event");
-                return Ok(SinkReply::FAIL);
-            };
-
-            if object_key != self.current_key {
-                // we switched keys:
-                // 1. finish the current upload, if any
-                // 2. initiate a new upload
-                self.prepare_new_multipart(object_key, ctx).await?;
-            }
-
-            // Handle the aggregation.
-            for data in serializer.serialize(event, ingest_id)? {
-                self.buffer.extend(data);
-                if self.buffer.len() >= self.min_part_size {
-                    self.upload_part(ctx).await?;
-                }
-            }
+impl S3ObjectStorageSinkImpl {
+    pub(crate) fn yolo(config: Config) -> Self {
+        Self {
+            config,
+            client: None,
+            reply_tx: None,
         }
-        Ok(SinkReply::NONE)
+    }
+    pub(crate) fn consistent(config: Config, reply_tx: Sender<AsyncSinkReply>) -> Self {
+        Self {
+            config,
+            client: None,
+            reply_tx: Some(reply_tx),
+        }
     }
 
-    // Required later
-    async fn on_signal(
-        &mut self,
-        _signal: Event,
-        _ctx: &SinkContext,
-        _serializer: &mut EventSerializer,
-    ) -> Result<SinkReply> {
-        Ok(SinkReply::default())
-    }
-
-    async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
-        // Commit the final upload.
-        self.complete_multipart(ctx).await?;
-        Ok(())
-    }
-
-    fn asynchronous(&self) -> bool {
-        false
-    }
-
-    fn auto_ack(&self) -> bool {
-        // TODO: record all the events we currently buffer for a multipart
-        // and only ever ack them all once the multipart is uploaded
-        true
-    }
-}
-
-impl S3Sink {
     fn get_client(&self) -> Result<&S3Client> {
         self.client
             .as_ref()
             .ok_or_else(|| ErrorKind::S3Error("no s3 client available".to_string()).into())
     }
+}
 
-    async fn prepare_new_multipart(&mut self, key: String, ctx: &SinkContext) -> Result<()> {
-        // Finish the previous multipart upload if any.
-        if !self.current_key.is_empty() {
-            self.complete_multipart(ctx).await?;
-        }
+pub(crate) struct S3Buffer {
+    block_size: usize,
+    data: Vec<u8>,
+    cursor: usize,
+}
 
-        if !key.is_empty() {
-            self.initiate_multipart(key).await?;
+impl ObjectStorageBuffer for S3Buffer {
+    fn new(size: usize) -> Self {
+        Self {
+            block_size: size,
+            data: Vec::with_capacity(size * 2),
+            cursor: 0,
         }
-        // NOTE: The buffers are cleared when the stuff is committed.
+    }
+
+    fn write(&mut self, mut data: Vec<u8>) {
+        self.data.append(&mut data);
+    }
+
+    fn read_current_block(&mut self) -> Option<BufferPart> {
+        if self.data.len() >= self.block_size {
+            let data = self.data.clone();
+            self.cursor += data.len();
+            self.data.clear();
+            Some(BufferPart {
+                data,
+                start: self.cursor,
+            })
+        } else {
+            None
+        }
+    }
+
+    fn mark_done_until(&mut self, _idx: usize) -> Result<()> {
+        // no-op
         Ok(())
     }
 
-    async fn initiate_multipart(&mut self, key: String) -> Result<()> {
-        self.current_key = key;
-        self.part_number = 0; // Reset to new sequence.
+    fn reset(&mut self) -> BufferPart {
+        let data = self.data.clone(); // we only clone up to len, not up to capacity
+        let start = self.cursor;
+        self.data.clear();
+        self.cursor = 0;
+        BufferPart { data, start }
+    }
+}
 
+#[async_trait::async_trait]
+impl ObjectStorageSinkImpl<S3Upload> for S3ObjectStorageSinkImpl {
+    fn buffer_size(&self) -> usize {
+        self.config.buffer_size
+    }
+    async fn connect(&mut self, _ctx: &SinkContext) -> Result<()> {
+        self.client =
+            Some(auth::get_client(self.config.aws_region.clone(), self.config.url.as_ref()).await?);
+        Ok(())
+    }
+
+    async fn bucket_exists(&mut self, bucket: &str) -> Result<bool> {
+        self.get_client()?
+            .head_bucket()
+            .bucket(bucket)
+            .send()
+            .await
+            .map_err(|e| {
+                let msg = format!("Failed to access Bucket `{bucket}`: {e}");
+                Error::from(ErrorKind::S3Error(msg))
+            })?;
+        Ok(true)
+    }
+
+    async fn start_upload(
+        &mut self,
+        object_id: &ObjectId,
+        event: &Event,
+        _ctx: &SinkContext,
+    ) -> Result<S3Upload> {
         let resp = self
             .get_client()?
             .create_multipart_upload()
-            .bucket(self.config.bucket.clone())
-            .key(self.current_key.clone())
+            .bucket(object_id.bucket())
+            .key(object_id.name())
             .send()
             .await?;
 
-        self.upload_id = resp.upload_id.ok_or_else(|| {
+        //let upload = CurrentUpload::new(resp.)
+
+        let upload_id = resp.upload_id.ok_or_else(|| {
             ErrorKind::S3Error(format!(
-            "Failed to initiate multipart upload for key \"{}\": upload id not found in response.",
-            &self.current_key
-        ))
+                "Failed to start upload for s3://{}: upload id not found in response.",
+                &object_id
+            ))
         })?;
+        let upload = S3Upload::new(object_id.clone(), upload_id, event);
 
-        Ok(())
+        Ok(upload)
     }
-
-    async fn upload_part(&mut self, ctx: &SinkContext) -> Result<()> {
-        let mut buf = Vec::with_capacity(self.min_part_size);
-        mem::swap(&mut buf, &mut self.buffer);
-        self.part_number += 1; // the upload part number needs to be >= 1, so we increment before uploading
+    async fn upload_data(
+        &mut self,
+        data: BufferPart,
+        upload: &mut S3Upload,
+        ctx: &SinkContext,
+    ) -> Result<usize> {
+        let end = data.end();
+        upload.part_number += 1; // the upload part number needs to be >= 1, so we increment before uploading
 
         debug!(
-            "{ctx} key: {} uploading part {}",
-            self.current_key, self.part_number,
+            "{ctx} Uploading part {} for {}",
+            upload.part_number,
+            upload.object_id(),
         );
 
         // Upload the part
         let resp = self
             .get_client()?
             .upload_part()
-            .body(buf.into())
-            .part_number(self.part_number)
-            .upload_id(self.upload_id.clone())
-            .bucket(self.config.bucket.clone())
-            .key(self.current_key.clone())
+            .body(data.data.into())
+            .part_number(upload.part_number)
+            .upload_id(upload.upload_id.clone())
+            .bucket(upload.object_id().bucket())
+            .key(upload.object_id().name())
             .send()
             .await?;
 
-        let mut completed = CompletedPart::builder().part_number(self.part_number);
+        let mut completed = CompletedPart::builder().part_number(upload.part_number);
         if let Some(e_tag) = resp.e_tag.as_ref() {
             completed = completed.e_tag(e_tag);
         }
         debug!(
-            "{ctx} Key {} part {} uploaded.",
-            self.current_key, self.part_number
+            "{ctx} part {} uploaded for {}.",
+            upload.part_number,
+            upload.object_id()
         );
         // Insert into the list of completed parts
-        self.parts.push(completed.build());
-        Ok(())
+        upload.parts.push(completed.build());
+        Ok(end)
     }
 
-    async fn complete_multipart(&mut self, ctx: &SinkContext) -> Result<()> {
-        // Upload the last part if any.
-        if !self.buffer.is_empty() {
-            self.upload_part(ctx).await?;
-        }
+    async fn finish_upload(
+        &mut self,
+        mut upload: S3Upload,
+        final_part: BufferPart,
+        ctx: &SinkContext,
+    ) -> Result<()> {
+        debug_assert!(
+            !upload.failed,
+            "finish may only be called for non-failed uploads"
+        );
 
-        let completed_parts = mem::take(&mut self.parts);
-        self.get_client()?
+        // Upload the last part if any.
+        if !final_part.is_empty() {
+            self.upload_data(final_part, &mut upload, ctx).await?;
+        }
+        let S3Upload {
+            object_id,
+            event_id,
+            op_meta,
+            transactional,
+            upload_id,
+            parts,
+            ..
+        } = upload;
+
+        debug!("{ctx} Finishing upload {upload_id} for {object_id}");
+
+        let res = self
+            .get_client()?
             .complete_multipart_upload()
-            .bucket(self.config.bucket.clone())
-            .upload_id(mem::take(&mut self.upload_id))
-            .key(self.current_key.clone())
+            .bucket(object_id.bucket())
+            .upload_id(&upload_id)
+            .key(object_id.name())
             .multipart_upload(
                 CompletedMultipartUpload::builder()
-                    .set_parts(Some(completed_parts))
+                    .set_parts(Some(parts))
                     .build(),
             )
             .send()
-            .await?;
+            .await;
 
-        debug!(
-            "{}: completed multipart upload for key: {}",
-            &ctx, self.current_key
+        // send an ack for all the accumulated events in the finished upload
+        if let (Some(reply_tx), true) = (self.reply_tx.as_ref(), transactional) {
+            let cf_data = ContraflowData::new(event_id, nanotime(), op_meta);
+            let reply = if let Ok(out) = &res {
+                if let Some(location) = out.location() {
+                    debug!("{ctx} Finished upload {upload_id} for {location}");
+                } else {
+                    debug!("{ctx} Finished upload {upload_id} for {object_id}");
+                }
+                // the duration of handling in the sink is a little bit meaningless here
+                // as a) the actual duration from the first event to the actual finishing of the upload
+                //       is horribly long, and shouldn ot be considered the actual event handling time
+                //    b) It will vary a lot e.g. when an actual upload call is made
+                AsyncSinkReply::Ack(cf_data, 0)
+            } else {
+                AsyncSinkReply::Fail(cf_data)
+            };
+            ctx.swallow_err(
+                reply_tx.send(reply).await,
+                &format!("Error sending ack/fail for upload {upload_id} to {object_id}"),
+            );
+        }
+        res?;
+        Ok(())
+    }
+
+    async fn fail_upload(&mut self, upload: S3Upload, ctx: &SinkContext) -> Result<()> {
+        let S3Upload {
+            object_id,
+            upload_id,
+            event_id,
+            op_meta,
+            ..
+        } = upload;
+        if let (Some(reply_tx), true) = (self.reply_tx.as_ref(), upload.transactional) {
+            ctx.swallow_err(
+                reply_tx
+                    .send(AsyncSinkReply::Fail(ContraflowData::new(
+                        event_id,
+                        nanotime(),
+                        op_meta,
+                    )))
+                    .await,
+                &format!("Error sending fail for upload {upload_id} for {object_id}"),
+            );
+        }
+        ctx.swallow_err(
+            self.get_client()?
+                .abort_multipart_upload()
+                .bucket(object_id.bucket())
+                .key(object_id.name())
+                .upload_id(&upload_id)
+                .send()
+                .await,
+            &format!("Error aborting multipart upload {upload_id} for {object_id}"),
         );
         Ok(())
     }
 }
 
-// Meta data of an event. convience struct for feature expansion.
-struct S3Meta<'a, 'value> {
-    meta: Option<&'a Value<'value>>,
+pub(crate) struct S3Upload {
+    object_id: ObjectId,
+    /// tracking the ids for all accumulated events
+    event_id: EventId,
+    /// tracking the traversed operators for each accumulated event for correct sink-reply handling
+    op_meta: OpMeta,
+
+    /// tracking the transactional status of the accumulated events
+    /// if any one of them is transactional, we send an ack for all
+    transactional: bool,
+
+    /// bookkeeping for multipart uploads.
+    upload_id: String,
+    part_number: i32,
+    parts: Vec<CompletedPart>,
+    /// whether this upload is marked as failed
+    failed: bool,
 }
 
-impl<'a, 'value> S3Meta<'a, 'value> {
-    fn new(meta: &'a Value<'value>) -> Self {
+impl S3Upload {
+    fn new(object_id: ObjectId, upload_id: String, event: &Event) -> Self {
         Self {
-            meta: meta.get("s3_streamer"),
+            object_id,
+            event_id: event.id.clone(),
+            op_meta: event.op_meta.clone(),
+            transactional: event.transactional,
+            upload_id,
+            part_number: 0,
+            parts: Vec::with_capacity(8),
+            failed: false,
         }
     }
+}
 
-    fn get_object_key(&self) -> Option<&str> {
-        self.meta.get_str("key")
+impl ObjectStorageUpload for S3Upload {
+    fn object_id(&self) -> &ObjectId {
+        &self.object_id
+    }
+
+    fn is_failed(&self) -> bool {
+        self.failed
+    }
+
+    fn mark_as_failed(&mut self) {
+        self.failed = true;
+    }
+
+    fn track(&mut self, event: &Event) {
+        self.event_id.track(&event.id);
+        if !event.op_meta.is_empty() {
+            self.op_meta.merge(event.op_meta.clone());
+        }
+        self.transactional |= event.transactional;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tremor_value::literal;
+
+    #[test]
+    fn config_defaults() -> Result<()> {
+        let config = literal!({});
+        let res = Config::new(&config)?;
+        assert!(res.aws_region.is_none());
+        assert!(res.url.is_none());
+        assert!(res.bucket.is_none());
+        assert_eq!(Mode::Yolo, res.mode);
+        assert_eq!(5242980, res.buffer_size);
+        Ok(())
     }
 }

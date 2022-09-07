@@ -61,7 +61,7 @@ pub struct Config {
     /// Defines the behaviour of the backpressure operator.
     ///
     /// - `discard`: messages are discared
-    /// - `circuitbreaker`: it acts as a circuit breaker but
+    /// - `pause`: it acts as a circuit breaker but
     ///    does let the messages pass
     #[serde(default)]
     pub method: Method,
