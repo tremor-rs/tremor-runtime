@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Fix output of `dns_client` being empty for any lookup.
+
 ## [0.13.0-rc.2]
 
 ### Fixes
