@@ -43,7 +43,7 @@ jumphash = "0.1"
 lalrpop-util = "0.19"
 lazy_static = "1.4"
 matches = "0.1.9"
-percent-encoding = "2.1"
+percent-encoding = "2.2"
 rand = { version = "0.8", features = ["small_rng"] }
 regex = "1"
 serde = "1.0"

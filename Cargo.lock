@@ -3496,9 +3496,9 @@ dependencies = [
 
 [[package]]
 name = "percent-encoding"
-version = "2.1.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
+checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
 name = "petgraph"
@@ -4534,9 +4534,9 @@ dependencies = [
 
 [[package]]
 name = "serde_yaml"
-version = "0.9.10"
+version = "0.9.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a09f551ccc8210268ef848f0bab37b306e87b85b2e017b899e7fb815f5aed62"
+checksum = "89f31df3f50926cdf2855da5fd8812295c34752cb20438dae42a67f79e021ac3"
 dependencies = [
  "indexmap",
  "itoa 1.0.2",
@@ -5582,7 +5582,7 @@ dependencies = [
  "log",
  "serde",
  "serde_derive",
- "serde_yaml 0.9.10",
+ "serde_yaml 0.9.11",
  "simd-json",
  "surf",
  "tide",
@@ -5618,7 +5618,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_derive",
- "serde_yaml 0.9.10",
+ "serde_yaml 0.9.11",
  "shell-words",
  "signal-hook",
  "signal-hook-async-std",
@@ -5705,7 +5705,7 @@ dependencies = [
  "rust-bert",
  "serde",
  "serde_derive",
- "serde_yaml 0.9.10",
+ "serde_yaml 0.9.11",
  "simd-json",
  "simd-json-derive",
  "sled",
@@ -5792,7 +5792,7 @@ dependencies = [
  "rustls-native-certs 0.6.2",
  "serde",
  "serde_derive",
- "serde_yaml 0.9.10",
+ "serde_yaml 0.9.11",
  "serenity",
  "serial_test",
  "signal-hook",
