@@ -39,7 +39,7 @@ log4rs = "1.1.0"
 
 [dev-dependencies]
 base64 = "0.13"
-criterion = "0.3"
+criterion = "0.4"
 tempfile = "3.2"
 xz2 = "0.1"
 
