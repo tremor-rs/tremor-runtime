@@ -269,12 +269,12 @@ mod test {
     use async_std::channel::bounded;
     use futures::future::Ready;
     use googapis::google::logging::r#type::LogSeverity;
-    use std::fmt::{Debug, Display, Formatter};
-    use std::task::Poll;
     use googapis::google::logging::v2::WriteLogEntriesResponse;
     use http::{HeaderMap, HeaderValue};
+    use std::fmt::{Debug, Display, Formatter};
+    use std::task::Poll;
     use tonic::body::BoxBody;
-    use tonic::codegen::{Service};
+    use tonic::codegen::Service;
     use tremor_pipeline::EventId;
     use tremor_value::{literal, structurize};
 
@@ -325,7 +325,10 @@ mod test {
             let jh = async_std::task::spawn(async move {
                 tx.send_data(buffer.into()).await.unwrap();
                 let mut trailers = HeaderMap::new();
-                trailers.insert("content-type", HeaderValue::from_static("application/grpc+proto"));
+                trailers.insert(
+                    "content-type",
+                    HeaderValue::from_static("application/grpc+proto"),
+                );
                 trailers.insert("grpc-status", HeaderValue::from_static("0"));
                 tx.send_trailers(trailers).await.unwrap();
             });
