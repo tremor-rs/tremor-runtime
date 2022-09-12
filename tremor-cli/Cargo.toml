@@ -15,7 +15,7 @@ matches = "0.1.9"
 
 [dev-dependencies]
 temp-dir = "0.1"
-criterion = "0.3"
+criterion = "0.4"
 float-cmp = "0.9"
 matches = "0.1"
 pretty_assertions = "1.3.0"
