@@ -775,5 +775,21 @@ mod test {
         let data = b"foo2:1234567890|c";
         let m = decode(data, 0).expect("failed to decode");
         assert_eq!(&data[..], encode_metric(&m).expect("failed to encode"));
+
+        let data = b"_sc|Redis connection|2|d:1663016695|h:test.example.com|#env:dev|m:Redis connection timed out after 10s|c:123abc";
+        let m = decode(data, 0).expect("failed to decode");
+        assert_eq!(&data[..], encode_service_check(&m).expect("failed to encode"));
+
+        let data = b"_sc|Redis connection|2";
+        let m = decode(data, 0).expect("failed to decode");
+        assert_eq!(&data[..], encode_service_check(&m).expect("failed to encode"));
+
+        let data = b"_e{21,36}:An exception occurred|Cannot parse CSV file from 10.0.0.17";
+        let m = decode(data, 0).expect("failed to decode");
+        assert_eq!(&data[..], encode_event(&m).expect("failed to encode"));
+
+        let data = b"_e{21,36}:An exception occurred|Cannot parse CSV file from 10.0.0.17|#env:dev,test:testing";
+        let m = decode(data, 0).expect("failed to decode");
+        assert_eq!(&data[..], encode_event(&m).expect("failed to encode"));
     }
 }
