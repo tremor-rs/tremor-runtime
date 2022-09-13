@@ -267,14 +267,18 @@ mod test {
     use crate::connectors::tests::ConnectorHarness;
     use crate::connectors::ConnectionLostNotifier;
     use async_std::channel::bounded;
+    use bytes::Bytes;
     use futures::future::Ready;
     use googapis::google::logging::r#type::LogSeverity;
     use googapis::google::logging::v2::WriteLogEntriesResponse;
     use http::{HeaderMap, HeaderValue};
+    use http_body::Body;
+    use prost::Message;
     use std::fmt::{Debug, Display, Formatter};
     use std::task::Poll;
     use tonic::body::BoxBody;
     use tonic::codegen::Service;
+    use tremor_pipeline::CbAction::Trigger;
     use tremor_pipeline::EventId;
     use tremor_value::{literal, structurize};
 
@@ -314,16 +318,23 @@ mod test {
             Poll::Ready(Ok(()))
         }
 
-        fn call(&mut self, request: http::Request<BoxBody>) -> Self::Future {
-            dbg!(request);
-
+        fn call(&mut self, _request: http::Request<BoxBody>) -> Self::Future {
             let mut buffer = vec![];
 
-            prost::encoding::message::encode(1, &WriteLogEntriesResponse {}, &mut buffer);
-
+            WriteLogEntriesResponse {}
+                .encode_length_delimited(&mut buffer)
+                .unwrap();
+            let body = bytes::Bytes::from(buffer);
+            let body = http_body::Full::new(body);
+            let body = http_body::combinators::BoxBody::new(body).map_err(|err| match err {});
+            let mut response = tonic::body::BoxBody::new(body);
             let (mut tx, body) = tonic::transport::Body::channel();
             let jh = async_std::task::spawn(async move {
-                tx.send_data(buffer.into()).await.unwrap();
+                let response = response.data().await.unwrap().unwrap();
+                let len: [u8; 4] = (response.len() as i32).to_ne_bytes();
+                let len = Bytes::from(len.to_vec());
+                tx.send_data(len).await.unwrap();
+                tx.send_data(response).await.unwrap();
                 let mut trailers = HeaderMap::new();
                 trailers.insert(
                     "content-type",
@@ -333,11 +344,8 @@ mod test {
                 tx.send_trailers(trailers).await.unwrap();
             });
             async_std::task::spawn_blocking(|| jh);
-            dbg!(&body);
 
             let response = http::Response::new(body);
-
-            dbg!(&response);
 
             futures::future::ready(Ok(response))
         }
@@ -407,7 +415,7 @@ mod test {
         )
         .await?;
 
-        assert!(matches!(rx.recv().await?, AsyncSinkReply::Ack(_, _)));
+        assert!(matches!(rx.recv().await?, AsyncSinkReply::CB(_, Trigger)));
 
         Ok(())
     }
@@ -450,7 +458,7 @@ mod test {
     }
 
     #[async_std::test]
-    async fn on_event_fails_if_client_is_not_conected() -> Result<()> {
+    async fn on_event_fails_if_client_is_not_connected() -> Result<()> {
         let (rx, _tx) = async_std::channel::unbounded();
         let (reply_tx, _reply_rx) = async_std::channel::unbounded();
         let config = Config::new(&literal!({
