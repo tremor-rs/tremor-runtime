@@ -252,6 +252,10 @@ error_chain! {
             description("Invalid statsd metric")
                 display("Invalid statsd metric")
         }
+        InvalidDogStatsD {
+            description("Invalid dogstatsd metric")
+                display("Invalid dogstatsd metric")
+        }
         InvalidInfluxData(s: String, e: influx::DecoderError) {
             description("Invalid Influx Line Protocol data")
                 display("Invalid Influx Line Protocol data: {}\n{}", e, s)
