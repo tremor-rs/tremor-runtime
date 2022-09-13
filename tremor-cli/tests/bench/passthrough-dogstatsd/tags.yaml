@@ -1,0 +1,4 @@
+[
+    "passthrough",
+    "codec:dogstatsd"
+]
