@@ -191,7 +191,6 @@ where
                 .await?;
 
             if let Err(error) = log_entries_response {
-                dbg!(&error);
                 error!("Failed to write a log entries: {}", error);
 
                 if matches!(
@@ -215,7 +214,6 @@ where
                     .send(AsyncSinkReply::Fail(ContraflowData::from(event)))
                     .await?;
             } else {
-                dbg!("Acking");
                 reply_tx
                     .send(AsyncSinkReply::Ack(
                         ContraflowData::from(event),
