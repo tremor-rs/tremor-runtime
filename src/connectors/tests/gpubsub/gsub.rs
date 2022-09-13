@@ -14,6 +14,7 @@
 
 use crate::connectors::impls::gpubsub::consumer::Builder;
 use crate::connectors::tests::ConnectorHarness;
+use crate::connectors::utils::EnvHelper;
 use crate::errors::Result;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
@@ -26,6 +27,7 @@ use tonic::transport::Channel;
 use tremor_pipeline::CbAction;
 use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
+use tremor_runtime::instance::State;
 
 #[async_std::test]
 #[serial(gpubsub, timeout_ms = 600000)]
