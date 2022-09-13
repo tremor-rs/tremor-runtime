@@ -480,6 +480,12 @@ mod test {
     }
 
     #[test]
+    fn dogstatsd_bad_metric_payload() {
+        let data = b"dog:111";
+        assert!(decode(data, 0).is_err())
+    }
+
+    #[test]
     fn dogstatsd_complete_payload_multiple_values() {
         let data = b"dog:111:222:333:4.44|g|@0.5|#foo:bar,fizz:buzz|c:123abc";
         let parsed = decode(data, 0).expect("failed to decode");
@@ -691,6 +697,12 @@ mod test {
     }
 
     #[test]
+    fn dogstatsd_bad_event_payload() {
+        let data = b"_e{4,6}:Test";
+        assert!(decode(data, 0).is_err())
+    }
+
+    #[test]
     fn dogstatsd_service_check() {
         let data = b"_sc|Redis connection|2|#env:dev|m:Redis connection timed out after 10s";
         let parsed = decode(data, 0).expect("failed to decode");
@@ -740,6 +752,12 @@ mod test {
         assert_eq!(parsed, expected);
         let encoded = encode(&parsed).expect("failed to encode");
         assert_eq!(encoded, data);
+    }
+
+    #[test]
+    fn dogstatsd_bad_service_check_payload() {
+        let data = b"_sc|Redis connection";
+        assert!(decode(data, 0).is_err())
     }
 
     #[test]
