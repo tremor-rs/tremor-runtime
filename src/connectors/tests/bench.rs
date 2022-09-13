@@ -14,7 +14,7 @@ use super::ConnectorHarness;
 use crate::{
     connectors::{impls::bench, prelude::KillSwitch, sink::SinkMsg},
     errors::Result,
-    system::{flow_supervisor, World, WorldConfig},
+    system::{flow_supervisor, Runtime, WorldConfig},
 };
 use std::{io::Write, time::Duration};
 use tempfile::NamedTempFile;
@@ -40,7 +40,7 @@ async fn stop_after_events() -> Result<()> {
         "iters": 2
       }
     });
-    let (world, world_handle) = World::start(WorldConfig::default()).await?;
+    let (world, world_handle) = Runtime::start(WorldConfig::default()).await?;
     let mut harness = ConnectorHarness::new_with_kill_switch(
         function_name!(),
         &bench::Builder::default(),

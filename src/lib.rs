@@ -83,7 +83,7 @@ pub static mut INSTANCE: &str = "tremor";
 pub(crate) use crate::config::Connector;
 use crate::{
     errors::{Error, Result},
-    system::World,
+    system::Runtime,
 };
 use std::{io::Read, sync::atomic::AtomicUsize};
 pub use tremor_pipeline::Event;
@@ -107,7 +107,7 @@ pub(crate) fn qsize() -> usize {
 ///
 /// # Errors
 /// Fails if the file can not be loaded
-pub async fn load_troy_file(world: &World, file_name: &str) -> Result<usize> {
+pub async fn load_troy_file(world: &Runtime, file_name: &str) -> Result<usize> {
     info!("Loading troy from {file_name}");
 
     let mut file = tremor_common::file::open(&file_name)?;
@@ -140,7 +140,7 @@ mod tests {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_load_troy_file() -> Result<()> {
-        let (world, handle) = World::start(WorldConfig::default()).await?;
+        let (world, handle) = Runtime::start(WorldConfig::default()).await?;
         let troy_file = tempfile::NamedTempFile::new()?;
         troy_file.as_file().write_all(
             r#"

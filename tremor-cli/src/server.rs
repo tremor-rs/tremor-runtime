@@ -25,7 +25,7 @@ use std::io::Write;
 use std::sync::atomic::Ordering;
 use tremor_api as api;
 use tremor_common::file;
-use tremor_runtime::system::{ShutdownMode, World};
+use tremor_runtime::system::{Runtime, ShutdownMode};
 use tremor_runtime::{self, version};
 
 macro_rules! log_and_print_error {
@@ -98,7 +98,7 @@ impl ServerRun {
             debug_connectors: self.debug_connectors,
         };
 
-        let (world, handle) = World::start(config).await?;
+        let (world, handle) = Runtime::start(config).await?;
 
         // signal handling
         let signals = Signals::new([SIGTERM, SIGINT, SIGQUIT])?;

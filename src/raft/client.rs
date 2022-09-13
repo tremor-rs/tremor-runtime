@@ -309,7 +309,7 @@ fn maybe_id<T: ToString>(id: Option<T>) -> String {
         None => "-".to_string(),
     }
 }
-pub fn print_metrics(metrics: RaftMetrics<u64, TremorNode>) {
+pub fn print_metrics(metrics: RaftMetrics<TremorNodeId, TremorNode>) {
     println!(
         r#"Node:
     Id: {}

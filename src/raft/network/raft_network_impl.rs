@@ -17,6 +17,9 @@ use tarpc::{client, context, tokio_serde::formats::Json};
 pub struct TremorNetwork {}
 
 impl TremorNetwork {
+    pub(crate) fn new() -> Self {
+        Self {}
+    }
     pub async fn send_rpc<Req, Resp, Err>(
         &self,
         target: TremorNodeId,

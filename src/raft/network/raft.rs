@@ -31,22 +31,22 @@ impl super::Raft for RaftServer {
     async fn vote(
         self,
         _: context::Context,
-        vote: VoteRequest<u64>,
-    ) -> Result<VoteResponse<u64>, VoteError<TremorNodeId>> {
+        vote: VoteRequest<TremorNodeId>,
+    ) -> Result<VoteResponse<TremorNodeId>, VoteError<TremorNodeId>> {
         self.app.raft.vote(vote).await
     }
     async fn append(
         self,
         _: context::Context,
         req: AppendEntriesRequest<TremorTypeConfig>,
-    ) -> Result<AppendEntriesResponse<u64>, AppendEntriesError<TremorNodeId>> {
+    ) -> Result<AppendEntriesResponse<TremorNodeId>, AppendEntriesError<TremorNodeId>> {
         self.app.raft.append_entries(req).await
     }
     async fn snapshot(
         self,
         _: context::Context,
         req: InstallSnapshotRequest<TremorTypeConfig>,
-    ) -> Result<InstallSnapshotResponse<u64>, InstallSnapshotError<TremorNodeId>> {
+    ) -> Result<InstallSnapshotResponse<TremorNodeId>, InstallSnapshotError<TremorNodeId>> {
         self.app.raft.install_snapshot(req).await
     }
 }

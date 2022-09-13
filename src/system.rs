@@ -93,12 +93,12 @@ impl KillSwitch {
 
 /// Tremor runtime
 #[derive(Clone, Debug)]
-pub struct World {
-    pub(crate) system: flow_supervisor::Channel,
+pub struct Runtime {
+    pub(crate) flows: flow_supervisor::Channel,
     pub(crate) kill_switch: KillSwitch,
 }
 
-impl World {
+impl Runtime {
     /// Loads a Troy src
     ///
     /// # Errors
@@ -135,7 +135,7 @@ impl World {
     /// If the flow can't be started
     pub async fn start_flow(&self, flow: &ast::DeployFlow<'static>) -> Result<()> {
         let (tx, rx) = oneshot::channel();
-        self.system
+        self.flows
             .send(flow_supervisor::Msg::StartDeploy {
                 flow: Box::new(flow.clone()),
                 sender: tx,
@@ -164,10 +164,10 @@ impl World {
             Ok(())
         }
     }
-    
+
     /// stops a flow
     pub async fn stop_flow(&self, id: flow::Alias) -> Result<()> {
-        self.system
+        self.flows
             .send(flow_supervisor::Msg::StopDeploy { id })
             .await?;
         Ok(())
@@ -175,14 +175,14 @@ impl World {
 
     /// pauses a flow
     pub async fn pause_flow(&self, id: flow::Alias) -> Result<()> {
-        self.system
+        self.flows
             .send(flow_supervisor::Msg::PauseDeploy { id })
             .await?;
         Ok(())
     }
     /// resumes a flow
     pub async fn resume_flow(&self, id: flow::Alias) -> Result<()> {
-        self.system
+        self.flows
             .send(flow_supervisor::Msg::ResumeDeploy { id })
             .await?;
         Ok(())
@@ -196,7 +196,7 @@ impl World {
         &self,
         builder: Box<dyn connectors::ConnectorBuilder>,
     ) -> Result<()> {
-        self.system
+        self.flows
             .send(flow_supervisor::Msg::RegisterConnectorType {
                 connector_type: builder.connector_type(),
                 builder,
@@ -214,7 +214,7 @@ impl World {
     pub async fn get_flow(&self, flow_id: String) -> Result<Flow> {
         let (flow_tx, flow_rx) = oneshot::channel();
         let flow_id = flow::Alias::new(flow_id);
-        self.system
+        self.flows
             .send(flow_supervisor::Msg::GetFlow(flow_id.clone(), flow_tx))
             .await?;
         flow_rx.await?
@@ -226,7 +226,7 @@ impl World {
     ///  * if we fail to send the request or fail to receive it
     pub async fn get_flows(&self) -> Result<Vec<Flow>> {
         let (reply_tx, reply_rx) = oneshot::channel();
-        self.system
+        self.flows
             .send(flow_supervisor::Msg::GetFlows(reply_tx))
             .await?;
         reply_rx.await?
@@ -240,7 +240,7 @@ impl World {
         let (system_h, system, kill_switch) = flow_supervisor::FlowSupervisor::new().start();
 
         let world = Self {
-            system,
+            flows: system,
             kill_switch,
         };
 

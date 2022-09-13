@@ -30,7 +30,7 @@ use tremor_runtime::{
     config,
     postprocessor::Postprocessor,
     preprocessor::Preprocessor,
-    system::{World, WorldConfig},
+    system::{Runtime, WorldConfig},
 };
 use tremor_script::{
     arena::Arena,
@@ -418,7 +418,7 @@ impl Run {
         let config = WorldConfig {
             debug_connectors: true,
         };
-        let (world, handle) = World::start(config).await?;
+        let (world, handle) = Runtime::start(config).await?;
         tremor_runtime::load_troy_file(&world, &self.script).await?;
         handle.await??;
         Ok(())

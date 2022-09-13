@@ -17,7 +17,7 @@ use std::time::Duration;
 use tremor_common::file;
 use tremor_runtime::{
     errors::*,
-    system::{World, WorldConfig},
+    system::{Runtime, WorldConfig},
 };
 use tremor_script::{deploy::Deploy, module::Manager};
 
@@ -52,9 +52,9 @@ macro_rules! test_cases {
                             let config = WorldConfig{
                                 debug_connectors: true,
                             };
-                            let (world, h) = World::start(config).await?;
+                            let (runtime, h) = Runtime::start(config).await?;
                             for flow in deployable.iter_flows() {
-                                world.start_flow(flow).await?;
+                                runtime.start_flow(flow).await?;
                             }
                             // this isn't good
                             tokio::time::timeout(Duration::from_secs(10), h).await???;

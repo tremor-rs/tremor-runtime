@@ -15,7 +15,7 @@ use openraft::{
 use std::{collections::HashMap, fmt::Display, sync::Arc};
 use tide::{Body, Request, Response, StatusCode};
 
-pub fn rest(app: &mut Server) {
+pub fn install_rest_endpoints(app: &mut Server) {
     let mut api = app.at("/api");
     api.at("/apps").post(install);
     api.at("/apps").get(list);

@@ -66,8 +66,8 @@ pub(crate) struct Cluster {
 
 #[derive(Parser, Clone, Debug)]
 pub(crate) enum ClusterCommand {
-    /// Initializes a new initial cluster
-    Init {
+    /// Bootstraps a new initial cluster
+    Bootstrap {
         /// Database dir to store raft data in
         #[clap(short, long, value_parser = clap::value_parser!(String))]
         db_dir: String,

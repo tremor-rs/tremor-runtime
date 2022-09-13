@@ -17,7 +17,11 @@ use crate::{
     errors::Result,
 };
 use async_std::{io::ReadExt, task};
-use rand;
+
+use async_std::stream::StreamExt;
+use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
+use signal_hook::low_level::signal_name;
+use signal_hook_async_std::Signals;
 use simd_json::OwnedValue;
 use std::{
     collections::{BTreeSet, HashMap},
@@ -28,10 +32,12 @@ use tremor_runtime::{
     raft::{
         archive,
         client::{print_metrics, TremorClient},
-        init_cluster, init_raft_node, start_raft_node,
+        node::{ClusterNode, ClusterNodeKillSwitch},
+        start_raft_node,
         store::{AppId, FlowId, InstanceId},
+        TremorNodeId,
     },
-    system::{ShutdownMode, World, WorldConfig},
+    system::{Runtime, ShutdownMode, WorldConfig},
 };
 
 /// returns either the defined API address or the default defined from the environment
@@ -47,24 +53,63 @@ fn get_api(input: Option<String>) -> Result<String> {
     )
 }
 
+async fn handle_signals(signals: Signals, kill_switch: ClusterNodeKillSwitch) {
+    let mut signals = signals.fuse();
+
+    while let Some(signal) = signals.next().await {
+        info!(
+            "Received SIGNAL: {}",
+            signal_name(signal).unwrap_or(&signal.to_string())
+        );
+        match signal {
+            SIGINT | SIGTERM => {
+                if let Err(_e) = kill_switch.stop(ShutdownMode::Graceful) {
+                    if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
+                        error!("Error handling signal {}: {}", signal, e);
+                    }
+                }
+            }
+            SIGQUIT => {
+                if let Err(_e) = kill_switch.stop(ShutdownMode::Forceful) {
+                    if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
+                        error!("Error handling signal {}: {}", signal, e);
+                    }
+                }
+            }
+            signal => {
+                if let Err(e) = signal_hook::low_level::emulate_default_handler(signal) {
+                    error!("Error handling signal {}: {}", signal, e);
+                }
+            }
+        }
+    }
+}
+
 impl Cluster {
     pub(crate) async fn run(self) -> Result<()> {
         match self.command {
-            // rm -r temp/test-db*; cargo run -p tremor-cli -- cluster init --db-dir temp/test-db1 --api 127.0.0.1:8001 --rpc 127.0.0.1:9001
-            ClusterCommand::Init { rpc, api, db_dir } => {
-                init_raft_node(&db_dir, 0, rpc, api).await?;
+            // rm -r temp/test-db*; cargo run -p tremor-cli -- cluster boostrap --db-dir temp/test-db1 --api 127.0.0.1:8001 --rpc 127.0.0.1:9001
+            ClusterCommand::Bootstrap { rpc, api, db_dir } => {
+                let node_id = TremorNodeId::default();
+
+                let mut node =
+                    ClusterNode::new(node_id, rpc, api, db_dir, tremor_runtime::raft::config()?);
+                let running_node = node.bootstrap_as_single_node_cluster().await?;
+                // TODO: install signal handler
+                let signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
+                let signal_handle = signals.handle();
+                let signal_handler_task =
+                    async_std::task::spawn(handle_signals(signals, running_node.kill_switch()));
+
                 println!(
                     "Node Initialized, this will now form a cluster and elect itself as leader."
                 );
-                let config = WorldConfig::default();
-                let (world, world_handle) = World::start(config).await?;
-
-                init_cluster(&db_dir, world.clone()).await?;
-                info!("Cluster Staring");
-                start_raft_node(&db_dir, world.clone()).await?;
-
-                world.stop(ShutdownMode::Graceful).await?;
-                world_handle.await?;
+                // wait for the node to be finished
+                if let Err(e) = running_node.join().await {
+                    error!("Error: {e}");
+                }
+                signal_handle.close();
+                signal_handler_task.cancel().await;
             }
             // target/debug/tremor cluster join --db-dir temp/test-db2 --api 127.0.0.1:8002 --rpc 127.0.0.1:9002 --cluster-api 127.0.0.1:8001
             // target/debug/tremor cluster join --db-dir temp/test-db3 --api 127.0.0.1:8003 --rpc 127.0.0.1:9003 --cluster-api 127.0.0.1:8001
@@ -74,19 +119,19 @@ impl Cluster {
                 rpc,
                 api,
             } => {
-                let my_id: u64 = rand::random();
-                init_raft_node(&db_dir, my_id, rpc.clone(), api.clone()).await?;
+                let my_id = TremorNodeId::random();
+                //init_raft_node(&db_dir, my_id, rpc.clone(), api.clone()).await?;
                 println!("Node Initialized, we're starting the node and then connecting the leader to join the cluster.");
 
                 let config = WorldConfig::default();
-                let (world, world_handle) = World::start(config).await?;
+                let (world, world_handle) = Runtime::start(config).await?;
 
                 let dir = db_dir.clone();
                 let w = world.clone();
                 let t = task::spawn(async move {
                     start_raft_node(&dir, w)
                         .await
-                        .expect("failed tos tart node");
+                        .expect("failed to start node");
                 });
 
                 task::sleep(Duration::from_secs(1)).await;
@@ -148,7 +193,8 @@ impl Cluster {
                 world_handle.await?;
             }
             ClusterCommand::Remove { node, api } => {
-                let mut client = TremorClient::new(node, get_api(api)?);
+                let node_id = TremorNodeId::from(node);
+                let mut client = TremorClient::new(node_id, get_api(api)?);
 
                 let metrics = client.metrics().await.map_err(|e| format!("error: {e}",))?;
 
@@ -165,7 +211,7 @@ impl Cluster {
                 let membership: BTreeSet<_> = metrics
                     .membership_config
                     .nodes()
-                    .filter_map(|(id, _)| if *id == node { None } else { Some(*id) })
+                    .filter_map(|(id, _)| if *id == node_id { None } else { Some(*id) })
                     .collect();
 
                 client
@@ -179,16 +225,16 @@ impl Cluster {
             // cargo run -p tremor-cli -- cluster start --db-dir temp/test-db3
             ClusterCommand::Start { db_dir } => {
                 let db_dir = db_dir.clone();
-                info!("Cluster Staring");
+                info!("Cluster Starting");
                 let config = WorldConfig::default();
-                let (world, world_handle) = World::start(config).await?;
+                let (world, world_handle) = Runtime::start(config).await?;
                 start_raft_node(&db_dir, world.clone()).await?;
                 world.stop(ShutdownMode::Graceful).await?;
                 world_handle.await?;
             }
             // target/debug/tremor cluster status --api 127.0.0.1:8001
             ClusterCommand::Status { api, json } => {
-                let mut client = TremorClient::new(0, get_api(api)?);
+                let mut client = TremorClient::new(TremorNodeId::default(), get_api(api)?);
                 let r = client.metrics().await.map_err(|e| format!("error: {e}"))?;
                 if json {
                     println!("{}", serde_json::to_string_pretty(&r)?);
@@ -215,7 +261,7 @@ impl AppsCommands {
     pub(crate) async fn run(self, api: String) -> Result<()> {
         match self {
             AppsCommands::List { json } => {
-                let mut client = TremorClient::new(0, api);
+                let mut client = TremorClient::new(TremorNodeId::default(), api);
                 let r = client.list().await.map_err(|e| format!("error: {e}"))?;
                 if json {
                     println!("{}", serde_json::to_string_pretty(&r)?);
@@ -226,7 +272,7 @@ impl AppsCommands {
                 }
             }
             AppsCommands::Install { file } => {
-                let mut client = TremorClient::new(0, api.clone());
+                let mut client = TremorClient::new(TremorNodeId::default(), api.clone());
                 let mut file = file::open(&file).await?;
                 let mut buf = Vec::new();
                 file.read_to_end(&mut buf).await?;
@@ -249,7 +295,7 @@ impl AppsCommands {
                 instance,
                 config,
             } => {
-                let mut client = TremorClient::new(0, api.clone());
+                let mut client = TremorClient::new(TremorNodeId::default(), api.clone());
                 let config: HashMap<String, OwnedValue> = if let Some(config) = config {
                     serde_json::from_str(&config)?
                 } else {

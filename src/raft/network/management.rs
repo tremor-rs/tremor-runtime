@@ -12,7 +12,7 @@ use crate::raft::{app::TremorApp, TremorNode};
 
 // --- Cluster management
 
-pub fn rest(app: &mut Server) {
+pub fn install_rest_endpoints(app: &mut Server) {
     let mut cluster = app.at("/cluster");
     cluster.at("/add-learner").post(add_learner);
     cluster.at("/change-membership").post(change_membership);

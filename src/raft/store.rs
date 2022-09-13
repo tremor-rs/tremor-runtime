@@ -1,6 +1,6 @@
 use crate::{
     raft::{archive::TremorAppDef, ClusterError, TremorNode, TremorNodeId, TremorTypeConfig},
-    system::World,
+    system::Runtime,
 };
 use async_std::{net::ToSocketAddrs, sync::RwLock};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -8,8 +8,8 @@ use openraft::{
     async_trait::async_trait,
     storage::{LogState, Snapshot},
     AnyError, EffectiveMembership, Entry, EntryPayload, ErrorSubject, ErrorVerb, LogId, NodeId,
-    RaftLogReader, RaftSnapshotBuilder, RaftStorage, SnapshotMeta, StorageError, StorageIOError,
-    Vote,
+    RaftLogReader, RaftSnapshotBuilder, RaftStorage, SnapshotMeta, StateMachineChanges,
+    StorageError, StorageIOError, Vote,
 };
 use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Direction, FlushOptions, Options, DB};
 use serde::{Deserialize, Serialize};
@@ -272,7 +272,7 @@ pub(crate) struct TremorStateMachine {
     /// Application data.
     pub db: Arc<rocksdb::DB>,
     pub apps: HashMap<AppId, StateApp>,
-    pub world: World,
+    pub world: Runtime,
 }
 
 impl TremorStateMachine {
@@ -345,7 +345,7 @@ impl TremorStateMachine {
     async fn from_serializable(
         sm: SerializableTremorStateMachine,
         db: Arc<rocksdb::DB>,
-        world: World,
+        world: Runtime,
     ) -> StorageResult<Self> {
         let mut r = Self {
             db,
@@ -378,7 +378,7 @@ impl TremorStateMachine {
         Ok(r)
     }
 
-    async fn new(db: Arc<rocksdb::DB>, world: World) -> Result<TremorStateMachine, StoreError> {
+    async fn new(db: Arc<rocksdb::DB>, world: Runtime) -> Result<TremorStateMachine, StoreError> {
         let mut r = Self {
             db: db.clone(),
             world,
@@ -539,7 +539,7 @@ impl TremorStateMachine {
 #[derive(Debug)]
 pub struct TremorStore {
     db: Arc<rocksdb::DB>,
-    world: World,
+    runtime: Runtime,
     /// The Raft state machine.
     pub(crate) state_machine: RwLock<TremorStateMachine>,
 }
@@ -670,7 +670,7 @@ impl TremorStore {
             .ok_or(StoreError::MissingCf(TremorStore::LOGS))
     }
 
-    fn get_last_purged_(&self) -> StorageResult<Option<LogId<u64>>> {
+    fn get_last_purged_(&self) -> StorageResult<Option<LogId<TremorNodeId>>> {
         Ok(self
             .db
             .get_cf(self.store()?, b"last_purged_log_id")
@@ -678,7 +678,7 @@ impl TremorStore {
             .and_then(|v| serde_json::from_slice(&v).ok()))
     }
 
-    fn set_last_purged_(&self, log_id: LogId<u64>) -> StorageResult<()> {
+    fn set_last_purged_(&self, log_id: LogId<TremorNodeId>) -> StorageResult<()> {
         self.put(
             self.store()?,
             b"last_purged_log_id",
@@ -699,7 +699,7 @@ impl TremorStore {
             .unwrap_or_default())
     }
 
-    fn set_snapshot_indesx_(&self, snapshot_index: u64) -> StorageResult<()> {
+    fn set_snapshot_index_(&self, snapshot_index: u64) -> StorageResult<()> {
         self.put(
             self.store()?,
             b"snapshot_index",
@@ -826,7 +826,7 @@ impl RaftSnapshotBuilder<TremorTypeConfig, Cursor<Vec<u8>>> for Arc<TremorStore>
 
         // TODO: we probably want thius to be atomic.
         let snapshot_idx: u64 = self.get_snapshot_index_()? + 1;
-        self.set_snapshot_indesx_(snapshot_idx)?;
+        self.set_snapshot_index_(snapshot_idx)?;
 
         let snapshot_id = format!(
             "{}-{}-{}",
@@ -998,7 +998,7 @@ impl RaftStorage<TremorTypeConfig> for Arc<TremorStore> {
         &mut self,
         meta: &SnapshotMeta<TremorNodeId, TremorNode>,
         snapshot: Box<Self::SnapshotData>,
-    ) -> StorageResult<()> {
+    ) -> StorageResult<StateMachineChanges<TremorTypeConfig>> {
         info!(
             "decoding snapshot for installation size: {} ",
             snapshot.get_ref().len()
@@ -1023,13 +1023,16 @@ impl RaftStorage<TremorTypeConfig> for Arc<TremorStore> {
             *state_machine = TremorStateMachine::from_serializable(
                 updated_state_machine,
                 self.db.clone(),
-                self.world.clone(),
+                self.runtime.clone(),
             )
             .await?;
         }
 
         self.set_current_snapshot_(new_snapshot)?;
-        Ok(())
+        Ok(StateMachineChanges {
+            last_applied: meta.last_log_id,
+            is_snapshot: true,
+        })
     }
 
     // #[tracing::instrument(level = "trace", skip(self))]
@@ -1065,6 +1068,10 @@ impl TremorStore {
     const INSTANCES: &'static str = "instances";
     const STATE_MACHINE: &'static str = "state_machine";
 
+    /// Initialize the rocksdb column families.
+    ///
+    /// This function is safe and never cleans up or resets the current state,
+    /// but creates a new db if there is none.
     fn init_db<P: AsRef<Path>>(db_path: P) -> Result<DB, ClusterError> {
         let mut db_opts = Options::default();
         db_opts.create_missing_column_families(true);
@@ -1086,14 +1093,31 @@ impl TremorStore {
         )
         .map_err(ClusterError::Rocks)
     }
-    pub async fn init_node<P: AsRef<Path>>(
+
+    pub(crate) fn get_node_data(&self) -> Result<(TremorNodeId, String, String), ClusterError> {
+        let id = self
+            .get_node_id()?
+            .ok_or("invalid cluster store, node_id missing")?;
+        let api_addr = self
+            .get_api_addr()?
+            .ok_or("invalid cluster store, http_addr missing")?;
+
+        let rpc_addr = self
+            .get_rpc_addr()?
+            .ok_or("invalid cluster store, rpc_addr missing")?;
+        Ok((id, api_addr, rpc_addr))
+    }
+
+    /// bootstrapping constructor - storing the given node data in the db
+    pub(crate) async fn bootstrap<P: AsRef<Path>>(
         db_path: P,
         node_id: TremorNodeId,
-        rpc_addr: impl ToString + ToSocketAddrs,
-        api_addr: impl ToString + ToSocketAddrs,
-    ) -> Result<(), ClusterError> {
-        let db = TremorStore::init_db(db_path)?;
-        let node_id = id_to_bin(node_id)?;
+        rpc_addr: impl Into<String> + ToSocketAddrs,
+        api_addr: impl Into<String> + ToSocketAddrs,
+        world: Runtime,
+    ) -> Result<Arc<TremorStore>, ClusterError> {
+        let db = Self::init_db(db_path)?;
+        let node_id = id_to_bin(*node_id)?;
         if let Err(e) = rpc_addr.to_socket_addrs().await {
             return Err(ClusterError::Other(format!("Invalid rpc_addr {e}")));
         }
@@ -1106,26 +1130,42 @@ impl TremorStore {
             .ok_or("no node column family")?;
 
         db.put_cf(cf, "node_id", node_id)?;
-        db.put_cf(cf, "rpc_addr", rpc_addr.to_string().as_bytes())?;
-        db.put_cf(cf, "api_addr", api_addr.to_string().as_bytes())?;
-
-        Ok(())
-    }
-    pub(crate) async fn new<P: AsRef<Path>>(
-        db_path: P,
-        world: World,
-    ) -> Result<Arc<TremorStore>, ClusterError> {
-        let db = Arc::new(TremorStore::init_db(db_path)?);
+        db.put_cf(cf, "rpc_addr", rpc_addr.into().as_bytes())?;
+        db.put_cf(cf, "api_addr", api_addr.into().as_bytes())?;
+        let db = Arc::new(db);
         let state_machine = RwLock::new(
             TremorStateMachine::new(db.clone(), world.clone())
                 .await
                 .map_err(StoreError::from)?,
         );
-        Ok(Arc::new(TremorStore {
+        Ok(Arc::new(Self {
             db,
             state_machine,
-            world,
+            runtime: world,
         }))
+    }
+
+    /// loading constructor - loading the given database
+    ///
+    /// verifying that we have some node-data stored
+    pub(crate) async fn load<P: AsRef<Path>>(
+        db_path: P,
+        world: Runtime,
+    ) -> Result<Arc<TremorStore>, ClusterError> {
+        let db = Arc::new(Self::init_db(db_path)?);
+        let state_machine = RwLock::new(
+            TremorStateMachine::new(db.clone(), world.clone())
+                .await
+                .map_err(StoreError::from)?,
+        );
+        let this = Self {
+            db,
+            state_machine,
+            runtime: world,
+        };
+        // verify that we actually have some valid node data
+        _ = this.get_node_data()?;
+        Ok(Arc::new(this))
     }
 
     pub fn get_api_addr(&self) -> Result<Option<String>, StoreError> {
@@ -1145,7 +1185,30 @@ impl TremorStore {
     pub fn get_node_id(&self) -> Result<Option<TremorNodeId>, StoreError> {
         self.db
             .get_cf(self.node()?, "node_id")?
-            .map(|v| bin_to_id(&v))
+            .map(|v| bin_to_id(&v).map(TremorNodeId::from))
             .transpose()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::raft::ClusterResult;
+
+    use super::*;
+
+    #[test]
+    fn init_db_is_idempotent() -> ClusterResult<()> {
+        let dir = tempfile::tempdir()?;
+        let db = TremorStore::init_db(dir.path())?;
+        let handle = db.cf_handle(TremorStore::NODE).unwrap();
+        let data = vec![1_u8, 2_u8, 3_u8];
+        db.put_cf(handle, "node_id", data.clone())?;
+        drop(db);
+
+        let db2 = TremorStore::init_db(dir.path())?;
+        let handle2 = db2.cf_handle(TremorStore::NODE).unwrap();
+        let res2 = db2.get_cf(handle2, "node_id")?;
+        assert_eq!(Some(data), res2);
+        Ok(())
     }
 }

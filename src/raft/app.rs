@@ -9,7 +9,28 @@ use super::TremorStore;
 pub struct TremorApp {
     pub id: TremorNodeId,
     pub api_addr: String,
-    pub rcp_addr: String,
+    pub rpc_addr: String,
     pub raft: TremorRaft,
     pub store: Arc<TremorStore>,
 }
+
+/*
+impl TremorApp {
+
+    pub(crate) fn new<P: AsRef<Path>>(
+        id: TremorNodeId,
+        api_addr: String,
+        rpc_addr: String,
+        raft: TremorRaft,
+        store: Arc<TremorStore>,
+    ) -> Self {
+        Self {
+            id,
+            api_addr,
+            rpc_addr,
+            raft,
+            store,
+        }
+    }
+}
+*/

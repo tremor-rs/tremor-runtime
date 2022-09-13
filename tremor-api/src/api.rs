@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use tide::Response;
 use tokio::task::JoinHandle;
 use tremor_runtime::instance::State as InstanceState;
-use tremor_runtime::system::World;
+use tremor_runtime::system::Runtime;
 
 pub mod flow;
 pub mod model;
@@ -41,7 +41,7 @@ pub const DEFAULT_API_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Clone)]
 pub struct State {
-    pub world: World,
+    pub world: Runtime,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -167,7 +167,7 @@ async fn handle_api_request<
 
 /// server the tremor API in a separately spawned task
 #[must_use]
-pub fn serve(host: String, world: &World) -> JoinHandle<Result<()>> {
+pub fn serve(host: String, world: &Runtime) -> JoinHandle<Result<()>> {
     let mut v1_app = tide::Server::with_state(State {
         world: world.clone(),
     });
@@ -233,7 +233,7 @@ mod tests {
         let config = WorldConfig {
             debug_connectors: true,
         };
-        let (world, world_handle) = World::start(config).await?;
+        let (world, world_handle) = Runtime::start(config).await?;
 
         let free_port = {
             let listener = TcpListener::bind("127.0.0.1:0").await?;

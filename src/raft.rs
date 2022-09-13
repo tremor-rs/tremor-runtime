@@ -5,7 +5,7 @@ use crate::{
         network::{api, management, raft::RaftServer, raft_network_impl::TremorNetwork},
         store::{StoreError, TremorRequest, TremorResponse, TremorStore},
     },
-    system::World,
+    system::Runtime,
 };
 
 use async_std::task;
@@ -26,11 +26,54 @@ pub mod app;
 pub mod archive;
 pub mod client;
 pub mod network;
+pub mod node;
 pub mod store;
 
-pub type TremorNodeId = u64;
+#[derive(
+    Default, Debug, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, PartialOrd, Ord, Clone,
+)]
+pub struct TremorNodeId(u64);
 
-fn config() -> ClusterResult<Config> {
+impl TremorNodeId {
+    pub fn random() -> Self {
+        Self(rand::random())
+    }
+}
+
+impl From<u64> for TremorNodeId {
+    fn from(id: u64) -> Self {
+        Self(id)
+    }
+}
+
+impl From<TremorNodeId> for u64 {
+    fn from(id: TremorNodeId) -> Self {
+        id.0
+    }
+}
+
+impl std::fmt::Display for TremorNodeId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl AsRef<u64> for TremorNodeId {
+    fn as_ref(&self) -> &u64 {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for TremorNodeId {
+    type Target = u64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+/// load a default raft config
+pub fn config() -> ClusterResult<Config> {
     let mut config = Config::default();
     config.heartbeat_interval = 250;
     config.election_timeout_min = 299;
@@ -46,7 +89,7 @@ impl Display for TremorNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "ExampleNode {{ api: {}, rpc: {} }}",
+            "TremorNode {{ api: {}, rpc: {} }}",
             self.api_addr, self.rpc_addr
         )
     }
@@ -136,38 +179,18 @@ impl std::error::Error for ClusterError {}
 
 type ClusterResult<T> = Result<T, ClusterError>;
 
-pub async fn init_raft_node<P>(
-    dir: P,
-    node_id: TremorNodeId,
-    rpc: String,
-    api: String,
-) -> ClusterResult<()>
+pub async fn init_cluster<P>(dir: P, world: Runtime) -> ClusterResult<()>
 where
     P: AsRef<Path>,
 {
-    TremorStore::init_node(&dir, node_id, &rpc, &api).await
-}
-
-pub async fn init_cluster<P>(dir: P, world: World) -> ClusterResult<()>
-where
-    P: AsRef<Path>,
-{
+    // FIXME
+    let store = TremorStore::load(&dir, world).await?;
     // Validate that the data is correctly stored
-    let store = TremorStore::new(&dir, world).await?;
-    let id = store
-        .get_node_id()?
-        .ok_or("invalid cluster store, node_id missing")?;
+    let (id, api_addr, rpc_addr) = store.get_node_data()?;
     debug!("Node id: {id}");
-    debug_assert_eq!(id, 0);
-    let api_addr = store
-        .get_api_addr()?
-        .ok_or("invalid cluster store, http_addr missing")?;
     debug!("API addr: {api_addr}");
-
-    let rpc_addr = store
-        .get_rpc_addr()?
-        .ok_or("invalid cluster store, rpc_addr missing")?;
     debug!("RPC addr: {rpc_addr}");
+    //let node = ClusterNode::new(id, api_addr.clone(), rpc_addr.clone(), config()?);
 
     // Create the network layer that will connect and communicate the raft instances and
     // will be used in conjunction with the store created above.
@@ -187,13 +210,16 @@ where
     Ok(())
 }
 
-pub async fn start_raft_node<P>(dir: P, world: World) -> ClusterResult<()>
+/// Start the current Raft node from the data stored in `dir`.
+///
+/// Precondition: `dir` has been properly initialized by `TremorStore::init_node`
+pub async fn start_raft_node<P>(dir: P, world: Runtime) -> ClusterResult<()>
 where
     P: AsRef<Path>,
 {
     let config = Arc::new(config()?);
     // Create a instance of where the Raft data will be stored.
-    let store = TremorStore::new(&dir, world.clone()).await?;
+    let store = TremorStore::load(&dir, world).await?;
     let id = store
         .get_node_id()?
         .ok_or("invalid cluster store, node_id missing")?;
@@ -217,7 +243,7 @@ where
     let app = Arc::new(TremorApp {
         id,
         api_addr: api_addr.clone(),
-        rcp_addr: rpc_addr.clone(),
+        rpc_addr: rpc_addr.clone(),
         raft,
         store,
     });
@@ -246,12 +272,11 @@ where
             .await
     });
 
-    // Create an application that will store all the instances created above, this will
-    // be later used on the actix-web services.
+    // Create an application that will store all the instances created above
     let mut app: Server = tide::Server::with_state(app);
 
-    management::rest(&mut app);
-    api::rest(&mut app);
+    management::install_rest_endpoints(&mut app);
+    api::install_rest_endpoints(&mut app);
 
     app.listen(api_addr).await?;
     Ok(())

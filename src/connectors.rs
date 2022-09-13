@@ -39,7 +39,7 @@ use crate::{
     errors::{connector_send_err, Error, Kind as ErrorKind, Result},
     instance::State,
     log_error, pipeline, qsize,
-    system::{flow, KillSwitch, World},
+    system::{flow, KillSwitch, Runtime},
 };
 use beef::Cow;
 use futures::Future;
@@ -1257,7 +1257,7 @@ pub(crate) fn debug_connector_types() -> Vec<Box<dyn ConnectorBuilder + 'static>
 /// # Errors
 ///  * If a builtin connector couldn't be registered
 
-pub(crate) async fn register_builtin_connector_types(world: &World, debug: bool) -> Result<()> {
+pub(crate) async fn register_builtin_connector_types(world: &Runtime, debug: bool) -> Result<()> {
     for builder in builtin_connector_types() {
         world.register_builtin_connector_type(builder).await?;
     }
