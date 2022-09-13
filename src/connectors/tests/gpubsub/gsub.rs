@@ -25,9 +25,9 @@ use testcontainers::clients::Cli;
 use testcontainers::RunnableImage;
 use tonic::transport::Channel;
 use tremor_pipeline::CbAction;
+use tremor_runtime::instance::State;
 use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
-use tremor_runtime::instance::State;
 
 #[async_std::test]
 #[serial(gpubsub, timeout_ms = 600000)]
