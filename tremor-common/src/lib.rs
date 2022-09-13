@@ -37,6 +37,9 @@ pub mod ids;
 /// Random numbers
 pub mod rand;
 
+/// String/str functions
+pub mod string;
+
 /// A dashmap with an expiration date for items
 pub mod blue_green_hashmap;
 /// Common ports

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use super::prelude::*;
-use std::{slice::SliceIndex, str};
+use tremor_common::string::substr;
 
 #[derive(Clone)]
 pub struct StatsD {}
@@ -86,8 +86,7 @@ fn decode(data: &[u8], _ingest_ns: u64) -> Result<Value> {
     loop {
         match d.next() {
             Some((idx, b':')) => {
-                let raw = data.get(0..idx).ok_or_else(invalid)?;
-                let v = str::from_utf8(raw)?;
+                let v = substr(data, 0..idx)?;
                 value_start = idx + 1;
                 m.insert("metric".into(), Value::from(v));
                 break;
@@ -172,26 +171,10 @@ fn invalid() -> Error {
     Error::from(ErrorKind::InvalidStatsD)
 }
 
-fn substr<I: SliceIndex<[u8], Output = [u8]>>(data: &[u8], r: I) -> Result<&str> {
-    let raw = data.get(r).ok_or_else(invalid)?;
-    let s = str::from_utf8(raw)?;
-    Ok(s)
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
     use tremor_value::literal;
-    #[test]
-    fn test_subslice() {
-        let a = b"012345";
-
-        assert_eq!(substr(a, 1..), Ok("12345"));
-        assert_eq!(substr(a, ..4), Ok("0123"));
-        assert_eq!(substr(a, 1..4), Ok("123"));
-        assert!(substr(a, 99..).is_err());
-        assert!(substr(a, ..99).is_err());
-    }
 
     // gorets:1|c
     #[test]

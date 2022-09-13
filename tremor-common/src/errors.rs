@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use std::fmt::Display;
+use std::{fmt::Display, str::Utf8Error};
 
 /// A shared error for common functions
 #[derive(Debug)]
@@ -28,6 +28,8 @@ pub enum Error {
     UrlParseError(url::ParseError),
     /// Invalid Tremor Url
     InvalidTremorUrl(String, String),
+    /// Substring out of bounds
+    SubstringOutOfBounds,
     /// Generic untyped error message
     Generic(String),
 }
@@ -50,6 +52,12 @@ impl From<url::ParseError> for Error {
     }
 }
 
+impl From<Utf8Error> for Error {
+    fn from(e: Utf8Error) -> Self {
+        Self::Generic(e.to_string())
+    }
+}
+
 impl Display for Error {
     fn fmt(&self, w: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -63,6 +71,7 @@ impl Display for Error {
             Error::InvalidTremorUrl(reason, detail) => {
                 write!(w, "Invalid Tremor URL, {}: `{}`", reason, detail)
             }
+            Error::SubstringOutOfBounds => write!(w, "Substring out of bounds"),
             Error::Generic(msg) => write!(w, "Error: {}", msg),
         }
     }
