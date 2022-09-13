@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### New features
+
+- Add `dogstatsd` codec for Datadog DogStasD implementation
+
 ### Fixes
 
 - Fix output of `dns_client` being empty for any lookup.
