@@ -16,6 +16,7 @@ use crate::connectors::impls::gpubsub::consumer::Builder;
 use crate::connectors::tests::ConnectorHarness;
 use crate::connectors::utils::EnvHelper;
 use crate::errors::Result;
+use crate::instance::State;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
 use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage, Subscription, Topic};
@@ -25,7 +26,6 @@ use testcontainers::clients::Cli;
 use testcontainers::RunnableImage;
 use tonic::transport::Channel;
 use tremor_pipeline::CbAction;
-use tremor_runtime::instance::State;
 use tremor_value::{literal, Value};
 use value_trait::ValueAccess;
 
