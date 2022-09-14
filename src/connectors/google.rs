@@ -78,7 +78,7 @@ where
         let metadata_value = match MetadataValue::from_str(header_value.as_str()) {
             Ok(val) => val,
             Err(e) => {
-                error!("Failed to get token for BigQuery: {}", e);
+                error!("Failed to get token: {}", e);
 
                 return Err(Status::unavailable(
                     "Failed to retrieve authentication token.",

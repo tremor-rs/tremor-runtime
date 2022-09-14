@@ -23,7 +23,9 @@ use async_std::task;
 use async_std::task::JoinHandle;
 use beef::generic::Cow;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
-use googapis::google::pubsub::v1::{PubsubMessage, ReceivedMessage, StreamingPullRequest};
+use googapis::google::pubsub::v1::{
+    GetSubscriptionRequest, PubsubMessage, ReceivedMessage, StreamingPullRequest,
+};
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -284,12 +286,24 @@ impl<T: TokenProvider + 'static> Source for GSubSource<T> {
             task_handle.cancel().await;
         }
 
-        let client = SubscriberClient::with_interceptor(
+        let mut client = SubscriberClient::with_interceptor(
             channel.clone(),
             AuthInterceptor {
                 token_provider: T::default(),
             },
         );
+        // check that the subscription exists
+        let res = client
+            .get_subscription(GetSubscriptionRequest {
+                subscription: self.config.subscription_id.clone(),
+            })
+            .await?
+            .into_inner();
+        info!(
+            "{ctx} Using subscription '{}' for topic '{}'",
+            &res.name, &res.topic
+        );
+        debug!("{ctx} Subscription details {res:?}");
 
         let client_background = client.clone();
 
