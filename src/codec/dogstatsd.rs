@@ -75,10 +75,11 @@ fn encode_metric(value: &Value) -> Result<Vec<u8>> {
         .ok_or(ErrorKind::InvalidDogStatsD)?;
     let value_array: Vec<String> = values
         .iter()
-        .flat_map(|x| x.as_f64())
+        .filter_map(simd_json::ValueAccess::as_f64)
         .map(|x| {
             if x.fract() == 0.0 {
-                let n = x as i32;
+                #[allow(clippy::cast_possible_truncation)]
+                let n = x as i64;
                 n.to_string()
             } else {
                 x.to_string()
@@ -103,8 +104,11 @@ fn encode_metric(value: &Value) -> Result<Vec<u8>> {
 
     if let Some(tags) = value.get_array("tags") {
         r.push_str("|#");
-        let tag_array: Vec<&str> = tags.iter().flat_map(|tag| tag.as_str()).collect();
-        r.push_str(&tag_array.join(","))
+        let tag_array: Vec<&str> = tags
+            .iter()
+            .filter_map(simd_json::ValueAccess::as_str)
+            .collect();
+        r.push_str(&tag_array.join(","));
     }
 
     if let Some(container_id) = value.get_str("container_id") {
@@ -161,8 +165,11 @@ fn encode_event(value: &Value) -> Result<Vec<u8>> {
 
     if let Some(tags) = value.get_array("tags") {
         r.push_str("|#");
-        let tag_array: Vec<&str> = tags.iter().flat_map(|tag| tag.as_str()).collect();
-        r.push_str(&tag_array.join(","))
+        let tag_array: Vec<&str> = tags
+            .iter()
+            .filter_map(simd_json::ValueAccess::as_str)
+            .collect();
+        r.push_str(&tag_array.join(","));
     }
 
     if let Some(container_id) = value.get_str("container_id") {
@@ -195,8 +202,11 @@ fn encode_service_check(value: &Value) -> Result<Vec<u8>> {
 
     if let Some(tags) = value.get_array("tags") {
         r.push_str("|#");
-        let tag_array: Vec<&str> = tags.iter().flat_map(|tag| tag.as_str()).collect();
-        r.push_str(&tag_array.join(","))
+        let tag_array: Vec<&str> = tags
+            .iter()
+            .filter_map(simd_json::ValueAccess::as_str)
+            .collect();
+        r.push_str(&tag_array.join(","));
     }
 
     if let Some(message) = value.get_str("message") {
@@ -281,7 +291,7 @@ fn decode_metric(data: &[u8]) -> Result<Value> {
     };
 
     // Optional Sections
-    for section in substr(data, section_start..)?.split("|") {
+    for section in substr(data, section_start..)?.split('|') {
         if section.starts_with('@') {
             let sample_rate = section.get(1..).ok_or(ErrorKind::InvalidDogStatsD)?;
             let sample_rate_float: f64 = sample_rate.parse()?;
@@ -290,7 +300,7 @@ fn decode_metric(data: &[u8]) -> Result<Value> {
             let tags: Vec<&str> = section
                 .get(1..)
                 .ok_or(ErrorKind::InvalidDogStatsD)?
-                .split(",")
+                .split(',')
                 .collect();
             m.insert("tags".into(), Value::from(tags));
         } else if section.starts_with('c') {
@@ -315,7 +325,7 @@ fn decode_event(data: &[u8]) -> Result<Value> {
     loop {
         match d.next() {
             Some((idx, b'|')) => {
-                let v: Vec<&str> = substr(data, 2..idx)?.split(":").collect();
+                let v: Vec<&str> = substr(data, 2..idx)?.split(':').collect();
                 let title: &str = v.get(1).ok_or(ErrorKind::InvalidDogStatsD)?;
                 m.insert("title".into(), Value::from(title));
                 section_start = idx + 1;
@@ -353,7 +363,7 @@ fn decode_event(data: &[u8]) -> Result<Value> {
 
     // Optional Sections
     if optional_sections {
-        for section in substr(data, optional_text_idx..)?.split("|") {
+        for section in substr(data, optional_text_idx..)?.split('|') {
             if section.starts_with('d') {
                 let timestamp: u32 = section
                     .get(2..)
@@ -379,7 +389,7 @@ fn decode_event(data: &[u8]) -> Result<Value> {
                 let tags: Vec<&str> = section
                     .get(1..)
                     .ok_or(ErrorKind::InvalidDogStatsD)?
-                    .split(",")
+                    .split(',')
                     .collect();
                 m.insert("tags".into(), Value::from(tags));
             } else if section.starts_with('c') {
@@ -401,12 +411,9 @@ fn decode_service_check(data: &[u8]) -> Result<Value> {
 
     // Skip the prefix and set the starting
     loop {
-        match d.next() {
-            Some((idx, b'|')) => {
-                start_index = idx + 1;
-                break;
-            }
-            _ => (),
+        if let Some((idx, b'|')) = d.next() {
+            start_index = idx + 1;
+            break;
         }
     }
 
@@ -436,7 +443,7 @@ fn decode_service_check(data: &[u8]) -> Result<Value> {
     // Optional Sections
     match d.next() {
         Some((idx, b'|')) => {
-            for section in substr(data, idx + 1..)?.split("|") {
+            for section in substr(data, idx + 1..)?.split('|') {
                 if section.starts_with('d') {
                     let timestamp: u32 = section
                         .get(2..)
@@ -450,7 +457,7 @@ fn decode_service_check(data: &[u8]) -> Result<Value> {
                     let tags: Vec<&str> = section
                         .get(1..)
                         .ok_or(ErrorKind::InvalidDogStatsD)?
-                        .split(",")
+                        .split(',')
                         .collect();
                     m.insert("tags".into(), Value::from(tags));
                 } else if section.starts_with('m') {
