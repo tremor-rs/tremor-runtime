@@ -75,13 +75,14 @@ fn encode_metric(value: &Value) -> Result<Vec<u8>> {
         .ok_or(ErrorKind::InvalidDogStatsD)?;
     let value_array: Vec<String> = values
         .iter()
+        .flat_map(|x| x.as_f64())
         .map(|x| {
-            let n = x.as_f64().unwrap();
-            if n.fract() == 0.0 {
-                let i = n as i32;
-                i.to_string();
+            if x.fract() == 0.0 {
+                let n = x as i32;
+                n.to_string()
+            } else {
+                x.to_string()
             }
-            n.to_string()
         })
         .collect();
 
@@ -102,7 +103,7 @@ fn encode_metric(value: &Value) -> Result<Vec<u8>> {
 
     if let Some(tags) = value.get_array("tags") {
         r.push_str("|#");
-        let tag_array: Vec<&str> = tags.iter().map(|tag| tag.as_str().unwrap()).collect();
+        let tag_array: Vec<&str> = tags.iter().flat_map(|tag| tag.as_str()).collect();
         r.push_str(&tag_array.join(","))
     }
 
@@ -160,7 +161,7 @@ fn encode_event(value: &Value) -> Result<Vec<u8>> {
 
     if let Some(tags) = value.get_array("tags") {
         r.push_str("|#");
-        let tag_array: Vec<&str> = tags.iter().map(|tag| tag.as_str().unwrap()).collect();
+        let tag_array: Vec<&str> = tags.iter().flat_map(|tag| tag.as_str()).collect();
         r.push_str(&tag_array.join(","))
     }
 
@@ -194,7 +195,7 @@ fn encode_service_check(value: &Value) -> Result<Vec<u8>> {
 
     if let Some(tags) = value.get_array("tags") {
         r.push_str("|#");
-        let tag_array: Vec<&str> = tags.iter().map(|tag| tag.as_str().unwrap()).collect();
+        let tag_array: Vec<&str> = tags.iter().flat_map(|tag| tag.as_str()).collect();
         r.push_str(&tag_array.join(","))
     }
 
@@ -282,14 +283,18 @@ fn decode_metric(data: &[u8]) -> Result<Value> {
     // Optional Sections
     for section in substr(data, section_start..)?.split("|") {
         if section.starts_with('@') {
-            let sample_rate = &section[1..];
+            let sample_rate = section.get(1..).ok_or(ErrorKind::InvalidDogStatsD)?;
             let sample_rate_float: f64 = sample_rate.parse()?;
             m.insert("sample_rate".into(), Value::from(sample_rate_float));
         } else if section.starts_with('#') {
-            let tags: Vec<&str> = section[1..].split(",").collect();
+            let tags: Vec<&str> = section
+                .get(1..)
+                .ok_or(ErrorKind::InvalidDogStatsD)?
+                .split(",")
+                .collect();
             m.insert("tags".into(), Value::from(tags));
         } else if section.starts_with('c') {
-            let container_id = &section[2..];
+            let container_id = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
             m.insert("container_id".into(), Value::from(container_id));
         }
     }
@@ -311,7 +316,7 @@ fn decode_event(data: &[u8]) -> Result<Value> {
         match d.next() {
             Some((idx, b'|')) => {
                 let v: Vec<&str> = substr(data, 2..idx)?.split(":").collect();
-                let title = v[1];
+                let title: &str = v.get(1).ok_or(ErrorKind::InvalidDogStatsD)?;
                 m.insert("title".into(), Value::from(title));
                 section_start = idx + 1;
                 break;
@@ -350,28 +355,35 @@ fn decode_event(data: &[u8]) -> Result<Value> {
     if optional_sections {
         for section in substr(data, optional_text_idx..)?.split("|") {
             if section.starts_with('d') {
-                let timestamp: u32 = section[2..].parse()?;
+                let timestamp: u32 = section
+                    .get(2..)
+                    .ok_or(ErrorKind::InvalidDogStatsD)?
+                    .parse()?;
                 m.insert("timestamp".into(), Value::from(timestamp));
             } else if section.starts_with('h') {
-                let hostname = &section[2..];
+                let hostname = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
                 m.insert("hostname".into(), Value::from(hostname));
             } else if section.starts_with('p') {
-                let priority = &section[2..];
+                let priority = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
                 m.insert("priority".into(), Value::from(priority));
             } else if section.starts_with('s') {
-                let source = &section[2..];
+                let source = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
                 m.insert("source".into(), Value::from(source));
             } else if section.starts_with('t') {
-                let event_type = &section[2..];
+                let event_type = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
                 m.insert("type".into(), Value::from(event_type));
             } else if section.starts_with('k') {
-                let aggregation = &section[2..];
+                let aggregation = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
                 m.insert("aggregation_key".into(), Value::from(aggregation));
             } else if section.starts_with('#') {
-                let tags: Vec<&str> = section[1..].split(",").collect();
+                let tags: Vec<&str> = section
+                    .get(1..)
+                    .ok_or(ErrorKind::InvalidDogStatsD)?
+                    .split(",")
+                    .collect();
                 m.insert("tags".into(), Value::from(tags));
             } else if section.starts_with('c') {
-                let container_id = &section[2..];
+                let container_id = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
                 m.insert("container_id".into(), Value::from(container_id));
             }
         }
@@ -426,19 +438,26 @@ fn decode_service_check(data: &[u8]) -> Result<Value> {
         Some((idx, b'|')) => {
             for section in substr(data, idx + 1..)?.split("|") {
                 if section.starts_with('d') {
-                    let timestamp: u32 = section[2..].parse()?;
+                    let timestamp: u32 = section
+                        .get(2..)
+                        .ok_or(ErrorKind::InvalidDogStatsD)?
+                        .parse()?;
                     m.insert("timestamp".into(), Value::from(timestamp));
                 } else if section.starts_with('h') {
-                    let hostname = &section[2..];
+                    let hostname = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
                     m.insert("hostname".into(), Value::from(hostname));
                 } else if section.starts_with('#') {
-                    let tags: Vec<&str> = section[1..].split(",").collect();
+                    let tags: Vec<&str> = section
+                        .get(1..)
+                        .ok_or(ErrorKind::InvalidDogStatsD)?
+                        .split(",")
+                        .collect();
                     m.insert("tags".into(), Value::from(tags));
                 } else if section.starts_with('m') {
-                    let message = &section[2..];
+                    let message = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
                     m.insert("message".into(), Value::from(message));
                 } else if section.starts_with('c') {
-                    let container_id = &section[2..];
+                    let container_id = section.get(2..).ok_or(ErrorKind::InvalidDogStatsD)?;
                     m.insert("container_id".into(), Value::from(container_id));
                 }
             }
@@ -764,30 +783,37 @@ mod test {
     fn bench() {
         let data = b"foo:1620649445.3351967|h";
         let m = decode(data, 0).expect("failed to decode");
+        // ALLOW: Values are hardcoded
         assert_eq!(&data[..], encode(&m).expect("failed to encode"));
 
         let data = b"foo1:12345|c";
         let m = decode(data, 0).expect("failed to decode");
+        // ALLOW: Values are hardcoded
         assert_eq!(&data[..], encode(&m).expect("failed to encode"));
 
         let data = b"foo2:1234567890|c";
         let m = decode(data, 0).expect("failed to decode");
+        // ALLOW: Values are hardcoded
         assert_eq!(&data[..], encode(&m).expect("failed to encode"));
 
         let data = b"_sc|Redis connection|2|d:1663016695|h:test.example.com|#env:dev|m:Redis connection timed out after 10s|c:123abc";
         let m = decode(data, 0).expect("failed to decode");
+        // ALLOW: Values are hardcoded
         assert_eq!(&data[..], encode(&m).expect("failed to encode"));
 
         let data = b"_sc|Redis connection|2";
         let m = decode(data, 0).expect("failed to decode");
+        // ALLOW: Values are hardcoded
         assert_eq!(&data[..], encode(&m).expect("failed to encode"));
 
         let data = b"_e{21,36}:An exception occurred|Cannot parse CSV file from 10.0.0.17";
         let m = decode(data, 0).expect("failed to decode");
+        // ALLOW: Values are hardcoded
         assert_eq!(&data[..], encode(&m).expect("failed to encode"));
 
         let data = b"_e{21,36}:An exception occurred|Cannot parse CSV file from 10.0.0.17|#env:dev,test:testing";
         let m = decode(data, 0).expect("failed to decode");
+        // ALLOW: Values are hardcoded
         assert_eq!(&data[..], encode(&m).expect("failed to encode"));
     }
 }
