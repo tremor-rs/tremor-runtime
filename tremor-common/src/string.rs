@@ -15,7 +15,21 @@
 use crate::errors::Error;
 use std::{slice::SliceIndex, str};
 
-/// Retrieve a substring from a range of u8s
+/// Retrieves a substring from a slice of u8s
+///
+/// # Examples
+///
+/// ```
+///  let data = b"foo:1620649445.3351967|h";
+///  let a = substr(data, 0..3)?;
+///
+///  assert_eq!(a, "foo");
+/// ```
+///
+/// # Errors
+///
+/// `Error::SubstringOutOfBounds` if the index is out of bounds
+///
 pub fn substr<I: SliceIndex<[u8], Output = [u8]>>(data: &[u8], r: I) -> Result<&str, Error> {
     let raw = data.get(r).ok_or(Error::SubstringOutOfBounds)?;
     let s = str::from_utf8(raw)?;
