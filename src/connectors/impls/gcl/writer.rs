@@ -104,8 +104,10 @@ pub(crate) struct Config {
     #[serde(default = "Default::default")]
     pub labels: HashMap<String, String>,
 
-    #[serde(default = "default_concurrency_cap")]
-    pub concurrency_cap: usize,
+    /// This settings sets an upper limit on the number of concurrent in flight requests
+    /// that can be in progress simultaneously
+    #[serde(default = "default_concurrency")]
+    pub concurrency: usize,
 }
 
 fn default_partial_success() -> bool {
@@ -128,7 +130,7 @@ fn default_log_severity() -> i32 {
     LogSeverity::Default as i32
 }
 
-fn default_concurrency_cap() -> usize {
+fn default_concurrency() -> usize {
     4
 }
 

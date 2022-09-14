@@ -17,7 +17,9 @@ use crate::connectors::tests::ConnectorHarness;
 use crate::errors::Result;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::subscriber_client::SubscriberClient;
-use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage, Subscription, Topic, GetSubscriptionRequest};
+use googapis::google::pubsub::v1::{
+    GetSubscriptionRequest, PublishRequest, PubsubMessage, Subscription, Topic,
+};
 use serial_test::serial;
 use std::collections::HashMap;
 use testcontainers::clients::Cli;
@@ -82,7 +84,11 @@ async fn create_subscription(endpoint: String, topic: &str, subscription: &str) 
         })
         .await?;
     // assert the system knows about our subscription now
-    dbg!(subscriber.get_subscription(GetSubscriptionRequest { subscription: subscription.to_string() }).await?);
+    subscriber
+        .get_subscription(GetSubscriptionRequest {
+            subscription: subscription.to_string(),
+        })
+        .await?;
     Ok(())
 }
 
@@ -128,7 +134,7 @@ async fn simple_subscribe() -> Result<()> {
 
     let mut attributes = HashMap::new();
     attributes.insert("a".to_string(), "b".to_string());
-    
+
     let channel = Channel::from_shared(endpoint)?.connect().await?;
     let mut publisher = PublisherClient::new(channel.clone());
     publisher

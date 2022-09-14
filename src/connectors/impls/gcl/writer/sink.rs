@@ -114,7 +114,7 @@ impl<
         reply_tx: Sender<AsyncSinkReply>,
         channel_factory: impl ChannelFactory<TChannel> + Send + Sync + 'static,
     ) -> Self {
-        let concurrency_cap = ConcurrencyCap::new(config.concurrency_cap, reply_tx.clone());
+        let concurrency_cap = ConcurrencyCap::new(config.concurrency, reply_tx.clone());
         Self {
             client: None,
             config,
@@ -364,7 +364,7 @@ mod test {
                 request_timeout: 0,
                 default_severity: 0,
                 labels: Default::default(),
-                concurrency_cap: 0,
+                concurrency: 0,
             },
             tx,
             MockChannelFactory,
