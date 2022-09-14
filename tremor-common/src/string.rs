@@ -17,7 +17,7 @@ use std::{slice::SliceIndex, str};
 
 /// Retrieve a substring from a range of u8s
 pub fn substr<I: SliceIndex<[u8], Output = [u8]>>(data: &[u8], r: I) -> Result<&str, Error> {
-    let raw = data.get(r).ok_or_else(|| Error::SubstringOutOfBounds)?;
+    let raw = data.get(r).ok_or(Error::SubstringOutOfBounds)?;
     let s = str::from_utf8(raw)?;
     Ok(s)
 }
