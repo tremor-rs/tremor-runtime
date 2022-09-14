@@ -23,7 +23,7 @@ pub trait TokenProvider: Clone + Default + Send {
 }
 
 pub struct GouthTokenProvider {
-    gouth_token: Option<Token>,
+    pub(crate) gouth_token: Option<Token>,
 }
 
 impl Clone for GouthTokenProvider {
@@ -124,6 +124,17 @@ pub(crate) mod tests {
         fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status> {
             Ok(self.token.clone())
         }
+    }
+
+    #[test]
+    fn appease_the_coverage_gods() {
+        let provider = GouthTokenProvider::default();
+        let mut provider = provider.clone();
+        assert!(provider.get_token().is_err());
+
+        let provider = FailingTokenProvider::default();
+        let mut provider = provider.clone();
+        assert!(provider.get_token().is_err());
     }
 
     #[test]
