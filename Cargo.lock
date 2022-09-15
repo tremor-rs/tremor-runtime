@@ -4546,9 +4546,9 @@ dependencies = [
 
 [[package]]
 name = "serde_yaml"
-version = "0.9.11"
+version = "0.9.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89f31df3f50926cdf2855da5fd8812295c34752cb20438dae42a67f79e021ac3"
+checksum = "8613d593412a0deb7bbd8de9d908efff5a0cb9ccd8f62c641e7b2ed2f57291d1"
 dependencies = [
  "indexmap",
  "itoa 1.0.2",
@@ -5585,7 +5585,7 @@ dependencies = [
  "log",
  "serde",
  "serde_derive",
- "serde_yaml 0.9.11",
+ "serde_yaml 0.9.13",
  "simd-json",
  "surf",
  "tide",
@@ -5621,7 +5621,7 @@ dependencies = [
  "pretty_assertions",
  "serde",
  "serde_derive",
- "serde_yaml 0.9.11",
+ "serde_yaml 0.9.13",
  "shell-words",
  "signal-hook",
  "signal-hook-async-std",
@@ -5710,7 +5710,7 @@ dependencies = [
  "rust-bert",
  "serde",
  "serde_derive",
- "serde_yaml 0.9.11",
+ "serde_yaml 0.9.13",
  "simd-json",
  "simd-json-derive",
  "sled",
@@ -5798,7 +5798,7 @@ dependencies = [
  "rustls-native-certs 0.6.2",
  "serde",
  "serde_derive",
- "serde_yaml 0.9.11",
+ "serde_yaml 0.9.13",
  "serenity",
  "serial_test",
  "signal-hook",
