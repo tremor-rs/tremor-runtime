@@ -19,4 +19,4 @@ simd-json-derive = "0.8"
 base64 = "0.21"
 
 [dev-dependencies]
-tokio = { version = "1.27", features = ["full"] }
+tempfile = { version = "3.2" }

@@ -78,29 +78,31 @@ pub(crate) enum ClusterCommand {
         #[clap(short, long, value_parser = clap::value_parser!(String))]
         api: String,
     },
-
-    /// Joins a new node to the cluster
-    Join {
-        /// Database dir to store raft data in
-        #[clap(short, long, value_parser = clap::value_parser!(String))]
-        db_dir: String,
-        /// The cluster to join, defaults to `TREMER_API_ADDRESS`
-        #[clap(short, long, value_parser = clap::value_parser!(String))]
-        cluster_api: Option<String>,
-        /// Raft RPC IP and endpoint to listen to
-        #[clap(short, long, value_parser = clap::value_parser!(String))]
-        rpc: String,
-        /// Raft API IP and endpoint to listen to
-        #[clap(short, long, value_parser = clap::value_parser!(String))]
-        api: String,
-    },
     /// Starts a cluster node that is part as a cluster already
     Start {
+        /// optional node_id to assign to the current node,
+        /// if not provided will be read from previously initialized cluster state
+        /// or a random id will be created
+        #[clap(short, long, value_parser = clap::value_parser!(u64))]
+        node_id: Option<u64>,
         /// Database dir to store raft data in
         #[clap(short, long, value_parser = clap::value_parser!(String))]
         db_dir: String,
+        /// optional Raft RPC IP and endpoint to listen to
+        /// if not provided, it will be read from the previously initialized cluster state
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        rpc: Option<String>,
+        /// optional Raft API IP and endpoint to listen to
+        /// if not provided, it will be read from the previously initialized cluster state
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        api: Option<String>,
+        /// Zero or more endpoints of the cluster to join
+        /// if no value is provided this node will not attempt to explicitly join any cluster
+        /// except the one it is already part of
+        #[clap(short, long, value_parser = clap::value_parser!(String))]
+        join: Vec<String>,
     },
-    /// Removes a note from the cluster (the node still has to be stopped after this)
+    /// Removes a node from the cluster (the node still has to be stopped after this)
     Remove {
         /// Raft API IP and endpoint to send to
         #[clap(short, long, value_parser = clap::value_parser!(String))]
@@ -120,7 +122,7 @@ pub(crate) enum ClusterCommand {
     },
     /// App related tommands
     Apps {
-        /// Raft API IP and endpoint to send to, defaults to `TREMER_API_ADDRESS`
+        /// Raft API IP and endpoint to send to, defaults to `TREMOR_API_ADDRESS`
         #[clap(short, long, value_parser = clap::value_parser!(String))]
         api: Option<String>,
         #[clap(subcommand)]

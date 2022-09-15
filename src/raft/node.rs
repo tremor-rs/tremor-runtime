@@ -14,13 +14,14 @@
 
 //! The entirety of a cluster node as a struct
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 
-use crate::errors::Result;
 use crate::system::ShutdownMode;
+use crate::{errors::Result, raft::client::TremorClient};
 use crate::{
     raft::{
         network::{api, management},
@@ -61,12 +62,18 @@ impl ClusterNodeKillSwitch {
 }
 
 pub struct RunningClusterNode {
+    node: ClusterNode,
     kill_switch_tx: Sender<ShutdownMode>,
     run_handle: JoinHandle<ClusterResult<()>>,
 }
 
 impl RunningClusterNode {
+    pub fn node(&self) -> &ClusterNode {
+        &self.node
+    }
+
     async fn start(
+        node: ClusterNode,
         raft: Raft<TremorTypeConfig, TremorNetwork, Arc<TremorStore>>,
         server_state: Arc<TremorApp>,
         runtime: Runtime,
@@ -142,6 +149,7 @@ impl RunningClusterNode {
         });
 
         Ok(Self {
+            node,
             kill_switch_tx,
             run_handle,
         })
@@ -157,6 +165,67 @@ impl RunningClusterNode {
     /// block until the cluster node is done noodling
     pub async fn join(self) -> ClusterResult<()> {
         self.run_handle.await
+    }
+
+    pub async fn join_cluster(&self, endpoint: impl Into<String>) -> ClusterResult<()> {
+        // try to contact the endpoint
+        let my_id = self.node().id;
+        let mut client = TremorClient::new(my_id, endpoint.into());
+
+        let metrics = client.metrics().await.map_err(|e| format!("error: {e}",))?;
+
+        // find out who the leader is
+        let leader_id = metrics.current_leader.ok_or("No leader present!")?;
+
+        let leader = metrics.membership_config.get_node(&leader_id);
+        let leader_addr = leader.api_addr.clone();
+        println!("communication with leader: {leader_addr} establisehd, joining as a learner.",);
+
+        // contact the leader directly
+        let mut client = TremorClient::new(leader_id, leader_addr.clone());
+
+        println!("Joining as learner");
+        client
+            .add_learner(
+                my_id,
+                self.node().rpc_addr.clone(),
+                self.node().api_addr.clone(),
+            )
+            .await
+            .map_err(|e| format!("Failed to add learner: {e}"))?;
+
+        print!("Waiting until we have joined");
+        let mut membership: BTreeSet<_>;
+        loop {
+            print!(".");
+            task::sleep(Duration::from_secs(1)).await;
+
+            let metrics = client.metrics().await.map_err(|e| format!("error: {e}"))?;
+
+            if !metrics
+                .membership_config
+                .nodes()
+                .any(|(id, _)| id == &my_id)
+            {
+                continue;
+            }
+
+            membership = metrics
+                .membership_config
+                .nodes()
+                .map(|(id, _)| *id)
+                .collect();
+            membership.insert(my_id);
+            break;
+        }
+        println!(" done!");
+        println!("We are now a learner, and are asking to change the cluster mebership...");
+
+        client
+            .change_membership(&membership)
+            .await
+            .map_err(|e| format!("Failed to update membershipo learner: {e}"))?;
+        Ok(())
     }
 }
 
@@ -189,6 +258,61 @@ impl ClusterNode {
         }
     }
 
+    /// Load the latest state from `db_dir`
+    /// and start the cluster with it
+    ///
+    /// # Errors
+    /// if the store does not exist, is not properly initialized
+    pub async fn load_from_store(
+        db_dir: impl AsRef<Path> + ToSocketAddrs,
+        raft_config: Config,
+    ) -> ClusterResult<RunningClusterNode> {
+        let world_config = WorldConfig::default(); // TODO: make configurable
+        let (runtime, runtime_handle) = Runtime::start(world_config).await?;
+
+        let store = TremorStore::load(&db_dir, runtime.clone()).await?;
+        // ensure we have working node data
+        let (node_id, api_addr, rpc_addr) = store.get_node_data()?;
+        let node = Self::new(node_id, &rpc_addr, &api_addr, db_dir, raft_config.clone());
+
+        let network = TremorNetwork::new();
+        let raft = Raft::new(node.id, node.raft_config.clone(), network, store.clone());
+        let server_state = Arc::new(TremorApp {
+            id: node_id,
+            api_addr,
+            rpc_addr,
+            raft: raft.clone(),
+            store,
+        });
+        RunningClusterNode::start(node, raft, server_state, runtime, runtime_handle).await
+    }
+
+    /// Just start the cluster node and let it do whatever it does
+    pub async fn start(&mut self) -> ClusterResult<RunningClusterNode> {
+        let world_config = WorldConfig::default(); // TODO: make configurable
+        let (runtime, runtime_handle) = Runtime::start(world_config).await?;
+        let store = TremorStore::bootstrap(
+            &self.db_dir,
+            self.id,
+            &self.rpc_addr,
+            &self.api_addr,
+            runtime.clone(),
+        )
+        .await?;
+        let network = TremorNetwork::new();
+        let raft = Raft::new(self.id, self.raft_config.clone(), network, store.clone());
+        let server_state = Arc::new(TremorApp {
+            id: self.id,
+            api_addr: self.api_addr.clone(),
+            rpc_addr: self.rpc_addr.clone(),
+            raft: raft.clone(),
+            store,
+        });
+        RunningClusterNode::start(self.clone(), raft, server_state, runtime, runtime_handle).await
+    }
+
+    /// Bootstrap and start this cluster node as a single node cluster
+    /// of which it immediately becomes the leader.
     pub async fn bootstrap_as_single_node_cluster(&mut self) -> ClusterResult<RunningClusterNode> {
         let world_config = WorldConfig::default(); // TODO: make configurable
         let (runtime, runtime_handle) = Runtime::start(world_config).await?;
@@ -211,6 +335,7 @@ impl ClusterNode {
                 rpc_addr: self.rpc_addr.clone(),
             },
         );
+        // this is the crucial bootstrapping step
         raft.initialize(nodes).await?;
         let server_state = Arc::new(TremorApp {
             id: self.id,
@@ -219,6 +344,6 @@ impl ClusterNode {
             raft: raft.clone(),
             store,
         });
-        RunningClusterNode::start(raft, server_state, runtime, runtime_handle).await
+        RunningClusterNode::start(self.clone(), raft, server_state, runtime, runtime_handle).await
     }
 }

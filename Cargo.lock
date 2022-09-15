@@ -6330,6 +6330,7 @@ dependencies = [
  "serde",
  "simd-json 0.8.0",
  "simd-json-derive",
+ "tempfile",
  "tokio",
  "url",
 ]

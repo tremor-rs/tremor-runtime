@@ -16,7 +16,7 @@ use crate::{
     cli::{AppsCommands, Cluster, ClusterCommand},
     errors::Result,
 };
-use async_std::{io::ReadExt, task};
+use async_std::io::ReadExt;
 
 use async_std::stream::StreamExt;
 use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
@@ -25,7 +25,7 @@ use signal_hook_async_std::Signals;
 use simd_json::OwnedValue;
 use std::{
     collections::{BTreeSet, HashMap},
-    time::Duration,
+    path::Path,
 };
 use tremor_common::asy::file;
 use tremor_runtime::{
@@ -33,19 +33,18 @@ use tremor_runtime::{
         archive,
         client::{print_metrics, TremorClient},
         node::{ClusterNode, ClusterNodeKillSwitch},
-        start_raft_node,
         store::{AppId, FlowId, InstanceId},
-        TremorNodeId,
+        ClusterError, TremorNodeId,
     },
-    system::{Runtime, ShutdownMode, WorldConfig},
+    system::ShutdownMode,
 };
 
 /// returns either the defined API address or the default defined from the environment
-/// variable TREMER_API_ADDRESS
+/// variable TREMOR_API_ADDRESS
 fn get_api(input: Option<String>) -> Result<String> {
     input.map_or_else(
         || {
-            Ok(std::env::var("TREMER_API_ADDRESS")
+            Ok(std::env::var("TREMOR_API_ADDRESS")
                 .map(|s| s.to_string())
                 .map_err(|e| format!("{}", e))?)
         },
@@ -95,7 +94,8 @@ impl Cluster {
                 let mut node =
                     ClusterNode::new(node_id, rpc, api, db_dir, tremor_runtime::raft::config()?);
                 let running_node = node.bootstrap_as_single_node_cluster().await?;
-                // TODO: install signal handler
+
+                // install signal handler
                 let signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
                 let signal_handle = signals.handle();
                 let signal_handler_task =
@@ -113,84 +113,70 @@ impl Cluster {
             }
             // target/debug/tremor cluster join --db-dir temp/test-db2 --api 127.0.0.1:8002 --rpc 127.0.0.1:9002 --cluster-api 127.0.0.1:8001
             // target/debug/tremor cluster join --db-dir temp/test-db3 --api 127.0.0.1:8003 --rpc 127.0.0.1:9003 --cluster-api 127.0.0.1:8001
-            ClusterCommand::Join {
+            ClusterCommand::Start {
+                node_id,
                 db_dir,
-                cluster_api: leader,
                 rpc,
                 api,
+                join,
             } => {
-                let my_id = TremorNodeId::random();
+                //let my_id = TremorNodeId::random();
                 //init_raft_node(&db_dir, my_id, rpc.clone(), api.clone()).await?;
-                println!("Node Initialized, we're starting the node and then connecting the leader to join the cluster.");
+                //println!("Node Initialized, we're starting the node and then connecting the leader to join the cluster.");
 
-                let config = WorldConfig::default();
-                let (world, world_handle) = Runtime::start(config).await?;
+                let running_node = if Path::new(&db_dir).exists()
+                    && !tremor_common::file::is_empty(&db_dir)?
+                {
+                    ClusterNode::load_from_store(&db_dir, tremor_runtime::raft::config()?).await?
+                } else {
+                    // db dir does not exist
+                    let node_id = node_id
+                        .map(TremorNodeId::from)
+                        .unwrap_or_else(TremorNodeId::random);
+                    let rpc_addr = rpc.ok_or(ClusterError::from("missing rpc address"))?;
+                    let api_addr = api.ok_or(ClusterError::from("missing api address"))?;
+                    let mut node = ClusterNode::new(
+                        node_id,
+                        rpc_addr,
+                        api_addr,
+                        &db_dir,
+                        tremor_runtime::raft::config()?,
+                    );
+                    node.start().await?
+                };
 
-                let dir = db_dir.clone();
-                let w = world.clone();
-                let t = task::spawn(async move {
-                    start_raft_node(&dir, w)
-                        .await
-                        .expect("failed to start node");
-                });
+                // install signal handler
+                let signals = Signals::new(&[SIGTERM, SIGINT, SIGQUIT])?;
+                let signal_handle = signals.handle();
+                let signal_handler_task =
+                    async_std::task::spawn(handle_signals(signals, running_node.kill_switch()));
 
-                task::sleep(Duration::from_secs(1)).await;
-
-                let mut client = TremorClient::new(my_id, get_api(leader)?);
-
-                let metrics = client.metrics().await.map_err(|e| format!("error: {e}",))?;
-
-                let leader_id = metrics.current_leader.ok_or("No leader present!")?;
-
-                let leader = metrics.membership_config.get_node(&leader_id);
-                let leader_addr = leader.api_addr.clone();
-                println!(
-                    "communication with leader: {leader_addr} establisehd, joining as a learner.",
-                );
-
-                let mut client = TremorClient::new(leader_id, leader_addr.clone());
-
-                println!("Joining as learner");
-                client
-                    .add_learner(my_id, rpc, api)
-                    .await
-                    .map_err(|e| format!("Failed to add learner: {e}"))?;
-
-                print!("Waiting until we have joined");
-                let mut membership: BTreeSet<_>;
-                loop {
-                    print!(".");
-                    task::sleep(Duration::from_secs(1)).await;
-
-                    let metrics = client.metrics().await.map_err(|e| format!("error: {e}"))?;
-
-                    if !metrics
-                        .membership_config
-                        .nodes()
-                        .any(|(id, _)| id == &my_id)
-                    {
-                        continue;
+                // attempt to join any one of the given endpoints, stop once we joined one
+                if !join.is_empty() {
+                    let mut joined = false;
+                    for endpoint in &join {
+                        if running_node.join_cluster(endpoint).await.is_ok() {
+                            joined = true;
+                            break;
+                        }
                     }
-
-                    membership = metrics
-                        .membership_config
-                        .nodes()
-                        .map(|(id, _)| *id)
-                        .collect();
-                    membership.insert(my_id);
-                    break;
+                    // TODO: what better thing to do here? Bootstrap single node cluster? Just run on as is?
+                    if !joined {
+                        running_node.kill_switch().stop(ShutdownMode::Forceful)?;
+                        running_node.join().await?;
+                        return Err(format!(
+                            "Unable to join any of the given endpoints: {}",
+                            join.join(", ")
+                        )
+                        .into());
+                    }
                 }
-                println!(" done!");
-                println!("We are now a learner, and are asking to change the cluster mebership...");
-
-                client
-                    .change_membership(&membership)
-                    .await
-                    .map_err(|e| format!("Failed to update membershipo learner: {e}"))?;
-                println!("Membership updated, node is running, from now on you can start the cluster with `tremor cluster start`");
-                t.await;
-                world.stop(ShutdownMode::Graceful).await?;
-                world_handle.await?;
+                // wait for the node to be finished
+                if let Err(e) = running_node.join().await {
+                    error!("Error: {e}");
+                }
+                signal_handle.close();
+                signal_handler_task.cancel().await;
             }
             ClusterCommand::Remove { node, api } => {
                 let node_id = TremorNodeId::from(node);
@@ -219,18 +205,6 @@ impl Cluster {
                     .await
                     .map_err(|e| format!("Failed to update membershipo learner: {e}"))?;
                 println!("Membership updated: node {node} removed.");
-            }
-            // cargo run -p tremor-cli -- cluster start --db-dir temp/test-db1
-            // cargo run -p tremor-cli -- cluster start --db-dir temp/test-db2
-            // cargo run -p tremor-cli -- cluster start --db-dir temp/test-db3
-            ClusterCommand::Start { db_dir } => {
-                let db_dir = db_dir.clone();
-                info!("Cluster Starting");
-                let config = WorldConfig::default();
-                let (world, world_handle) = Runtime::start(config).await?;
-                start_raft_node(&db_dir, world.clone()).await?;
-                world.stop(ShutdownMode::Graceful).await?;
-                world_handle.await?;
             }
             // target/debug/tremor cluster status --api 127.0.0.1:8001
             ClusterCommand::Status { api, json } => {

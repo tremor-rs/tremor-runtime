@@ -1163,8 +1163,6 @@ impl TremorStore {
             state_machine,
             runtime: world,
         };
-        // verify that we actually have some valid node data
-        _ = this.get_node_data()?;
         Ok(Arc::new(this))
     }
 
