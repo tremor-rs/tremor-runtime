@@ -571,7 +571,6 @@ async fn handle_response(
                     "elastic": {
                         "_id": action_item.get("_id").map(Value::clone_static),
                         "_index": action_item.get("_index").map(Value::clone_static),
-                        "_type": action_item.get("_type").map(Value::clone_static),
                         "action": action.clone(),
                         "success": false
                     }
@@ -590,7 +589,6 @@ async fn handle_response(
                     "elastic": {
                         "_id": action_item.get("_id").map(Value::clone_static),
                         "_index": action_item.get("_index").map(Value::clone_static),
-                        "_type": action_item.get("_type").map(Value::clone_static),
                         "version": action_item.get("_version").map(Value::clone_static),
                         "action": action.clone(),
                         "success": true
