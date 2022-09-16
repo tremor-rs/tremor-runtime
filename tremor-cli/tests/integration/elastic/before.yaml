@@ -11,6 +11,8 @@
         "discovery.type=single-node",
         "-e",
         "action.auto_create_index=true",
+        "-e",
+        "xpack.security.enabled=false",
         "elasticsearch:8.4.1"
     ],
     "await": {
