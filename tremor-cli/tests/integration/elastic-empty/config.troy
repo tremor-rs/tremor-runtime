@@ -12,7 +12,6 @@ flow
       # setting required metadata for elastic
       let $elastic = {
         "_index": "my_little_index",
-        "_type": "my_little_doc"
       };
       event
     end;
@@ -37,7 +36,6 @@ flow
       "success": $elastic.success,
       "payload": event.payload,
       "index": $elastic["_index"],
-      "doc": $elastic["_type"]
     }
     from in where $elastic.success into out;
 
@@ -46,7 +44,6 @@ flow
       "success": $elastic.success,
       "payload": event.payload,
       "index": $elastic["_index"],
-      "doc": $elastic["_type"]
     }
     from in where not $elastic.success into err;
   end;

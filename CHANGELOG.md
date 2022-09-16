@@ -10,6 +10,10 @@
 
 - Fix output of `dns_client` being empty for any lookup.
 
+### Breaking Changes
+
+- Remove `$elastic._type` field from `elastic` connector response events
+
 ## [0.13.0-rc.2]
 
 ### Fixes
