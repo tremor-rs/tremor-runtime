@@ -801,10 +801,10 @@ impl<'a, 'value> ESMeta<'a, 'value> {
     }
 
     fn parts<'blk>(&'blk self, default_index: Option<&'blk str>) -> BulkParts<'blk> {
-        match (self.get_index().or(default_index), self.get_type()) {
-            (Some(index), Some(doc_type)) => BulkParts::IndexType(index, doc_type),
-            (Some(index), None) => BulkParts::Index(index),
-            _ => BulkParts::None,
+        if let Some(index) = self.get_index().or(default_index) {
+            BulkParts::Index(index)
+        } else {
+            BulkParts::None
         }
     }
 
@@ -839,7 +839,6 @@ impl<'a, 'value> ESMeta<'a, 'value> {
     fn get_index(&self) -> Option<&str> {
         self.meta.get_str("_index")
     }
-
     fn get_type(&self) -> Option<&str> {
         self.meta.get_str("_type")
     }
