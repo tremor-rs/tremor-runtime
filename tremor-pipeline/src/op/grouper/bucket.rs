@@ -61,6 +61,8 @@
 //! }
 //! ```
 
+use std::num::NonZeroUsize;
+
 use crate::errors::{ErrorKind, Result};
 use crate::metrics::value_count;
 use crate::op::prelude::*;
@@ -119,7 +121,10 @@ struct Bucket {
 impl Bucket {
     fn new(cardinality: usize) -> Self {
         Self {
-            cache: LruCache::new(cardinality),
+            cache: LruCache::new(
+                // ALLOW: 1000 is not 0, so we are good here
+                NonZeroUsize::new(cardinality).unwrap_or(NonZeroUsize::new(1000).unwrap()),
+            ),
             pass: 0,
             overflow: 0,
         }
