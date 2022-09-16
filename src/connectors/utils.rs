@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 
 /// Metrics facilities
@@ -220,6 +220,7 @@ pub(crate) mod url {
 #[allow(unused)]
 pub(crate) struct EnvHelper {
     restore: HashMap<String, String>,
+    remove: HashSet<String>,
 }
 
 impl EnvHelper {
@@ -227,6 +228,7 @@ impl EnvHelper {
     pub(crate) fn new() -> Self {
         Self {
             restore: HashMap::new(),
+            remove: HashSet::new(),
         }
     }
 
@@ -234,6 +236,8 @@ impl EnvHelper {
     pub(crate) fn set_var(&mut self, key: &str, value: &str) {
         if let Ok(old_value) = std::env::var(key) {
             self.restore.insert(key.to_string(), old_value);
+        } else {
+            self.remove.insert(key.to_string());
         }
         std::env::set_var(key, value);
     }
@@ -252,5 +256,32 @@ impl Drop for EnvHelper {
         for (k, v) in &self.restore {
             std::env::set_var(k, v);
         }
+        for k in &self.remove {
+            std::env::remove_var(k);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::EnvHelper;
+
+    #[test]
+    fn env_helper() {
+        let mut env_helper = EnvHelper::new();
+        env_helper.set_var("snot", "badger");
+        env_helper.remove_var("HOME");
+        assert_eq!("badger", std::env::var("snot").unwrap());
+
+        env_helper.set_var("snot", "meh");
+
+        assert_eq!("meh", std::env::var("snot").unwrap());
+
+        assert!(std::env::var("HOME").is_err());
+        drop(env_helper);
+
+        // restored/removed
+        assert!(std::env::var("snot").is_err());
+        assert!(std::env::var("HOME").is_ok());
     }
 }
