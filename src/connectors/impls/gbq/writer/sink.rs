@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::google::AuthInterceptor;
+use crate::connectors::google::{AuthInterceptor, TokenProvider};
 use crate::connectors::impls::gbq::writer::Config;
 use crate::connectors::prelude::*;
 use async_std::prelude::{FutureExt, StreamExt};
@@ -24,17 +24,15 @@ use googapis::google::cloud::bigquery::storage::v1::{
     append_rows_request, table_field_schema, write_stream, AppendRowsRequest,
     CreateWriteStreamRequest, ProtoRows, ProtoSchema, TableFieldSchema, WriteStream,
 };
-use gouth::Token;
 use prost::encoding::WireType;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
 use std::collections::HashMap;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
-use tonic::Status;
 
-pub(crate) struct GbqSink {
-    client: Option<BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor>>>,
+pub(crate) struct GbqSink<T: TokenProvider> {
+    client: Option<BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor<T>>>>,
     write_stream: Option<WriteStream>,
     mapping: Option<JsonToProtobufMapping>,
     config: Config,
@@ -278,7 +276,7 @@ impl JsonToProtobufMapping {
         &self.descriptor
     }
 }
-impl GbqSink {
+impl<T: TokenProvider> GbqSink<T> {
     pub fn new(config: Config) -> Self {
         Self {
             client: None,
@@ -291,14 +289,14 @@ impl GbqSink {
     #[cfg(test)]
     pub fn set_client(
         &mut self,
-        client: BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor>>,
+        client: BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor<T>>>,
     ) {
         self.client = Some(client);
     }
 }
 
 #[async_trait::async_trait]
-impl Sink for GbqSink {
+impl<T: TokenProvider + 'static> Sink for GbqSink<T> {
     async fn on_event(
         &mut self,
         _input: &str,
@@ -386,7 +384,6 @@ impl Sink for GbqSink {
 
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         info!("{ctx} Connecting to BigQuery");
-        let token = Token::new()?;
 
         let tls_config = ClientTlsConfig::new()
             .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
@@ -398,20 +395,10 @@ impl Sink for GbqSink {
             .connect()
             .await?;
 
-        let interceptor_ctx = ctx.clone();
         let mut client = BigQueryWriteClient::with_interceptor(
             channel,
             AuthInterceptor {
-                token: Box::new(move || match token.header_value() {
-                    Ok(val) => Ok(val),
-                    Err(e) => {
-                        error!("{interceptor_ctx} Failed to get token for BigQuery: {}", e);
-
-                        Err(Status::unavailable(
-                            "Failed to retrieve authentication token.",
-                        ))
-                    }
-                }),
+                token_provider: T::default(),
             },
         );
 
@@ -455,11 +442,11 @@ impl Sink for GbqSink {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::connectors::google::tests::TestTokenProvider;
     use crate::connectors::impls::gbq;
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use crate::connectors::tests::ConnectorHarness;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
-    use std::sync::Arc;
     use value_trait::StaticNode;
 
     #[test]
@@ -1080,7 +1067,7 @@ mod test {
         }))
         .unwrap();
 
-        let mut sink = GbqSink::new(config);
+        let mut sink = GbqSink::<TestTokenProvider>::new(config);
 
         let result = sink
             .on_event(
@@ -1123,7 +1110,7 @@ mod test {
         sink.set_client(BigQueryWriteClient::with_interceptor(
             Channel::from_static("http://example.com").connect_lazy(),
             AuthInterceptor {
-                token: Box::new(|| Ok(Arc::new(String::new()))),
+                token_provider: TestTokenProvider::new(),
             },
         ));
 

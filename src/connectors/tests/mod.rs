@@ -499,7 +499,7 @@ impl TestPipeline {
     feature = "ws-integration",
     feature = "s3-integration"
 ))]
-mod free_port {
+pub(crate) mod free_port {
 
     use std::ops::RangeInclusive;
 

@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::google::AuthInterceptor;
+use crate::connectors::google::{AuthInterceptor, TokenProvider};
+
 use crate::connectors::prelude::{
     Alias, Attempt, ErrorKind, EventSerializer, KillSwitch, SinkAddr, SinkContext,
     SinkManagerBuilder, SinkReply, Url,
@@ -28,6 +29,7 @@ use async_std::prelude::FutureExt;
 use googapis::google::pubsub::v1::publisher_client::PublisherClient;
 use googapis::google::pubsub::v1::{PublishRequest, PubsubMessage};
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::time::Duration;
 use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
@@ -53,6 +55,12 @@ impl ConfigImpl for Config {}
 #[derive(Default, Debug)]
 pub(crate) struct Builder {}
 
+#[cfg(not(test))]
+type GpubConnectorWithTokenProvider = GpubConnector<crate::connectors::google::GouthTokenProvider>;
+#[cfg(test)]
+type GpubConnectorWithTokenProvider =
+    GpubConnector<crate::connectors::google::tests::TestTokenProvider>;
+
 #[async_trait::async_trait()]
 impl ConnectorBuilder for Builder {
     fn connector_type(&self) -> ConnectorType {
@@ -68,22 +76,26 @@ impl ConnectorBuilder for Builder {
     ) -> Result<Box<dyn Connector>> {
         let config = Config::new(raw_config)?;
 
-        Ok(Box::new(GpubConnector { config }))
+        Ok(Box::new(GpubConnectorWithTokenProvider {
+            config,
+            _phantom: PhantomData::default(),
+        }))
     }
 }
 
-struct GpubConnector {
+struct GpubConnector<T> {
     config: Config,
+    _phantom: PhantomData<T>,
 }
 
 #[async_trait::async_trait()]
-impl Connector for GpubConnector {
+impl<T: TokenProvider + 'static> Connector for GpubConnector<T> {
     async fn create_sink(
         &mut self,
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = GpubSink {
+        let sink = GpubSink::<T> {
             config: self.config.clone(),
             hostname: self
                 .config
@@ -110,50 +122,15 @@ impl Connector for GpubConnector {
     }
 }
 
-struct GpubSink {
+struct GpubSink<T: TokenProvider> {
     config: Config,
     hostname: String,
 
-    client: Option<PublisherClient<InterceptedService<Channel, AuthInterceptor>>>,
-}
-
-#[cfg(not(test))]
-fn create_publisher_client(
-    channel: Channel,
-) -> Result<PublisherClient<InterceptedService<Channel, AuthInterceptor>>> {
-    use gouth::Token;
-    use tonic::Status;
-
-    let token = Token::new()?;
-
-    Ok(PublisherClient::with_interceptor(
-        channel,
-        AuthInterceptor {
-            token: Box::new(move || {
-                token
-                    .header_value()
-                    .map_err(|_| Status::unavailable("Failed to retrieve authentication token."))
-            }),
-        },
-    ))
-}
-
-#[cfg(test)]
-fn create_publisher_client(
-    channel: Channel,
-) -> Result<PublisherClient<InterceptedService<Channel, AuthInterceptor>>> {
-    use std::sync::Arc;
-
-    Ok(PublisherClient::with_interceptor(
-        channel,
-        AuthInterceptor {
-            token: Box::new(|| Ok(Arc::new(String::new()))),
-        },
-    ))
+    client: Option<PublisherClient<InterceptedService<Channel, AuthInterceptor<T>>>>,
 }
 
 #[async_trait::async_trait()]
-impl Sink for GpubSink {
+impl<T: TokenProvider> Sink for GpubSink<T> {
     async fn connect(&mut self, _ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         let mut channel = Channel::from_shared(self.config.url.to_string())?
             .connect_timeout(Duration::from_nanos(self.config.connect_timeout));
@@ -167,7 +144,12 @@ impl Sink for GpubSink {
 
         let channel = channel.connect().await?;
 
-        self.client = Some(create_publisher_client(channel)?);
+        self.client = Some(PublisherClient::with_interceptor(
+            channel,
+            AuthInterceptor {
+                token_provider: T::default(),
+            },
+        ));
 
         Ok(true)
     }
@@ -257,10 +239,11 @@ impl Sink for GpubSink {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::connectors::google::tests::TestTokenProvider;
 
     #[test]
     pub fn is_not_auto_ack() {
-        let sink = GpubSink {
+        let sink = GpubSink::<TestTokenProvider> {
             config: Config {
                 connect_timeout: 0,
                 request_timeout: 0,
@@ -276,7 +259,7 @@ mod tests {
 
     #[test]
     pub fn is_async() {
-        let sink = GpubSink {
+        let sink = GpubSink::<TestTokenProvider> {
             config: Config {
                 connect_timeout: 0,
                 request_timeout: 0,
