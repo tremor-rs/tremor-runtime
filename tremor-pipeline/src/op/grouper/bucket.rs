@@ -122,8 +122,8 @@ impl Bucket {
     fn new(cardinality: usize) -> Self {
         Self {
             cache: LruCache::new(
-                // ALLOW: 1000 is not 0, so we are good here
                 NonZeroUsize::new(cardinality)
+                    // ALLOW: 1000 is not 0, so we are good here
                     .unwrap_or(NonZeroUsize::new(1000).expect("1000 is not 0")),
             ),
             pass: 0,
