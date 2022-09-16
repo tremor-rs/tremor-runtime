@@ -46,7 +46,7 @@ async fn connector_elastic() -> Result<()> {
             .with_env_var("discovery.type", "single-node")
             .with_env_var("ES_JAVA_OPTS", "-Xms256m -Xmx256m")
             .with_env_var("xpack.security.enabled", "false")
-            .with_env_var("xpack.security.http.ssl.enabled", "false")
+            .with_env_var("xpack.security.http.ssl.enabled", "false"),
     )
     .with_mapped_port((port, 9200_u16));
 
