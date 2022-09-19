@@ -32,6 +32,7 @@ use crate::{
 use async_std::{
     channel::{bounded, Sender},
     net::ToSocketAddrs,
+    prelude::FutureExt,
     task::{self, JoinHandle},
 };
 use futures::{future, prelude::*};
@@ -137,7 +138,7 @@ impl RunningClusterNode {
                 }
                 mode = kill_switch_future => {
                     let mode = mode.unwrap_or(ShutdownMode::Forceful);
-                    info!("Tremor cluster node stopping with {mode:?}");
+                    info!("Tremor cluster node stopping in {mode:?} mode");
                     // tcp and http api stopped listening as we don't poll them no more
                     raft.shutdown().await.map_err(|_| ClusterError::from("Error shutting down local raft node"))?;
                     runtime.stop(mode).await?;
@@ -167,24 +168,47 @@ impl RunningClusterNode {
         self.run_handle.await
     }
 
-    pub async fn join_cluster(&self, endpoint: impl Into<String>) -> ClusterResult<()> {
+    pub async fn join_cluster(&self, endpoint: impl ToString) -> ClusterResult<()> {
         // try to contact the endpoint
         let my_id = self.node().id;
-        let mut client = TremorClient::new(my_id, endpoint.into());
+        debug!("Establishing connectivity to {}", endpoint.to_string());
+        let mut client = TremorClient::new(my_id, endpoint.to_string());
 
-        let metrics = client.metrics().await.map_err(|e| format!("error: {e}",))?;
+        let timeout = Duration::from_secs(5);
+        let metrics = client
+            .metrics()
+            .timeout(timeout)
+            .await
+            .map_err(|_| {
+                format!(
+                    "Timeout connecting to {} after {}s",
+                    endpoint.to_string(),
+                    timeout.as_secs()
+                )
+            })?
+            .map_err(|e| format!("Error connecting to {}: {e}", endpoint.to_string()))?;
+
+        // check if we are already part of the cluster an endpoint is pointing at
+        for config in metrics.membership_config.membership.get_joint_config() {
+            if config.contains(&my_id) {
+                info!(
+                    "Already voter of cluster at endpoint: {}",
+                    endpoint.to_string()
+                );
+                return Ok(());
+            }
+        }
 
         // find out who the leader is
         let leader_id = metrics.current_leader.ok_or("No leader present!")?;
 
         let leader = metrics.membership_config.get_node(&leader_id);
         let leader_addr = leader.api_addr.clone();
-        println!("communication with leader: {leader_addr} establisehd, joining as a learner.",);
 
         // contact the leader directly
         let mut client = TremorClient::new(leader_id, leader_addr.clone());
 
-        println!("Joining as learner");
+        info!("Joining {leader_addr} as Learner");
         client
             .add_learner(
                 my_id,
@@ -194,10 +218,9 @@ impl RunningClusterNode {
             .await
             .map_err(|e| format!("Failed to add learner: {e}"))?;
 
-        print!("Waiting until we have joined");
+        info!("Waiting until we have joined");
         let mut membership: BTreeSet<_>;
         loop {
-            print!(".");
             task::sleep(Duration::from_secs(1)).await;
 
             let metrics = client.metrics().await.map_err(|e| format!("error: {e}"))?;
@@ -218,8 +241,7 @@ impl RunningClusterNode {
             membership.insert(my_id);
             break;
         }
-        println!(" done!");
-        println!("We are now a learner, and are asking to change the cluster mebership...");
+        info!("Joining the cluster as a voting member...");
 
         client
             .change_membership(&membership)

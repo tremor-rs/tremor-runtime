@@ -90,6 +90,7 @@ impl Cluster {
             // rm -r temp/test-db*; cargo run -p tremor-cli -- cluster boostrap --db-dir temp/test-db1 --api 127.0.0.1:8001 --rpc 127.0.0.1:9001
             ClusterCommand::Bootstrap { rpc, api, db_dir } => {
                 let node_id = TremorNodeId::default();
+                info!("Boostrapping Tremor node with id {node_id}...");
 
                 let mut node =
                     ClusterNode::new(node_id, rpc, api, db_dir, tremor_runtime::raft::config()?);
@@ -101,13 +102,12 @@ impl Cluster {
                 let signal_handler_task =
                     async_std::task::spawn(handle_signals(signals, running_node.kill_switch()));
 
-                println!(
-                    "Node Initialized, this will now form a cluster and elect itself as leader."
-                );
+                info!("Tremor node bootstrapped as single node cluster.");
                 // wait for the node to be finished
                 if let Err(e) = running_node.join().await {
                     error!("Error: {e}");
                 }
+                info!("Tremor stopped.");
                 signal_handle.close();
                 signal_handler_task.cancel().await;
             }
@@ -120,13 +120,10 @@ impl Cluster {
                 api,
                 join,
             } => {
-                //let my_id = TremorNodeId::random();
-                //init_raft_node(&db_dir, my_id, rpc.clone(), api.clone()).await?;
-                //println!("Node Initialized, we're starting the node and then connecting the leader to join the cluster.");
-
                 let running_node = if Path::new(&db_dir).exists()
                     && !tremor_common::file::is_empty(&db_dir)?
                 {
+                    info!("Loading existing Tremor node state from {db_dir}.");
                     ClusterNode::load_from_store(&db_dir, tremor_runtime::raft::config()?).await?
                 } else {
                     // db dir does not exist
@@ -135,6 +132,7 @@ impl Cluster {
                         .unwrap_or_else(TremorNodeId::random);
                     let rpc_addr = rpc.ok_or(ClusterError::from("missing rpc address"))?;
                     let api_addr = api.ok_or(ClusterError::from("missing api address"))?;
+                    info!("Boostrapping cluster node with id {node_id} and db_dir {db_dir}");
                     let mut node = ClusterNode::new(
                         node_id,
                         rpc_addr,
@@ -155,7 +153,9 @@ impl Cluster {
                 if !join.is_empty() {
                     let mut joined = false;
                     for endpoint in &join {
+                        info!("Trying to join existing cluster via {endpoint}...");
                         if running_node.join_cluster(endpoint).await.is_ok() {
+                            info!("Successfully joined cluster via {endpoint}.");
                             joined = true;
                             break;
                         }
