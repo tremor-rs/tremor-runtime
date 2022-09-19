@@ -245,7 +245,7 @@ qwal = { git = "https://github.com/tremor-rs/qwal" }
 [dev-dependencies]
 serial_test = { version = "0.9", features = ["logging"] }
 # path = "../serial_test/serial_test" 
-env_logger = "0.9.0"
+env_logger = "0.9.1"
 matches = "0.1"
 pretty_assertions = "1.3.0"
 proptest = "1.0"
