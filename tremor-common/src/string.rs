@@ -20,8 +20,9 @@ use std::{slice::SliceIndex, str};
 /// # Examples
 ///
 /// ```
+///  use tremor_common::string::substr;
 ///  let data = b"foo:1620649445.3351967|h";
-///  let a = substr(data, 0..3)?;
+///  let a = substr(data, 0..3).unwrap();
 ///
 ///  assert_eq!(a, "foo");
 /// ```
