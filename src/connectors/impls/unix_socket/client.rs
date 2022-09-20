@@ -12,11 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::prelude::*;
-use crate::errors::{Kind as ErrorKind, Result};
-use async_std::channel::{bounded, Receiver, Sender};
-use async_std::os::unix::net::UnixStream;
-use async_std::path::PathBuf;
+use crate::{
+    connectors::prelude::*,
+    errors::{Kind as ErrorKind, Result},
+};
+use async_std::{
+    channel::{bounded, Receiver, Sender},
+    os::unix::net::UnixStream,
+    path::PathBuf,
+    sync::Arc,
+};
 use futures::AsyncWriteExt;
 
 use super::UnixSocketReader;
@@ -76,7 +81,11 @@ impl Connector for Client {
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         // this source is wired up to the ending channel that is forwarding data received from the TCP (or TLS) connection
-        let source = ChannelSource::from_channel(self.source_tx.clone(), self.source_rx.clone());
+        let source = ChannelSource::from_channel(
+            self.source_tx.clone(),
+            self.source_rx.clone(),
+            Arc::default(), // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
+        );
         builder.spawn(source, source_context).map(Some)
     }
 

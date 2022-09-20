@@ -13,13 +13,16 @@
 // limitations under the License.
 
 use crate::{connectors::prelude::*, system::KillSwitch};
-use async_std::channel::{bounded, Receiver, Sender};
+use async_std::{
+    channel::{bounded, Receiver, Sender},
+    sync::Arc,
+};
 use async_std_resolver::{
     lookup::Lookup,
     proto::rr::{RData, RecordType},
     resolver_from_system_conf, AsyncStdResolver,
 };
-use std::boxed::Box;
+use std::{boxed::Box, sync::atomic::AtomicBool};
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -37,13 +40,18 @@ impl ConnectorBuilder for Builder {
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
         let (tx, rx) = bounded(128);
-        Ok(Box::new(Client { tx, rx }))
+        Ok(Box::new(Client {
+            tx,
+            rx,
+            source_is_connected: Arc::default(),
+        }))
     }
 }
 
 pub(crate) struct Client {
     tx: Sender<SourceReply>,
     rx: Receiver<SourceReply>,
+    source_is_connected: Arc<AtomicBool>,
 }
 
 #[async_trait::async_trait()]
@@ -58,7 +66,11 @@ impl Connector for Client {
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         // this is a dumb source that is simply forwarding `SourceReply`s it receives from the sink
-        let source = ChannelSource::from_channel(self.tx.clone(), self.rx.clone());
+        let source = ChannelSource::from_channel(
+            self.tx.clone(),
+            self.rx.clone(),
+            self.source_is_connected.clone(),
+        );
         builder.spawn(source, source_context).map(Some)
     }
 
@@ -68,7 +80,7 @@ impl Connector for Client {
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
         // issues DNS queries and forwards the responses to the source
-        let s = DnsSink::new(self.tx.clone());
+        let s = DnsSink::new(self.tx.clone(), self.source_is_connected.clone());
         builder.spawn(s, sink_context).map(Some)
     }
 }
@@ -78,10 +90,11 @@ struct DnsSink {
     tx: Sender<SourceReply>,
     resolver: Option<AsyncStdResolver>,
     origin_uri: EventOriginUri,
+    source_is_connected: Arc<AtomicBool>,
 }
 
 impl DnsSink {
-    fn new(tx: Sender<SourceReply>) -> Self {
+    fn new(tx: Sender<SourceReply>, source_is_connected: Arc<AtomicBool>) -> Self {
         let origin_uri = EventOriginUri {
             scheme: "tremor-dns".to_string(),
             host: hostname(),
@@ -92,6 +105,7 @@ impl DnsSink {
             tx,
             resolver: None,
             origin_uri,
+            source_is_connected,
         }
     }
     async fn query<'event>(
@@ -136,6 +150,7 @@ impl Sink for DnsSink {
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
+        let source_is_connected = self.source_is_connected.load(Ordering::Acquire);
         for (_, m) in event.value_meta_iter() {
             // verify incoming request and extract DNS query params
             let dns_meta = m.get("dns");
@@ -164,13 +179,15 @@ impl Sink for DnsSink {
                     (ERR, error_e)
                 }
             };
-            let source_reply = SourceReply::Structured {
-                origin_uri: self.origin_uri.clone(),
-                payload,
-                stream: DEFAULT_STREAM_ID,
-                port: Some(port),
-            };
-            self.tx.send(source_reply).await?;
+            if source_is_connected {
+                let source_reply = SourceReply::Structured {
+                    origin_uri: self.origin_uri.clone(),
+                    payload,
+                    stream: DEFAULT_STREAM_ID,
+                    port: Some(port),
+                };
+                self.tx.send(source_reply).await?;
+            }
         }
         Ok(SinkReply::NONE)
     }

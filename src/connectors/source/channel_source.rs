@@ -12,14 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::source::{
-    Source, SourceContext, SourceReply, SourceReplySender, StreamDone, StreamReader,
+use crate::{
+    connectors::{
+        source::{Source, SourceContext, SourceReply, SourceReplySender, StreamDone, StreamReader},
+        Context,
+    },
+    errors::Result,
 };
-use crate::connectors::Context;
-use crate::errors::Result;
-use async_std::channel::{bounded, Receiver, Sender};
-use async_std::prelude::*;
-use async_std::task;
+use async_std::{
+    channel::{bounded, Receiver, Sender},
+    prelude::*,
+    sync::Arc,
+    task,
+};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 /// A source that receives `SourceReply` messages via a channel.
 /// It does not handle acks/fails.
@@ -30,20 +36,29 @@ use std::time::Duration;
 pub(crate) struct ChannelSource {
     rx: Receiver<SourceReply>,
     tx: SourceReplySender,
+    is_connected: Arc<AtomicBool>,
 }
 
 impl ChannelSource {
     /// constructor
     #[must_use]
-    pub fn new(qsize: usize) -> Self {
+    pub fn new(qsize: usize, is_connected: Arc<AtomicBool>) -> Self {
         let (tx, rx) = bounded(qsize);
-        Self::from_channel(tx, rx)
+        Self::from_channel(tx, rx, is_connected)
     }
 
     /// construct a channel source from a given channel
     #[must_use]
-    pub fn from_channel(tx: Sender<SourceReply>, rx: Receiver<SourceReply>) -> Self {
-        Self { rx, tx }
+    pub fn from_channel(
+        tx: Sender<SourceReply>,
+        rx: Receiver<SourceReply>,
+        is_connected: Arc<AtomicBool>,
+    ) -> Self {
+        Self {
+            rx,
+            tx,
+            is_connected,
+        }
     }
 
     /// get the runtime for the source
@@ -53,6 +68,29 @@ impl ChannelSource {
         ChannelSourceRuntime {
             sender: self.tx.clone(),
         }
+    }
+}
+
+#[async_trait::async_trait()]
+impl Source for ChannelSource {
+    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
+        Ok(self.rx.recv().await?)
+    }
+
+    /// this source is not handling acks/fails
+    fn is_transactional(&self) -> bool {
+        false
+    }
+
+    fn asynchronous(&self) -> bool {
+        true
+    }
+
+    async fn on_cb_open(&mut self, _ctx: &SourceContext) -> Result<()> {
+        // we will only know if we are connected to some pipelines if we receive a CBAction::Restore contraflow event
+        // we will not send responses to out/err if we are not connected and this is determined by this variable
+        self.is_connected.store(true, Ordering::Release);
+        Ok(())
     }
 }
 
@@ -122,21 +160,5 @@ impl ChannelSourceRuntime {
                 );
             }
         });
-    }
-}
-
-#[async_trait::async_trait()]
-impl Source for ChannelSource {
-    async fn pull_data(&mut self, _pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        Ok(self.rx.recv().await?)
-    }
-
-    /// this source is not handling acks/fails
-    fn is_transactional(&self) -> bool {
-        false
-    }
-
-    fn asynchronous(&self) -> bool {
-        true
     }
 }

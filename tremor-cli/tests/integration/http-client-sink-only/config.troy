@@ -1,0 +1,62 @@
+define flow echo_server
+flow
+  use integration;
+  use tremor::pipelines;
+  use tremor::connectors;
+
+  define connector http_server from http_server
+  with
+    codec = "json-sorted",
+    config = {
+      "url": "http://localhost:65535/",
+    }
+  end;
+  create connector stdio from connectors::console;
+  create connector http_server;
+
+  create pipeline echo from pipelines::passthrough;
+
+  # Echo http server: <http:req> -> server -> server_side -> <http:resp>
+  connect /connector/http_server to /pipeline/echo;
+  connect /pipeline/echo to /connector/http_server;
+  connect /pipeline/echo to /connector/stdio;
+end;
+deploy flow echo_server;
+
+define flow client_sink_only
+flow
+  use std::time::nanos;
+  use tremor::pipelines;
+
+  define connector input from cb
+  with
+    config =  {
+      "paths": ["in.json", "in2.json"],
+      "expect_batched": false,
+      "timeout": nanos::from_seconds(8),
+
+    }
+  end;
+  create connector input;
+
+  define connector http_client from http_client
+  with
+    codec = "json-sorted",
+    config = {
+      "url": "http://localhost:65535/snot",
+      "method": "PUT",
+      "headers": {
+        "X-Something": "snot"
+      },
+      "timeout": nanos::from_seconds(10)
+    }
+  end;
+  create connector http_client;
+
+  create pipeline passthrough from pipelines::passthrough;
+
+  connect /connector/input to /pipeline/passthrough;
+  connect /pipeline/passthrough to /connector/http_client;
+
+end;
+deploy flow client_sink_only;
