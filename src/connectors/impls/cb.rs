@@ -273,58 +273,63 @@ impl CbSource {
 
 #[async_trait::async_trait()]
 impl Source for CbSource {
-    async fn pull_data(&mut self, pull_id: &mut u64, _ctx: &SourceContext) -> Result<SourceReply> {
-        let idx: usize = self.num_sent % self.files.len();
-        // ALLOW: the modulo makes this safe
-        if let Some(file) = self.files.get_mut(idx) {
-            if let Some(line) = file.next().await {
+    async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
+        if !self.files.is_empty() {
+            let idx: usize = self.num_sent % self.files.len();
+            let file = self
+                .files
+                .get_mut(idx)
+                .ok_or_else(|| ErrorKind::ClientNotAvailable("cb", "No file available"))?;
+            let res = if let Some(line) = file.next().await {
                 self.num_sent += 1;
                 self.last_sent
                     .entry(idx as u64)
                     .and_modify(|last_sent| *last_sent = *last_sent.max(pull_id))
                     .or_insert(*pull_id);
 
-                Ok(SourceReply::Data {
+                SourceReply::Data {
                     data: line?.into_bytes(),
                     meta: None,
                     stream: Some(idx as u64),
                     port: None,
                     origin_uri: self.origin_uri.clone(),
                     codec_overwrite: None,
-                })
-            } else if self.finished {
-                let kill_switch = self.kill_switch.clone();
-
-                if self.config.timeout > 0 && !self.did_receive_all() {
-                    async_std::task::sleep(Duration::from_nanos(self.config.timeout)).await;
                 }
-
-                if self.did_receive_all() {
-                    eprintln!("All required CB events received.");
-                    eprintln!("Got acks: {:?}", self.received_cbs.ack);
-                    eprintln!("Got fails: {:?}", self.received_cbs.fail);
-                } else {
-                    // report failures to stderr and exit with 1
-                    eprintln!("Expected CB events up to id {:?}.", self.last_sent);
-                    eprintln!("Got acks: {:?}", self.received_cbs.ack);
-                    eprintln!("Got fails: {:?}", self.received_cbs.fail);
-                }
-                async_std::task::spawn::<_, Result<()>>(async move {
-                    kill_switch.stop(ShutdownMode::Graceful).await?;
-                    Ok(())
-                });
-
-                Ok(SourceReply::Finished)
             } else {
-                self.finished = true;
-                Ok(SourceReply::EndStream {
+                // file is exhausted, remove it from our list
+                self.files.remove(idx);
+                SourceReply::EndStream {
                     stream: idx as u64,
                     origin_uri: self.origin_uri.clone(),
                     meta: None,
-                })
-            }
+                }
+            };
+            return Ok(res);
         } else {
-            return Err(ErrorKind::ClientNotAvailable("cb", "No file available").into());
+            info!("{ctx} finished.");
+            self.finished = true;
+            let kill_switch = self.kill_switch.clone();
+
+            if self.config.timeout > 0 && !self.did_receive_all() {
+                async_std::task::sleep(Duration::from_nanos(self.config.timeout)).await;
+            }
+
+            if self.did_receive_all() {
+                eprintln!("All required CB events received.");
+                eprintln!("Got acks: {:?}", self.received_cbs.ack);
+                eprintln!("Got fails: {:?}", self.received_cbs.fail);
+            } else {
+                // report failures to stderr and exit with 1
+                eprintln!("Expected CB events up to id {:?}.", self.last_sent);
+                eprintln!("Got acks: {:?}", self.received_cbs.ack);
+                eprintln!("Got fails: {:?}", self.received_cbs.fail);
+            }
+            async_std::task::spawn::<_, Result<()>>(async move {
+                kill_switch.stop(ShutdownMode::Graceful).await?;
+                Ok(())
+            });
+
+            Ok(SourceReply::Finished)
         }
     }
 

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -122,6 +123,7 @@ impl ConnectorBuilder for Builder {
             tls_client_config,
             mime_codec_map,
             configured_codec,
+            source_is_connected: Arc::default(),
         }))
     }
 }
@@ -135,6 +137,7 @@ pub(crate) struct Client {
     // this is basically an immutable map, we use arc to share it across tasks (e.g. for each request sending)
     mime_codec_map: Arc<MimeCodecMap>,
     configured_codec: String,
+    source_is_connected: Arc<AtomicBool>,
 }
 
 #[async_trait::async_trait]
@@ -149,6 +152,7 @@ impl Connector for Client {
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let source = HttpRequestSource {
+            is_connected: self.source_is_connected.clone(),
             rx: self.response_rx.clone(),
         };
         builder.spawn(source, source_context).map(Some)
@@ -166,12 +170,14 @@ impl Connector for Client {
             self.tls_client_config.clone(),
             self.mime_codec_map.clone(),
             self.configured_codec.clone(),
+            self.source_is_connected.clone(),
         );
         builder.spawn(sink, sink_context).map(Some)
     }
 }
 
 struct HttpRequestSource {
+    is_connected: Arc<AtomicBool>,
     rx: Receiver<SourceReply>,
 }
 
@@ -189,6 +195,13 @@ impl Source for HttpRequestSource {
     fn asynchronous(&self) -> bool {
         false
     }
+
+    async fn on_cb_open(&mut self, _ctx: &SourceContext) -> Result<()> {
+        // we will only know if we are connected to some pipelines if we receive a CBAction::Restore contraflow event
+        // we will not send responses to out/err if we are not connected and this is determined by this variable
+        self.is_connected.store(true, Ordering::Release);
+        Ok(())
+    }
 }
 
 struct HttpRequestSink {
@@ -203,6 +216,10 @@ struct HttpRequestSink {
     origin_uri: EventOriginUri,
     codec_map: Arc<MimeCodecMap>,
     configured_codec: String,
+    // we should only send responses down the channel when we know there is a source consuming them
+    // otherwise the channel would fill up and we'd be stuck
+    // TODO: find/implement a channel that just throws away the oldest message when it is full, like a ring-buffer
+    source_is_connected: Arc<AtomicBool>,
 }
 
 impl HttpRequestSink {
@@ -213,6 +230,7 @@ impl HttpRequestSink {
         tls_client_config: Option<rustls::ClientConfig>,
         codec_map: Arc<MimeCodecMap>,
         configured_codec: String,
+        source_is_connected: Arc<AtomicBool>,
     ) -> Self {
         let concurrency_cap = ConcurrencyCap::new(config.concurrency, reply_tx.clone());
         Self {
@@ -231,6 +249,7 @@ impl HttpRequestSink {
             },
             codec_map,
             configured_codec,
+            source_is_connected,
         }
     }
 }
@@ -268,7 +287,10 @@ impl Sink for HttpRequestSink {
 
         if let Some(client) = self.client.as_ref().cloned() {
             let send_ctx = ctx.clone();
-            let response_tx = self.response_tx.clone();
+            let response_tx = self
+                .source_is_connected
+                .load(Ordering::Acquire)
+                .then(|| self.response_tx.clone());
             let reply_tx = self.reply_tx.clone();
             let contraflow_data = if event.transactional {
                 Some(ContraflowData::from(&event))
@@ -364,10 +386,12 @@ impl Sink for HttpRequestSink {
                                 port: None,
                                 codec_overwrite,
                             };
-                            send_ctx.swallow_err(
-                                response_tx.send(reply).await,
-                                "Error sending response to source",
-                            );
+                            if let Some(response_tx) = response_tx {
+                                send_ctx.swallow_err(
+                                    response_tx.send(reply).await,
+                                    "Error sending response to source",
+                                );
+                            }
                             if let Some(contraflow_data) = contraflow_data {
                                 send_ctx.swallow_err(
                                     reply_tx

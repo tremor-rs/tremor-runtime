@@ -5,6 +5,7 @@
 ### Fixes
 
 - Fix pipeline DAG creation when pipeline has unused nodes (e.g. a stream, operator or script)
+- Fix possible hangs in `http_client`, `kv` and `dns` connectors when no pipelines is connected to their `out` port
 
 ## [0.13.0-rc.3]
 

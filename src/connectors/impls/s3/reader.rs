@@ -16,6 +16,7 @@ use futures::stream::TryStreamExt;
 use std::error::Error as StdError;
 
 use async_std::channel::{self, Receiver, Sender};
+use async_std::sync::Arc;
 use async_std::task::{self, JoinHandle};
 
 use super::auth;
@@ -31,7 +32,7 @@ const URL_SCHEME: &str = "tremor-s3";
 
 #[derive(Deserialize, Debug, Default)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct S3SourceConfig {
+pub(crate) struct Config {
     // if not provided here explicitly, the region is taken from environment variable or local AWS config
     // NOTE: S3 will fail if NO region could be found.
     aws_region: Option<String>,
@@ -43,12 +44,12 @@ pub(crate) struct S3SourceConfig {
 
     /// Sourcing field names and defaults from
     /// https://docs.aws.amazon.com/cli/latest/topic/s3-config.html
-    #[serde(default = "S3SourceConfig::default_multipart_chunksize")]
+    #[serde(default = "Config::default_multipart_chunksize")]
     multipart_chunksize: i64,
-    #[serde(default = "S3SourceConfig::default_multipart_threshold")]
+    #[serde(default = "Config::default_multipart_threshold")]
     multipart_threshold: i64,
 
-    #[serde(default = "S3SourceConfig::default_max_connections")]
+    #[serde(default = "Config::default_max_connections")]
     max_connections: usize,
 }
 
@@ -58,7 +59,7 @@ struct KeyPayload {
 }
 
 // Defaults for the config.
-impl S3SourceConfig {
+impl Config {
     fn default_multipart_chunksize() -> i64 {
         MINCHUNKSIZE
     }
@@ -72,7 +73,7 @@ impl S3SourceConfig {
     }
 }
 
-impl ConfigImpl for S3SourceConfig {}
+impl ConfigImpl for Config {}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -90,10 +91,10 @@ impl ConnectorBuilder for Builder {
         config: &Value,
         _kill_switch: &KillSwitch,
     ) -> Result<Box<dyn Connector>> {
-        let config = S3SourceConfig::new(config)?;
+        let config = Config::new(config)?;
 
         // TODO: display a warning if chunksize lesser than some quantity
-        Ok(Box::new(S3SourceConnector {
+        Ok(Box::new(S3Reader {
             handles: Vec::with_capacity(config.max_connections),
             config,
             tx: None,
@@ -101,21 +102,21 @@ impl ConnectorBuilder for Builder {
     }
 }
 
-struct S3SourceConnector {
-    config: S3SourceConfig,
+struct S3Reader {
+    config: Config,
     tx: Option<Sender<SourceReply>>,
     handles: Vec<JoinHandle<Result<()>>>,
 }
 
 #[async_trait::async_trait]
-impl Connector for S3SourceConnector {
+impl Connector for S3Reader {
     async fn create_source(
         &mut self,
         source_context: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         let (tx, rx) = channel::bounded(QSIZE.load(Ordering::Relaxed));
-        let s3_source = ChannelSource::from_channel(tx.clone(), rx);
+        let s3_source = ChannelSource::from_channel(tx.clone(), rx, Arc::default());
 
         self.tx = Some(tx);
 
