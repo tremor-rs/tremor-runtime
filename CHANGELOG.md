@@ -4,7 +4,7 @@
 
 ### Fixes
 
-- Fix pipeline build
+- Fix pipeline DAG creation when pipeline has unused nodes (e.g. a stream, operator or script)
 
 ## [0.13.0-rc.3]
 
