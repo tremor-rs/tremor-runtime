@@ -125,7 +125,10 @@ impl Connector for WsServer {
         ctx: SourceContext,
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
-        let source = ChannelSource::new(builder.qsize());
+        let source = ChannelSource::new(
+            builder.qsize(),
+            Arc::default(), // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
+        );
         self.source_runtime = Some(source.runtime());
         let addr = builder.spawn(source, ctx)?;
 

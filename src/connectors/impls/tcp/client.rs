@@ -21,9 +21,12 @@
 use super::TcpReader;
 use crate::connectors::utils::tls::{tls_client_connector, TLSClientConfig};
 use crate::{connectors::prelude::*, errors::err_connector_def};
-use async_std::channel::{bounded, Receiver, Sender};
-use async_std::net::TcpStream;
-use async_std::prelude::*;
+use async_std::{
+    channel::{bounded, Receiver, Sender},
+    net::TcpStream,
+    prelude::*,
+    sync::Arc,
+};
 use async_tls::TlsConnector;
 use either::Either;
 use futures::io::AsyncReadExt;
@@ -133,7 +136,11 @@ impl Connector for TcpClient {
         builder: SourceManagerBuilder,
     ) -> Result<Option<SourceAddr>> {
         // this source is wired up to the ending channel that is forwarding data received from the TCP (or TLS) connection
-        let source = ChannelSource::from_channel(self.source_tx.clone(), self.source_rx.clone());
+        let source = ChannelSource::from_channel(
+            self.source_tx.clone(),
+            self.source_rx.clone(),
+            Arc::default(), // we don't need to know if the source is connected. Worst case if nothing is connected is that the receiving task is blocked.
+        );
         builder.spawn(source, source_context).map(Some)
     }
 
