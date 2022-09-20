@@ -227,7 +227,7 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
     ///
     /// # Errors
     /// if the walker function fails
-    fn walk_stream_stmt(&mut self, stmt: &mut StreamStmt) -> Result<()> {
+    fn walk_stream_stmt(&mut self, stmt: &mut StreamCreate) -> Result<()> {
         stop!(self.visit_stream_stmt(stmt), self.leave_stream_stmt(stmt));
         self.leave_stream_stmt(stmt)
     }
@@ -291,7 +291,7 @@ pub trait Walker<'script>: ExprWalker<'script> + QueryVisitor<'script> {
             Stmt::OperatorDefinition(d) => self.walk_operator_defn(d)?,
             Stmt::ScriptDefinition(d) => self.walk_script_defn(d.as_mut())?,
             Stmt::PipelineDefinition(d) => self.walk_pipeline_definition(d.as_mut())?,
-            Stmt::StreamStmt(s) => self.walk_stream_stmt(s)?,
+            Stmt::StreamCreate(s) => self.walk_stream_stmt(s)?,
             Stmt::OperatorCreate(s) => self.walk_operator_create(s)?,
             Stmt::ScriptCreate(s) => self.walk_script_stmt(s)?,
             Stmt::PipelineCreate(s) => self.walk_pipeline_stmt(s)?,

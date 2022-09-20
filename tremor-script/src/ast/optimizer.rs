@@ -27,7 +27,7 @@ use crate::ast::{
     MetadataPath, OperatorCreate, OperatorDefinition, Patch, PatchOperation, Path, Pattern,
     PipelineCreate, PipelineDefinition, PredicateClause, PredicatePattern, Query, Record,
     RecordPattern, Recur, ReservedPath, Script, ScriptCreate, ScriptDefinition, Segment, Select,
-    SelectStmt, StatePath, Stmt, StrLitElement, StreamStmt, StringLit, TestExpr, TuplePattern,
+    SelectStmt, StatePath, Stmt, StrLitElement, StreamCreate, StringLit, TestExpr, TuplePattern,
     UnaryExpr, WindowDefinition, WithExpr,
 };
 use crate::errors::Result;
@@ -1118,14 +1118,14 @@ where
         Ok(())
     }
 
-    fn visit_stream_stmt(&mut self, stmt: &mut StreamStmt) -> Result<VisitRes> {
+    fn visit_stream_stmt(&mut self, stmt: &mut StreamCreate) -> Result<VisitRes> {
         self.first.visit_stream_stmt(stmt)?;
         self.second.visit_stream_stmt(stmt)?;
 
         Ok(VisitRes::Walk)
     }
 
-    fn leave_stream_stmt(&mut self, stmt: &mut StreamStmt) -> Result<()> {
+    fn leave_stream_stmt(&mut self, stmt: &mut StreamCreate) -> Result<()> {
         self.first.leave_stream_stmt(stmt)?;
         self.second.leave_stream_stmt(stmt)?;
 

@@ -1,0 +1,2 @@
+create stream stage1;
+select event from in into out;

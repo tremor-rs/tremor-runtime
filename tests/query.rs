@@ -271,6 +271,7 @@ test_cases!(
     pp_alias_operator,
     pp_config_directive,
     // INSERT
+    unused_node,
     route_emit,
     drop_event,
     pipeline_group_by_size,
