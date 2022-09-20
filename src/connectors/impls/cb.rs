@@ -303,7 +303,7 @@ impl Source for CbSource {
             let idx: usize = self.num_sent % self.files.len();
             let file = self
                 .files
-                .get_mut(idx)
+                .get_mut(idx) // this is safe as we do the module above
                 .ok_or(ErrorKind::ClientNotAvailable("cb", "No file available"))?;
             let res = if let Some(line) = file.next().await {
                 self.num_sent += 1;
