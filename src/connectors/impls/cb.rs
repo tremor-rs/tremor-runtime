@@ -274,38 +274,7 @@ impl CbSource {
 #[async_trait::async_trait()]
 impl Source for CbSource {
     async fn pull_data(&mut self, pull_id: &mut u64, ctx: &SourceContext) -> Result<SourceReply> {
-        if !self.files.is_empty() {
-            let idx: usize = self.num_sent % self.files.len();
-            let file = self
-                .files
-                .get_mut(idx)
-                .ok_or_else(|| ErrorKind::ClientNotAvailable("cb", "No file available"))?;
-            let res = if let Some(line) = file.next().await {
-                self.num_sent += 1;
-                self.last_sent
-                    .entry(idx as u64)
-                    .and_modify(|last_sent| *last_sent = *last_sent.max(pull_id))
-                    .or_insert(*pull_id);
-
-                SourceReply::Data {
-                    data: line?.into_bytes(),
-                    meta: None,
-                    stream: Some(idx as u64),
-                    port: None,
-                    origin_uri: self.origin_uri.clone(),
-                    codec_overwrite: None,
-                }
-            } else {
-                // file is exhausted, remove it from our list
-                self.files.remove(idx);
-                SourceReply::EndStream {
-                    stream: idx as u64,
-                    origin_uri: self.origin_uri.clone(),
-                    meta: None,
-                }
-            };
-            return Ok(res);
-        } else {
+        if self.files.is_empty() {
             info!("{ctx} finished.");
             self.finished = true;
             let kill_switch = self.kill_switch.clone();
@@ -330,6 +299,37 @@ impl Source for CbSource {
             });
 
             Ok(SourceReply::Finished)
+        } else {
+            let idx: usize = self.num_sent % self.files.len();
+            let file = self
+                .files
+                .get_mut(idx)
+                .ok_or(ErrorKind::ClientNotAvailable("cb", "No file available"))?;
+            let res = if let Some(line) = file.next().await {
+                self.num_sent += 1;
+                self.last_sent
+                    .entry(idx as u64)
+                    .and_modify(|last_sent| *last_sent = *last_sent.max(pull_id))
+                    .or_insert(*pull_id);
+
+                SourceReply::Data {
+                    data: line?.into_bytes(),
+                    meta: None,
+                    stream: Some(idx as u64),
+                    port: None,
+                    origin_uri: self.origin_uri.clone(),
+                    codec_overwrite: None,
+                }
+            } else {
+                // file is exhausted, remove it from our list
+                self.files.remove(idx);
+                SourceReply::EndStream {
+                    stream: idx as u64,
+                    origin_uri: self.origin_uri.clone(),
+                    meta: None,
+                }
+            };
+            Ok(res)
         }
     }
 
