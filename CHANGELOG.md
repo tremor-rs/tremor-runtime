@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- Fix pipeline build
+
 ## [0.13.0-rc.3]
 
 ### New features

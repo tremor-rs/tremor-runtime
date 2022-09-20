@@ -24,7 +24,7 @@ use super::{
 use super::{
     error_generic, error_no_locals, BaseExpr, GroupBy, HashMap, Helper, OperatorCreate,
     OperatorDefinition, OperatorKind, PipelineCreate, PipelineDefinition, Query, Result,
-    ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamStmt, Upable,
+    ScriptCreate, ScriptDefinition, Select, SelectStmt, Serialize, Stmt, StreamCreate, Upable,
     WindowDefinition, WindowKind,
 };
 use crate::ast::optimizer::Optimizer;
@@ -155,7 +155,7 @@ impl<'script> Upable<'script> for StmtRaw<'script> {
                     locals: locals.len(),
                 })))
             }
-            StmtRaw::StreamStmt(stmt) => Ok(Some(Stmt::StreamStmt(stmt.up(helper)?))),
+            StmtRaw::StreamStmt(stmt) => Ok(Some(Stmt::StreamCreate(stmt.up(helper)?))),
             StmtRaw::OperatorDefinition(stmt) => {
                 let stmt: OperatorDefinition<'script> = stmt.up(helper)?;
                 helper.scope.insert_operator(stmt)?;
@@ -626,9 +626,9 @@ pub struct StreamStmtRaw {
 impl_expr_no_lt!(StreamStmtRaw);
 
 impl<'script> Upable<'script> for StreamStmtRaw {
-    type Target = StreamStmt;
+    type Target = StreamCreate;
     fn up<'registry>(self, _helper: &mut Helper<'script, 'registry>) -> Result<Self::Target> {
-        Ok(StreamStmt {
+        Ok(StreamCreate {
             mid: self.mid.box_with_name(&self.id),
             id: self.id,
         })
