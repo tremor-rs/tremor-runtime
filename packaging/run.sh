@@ -99,7 +99,7 @@ echo "Found the target binary: ${TARGET_BIN}"
 
 # get the package version from cargo manifest (assumption is first instance of
 # the regex match pattern here is the package version, which is true for most packages)
-VERSION=$(grep --max-count 1 '^version\s*=' Cargo.toml | cut --delimiter '=' -f2 | tr --delete ' ' | tr --delete '"' || true)
+VERSION=$(grep --max-count 1 '^version\s*=' Cargo.toml | cut -d '=' -f2 | tr -d ' ' | tr -d '"' || true)
 #
 # accurate determination, but depends on remarshal which won't be available by default
 #VERSION=$(remarshal -i Cargo.toml -of json | jq -r '.package.version')
