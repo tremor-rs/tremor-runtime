@@ -232,8 +232,8 @@ impl Server {
 
 #[cfg(test)]
 mod tests {
-    use super::*;    // use env_logger;
-    // use http_types::Method;
+    use super::*; // use env_logger;
+                  // use http_types::Method;
 
     #[async_std::test]
     async fn otel_client_builder() -> Result<()> {

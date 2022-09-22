@@ -43,7 +43,8 @@ pub(crate) enum Compression {
 
 pub(crate) const EMPTY: Vec<Value> = Vec::new();
 
-pub(crate) fn any_value_to_json(pb: AnyValue) -> Value<'static> {    use any_value::Value as Inner;
+pub(crate) fn any_value_to_json(pb: AnyValue) -> Value<'static> {
+    use any_value::Value as Inner;
     let v: Value = match pb.value {
         Some(Inner::StringValue(v)) => v.into(),
         Some(Inner::BoolValue(v)) => v.into(),
