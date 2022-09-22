@@ -18,7 +18,8 @@ use super::{
 };
 use crate::connectors::prelude::*;
 use tonic::transport::Channel as TonicChannel;
-use tonic::transport::Endpoint as TonicEndpoint;use tremor_otelapis::opentelemetry::proto::collector::{
+use tonic::transport::Endpoint as TonicEndpoint;
+use tremor_otelapis::opentelemetry::proto::collector::{
     logs::v1::{logs_service_client::LogsServiceClient, ExportLogsServiceRequest},
     metrics::v1::{metrics_service_client::MetricsServiceClient, ExportMetricsServiceRequest},
     trace::v1::{trace_service_client::TraceServiceClient, ExportTraceServiceRequest},
@@ -151,7 +152,8 @@ impl Sink for OtelSink {
             trace_client,
         });
 
-        Ok(true)    }
+        Ok(true)
+    }
     async fn on_event(
         &mut self,
         _input: &str,
