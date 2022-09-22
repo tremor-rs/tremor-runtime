@@ -12,11 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::{common::OtelDefaults, logs, metrics, trace};
+use super::{
+    common::{Compression, OtelDefaults},
+    logs, metrics, trace,
+};
 use crate::connectors::prelude::*;
 use tonic::transport::Channel as TonicChannel;
-use tonic::transport::Endpoint as TonicEndpoint;
-use tremor_otelapis::opentelemetry::proto::collector::{
+use tonic::transport::Endpoint as TonicEndpoint;use tremor_otelapis::opentelemetry::proto::collector::{
     logs::v1::{logs_service_client::LogsServiceClient, ExportLogsServiceRequest},
     metrics::v1::{metrics_service_client::MetricsServiceClient, ExportMetricsServiceRequest},
     trace::v1::{trace_service_client::TraceServiceClient, ExportTraceServiceRequest},
@@ -40,10 +42,12 @@ pub(crate) struct Config {
     /// Enables the metrics service
     #[serde(default = "default_true")]
     pub(crate) metrics: bool,
+    /// Configurable compression for otel payloads
+    #[serde(default = "Default::default")]
+    pub(crate) compression: Compression,
 }
 
 impl ConfigImpl for Config {}
-
 /// The `OpenTelemetry` client connector
 pub(crate) struct Client {
     config: Config,
@@ -128,14 +132,26 @@ impl Sink for OtelSink {
             .connect()
             .await?;
 
+        let logs_client = LogsServiceClient::new(channel.clone());
+        let metrics_client = MetricsServiceClient::new(channel.clone());
+        let trace_client = TraceServiceClient::new(channel);
+
+        let (logs_client, metrics_client, trace_client) = match self.config.compression {
+            Compression::Gzip => (
+                logs_client.accept_gzip().send_gzip(),
+                metrics_client.accept_gzip().send_gzip(),
+                trace_client.accept_gzip().send_gzip(),
+            ),
+            Compression::None => (logs_client, metrics_client, trace_client),
+        };
+
         self.remote = Some(RemoteOpenTelemetryEndpoint {
-            logs_client: LogsServiceClient::new(channel.clone()),
-            metrics_client: MetricsServiceClient::new(channel.clone()),
-            trace_client: TraceServiceClient::new(channel),
+            logs_client,
+            metrics_client,
+            trace_client,
         });
 
-        Ok(true)
-    }
+        Ok(true)    }
     async fn on_event(
         &mut self,
         _input: &str,

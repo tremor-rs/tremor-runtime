@@ -32,10 +32,18 @@ impl url::Defaults for OtelDefaults {
     const PORT: u16 = 4317;
 }
 
+/// Enum to support configurable compression on otel grpc client/servers.
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum Compression {
+    #[default]
+    None,
+    Gzip,
+}
+
 pub(crate) const EMPTY: Vec<Value> = Vec::new();
 
-pub(crate) fn any_value_to_json(pb: AnyValue) -> Value<'static> {
-    use any_value::Value as Inner;
+pub(crate) fn any_value_to_json(pb: AnyValue) -> Value<'static> {    use any_value::Value as Inner;
     let v: Value = match pb.value {
         Some(Inner::StringValue(v)) => v.into(),
         Some(Inner::BoolValue(v)) => v.into(),

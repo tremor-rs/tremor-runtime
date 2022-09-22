@@ -92,6 +92,7 @@
 ### New features
 
 - Add `dogstatsd` codec for Datadog DogStasD implementation
+- Add `compression` field in `otel` connectors for compression support on payloads.
 
 ### Fixes
 
