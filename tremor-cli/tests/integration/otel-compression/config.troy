@@ -1,0 +1,74 @@
+define flow server
+flow
+  use integration;
+  use tremor::pipelines;
+  use tremor::connectors;
+
+  define connector otel_server from otel_server
+  with
+    config = {
+      "url": "127.0.0.1:4317",
+      "compression": "gzip",
+    }
+  end;
+
+  define pipeline instrument
+  into out, exit
+  pipeline
+    # recording
+    select event from in into out;
+    
+    # quiescence
+    select { "exit": 0, "delay": 10 } from in 
+    where present event.trace[0].instrumentation_library_spans[0].spans[0].attributes.`http.target`
+    into exit;
+  end;
+
+  create connector data_out from integration::write_file;
+  create connector exit from integration::exit;
+  create connector otels from otel_server;
+    create connector stdio from connectors::console;
+
+  create pipeline echo from instrument;
+  create pipeline passthrough from pipelines::passthrough;
+
+  # Echo otel server: <otel:req> -> server -> server_side -> <file>
+  connect /connector/otels to /pipeline/echo;
+  connect /connector/otels to /pipeline/passthrough;
+
+  connect /pipeline/passthrough to /connector/stdio;
+  connect /pipeline/echo to /connector/data_out;
+  connect /pipeline/echo/exit to /connector/exit;
+end;
+
+define flow client
+flow
+  use integration;
+  use tremor::pipelines;
+
+  define connector otel_client from otel_client
+  with
+    config = {
+      "url": "127.0.0.1:4317",
+      "compression": "gzip",
+    },
+    reconnect = {
+      "retry": {
+        "interval_ms": 100,
+        "growth_rate": 2,
+        "max_retries": 3,
+      }
+    }
+  end;
+
+  create connector data_in from integration::read_file;
+  create connector otelc from otel_client;
+  create pipeline replay from pipelines::passthrough;
+  
+  # Replay recorded events over otel client to server
+  connect /connector/data_in to /pipeline/replay;
+  connect /pipeline/replay to /connector/otelc;
+end;
+
+deploy flow server;
+deploy flow client;

@@ -5423,6 +5423,7 @@ dependencies = [
  "async-trait",
  "base64 0.13.0",
  "bytes 1.2.1",
+ "flate2",
  "futures-core",
  "futures-util",
  "h2",
@@ -5653,9 +5654,9 @@ dependencies = [
 
 [[package]]
 name = "tremor-otelapis"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c6cfab2469df1b6c86199844e008f549cc6b19ca59ef0b43b68b8a62f21d63b"
+checksum = "80c7980882ce019e2929d7c23c774716b871d23dab89858ee3a845b23ba2efeb"
 dependencies = [
  "async-channel",
  "prost",
