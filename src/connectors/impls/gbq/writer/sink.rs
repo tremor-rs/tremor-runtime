@@ -18,6 +18,7 @@ use crate::connectors::prelude::*;
 use async_std::prelude::{FutureExt, StreamExt};
 use futures::stream;
 use googapis::google::cloud::bigquery::storage::v1::append_rows_request::ProtoData;
+use googapis::google::cloud::bigquery::storage::v1::append_rows_response::AppendResult;
 use googapis::google::cloud::bigquery::storage::v1::big_query_write_client::BigQueryWriteClient;
 use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Type as TableType;
 use googapis::google::cloud::bigquery::storage::v1::{
@@ -363,7 +364,33 @@ impl<T: TokenProvider + 'static> Sink for GbqSink<T> {
             .await
         {
             match x {
-                Some(Ok(_)) => Ok(SinkReply::ACK),
+                Some(Ok(res)) => {
+                    if let Some(updated_schema) = res.updated_schema.as_ref() {
+                        let new_schema = updated_schema
+                            .fields
+                            .iter()
+                            .map(|f| {
+                                format!(
+                                    "{}: {}",
+                                    f.name,
+                                    TableType::from_i32(f.r#type).unwrap_or_default()
+                                )
+                            })
+                            .join("\n");
+                        info!("{ctx} GBQ Schema was updated: {new_schema}")
+                    }
+                    if let Some(res) = res.response {
+                        match res {
+                            Response::AppendResult(AppendResult { .. }) => Ok(SinkReply::ACK),
+                            Response::Error(e) => {
+                                error!("{ctx} GBQ Error: {}", e);
+                                Ok(SinkReply::FAIL)
+                            }
+                        }
+                    } else {
+                        Ok(SinkReply::ACK)
+                    }
+                }
                 Some(Err(e)) => {
                     error!("{ctx} GBQ Error: {}", e);
                     Ok(SinkReply::FAIL)
