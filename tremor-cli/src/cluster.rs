@@ -26,6 +26,7 @@ use simd_json::OwnedValue;
 use std::{
     collections::{BTreeSet, HashMap},
     path::Path,
+    time::Duration,
 };
 use tremor_common::asy::file;
 use tremor_runtime::{
@@ -151,15 +152,26 @@ impl Cluster {
 
                 // attempt to join any one of the given endpoints, stop once we joined one
                 if !join.is_empty() {
-                    let mut joined = false;
-                    for endpoint in &join {
-                        info!("Trying to join existing cluster via {endpoint}...");
-                        if running_node.join_cluster(endpoint).await.is_ok() {
-                            info!("Successfully joined cluster via {endpoint}.");
-                            joined = true;
-                            break;
+                    // for no we infinitely try to join until it succeeds
+                    'outer: loop {
+                        let mut join_wait = Duration::from_secs(2);
+                        for endpoint in &join {
+                            info!("Trying to join existing cluster via {endpoint}...");
+                            if running_node.join_cluster(endpoint).await.is_ok() {
+                                info!("Successfully joined cluster via {endpoint}.");
+                                joined = true;
+                                break 'outer;
+                            }
                         }
+                        // exponential backoff
+                        join_wait *= 2;
+                        info!(
+                            "Waiting for {}s before retrying to join...",
+                            join_wait.as_secs()
+                        );
+                        task::sleep(join_wait).await;
                     }
+                    /*
                     // TODO: what better thing to do here? Bootstrap single node cluster? Just run on as is?
                     if !joined {
                         running_node.kill_switch().stop(ShutdownMode::Forceful)?;
@@ -170,6 +182,7 @@ impl Cluster {
                         )
                         .into());
                     }
+                    */
                 }
                 // wait for the node to be finished
                 if let Err(e) = running_node.join().await {
