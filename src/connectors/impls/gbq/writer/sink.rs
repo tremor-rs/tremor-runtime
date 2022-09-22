@@ -12,25 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connectors::google::{AuthInterceptor, TokenProvider};
-use crate::connectors::impls::gbq::writer::Config;
-use crate::connectors::prelude::*;
+use crate::connectors::{
+    google::{AuthInterceptor, TokenProvider},
+    impls::gbq::writer::Config,
+    prelude::*,
+};
 use async_std::prelude::{FutureExt, StreamExt};
 use futures::stream;
-use googapis::google::cloud::bigquery::storage::v1::append_rows_request::ProtoData;
-use googapis::google::cloud::bigquery::storage::v1::append_rows_response::AppendResult;
-use googapis::google::cloud::bigquery::storage::v1::big_query_write_client::BigQueryWriteClient;
-use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Type as TableType;
 use googapis::google::cloud::bigquery::storage::v1::{
-    append_rows_request, table_field_schema, write_stream, AppendRowsRequest,
-    CreateWriteStreamRequest, ProtoRows, ProtoSchema, TableFieldSchema, WriteStream,
+    append_rows_request::{self, ProtoData},
+    append_rows_response::{AppendResult, Response},
+    big_query_write_client::BigQueryWriteClient,
+    table_field_schema::{self, Type as TableType},
+    write_stream, AppendRowsRequest, CreateWriteStreamRequest, ProtoRows, ProtoSchema,
+    TableFieldSchema, WriteStream,
 };
 use prost::encoding::WireType;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
-use std::collections::HashMap;
-use std::time::Duration;
-use tonic::codegen::InterceptedService;
-use tonic::transport::{Certificate, Channel, ClientTlsConfig};
+use std::{collections::HashMap, time::Duration};
+use tonic::{
+    codegen::InterceptedService,
+    transport::{Certificate, Channel, ClientTlsConfig},
+};
 
 pub(crate) struct GbqSink<T: TokenProvider> {
     client: Option<BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor<T>>>>,
@@ -366,24 +369,27 @@ impl<T: TokenProvider + 'static> Sink for GbqSink<T> {
             match x {
                 Some(Ok(res)) => {
                     if let Some(updated_schema) = res.updated_schema.as_ref() {
-                        let new_schema = updated_schema
-                            .fields
-                            .iter()
-                            .map(|f| {
-                                format!(
-                                    "{}: {}",
-                                    f.name,
-                                    TableType::from_i32(f.r#type).unwrap_or_default()
-                                )
-                            })
-                            .join("\n");
-                        info!("{ctx} GBQ Schema was updated: {new_schema}")
+                        info!(
+                            "{ctx} GBQ Schema was updated: {}",
+                            updated_schema
+                                .fields
+                                .iter()
+                                .map(|f| {
+                                    format!(
+                                        "{}: {:?}",
+                                        f.name,
+                                        TableType::from_i32(f.r#type).unwrap_or_default()
+                                    )
+                                })
+                                .collect::<Vec<_>>()
+                                .join("\n")
+                        );
                     }
                     if let Some(res) = res.response {
                         match res {
                             Response::AppendResult(AppendResult { .. }) => Ok(SinkReply::ACK),
                             Response::Error(e) => {
-                                error!("{ctx} GBQ Error: {}", e);
+                                error!("{ctx} GBQ Error: {} {}", e.code, e.message);
                                 Ok(SinkReply::FAIL)
                             }
                         }
