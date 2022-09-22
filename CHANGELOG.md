@@ -6,6 +6,7 @@
 
 - Fix pipeline DAG creation when pipeline has unused nodes (e.g. a stream, operator or script)
 - Fix possible hangs in `http_client`, `kv` and `dns` connectors when no pipelines is connected to their `out` port
+- Fix `gbq_writer` swallow errors for requests that have been successfully sent to gbq, but failed.
 - Fix systemd startup script
 
 ## [0.13.0-rc.3]
