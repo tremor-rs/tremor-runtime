@@ -45,4 +45,4 @@ else
 fi
 
 # IMPORTANT: do not quote ARGS, no matter what shellcheck tells you
-exec /usr/bin/tini /tremor -- ${ARGS}
+exec /usr/bin/tremor ${ARGS}
