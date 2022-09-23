@@ -39,7 +39,7 @@ else
 
 
     # Load *.troy files
-    TROYS=$(find /etc/tremor/config/ -not -path '*/.*' -type f,l -name '*.troy' -print 2>/dev/null | sort)
+    TROYS=$(find /etc/tremor/config/ -not -path '*/.*' \( -type f -o -type l \) -name '*.troy' -print 2>/dev/null | sort)
     [ ! -z "$TROYS" ] && ARTEFACTS="$ARTEFACTS $TROYS"
 
     ARGS="--logger-config ${LOGGER_FILE} server run"
