@@ -610,7 +610,7 @@ mod test {
                             details: vec![],
                         })),
                     }
-                    .encode_length_delimited(&mut buffer)
+                    .encode(&mut buffer)
                     .unwrap();
                 }
                 _ => panic!(
