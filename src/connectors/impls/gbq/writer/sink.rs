@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::connectors::google::ChannelFactory;
 use crate::connectors::{
     google::{AuthInterceptor, TokenProvider},
     impls::gbq::writer::Config,
@@ -35,11 +36,37 @@ use tonic::{
     transport::{Certificate, Channel, ClientTlsConfig},
 };
 
-pub(crate) struct GbqSink<T: TokenProvider> {
-    client: Option<BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor<T>>>>,
+pub(crate) struct TonicChannelFactory;
+
+#[async_trait::async_trait]
+impl ChannelFactory<Channel> for TonicChannelFactory {
+    async fn make_channel(&self, connect_timeout: Duration) -> Result<Channel> {
+        let tls_config = ClientTlsConfig::new()
+            .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
+            .domain_name("bigquerystorage.googleapis.com");
+
+        Ok(
+            Channel::from_static("https://bigquerystorage.googleapis.com")
+                .connect_timeout(connect_timeout)
+                .tls_config(tls_config)?
+                .connect()
+                .await?,
+        )
+    }
+}
+
+pub(crate) struct GbqSink<
+    T: TokenProvider,
+    TChannel: tonic::codegen::Service<
+            http::Request<tonic::body::BoxBody>,
+            Response = http::Response<tonic::transport::Body>,
+        > + Clone,
+> {
+    client: Option<BigQueryWriteClient<InterceptedService<TChannel, AuthInterceptor<T>>>>,
     write_stream: Option<WriteStream>,
     mapping: Option<JsonToProtobufMapping>,
     config: Config,
+    channel_factory: Box<dyn ChannelFactory<TChannel> + Send + Sync>,
 }
 
 struct Field {
@@ -280,27 +307,43 @@ impl JsonToProtobufMapping {
         &self.descriptor
     }
 }
-impl<T: TokenProvider> GbqSink<T> {
-    pub fn new(config: Config) -> Self {
+impl<
+        T: TokenProvider,
+        TChannel: tonic::codegen::Service<
+                http::Request<tonic::body::BoxBody>,
+                Response = http::Response<tonic::transport::Body>,
+            > + Clone,
+    > GbqSink<T, TChannel>
+{
+    pub fn new(
+        config: Config,
+        channel_factory: Box<dyn ChannelFactory<TChannel> + Send + Sync>,
+    ) -> Self {
         Self {
             client: None,
             write_stream: None,
             mapping: None,
             config,
+            channel_factory,
         }
-    }
-
-    #[cfg(test)]
-    pub fn set_client(
-        &mut self,
-        client: BigQueryWriteClient<InterceptedService<Channel, AuthInterceptor<T>>>,
-    ) {
-        self.client = Some(client);
     }
 }
 
 #[async_trait::async_trait]
-impl<T: TokenProvider + 'static> Sink for GbqSink<T> {
+impl<
+        T: TokenProvider + 'static,
+        TChannel: tonic::codegen::Service<
+                http::Request<tonic::body::BoxBody>,
+                Response = http::Response<tonic::transport::Body>,
+                Error = TChannelError,
+            > + Send
+            + Clone
+            + 'static,
+        TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync,
+    > Sink for GbqSink<T, TChannel>
+where
+    TChannel::Future: Send,
+{
     async fn on_event(
         &mut self,
         _input: &str,
@@ -418,14 +461,9 @@ impl<T: TokenProvider + 'static> Sink for GbqSink<T> {
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         info!("{ctx} Connecting to BigQuery");
 
-        let tls_config = ClientTlsConfig::new()
-            .ca_certificate(Certificate::from_pem(googapis::CERTIFICATES))
-            .domain_name("bigquerystorage.googleapis.com");
-
-        let channel = Channel::from_static("https://bigquerystorage.googleapis.com")
-            .connect_timeout(Duration::from_nanos(self.config.connect_timeout))
-            .tls_config(tls_config)?
-            .connect()
+        let channel = self
+            .channel_factory
+            .make_channel(Duration::from_nanos(self.config.connect_timeout))
             .await?;
 
         let mut client = BigQueryWriteClient::with_interceptor(
@@ -481,6 +519,17 @@ mod test {
     use crate::connectors::tests::ConnectorHarness;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
     use value_trait::StaticNode;
+
+    struct TestChannelFactory {
+        channel: Channel,
+    }
+
+    #[async_trait::async_trait]
+    impl ChannelFactory<Channel> for TestChannelFactory {
+        async fn make_channel(&self, _connect_timeout: Duration) -> Result<Channel> {
+            Ok(self.channel.clone())
+        }
+    }
 
     #[test]
     fn skips_unknown_field_types() {
@@ -1100,7 +1149,7 @@ mod test {
         }))
         .unwrap();
 
-        let mut sink = GbqSink::<TestTokenProvider>::new(config);
+        let mut sink = GbqSink::<TestTokenProvider, _>::new(config, Box::new(TonicChannelFactory));
 
         let result = sink
             .on_event(
@@ -1139,13 +1188,12 @@ mod test {
         }))
         .unwrap();
 
-        let mut sink = GbqSink::new(config);
-        sink.set_client(BigQueryWriteClient::with_interceptor(
-            Channel::from_static("http://example.com").connect_lazy(),
-            AuthInterceptor {
-                token_provider: TestTokenProvider::new(),
-            },
-        ));
+        let mut sink = GbqSink::<TestTokenProvider, _>::new(
+            config,
+            Box::new(TestChannelFactory {
+                channel: Channel::from_static("http://example.com").connect_lazy(),
+            }),
+        );
 
         let result = sink
             .on_event(

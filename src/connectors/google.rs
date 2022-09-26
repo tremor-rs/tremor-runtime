@@ -12,11 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::errors::Result;
 use gouth::Token;
 use std::sync::Arc;
+use std::time::Duration;
 use tonic::metadata::MetadataValue;
 use tonic::service::Interceptor;
 use tonic::{Request, Status};
+
+#[async_trait::async_trait]
+pub(crate) trait ChannelFactory<
+    TChannel: tonic::codegen::Service<
+            http::Request<tonic::body::BoxBody>,
+            Response = http::Response<tonic::transport::Body>,
+        > + Clone,
+>
+{
+    async fn make_channel(&self, connect_timeout: Duration) -> Result<TChannel>;
+}
 
 pub trait TokenProvider: Clone + Default + Send {
     fn get_token(&mut self) -> ::std::result::Result<Arc<String>, Status>;

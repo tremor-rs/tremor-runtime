@@ -15,7 +15,7 @@
 mod sink;
 
 use crate::connectors::google::GouthTokenProvider;
-use crate::connectors::impls::gbq::writer::sink::GbqSink;
+use crate::connectors::impls::gbq::writer::sink::{GbqSink, TonicChannelFactory};
 use crate::connectors::prelude::*;
 use crate::connectors::{Connector, ConnectorBuilder, ConnectorConfig, ConnectorType};
 use serde::Deserialize;
@@ -43,7 +43,10 @@ impl Connector for Gbq {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = GbqSink::<GouthTokenProvider>::new(self.config.clone());
+        let sink = GbqSink::<GouthTokenProvider, _>::new(
+            self.config.clone(),
+            Box::new(TonicChannelFactory),
+        );
 
         builder.spawn(sink, sink_context).map(Some)
     }
