@@ -177,7 +177,7 @@ rdkafka-sys = { git = "https://github.com/fede1024/rust-rdkafka", rev = "7a2355f
 smol = "1.2.5"
 
 # crononome
-cron = "0.11.0"
+cron = "0.12.0"
 
 # logstash grok patterns
 grok = "2"
