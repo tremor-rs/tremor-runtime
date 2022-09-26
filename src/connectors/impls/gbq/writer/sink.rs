@@ -517,17 +517,134 @@ mod test {
     use crate::connectors::impls::gbq;
     use crate::connectors::reconnect::ConnectionLostNotifier;
     use crate::connectors::tests::ConnectorHarness;
+    use bytes::Bytes;
+    use futures::future::Ready;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
+    // use googapis::google::cloud::bigquery::storage::v1::{
+    //     append_rows_response, AppendRowsResponse, TableSchema,
+    // };
+    // use googapis::google::rpc::Status;
+    use http::{HeaderMap, HeaderValue};
+    // use http_body::Body;
+    use googapis::google::cloud::bigquery::storage::v1::{
+        append_rows_response, AppendRowsResponse, TableSchema,
+    };
+    use googapis::google::rpc::Status;
+    use prost::Message;
+    use std::fmt::{Display, Formatter};
+    use std::task::Poll;
+    use tonic::body::BoxBody;
+    use tonic::codegen::Service;
     use value_trait::StaticNode;
 
-    struct TestChannelFactory {
+    struct HardcodedChannelFactory {
         channel: Channel,
     }
 
     #[async_trait::async_trait]
-    impl ChannelFactory<Channel> for TestChannelFactory {
+    impl ChannelFactory<Channel> for HardcodedChannelFactory {
         async fn make_channel(&self, _connect_timeout: Duration) -> Result<Channel> {
             Ok(self.channel.clone())
+        }
+    }
+
+    #[derive(Debug)]
+    enum MockServiceError {}
+
+    impl Display for MockServiceError {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            write!(f, "MockServiceError")
+        }
+    }
+
+    impl std::error::Error for MockServiceError {}
+
+    struct MockChannelFactory;
+
+    #[async_trait::async_trait]
+    impl ChannelFactory<MockService> for MockChannelFactory {
+        async fn make_channel(&self, _connect_timeout: Duration) -> Result<MockService> {
+            Ok(MockService { request_counter: 0 })
+        }
+    }
+
+    #[derive(Clone)]
+    struct MockService {
+        request_counter: u32,
+    }
+
+    impl Service<http::Request<BoxBody>> for MockService {
+        type Response = http::Response<tonic::transport::Body>;
+        type Error = MockServiceError;
+        type Future =
+            Ready<std::result::Result<http::Response<tonic::transport::Body>, MockServiceError>>;
+
+        fn poll_ready(
+            &mut self,
+            _cx: &mut std::task::Context<'_>,
+        ) -> Poll<std::result::Result<(), Self::Error>> {
+            Poll::Ready(Ok(()))
+        }
+
+        fn call(&mut self, _request: http::Request<BoxBody>) -> Self::Future {
+            let mut buffer = vec![];
+
+            match self.request_counter {
+                0 => {
+                    WriteStream {
+                        name: "test".to_string(),
+                        r#type: i32::from(write_stream::Type::Committed),
+                        create_time: None,
+                        commit_time: None,
+                        table_schema: Some(TableSchema { fields: vec![] }),
+                    }
+                    .encode(&mut buffer)
+                    .unwrap();
+                }
+                1 => {
+                    AppendRowsResponse {
+                        updated_schema: Some(TableSchema { fields: vec![] }),
+                        response: Some(append_rows_response::Response::Error(Status {
+                            code: 1024,
+                            message: "test failure".to_string(),
+                            details: vec![],
+                        })),
+                    }
+                    .encode_length_delimited(&mut buffer)
+                    .unwrap();
+                }
+                _ => panic!(
+                    "Received more requests than expected (request {})",
+                    self.request_counter
+                ),
+            };
+            self.request_counter += 1;
+
+            let (mut tx, body) = tonic::transport::Body::channel();
+            let jh = async_std::task::spawn(async move {
+                // let response = body_bytes.data().await.unwrap().unwrap();
+                let len: [u8; 4] = (buffer.len() as u32).to_be_bytes();
+
+                let mut response_buffer = vec![0u8];
+                response_buffer.append(&mut len.to_vec());
+                response_buffer.append(&mut buffer.to_vec());
+
+                tx.send_data(Bytes::from(response_buffer)).await.unwrap();
+
+                let mut trailers = HeaderMap::new();
+                trailers.insert(
+                    "content-type",
+                    HeaderValue::from_static("application/grpc+proto"),
+                );
+                trailers.insert("grpc-status", HeaderValue::from_static("0"));
+
+                tx.send_trailers(trailers).await.unwrap();
+            });
+            async_std::task::spawn_blocking(|| jh);
+
+            let response = http::Response::new(body);
+
+            futures::future::ready(Ok(response))
         }
     }
 
@@ -1190,7 +1307,7 @@ mod test {
 
         let mut sink = GbqSink::<TestTokenProvider, _>::new(
             config,
-            Box::new(TestChannelFactory {
+            Box::new(HardcodedChannelFactory {
                 channel: Channel::from_static("http://example.com").connect_lazy(),
             }),
         );
@@ -1220,5 +1337,60 @@ mod test {
 
         assert!(result.is_err());
         Ok(())
+    }
+
+    #[async_std::test]
+    pub async fn fails_on_error_response() {
+        let mut sink = GbqSink::<TestTokenProvider, _>::new(
+            Config {
+                table_id: "".to_string(),
+                connect_timeout: 1_000_000_000,
+                request_timeout: 1_000_000_000,
+            },
+            Box::new(MockChannelFactory {}),
+        );
+
+        let sink_context = SinkContext {
+            uid: Default::default(),
+            alias: Alias::new("flow", "connector"),
+            connector_type: Default::default(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(async_std::channel::unbounded().0),
+        };
+
+        sink.connect(&sink_context, &Attempt::default())
+            .await
+            .unwrap();
+
+        let result = sink
+            .on_event(
+                "",
+                Event {
+                    id: Default::default(),
+                    data: Default::default(),
+                    ingest_ns: 0,
+                    origin_uri: None,
+                    kind: None,
+                    is_batch: false,
+                    cb: Default::default(),
+                    op_meta: Default::default(),
+                    transactional: false,
+                },
+                &sink_context,
+                &mut EventSerializer::new(
+                    None,
+                    CodecReq::Structured,
+                    vec![],
+                    &ConnectorType::from(""),
+                    &Alias::new("flow", "connector"),
+                )
+                .unwrap(),
+                0,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result.ack, SinkAck::Fail);
+        assert_eq!(result.cb, CbAction::None);
     }
 }
