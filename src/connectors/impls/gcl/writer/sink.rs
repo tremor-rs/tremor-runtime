@@ -14,7 +14,7 @@
 
 use super::meta;
 
-use crate::connectors::google::{AuthInterceptor, TokenProvider};
+use crate::connectors::google::{AuthInterceptor, ChannelFactory, TokenProvider};
 use crate::connectors::impls::gcl::writer::Config;
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
@@ -30,17 +30,6 @@ use tonic::codegen::InterceptedService;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 use tonic::Code;
 use tremor_common::time::nanotime;
-
-#[async_trait::async_trait]
-pub(crate) trait ChannelFactory<
-    TChannel: tonic::codegen::Service<
-            http::Request<tonic::body::BoxBody>,
-            Response = http::Response<tonic::transport::Body>,
-        > + Clone,
->
-{
-    async fn make_channel(&self, connect_timeout: Duration) -> Result<TChannel>;
-}
 
 pub(crate) struct TonicChannelFactory;
 
