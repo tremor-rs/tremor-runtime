@@ -603,7 +603,18 @@ mod test {
                 }
                 1 => {
                     AppendRowsResponse {
-                        updated_schema: Some(TableSchema { fields: vec![] }),
+                        updated_schema: Some(TableSchema {
+                            fields: vec![TableFieldSchema {
+                                name: "newfield".to_string(),
+                                r#type: i32::from(table_field_schema::Type::String),
+                                mode: i32::from(Mode::Nullable),
+                                fields: vec![],
+                                description: "test".to_string(),
+                                max_length: 10,
+                                precision: 0,
+                                scale: 0,
+                            }],
+                        }),
                         response: Some(append_rows_response::Response::Error(Status {
                             code: 1024,
                             message: "test failure".to_string(),
