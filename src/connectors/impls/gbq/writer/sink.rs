@@ -425,10 +425,7 @@ where
                             .collect::<Vec<_>>()
                             .join("\n");
 
-                        info!(
-                            "{ctx} GBQ Schema was updated: {}",
-                            fields
-                        );
+                        info!("{ctx} GBQ Schema was updated: {}", fields);
                     }
                     if let Some(res) = res.response {
                         match res {
@@ -1405,5 +1402,19 @@ mod test {
 
         assert_eq!(result.ack, SinkAck::Fail);
         assert_eq!(result.cb, CbAction::None);
+    }
+
+    #[async_std::test]
+    pub async fn does_not_auto_ack() {
+        let sink = GbqSink::<TestTokenProvider, _>::new(
+            Config {
+                table_id: "".to_string(),
+                connect_timeout: 1_000_000_000,
+                request_timeout: 1_000_000_000,
+            },
+            Box::new(MockChannelFactory {}),
+        );
+
+        assert!(!sink.auto_ack());
     }
 }
