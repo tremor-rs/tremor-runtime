@@ -73,3 +73,44 @@ impl ConnectorBuilder for Builder {
         Ok(Box::new(Gbq { config }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::connectors::metrics::SinkReporter;
+    use crate::connectors::reconnect::ConnectionLostNotifier;
+    use crate::connectors::sink::builder;
+
+    #[async_std::test]
+    pub async fn can_spawn_sink() {
+        let mut connector = Gbq {
+            config: Config {
+                table_id: "test".into(),
+                connect_timeout: 1,
+                request_timeout: 1,
+            },
+        };
+
+        let sink_address = connector
+            .create_sink(
+                SinkContext {
+                    uid: Default::default(),
+                    alias: Alias::new("a", "b"),
+                    connector_type: Default::default(),
+                    quiescence_beacon: Default::default(),
+                    notifier: ConnectionLostNotifier::new(async_std::channel::unbounded().0),
+                },
+                builder(
+                    &ConnectorConfig::default(),
+                    CodecReq::Structured,
+                    &Alias::new("a", "b"),
+                    128,
+                    SinkReporter::new(Alias::new("a", "b"), async_broadcast::broadcast(1).0, None),
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(sink_address.is_some());
+    }
+}
