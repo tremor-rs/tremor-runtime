@@ -412,20 +412,22 @@ where
             match x {
                 Some(Ok(res)) => {
                     if let Some(updated_schema) = res.updated_schema.as_ref() {
+                        let fields = updated_schema
+                            .fields
+                            .iter()
+                            .map(|f| {
+                                format!(
+                                    "{}: {:?}",
+                                    f.name,
+                                    TableType::from_i32(f.r#type).unwrap_or_default()
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+
                         info!(
                             "{ctx} GBQ Schema was updated: {}",
-                            updated_schema
-                                .fields
-                                .iter()
-                                .map(|f| {
-                                    format!(
-                                        "{}: {:?}",
-                                        f.name,
-                                        TableType::from_i32(f.r#type).unwrap_or_default()
-                                    )
-                                })
-                                .collect::<Vec<_>>()
-                                .join("\n")
+                            fields
                         );
                     }
                     if let Some(res) = res.response {
