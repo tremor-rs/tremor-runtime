@@ -407,7 +407,11 @@ where
                 };
             }
 
-            match request.rows.as_mut().ok_or(ErrorKind::GbqSinkFailed("No rows in request"))? {
+            match request
+                .rows
+                .as_mut()
+                .ok_or(ErrorKind::GbqSinkFailed("No rows in request"))?
+            {
                 Rows::ProtoRows(ref mut x) => x
                     .rows
                     .as_mut()
