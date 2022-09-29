@@ -1485,7 +1485,18 @@ mod test {
             r#type: i32::from(write_stream::Type::Committed),
             create_time: None,
             commit_time: None,
-            table_schema: Some(TableSchema { fields: vec![] }),
+            table_schema: Some(TableSchema {
+                fields: vec![TableFieldSchema {
+                    name: "a".to_string(),
+                    r#type: table_field_schema::Type::String as i32,
+                    mode: table_field_schema::Mode::Nullable as i32,
+                    fields: vec![],
+                    description: "".to_string(),
+                    max_length: 0,
+                    precision: 0,
+                    scale: 0,
+                }],
+            }),
         }
         .encode(&mut buffer_write_stream)
         .unwrap();
@@ -1528,38 +1539,56 @@ mod test {
             .await
             .unwrap();
 
-        for _ in 0..=1 {
-            let result = sink
-                .on_event(
-                    "",
-                    Event {
-                        id: Default::default(),
-                        data: EventPayload::from(literal!({"a": "a".repeat(1024 * 14)})),
-                        ingest_ns: 0,
-                        origin_uri: None,
-                        kind: None,
-                        is_batch: false,
-                        cb: Default::default(),
-                        op_meta: Default::default(),
-                        transactional: false,
+        let value = literal!([
+            {
+                "data": {
+                    "value": {
+                        "a": "a".repeat(15*1024)
                     },
-                    &sink_context,
-                    &mut EventSerializer::new(
-                        None,
-                        CodecReq::Structured,
-                        vec![],
-                        &ConnectorType::from(""),
-                        &Alias::new("flow", "connector"),
-                    )
-                    .unwrap(),
-                    0,
+                    "meta": {}
+                }
+            },
+            {
+                "data": {
+                    "value": {
+                        "a": "b".repeat(15*1024)
+                    },
+                    "meta": {}
+                }
+            }
+        ]);
+
+        let payload: EventPayload = value.into();
+
+        let result = sink
+            .on_event(
+                "",
+                Event {
+                    id: Default::default(),
+                    data: payload,
+                    ingest_ns: 0,
+                    origin_uri: None,
+                    kind: None,
+                    is_batch: true,
+                    cb: Default::default(),
+                    op_meta: Default::default(),
+                    transactional: false,
+                },
+                &sink_context,
+                &mut EventSerializer::new(
+                    None,
+                    CodecReq::Structured,
+                    vec![],
+                    &ConnectorType::from(""),
+                    &Alias::new("flow", "connector"),
                 )
-                .await
-                .unwrap();
+                .unwrap(),
+                0,
+            )
+            .await
+            .unwrap();
 
-            assert_eq!(result.ack, SinkAck::Ack);
-        }
-
+        assert_eq!(result.ack, SinkAck::Ack);
         assert_eq!(0, responses.read().unwrap().len());
     }
 
