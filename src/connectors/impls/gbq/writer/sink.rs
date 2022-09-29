@@ -192,8 +192,6 @@ fn map_field(
 fn encode_field(val: &Value, field: &Field, result: &mut Vec<u8>) -> Result<()> {
     let tag = field.tag;
 
-    // fixme check which fields are required and fail if they're missing
-    // fixme do not panic if the tremor type does not match
     match field.table_type {
         TableType::Double => prost::encoding::double::encode(
             tag,
@@ -344,6 +342,7 @@ impl<
 where
     TChannel::Future: Send,
 {
+    #[allow(clippy::too_many_lines)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -368,93 +367,114 @@ where
             "The mapping is not available",
         ))?;
 
+        let mut request_data = Vec::with_capacity(1);
         let mut serialized_rows = Vec::with_capacity(event.len());
+        let mut size = 0;
 
         for data in event.value_iter() {
-            serialized_rows.push(mapping.map(data)?);
+            let serialized_event = mapping.map(data)?;
+
+            // 1024B is the estimated overhead of the request
+            if size + serialized_event.len() > self.config.request_size_limit - 1024 {
+                let row_count = serialized_rows.len();
+                request_data.push(serialized_rows);
+                serialized_rows = Vec::with_capacity(event.len() - row_count);
+                size = 0;
+            }
+
+            size += serialized_event.len();
         }
 
-        let request = AppendRowsRequest {
-            write_stream: write_stream.name.clone(),
-            offset: None,
-            trace_id: "".to_string(),
-            rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
-                writer_schema: Some(ProtoSchema {
-                    proto_descriptor: Some(mapping.descriptor().clone()),
-                }),
-                rows: Some(ProtoRows { serialized_rows }),
-            })),
-        };
-        let req_timeout = Duration::from_nanos(self.config.request_timeout);
-        let append_response = client
-            .append_rows(stream::iter(vec![request]))
-            .timeout(req_timeout)
-            .await;
+        request_data.push(serialized_rows);
 
-        let append_response = if let Ok(append_response) = append_response {
-            append_response
-        } else {
-            // timeout sending append rows request
-            error!(
-                "{ctx} GBQ request timed out after {}ms",
-                req_timeout.as_millis()
-            );
-            ctx.notifier.connection_lost().await?;
+        if request_data.len() > 1 {
+            warn!("The batch is too large to be sent in a single request, splitting it into {} requests. Consider lowering the batch size.", request_data.len());
+        }
 
-            return Ok(SinkReply::FAIL);
-        };
-        if let Ok(x) = append_response?
-            .into_inner()
-            .next()
-            .timeout(req_timeout)
-            .await
-        {
-            match x {
-                Some(Ok(res)) => {
-                    if let Some(updated_schema) = res.updated_schema.as_ref() {
-                        let fields = updated_schema
-                            .fields
-                            .iter()
-                            .map(|f| {
-                                format!(
-                                    "{}: {:?}",
-                                    f.name,
-                                    TableType::from_i32(f.r#type).unwrap_or_default()
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                            .join("\n");
+        for serialized_rows in request_data {
+            let request = AppendRowsRequest {
+                write_stream: write_stream.name.clone(),
+                offset: None,
+                trace_id: "".to_string(),
+                rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
+                    writer_schema: Some(ProtoSchema {
+                        proto_descriptor: Some(mapping.descriptor().clone()),
+                    }),
+                    rows: Some(ProtoRows { serialized_rows }),
+                })),
+            };
+            let req_timeout = Duration::from_nanos(self.config.request_timeout);
+            let append_response = client
+                .append_rows(stream::iter(vec![request]))
+                .timeout(req_timeout)
+                .await;
 
-                        info!("{ctx} GBQ Schema was updated: {}", fields);
-                    }
-                    if let Some(res) = res.response {
-                        match res {
-                            Response::AppendResult(AppendResult { .. }) => Ok(SinkReply::ACK),
-                            Response::Error(e) => {
-                                error!("{ctx} GBQ Error: {} {}", e.code, e.message);
-                                Ok(SinkReply::FAIL)
+            let append_response = if let Ok(append_response) = append_response {
+                append_response
+            } else {
+                // timeout sending append rows request
+                error!(
+                    "{ctx} GBQ request timed out after {}ms",
+                    req_timeout.as_millis()
+                );
+                ctx.notifier.connection_lost().await?;
+
+                return Ok(SinkReply::FAIL);
+            };
+
+            if let Ok(x) = append_response?
+                .into_inner()
+                .next()
+                .timeout(req_timeout)
+                .await
+            {
+                match x {
+                    Some(Ok(res)) => {
+                        if let Some(updated_schema) = res.updated_schema.as_ref() {
+                            let fields = updated_schema
+                                .fields
+                                .iter()
+                                .map(|f| {
+                                    format!(
+                                        "{}: {:?}",
+                                        f.name,
+                                        TableType::from_i32(f.r#type).unwrap_or_default()
+                                    )
+                                })
+                                .collect::<Vec<_>>()
+                                .join("\n");
+
+                            info!("{ctx} GBQ Schema was updated: {}", fields);
+                        }
+                        if let Some(res) = res.response {
+                            match res {
+                                Response::AppendResult(AppendResult { .. }) => {}
+                                Response::Error(e) => {
+                                    error!("{ctx} GBQ Error: {} {}", e.code, e.message);
+                                    return Ok(SinkReply::FAIL);
+                                }
                             }
                         }
-                    } else {
-                        Ok(SinkReply::ACK)
                     }
+                    Some(Err(e)) => {
+                        error!("{ctx} GBQ Error: {}", e);
+                        return Ok(SinkReply::FAIL);
+                    }
+                    None => return Ok(SinkReply::NONE),
                 }
-                Some(Err(e)) => {
-                    error!("{ctx} GBQ Error: {}", e);
-                    Ok(SinkReply::FAIL)
-                }
-                None => Ok(SinkReply::NONE),
-            }
-        } else {
-            // timeout receiving response
-            error!(
-                "{ctx} Receiving GBQ response timeout after {}ms",
-                req_timeout.as_millis()
-            );
-            ctx.notifier.connection_lost().await?;
+            } else {
+                // timeout receiving response
+                error!(
+                    "{ctx} Receiving GBQ response timeout after {}ms",
+                    req_timeout.as_millis()
+                );
+                ctx.notifier.connection_lost().await?;
 
-            Ok(SinkReply::FAIL)
+                return Ok(SinkReply::FAIL);
+            }
         }
+
+        Ok(SinkReply::ACK)
     }
 
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
@@ -519,18 +539,15 @@ mod test {
     use bytes::Bytes;
     use futures::future::Ready;
     use googapis::google::cloud::bigquery::storage::v1::table_field_schema::Mode;
-    // use googapis::google::cloud::bigquery::storage::v1::{
-    //     append_rows_response, AppendRowsResponse, TableSchema,
-    // };
-    // use googapis::google::rpc::Status;
-    use http::{HeaderMap, HeaderValue};
-    // use http_body::Body;
     use googapis::google::cloud::bigquery::storage::v1::{
         append_rows_response, AppendRowsResponse, TableSchema,
     };
     use googapis::google::rpc::Status;
+    use http::{HeaderMap, HeaderValue};
     use prost::Message;
+    use std::collections::VecDeque;
     use std::fmt::{Display, Formatter};
+    use std::sync::{Arc, RwLock};
     use std::task::Poll;
     use tonic::body::BoxBody;
     use tonic::codegen::Service;
@@ -558,18 +575,22 @@ mod test {
 
     impl std::error::Error for MockServiceError {}
 
-    struct MockChannelFactory;
+    struct MockChannelFactory {
+        responses: Arc<RwLock<VecDeque<Vec<u8>>>>,
+    }
 
     #[async_trait::async_trait]
     impl ChannelFactory<MockService> for MockChannelFactory {
         async fn make_channel(&self, _connect_timeout: Duration) -> Result<MockService> {
-            Ok(MockService { request_counter: 0 })
+            Ok(MockService {
+                responses: self.responses.clone(),
+            })
         }
     }
 
     #[derive(Clone)]
     struct MockService {
-        request_counter: u32,
+        responses: Arc<RwLock<VecDeque<Vec<u8>>>>,
     }
 
     impl Service<http::Request<BoxBody>> for MockService {
@@ -586,53 +607,10 @@ mod test {
         }
 
         fn call(&mut self, _request: http::Request<BoxBody>) -> Self::Future {
-            let mut buffer = vec![];
-
-            match self.request_counter {
-                0 => {
-                    WriteStream {
-                        name: "test".to_string(),
-                        r#type: i32::from(write_stream::Type::Committed),
-                        create_time: None,
-                        commit_time: None,
-                        table_schema: Some(TableSchema { fields: vec![] }),
-                    }
-                    .encode(&mut buffer)
-                    .unwrap();
-                }
-                1 => {
-                    AppendRowsResponse {
-                        updated_schema: Some(TableSchema {
-                            fields: vec![TableFieldSchema {
-                                name: "newfield".to_string(),
-                                r#type: i32::from(table_field_schema::Type::String),
-                                mode: i32::from(Mode::Nullable),
-                                fields: vec![],
-                                description: "test".to_string(),
-                                max_length: 10,
-                                precision: 0,
-                                scale: 0,
-                            }],
-                        }),
-                        response: Some(append_rows_response::Response::Error(Status {
-                            code: 1024,
-                            message: "test failure".to_string(),
-                            details: vec![],
-                        })),
-                    }
-                    .encode(&mut buffer)
-                    .unwrap();
-                }
-                _ => panic!(
-                    "Received more requests than expected (request {})",
-                    self.request_counter
-                ),
-            };
-            self.request_counter += 1;
+            let buffer = self.responses.write().unwrap().pop_front().unwrap();
 
             let (mut tx, body) = tonic::transport::Body::channel();
             let jh = async_std::task::spawn(async move {
-                // let response = body_bytes.data().await.unwrap().unwrap();
                 let len: [u8; 4] = (buffer.len() as u32).to_be_bytes();
 
                 let mut response_buffer = vec![0u8];
@@ -1351,13 +1329,53 @@ mod test {
 
     #[async_std::test]
     pub async fn fails_on_error_response() {
+        let mut buffer_write_stream = vec![];
+        let mut buffer_append_rows_response = vec![];
+        WriteStream {
+            name: "test".to_string(),
+            r#type: i32::from(write_stream::Type::Committed),
+            create_time: None,
+            commit_time: None,
+            table_schema: Some(TableSchema { fields: vec![] }),
+        }
+        .encode(&mut buffer_write_stream)
+        .unwrap();
+
+        AppendRowsResponse {
+            updated_schema: Some(TableSchema {
+                fields: vec![TableFieldSchema {
+                    name: "newfield".to_string(),
+                    r#type: i32::from(table_field_schema::Type::String),
+                    mode: i32::from(Mode::Nullable),
+                    fields: vec![],
+                    description: "test".to_string(),
+                    max_length: 10,
+                    precision: 0,
+                    scale: 0,
+                }],
+            }),
+            response: Some(append_rows_response::Response::Error(Status {
+                code: 1024,
+                message: "test failure".to_string(),
+                details: vec![],
+            })),
+        }
+        .encode(&mut buffer_append_rows_response)
+        .unwrap();
+
         let mut sink = GbqSink::<TestTokenProvider, _>::new(
             Config {
                 table_id: "".to_string(),
                 connect_timeout: 1_000_000_000,
                 request_timeout: 1_000_000_000,
+                request_size_limit: 10 * 1024 * 1024,
             },
-            Box::new(MockChannelFactory {}),
+            Box::new(MockChannelFactory {
+                responses: Arc::new(RwLock::new(VecDeque::from([
+                    buffer_write_stream,
+                    buffer_append_rows_response,
+                ]))),
+            }),
         );
 
         let sink_context = SinkContext {
@@ -1405,14 +1423,104 @@ mod test {
     }
 
     #[async_std::test]
+    pub async fn splits_large_requests() {
+        let mut buffer_write_stream = vec![];
+        let mut buffer_append_rows_response = vec![];
+        WriteStream {
+            name: "test".to_string(),
+            r#type: i32::from(write_stream::Type::Committed),
+            create_time: None,
+            commit_time: None,
+            table_schema: Some(TableSchema { fields: vec![] }),
+        }
+        .encode(&mut buffer_write_stream)
+        .unwrap();
+
+        AppendRowsResponse {
+            updated_schema: None,
+            response: Some(append_rows_response::Response::AppendResult(AppendResult {
+                offset: None,
+            })),
+        }
+        .encode(&mut buffer_append_rows_response)
+        .unwrap();
+
+        let responses = Arc::new(RwLock::new(VecDeque::from([
+            buffer_write_stream,
+            buffer_append_rows_response.clone(),
+            buffer_append_rows_response,
+        ])));
+        let mut sink = GbqSink::<TestTokenProvider, _>::new(
+            Config {
+                table_id: "".to_string(),
+                connect_timeout: 1_000_000_000,
+                request_timeout: 1_000_000_000,
+                request_size_limit: 16 * 1024,
+            },
+            Box::new(MockChannelFactory {
+                responses: responses.clone(),
+            }),
+        );
+
+        let sink_context = SinkContext {
+            uid: Default::default(),
+            alias: Alias::new("flow", "connector"),
+            connector_type: Default::default(),
+            quiescence_beacon: Default::default(),
+            notifier: ConnectionLostNotifier::new(async_std::channel::unbounded().0),
+        };
+
+        sink.connect(&sink_context, &Attempt::default())
+            .await
+            .unwrap();
+
+        for _ in 0..=1 {
+            let result = sink
+                .on_event(
+                    "",
+                    Event {
+                        id: Default::default(),
+                        data: EventPayload::from(literal!({"a": "a".repeat(1024 * 14)})),
+                        ingest_ns: 0,
+                        origin_uri: None,
+                        kind: None,
+                        is_batch: false,
+                        cb: Default::default(),
+                        op_meta: Default::default(),
+                        transactional: false,
+                    },
+                    &sink_context,
+                    &mut EventSerializer::new(
+                        None,
+                        CodecReq::Structured,
+                        vec![],
+                        &ConnectorType::from(""),
+                        &Alias::new("flow", "connector"),
+                    )
+                    .unwrap(),
+                    0,
+                )
+                .await
+                .unwrap();
+
+            assert_eq!(result.ack, SinkAck::Ack);
+        }
+
+        assert_eq!(0, responses.read().unwrap().len());
+    }
+
+    #[async_std::test]
     pub async fn does_not_auto_ack() {
         let sink = GbqSink::<TestTokenProvider, _>::new(
             Config {
                 table_id: "".to_string(),
                 connect_timeout: 1_000_000_000,
                 request_timeout: 1_000_000_000,
+                request_size_limit: 10 * 1024 * 1024,
             },
-            Box::new(MockChannelFactory {}),
+            Box::new(MockChannelFactory {
+                responses: Arc::new(RwLock::new(VecDeque::new())),
+            }),
         );
 
         assert!(!sink.auto_ack());
