@@ -388,9 +388,18 @@ where
         for data in event.value_iter() {
             let serialized_event = mapping.map(data)?;
 
+            Self::rows_from_request(&mut request)?.push(serialized_event);
+
             if request.encoded_len() > self.config.request_size_limit {
-                let row_count = 0; //request_rows.len();
+                let rows = Self::rows_from_request(&mut request)?;
+                let row_count = rows.len();
+                let last_event = rows.pop().ok_or(ErrorKind::GbqSinkFailed(
+                    "Failed to pop last event from request",
+                ))?;
                 request_data.push(request);
+
+                let mut new_rows = Vec::with_capacity(event.len() - row_count);
+                new_rows.push(last_event);
 
                 request = AppendRowsRequest {
                     write_stream: write_stream.name.clone(),
@@ -400,25 +409,12 @@ where
                             proto_descriptor: Some(mapping.descriptor().clone()),
                         }),
                         rows: Some(ProtoRows {
-                            serialized_rows: Vec::with_capacity(event.len() - row_count),
+                            serialized_rows: new_rows,
                         }),
                     })),
                     trace_id: String::new(),
                 };
             }
-
-            match request
-                .rows
-                .as_mut()
-                .ok_or(ErrorKind::GbqSinkFailed("No rows in request"))?
-            {
-                Rows::ProtoRows(ref mut x) => x
-                    .rows
-                    .as_mut()
-                    .ok_or(ErrorKind::GbqSinkFailed("No rows in request"))?
-                    .serialized_rows
-                    .push(serialized_event),
-            };
         }
 
         request_data.push(request);
@@ -551,6 +547,39 @@ where
 
     fn auto_ack(&self) -> bool {
         false
+    }
+}
+
+impl<
+        T: TokenProvider + 'static,
+        TChannel: tonic::codegen::Service<
+                http::Request<tonic::body::BoxBody>,
+                Response = http::Response<tonic::transport::Body>,
+                Error = TChannelError,
+            > + Send
+            + Clone
+            + 'static,
+        TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync,
+    > GbqSink<T, TChannel>
+where
+    TChannel::Future: Send,
+{
+    fn rows_from_request(request: &mut AppendRowsRequest) -> Result<&mut Vec<Vec<u8>>> {
+        let rows = match request
+            .rows
+            .as_mut()
+            .ok_or(ErrorKind::GbqSinkFailed("No rows in request"))?
+        {
+            Rows::ProtoRows(ref mut x) => {
+                &mut x
+                    .rows
+                    .as_mut()
+                    .ok_or(ErrorKind::GbqSinkFailed("No rows in request"))?
+                    .serialized_rows
+            }
+        };
+
+        Ok(rows)
     }
 }
 
