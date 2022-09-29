@@ -16,9 +16,8 @@ use crate::{
     cli::{AppsCommands, Cluster, ClusterCommand},
     errors::Result,
 };
-use async_std::io::ReadExt;
+use async_std::{io::ReadExt, stream::StreamExt, task};
 
-use async_std::stream::StreamExt;
 use signal_hook::consts::signal::{SIGINT, SIGQUIT, SIGTERM};
 use signal_hook::low_level::signal_name;
 use signal_hook_async_std::Signals;
@@ -159,7 +158,6 @@ impl Cluster {
                             info!("Trying to join existing cluster via {endpoint}...");
                             if running_node.join_cluster(endpoint).await.is_ok() {
                                 info!("Successfully joined cluster via {endpoint}.");
-                                joined = true;
                                 break 'outer;
                             }
                         }
