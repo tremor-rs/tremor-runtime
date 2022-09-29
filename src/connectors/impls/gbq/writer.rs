@@ -26,8 +26,15 @@ pub(crate) struct Config {
     pub table_id: String,
     pub connect_timeout: u64,
     pub request_timeout: u64,
+    #[serde(default = "default_request_size_limit")]
+    pub request_size_limit: usize,
 }
 impl ConfigImpl for Config {}
+
+fn default_request_size_limit() -> usize {
+    // 10MB
+    10 * 1024 * 1024
+}
 
 #[derive(Debug, Default)]
 pub(crate) struct Builder {}
@@ -88,6 +95,7 @@ mod tests {
                 table_id: "test".into(),
                 connect_timeout: 1,
                 request_timeout: 1,
+                request_size_limit: 10 * 1024 * 1024,
             },
         };
 
