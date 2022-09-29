@@ -388,7 +388,7 @@ where
         request_data.push(serialized_rows);
 
         if request_data.len() > 1 {
-            warn!("The batch is too large to be sent in a single request, splitting it into {} requests. Consider lowering the batch size.", request_data.len());
+            warn!("{ctx} The batch is too large to be sent in a single request, splitting it into {} requests. Consider lowering the batch size.", request_data.len());
         }
 
         for serialized_rows in request_data {
