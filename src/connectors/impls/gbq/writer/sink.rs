@@ -20,6 +20,7 @@ use crate::connectors::{
 };
 use async_std::prelude::{FutureExt, StreamExt};
 use futures::stream;
+use googapis::google::cloud::bigquery::storage::v1::append_rows_request::Rows;
 use googapis::google::cloud::bigquery::storage::v1::{
     append_rows_request::{self, ProtoData},
     append_rows_response::{AppendResult, Response},
@@ -29,6 +30,7 @@ use googapis::google::cloud::bigquery::storage::v1::{
     TableFieldSchema, WriteStream,
 };
 use prost::encoding::WireType;
+use prost::Message;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
 use std::{collections::HashMap, time::Duration};
 use tonic::{
@@ -368,41 +370,60 @@ where
         ))?;
 
         let mut request_data = Vec::with_capacity(1);
-        let mut serialized_rows = Vec::with_capacity(event.len());
-        let mut size = 0;
+
+        let mut request = AppendRowsRequest {
+            write_stream: write_stream.name.clone(),
+            offset: None,
+            rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
+                writer_schema: Some(ProtoSchema {
+                    proto_descriptor: Some(mapping.descriptor().clone()),
+                }),
+                rows: Some(ProtoRows {
+                    serialized_rows: Vec::with_capacity(event.len()),
+                }),
+            })),
+            trace_id: String::new(),
+        };
 
         for data in event.value_iter() {
             let serialized_event = mapping.map(data)?;
 
-            // 1024B is the estimated overhead of the request
-            if size + serialized_event.len() > self.config.request_size_limit - 1024 {
-                let row_count = serialized_rows.len();
-                request_data.push(serialized_rows);
-                serialized_rows = Vec::with_capacity(event.len() - row_count);
-                size = 0;
+            if request.encoded_len() > self.config.request_size_limit {
+                let row_count = 0; //request_rows.len();
+                request_data.push(request);
+
+                request = AppendRowsRequest {
+                    write_stream: write_stream.name.clone(),
+                    offset: None,
+                    rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
+                        writer_schema: Some(ProtoSchema {
+                            proto_descriptor: Some(mapping.descriptor().clone()),
+                        }),
+                        rows: Some(ProtoRows {
+                            serialized_rows: Vec::with_capacity(event.len() - row_count),
+                        }),
+                    })),
+                    trace_id: String::new(),
+                };
             }
 
-            size += serialized_event.len();
+            match request.rows.as_mut().ok_or(ErrorKind::GbqSinkFailed("No rows in request"))? {
+                Rows::ProtoRows(ref mut x) => x
+                    .rows
+                    .as_mut()
+                    .ok_or(ErrorKind::GbqSinkFailed("No rows in request"))?
+                    .serialized_rows
+                    .push(serialized_event),
+            };
         }
 
-        request_data.push(serialized_rows);
+        request_data.push(request);
 
         if request_data.len() > 1 {
             warn!("{ctx} The batch is too large to be sent in a single request, splitting it into {} requests. Consider lowering the batch size.", request_data.len());
         }
 
-        for serialized_rows in request_data {
-            let request = AppendRowsRequest {
-                write_stream: write_stream.name.clone(),
-                offset: None,
-                trace_id: "".to_string(),
-                rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
-                    writer_schema: Some(ProtoSchema {
-                        proto_descriptor: Some(mapping.descriptor().clone()),
-                    }),
-                    rows: Some(ProtoRows { serialized_rows }),
-                })),
-            };
+        for request in request_data {
             let req_timeout = Duration::from_nanos(self.config.request_timeout);
             let append_response = client
                 .append_rows(stream::iter(vec![request]))
