@@ -287,32 +287,37 @@ async fn write(mut req: Request<Arc<TremorApp>>) -> tide::Result {
         Ok(res) => Ok(Response::builder(StatusCode::Ok)
             .body(Body::from_json(&res)?)
             .build()),
-        Err(e) => match e {
-            ClientWriteError::ForwardToLeader(ForwardToLeader {
-                leader_node: Some(TremorNode { api_addr, .. }),
-                leader_id: Some(leader_id),
-            }) => {
-                debug!("Forward to leader: {api_addr}");
-                let mut client = TremorClient::new(leader_id, api_addr.clone());
-                let response = client.write(&body).await?;
-                Ok(Response::builder(StatusCode::Ok)
-                    .body(Body::from_json(&response)?)
-                    .build())
+        Err(e) => {
+            debug!("Write Error: {e}");
+            match e {
+                ClientWriteError::ForwardToLeader(ForwardToLeader {
+                    leader_node: Some(TremorNode { api_addr, .. }),
+                    leader_id: Some(leader_id),
+                }) => {
+                    debug!("Forward to leader: {api_addr}");
+                    let mut client = TremorClient::new(leader_id, api_addr.clone());
+                    let response = client.write(&body).await?;
+                    Ok(Response::builder(StatusCode::Ok)
+                        .body(Body::from_json(&response)?)
+                        .build())
+                }
+                ClientWriteError::ForwardToLeader(e) => {
+                    Ok(Response::builder(StatusCode::ServiceUnavailable)
+                        .body(Body::from_json(&e)?)
+                        .build())
+                }
+                ClientWriteError::ChangeMembershipError(e) => {
+                    Ok(Response::builder(StatusCode::ServiceUnavailable)
+                        .body(Body::from_json(&e)?)
+                        .build())
+                }
+                ClientWriteError::Fatal(e) => {
+                    Ok(Response::builder(StatusCode::InternalServerError)
+                        .body(Body::from_json(&e)?)
+                        .build())
+                }
             }
-            ClientWriteError::ForwardToLeader(e) => {
-                Ok(Response::builder(StatusCode::ServiceUnavailable)
-                    .body(Body::from_json(&e)?)
-                    .build())
-            }
-            ClientWriteError::ChangeMembershipError(e) => {
-                Ok(Response::builder(StatusCode::ServiceUnavailable)
-                    .body(Body::from_json(&e)?)
-                    .build())
-            }
-            ClientWriteError::Fatal(e) => Ok(Response::builder(StatusCode::InternalServerError)
-                .body(Body::from_json(&e)?)
-                .build()),
-        },
+        }
     }
 }
 
@@ -328,7 +333,7 @@ async fn read(mut req: Request<Arc<TremorApp>>) -> tide::Result {
 
 async fn consistent_read(mut req: Request<Arc<TremorApp>>) -> tide::Result {
     let key: String = req.body_json().await?;
-    let ret = req.state().raft.is_leader().await;
+    let ret = req.state().raft.is_leader().await; // this sends around appendentries requests to all current nodes
     match ret {
         Ok(_) => {
             let state_machine = req.state().store.state_machine.read().await;
@@ -338,31 +343,36 @@ async fn consistent_read(mut req: Request<Arc<TremorApp>>) -> tide::Result {
                 .body(Body::from_json(&value)?)
                 .build())
         }
-        Err(e) => match e {
-            CheckIsLeaderError::ForwardToLeader(ForwardToLeader {
-                leader_node: Some(TremorNode { api_addr, .. }),
-                leader_id: Some(leader_id),
-            }) => {
-                debug!("Forward to leader: {api_addr}");
-                let mut client = TremorClient::new(leader_id, api_addr.clone());
-                let value = client.consistent_read(&key).await?;
-                Ok(Response::builder(StatusCode::Ok)
-                    .body(Body::from_json(&value)?)
-                    .build())
+        Err(e) => {
+            debug!("Read Error {e}");
+            match e {
+                CheckIsLeaderError::ForwardToLeader(ForwardToLeader {
+                    leader_node: Some(TremorNode { api_addr, .. }),
+                    leader_id: Some(leader_id),
+                }) => {
+                    debug!("Forward to leader: {api_addr}");
+                    let mut client = TremorClient::new(leader_id, api_addr.clone());
+                    let value = client.consistent_read(&key).await?;
+                    Ok(Response::builder(StatusCode::Ok)
+                        .body(Body::from_json(&value)?)
+                        .build())
+                }
+                CheckIsLeaderError::ForwardToLeader(e) => {
+                    Ok(Response::builder(StatusCode::ServiceUnavailable)
+                        .body(Body::from_json(&e)?)
+                        .build())
+                }
+                CheckIsLeaderError::QuorumNotEnough(e) => {
+                    Ok(Response::builder(StatusCode::ServiceUnavailable)
+                        .body(Body::from_json(&e)?)
+                        .build())
+                }
+                CheckIsLeaderError::Fatal(e) => {
+                    Ok(Response::builder(StatusCode::InternalServerError)
+                        .body(Body::from_json(&e)?)
+                        .build())
+                }
             }
-            CheckIsLeaderError::ForwardToLeader(e) => {
-                Ok(Response::builder(StatusCode::ServiceUnavailable)
-                    .body(Body::from_json(&e)?)
-                    .build())
-            }
-            CheckIsLeaderError::QuorumNotEnough(e) => {
-                Ok(Response::builder(StatusCode::ServiceUnavailable)
-                    .body(Body::from_json(&e)?)
-                    .build())
-            }
-            CheckIsLeaderError::Fatal(e) => Ok(Response::builder(StatusCode::InternalServerError)
-                .body(Body::from_json(&e)?)
-                .build()),
-        },
+        }
     }
 }

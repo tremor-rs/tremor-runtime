@@ -174,9 +174,9 @@ impl TremorClient {
         self.api_req("api/read", Some(req)).await
     }
 
-    /// Consistent Read value by key, in an inconsistent mode.
+    /// Consistent Read value by key.
     ///
-    /// This method MUST return consitent value or CheckIsLeaderError.
+    /// This method MUST return consistent value or CheckIsLeaderError.
     pub async fn consistent_read(
         &mut self,
         req: &String,

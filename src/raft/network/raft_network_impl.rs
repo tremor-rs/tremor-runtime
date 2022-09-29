@@ -68,14 +68,9 @@ impl RaftNetworkFactory<TremorTypeConfig> for TremorNetwork {
         target: TremorNodeId,
         node: &TremorNode,
     ) -> Result<Self::Network, Self::ConnectionError> {
-        let client = tarpc::serde_transport::tcp::connect(&node.rpc_addr, Json::default)
-            .await
-            .ok()
-            .map(|transport| RaftClient::new(client::Config::default(), transport).spawn());
-
         Ok(TremorNetworkConnection {
             addr: node.rpc_addr.clone(),
-            client,
+            client: None,
             target,
         })
     }
