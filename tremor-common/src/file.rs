@@ -81,8 +81,10 @@ pub fn extension(path: &str) -> Option<&str> {
 }
 
 /// Returns true if the directory exists and is empty
+///
 /// # Errors
-///  * if the directory couldn't be opened
+///
+/// if the given path is not a directory or cannot be read or does not exist etc etc etc
 pub fn is_empty<D>(dir: &D) -> Result<bool, Error>
 where
     D: AsRef<Path> + ?Sized,
