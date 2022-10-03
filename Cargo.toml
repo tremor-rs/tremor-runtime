@@ -98,7 +98,7 @@ simd-json = { version = "0.6", features = ["known-key"] }
 simd-json-derive = "0.4"
 snap = "1"
 
-syslog_loose = "0.17"
+syslog_loose = "0.18"
 tremor-common = { path = "tremor-common" }
 tremor-influx = { path = "tremor-influx" }
 tremor-pipeline = { path = "tremor-pipeline" }
