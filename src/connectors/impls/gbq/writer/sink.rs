@@ -32,6 +32,7 @@ use googapis::google::cloud::bigquery::storage::v1::{
 use prost::encoding::WireType;
 use prost::Message;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
+use std::collections::hash_map::Entry;
 use std::{collections::HashMap, time::Duration};
 use tonic::{
     codegen::InterceptedService,
@@ -57,7 +58,6 @@ impl ChannelFactory<Channel> for TonicChannelFactory {
     }
 }
 
-#[derive(Clone)]
 struct ConnectedWriteStream {
     name: String,
     mapping: JsonToProtobufMapping,
@@ -76,7 +76,6 @@ pub(crate) struct GbqSink<
     channel_factory: Box<dyn ChannelFactory<TChannel> + Send + Sync>,
 }
 
-#[derive(Clone)]
 struct Field {
     table_type: TableType,
     tag: u32,
@@ -85,7 +84,6 @@ struct Field {
     subfields: HashMap<String, Field>,
 }
 
-#[derive(Clone)]
 struct JsonToProtobufMapping {
     fields: HashMap<String, Field>,
     descriptor: DescriptorProto,
@@ -359,6 +357,8 @@ where
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
+        let request_size_limit = self.config.request_size_limit;
+
         let mut request_data: Vec<AppendRowsRequest> = Vec::new();
 
         let mut requests: HashMap<String, AppendRowsRequest> = HashMap::new();
@@ -395,7 +395,7 @@ where
 
             Self::rows_from_request(&mut request)?.push(serialized_event);
 
-            if request.encoded_len() > self.config.request_size_limit {
+            if request.encoded_len() > request_size_limit {
                 let rows = Self::rows_from_request(&mut request)?;
                 let row_count = rows.len();
                 let last_event = rows.pop().ok_or(ErrorKind::GbqSinkFailed(
@@ -421,7 +421,7 @@ where
                 };
             }
 
-            requests.insert(write_stream.name, request);
+            requests.insert(write_stream.name.clone(), request);
         }
 
         for (_, request) in requests {
@@ -554,53 +554,51 @@ where
         &mut self,
         table_id: &str,
         ctx: &SinkContext,
-    ) -> Result<ConnectedWriteStream> {
+    ) -> Result<&ConnectedWriteStream> {
         let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
             "BigQuery",
             "The client is not connected",
         ))?;
 
-        if let Some(write_stream) = self.write_streams.get(table_id) {
-            return Ok(write_stream.clone());
+        match self.write_streams.entry(table_id.to_string()) {
+            Entry::Occupied(entry) => {
+                // NOTE: `into_mut` is needed here, even though we just need a non-mutable reference
+                //  This is because `get` returns reference which's lifetime is bound to the entry,
+                //  while the reference returned by `into_mut` is bound to the map
+                Ok(entry.into_mut())
+            }
+            Entry::Vacant(entry) => {
+                let stream = client
+                    .create_write_stream(CreateWriteStreamRequest {
+                        parent: self.config.table_id.clone(),
+                        write_stream: Some(WriteStream {
+                            // The stream name here will be ignored and a generated value will be set in the response
+                            name: "".to_string(),
+                            r#type: i32::from(write_stream::Type::Committed),
+                            create_time: None,
+                            commit_time: None,
+                            table_schema: None,
+                        }),
+                    })
+                    .await?
+                    .into_inner();
+
+                let mapping = JsonToProtobufMapping::new(
+                    &stream
+                        .table_schema
+                        .as_ref()
+                        .ok_or(ErrorKind::GbqSinkFailed("Table schema was not provided"))?
+                        .clone()
+                        .fields,
+                    ctx,
+                );
+
+                Ok(entry.insert(ConnectedWriteStream {
+                    name: stream.name,
+                    mapping,
+                }))
+            }
         }
-
-        let stream = client
-            .create_write_stream(CreateWriteStreamRequest {
-                parent: self.config.table_id.clone(),
-                write_stream: Some(WriteStream {
-                    // The stream name here will be ignored and a generated value will be set in the response
-                    name: "".to_string(),
-                    r#type: i32::from(write_stream::Type::Committed),
-                    create_time: None,
-                    commit_time: None,
-                    table_schema: None,
-                }),
-            })
-            .await?
-            .into_inner();
-
-        let mapping = JsonToProtobufMapping::new(
-            &stream
-                .table_schema
-                .as_ref()
-                .ok_or(ErrorKind::GbqSinkFailed("Table schema was not provided"))?
-                .clone()
-                .fields,
-            ctx,
-        );
-
-        self.write_streams.insert(
-            table_id.to_string(),
-            ConnectedWriteStream {
-                name: stream.name,
-                mapping,
-            },
-        );
-        Ok(self
-            .write_streams
-            .get(table_id)
-            .ok_or(ErrorKind::GbqSinkFailed("Unable to receive write stream"))?
-            .clone())
     }
 }
 
