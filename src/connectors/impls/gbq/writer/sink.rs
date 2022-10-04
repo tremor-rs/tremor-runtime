@@ -57,6 +57,12 @@ impl ChannelFactory<Channel> for TonicChannelFactory {
     }
 }
 
+#[derive(Clone)]
+struct ConnectedWriteStream {
+    name: String,
+    mapping: JsonToProtobufMapping,
+}
+
 pub(crate) struct GbqSink<
     T: TokenProvider,
     TChannel: tonic::codegen::Service<
@@ -65,12 +71,12 @@ pub(crate) struct GbqSink<
         > + Clone,
 > {
     client: Option<BigQueryWriteClient<InterceptedService<TChannel, AuthInterceptor<T>>>>,
-    write_stream: Option<WriteStream>,
-    mapping: Option<JsonToProtobufMapping>,
+    write_streams: HashMap<String, ConnectedWriteStream>,
     config: Config,
     channel_factory: Box<dyn ChannelFactory<TChannel> + Send + Sync>,
 }
 
+#[derive(Clone)]
 struct Field {
     table_type: TableType,
     tag: u32,
@@ -79,6 +85,7 @@ struct Field {
     subfields: HashMap<String, Field>,
 }
 
+#[derive(Clone)]
 struct JsonToProtobufMapping {
     fields: HashMap<String, Field>,
     descriptor: DescriptorProto,
@@ -321,8 +328,7 @@ impl<
     ) -> Self {
         Self {
             client: None,
-            write_stream: None,
-            mapping: None,
+            write_streams: HashMap::new(),
             config,
             channel_factory,
         }
@@ -353,40 +359,39 @@ where
         _serializer: &mut EventSerializer,
         _start: u64,
     ) -> Result<SinkReply> {
-        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
-            "BigQuery",
-            "The client is not connected",
-        ))?;
-        let write_stream = self
-            .write_stream
-            .as_ref()
-            .ok_or(ErrorKind::ClientNotAvailable(
-                "BigQuery",
-                "The write stream is not available",
-            ))?;
-        let mapping = self.mapping.as_mut().ok_or(ErrorKind::ClientNotAvailable(
-            "BigQuery",
-            "The mapping is not available",
-        ))?;
+        let mut request_data: Vec<AppendRowsRequest> = Vec::new();
 
-        let mut request_data = Vec::with_capacity(1);
+        let mut requests: HashMap<String, AppendRowsRequest> = HashMap::new();
 
-        let mut request = AppendRowsRequest {
-            write_stream: write_stream.name.clone(),
-            offset: None,
-            rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
-                writer_schema: Some(ProtoSchema {
-                    proto_descriptor: Some(mapping.descriptor().clone()),
-                }),
-                rows: Some(ProtoRows {
-                    serialized_rows: Vec::with_capacity(event.len()),
-                }),
-            })),
-            trace_id: String::new(),
-        };
+        for (data, meta) in event.value_meta_iter() {
+            let write_stream = self
+                .get_or_create_write_stream(
+                    &ctx.extract_meta(meta)
+                        .get("table_id")
+                        .as_str()
+                        .map_or_else(|| self.config.table_id.clone(), ToString::to_string),
+                    ctx,
+                )
+                .await?;
 
-        for data in event.value_iter() {
-            let serialized_event = mapping.map(data)?;
+            let mut request =
+                requests
+                    .remove(&write_stream.name)
+                    .unwrap_or_else(|| AppendRowsRequest {
+                        write_stream: write_stream.name.clone(),
+                        offset: None,
+                        rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
+                            writer_schema: Some(ProtoSchema {
+                                proto_descriptor: Some(write_stream.mapping.descriptor().clone()),
+                            }),
+                            rows: Some(ProtoRows {
+                                serialized_rows: Vec::with_capacity(event.len()),
+                            }),
+                        })),
+                        trace_id: String::new(),
+                    });
+
+            let serialized_event = write_stream.mapping.map(data)?;
 
             Self::rows_from_request(&mut request)?.push(serialized_event);
 
@@ -406,7 +411,7 @@ where
                     offset: None,
                     rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
                         writer_schema: Some(ProtoSchema {
-                            proto_descriptor: Some(mapping.descriptor().clone()),
+                            proto_descriptor: Some(write_stream.mapping.descriptor().clone()),
                         }),
                         rows: Some(ProtoRows {
                             serialized_rows: new_rows,
@@ -415,13 +420,22 @@ where
                     trace_id: String::new(),
                 };
             }
+
+            requests.insert(write_stream.name, request);
         }
 
-        request_data.push(request);
+        for (_, request) in requests {
+            request_data.push(request);
+        }
 
         if request_data.len() > 1 {
             warn!("{ctx} The batch is too large to be sent in a single request, splitting it into {} requests. Consider lowering the batch size.", request_data.len());
         }
+
+        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
+            "BigQuery",
+            "The client is not connected",
+        ))?;
 
         for request in request_data {
             let req_timeout = Duration::from_nanos(self.config.request_timeout);
@@ -506,14 +520,51 @@ where
             .make_channel(Duration::from_nanos(self.config.connect_timeout))
             .await?;
 
-        let mut client = BigQueryWriteClient::with_interceptor(
+        let client = BigQueryWriteClient::with_interceptor(
             channel,
             AuthInterceptor {
                 token_provider: T::default(),
             },
         );
+        self.client = Some(client);
 
-        let write_stream = client
+        Ok(true)
+    }
+
+    fn auto_ack(&self) -> bool {
+        false
+    }
+}
+
+impl<
+        T: TokenProvider + 'static,
+        TChannel: tonic::codegen::Service<
+                http::Request<tonic::body::BoxBody>,
+                Response = http::Response<tonic::transport::Body>,
+                Error = TChannelError,
+            > + Send
+            + Clone
+            + 'static,
+        TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync,
+    > GbqSink<T, TChannel>
+where
+    TChannel::Future: Send,
+{
+    async fn get_or_create_write_stream(
+        &mut self,
+        table_id: &str,
+        ctx: &SinkContext,
+    ) -> Result<ConnectedWriteStream> {
+        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
+            "BigQuery",
+            "The client is not connected",
+        ))?;
+
+        if let Some(write_stream) = self.write_streams.get(table_id) {
+            return Ok(write_stream.clone());
+        }
+
+        let stream = client
             .create_write_stream(CreateWriteStreamRequest {
                 parent: self.config.table_id.clone(),
                 write_stream: Some(WriteStream {
@@ -529,7 +580,7 @@ where
             .into_inner();
 
         let mapping = JsonToProtobufMapping::new(
-            &write_stream
+            &stream
                 .table_schema
                 .as_ref()
                 .ok_or(ErrorKind::GbqSinkFailed("Table schema was not provided"))?
@@ -538,15 +589,18 @@ where
             ctx,
         );
 
-        self.mapping = Some(mapping);
-        self.write_stream = Some(write_stream);
-        self.client = Some(client);
-
-        Ok(true)
-    }
-
-    fn auto_ack(&self) -> bool {
-        false
+        self.write_streams.insert(
+            table_id.to_string(),
+            ConnectedWriteStream {
+                name: stream.name,
+                mapping,
+            },
+        );
+        Ok(self
+            .write_streams
+            .get(table_id)
+            .ok_or(ErrorKind::GbqSinkFailed("Unable to receive write stream"))?
+            .clone())
     }
 }
 
