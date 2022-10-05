@@ -346,6 +346,10 @@ error_chain! {
             description("GBQ Sink failed")
                 display("GBQ Sink failed: {}", msg)
         }
+        GbqSchemaNotProvided(table: String) {
+            description("GBQ Schema not provided")
+                display("GBQ Schema not provided for table {}", table)
+        }
         ClientNotAvailable(name: &'static str, msg: &'static str) {
             description("Client not available")
                 display("{} client not available: {}", name, msg)
