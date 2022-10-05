@@ -348,7 +348,6 @@ impl<
 where
     TChannel::Future: Send,
 {
-    #[allow(clippy::too_many_lines)]
     async fn on_event(
         &mut self,
         _input: &str,
@@ -359,74 +358,9 @@ where
     ) -> Result<SinkReply> {
         let request_size_limit = self.config.request_size_limit;
 
-        let mut request_data: Vec<AppendRowsRequest> = Vec::new();
-
-        let mut requests: HashMap<String, AppendRowsRequest> = HashMap::new();
-
-        for (data, meta) in event.value_meta_iter() {
-            let write_stream = self
-                .get_or_create_write_stream(
-                    &ctx.extract_meta(meta)
-                        .get("table_id")
-                        .as_str()
-                        .map_or_else(|| self.config.table_id.clone(), ToString::to_string),
-                    ctx,
-                )
-                .await?;
-
-            let mut request =
-                requests
-                    .remove(&write_stream.name)
-                    .unwrap_or_else(|| AppendRowsRequest {
-                        write_stream: write_stream.name.clone(),
-                        offset: None,
-                        rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
-                            writer_schema: Some(ProtoSchema {
-                                proto_descriptor: Some(write_stream.mapping.descriptor().clone()),
-                            }),
-                            rows: Some(ProtoRows {
-                                serialized_rows: Vec::with_capacity(event.len()),
-                            }),
-                        })),
-                        trace_id: String::new(),
-                    });
-
-            let serialized_event = write_stream.mapping.map(data)?;
-
-            Self::rows_from_request(&mut request)?.push(serialized_event);
-
-            if request.encoded_len() > request_size_limit {
-                let rows = Self::rows_from_request(&mut request)?;
-                let row_count = rows.len();
-                let last_event = rows.pop().ok_or(ErrorKind::GbqSinkFailed(
-                    "Failed to pop last event from request",
-                ))?;
-                request_data.push(request);
-
-                let mut new_rows = Vec::with_capacity(event.len() - row_count);
-                new_rows.push(last_event);
-
-                request = AppendRowsRequest {
-                    write_stream: write_stream.name.clone(),
-                    offset: None,
-                    rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
-                        writer_schema: Some(ProtoSchema {
-                            proto_descriptor: Some(write_stream.mapping.descriptor().clone()),
-                        }),
-                        rows: Some(ProtoRows {
-                            serialized_rows: new_rows,
-                        }),
-                    })),
-                    trace_id: String::new(),
-                };
-            }
-
-            requests.insert(write_stream.name.clone(), request);
-        }
-
-        for (_, request) in requests {
-            request_data.push(request);
-        }
+        let request_data = self
+            .event_to_requests(event, ctx, request_size_limit)
+            .await?;
 
         if request_data.len() > 1 {
             warn!("{ctx} The batch is too large to be sent in a single request, splitting it into {} requests. Consider lowering the batch size.", request_data.len());
@@ -550,6 +484,106 @@ impl<
 where
     TChannel::Future: Send,
 {
+    async fn event_to_requests(
+        &mut self,
+        event: Event,
+        ctx: &SinkContext,
+        request_size_limit: usize,
+    ) -> Result<Vec<AppendRowsRequest>> {
+        let mut request_data: Vec<AppendRowsRequest> = Vec::new();
+        let mut requests: HashMap<String, AppendRowsRequest> = HashMap::new();
+
+        for (data, meta) in event.value_meta_iter() {
+            let write_stream = self
+                .get_or_create_write_stream(
+                    &ctx.extract_meta(meta)
+                        .get("table_id")
+                        .as_str()
+                        .map_or_else(|| self.config.table_id.clone(), ToString::to_string),
+                    ctx,
+                )
+                .await?;
+
+            match requests.entry(write_stream.name.clone()) {
+                Entry::Occupied(entry) => {
+                    let mut request = entry.remove();
+
+                    let serialized_event = write_stream.mapping.map(data)?;
+                    Self::rows_from_request(&mut request)?.push(serialized_event);
+
+                    if request.encoded_len() > request_size_limit {
+                        let rows = Self::rows_from_request(&mut request)?;
+                        let row_count = rows.len();
+                        let last_event = rows.pop().ok_or(ErrorKind::GbqSinkFailed(
+                            "Failed to pop last event from request",
+                        ))?;
+                        request_data.push(request);
+
+                        let mut new_rows = Vec::with_capacity(event.len() - row_count);
+                        new_rows.push(last_event);
+
+                        requests.insert(
+                            write_stream.name.clone(),
+                            AppendRowsRequest {
+                                write_stream: write_stream.name.clone(),
+                                offset: None,
+                                rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
+                                    writer_schema: Some(ProtoSchema {
+                                        proto_descriptor: Some(
+                                            write_stream.mapping.descriptor().clone(),
+                                        ),
+                                    }),
+                                    rows: Some(ProtoRows {
+                                        serialized_rows: new_rows,
+                                    }),
+                                })),
+                                trace_id: String::new(),
+                            },
+                        );
+                    }
+                }
+                Entry::Vacant(entry) => {
+                    let serialized_event = write_stream.mapping.map(data)?;
+                    let mut serialized_rows = Vec::with_capacity(event.len());
+                    serialized_rows.push(serialized_event);
+
+                    entry.insert(AppendRowsRequest {
+                        write_stream: write_stream.name.clone(),
+                        offset: None,
+                        rows: Some(append_rows_request::Rows::ProtoRows(ProtoData {
+                            writer_schema: Some(ProtoSchema {
+                                proto_descriptor: Some(write_stream.mapping.descriptor().clone()),
+                            }),
+                            rows: Some(ProtoRows { serialized_rows }),
+                        })),
+                        trace_id: String::new(),
+                    });
+                }
+            }
+        }
+
+        for (_, request) in requests {
+            request_data.push(request);
+        }
+
+        Ok(request_data)
+    }
+}
+
+impl<
+        T: TokenProvider + 'static,
+        TChannel: tonic::codegen::Service<
+                http::Request<tonic::body::BoxBody>,
+                Response = http::Response<tonic::transport::Body>,
+                Error = TChannelError,
+            > + Send
+            + Clone
+            + 'static,
+        TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync,
+    > GbqSink<T, TChannel>
+where
+    TChannel::Future: Send,
+{
     async fn get_or_create_write_stream(
         &mut self,
         table_id: &str,
@@ -570,7 +604,7 @@ where
             Entry::Vacant(entry) => {
                 let stream = client
                     .create_write_stream(CreateWriteStreamRequest {
-                        parent: self.config.table_id.clone(),
+                        parent: table_id.to_string(),
                         write_stream: Some(WriteStream {
                             // The stream name here will be ignored and a generated value will be set in the response
                             name: "".to_string(),
@@ -587,7 +621,7 @@ where
                     &stream
                         .table_schema
                         .as_ref()
-                        .ok_or(ErrorKind::GbqSinkFailed("Table schema was not provided"))?
+                        .ok_or_else(|| ErrorKind::GbqSchemaNotProvided(table_id.to_string()))?
                         .clone()
                         .fields,
                     ctx,
