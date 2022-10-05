@@ -50,7 +50,7 @@ impl Connector for Gbq {
         sink_context: SinkContext,
         builder: SinkManagerBuilder,
     ) -> Result<Option<SinkAddr>> {
-        let sink = GbqSink::<GouthTokenProvider, _>::new(
+        let sink = GbqSink::<GouthTokenProvider, _, _>::new(
             self.config.clone(),
             Box::new(TonicChannelFactory),
         );
