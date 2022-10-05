@@ -33,6 +33,7 @@ use prost::encoding::WireType;
 use prost::Message;
 use prost_types::{field_descriptor_proto, DescriptorProto, FieldDescriptorProto};
 use std::collections::hash_map::Entry;
+use std::marker::PhantomData;
 use std::{collections::HashMap, time::Duration};
 use tonic::{
     codegen::InterceptedService,
@@ -65,15 +66,14 @@ struct ConnectedWriteStream {
 
 pub(crate) struct GbqSink<
     T: TokenProvider,
-    TChannel: tonic::codegen::Service<
-            http::Request<tonic::body::BoxBody>,
-            Response = http::Response<tonic::transport::Body>,
-        > + Clone,
+    TChannel: GbqChannel<TChannelError>,
+    TChannelError: GbqChannelError,
 > {
     client: Option<BigQueryWriteClient<InterceptedService<TChannel, AuthInterceptor<T>>>>,
     write_streams: HashMap<String, ConnectedWriteStream>,
     config: Config,
     channel_factory: Box<dyn ChannelFactory<TChannel> + Send + Sync>,
+    _error_phantom: PhantomData<TChannelError>,
 }
 
 struct Field {
@@ -312,13 +312,8 @@ impl JsonToProtobufMapping {
         &self.descriptor
     }
 }
-impl<
-        T: TokenProvider,
-        TChannel: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-                Response = http::Response<tonic::transport::Body>,
-            > + Clone,
-    > GbqSink<T, TChannel>
+impl<T: TokenProvider, TChannel: GbqChannel<TChannelError>, TChannelError: GbqChannelError>
+    GbqSink<T, TChannel, TChannelError>
 {
     pub fn new(
         config: Config,
@@ -329,6 +324,7 @@ impl<
             write_streams: HashMap::new(),
             config,
             channel_factory,
+            _error_phantom: PhantomData,
         }
     }
 }
@@ -336,15 +332,9 @@ impl<
 #[async_trait::async_trait]
 impl<
         T: TokenProvider + 'static,
-        TChannel: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-                Response = http::Response<tonic::transport::Body>,
-                Error = TChannelError,
-            > + Send
-            + Clone
-            + 'static,
-        TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync,
-    > Sink for GbqSink<T, TChannel>
+        TChannel: GbqChannel<TChannelError> + 'static,
+        TChannelError: GbqChannelError,
+    > Sink for GbqSink<T, TChannel, TChannelError>
 where
     TChannel::Future: Send,
 {
@@ -470,19 +460,45 @@ where
     }
 }
 
-impl<
-        T: TokenProvider + 'static,
-        TChannel: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-                Response = http::Response<tonic::transport::Body>,
-                Error = TChannelError,
-            > + Send
-            + Clone
-            + 'static,
-        TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync,
-    > GbqSink<T, TChannel>
+pub trait GbqChannel<TChannelError>:
+    tonic::codegen::Service<
+        http::Request<tonic::body::BoxBody>,
+        Response = http::Response<tonic::transport::Body>,
+        Error = TChannelError,
+    > + Send
+    + Clone
 where
+    TChannelError: GbqChannelError,
+{
+}
+
+pub trait GbqChannelError:
+    Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync
+{
+}
+
+impl<T> GbqChannelError for T where
+    T: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync
+{
+}
+impl<T, TChannelError> GbqChannel<TChannelError> for T
+where
+    T: tonic::codegen::Service<
+            http::Request<tonic::body::BoxBody>,
+            Response = http::Response<tonic::transport::Body>,
+            Error = TChannelError,
+        > + Send
+        + Clone,
+    TChannelError: GbqChannelError,
+{
+}
+
+impl<T, TChannelError, TChannel> GbqSink<T, TChannel, TChannelError>
+where
+    T: TokenProvider + 'static,
+    TChannel: GbqChannel<TChannelError> + 'static,
     TChannel::Future: Send,
+    TChannelError: GbqChannelError,
 {
     async fn event_to_requests(
         &mut self,
@@ -572,15 +588,9 @@ where
 
 impl<
         T: TokenProvider + 'static,
-        TChannel: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-                Response = http::Response<tonic::transport::Body>,
-                Error = TChannelError,
-            > + Send
-            + Clone
-            + 'static,
-        TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync,
-    > GbqSink<T, TChannel>
+        TChannel: GbqChannel<TChannelError> + 'static,
+        TChannelError: GbqChannelError,
+    > GbqSink<T, TChannel, TChannelError>
 where
     TChannel::Future: Send,
 {
@@ -638,15 +648,9 @@ where
 
 impl<
         T: TokenProvider + 'static,
-        TChannel: tonic::codegen::Service<
-                http::Request<tonic::body::BoxBody>,
-                Response = http::Response<tonic::transport::Body>,
-                Error = TChannelError,
-            > + Send
-            + Clone
-            + 'static,
-        TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync,
-    > GbqSink<T, TChannel>
+        TChannel: GbqChannel<TChannelError> + 'static,
+        TChannelError: GbqChannelError,
+    > GbqSink<T, TChannel, TChannelError>
 where
     TChannel::Future: Send,
 {
@@ -1394,7 +1398,8 @@ mod test {
         }))
         .unwrap();
 
-        let mut sink = GbqSink::<TestTokenProvider, _>::new(config, Box::new(TonicChannelFactory));
+        let mut sink =
+            GbqSink::<TestTokenProvider, _, _>::new(config, Box::new(TonicChannelFactory));
 
         let result = sink
             .on_event(
@@ -1433,7 +1438,7 @@ mod test {
         }))
         .unwrap();
 
-        let mut sink = GbqSink::<TestTokenProvider, _>::new(
+        let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
             config,
             Box::new(HardcodedChannelFactory {
                 channel: Channel::from_static("http://example.com").connect_lazy(),
@@ -1503,7 +1508,7 @@ mod test {
         .encode(&mut buffer_append_rows_response)
         .unwrap();
 
-        let mut sink = GbqSink::<TestTokenProvider, _>::new(
+        let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
             Config {
                 table_id: "".to_string(),
                 connect_timeout: 1_000_000_000,
@@ -1601,7 +1606,7 @@ mod test {
             buffer_append_rows_response.clone(),
             buffer_append_rows_response,
         ])));
-        let mut sink = GbqSink::<TestTokenProvider, _>::new(
+        let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
             Config {
                 table_id: "".to_string(),
                 connect_timeout: 1_000_000_000,
@@ -1680,7 +1685,7 @@ mod test {
 
     #[async_std::test]
     pub async fn does_not_auto_ack() {
-        let sink = GbqSink::<TestTokenProvider, _>::new(
+        let sink = GbqSink::<TestTokenProvider, _, _>::new(
             Config {
                 table_id: "".to_string(),
                 connect_timeout: 1_000_000_000,
