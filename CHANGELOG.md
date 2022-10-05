@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.13.0-rc.5]
 ### Fixes
 - The Google BigQuery connector will now split requests that are longer than the allowed limit (10MB)
 

@@ -4,7 +4,7 @@ description = "Tremor CLI Tool"
 edition = "2021"
 license = "Apache-2.0"
 name = "tremor-cli"
-version = "0.13.0-rc.4"
+version = "0.13.0-rc.5"
 
 [package.metadata.docs.rs]
 default-target = "x86_64-unknown-linux-gnu"
@@ -47,12 +47,12 @@ surf = { version = "=2.3.2", default-features = false, features = [
   "h1-client-rustls",
   "middleware-logger",
 ] }
-tremor-api = { version = "0.13.0-rc.4", path = "../tremor-api" }
-tremor-common = { version = "0.13.0-rc.4", path = "../tremor-common" }
-tremor-pipeline = { version = "0.13.0-rc.4", path = "../tremor-pipeline" }
-tremor-runtime = { version = "0.13.0-rc.4", path = "../" }
-tremor-script = { version = "0.13.0-rc.4", path = "../tremor-script" }
-tremor-value = { version = "0.13.0-rc.4", path = "../tremor-value" }
+tremor-api = { version = "0.13.0-rc.5", path = "../tremor-api" }
+tremor-common = { version = "0.13.0-rc.5", path = "../tremor-common" }
+tremor-pipeline = { version = "0.13.0-rc.5", path = "../tremor-pipeline" }
+tremor-runtime = { version = "0.13.0-rc.5", path = "../" }
+tremor-script = { version = "0.13.0-rc.5", path = "../tremor-script" }
+tremor-value = { version = "0.13.0-rc.5", path = "../tremor-value" }
 url = "2"
 # mimalloc-rs = { version = "0.1", default-features = true, optional = true }
 # allocator_api = "0.6.0"
