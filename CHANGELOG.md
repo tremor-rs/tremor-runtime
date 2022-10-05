@@ -4,6 +4,9 @@
 ### Fixes
 - The Google BigQuery connector will now split requests that are longer than the allowed limit (10MB)
 
+### New Features
+- The GoogleBigQuery connector now accepts `table_id` metadata, to allow setting target table per event.
+
 ## [0.13.0-rc.4]
 
 ### Fixes
