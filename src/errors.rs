@@ -337,6 +337,10 @@ error_chain! {
             description("No socket available")
                 display("No socket available. Probably not connected yet.")
         }
+        FlowFailed(flow: String) {
+            description("Flow entered failed state")
+            display("Flow {flow} entered failed state")
+        }
         DeployFlowError(flow: String, err: String) {
             description("Error deploying Flow")
                 display("Error deploying Flow {}: {}", flow, err)

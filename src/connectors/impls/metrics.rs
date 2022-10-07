@@ -39,6 +39,7 @@ pub(crate) struct MetricsConnector {
 impl MetricsConnector {
     pub(crate) fn new() -> Self {
         Self {
+            // FIXME: scope the metrics channel to the app a flow is deployed in
             tx: METRICS_CHANNEL.tx(),
         }
     }

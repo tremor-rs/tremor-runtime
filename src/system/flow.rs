@@ -15,21 +15,19 @@
 use crate::{
     channel::{bounded, Sender},
     errors::empty_error,
-    qsize,
 };
 use crate::{
     connectors::{self, ConnectorResult, Known},
     errors::{Error, Kind as ErrorKind, Result},
-    instance::State,
+    instance::{IntendedState, State},
     log_error,
     pipeline::{self, InputTarget},
     primerge::PriorityMerge,
     system::KillSwitch,
 };
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use hashbrown::HashMap;
-use std::collections::HashSet;
-use std::time::Duration;
+use std::{collections::HashSet, ops::ControlFlow, pin::Pin, time::Duration};
 use tokio::{task, time::timeout};
 use tokio_stream::wrappers::ReceiverStream;
 use tremor_common::ids::{ConnectorIdGen, OperatorIdGen};
@@ -38,9 +36,11 @@ use tremor_script::{
     errors::{error_generic, not_defined_err},
 };
 
+use super::ShutdownMode;
+
 /// unique identifier of a flow instance within a tremor instance
 #[derive(Debug, PartialEq, PartialOrd, Eq, Hash, Clone, Serialize, Deserialize)]
-pub struct Alias(String);
+pub struct Alias(String); // FIXME: we need to add the app_id to this
 
 impl Alias {
     /// construct a new flow if from some stringy thingy
@@ -82,16 +82,13 @@ impl std::fmt::Display for Alias {
 #[derive(Debug)]
 /// Control Plane message accepted by each binding control plane handler
 pub(crate) enum Msg {
-    /// start all contained instances
-    Start,
-    /// pause all contained instances
-    Pause,
-    /// resume all contained instance from pause
-    Resume,
-    /// stop all contained instances, and get notified via the given sender when the stop process is done
-    Stop(Sender<Result<()>>),
-    /// drain all contained instances, and get notified via the given sender when the drain process is done
-    Drain(Sender<Result<()>>),
+    /// Change the state of this flow to `intended_state`
+    ChangeState {
+        // the state this flow should be changed to
+        intended_state: IntendedState,
+        // this is where we send the result
+        reply_tx: Sender<Result<()>>,
+    },
     /// Request a `StatusReport` from this instance.
     ///
     /// The sender expects a Result, which makes it easier to signal errors on the message handling path to the sender
@@ -117,7 +114,7 @@ pub struct StatusReport {
     pub alias: Alias,
     /// the current state
     pub status: State,
-    /// the crated connectors
+    /// the created connectors
     pub connectors: Vec<connectors::Alias>,
 }
 
@@ -125,11 +122,19 @@ impl Flow {
     pub(crate) fn id(&self) -> &Alias {
         &self.alias
     }
-    pub(crate) async fn stop(&self, tx: Sender<Result<()>>) -> Result<()> {
-        self.addr.send(Msg::Stop(tx)).await.map_err(Error::from)
-    }
-    pub(crate) async fn drain(&self, tx: Sender<Result<()>>) -> Result<()> {
-        self.addr.send(Msg::Drain(tx)).await.map_err(Error::from)
+
+    pub(crate) async fn change_state(
+        &self,
+        new_state: IntendedState,
+        tx: Sender<Result<()>>,
+    ) -> Result<()> {
+        self.addr
+            .send(Msg::ChangeState {
+                intended_state: new_state,
+                reply_tx: tx,
+            })
+            .await
+            .map_err(Error::from)
     }
 
     /// request a `StatusReport` from this `Flow`
@@ -165,13 +170,21 @@ impl Flow {
         rx.recv().await.ok_or_else(empty_error)?
     }
 
+    /// Start this flow and all connectors in it.
+    ///
+    /// # Errors
+    /// if the connector is not running anymore and can't be reached
+    pub async fn start(&self, tx: Sender<Result<()>>) -> Result<()> {
+        self.change_state(IntendedState::Running, tx).await
+    }
+
     /// Pause this flow and all connectors in it.
     ///
     /// # Errors
     /// if the connector is not running anymore and can't be reached
     /// or if the connector is in a state where it can't be paused (e.g. failed)
-    pub async fn pause(&self) -> Result<()> {
-        self.addr.send(Msg::Pause).await.map_err(Error::from)
+    pub async fn pause(&self, tx: Sender<Result<()>>) -> Result<()> {
+        self.change_state(IntendedState::Paused, tx).await
     }
 
     /// Resume this flow and all connectors in it.
@@ -179,16 +192,27 @@ impl Flow {
     /// # Errors
     /// if the connector is not running anymore and can't be reached
     /// or if the connector is in a state where it can't be resumed (e.g. failed)
-    pub async fn resume(&self) -> Result<()> {
-        self.addr.send(Msg::Resume).await.map_err(Error::from)
+    pub async fn resume(&self, tx: Sender<Result<()>>) -> Result<()> {
+        self.change_state(IntendedState::Running, tx).await
     }
 
-    pub(crate) async fn start(
+    pub(crate) async fn stop(&self, tx: Sender<Result<()>>) -> Result<()> {
+        self.change_state(IntendedState::Stopped, tx).await
+    }
+
+    /// Deploy the given flow instance and all its pipelines and connectors
+    /// but doesn't start them yet
+    ///
+    /// # Errors
+    /// If any of the operations of spawning connectors, linking pipelines and connectors or spawning the flow instance
+    /// fails.
+    pub(crate) async fn deploy(
         flow: ast::DeployFlow<'static>,
         operator_id_gen: &mut OperatorIdGen,
         connector_id_gen: &mut ConnectorIdGen,
         known_connectors: &Known,
         kill_switch: &KillSwitch,
+        // FIXME: add AppContext
     ) -> Result<Self> {
         let mut pipelines = HashMap::new();
         let mut connectors = HashMap::new();
@@ -250,8 +274,6 @@ impl Flow {
             &flow.defn.connections,
         )
         .await?;
-
-        addr.send(Msg::Start).await?;
 
         let this = Flow {
             alias: flow_alias.clone(),
@@ -391,6 +413,504 @@ async fn link(
     }
     Ok(())
 }
+#[derive(Debug)]
+/// wrapper for all possible messages handled by the flow task
+enum MsgWrapper {
+    Msg(Msg),
+    StartResult(ConnectorResult<()>),
+    DrainResult(ConnectorResult<()>),
+    StopResult(ConnectorResult<()>),
+}
+
+struct RunningFlow {
+    id: Alias,
+    state: State,
+    expected_starts: usize,
+    expected_drains: usize,
+    expected_stops: usize,
+    pipelines: HashMap<String, pipeline::Addr>,
+    source_only_connectors: Vec<connectors::Addr>,
+    source_and_sink_connectors: Vec<connectors::Addr>,
+    sink_only_connectors: Vec<connectors::Addr>,
+    state_change_senders: HashMap<State, Vec<Sender<Result<()>>>>,
+    input_channel: Pin<Box<dyn Stream<Item = MsgWrapper> + Send + Sync>>,
+    msg_tx: Sender<Msg>,
+    drain_tx: Sender<ConnectorResult<()>>,
+    stop_tx: Sender<ConnectorResult<()>>,
+    start_tx: Sender<ConnectorResult<()>>,
+}
+
+impl RunningFlow {
+    fn new(
+        id: Alias,
+        pipelines: HashMap<String, pipeline::Addr>,
+        connectors: HashMap<String, connectors::Addr>,
+        links: &[ConnectStmt],
+    ) -> Self {
+        let (msg_tx, msg_rx) = bounded(crate::qsize());
+        let (drain_tx, drain_rx) = bounded(crate::qsize());
+        let (stop_tx, stop_rx) = bounded(crate::qsize());
+        let (start_tx, start_rx) = bounded(crate::qsize());
+        let input_channel = Box::pin(PriorityMerge::new(
+            ReceiverStream::new(msg_rx).map(MsgWrapper::Msg),
+            PriorityMerge::new(
+                ReceiverStream::new(drain_rx).map(MsgWrapper::DrainResult),
+                PriorityMerge::new(
+                    ReceiverStream::new(stop_rx).map(MsgWrapper::StopResult),
+                    ReceiverStream::new(start_rx).map(MsgWrapper::StartResult),
+                ),
+            ),
+        ));
+        // extracting connectors and pipes from the links
+        let sink_connectors: HashSet<String> = links
+            .iter()
+            .filter_map(|c| {
+                if let ConnectStmt::PipelineToConnector { to, .. } = c {
+                    Some(to.alias().to_string())
+                } else {
+                    None
+                }
+            })
+            .collect();
+        let source_connectors: HashSet<String> = links
+            .iter()
+            .filter_map(|c| {
+                if let ConnectStmt::ConnectorToPipeline { from, .. } = c {
+                    Some(from.alias().to_string())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let source_only_connectors: Vec<connectors::Addr> = source_connectors
+            .difference(&sink_connectors)
+            .filter_map(|p| connectors.get(p))
+            .cloned()
+            .collect();
+        let source_and_sink_connectors: Vec<connectors::Addr> = sink_connectors
+            .intersection(&source_connectors)
+            .filter_map(|p| connectors.get(p))
+            .cloned()
+            .collect();
+        let sink_only_connectors: Vec<connectors::Addr> = sink_connectors
+            .difference(&source_connectors)
+            .filter_map(|p| connectors.get(p))
+            .cloned()
+            .collect();
+        Self {
+            id,
+            state: State::Initializing,
+            expected_starts: 0,
+            expected_drains: 0,
+            expected_stops: 0,
+            pipelines,
+            source_only_connectors,
+            source_and_sink_connectors,
+            sink_only_connectors,
+            state_change_senders: HashMap::new(),
+            input_channel,
+            msg_tx,
+            drain_tx,
+            stop_tx,
+            start_tx,
+        }
+    }
+
+    fn addr(&self) -> Addr {
+        self.msg_tx.clone()
+    }
+
+    fn has_connectors(&self) -> bool {
+        !(self.source_only_connectors.is_empty()
+            && self.source_and_sink_connectors.is_empty()
+            && self.sink_only_connectors.is_empty())
+    }
+
+    fn connectors_start_to_end(&self) -> impl Iterator<Item = &connectors::Addr> {
+        self.source_only_connectors
+            .iter()
+            .chain(&self.source_and_sink_connectors)
+            .chain(&self.sink_only_connectors)
+    }
+
+    fn connectors_end_to_start(&self) -> impl Iterator<Item = &connectors::Addr> {
+        self.sink_only_connectors
+            .iter()
+            .chain(&self.source_and_sink_connectors)
+            .chain(&self.source_only_connectors)
+    }
+    async fn run(mut self) -> Result<()> {
+        let prefix = format!("[Flow::{}]", self.id);
+
+        while let Some(wrapped) = self.input_channel.next().await {
+            match wrapped {
+                MsgWrapper::Msg(Msg::ChangeState {
+                    intended_state,
+                    reply_tx,
+                }) => {
+                    // store sender
+                    self.state_change_senders
+                        .entry(State::from(&intended_state))
+                        .or_insert_with(|| Vec::with_capacity(1))
+                        .push(reply_tx);
+
+                    match (self.state, intended_state) {
+                        (State::Initializing, IntendedState::Running) => {
+                            if let Err(e) = self.handle_start(&prefix).await {
+                                error!("{prefix} Error starting: {e}");
+                                self.change_state(State::Failed).await;
+                            }
+                        }
+                        (State::Initializing, IntendedState::Paused) => {
+                            // we ignore this
+                            // we can only go from Initializing to Paused state by starting and then pausing right away
+                            // this might lead to unwanted traffic along the way, so we keep it as it is
+                            // Initializing is a good enough Pause for now
+                            // We didn't connect yet, though, so we do not realize if config is broken just yet
+                            info!("{prefix} Paused.");
+                        }
+                        (state, IntendedState::Stopped) => {
+                            let mode = match state {
+                                State::Initializing | State::Failed | State::Draining => {
+                                    // no need to drain here
+                                    ShutdownMode::Forceful
+                                }
+                                State::Running | State::Paused => ShutdownMode::Graceful, // always drain
+                                State::Stopped => {
+                                    info!("{prefix} Already in state {state}");
+                                    continue;
+                                }
+                            };
+                            match self.handle_stop(mode, &prefix).await {
+                                Ok(ControlFlow::Continue(())) => {}
+                                Ok(ControlFlow::Break(())) => {
+                                    break;
+                                }
+                                Err(e) => {
+                                    error!("{prefix} Error stopping: {e}");
+                                    // we don't care if we failed here, we terminate anyways
+                                    self.change_state(State::Stopped).await;
+                                    break;
+                                }
+                            }
+                        }
+                        (state @ State::Running, IntendedState::Running)
+                        | (state @ State::Paused, IntendedState::Paused)
+                        | (state @ State::Stopped, IntendedState::Stopped) => {
+                            info!("{prefix} Already in state {state}");
+                        }
+                        (State::Running, IntendedState::Paused) => {
+                            if let Err(e) = self.handle_pause(&prefix).await {
+                                error!("{prefix} Error during pausing: {e}");
+                                self.change_state(State::Failed).await;
+                            }
+                        }
+                        (State::Paused, IntendedState::Running) => {
+                            if let Err(e) = self.handle_resume(&prefix).await {
+                                error!("{prefix} Error during resuming: {e}");
+                                self.change_state(State::Failed).await;
+                            }
+                        }
+                        (State::Draining, IntendedState::Running | IntendedState::Paused)
+                        | (State::Stopped, _) => {
+                            todo!("illegal state change")
+                        }
+                        (State::Failed, intended) => {
+                            error!("{prefix} Cannot change state from failed to {intended}");
+                            // trigger erroring all listeners
+                            self.change_state(State::Failed).await
+                        }
+                    }
+                }
+                MsgWrapper::Msg(Msg::Report(sender)) => {
+                    // TODO: aggregate states of all containing instances
+                    let connectors = self
+                        .connectors_start_to_end()
+                        .map(|c| &c.alias)
+                        .cloned()
+                        .collect();
+                    let report = StatusReport {
+                        alias: self.id.clone(),
+                        status: self.state,
+                        connectors,
+                    };
+                    log_error!(
+                        sender.send(Ok(report)).await,
+                        "{prefix} Error sending status report: {e}"
+                    );
+                }
+                MsgWrapper::Msg(Msg::GetConnector(connector_alias, reply_tx)) => {
+                    // TODO: inefficient find, but on the other hand we don't need to store connectors in another way
+                    let res = self
+                        .connectors_start_to_end()
+                        .find(|c| c.alias == connector_alias)
+                        .cloned()
+                        .ok_or_else(|| {
+                            Error::from(ErrorKind::ConnectorNotFound(
+                                connector_alias.flow_alias().to_string(),
+                                connector_alias.connector_alias().to_string(),
+                            ))
+                        });
+                    log_error!(
+                        reply_tx.send(res).await,
+                        "{prefix} Error sending GetConnector response: {e}"
+                    );
+                }
+                MsgWrapper::Msg(Msg::GetConnectors(reply_tx)) => {
+                    let res = self.connectors_start_to_end().cloned().collect::<Vec<_>>();
+                    log_error!(
+                        reply_tx.send(Ok(res)).await,
+                        "{prefix} Error sending GetConnectors response: {e}"
+                    );
+                }
+                MsgWrapper::StartResult(res) => {
+                    if let Err(e) = self.handle_start_result(res, &prefix).await {
+                        error!("{prefix} Error starting: {e}");
+                        self.change_state(State::Failed).await;
+                    }
+                }
+                MsgWrapper::DrainResult(res) => {
+                    if let Err(e) = self.handle_drain_result(res, &prefix).await {
+                        error!("{prefix} Error during draining: {e}");
+                        self.change_state(State::Failed).await;
+                    }
+                }
+                MsgWrapper::StopResult(res) => match self.handle_stop_result(res, &prefix).await {
+                    Ok(ControlFlow::Continue(())) => {}
+                    Ok(ControlFlow::Break(())) => {
+                        break;
+                    }
+                    Err(e) => {
+                        error!("{prefix} Error during stopping: {e}");
+                        self.change_state(State::Stopped).await;
+                        break;
+                    }
+                },
+            }
+        }
+        info!("{prefix} Stopped.");
+        Ok(())
+    }
+
+    async fn handle_start(&mut self, prefix: impl std::fmt::Display) -> Result<()> {
+        info!("{prefix} Starting...");
+        // start all pipelines first - order doesnt matter as connectors aren't started yet
+        for pipe in self.pipelines.values() {
+            pipe.start().await?;
+        }
+
+        if self.has_connectors() {
+            // start sink connectors first then source/sink connectors then source only connectors
+            let mut started = 0_usize;
+            for conn in self.connectors_end_to_start() {
+                conn.start(self.start_tx.clone()).await?;
+                started += 1;
+            }
+            self.expected_starts = started;
+
+            debug!(
+                "{prefix} Waiting for {} connectors to start.",
+                self.expected_starts
+            );
+        } else {
+            self.change_state(State::Running).await;
+            info!("{prefix} Started.");
+        }
+        Ok(())
+    }
+
+    async fn handle_start_result(
+        &mut self,
+        conn_res: ConnectorResult<()>,
+        prefix: impl std::fmt::Display,
+    ) -> Result<()> {
+        if let Err(e) = conn_res.res {
+            error!(
+                "{prefix} Error starting Connector {conn}: {e}",
+                conn = conn_res.alias
+            );
+            if self.state != State::Failed {
+                // only report failed upon the first connector failure
+                info!("{prefix} Failed.");
+                self.change_state(State::Failed).await;
+            }
+        } else if self.state == State::Initializing {
+            // report started flow if all connectors started
+            self.expected_starts = self.expected_starts.saturating_sub(1);
+            if self.expected_starts == 0 {
+                info!("{prefix} Started.");
+                self.change_state(State::Running).await;
+            }
+        }
+        Ok(())
+    }
+
+    async fn handle_pause(&mut self, prefix: impl std::fmt::Display) -> Result<()> {
+        info!("{prefix} Pausing...");
+        for source in self.connectors_start_to_end() {
+            source.pause().await?;
+        }
+        for pipeline in self.pipelines.values() {
+            pipeline.pause().await?;
+        }
+        self.change_state(State::Paused).await;
+        info!("{prefix} Paused.");
+        Ok(())
+    }
+
+    async fn handle_resume(&mut self, prefix: impl std::fmt::Display) -> Result<()> {
+        info!("{prefix} Resuming...");
+
+        for pipeline in self.pipelines.values() {
+            pipeline.resume().await?;
+        }
+        for sink in self.connectors_end_to_start() {
+            sink.resume().await?;
+        }
+        self.change_state(State::Running).await;
+        info!("{prefix} Resumed.");
+        Ok(())
+    }
+
+    async fn handle_stop(
+        &mut self,
+        mode: ShutdownMode,
+        prefix: impl std::fmt::Display,
+    ) -> Result<ControlFlow<()>> {
+        if self.has_connectors() {
+            match mode {
+                ShutdownMode::Graceful => {
+                    info!("{prefix} Draining...");
+
+                    self.change_state(State::Draining).await;
+
+                    // QUIESCENCE
+                    // - send drain msg to all connectors
+                    // - wait until
+                    //   a) all connectors are drained (means all pipelines in between are also drained) or
+                    let mut drained = 0_usize;
+                    for addr in self.connectors_start_to_end() {
+                        if !log_error!(
+                            addr.drain(self.drain_tx.clone()).await,
+                            "{prefix} Error starting Draining Connector {addr:?}: {e}"
+                        ) {
+                            drained += 1;
+                        }
+                    }
+                    self.expected_drains = drained;
+                }
+                _ => {
+                    info!("{prefix} Stopping...");
+                    let mut stopped = 0_usize;
+                    for connector in self.connectors_end_to_start() {
+                        if !log_error!(
+                            connector.stop(self.stop_tx.clone()).await,
+                            "{prefix} Error stopping connector {connector}: {e}"
+                        ) {
+                            stopped += 1;
+                        }
+                    }
+                    self.expected_stops = stopped;
+                    for pipeline in self.pipelines.values() {
+                        if let Err(e) = pipeline.stop().await {
+                            error!("{prefix} Error stopping pipeline {pipeline:?}: {e}");
+                        }
+                    }
+                }
+            }
+            // we continue the stop process in `handle_stop_result`
+            Ok(ControlFlow::Continue(()))
+        } else {
+            // stop the (senseless) pipelines, as there are no events flowing through them
+            for pipeline in self.pipelines.values() {
+                if let Err(e) = pipeline.stop().await {
+                    error!("{prefix} Error stopping pipeline {pipeline:?}: {e}");
+                }
+            }
+            // nothing to do, we can break right away
+            Ok(ControlFlow::Break(()))
+        }
+    }
+
+    async fn handle_stop_result(
+        &mut self,
+        conn_res: ConnectorResult<()>,
+        prefix: impl std::fmt::Display,
+    ) -> Result<ControlFlow<()>> {
+        info!("{prefix} Connector {} stopped.", &conn_res.alias);
+
+        log_error!(
+            conn_res.res,
+            "{prefix} Error during Stopping in Connector {}: {e}",
+            &conn_res.alias
+        );
+
+        let old = self.expected_stops;
+        self.expected_stops = self.expected_stops.saturating_sub(1);
+        if self.expected_stops == 0 && old > 0 {
+            info!("{prefix} All connectors are stopped.");
+            // upon last stop we finally know we are stopped
+            self.change_state(State::Stopped).await;
+            Ok(ControlFlow::Break(()))
+        } else {
+            Ok(ControlFlow::Continue(()))
+        }
+    }
+
+    async fn handle_drain_result(
+        &mut self,
+        conn_res: ConnectorResult<()>,
+        prefix: impl std::fmt::Display,
+    ) -> Result<ControlFlow<()>> {
+        info!("{prefix} Connector {} drained.", &conn_res.alias);
+
+        log_error!(
+            conn_res.res,
+            "{prefix} Error during Draining in Connector {}: {e}",
+            &conn_res.alias
+        );
+
+        let old = self.expected_drains;
+        self.expected_drains = self.expected_drains.saturating_sub(1);
+        if self.expected_drains == 0 && old > 0 {
+            info!("{prefix} All connectors are drained.");
+            // upon last drain, finally do a stop
+            self.handle_stop(ShutdownMode::Forceful, prefix).await
+        } else {
+            Ok(ControlFlow::Continue(()))
+        }
+    }
+
+    async fn change_state(&mut self, new_state: State) {
+        if self.state != new_state {
+            self.state = new_state;
+            if let Some(senders) = self.state_change_senders.get_mut(&new_state) {
+                for sender in senders.drain(..) {
+                    log_error!(
+                        sender.send(Ok(())).await,
+                        "Error notifying {new_state} state handler: {e}"
+                    );
+                }
+            }
+            // upon failed state, error out all other listeners of valid non-failed states, as there is no recovery
+            if let State::Failed = new_state {
+                for state in &[State::Running, State::Paused, State::Draining] {
+                    if let Some(senders) = self.state_change_senders.get_mut(state) {
+                        for sender in senders.drain(..) {
+                            log_error!(
+                                sender
+                                    .send(Err(ErrorKind::FlowFailed(self.id.to_string()).into()))
+                                    .await,
+                                "Error notifying {state} state handlers of failed state: {e}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
 
 /// task handling flow instance control plane
 #[allow(clippy::too_many_lines)]
@@ -400,319 +920,9 @@ async fn spawn_task(
     connectors: HashMap<String, connectors::Addr>,
     links: &[ConnectStmt],
 ) -> Result<Addr> {
-    #[derive(Debug)]
-    /// wrapper for all possible messages handled by the flow task
-    enum MsgWrapper {
-        Msg(Msg),
-        StartResult(ConnectorResult<()>),
-        DrainResult(ConnectorResult<()>),
-        StopResult(ConnectorResult<()>),
-    }
-
-    let (msg_tx, msg_rx) = bounded(qsize());
-    let (drain_tx, drain_rx) = bounded(qsize());
-    let (stop_tx, stop_rx) = bounded(qsize());
-    let (start_tx, start_rx) = bounded(qsize());
-
-    let mut input_channel = PriorityMerge::new(
-        ReceiverStream::new(msg_rx).map(MsgWrapper::Msg),
-        PriorityMerge::new(
-            ReceiverStream::new(drain_rx).map(MsgWrapper::DrainResult),
-            PriorityMerge::new(
-                ReceiverStream::new(stop_rx).map(MsgWrapper::StopResult),
-                ReceiverStream::new(start_rx).map(MsgWrapper::StartResult),
-            ),
-        ),
-    );
-    let addr = msg_tx;
-    let mut state = State::Initializing;
-    // let registries = self.reg.clone();
-
-    // extracting connectors and pipes from the links
-    let sink_connectors: HashSet<String> = links
-        .iter()
-        .filter_map(|c| {
-            if let ConnectStmt::PipelineToConnector { to, .. } = c {
-                Some(to.alias().to_string())
-            } else {
-                None
-            }
-        })
-        .collect();
-    let source_connectors: HashSet<String> = links
-        .iter()
-        .filter_map(|c| {
-            if let ConnectStmt::ConnectorToPipeline { from, .. } = c {
-                Some(from.alias().to_string())
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    let pipelines: Vec<_> = pipelines.values().cloned().collect();
-
-    let start_points: Vec<_> = source_connectors
-        .difference(&sink_connectors)
-        .filter_map(|p| connectors.get(p))
-        .cloned()
-        .collect();
-    let mixed_pickles: Vec<_> = sink_connectors
-        .intersection(&source_connectors)
-        .filter_map(|p| connectors.get(p))
-        .cloned()
-        .collect();
-    let end_points: Vec<_> = sink_connectors
-        .difference(&source_connectors)
-        .filter_map(|p| connectors.get(p))
-        .cloned()
-        .collect();
-
-    // for receiving drain/stop completion notifications from connectors
-    let mut expected_drains: usize = 0;
-    let mut expected_stops: usize = 0;
-
-    // for storing senders that have been sent to us
-    let mut drain_senders = Vec::with_capacity(1);
-    let mut stop_senders = Vec::with_capacity(1);
-
-    let prefix = format!("[Flow::{id}]");
-
-    task::spawn(async move {
-        let mut wait_for_start_responses: usize = 0;
-        while let Some(wrapped) = input_channel.next().await {
-            match wrapped {
-                MsgWrapper::Msg(Msg::Start) if state == State::Initializing => {
-                    info!("{prefix} Starting...");
-                    // start all pipelines first - order doesnt matter as connectors aren't started yet
-                    for pipe in &pipelines {
-                        pipe.start().await?;
-                    }
-
-                    if connectors.is_empty() {
-                        state = State::Running;
-                        info!("{prefix} Started.");
-                    } else {
-                        // start sink connectors first then source/sink connectors then source only connectors
-                        for conn in end_points.iter().chain(&mixed_pickles).chain(&start_points) {
-                            conn.start(start_tx.clone()).await?;
-                            wait_for_start_responses += 1;
-                        }
-
-                        debug!(
-                            "{prefix} Waiting for {wait_for_start_responses} connectors to start."
-                        );
-                    }
-                }
-                MsgWrapper::Msg(Msg::Start) => {
-                    info!("{prefix} Ignoring Start message. Current state: {state}");
-                }
-                MsgWrapper::Msg(Msg::Pause) if state == State::Running => {
-                    info!("{prefix} Pausing...");
-                    for source in start_points.iter().chain(&mixed_pickles).chain(&end_points) {
-                        source.pause().await?;
-                    }
-                    for pipeline in &pipelines {
-                        pipeline.pause().await?;
-                    }
-                    state = State::Paused;
-                    info!("{prefix} Paused.");
-                }
-                MsgWrapper::Msg(Msg::Pause) => {
-                    info!("{prefix} Ignoring Pause message. Current state: {state}",);
-                }
-                MsgWrapper::Msg(Msg::Resume) if state == State::Paused => {
-                    info!("{prefix} Resuming...");
-
-                    for pipeline in &pipelines {
-                        pipeline.resume().await?;
-                    }
-                    for sink in end_points.iter().chain(&mixed_pickles).chain(&start_points) {
-                        sink.resume().await?;
-                    }
-                    state = State::Running;
-                    info!("{prefix} Resumed.");
-                }
-                MsgWrapper::Msg(Msg::Resume) => {
-                    info!("{prefix} Ignoring Resume message. Current state: {state}",);
-                }
-                MsgWrapper::Msg(Msg::Drain(_sender)) if state == State::Draining => {
-                    info!("{prefix} Ignoring Drain message. Current state: {state}",);
-                }
-                MsgWrapper::Msg(Msg::Drain(sender)) => {
-                    info!("{prefix} Draining...");
-
-                    state = State::Draining;
-
-                    // handling the weird case of no connectors
-                    if connectors.is_empty() {
-                        info!("{prefix} Nothing to drain.");
-                        log_error!(
-                            sender.send(Ok(())).await,
-                            "{prefix} Error sending drain result: {e}"
-                        );
-                    } else {
-                        drain_senders.push(sender);
-
-                        // QUIESCENCE
-                        // - send drain msg to all connectors
-                        // - wait until
-                        //   a) all connectors are drained (means all pipelines in between are also drained) or
-                        //   b) we timed out
-
-                        // source only connectors
-                        for addr in start_points.iter().chain(&mixed_pickles).chain(&end_points) {
-                            if !log_error!(
-                                addr.drain(drain_tx.clone()).await,
-                                "{prefix} Error starting Draining Connector {addr:?}: {e}"
-                            ) {
-                                expected_drains += 1;
-                            }
-                        }
-                    }
-                }
-                MsgWrapper::Msg(Msg::Stop(sender)) => {
-                    info!("{prefix} Stopping...");
-                    if connectors.is_empty() {
-                        log_error!(
-                            sender.send(Ok(())).await,
-                            "{prefix} Error sending Stop result: {e}"
-                        );
-                    } else {
-                        stop_senders.push(sender);
-                        for connector in
-                            end_points.iter().chain(&start_points).chain(&mixed_pickles)
-                        {
-                            if !log_error!(
-                                connector.stop(stop_tx.clone()).await,
-                                "{prefix} Error stopping connector {connector}: {e}"
-                            ) {
-                                expected_stops += 1;
-                            }
-                        }
-                    }
-
-                    for pipeline in &pipelines {
-                        if let Err(e) = pipeline.stop().await {
-                            error!("{prefix} Error stopping pipeline {pipeline:?}: {e}");
-                        }
-                    }
-
-                    state = State::Stopped;
-                }
-                MsgWrapper::Msg(Msg::Report(sender)) => {
-                    // TODO: aggregate states of all containing instances
-                    let connectors = connectors
-                        .keys()
-                        .map(|c| connectors::Alias::new(id.clone(), c))
-                        .collect();
-                    let report = StatusReport {
-                        alias: id.clone(),
-                        status: state,
-                        connectors,
-                    };
-                    log_error!(
-                        sender.send(Ok(report)).await,
-                        "{prefix} Error sending status report: {e}"
-                    );
-                }
-                MsgWrapper::Msg(Msg::GetConnector(connector_alias, reply_tx)) => {
-                    log_error!(
-                        reply_tx
-                            .send(
-                                connectors
-                                    .get(&connector_alias.connector_alias().to_string())
-                                    .cloned()
-                                    .ok_or_else(|| {
-                                        ErrorKind::ConnectorNotFound(
-                                            connector_alias.flow_alias().to_string(),
-                                            connector_alias.connector_alias().to_string(),
-                                        )
-                                        .into()
-                                    })
-                            )
-                            .await,
-                        "{prefix} Error sending GetConnector response: {e}"
-                    );
-                }
-                MsgWrapper::Msg(Msg::GetConnectors(reply_tx)) => {
-                    let res = connectors.values().cloned().collect::<Vec<_>>();
-                    log_error!(
-                        reply_tx.send(Ok(res)).await,
-                        "{prefix} Error sending GetConnectors response: {e}"
-                    );
-                }
-
-                MsgWrapper::DrainResult(conn_res) => {
-                    info!("[Flow::{}] Connector {} drained.", &id, &conn_res.alias);
-
-                    log_error!(
-                        conn_res.res,
-                        "{prefix} Error during Draining in Connector {}: {e}",
-                        &conn_res.alias
-                    );
-
-                    let old = expected_drains;
-                    expected_drains = expected_drains.saturating_sub(1);
-                    if expected_drains == 0 && old > 0 {
-                        info!("{prefix} All connectors are drained.");
-                        // upon last drain
-                        for drain_sender in drain_senders.drain(..) {
-                            log_error!(
-                                drain_sender.send(Ok(())).await,
-                                "{prefix} Error sending successful Drain result: {e}"
-                            );
-                        }
-                    }
-                }
-                MsgWrapper::StopResult(conn_res) => {
-                    info!("[Flow::{}] Connector {} stopped.", &id, &conn_res.alias);
-
-                    log_error!(
-                        conn_res.res,
-                        "{prefix} Error during Draining in Connector {}: {e}",
-                        &conn_res.alias
-                    );
-
-                    let old = expected_stops;
-                    expected_stops = expected_stops.saturating_sub(1);
-                    if expected_stops == 0 && old > 0 {
-                        info!("{prefix} All connectors are stopped.");
-                        // upon last stop
-                        for stop_sender in stop_senders.drain(..) {
-                            log_error!(
-                                stop_sender.send(Ok(())).await,
-                                "{prefix} Error sending successful Stop result: {e}"
-                            );
-                        }
-                        break;
-                    }
-                }
-                MsgWrapper::StartResult(conn_res) => {
-                    if let Err(e) = conn_res.res {
-                        error!(
-                            "{prefix} Error starting Connector {conn}: {e}",
-                            conn = conn_res.alias
-                        );
-                        if state != State::Failed {
-                            // only report failed upon the first connector failure
-                            state = State::Failed;
-                            info!("{prefix} Failed.");
-                        }
-                    } else if state == State::Initializing {
-                        // report started flow if all connectors started
-                        wait_for_start_responses = wait_for_start_responses.saturating_sub(1);
-                        if wait_for_start_responses == 0 {
-                            state = State::Running;
-                            info!("{prefix} Started.");
-                        }
-                    }
-                }
-            }
-        }
-        info!("{prefix} Stopped.");
-        Result::Ok(())
-    });
+    let flow = RunningFlow::new(id, pipelines, connectors, links);
+    let addr = flow.addr();
+    task::spawn(flow.run());
     Ok(addr)
 }
 
@@ -879,7 +1089,7 @@ mod tests {
         let (connector_tx, mut connector_rx) = crate::channel::unbounded();
         let builder = connector::FakeBuilder { tx: connector_tx };
         known_connectors.insert(builder.connector_type(), Box::new(builder));
-        let flow = Flow::start(
+        let flow = Flow::deploy(
             deploy,
             &mut operator_id_gen,
             &mut connector_id_gen,
@@ -910,21 +1120,20 @@ mod tests {
         assert_eq!(instance::State::Running, report.status);
         assert_eq!(1, report.connectors.len());
 
-        flow.pause().await?;
+        let (tx, rx) = bounded(1);
+        flow.pause(tx.clone()).await?;
+        rx.recv().await.ok_or_else(empty_error)??;
         let report = flow.report_status().await?;
         assert_eq!(instance::State::Paused, report.status);
         assert_eq!(1, report.connectors.len());
 
-        flow.resume().await?;
+        flow.resume(tx.clone()).await?;
+        rx.recv().await.ok_or_else(empty_error)??;
         let report = flow.report_status().await?;
         assert_eq!(instance::State::Running, report.status);
         assert_eq!(1, report.connectors.len());
 
-        // drain and stop the flow
-        let (tx, mut rx) = bounded(128);
-        flow.drain(tx.clone()).await?;
-        rx.recv().await.ok_or("empty")??;
-
+        // stop the flow
         flow.stop(tx).await?;
         rx.recv().await.ok_or("empty")??;
         Ok(())

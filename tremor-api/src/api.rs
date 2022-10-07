@@ -273,7 +273,7 @@ mod tests {
                 _other => None,
             })
             .expect("No deploy in the given troy file");
-        world.start_flow(&deploy).await?;
+        world.deploy_flow(&deploy).await?;
 
         // check the status endpoint
         let start = Instant::now();

@@ -12,20 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::flow::{Alias, Flow};
-use super::KillSwitch;
-use crate::system::DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT;
 use crate::{
     channel::{bounded, Sender},
-    errors::empty_error,
-};
-use crate::{
     connectors::{self, ConnectorBuilder, ConnectorType},
-    log_error,
-};
-use crate::{
-    errors::{Kind as ErrorKind, Result},
-    qsize,
+    errors::{empty_error, Kind as ErrorKind, Result},
+    instance::IntendedState,
+    log_error, qsize,
+    system::{
+        flow::{Alias, Flow},
+        KillSwitch, DEFAULT_GRACEFUL_SHUTDOWN_TIMEOUT,
+    },
 };
 use hashbrown::{hash_map::Entry, HashMap};
 use tokio::{
@@ -41,27 +37,21 @@ pub(crate) type Channel = Sender<Msg>;
 /// This is control plane
 #[derive(Debug)]
 pub(crate) enum Msg {
-    /// deploy a Flow
-    StartDeploy {
-        /// deploy flow
+    /// Deploy a flow, instantiate it, but does not start it or any child instance (connector, pipeline)
+    DeployFlow {
+        /// the `deploy flow` AST
         flow: Box<DeployFlow<'static>>,
         /// result sender
         sender: oneshot::Sender<Result<()>>,
     },
-    StopDeploy {
-        /// unique ID for this deployment
+    /// change instance state
+    ChangeInstanceState {
+        /// unique ID for the `Flow` instance to start
         id: Alias,
-        // FIXME: we need some way to stop deployments
-    },
-    PauseDeploy {
-        /// unique ID for this deployment
-        id: Alias,
-        // FIXME: we need some way to pause deployments
-    },
-    ResumeDeploy {
-        /// unique ID for this deployment
-        id: Alias,
-        // FIXME: we need some way to resume deployments
+        /// The state the instance should be changed to
+        intended_state: IntendedState,
+        /// result sender
+        reply_tx: Sender<Result<()>>,
     },
     RegisterConnectorType {
         /// the type of connector
@@ -105,7 +95,7 @@ impl FlowSupervisor {
         }
     }
 
-    async fn handle_start_deploy(
+    async fn handle_deploy(
         &mut self,
         flow: DeployFlow<'static>,
         sender: oneshot::Sender<Result<()>>,
@@ -114,7 +104,7 @@ impl FlowSupervisor {
         let id = Alias::from(&flow);
         let res = match self.flows.entry(id.clone()) {
             Entry::Occupied(_occupied) => Err(ErrorKind::DuplicateFlow(id.to_string()).into()),
-            Entry::Vacant(vacant) => Flow::start(
+            Entry::Vacant(vacant) => Flow::deploy(
                 flow,
                 &mut self.operator_id_gen,
                 &mut self.connector_id_gen,
@@ -180,7 +170,7 @@ impl FlowSupervisor {
                     Result::Ok(())
                 }),
             )
-            .await???;
+            .await??;
         }
         Ok(())
     }
@@ -197,7 +187,7 @@ impl FlowSupervisor {
             let (tx, mut rx) = bounded(num_flows);
             for (_, flow) in &self.flows {
                 if !log_error!(
-                    flow.drain(tx.clone()).await,
+                    flow.stop(tx.clone()).await,
                     "Failed to drain Deployment \"{alias}\": {e}",
                     alias = flow.id()
                 ) {
@@ -221,15 +211,20 @@ impl FlowSupervisor {
         }
     }
 
-    async fn handle_stop(&self, id: Alias) {
-        todo!("stop {id}");
+    async fn handle_change_state(
+        &self,
+        id: Alias,
+        intended_state: IntendedState,
+        reply_tx: Sender<Result<()>>,
+    ) -> Result<()> {
+        if let Some(flow) = self.flows.get(&id) {
+            flow.change_state(intended_state, reply_tx).await?;
+            Ok(())
+        } else {
+            return Err(ErrorKind::FlowNotFound(id.to_string()).into());
+        }
     }
-    async fn handle_pause(&self, id: Alias) {
-        todo!("pause {id}");
-    }
-    async fn handle_resume(&self, id: Alias) {
-        todo!("resume {id}");
-    }
+
     pub fn start(mut self) -> (JoinHandle<Result<()>>, Channel, KillSwitch) {
         let (tx, mut rx) = bounded(qsize());
         let kill_switch = KillSwitch(tx.clone());
@@ -243,9 +238,8 @@ impl FlowSupervisor {
                         builder,
                         ..
                     } => self.handle_register_connector_type(connector_type, builder),
-                    Msg::StartDeploy { flow, sender } => {
-                        self.handle_start_deploy(*flow, sender, &task_kill_switch)
-                            .await;
+                    Msg::DeployFlow { flow, sender } => {
+                        self.handle_deploy(*flow, sender, &task_kill_switch).await;
                     }
                     Msg::GetFlows(reply_tx) => self.handle_get_flows(reply_tx),
                     Msg::GetFlow(id, reply_tx) => self.handle_get_flow(&id, reply_tx),
@@ -254,9 +248,22 @@ impl FlowSupervisor {
                         break;
                     }
                     Msg::Drain(sender) => self.handle_drain(sender).await,
-                    Msg::StopDeploy { id } => self.handle_stop(id).await,
-                    Msg::PauseDeploy { id } => self.handle_pause(id).await,
-                    Msg::ResumeDeploy { id } => self.handle_resume(id).await,
+                    Msg::ChangeInstanceState {
+                        id,
+                        intended_state,
+                        reply_tx,
+                    } => {
+                        if let Err(e) = self
+                            .handle_change_state(id, intended_state, reply_tx.clone())
+                            .await
+                        {
+                            // if an error happened here already, the reply_tx hasn't been sent anywhere so we need to send the error here
+                            log_error!(
+                                reply_tx.send(Err(e)).await,
+                                "Error sending ChangeInstanceState reply: {e}"
+                            );
+                        }
+                    }
                 }
             }
             info!("Manager stopped.");

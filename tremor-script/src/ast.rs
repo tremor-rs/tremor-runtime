@@ -129,8 +129,9 @@ impl NodeMeta {
             name: None,
         }
     }
-    #[cfg(test)]
-    pub(crate) fn dummy() -> Box<Self> {
+    /// Creates a new meta node with dummy data
+    #[must_use]
+    pub fn dummy() -> Box<Self> {
         Box::new(NodeMeta::new(
             Location::start_of_file(arena::Index::INVALID),
             Location::start_of_file(arena::Index::INVALID),

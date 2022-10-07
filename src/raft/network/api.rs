@@ -33,15 +33,6 @@ pub enum InstallError {
     ClientWriteError(ClientWriteError<TremorNodeId, TremorNode>),
 }
 
-/**
- * Application API
- *
- * This is where you place your application, you can use the example below to create your
- * API. The current implementation:
- *
- *  - `POST - /write` saves a value in a key and sync the nodes.
- *  - `POST - /read` attempt to find a value from a given key.
- */
 async fn install(mut req: Request<Arc<TremorApp>>) -> tide::Result {
     let file: Vec<u8> = req.body_json().await?;
     let app = dbg!(get_app(&file)).map_err(|e| AnyError::new(&e))?;
@@ -55,7 +46,7 @@ async fn install(mut req: Request<Arc<TremorApp>>) -> tide::Result {
                 .build());
         }
     }
-    let request = TremorRequest::Load {
+    let request = TremorRequest::InstallApp {
         app,
         file: file.clone(),
     };
@@ -128,10 +119,10 @@ impl Display for AppState {
             }
         }
         write!(f, "   Instances: \n")?;
-        for (name, FlowInstance { id, config }) in &self.instances {
+        for (name, FlowInstance { id, config, state }) in &self.instances {
             write!(f, "    - {name}\n")?;
             write!(f, "      Flow: {id}\n")?;
-            write!(f, "      Config:")?;
+            write!(f, "      Config:\n")?;
             if config.is_empty() {
                 write!(f, " -\n")?;
             } else {
@@ -140,6 +131,7 @@ impl Display for AppState {
                     write!(f, "        - {name}: {val}\n")?;
                 }
             }
+            write!(f, "      State: {state}\n")?;
         }
         Ok(())
     }

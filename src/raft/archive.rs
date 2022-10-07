@@ -20,6 +20,7 @@ use std::{collections::BTreeSet, io::Read};
 use tar::{Archive, Header};
 use tokio::io::AsyncWriteExt;
 use tremor_common::asy::file;
+use tremor_script::{arena, NodeMeta};
 use tremor_script::{
     arena::Arena,
     ast::{
@@ -52,7 +53,7 @@ impl TremorAppDef {
     }
 }
 
-/// Packages a tremor application into a tarball, entry point is the `main.troy` file, target the output target
+/// Packages a tremor application into a tarball, entry point is the `main.troy` file, target the tar.gz file
 pub async fn package(target: &str, entrypoint: &str, name: Option<String>) -> Result<()> {
     let mut output = file::create(target).await?;
     let name = PathBuf::from(entrypoint)
@@ -201,7 +202,8 @@ pub fn get_app(src: &[u8]) -> Result<TremorAppDef> {
     Ok(app)
 }
 
-pub fn extract(src: &[u8]) -> Result<(TremorAppDef, Deploy)> {
+/// Extract app deploy an all used arena indices
+pub fn extract(src: &[u8]) -> Result<(TremorAppDef, Deploy, Vec<arena::Index>)> {
     let mut ar = Archive::new(src);
 
     let mut entries = ar.entries()?;
@@ -233,7 +235,7 @@ pub fn extract(src: &[u8]) -> Result<(TremorAppDef, Deploy)> {
             .map(|p| p.to_string_lossy().to_string())
             .collect();
         let id = module.pop().ok_or("No module name")?;
-        let module = NodeId::new(&id, &module);
+        let module = NodeId::new(id.clone(), module.clone(), NodeMeta::dummy().to_owned());
 
         info!("included library: {}", entry.path()?.to_string_lossy());
         let mut contents = String::new();
@@ -244,6 +246,7 @@ pub fn extract(src: &[u8]) -> Result<(TremorAppDef, Deploy)> {
     let aggr_reg = tremor_script::registry::aggr();
 
     let deploy = Deploy::parse_with_cache(&main, &*FN_REGISTRY.read()?, &aggr_reg, &modules)?;
-
-    Ok((app, deploy))
+    let mut aids = modules.into_values().collect::<Vec<_>>();
+    aids.push(deploy.aid);
+    Ok((app, deploy, aids))
 }

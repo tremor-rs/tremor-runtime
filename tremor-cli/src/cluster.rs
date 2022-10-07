@@ -169,18 +169,6 @@ impl Cluster {
                         );
                         task::sleep(join_wait).await;
                     }
-                    /*
-                    // TODO: what better thing to do here? Bootstrap single node cluster? Just run on as is?
-                    if !joined {
-                        running_node.kill_switch().stop(ShutdownMode::Forceful)?;
-                        running_node.join().await?;
-                        return Err(format!(
-                            "Unable to join any of the given endpoints: {}",
-                            join.join(", ")
-                        )
-                        .into());
-                    }
-                    */
                 }
                 // wait for the node to be finished
                 if let Err(e) = running_node.join().await {

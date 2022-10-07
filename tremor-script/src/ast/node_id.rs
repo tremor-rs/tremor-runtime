@@ -27,6 +27,14 @@ pub struct NodeId {
 }
 impl_expr_no_lt!(NodeId);
 
+impl NodeId {
+    /// Create a new node id
+    #[must_use]
+    pub fn new(id: String, module: Vec<String>, mid: Box<NodeMeta>) -> Self {
+        Self { id, module, mid }
+    }
+}
+
 impl<'script> From<IdentRaw<'script>> for NodeId {
     fn from(id: IdentRaw<'script>) -> Self {
         Self {

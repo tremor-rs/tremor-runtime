@@ -19,9 +19,10 @@ pub mod flow_supervisor;
 
 use self::flow::Flow;
 use crate::{
-    channel::Sender,
+    channel::{bounded, Sender},
     connectors,
-    errors::{Error, Kind as ErrorKind, Result},
+    errors::{empty_error, Error, Kind as ErrorKind, Result},
+    instance::IntendedState as IntendedInstanceState,
     log_error,
 };
 use std::time::Duration;
@@ -47,6 +48,19 @@ pub enum ShutdownMode {
     Graceful,
     /// Just stop everything and not wait
     Forceful,
+}
+
+impl std::fmt::Display for ShutdownMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Graceful => "graceful",
+                Self::Forceful => "forceful",
+            }
+        )
+    }
 }
 
 /// for draining and stopping
@@ -82,7 +96,7 @@ impl KillSwitch {
 
     #[cfg(test)]
     pub(crate) fn dummy() -> Self {
-        KillSwitch(crate::channel::bounded(1).0)
+        KillSwitch(bounded(1).0)
     }
 
     #[cfg(test)]
@@ -99,7 +113,8 @@ pub struct Runtime {
 }
 
 impl Runtime {
-    /// Loads a Troy src
+    /// Loads a Troy src and starts all deployed flows.
+    /// Returns the number of deployed and started flows
     ///
     /// # Errors
     ///   Fails if the source can not be loaded
@@ -123,20 +138,26 @@ impl Runtime {
         };
 
         let mut count = 0;
+        // first deploy them
         for flow in deployable.iter_flows() {
-            self.start_flow(flow).await?;
+            self.deploy_flow(flow).await?;
+        }
+        // start flows in a second step
+        for flow in deployable.iter_flows() {
+            self.start_flow(flow::Alias::new(&flow.instance_alias))
+                .await?;
             count += 1;
         }
         Ok(count)
     }
 
-    /// Instantiate a flow from
+    /// Deploy a flow - create an instance of it
     /// # Errors
     /// If the flow can't be started
-    pub async fn start_flow(&self, flow: &ast::DeployFlow<'static>) -> Result<()> {
+    pub async fn deploy_flow(&self, flow: &ast::DeployFlow<'static>) -> Result<()> {
         let (tx, rx) = oneshot::channel();
         self.flows
-            .send(flow_supervisor::Msg::StartDeploy {
+            .send(flow_supervisor::Msg::DeployFlow {
                 flow: Box::new(flow.clone()),
                 sender: tx,
             })
@@ -165,27 +186,46 @@ impl Runtime {
         }
     }
 
+    pub async fn start_flow(&self, id: flow::Alias) -> Result<()> {
+        let (reply_tx, mut reply_rx) = bounded(1);
+        self.flows
+            .send(flow_supervisor::Msg::ChangeInstanceState {
+                id,
+                intended_state: IntendedInstanceState::Running,
+                reply_tx,
+            })
+            .await?;
+        reply_rx.recv().await.ok_or_else(empty_error)?
+    }
+
     /// stops a flow
     pub async fn stop_flow(&self, id: flow::Alias) -> Result<()> {
+        let (reply_tx, mut reply_rx) = bounded(1);
         self.flows
-            .send(flow_supervisor::Msg::StopDeploy { id })
+            .send(flow_supervisor::Msg::ChangeInstanceState {
+                id,
+                intended_state: IntendedInstanceState::Stopped,
+                reply_tx,
+            })
             .await?;
-        Ok(())
+        reply_rx.recv().await.ok_or_else(empty_error)?
     }
 
     /// pauses a flow
     pub async fn pause_flow(&self, id: flow::Alias) -> Result<()> {
+        let (reply_tx, mut reply_rx) = bounded(1);
         self.flows
-            .send(flow_supervisor::Msg::PauseDeploy { id })
+            .send(flow_supervisor::Msg::ChangeInstanceState {
+                id,
+                intended_state: IntendedInstanceState::Paused,
+                reply_tx,
+            })
             .await?;
-        Ok(())
+        reply_rx.recv().await.ok_or_else(empty_error)?
     }
     /// resumes a flow
     pub async fn resume_flow(&self, id: flow::Alias) -> Result<()> {
-        self.flows
-            .send(flow_supervisor::Msg::ResumeDeploy { id })
-            .await?;
-        Ok(())
+        self.start_flow(id).await // equivalent
     }
 
     /// Registers the given connector type with `type_name` and the corresponding `builder`

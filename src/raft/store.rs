@@ -1,8 +1,11 @@
 use crate::{
+    errors::{Error as RuntimeError, Kind as ErrorKind},
+    instance::{IntendedState, State as InstanceState},
+    log_error,
     raft::{archive::TremorAppDef, ClusterError, TremorNode, TremorNodeId, TremorTypeConfig},
     system::Runtime,
 };
-use async_std::{net::ToSocketAddrs, sync::RwLock};
+use async_std::{channel::unbounded, net::ToSocketAddrs, prelude::FutureExt, sync::RwLock};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use openraft::{
     async_trait::async_trait,
@@ -15,7 +18,7 @@ use rocksdb::{ColumnFamily, ColumnFamilyDescriptor, Direction, FlushOptions, Opt
 use serde::{Deserialize, Serialize};
 use simd_json::OwnedValue;
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     error::Error,
     fmt::{Debug, Display, Formatter},
     io::Cursor,
@@ -23,8 +26,10 @@ use std::{
     path::Path,
     string::FromUtf8Error,
     sync::{Arc, Mutex},
+    time::Duration,
 };
 use tremor_script::{
+    arena,
     ast::{
         optimizer::Optimizer, visitors::ArgsRewriter, walkers::DeployWalker, CreationalWith,
         DeployFlow, FlowDefinition, Helper, Ident, ImutExpr, WithExprs,
@@ -49,9 +54,16 @@ pub enum TremorRequest {
         key: String,
         value: String,
     },
-    Load {
+    // extract archive, parse sources, save sources in arena, put app into state machine
+    InstallApp {
         app: TremorAppDef,
         file: Vec<u8>,
+    },
+    // delete from statemachine, delete sources from arena
+    UninstallApp {
+        app: AppId,
+        /// if `true`, stop all instances of this app
+        force: bool,
     },
     Start {
         app: AppId,
@@ -119,6 +131,14 @@ fn sm_w_err<E: Error + 'static>(e: E) -> StorageError<TremorNodeId> {
     )
     .into()
 }
+fn sm_d_err<E: Error + 'static>(e: E) -> StorageError<TremorNodeId> {
+    StorageIOError::new(
+        ErrorSubject::StateMachine,
+        ErrorVerb::Delete,
+        AnyError::new(&e),
+    )
+    .into()
+}
 fn store_w_err(e: impl Error + 'static) -> StorageError<TremorNodeId> {
     StorageIOError::new(ErrorSubject::Store, ErrorVerb::Write, AnyError::new(&e)).into()
 }
@@ -161,17 +181,10 @@ fn snap_w_err(
 //     .into()
 // }
 
-/**
- * Here defines a state machine of the raft, this state represents a copy of the data
- * between each node. Note that we are using `serde` to serialize the `data`, which has
- * a implementation to be serialized. Note that for this test we set both the key and
- * value as String, but you could set any type of value that has the serialization impl.
- */
 #[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct SerializableTremorStateMachine {
     pub last_applied_log: Option<LogId<TremorNodeId>>,
 
-    // TODO: it should not be Option.
     pub last_membership: EffectiveMembership<TremorNodeId, TremorNode>,
 
     /// Application data, for the k/v store
@@ -180,7 +193,7 @@ pub struct SerializableTremorStateMachine {
     /// Application data.
     pub archives: Vec<Vec<u8>>,
 
-    /// Instances
+    /// Instances and their desired state
     pub instances: HashMap<AppId, Instances>,
 }
 
@@ -253,10 +266,12 @@ impl Display for AppId {
         write!(f, "{}", self.0)
     }
 }
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct FlowInstance {
     pub id: FlowId,
     pub config: HashMap<String, OwnedValue>,
+    pub state: IntendedState,
 }
 pub type Instances = HashMap<InstanceId, FlowInstance>;
 
@@ -264,6 +279,7 @@ pub type Instances = HashMap<InstanceId, FlowInstance>;
 pub(crate) struct StateApp {
     pub app: TremorAppDef,
     pub instances: Instances,
+    arena_indices: Vec<arena::Index>,
     main: Deploy,
 }
 
@@ -276,25 +292,29 @@ pub(crate) struct TremorStateMachine {
 }
 
 impl TremorStateMachine {
-    fn data(&self) -> StorageResult<&ColumnFamily> {
+    /// data column family
+    fn cf_data(&self) -> StorageResult<&ColumnFamily> {
         self.db
             .cf_handle(TremorStore::DATA)
             .ok_or(StoreError::MissingCf(TremorStore::DATA))
             .map_err(StorageError::from)
     }
-    fn apps(&self) -> StorageResult<&ColumnFamily> {
+    /// apps column family
+    fn cf_apps(&self) -> StorageResult<&ColumnFamily> {
         self.db
             .cf_handle(TremorStore::APPS)
             .ok_or(StoreError::MissingCf(TremorStore::APPS))
             .map_err(StorageError::from)
     }
-    fn instances(&self) -> StorageResult<&ColumnFamily> {
+    /// instances column family
+    fn cf_instances(&self) -> StorageResult<&ColumnFamily> {
         self.db
             .cf_handle(TremorStore::INSTANCES)
             .ok_or(StoreError::MissingCf(TremorStore::INSTANCES))
             .map_err(StorageError::from)
     }
-    fn state_machine(&self) -> StorageResult<&ColumnFamily> {
+    /// state machine column family
+    fn cf_state_machine(&self) -> StorageResult<&ColumnFamily> {
         self.db
             .cf_handle(TremorStore::STATE_MACHINE)
             .ok_or(StoreError::MissingCf(TremorStore::STATE_MACHINE))
@@ -302,7 +322,7 @@ impl TremorStateMachine {
     }
     fn get_last_membership(&self) -> StorageResult<EffectiveMembership<TremorNodeId, TremorNode>> {
         self.db
-            .get_cf(self.state_machine()?, b"last_membership")
+            .get_cf(self.cf_state_machine()?, TremorStore::LAST_MEMBERSHIP)
             .map_err(sm_r_err)
             .and_then(|value| {
                 value
@@ -316,15 +336,15 @@ impl TremorStateMachine {
     ) -> StorageResult<()> {
         self.db
             .put_cf(
-                self.state_machine()?,
-                b"last_membership",
+                self.cf_state_machine()?,
+                TremorStore::LAST_MEMBERSHIP,
                 serde_json::to_vec(&membership).map_err(sm_w_err)?,
             )
             .map_err(sm_w_err)
     }
     fn get_last_applied_log(&self) -> StorageResult<Option<LogId<TremorNodeId>>> {
         self.db
-            .get_cf(self.state_machine()?, b"last_applied_log")
+            .get_cf(self.cf_state_machine()?, TremorStore::LAST_APPLIED_LOG)
             .map_err(sm_r_err)
             .and_then(|value| {
                 value
@@ -335,11 +355,86 @@ impl TremorStateMachine {
     fn set_last_applied_log(&self, log_id: LogId<TremorNodeId>) -> StorageResult<()> {
         self.db
             .put_cf(
-                self.state_machine()?,
-                b"last_applied_log",
+                self.cf_state_machine()?,
+                TremorStore::LAST_APPLIED_LOG,
                 serde_json::to_vec(&log_id).map_err(sm_w_err)?,
             )
             .map_err(sm_w_err)
+    }
+    fn delete_last_applied_log(&self) -> StorageResult<()> {
+        self.db
+            .delete_cf(self.cf_state_machine()?, TremorStore::LAST_APPLIED_LOG)
+            .map_err(sm_d_err)
+    }
+
+    async fn apply_diff_from_snapshot(
+        &mut self,
+        snapshot: SerializableTremorStateMachine,
+    ) -> Result<(), StoreError> {
+        // load key value pairs
+        for (key, value) in snapshot.data {
+            self.db
+                .put_cf(self.cf_data()?, key.as_bytes(), value.as_bytes())
+                .map_err(sm_w_err)?;
+        }
+        // TODO: delete every key that is not in the snapshot - not necessarily needed today as we don't have a DELETE op on our k/v store
+
+        // load archives
+        for archive in snapshot.archives {
+            self.load_archive(archive)?;
+        }
+
+        // load instances
+        // stop and remove all instances not in the snapshot
+        let snapshot_instances = snapshot
+            .instances
+            .iter()
+            .flat_map(|(app_id, v)| {
+                v.keys()
+                    .map(|instance_id| (app_id.clone(), instance_id.clone()))
+            })
+            .collect::<HashSet<_>>();
+        for (app_id, app) in &self.apps {
+            for (instance, FlowInstance { id, config, state }) in &app.instances {
+                if !snapshot_instances.contains((app_id, instance)) {
+                    info!("Removing {app_id}::{id}::{instance}");
+                    self.stop_and_remove_instance(app_id, instance).await?;
+                }
+            }
+        }
+        let (state_tx, state_rx) = unbounded();
+        for (app_id, instances) in snapshot.instances {
+            for (instance, FlowInstance { id, config, state }) in instances.into_iter() {
+                let flow = match self.world.get_flow(id.to_string()).await {
+                    Ok(flow) => flow,
+                    Err(RuntimeError(ErrorKind::FlowNotFound(_), _)) => {
+                        // flow is not alive, deploy it
+                        self.deploy_flow(app_id, id, instance, config)
+                            .await
+                            .map_err(|_| StoreError::MissingFlow(app_id, id))?;
+                        self.world.get_flow(id.to_string()).await?
+                    }
+                    Err(e) => {
+                        return Err(StoreError::from(e));
+                    }
+                };
+                flow.change_state(state, state_tx.clone()).await?;
+                // TODO: if this failed, we might leave the runtime (instances) in an inconsistent state
+                log_error!(
+                    state_rx.recv().timeout(Duration::from_secs(2)).await??,
+                    "Error changing state of flow {app_id}/{id}/{instance} to {state}: {e}"
+                );
+            }
+        }
+        if let Some(log_id) = snapshot.last_applied_log {
+            self.set_last_applied_log(log_id)?;
+        } else {
+            self.delete_last_applied_log()?;
+        }
+
+        self.set_last_membership(snapshot.last_membership)?;
+
+        Ok(())
     }
 
     async fn from_serializable(
@@ -352,11 +447,6 @@ impl TremorStateMachine {
             world,
             apps: HashMap::new(),
         };
-        // load key value pairs
-        for (key, value) in sm.data {
-            r.db.put_cf(r.data()?, key.as_bytes(), value.as_bytes())
-                .map_err(sm_w_err)?;
-        }
 
         // load archives
         for archive in sm.archives {
@@ -365,8 +455,8 @@ impl TremorStateMachine {
 
         // load instances
         for (app_id, instances) in sm.instances {
-            for (instance, FlowInstance { id, config }) in instances.into_iter() {
-                r.start_app(app_id.clone(), id, instance, config).await?;
+            for (instance, FlowInstance { id, config, state }) in instances.into_iter() {
+                r.deploy_flow(app_id.clone(), id, instance, config).await?;
             }
         }
 
@@ -395,7 +485,7 @@ impl TremorStateMachine {
         }
 
         // load instances
-        let instnaces = db
+        let instances = db
             .iterator_cf(
                 db.cf_handle(TremorStore::INSTANCES)
                     .ok_or(StoreError::MissingCf(TremorStore::INSTANCES))?,
@@ -409,9 +499,9 @@ impl TremorStateMachine {
             })
             .collect::<Result<HashMap<AppId, Instances>, StoreError>>()?;
 
-        for (app_id, instances) in instnaces {
-            for (instance, FlowInstance { id, config }) in instances.into_iter() {
-                r.start_app(app_id.clone(), id, instance, config)
+        for (app_id, instances) in instances {
+            for (instance, FlowInstance { id, config, state }) in instances.into_iter() {
+                r.deploy_flow(app_id.clone(), id, instance, config)
                     .await
                     .map_err(|e| StoreError::Other(Box::new(e)))?;
             }
@@ -422,34 +512,37 @@ impl TremorStateMachine {
 
     fn insert(&self, key: String, value: String) -> StorageResult<()> {
         self.db
-            .put_cf(self.data()?, key.as_bytes(), value.as_bytes())
+            .put_cf(self.cf_data()?, key.as_bytes(), value.as_bytes())
             .map_err(store_w_err)
     }
 
+    /// Load app definition and `Deploy` AST from the tar-archive in `archive`
+    /// and store the definition in the db and state machine
     fn load_archive(&mut self, archive: Vec<u8>) -> StorageResult<()> {
-        let (app, main) = extract(&archive).map_err(store_w_err)?;
+        let (app, main, arena_indices) = extract(&archive).map_err(store_w_err)?;
 
         self.db
-            .put_cf(self.apps()?, app.name().0.as_bytes(), &archive)
+            .put_cf(self.cf_apps()?, app.name().0.as_bytes(), &archive)
             .map_err(store_w_err)?;
 
         let app = StateApp {
             app,
             main,
+            arena_indices,
             instances: HashMap::new(),
         };
         self.apps.insert(app.app.name().clone(), app);
 
         Ok(())
     }
-    pub async fn start_app(
+    pub async fn deploy_flow(
         &mut self,
         app_id: AppId,
         flow: FlowId,
         instance: InstanceId,
         config: HashMap<String, OwnedValue>,
     ) -> StorageResult<()> {
-        println!("start flow {app_id}/{flow}/{instance}");
+        println!("deploy flow instance {app_id}/{flow}/{instance}");
         let app = self
             .apps
             .get_mut(&app_id)
@@ -508,15 +601,21 @@ impl TremorStateMachine {
             defn,
             docs: None,
         };
-        app.instances
-            .insert(instance.clone(), FlowInstance { id: flow, config });
+        app.instances.insert(
+            instance.clone(),
+            FlowInstance {
+                id: flow,
+                config,
+                state: IntendedState::Running, // FIXME
+            },
+        );
         let instances = serde_json::to_vec(&app.instances).map_err(store_w_err)?;
 
         self.db
-            .put_cf(self.instances()?, app_id.0.as_bytes(), &instances)
+            .put_cf(self.cf_instances()?, app_id.0.as_bytes(), &instances)
             .map_err(store_w_err)?;
 
-        self.world.start_flow(&deploy).await.map_err(store_w_err)?;
+        self.world.deploy_flow(&deploy).await.map_err(store_w_err)?;
 
         Ok(())
     }
@@ -524,7 +623,7 @@ impl TremorStateMachine {
     pub fn get(&self, key: &str) -> StorageResult<Option<String>> {
         let key = key.as_bytes();
         self.db
-            .get_cf(self.data()?, key)
+            .get_cf(self.cf_data()?, key)
             .map(|value| {
                 if let Some(value) = value {
                     Some(String::from_utf8(value.to_vec()).ok()?)
@@ -647,24 +746,31 @@ impl TremorStore {
         Ok(())
     }
 
-    fn put(&self, cf: &ColumnFamily, key: &[u8], value: &[u8]) -> Result<(), StoreError> {
+    fn put<K, V>(&self, cf: &ColumnFamily, key: K, value: V) -> Result<(), StoreError>
+    where
+        K: AsRef<[u8]>,
+        V: AsRef<[u8]>,
+    {
         self.db.put_cf(cf, key, value)?;
         self.flush()?;
         Ok(())
     }
-    fn store(&self) -> Result<&ColumnFamily, StoreError> {
+    /// store column family
+    fn cf_store(&self) -> Result<&ColumnFamily, StoreError> {
         self.db
             .cf_handle(TremorStore::STORE)
             .ok_or(StoreError::MissingCf(TremorStore::STORE))
     }
 
-    fn node(&self) -> Result<&ColumnFamily, StoreError> {
+    /// node column family
+    fn cf_node(&self) -> Result<&ColumnFamily, StoreError> {
         self.db
             .cf_handle(TremorStore::NODE)
             .ok_or(StoreError::MissingCf(TremorStore::NODE))
     }
 
-    fn logs(&self) -> Result<&ColumnFamily, StoreError> {
+    /// logs columns family
+    fn cf_logs(&self) -> Result<&ColumnFamily, StoreError> {
         self.db
             .cf_handle(TremorStore::LOGS)
             .ok_or(StoreError::MissingCf(TremorStore::LOGS))
@@ -673,15 +779,15 @@ impl TremorStore {
     fn get_last_purged_(&self) -> StorageResult<Option<LogId<TremorNodeId>>> {
         Ok(self
             .db
-            .get_cf(self.store()?, b"last_purged_log_id")
+            .get_cf(self.cf_store()?, TremorStore::LAST_PURGED_LOG_ID)
             .map_err(|e| store_r_err(e))?
             .and_then(|v| serde_json::from_slice(&v).ok()))
     }
 
     fn set_last_purged_(&self, log_id: LogId<TremorNodeId>) -> StorageResult<()> {
         self.put(
-            self.store()?,
-            b"last_purged_log_id",
+            self.cf_store()?,
+            TremorStore::LAST_PURGED_LOG_ID,
             serde_json::to_vec(&log_id)
                 .map_err(StoreError::JSON)?
                 .as_slice(),
@@ -692,7 +798,7 @@ impl TremorStore {
     fn get_snapshot_index_(&self) -> StorageResult<u64> {
         Ok(self
             .db
-            .get_cf(self.store()?, b"snapshot_index")
+            .get_cf(self.cf_store()?, TremorStore::SNAPSHOT_INDEX)
             .map_err(store_r_err)?
             .map(|v| serde_json::from_slice(&v).map_err(StoreError::JSON))
             .transpose()?
@@ -701,8 +807,8 @@ impl TremorStore {
 
     fn set_snapshot_index_(&self, snapshot_index: u64) -> StorageResult<()> {
         self.put(
-            self.store()?,
-            b"snapshot_index",
+            self.cf_store()?,
+            TremorStore::SNAPSHOT_INDEX,
             serde_json::to_vec(&snapshot_index)
                 .map_err(store_w_err)?
                 .as_slice(),
@@ -713,8 +819,8 @@ impl TremorStore {
 
     fn set_vote_(&self, vote: &Vote<TremorNodeId>) -> StorageResult<()> {
         self.put(
-            self.store()?,
-            b"vote",
+            self.cf_store()?,
+            TremorStore::VOTE,
             &serde_json::to_vec(vote).map_err(vote_w_err)?,
         )
         .map_err(vote_w_err)
@@ -723,7 +829,7 @@ impl TremorStore {
     fn get_vote_(&self) -> StorageResult<Option<Vote<TremorNodeId>>> {
         Ok(self
             .db
-            .get_cf(self.store()?, b"vote")
+            .get_cf(self.cf_store()?, TremorStore::VOTE)
             .map_err(vote_r_err)?
             .and_then(|v| serde_json::from_slice(&v).ok()))
     }
@@ -731,16 +837,16 @@ impl TremorStore {
     fn get_current_snapshot_(&self) -> StorageResult<Option<TremorSnapshot>> {
         Ok(self
             .db
-            .get_cf(self.store()?, b"snapshot")
+            .get_cf(self.cf_store()?, TremorStore::SNAPSHOT)
             .map_err(store_r_err)?
             .and_then(|v| serde_json::from_slice(&v).ok()))
     }
 
     fn set_current_snapshot_(&self, snap: TremorSnapshot) -> StorageResult<()> {
         self.put(
-            self.store()?,
-            b"snapshot",
-            serde_json::to_vec(&snap).unwrap().as_slice(),
+            self.cf_store()?,
+            TremorStore::SNAPSHOT,
+            serde_json::to_vec(&snap).unwrap(),
         )
         .map_err(|e| snap_w_err(snap.meta, e))?;
         Ok(())
@@ -752,7 +858,7 @@ impl RaftLogReader<TremorTypeConfig> for Arc<TremorStore> {
     async fn get_log_state(&mut self) -> StorageResult<LogState<TremorTypeConfig>> {
         let last = self
             .db
-            .iterator_cf(self.logs()?, rocksdb::IteratorMode::End)
+            .iterator_cf(self.cf_logs()?, rocksdb::IteratorMode::End)
             .next()
             .and_then(|d| {
                 let (_, ent) = d.ok()?;
@@ -786,7 +892,7 @@ impl RaftLogReader<TremorTypeConfig> for Arc<TremorStore> {
         }?;
         self.db
             .iterator_cf(
-                self.logs()?,
+                self.cf_logs()?,
                 rocksdb::IteratorMode::From(&start, Direction::Forward),
             )
             .map(|d| -> StorageResult<_> {
@@ -876,7 +982,7 @@ impl RaftStorage<TremorTypeConfig> for Arc<TremorStore> {
             let id = id_to_bin(entry.log_id.index)?;
             assert_eq!(bin_to_id(&id)?, entry.log_id.index);
             self.put(
-                self.logs()?,
+                self.cf_logs()?,
                 &id,
                 &serde_json::to_vec(entry).map_err(logs_w_err)?,
             )
@@ -895,7 +1001,7 @@ impl RaftStorage<TremorTypeConfig> for Arc<TremorStore> {
         let from = id_to_bin(log_id.index)?;
         let to = id_to_bin(0xff_ff_ff_ff_ff_ff_ff_ff)?;
         self.db
-            .delete_range_cf(self.logs()?, &from, &to)
+            .delete_range_cf(self.cf_logs()?, &from, &to)
             .map_err(logs_w_err)
     }
 
@@ -907,7 +1013,7 @@ impl RaftStorage<TremorTypeConfig> for Arc<TremorStore> {
         let from = id_to_bin(0)?;
         let to = id_to_bin(log_id.index + 1)?;
         self.db
-            .delete_range_cf(self.logs()?, &from, &to)
+            .delete_range_cf(self.cf_logs()?, &from, &to)
             .map_err(logs_w_err)
     }
 
@@ -925,6 +1031,7 @@ impl RaftStorage<TremorTypeConfig> for Arc<TremorStore> {
     }
 
     // #[tracing::instrument(level = "trace", skip(self, entries))]
+    /// apply committed entries to the state machine, start the operation encoded in the `TremorRequest`
     async fn apply_to_state_machine(
         &mut self,
         entries: &[&Entry<TremorTypeConfig>],
@@ -948,7 +1055,7 @@ impl RaftStorage<TremorTypeConfig> for Arc<TremorStore> {
                             value: Some(value.clone()),
                         })
                     }
-                    TremorRequest::Load { app, file } => {
+                    TremorRequest::InstallApp { app, file } => {
                         debug!("[{}] installing app {app:?}", entry.log_id);
                         sm.load_archive(file.clone())?;
                         res.push(TremorResponse {
@@ -962,10 +1069,10 @@ impl RaftStorage<TremorTypeConfig> for Arc<TremorStore> {
                         config,
                     } => {
                         debug!(
-                            "[{}] start {app}/{flow} with config: {config:?}",
+                            "[{}] start {app}/{flow} as {instance} with config: {config:?}",
                             entry.log_id
                         );
-                        sm.start_app(app.clone(), flow.clone(), instance.clone(), config.clone())
+                        sm.deploy_flow(app.clone(), flow.clone(), instance.clone(), config.clone())
                             .await?;
                         res.push(TremorResponse {
                             value: Some(instance.to_string()),
@@ -992,7 +1099,7 @@ impl RaftStorage<TremorTypeConfig> for Arc<TremorStore> {
     }
 
     // #[tracing::instrument(level = "trace", skip(self, snapshot))]
-    // FIXME: this will not tear down old states ate the moment, we need to make sure that we
+    // FIXME: this will not tear down old states at the moment, we need to make sure that we
     // also remove / stop / pause flows and apps based on the delta
     async fn install_snapshot(
         &mut self,
@@ -1020,12 +1127,16 @@ impl RaftStorage<TremorTypeConfig> for Arc<TremorStore> {
                     )
                 })?;
             let mut state_machine = self.state_machine.write().await;
-            *state_machine = TremorStateMachine::from_serializable(
-                updated_state_machine,
-                self.db.clone(),
-                self.runtime.clone(),
-            )
-            .await?;
+            state_machine
+                .apply_diff_from_snapshot(updated_state_machine)
+                .await?;
+            // FIXME: this should take the updated state machine and apply its deltas to the current `state_machine`
+            // *state_machine = TremorStateMachine::from_serializable(
+            //     updated_state_machine,
+            //     self.db.clone(),
+            //     self.runtime.clone(),
+            // )
+            // .await?;
         }
 
         self.set_current_snapshot_(new_snapshot)?;
@@ -1057,6 +1168,7 @@ impl RaftStorage<TremorTypeConfig> for Arc<TremorStore> {
     }
 }
 impl TremorStore {
+    // db column families
     const NODE: &'static str = "node";
     const LOGS: &'static str = "logs";
     const STORE: &'static str = "store";
@@ -1064,6 +1176,14 @@ impl TremorStore {
     const APPS: &'static str = "apps";
     const INSTANCES: &'static str = "instances";
     const STATE_MACHINE: &'static str = "state_machine";
+
+    // keys
+    const LAST_MEMBERSHIP: &'static str = "last_membership";
+    const LAST_APPLIED_LOG: &'static str = "last_applied_log";
+    const LAST_PURGED_LOG_ID: &'static str = "last_purged_log_id";
+    const SNAPSHOT_INDEX: &'static str = "snapshot_index";
+    const VOTE: &'static str = "vote";
+    const SNAPSHOT: &'static str = "snapshot";
 
     /// Initialize the rocksdb column families.
     ///
@@ -1166,20 +1286,20 @@ impl TremorStore {
     pub fn get_api_addr(&self) -> Result<Option<String>, StoreError> {
         let api_addr = self
             .db
-            .get_cf(self.node()?, "api_addr")?
+            .get_cf(self.cf_node()?, "api_addr")?
             .map(|v| String::from_utf8(v).map_err(StoreError::Utf8))
             .transpose()?;
         Ok(api_addr)
     }
     pub fn get_rpc_addr(&self) -> Result<Option<String>, StoreError> {
         self.db
-            .get_cf(self.node()?, "rpc_addr")?
+            .get_cf(self.cf_node()?, "rpc_addr")?
             .map(|v| String::from_utf8(v).map_err(StoreError::Utf8))
             .transpose()
     }
     pub fn get_node_id(&self) -> Result<Option<TremorNodeId>, StoreError> {
         self.db
-            .get_cf(self.node()?, "node_id")?
+            .get_cf(self.cf_node()?, "node_id")?
             .map(|v| bin_to_id(&v).map(TremorNodeId::from))
             .transpose()
     }

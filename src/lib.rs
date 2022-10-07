@@ -94,10 +94,8 @@ pub type OpConfig = tremor_value::Value<'static>;
 
 pub(crate) mod channel;
 
-lazy_static! {
-    /// Default Q Size
-    static ref QSIZE: AtomicUsize = AtomicUsize::new(128);
-}
+/// Default Q Size
+const QSIZE: AtomicUsize = AtomicUsize::new(128);
 
 pub(crate) fn qsize() -> usize {
     QSIZE.load(std::sync::atomic::Ordering::Relaxed)
@@ -119,6 +117,7 @@ pub async fn load_troy_file(world: &Runtime, file_name: &str) -> Result<usize> {
 }
 
 /// Logs but ignores an error
+/// Returns `true` if the expr was an `Err(...)`, false otherwise.
 #[macro_export(log_error)]
 #[doc(hidden)]
 macro_rules! log_error {
