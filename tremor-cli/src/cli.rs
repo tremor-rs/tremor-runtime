@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use clap::{ArgEnum, Parser};
+use clap::{Parser, ValueEnum};
 
 /// Tremor cli - Command Line Interface
 #[derive(Parser, Debug)]
@@ -31,7 +31,7 @@ pub(crate) struct Cli {
 pub(crate) enum Command {
     /// Generate shell completions to stdout. Tries to guess the shell if no subcommand is given.
     Completions {
-        #[clap(arg_enum, value_parser = clap::value_parser!(clap_complete::shells::Shell))]
+        #[clap(value_enum, value_parser = clap::value_parser!(clap_complete::shells::Shell))]
         shell: Option<clap_complete::shells::Shell>,
     },
     /// Tremor server
@@ -56,7 +56,7 @@ pub(crate) enum Command {
 }
 
 /// Shell type
-#[derive(ArgEnum, Clone, Copy, Debug)]
+#[derive(ValueEnum, Clone, Copy, Debug)]
 pub(crate) enum Shell {
     /// Generate completion based on active shell
     Guess,
@@ -75,7 +75,7 @@ pub(crate) enum Shell {
 #[derive(Parser, Debug)]
 pub(crate) struct Test {
     /// Specifies what to test
-    #[clap(arg_enum, default_value_t, value_parser = clap::value_parser!(TestMode))]
+    #[clap(value_enum, default_value_t, value_parser = clap::value_parser!(TestMode))]
     pub(crate) mode: TestMode,
     /// The root test path
     #[clap(default_value = "tests", value_parser = clap::value_parser!(String))]
@@ -98,7 +98,7 @@ pub(crate) struct Test {
 }
 
 /// Shell type
-#[derive(ArgEnum, Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 pub(crate) enum TestMode {
     /// Run all tests
     All,
