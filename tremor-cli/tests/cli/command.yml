@@ -14,9 +14,9 @@ suites:
         expects:
           - source: stderr
             contains:
-              - USAGE
-              - OPTIONS
-              - SUBCOMMANDS
+              - Usage
+              - Options
+              - Commands
       - name: |
           `tremor -h` returns help
         command: tremor -h
@@ -26,9 +26,9 @@ suites:
         expects:
           - source: stdout
             contains:
-              - USAGE
-              - OPTIONS
-              - SUBCOMMANDS
+              - Usage
+              - Options
+              - Commands
       - name: |
           `tremor help` returns help
         command: tremor -h
@@ -38,9 +38,9 @@ suites:
         expects:
           - source: stdout
             contains:
-              - USAGE
-              - OPTIONS
-              - SUBCOMMANDS
+              - Usage
+              - Options
+              - Commands
       - name: |
           `tremor --help` returns help
         command: tremor --help
@@ -50,9 +50,9 @@ suites:
         expects:
           - source: stdout
             contains:
-              - USAGE
-              - OPTIONS
-              - SUBCOMMANDS
+              - Usage
+              - Options
+              - Commands
               - completions
               - dbg
               - doc
