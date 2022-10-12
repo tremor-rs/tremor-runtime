@@ -32,7 +32,7 @@ halfbrown = "0.1"
 http-types = "2.12"
 # jemallocator = {version = "0.3", optional = false}
 log = "0.4"
-log4rs = "1.1.0"
+log4rs = "1.2.0"
 serde = "1"
 serde_derive = "1"
 serde_yaml = "0.9"
