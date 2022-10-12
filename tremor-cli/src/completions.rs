@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::{cli::Cli, errors::Result};
-use clap::{self, ArgEnum, IntoApp};
+use clap::{self, CommandFactory, ValueEnum};
 use clap_complete::{generate, shells::Shell};
 use std::path::Path;
 
@@ -36,7 +36,6 @@ fn guess_shell() -> Result<Shell> {
         let shell = std::env::var_os("SHELL")
             .and_then(|s| Path::new(&s).file_name().map(std::ffi::OsStr::to_os_string))
             .ok_or(ERR_MSG)?;
-        #[allow(clippy::map_err_ignore)] // Error is OsString, unusable here
         let shell = shell.into_string().map_err(|_| ERR_MSG)?;
         let shell = Shell::from_str(&shell, true)?;
         Ok(shell)
