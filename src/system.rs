@@ -92,6 +92,11 @@ impl KillSwitch {
     pub(crate) fn dummy() -> Self {
         KillSwitch(bounded(1).0)
     }
+
+    #[cfg(test)]
+    pub(crate) fn new(sender: Sender<flow_supervisor::Msg>) -> Self {
+        KillSwitch(sender)
+    }
 }
 
 /// Tremor runtime

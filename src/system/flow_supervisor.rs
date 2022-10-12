@@ -30,6 +30,7 @@ use tremor_script::ast::DeployFlow;
 pub(crate) type Channel = Sender<Msg>;
 
 /// This is control plane
+#[derive(Debug)]
 pub(crate) enum Msg {
     /// deploy a Flow
     StartDeploy {
