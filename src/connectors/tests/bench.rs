@@ -12,14 +12,12 @@
 // See the License for the specific language governing perm
 use super::ConnectorHarness;
 use crate::{
-    connectors::{impls::bench, sink::SinkMsg},
+    connectors::{impls::bench, prelude::KillSwitch, sink::SinkMsg},
     errors::Result,
-    system::{World, WorldConfig},
+    system::{flow_supervisor, World, WorldConfig},
 };
-use std::{
-    io::Write,
-    time::{Duration, Instant},
-};
+use async_std::{channel::bounded, prelude::FutureExt};
+use std::{io::Write, time::Duration};
 use tempfile::NamedTempFile;
 use tremor_common::ports::IN;
 use tremor_value::prelude::*;
@@ -92,36 +90,36 @@ async fn stop_after_secs() -> Result<()> {
       }
     });
 
-    let (world, world_handle) = World::start(WorldConfig::default()).await?;
+    let (tx, rx) = bounded(1);
+    let kill_switch = KillSwitch::new(tx);
     let harness = ConnectorHarness::new_with_kill_switch(
         function_name!(),
         &bench::Builder::default(),
         &defn,
-        world.kill_switch,
+        kill_switch,
     )
     .await?;
     let out = harness.out().expect("No out pipeline connected");
     harness.start().await?;
     harness.wait_for_connected().await?;
 
-    let one_sec = Duration::from_secs(1);
-    let start = Instant::now();
     // echo pipeline
     let bg_out = out.clone();
     let bg_addr = harness.addr.clone();
     let handle = async_std::task::spawn::<_, Result<()>>(async move {
         // echo pipeline
-        while start.elapsed() < one_sec {
+        loop {
             let event = bg_out.get_event().await?;
             bg_addr
                 .send_sink(SinkMsg::Event { event, port: IN })
                 .await?;
         }
-        Ok(())
     });
 
-    // the bench connector should shut the world down
-    world_handle.await?;
+    // the bench connector should trigger the kill switch
+    let two_secs = Duration::from_secs(2);
+    let msg = rx.recv().timeout(two_secs).await??;
+    assert!(matches!(msg, flow_supervisor::Msg::Stop));
     info!("Flow supervisor finished");
     handle.cancel().await;
     info!("Echo pipeline finished");

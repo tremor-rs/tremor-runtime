@@ -377,9 +377,8 @@ impl TestPipeline {
         let task_rx = rx_mgmt.clone();
         task::spawn(async move {
             while let Ok(msg) = task_rx.recv().await {
-                match dbg!(msg) {
+                match msg {
                     pipeline::MgmtMsg::Stop => {
-                        dbg!();
                         break;
                     }
                     pipeline::MgmtMsg::ConnectInput { tx, .. } => {
