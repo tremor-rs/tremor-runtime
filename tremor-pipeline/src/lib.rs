@@ -831,6 +831,12 @@ impl EventIdGenerator {
     }
 
     #[must_use]
+    /// create a new generator for the `Operator` identified by `operator_id` with `stream_id`
+    pub fn for_operator_with_stream(operator_id: OperatorId, stream_id: u64) -> Self {
+        Self(operator_id.id(), stream_id, 0)
+    }
+
+    #[must_use]
     /// create a new generator using the given source and stream id
     pub fn new_with_stream(source_id: SourceId, stream_id: u64) -> Self {
         Self(source_id.id(), stream_id, 0)
