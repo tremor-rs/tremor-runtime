@@ -30,6 +30,10 @@ use tremor_script::{
 };
 use tremor_value::literal;
 
+fn test_uid() -> OperatorId {
+    OperatorId::new(42)
+}
+
 fn test_select_stmt<'s>(stmt: tremor_script::ast::Select<'s>) -> SelectStmt<'s> {
     SelectStmt {
         stmt: Box::new(stmt),
@@ -122,7 +126,7 @@ fn test_select(uid: OperatorId, stmt: SelectStmt<'static>) -> Select {
 
 fn try_enqueue(op: &mut Select, event: Event) -> Result<Option<(Cow<'static, str>, Event)>> {
     let mut state = Value::null();
-    let mut action = op.on_event(OperatorId::default(), "in", &mut state, event)?;
+    let mut action = op.on_event(test_uid(), "in", &mut state, event)?;
     let first = action.events.pop();
     if action.events.is_empty() {
         Ok(first)
@@ -136,7 +140,7 @@ fn try_enqueue_two(
     event: Event,
 ) -> Result<Option<[(Cow<'static, str>, Event); 2]>> {
     let mut state = Value::null();
-    let mut action = op.on_event(OperatorId::default(), "in", &mut state, event)?;
+    let mut action = op.on_event(test_uid(), "in", &mut state, event)?;
     let r = action
         .events
         .pop()
@@ -162,7 +166,7 @@ fn parse_query(query: &str) -> Result<crate::op::trickle::select::Select> {
         })
         .next()
         .ok_or_else(|| Error::from("Invalid query"))?;
-    Ok(test_select(OperatorId::new(1), stmt))
+    Ok(test_select(test_uid(), stmt))
 }
 
 #[test]
@@ -205,8 +209,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
         .query
         .stmts
         .iter()
-        .filter_map(as_select)
-        .next()
+        .find_map(as_select)
         .cloned()
         .ok_or_else(|| Error::from("Invalid query, expected 1 select statement"))?;
     let h = Helper::new(&reg, &aggr_reg);
@@ -232,7 +235,7 @@ fn select_stmt_from_query(query_str: &str) -> Result<Select> {
         })
         .collect();
 
-    Ok(Select::from_stmt(OperatorId::new(42), windows, &stmt))
+    Ok(Select::from_stmt(test_uid(), windows, &stmt))
 }
 
 fn test_tick(ns: u64) -> Event {
@@ -257,7 +260,7 @@ fn select_single_win_with_script_on_signal() -> Result<()> {
         select aggr::stats::count() from in[window1] group by event.g into out having event > 0;
         "#,
     )?;
-    let uid = OperatorId::new(42);
+    let uid = test_uid();
     let mut state = Value::null();
     let mut tick1 = test_tick(1);
     let mut eis = select.on_signal(uid, &mut state, &mut tick1)?;
@@ -313,15 +316,16 @@ fn select_single_win_on_signal() -> Result<()> {
         select aggr::win::collect_flattened(event) from in[window1] group by event.g into out;
         "#,
     )?;
-    let uid = OperatorId::new(42);
+    let uid = test_uid();
     let mut state = Value::null();
     let mut tick1 = test_tick(1);
     let mut eis = select.on_signal(uid, &mut state, &mut tick1)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
 
+    let event_id1: EventId = (1, 1, 300).into();
     let event = Event {
-        id: (1, 1, 300).into(),
+        id: event_id1.clone(),
         ingest_ns: 2,
         data: literal!({
            "g": "group"
@@ -336,7 +340,7 @@ fn select_single_win_on_signal() -> Result<()> {
     // no emit yet
     let mut tick2 = test_tick(3);
     eis = select.on_signal(uid, &mut state, &mut tick2)?;
-    assert!(eis.insights.is_empty());
+    assert!(eis.insights.is_empty(), "{:?} is not empty", eis.insights);
     assert_eq!(0, eis.events.len());
 
     // now emit
@@ -344,6 +348,17 @@ fn select_single_win_on_signal() -> Result<()> {
     eis = select.on_signal(uid, &mut state, &mut tick3)?;
     assert!(eis.insights.is_empty());
     assert_eq!(1, eis.events.len());
+    let event_id = eis.events[0].1.id.clone();
+    assert!(
+        event_id.is_tracking(&event_id1),
+        "select result event {:?} is not tracking input event {:?}",
+        &event_id,
+        &event_id1
+    );
+    assert_eq!(
+        Some(0), // first event for the first window
+        event_id.get_min_by_stream(uid.id(), 0)
+    );
     assert_eq!(
         r#"[{"g":"group"}]"#,
         sorted_serialize(eis.events[0].1.data.parts().0)?
@@ -367,7 +382,7 @@ fn select_multiple_wins_on_signal() -> Result<()> {
         select aggr::win::collect_flattened(event) from in[window1, window2] group by event.cat into out;
         "#,
     )?;
-    let uid = OperatorId::new(42);
+    let uid = test_uid();
     let mut state = Value::null();
     let mut tick1 = test_tick(1);
     let mut eis = select.on_signal(uid, &mut state, &mut tick1)?;
@@ -386,8 +401,9 @@ fn select_multiple_wins_on_signal() -> Result<()> {
     assert_eq!(0, eis.events.len());
 
     // insert first event
+    let event_id1: EventId = (1, 1, 300).into();
     let event = Event {
-        id: (1, 1, 300).into(),
+        id: event_id1.clone(),
         ingest_ns: 300,
         data: literal!({
            "cat" : 42,
@@ -407,12 +423,53 @@ fn select_multiple_wins_on_signal() -> Result<()> {
     assert_eq!(1, eis.events.len());
     let (_port, event) = eis.events.remove(0);
     assert_eq!(r#"[{"cat":42}]"#, sorted_serialize(event.data.parts().0)?);
+    assert!(
+        event.id.is_tracking(&event_id1),
+        "Select result event {:?} is not tracking input event {:?}",
+        &event.id,
+        &event_id1
+    );
     assert_eq!(true, event.transactional);
+    assert_eq!(
+        Some(0), // first event in the first window
+        event.id.get_min_by_stream(uid.id(), 0)
+    );
 
     let mut tick5 = test_tick(499);
     eis = select.on_signal(uid, &mut state, &mut tick5)?;
     assert!(eis.insights.is_empty());
     assert_eq!(0, eis.events.len());
+
+    // add another event to emit from the first and second window
+    let event_id2: EventId = (1, 1, 301).into();
+    let event2 = Event {
+        id: event_id2.clone(),
+        ingest_ns: 500, // ensure that we don't emit on event, but only on signal
+        data: literal!({
+            "cat": 42 // needs to be in the same group
+        })
+        .into(),
+        transactional: false,
+        ..Event::default()
+    };
+    eis = select.on_event(uid, "in", &mut state, event2)?;
+    assert!(eis.insights.is_empty());
+    assert_eq!(0, eis.events.len());
+    let mut tick6 = test_tick(600);
+    eis = select.on_signal(uid, &mut state, &mut tick6)?;
+    assert!(eis.insights.is_empty());
+    assert_eq!(2, eis.events.len());
+
+    let (_, event1) = eis.events.remove(0);
+    assert_eq!(event1.id.stream_id(), 0);
+    assert!(event1.id.is_tracking(&event_id2));
+    assert!(!event1.id.is_tracking(&event_id1));
+
+    let (_, event2) = eis.events.remove(0);
+    assert_eq!(event2.id.stream_id(), 1); // different window, different stream id
+    assert!(event2.id.is_tracking(&event_id2));
+    assert!(event2.id.is_tracking(&event1.id)); // second tilt is tracking window event from first window as well
+    assert!(event2.id.is_tracking(&event_id1));
 
     Ok(())
 }
@@ -428,7 +485,7 @@ fn test_transactional_single_window() -> Result<()> {
             select aggr::stats::count() from in[w2] into out;
         "#,
     )?;
-    let uid = OperatorId::new(0);
+    let uid = test_uid();
     let mut state = Value::null();
     let event1 = test_event_tx(0, false, 0);
     let id1 = event1.id.clone();
@@ -478,7 +535,7 @@ fn test_transactional_multiple_windows() -> Result<()> {
         "#,
     )?;
 
-    let uid = OperatorId::new(0);
+    let uid = test_uid();
     let mut state = Value::null();
     let event0 = test_event_tx(0, true, 0);
     let id0 = event0.id.clone();
@@ -595,7 +652,7 @@ fn select_nowin_nogrp_nowhr_nohav() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(OperatorId::new(1), stmt);
+    let mut op = test_select(test_uid(), stmt);
     assert!(try_enqueue(&mut op, test_event(0))?.is_none());
     assert!(try_enqueue(&mut op, test_event(1))?.is_none());
     let (out, event) = try_enqueue(&mut op, test_event(15))?.expect("no event");
@@ -617,7 +674,7 @@ fn select_nowin_nogrp_whrt_nohav() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(OperatorId::new(2), stmt);
+    let mut op = test_select(test_uid(), stmt);
 
     assert!(try_enqueue(&mut op, test_event(0))?.is_none());
 
@@ -639,7 +696,7 @@ fn select_nowin_nogrp_whrf_nohav() -> Result<()> {
     }));
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(OperatorId::new(3), stmt);
+    let mut op = test_select(test_uid(), stmt);
     let next = try_enqueue(&mut op, test_event(0))?;
     assert_eq!(None, next);
     Ok(())
@@ -656,7 +713,7 @@ fn select_nowin_nogrp_whrbad_nohav() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(OperatorId::new(4), stmt);
+    let mut op = test_select(test_uid(), stmt);
 
     assert!(try_enqueue(&mut op, test_event(0)).is_err());
 
@@ -678,7 +735,7 @@ fn select_nowin_nogrp_whrt_havt() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(OperatorId::new(5), stmt);
+    let mut op = test_select(test_uid(), stmt);
 
     let event = test_event(0);
     assert!(try_enqueue(&mut op, event)?.is_none());
@@ -705,7 +762,7 @@ fn select_nowin_nogrp_whrt_havf() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(OperatorId::new(6), stmt);
+    let mut op = test_select(test_uid(), stmt);
     let event = test_event(0);
 
     let next = try_enqueue(&mut op, event)?;
@@ -732,7 +789,7 @@ fn select_nowin_nogrp_whrt_havbad() -> Result<()> {
 
     let stmt = test_select_stmt(stmt_ast);
 
-    let mut op = test_select(OperatorId::new(7), stmt);
+    let mut op = test_select(test_uid(), stmt);
     let event = test_event(0);
 
     let next = try_enqueue(&mut op, event)?;

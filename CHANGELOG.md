@@ -1,5 +1,9 @@
 # Changelog
 
+### Fixes
+
+- Fix windows based on `interval` not sending the correct event id when timing out
+
 ## [0.13.0-rc.5]
 ### Fixes
 - The Google BigQuery connector will now split requests that are longer than the allowed limit (10MB)
