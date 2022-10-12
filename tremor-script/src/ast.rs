@@ -248,7 +248,7 @@ pub struct Consts<'script> {
 }
 
 impl<'script> Consts<'script> {
-    /// Generates runtime borrow of the costs
+    /// Generates runtime borrow of the consts
     #[must_use]
     pub fn run(&self) -> RunConsts<'_, 'script> {
         RunConsts {
