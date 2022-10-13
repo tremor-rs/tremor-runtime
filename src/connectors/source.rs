@@ -794,7 +794,7 @@ where
                 self.cb_restore_received += 1;
                 ctx.swallow_err(self.source.on_cb_open(ctx).await, "on_cb_open failed");
                 // avoid a race condition where the necessary start routine wasnt executed
-                // because a `CbAction::Open` was there first, and thus the `Start` msg was ignored
+                // because a `CbAction::Restore` was there first, and thus the `Start` msg was ignored
                 if self.state != SourceState::Initialized {
                     self.state = SourceState::Running;
                 }
@@ -939,6 +939,8 @@ where
         state_should_pull
             && !self.pipelines_out.is_empty() // we have pipelines connected
             && self.connectivity == Connectivity::Connected // we are connected to our thingy
+            && self.cb_restore_received > 0                       // we did receive at least 1 `CbAction::Restore` in order to ensure we do not accidentally send events 
+                                                                  // before we received any CbAction::SinkStart and the corresponding CbAction::Restore
             && self.cb_restore_received >= self.num_started_sinks // we did receive a `CbAction::Restore` from all connected sinks
                                                                   // so we know the downstream side is ready to receive something
     }
