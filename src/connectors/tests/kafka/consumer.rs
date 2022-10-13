@@ -1019,7 +1019,7 @@ async fn transactional_store_offset_handling() -> Result<()> {
     harness.start().await?;
     harness.wait_for_connected().await?;
     debug!("connected");
-    
+
     // give the background librdkafka time to start fetching the partitions before we fail
     // otherwise it will fail silently in the background
     // consider this a cry for help!
