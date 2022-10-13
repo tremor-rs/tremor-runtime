@@ -110,9 +110,9 @@ async fn stop_after_secs() -> Result<()> {
         // echo pipeline
         loop {
             let event = bg_out.get_event().await?;
-            bg_addr
-                .send_sink(SinkMsg::Event { event, port: IN })
-                .await?;
+            if let Err(e) = bg_addr.send_sink(SinkMsg::Event { event, port: IN }).await {
+                error!("Error sending event to sink: {e}");
+            }
         }
     });
 
@@ -121,10 +121,10 @@ async fn stop_after_secs() -> Result<()> {
     let msg = rx.recv().timeout(two_secs).await??;
     assert!(matches!(msg, flow_supervisor::Msg::Stop));
     info!("Flow supervisor finished");
-    handle.cancel().await;
-    info!("Echo pipeline finished");
     let (_out, err) = harness.stop().await?;
     info!("Harness stopped");
+    handle.cancel().await; // stopping the pipeline after the connector to ensure it is draining the source
+    info!("Echo pipeline finished");
     assert!(err.is_empty());
 
     Ok(())
