@@ -219,9 +219,11 @@ impl ConnectorHarness {
 
     pub(crate) async fn stop(self) -> Result<(Vec<Event>, Vec<Event>)> {
         let (tx, rx) = bounded(1);
-
+        debug!("Stopping harness...");
         self.addr.stop(tx).await?;
+        debug!("Waiting for stop result...");
         let cr = rx.recv().await?;
+        debug!("Stop result received.");
         cr.res?;
         //self.handle.cancel().await;
         let out_events = self
@@ -236,9 +238,11 @@ impl ConnectorHarness {
             .map(TestPipeline::get_events)
             .unwrap_or(Ok(vec![]))
             .unwrap_or_default();
-        for (_, p) in self.pipes {
+        for (port, p) in self.pipes {
+            debug!("stopping pipeline connected to {port}");
             p.stop().await?;
         }
+        debug!("Pipes stopped");
         Ok((out_events, err_events))
     }
 
