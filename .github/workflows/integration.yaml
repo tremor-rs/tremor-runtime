@@ -53,7 +53,7 @@ jobs:
         run: cargo llvm-cov run -p tremor-cli --lcov --output-path lcov.txt -- test --timeout 300 ${{ matrix.kind }} tremor-cli/tests ${{ matrix.exclude_tests }}
 
       - name: Upload error logs
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v3
         if: failure()
         with:
           name: test-errors
