@@ -184,6 +184,8 @@ pub(crate) struct Connector {
 
     //pub(crate) on_pause: PauseBehaviour,
     pub(crate) metrics_interval_s: Option<u64>,
+
+    pub(crate) initial_commands: Vec<Value<'static>>,
 }
 
 impl Connector {
@@ -224,7 +226,7 @@ impl Connector {
         }
         let config = connector_config.get(ConnectorDefinition::CONFIG).cloned();
 
-        // TODO: can we get hygenic errors here?
+        // TODO: can we get hygienic errors here?
 
         validate_type(
             connector_config,
@@ -278,6 +280,12 @@ impl Connector {
                 connector_alias,
             )
         })?;
+        validate_type(
+            connector_config,
+            ConnectorDefinition::INITIAL_COMMANDS,
+            ValueType::Array,
+            connector_alias,
+        )?;
 
         Ok(Self {
             connector_type,
@@ -301,6 +309,10 @@ impl Connector {
                 .get(ConnectorDefinition::CODEC)
                 .map(Codec::try_from)
                 .transpose()?,
+            initial_commands: connector_config
+                .get_array(ConnectorDefinition::INITIAL_COMMANDS)
+                .map(|o| o.iter().cloned().map(Value::into_static).collect())
+                .unwrap_or_default(),
         })
     }
 }

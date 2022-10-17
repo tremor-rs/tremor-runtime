@@ -277,6 +277,7 @@ struct StopAfter {
 }
 
 /// A null offramp that records histograms
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct Blackhole {
     // config: Config,
     stop_after: StopAfter,

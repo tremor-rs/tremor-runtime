@@ -9,13 +9,15 @@ flow
     postprocessors = ["separate"],
     codec = "json",
     config = {
-      "url": "0.0.0.0:65535",
       "buf_size": 1024,
       "tls": {
           "cert": "./before/localhost.cert",
           "key": "./before/localhost.key",
       },
-    }
+    },
+    initial_commands = [
+      {"socket_server": {"listen": {"address": "tcp://0.0.0.0:65535", "handle": "a"}}},
+    ],
   end;
 
   create connector server_out from integration::write_file
@@ -51,7 +53,7 @@ flow
     postprocessors = ["separate"],
     codec = "json",
     config = {
-      "url": "127.0.0.1:65535",
+      "default_handle": "a",
       "buf_size": 1024,
       "socket_options": {
         "TCP_NODELAY": false
@@ -67,7 +69,10 @@ flow
         "growth_rate": 2,
         "max_retries": 3,
       }
-    }
+    },
+    initial_commands = [
+      {"socket_client": {"connect": {"address": "127.0.0.1:65535", "handle": "a"}}},
+    ],
   end;
 
   create connector in from integration::read_file;

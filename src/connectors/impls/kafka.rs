@@ -14,12 +14,13 @@
 pub(crate) mod consumer;
 pub(crate) mod producer;
 
-use crate::connectors::{prelude::*, utils::metrics::make_metrics_payload};
+use crate::connectors::{prelude::*, reconnect, utils::metrics::make_metrics_payload};
 use beef::Cow;
 use halfbrown::HashMap;
 use rdkafka::{error::KafkaError, ClientContext, Statistics};
 use rdkafka_sys::RDKafkaErrorCode;
 use std::{
+    fmt::Display,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
@@ -68,11 +69,25 @@ fn is_failed_connect_error(err: &KafkaError) -> bool {
     )
 }
 
-struct TremorRDKafkaContext<Ctx>
-where
-    Ctx: Context + Send + Sync + 'static,
-{
-    ctx: Ctx,
+// We need this as the Context trait can't be made into an object
+trait KafkaContext: Display {
+    /// get the notifier to signal to the runtime that we are disconnected
+    fn notifier(&self) -> &reconnect::ConnectionLostNotifier;
+    /// provide the alias of the connector
+    fn alias(&self) -> &Alias;
+}
+
+impl<T: Context> KafkaContext for T {
+    fn notifier(&self) -> &reconnect::ConnectionLostNotifier {
+        self.notifier()
+    }
+    fn alias(&self) -> &Alias {
+        self.alias()
+    }
+}
+
+pub(crate) struct TremorRDKafkaContext {
+    ctx: Box<dyn KafkaContext + Send + Sync + 'static>,
     connect_tx: Sender<KafkaError>,
     metrics_tx: BroadcastSender<EventPayload>,
     active: AtomicBool,
@@ -80,10 +95,7 @@ where
     last_rebalance_ts: Arc<AtomicU64>,
 }
 
-impl<Ctx> TremorRDKafkaContext<Ctx>
-where
-    Ctx: Context + Send + Sync + 'static,
-{
+impl TremorRDKafkaContext {
     const PRODUCER: &'static str = "producer";
     const CONSUMER: &'static str = "consumer";
     const TX_MSGS: Cow<'static, str> = Cow::const_str("tx_msgs");
@@ -98,14 +110,17 @@ where
     const CONSUMER_LAG: Cow<'static, str> = Cow::const_str("consumer_lag");
     const KAFKA_CONSUMER_STATS: &'static str = "kafka_consumer_stats";
 
-    fn consumer(
+    fn consumer<Ctx>(
         ctx: Ctx,
         connect_tx: Sender<KafkaError>,
         metrics_tx: BroadcastSender<EventPayload>,
         last_rebalance_ts: Arc<AtomicU64>,
-    ) -> Self {
+    ) -> Self
+    where
+        Ctx: KafkaContext + Send + Sync + 'static,
+    {
         Self {
-            ctx,
+            ctx: Box::new(ctx),
             connect_tx,
             metrics_tx,
             active: AtomicBool::new(true),
@@ -113,13 +128,16 @@ where
         }
     }
 
-    fn producer(
+    fn producer<Ctx>(
         ctx: Ctx,
         connect_tx: Sender<KafkaError>,
         metrics_tx: BroadcastSender<EventPayload>,
-    ) -> Self {
+    ) -> Self
+    where
+        Ctx: KafkaContext + Send + Sync + 'static,
+    {
         Self {
-            ctx,
+            ctx: Box::new(ctx),
             connect_tx,
             metrics_tx,
             active: AtomicBool::new(true),
@@ -128,14 +146,14 @@ where
     }
 
     fn on_connection_lost(&self) -> JoinHandle<()> {
-        let ctx = self.ctx.clone();
-
         // only actually notify the notifier if we didn't do so before
         // otherwise we would flood the connector and reconnect multiple times
         if self.active.swap(false, Ordering::AcqRel) {
+            let id = format!("{}", self.ctx);
+            let notifier = self.ctx.notifier().clone();
             tokio::task::spawn(async move {
-                if let Err(e) = ctx.notifier().connection_lost().await {
-                    error!("{ctx} Error notifying the connector of a lost connection: {e}");
+                if let Err(e) = notifier.connection_lost().await {
+                    error!("{id} Error notifying the connector of a lost connection: {e}");
                 }
             })
         } else {
@@ -191,10 +209,7 @@ where
     }
 }
 
-impl<Ctx> ClientContext for TremorRDKafkaContext<Ctx>
-where
-    Ctx: Context + Send + Sync + 'static,
-{
+impl ClientContext for TremorRDKafkaContext {
     /// log messages from librdkafka with connector alias prefixed
     fn log(&self, level: rdkafka::config::RDKafkaLogLevel, fac: &str, log_message: &str) {
         match level {

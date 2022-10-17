@@ -155,16 +155,6 @@ impl Attempt {
         self.since_last_success += 1;
     }
 
-    /// Returns true if this is the very first attempt
-    pub(crate) fn is_first(&self) -> bool {
-        self.overall == 0
-    }
-
-    /// returns the number of previous successful connection attempts
-    pub(crate) fn success(&self) -> u64 {
-        self.success
-    }
-
     /// returns the number of connection attempts since the last success
     pub(crate) fn since_last_success(&self) -> u64 {
         self.since_last_success
@@ -409,15 +399,12 @@ mod tests {
     fn attempt() {
         let mut attempt = Attempt::default();
         assert_eq!(0, attempt.since_last_success());
-        assert_eq!(0, attempt.success());
 
         attempt.on_success();
         assert_eq!(0, attempt.since_last_success());
-        assert_eq!(1, attempt.success());
 
         attempt.on_failure();
         assert_eq!(1, attempt.since_last_success());
-        assert_eq!(1, attempt.success());
     }
 
     #[test]

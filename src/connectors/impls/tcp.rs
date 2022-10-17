@@ -15,10 +15,7 @@
 pub(crate) mod client;
 pub(crate) mod server;
 
-use crate::{
-    connectors::{prelude::*, utils::ConnectionMeta},
-    log_error,
-};
+use crate::{connectors::prelude::*, log_error};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, ReadHalf, WriteHalf};
 use tokio::net::TcpStream;
 
@@ -40,7 +37,7 @@ where
     meta: Value<'static>,
     // notify the writer when the connection is done,
     // otherwise the socket will never close
-    sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
+    sink_runtime: Option<ChannelSinkRuntime<ConnectionMetaWithHandle>>,
 }
 
 impl TcpReader<ReadHalf<TcpStream>> {
@@ -50,7 +47,7 @@ impl TcpReader<ReadHalf<TcpStream>> {
         alias: Alias,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
-        sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
+        sink_runtime: Option<ChannelSinkRuntime<ConnectionMetaWithHandle>>,
     ) -> Self {
         Self {
             wrapped_stream,
@@ -70,7 +67,7 @@ impl TcpReader<ReadHalf<tokio_rustls::server::TlsStream<TcpStream>>> {
         alias: Alias,
         origin_uri: EventOriginUri,
         meta: Value<'static>,
-        sink_runtime: Option<ChannelSinkRuntime<ConnectionMeta>>,
+        sink_runtime: Option<ChannelSinkRuntime<ConnectionMetaWithHandle>>,
     ) -> Self {
         Self {
             wrapped_stream: stream,

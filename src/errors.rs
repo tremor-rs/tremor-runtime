@@ -452,6 +452,10 @@ error_chain! {
             description("Connector already created")
                 display("Connector already created")
         }
+        NotImplemented(s: String) {
+            description("Not implemented")
+                display("Not implemented: {}", s)
+        }
     }
 }
 

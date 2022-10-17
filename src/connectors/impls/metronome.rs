@@ -150,6 +150,7 @@ mod tests {
             postprocessors: None,
             reconnect: Reconnect::None,
             metrics_interval_s: Some(5),
+            initial_commands: vec![],
         };
         let kill_switch = KillSwitch::dummy();
         assert!(matches!(

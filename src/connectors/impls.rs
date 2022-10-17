@@ -55,6 +55,7 @@ pub(crate) mod ws;
 
 /// Some common things for object storage connectors like gcs and s3
 pub(crate) mod object_storage;
+
 /// `OpenTelemetry`
 pub(crate) mod otel;
 /// AWS S3 connectors

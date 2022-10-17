@@ -146,8 +146,9 @@ impl Connector for KafkaProducerConnector {
     }
 }
 
-type TremorProducer = FutureProducer<TremorRDKafkaContext<SinkContext>>;
+type TremorProducer = FutureProducer<TremorRDKafkaContext>;
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct KafkaProducerSink {
     config: Config,
     producer_config: ClientConfig,

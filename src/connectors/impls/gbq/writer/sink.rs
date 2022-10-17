@@ -64,9 +64,10 @@ struct ConnectedWriteStream {
     mapping: JsonToProtobufMapping,
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber)]
 pub(crate) struct GbqSink<
-    T: TokenProvider,
-    TChannel: GbqChannel<TChannelError>,
+    T: TokenProvider + Send + Sync + 'static,
+    TChannel: GbqChannel<TChannelError> + Sync,
     TChannelError: GbqChannelError,
 > {
     client: Option<BigQueryWriteClient<InterceptedService<TChannel, AuthInterceptor<T>>>>,
@@ -74,6 +75,66 @@ pub(crate) struct GbqSink<
     config: Config,
     channel_factory: Box<dyn ChannelFactory<TChannel> + Send + Sync>,
     _error_phantom: PhantomData<TChannelError>,
+}
+
+#[async_trait::async_trait]
+impl<
+        T: TokenProvider + Send + Sync + 'static,
+        TChannel: GbqChannel<TChannelError> + Sync,
+        TChannelError: GbqChannelError,
+    > DatabaseWriter for GbqSink<T, TChannel, TChannelError>
+where
+    TChannel::Future: Send,
+{
+    async fn open_table(&mut self, table: &str, handle: &str, ctx: &SinkContext) -> Result<()> {
+        self.ensure_connected(ctx).await?;
+
+        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
+            "BigQuery",
+            "The client is not connected",
+        ))?;
+
+        let stream = client
+            .create_write_stream(CreateWriteStreamRequest {
+                parent: table.to_string(),
+                write_stream: Some(WriteStream {
+                    // The stream name here will be ignored and a generated value will be set in the response
+                    name: String::new(),
+                    r#type: i32::from(write_stream::Type::Committed),
+                    create_time: None,
+                    commit_time: None,
+                    table_schema: None,
+                }),
+            })
+            .await?
+            .into_inner();
+
+        let mapping = JsonToProtobufMapping::new(
+            &stream
+                .table_schema
+                .as_ref()
+                .ok_or_else(|| ErrorKind::GbqSchemaNotProvided(table.to_string()))?
+                .clone()
+                .fields,
+            ctx,
+        );
+
+        self.write_streams.insert(
+            handle.to_string(),
+            ConnectedWriteStream {
+                name: stream.name,
+                mapping,
+            },
+        );
+
+        Ok(())
+    }
+
+    async fn close_table(&mut self, handle: &str, _ctx: &SinkContext) -> Result<()> {
+        self.write_streams.remove(handle);
+
+        Ok(())
+    }
 }
 
 struct Field {
@@ -312,8 +373,12 @@ impl JsonToProtobufMapping {
         &self.descriptor
     }
 }
-impl<T: TokenProvider, TChannel: GbqChannel<TChannelError>, TChannelError: GbqChannelError>
-    GbqSink<T, TChannel, TChannelError>
+
+impl<
+        T: TokenProvider + Send + Sync + 'static,
+        TChannel: GbqChannel<TChannelError> + Sync,
+        TChannelError: GbqChannelError,
+    > GbqSink<T, TChannel, TChannelError>
 {
     pub fn new(
         config: Config,
@@ -327,13 +392,35 @@ impl<T: TokenProvider, TChannel: GbqChannel<TChannelError>, TChannelError: GbqCh
             _error_phantom: PhantomData,
         }
     }
+
+    async fn ensure_connected(&mut self, ctx: &SinkContext) -> Result<()> {
+        if self.client.is_some() {
+            return Ok(());
+        }
+
+        info!("{ctx} Connecting to BigQuery");
+        let channel = self
+            .channel_factory
+            .make_channel(Duration::from_nanos(self.config.connect_timeout))
+            .await?;
+
+        let client = BigQueryWriteClient::with_interceptor(
+            channel,
+            AuthInterceptor {
+                token_provider: T::default(),
+            },
+        );
+        self.client = Some(client);
+
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
 impl<
-        T: TokenProvider + 'static,
-        TChannel: GbqChannel<TChannelError> + 'static,
-        TChannelError: GbqChannelError,
+        T: TokenProvider + Send + Sync + 'static,
+        TChannel: GbqChannel<TChannelError> + Sync + 'static,
+        TChannelError: GbqChannelError + 'static,
     > Sink for GbqSink<T, TChannel, TChannelError>
 where
     TChannel::Future: Send,
@@ -348,9 +435,7 @@ where
     ) -> Result<SinkReply> {
         let request_size_limit = self.config.request_size_limit;
 
-        let request_data = self
-            .event_to_requests(event, ctx, request_size_limit)
-            .await?;
+        let request_data = self.event_to_requests(&event, ctx, request_size_limit)?;
 
         if request_data.len() > 1 {
             warn!("{ctx} The batch is too large to be sent in a single request, splitting it into {} requests. Consider lowering the batch size.", request_data.len());
@@ -430,20 +515,7 @@ where
     }
 
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
-        info!("{ctx} Connecting to BigQuery");
-
-        let channel = self
-            .channel_factory
-            .make_channel(Duration::from_nanos(self.config.connect_timeout))
-            .await?;
-
-        let client = BigQueryWriteClient::with_interceptor(
-            channel,
-            AuthInterceptor {
-                token_provider: T::default(),
-            },
-        );
-        self.client = Some(client);
+        self.ensure_connected(ctx).await?;
 
         Ok(true)
     }
@@ -474,6 +546,7 @@ impl<T> GbqChannelError for T where
     T: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync
 {
 }
+
 impl<T, TChannelError> GbqChannel<TChannelError> for T
 where
     T: tonic::codegen::Service<
@@ -488,14 +561,14 @@ where
 
 impl<T, TChannelError, TChannel> GbqSink<T, TChannel, TChannelError>
 where
-    T: TokenProvider + 'static,
-    TChannel: GbqChannel<TChannelError> + 'static,
+    T: TokenProvider + Send + Sync + 'static,
+    TChannel: GbqChannel<TChannelError> + Sync + 'static,
     TChannel::Future: Send,
     TChannelError: GbqChannelError,
 {
-    async fn event_to_requests(
+    fn event_to_requests(
         &mut self,
-        event: Event,
+        event: &Event,
         ctx: &SinkContext,
         request_size_limit: usize,
     ) -> Result<Vec<AppendRowsRequest>> {
@@ -503,15 +576,12 @@ where
         let mut requests: HashMap<String, AppendRowsRequest> = HashMap::new();
 
         for (data, meta) in event.value_meta_iter() {
-            let write_stream = self
-                .get_or_create_write_stream(
-                    &ctx.extract_meta(meta)
-                        .get("table_id")
-                        .as_str()
-                        .map_or_else(|| self.config.table_id.clone(), ToString::to_string),
-                    ctx,
-                )
-                .await?;
+            let write_stream = self.get_write_stream(
+                &ctx.extract_meta(meta)
+                    .get("handle")
+                    .as_str()
+                    .map_or_else(|| self.config.default_handle.clone(), ToString::to_string),
+            )?;
 
             match requests.entry(write_stream.name.clone()) {
                 Entry::Occupied(entry) => {
@@ -580,68 +650,24 @@ where
 }
 
 impl<
-        T: TokenProvider + 'static,
-        TChannel: GbqChannel<TChannelError> + 'static,
+        T: TokenProvider + Sync + Send + 'static,
+        TChannel: GbqChannel<TChannelError> + Sync + 'static,
         TChannelError: GbqChannelError,
     > GbqSink<T, TChannel, TChannelError>
 where
     TChannel::Future: Send,
 {
-    async fn get_or_create_write_stream(
-        &mut self,
-        table_id: &str,
-        ctx: &SinkContext,
-    ) -> Result<&ConnectedWriteStream> {
-        let client = self.client.as_mut().ok_or(ErrorKind::ClientNotAvailable(
-            "BigQuery",
-            "The client is not connected",
-        ))?;
-
-        match self.write_streams.entry(table_id.to_string()) {
-            Entry::Occupied(entry) => {
-                // NOTE: `into_mut` is needed here, even though we just need a non-mutable reference
-                //  This is because `get` returns reference which's lifetime is bound to the entry,
-                //  while the reference returned by `into_mut` is bound to the map
-                Ok(entry.into_mut())
-            }
-            Entry::Vacant(entry) => {
-                let stream = client
-                    .create_write_stream(CreateWriteStreamRequest {
-                        parent: table_id.to_string(),
-                        write_stream: Some(WriteStream {
-                            // The stream name here will be ignored and a generated value will be set in the response
-                            name: String::new(),
-                            r#type: i32::from(write_stream::Type::Committed),
-                            create_time: None,
-                            commit_time: None,
-                            table_schema: None,
-                        }),
-                    })
-                    .await?
-                    .into_inner();
-
-                let mapping = JsonToProtobufMapping::new(
-                    &stream
-                        .table_schema
-                        .as_ref()
-                        .ok_or_else(|| ErrorKind::GbqSchemaNotProvided(table_id.to_string()))?
-                        .clone()
-                        .fields,
-                    ctx,
-                );
-
-                Ok(entry.insert(ConnectedWriteStream {
-                    name: stream.name,
-                    mapping,
-                }))
-            }
-        }
+    fn get_write_stream(&mut self, handle: &str) -> Result<&ConnectedWriteStream> {
+        Ok(self
+            .write_streams
+            .get(handle)
+            .ok_or_else(|| ErrorKind::GbqSinkFailed("Failed to get write stream"))?)
     }
 }
 
 impl<
-        T: TokenProvider + 'static,
-        TChannel: GbqChannel<TChannelError> + 'static,
+        T: TokenProvider + Send + Sync + 'static,
+        TChannel: GbqChannel<TChannelError> + Sync + 'static,
         TChannelError: GbqChannelError,
     > GbqSink<T, TChannel, TChannelError>
 where
@@ -780,7 +806,7 @@ mod test {
 
     #[test]
     fn skips_unknown_field_types() {
-        let (rx, _tx) = crate::channel::bounded(1024);
+        let (rx, _tx) = crate::channel::bounded(128);
 
         let result = map_field(
             "name",
@@ -810,7 +836,7 @@ mod test {
 
     #[test]
     fn skips_fields_of_unspecified_type() {
-        let (rx, _tx) = bounded(1024);
+        let (rx, _tx) = crate::channel::bounded(128);
 
         let result = map_field(
             "name",
@@ -849,7 +875,7 @@ mod test {
         ];
 
         for item in data {
-            let (rx, _tx) = bounded(1024);
+            let (rx, _tx) = crate::channel::bounded(128);
 
             let result = map_field(
                 "name",
@@ -881,7 +907,7 @@ mod test {
 
     #[test]
     fn can_map_a_struct() {
-        let (rx, _tx) = bounded(1024);
+        let (rx, _tx) = crate::channel::bounded(128);
 
         let result = map_field(
             "name",
@@ -1127,7 +1153,7 @@ mod test {
 
     #[test]
     pub fn mapping_generates_a_correct_descriptor() {
-        let (rx, _tx) = bounded(1024);
+        let (rx, _tx) = crate::channel::bounded(128);
 
         let ctx = SinkContext::new(
             SinkUId::default(),
@@ -1177,7 +1203,7 @@ mod test {
 
     #[test]
     pub fn can_map_json_to_protobuf() -> Result<()> {
-        let (rx, _tx) = bounded(1024);
+        let (rx, _tx) = crate::channel::bounded(128);
 
         let ctx = SinkContext::new(
             SinkUId::default(),
@@ -1223,7 +1249,7 @@ mod test {
 
     #[test]
     fn map_field_ignores_fields_that_are_not_in_definition() -> Result<()> {
-        let (rx, _tx) = bounded(1024);
+        let (rx, _tx) = crate::channel::bounded(128);
 
         let ctx = SinkContext::new(
             SinkUId::default(),
@@ -1270,7 +1296,7 @@ mod test {
 
     #[test]
     fn map_field_ignores_struct_fields_that_are_not_in_definition() -> Result<()> {
-        let (rx, _tx) = bounded(1024);
+        let (rx, _tx) = crate::channel::bounded(128);
 
         let ctx = SinkContext::new(
             SinkUId::default(),
@@ -1315,7 +1341,7 @@ mod test {
 
     #[test]
     fn fails_on_bytes_type_mismatch() {
-        let (rx, _tx) = bounded(1024);
+        let (rx, _tx) = crate::channel::bounded(128);
 
         let ctx = SinkContext::new(
             SinkUId::default(),
@@ -1351,7 +1377,7 @@ mod test {
 
     #[test]
     fn fails_if_the_event_is_not_an_object() {
-        let (rx, _tx) = bounded(1024);
+        let (rx, _tx) = crate::channel::bounded(128);
 
         let ctx = SinkContext::new(
             SinkUId::default(),
@@ -1400,9 +1426,9 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn on_event_fails_if_client_is_not_conected() -> Result<()> {
-        let (rx, _tx) = bounded(1024);
+        let (rx, _tx) = crate::channel::bounded(128);
         let config = Config::new(&literal!({
-            "table_id": "doesnotmatter",
+            "default_handle": "doesnotmatter",
             "connect_timeout": 1_000_000,
             "request_timeout": 1_000_000
         }))?;
@@ -1439,9 +1465,9 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn on_event_fails_if_write_stream_is_not_conected() -> Result<()> {
-        let (rx, _tx) = bounded(1024);
+        let (rx, _tx) = crate::channel::bounded(128);
         let config = Config::new(&literal!({
-            "table_id": "doesnotmatter",
+            "default_handle": "doesnotmatter",
             "connect_timeout": 1_000_000,
             "request_timeout": 1_000_000
         }))?;
@@ -1518,7 +1544,7 @@ mod test {
 
         let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
             Config {
-                table_id: String::new(),
+                default_handle: "a".to_string(),
                 connect_timeout: 1_000_000_000,
                 request_timeout: 1_000_000_000,
                 request_size_limit: 10 * 1024 * 1024,
@@ -1540,7 +1566,19 @@ mod test {
             AppContext::default(),
         );
 
-        sink.connect(&ctx, &Attempt::default()).await?;
+        Sink::connect(&mut sink, &ctx, &Attempt::default()).await?;
+
+        let control_event_data = literal!({
+            "database_writer": {"open_table": {"handle": "a", "table": "my_table"}}
+        });
+        sink.on_control(
+            Event {
+                data: control_event_data.into(),
+                ..Event::default()
+            },
+            &ctx,
+        )
+        .await?;
 
         let result = sink
             .on_event(
@@ -1564,6 +1602,7 @@ mod test {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    #[allow(clippy::too_many_lines)]
     pub async fn splits_large_requests() -> Result<()> {
         let mut buffer_write_stream = vec![];
         let mut buffer_append_rows_response = vec![];
@@ -1604,7 +1643,7 @@ mod test {
         ])));
         let mut sink = GbqSink::<TestTokenProvider, _, _>::new(
             Config {
-                table_id: String::new(),
+                default_handle: "a".to_string(),
                 connect_timeout: 1_000_000_000,
                 request_timeout: 1_000_000_000,
                 request_size_limit: 16 * 1024,
@@ -1623,7 +1662,18 @@ mod test {
             AppContext::default(),
         );
 
-        sink.connect(&ctx, &Attempt::default()).await?;
+        Sink::connect(&mut sink, &ctx, &Attempt::default()).await?;
+        let control_event_data = literal!({
+            "database_writer": {"open_table": {"handle": "a", "table": "my_table"}}
+        });
+        sink.on_control(
+            Event {
+                data: control_event_data.into(),
+                ..Event::default()
+            },
+            &ctx,
+        )
+        .await?;
 
         let value = literal!([
             {
@@ -1671,7 +1721,7 @@ mod test {
     pub async fn does_not_auto_ack() {
         let sink = GbqSink::<TestTokenProvider, _, _>::new(
             Config {
-                table_id: String::new(),
+                default_handle: String::new(),
                 connect_timeout: 1_000_000_000,
                 request_timeout: 1_000_000_000,
                 request_size_limit: 10 * 1024 * 1024,

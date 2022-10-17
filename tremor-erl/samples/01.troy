@@ -8,10 +8,10 @@ flow
     metrics_interval_s = 1,
     codec = "string",
     postprocessors = ["separate"],
-    config = {
-      "mode": "truncate",
-      "path": "/tmp/tremor_eqc_outfile"
-    }
+    config = {},
+    initial_commands = [
+        {"file_io": {"open": {"mode": "write_truncate", "handle": "a", "path": "/tmp/tremor_eqc_outfile"}}}
+    ]
   end;
 
   create connector metrics from connectors::metrics;
@@ -32,10 +32,10 @@ flow
     metrics_interval_s = 5,
     codec = "string",
     preprocessors = ["separate"],
-    config = {
-      "mode": "read",
-      "path": "README.md"
-    }
+    config = {},
+    initial_commands = [
+        {"file_io": {"open": {"mode": "read", "handle": "a", "path": "README.md"}}}
+    ]
   end;
 
   # this one should be in failed state
@@ -43,10 +43,10 @@ flow
   with
     codec = "string",
     preprocessors = ["separate"],
-    config = {
-      "mode": "read",
-      "path": "path/to/nowhere/i_do_no_exist.txt"
-    }
+    config = {},
+    initial_commands = [
+        {"file_io": {"open": {"mode": "read", "handle": "a", "path": "path/to/nowhere/i_do_no_exist.txt"}}}
+    ]
   end;
 
   create connector infile;

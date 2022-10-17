@@ -17,8 +17,11 @@ flow
   with
     codec = "json",
     config = {
-      "url": "ws://127.0.0.1:4242/"
-    }
+        "default_handle": "a"
+    },
+    initial_commands = [
+      {"socket_client": {"connect": {"address": "ws://127.0.0.1:4242/", "handle": "a"}}}
+    ]
   end;
 
   create connector in from integration::read_file;

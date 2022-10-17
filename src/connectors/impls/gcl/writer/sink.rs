@@ -17,6 +17,9 @@ use crate::connectors::google::{AuthInterceptor, ChannelFactory, TokenProvider};
 use crate::connectors::impls::gcl::writer::Config;
 use crate::connectors::prelude::*;
 use crate::connectors::sink::concurrency_cap::ConcurrencyCap;
+use crate::connectors::traits::{
+    DatabaseWriter, FileIo, QueueSubscriber, SocketClient, SocketServer,
+};
 use crate::connectors::utils::pb;
 use googapis::google::logging::v2::log_entry::Payload;
 use googapis::google::logging::v2::logging_service_v2_client::LoggingServiceV2Client;
@@ -46,18 +49,21 @@ impl ChannelFactory<Channel> for TonicChannelFactory {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 pub(crate) struct GclSink<T, TChannel>
 where
-    T: TokenProvider + Clone,
+    T: TokenProvider + Clone + Send + Sync + 'static,
     TChannel: tonic::codegen::Service<
             http::Request<tonic::body::BoxBody>,
             Response = http::Response<tonic::transport::Body>,
-        > + Clone,
+        > + Clone
+        + Sync
+        + Send,
 {
     client: Option<LoggingServiceV2Client<InterceptedService<TChannel, AuthInterceptor<T>>>>,
     config: Config,
     concurrency_cap: ConcurrencyCap,
-    reply_tx: ReplySender,
+    reply_tx: crate::channel::UnboundedSender<AsyncSinkReply>,
     channel_factory: Box<dyn ChannelFactory<TChannel> + Send + Sync>,
 }
 
@@ -86,19 +92,20 @@ fn value_to_log_entry(
 }
 
 impl<
-        T: TokenProvider + Clone,
+        T: TokenProvider + Clone + Send + Sync + 'static,
         TChannel: tonic::codegen::Service<
                 http::Request<tonic::body::BoxBody>,
                 Response = http::Response<tonic::transport::Body>,
                 Error = TChannelError,
             > + Send
-            + Clone,
+            + Clone
+            + Sync,
         TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>>,
     > GclSink<T, TChannel>
 {
     pub fn new(
         config: Config,
-        reply_tx: ReplySender,
+        reply_tx: crate::channel::UnboundedSender<AsyncSinkReply>,
         channel_factory: impl ChannelFactory<TChannel> + Send + Sync + 'static,
     ) -> Self {
         let concurrency_cap = ConcurrencyCap::new(config.concurrency, reply_tx.clone());
@@ -114,12 +121,13 @@ impl<
 
 #[async_trait::async_trait]
 impl<
-        T: TokenProvider + Clone + 'static,
+        T: TokenProvider + Clone + Send + Sync + 'static,
         TChannel: tonic::codegen::Service<
                 http::Request<tonic::body::BoxBody>,
                 Response = http::Response<tonic::transport::Body>,
                 Error = TChannelError,
             > + Send
+            + Sync
             + Clone
             + 'static,
         TChannelError: Into<Box<dyn std::error::Error + Send + Sync + 'static>> + Send + Sync,
@@ -246,13 +254,13 @@ where
 mod test {
     #![allow(clippy::cast_possible_wrap)]
     use super::*;
-    use crate::connectors::impls::gcl;
     use crate::connectors::tests::ConnectorHarness;
     use crate::connectors::ConnectionLostNotifier;
     use crate::connectors::{
         google::tests::TestTokenProvider, utils::quiescence::QuiescenceBeacon,
     };
     use crate::{channel::bounded, system::flow::AppContext};
+    use crate::{channel::unbounded, connectors::impls::gcl};
     use bytes::Bytes;
     use futures::future::Ready;
     use googapis::google::logging::r#type::LogSeverity;
@@ -320,7 +328,7 @@ mod test {
             let body = http_body::combinators::BoxBody::new(body).map_err(|err| match err {});
             let mut response = tonic::body::BoxBody::new(body);
             let (mut tx, body) = tonic::transport::Body::channel();
-            let jh = tokio::task::spawn(async move {
+            let jh = async_std::task::spawn(async move {
                 let response = response.data().await.unwrap().unwrap();
                 let len: [u8; 4] = (response.len() as u32).to_ne_bytes();
                 let len = Bytes::from(len.to_vec());
@@ -334,7 +342,7 @@ mod test {
                 trailers.insert("grpc-status", HeaderValue::from_static("0"));
                 tx.send_trailers(trailers).await.unwrap();
             });
-            tokio::task::spawn_blocking(|| jh);
+            async_std::task::spawn_blocking(|| jh);
 
             let response = http::Response::new(body);
 
@@ -344,7 +352,7 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn on_event_can_send_an_event() -> Result<()> {
-        let (tx, mut rx) = crate::channel::unbounded();
+        let (tx, mut rx) = unbounded();
         let (connection_lost_tx, _connection_lost_rx) = bounded(10);
 
         let mut sink = GclSink::<TestTokenProvider, _>::new(
@@ -401,8 +409,8 @@ mod test {
         .await?;
 
         assert!(matches!(
-            rx.recv().await.expect("no msg"),
-            AsyncSinkReply::CB(_, Trigger)
+            rx.recv().await,
+            Some(AsyncSinkReply::CB(_, Trigger))
         ));
 
         Ok(())
@@ -447,8 +455,8 @@ mod test {
 
     #[tokio::test(flavor = "multi_thread")]
     async fn on_event_fails_if_client_is_not_connected() -> Result<()> {
-        let (rx, _tx) = bounded(1024);
-        let (reply_tx, _reply_rx) = crate::channel::unbounded();
+        let (rx, _tx) = bounded(128);
+        let (reply_tx, _reply_rx) = unbounded();
         let config = Config::new(&literal!({
             "connect_timeout": 1_000_000
         }))?;

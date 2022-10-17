@@ -85,6 +85,7 @@ impl Connector for Client {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct DnsSink {
     // for forwarding DNS responses
     tx: Sender<SourceReply>,

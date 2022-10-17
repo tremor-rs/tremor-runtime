@@ -13,9 +13,11 @@ flow
     codec = "msgpack",
     preprocessors = ["length-prefixed"],
     config = {
-      "url": "localhost:65535",
       "buf_size": 16384
-    }
+    },
+    initial_commands = [
+      {"socket_server": {"listen": {"address": "tcp://0.0.0.0:65535", "handle": "a"}}},
+    ],
   end;
   create connector server;
 
@@ -52,12 +54,15 @@ flow
     codec = "msgpack",
     postprocessors = ["length-prefixed"],
     config = {
-      "url": "localhost:65535",
+      "default_handle": "a",
       "socket_options": {
         "TCP_NODELAY": true
       },
       "tls": false
-    } 
+    },
+    initial_commands = [
+        {"socket_client": {"connect": {"address": "localhost:65535", "handle": "a"}}},
+    ]
   end;
   create connector client;
 

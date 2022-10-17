@@ -9,9 +9,9 @@ flow
   with 
     codec = {"name": "json", "config": {"mode": "sorted"}},
     postprocessors = ["separate"],
+    initial_commands = [{"file_io": {"open": {"mode": "write_truncate", "path": "out.log", "handle": "output"}}}],
     config = {
-      "path": "out.log",
-      "mode": "truncate"
+      "default_handle": "output"
     },
   end;
 
@@ -19,9 +19,8 @@ flow
   with 
     codec = "json",
     preprocessors = ["separate"],
+    initial_commands = [{"file_io": {"open": {"mode": "read", "path": "in.json", "handle": "input"}}}],
     config = {
-      "path": "in.json",
-      "mode": "read"
     },
   end;
 

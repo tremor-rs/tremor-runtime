@@ -195,11 +195,12 @@ where
     async fn fail_upload(&mut self, upload: Upload, ctx: &SinkContext) -> Result<()>;
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 pub(crate) struct ConsistentSink<Impl, Upload, Buffer>
 where
-    Buffer: ObjectStorageBuffer,
-    Upload: ObjectStorageUpload,
-    Impl: ObjectStorageSinkImpl<Upload>,
+    Buffer: ObjectStorageBuffer + Sync + Send,
+    Upload: ObjectStorageUpload + Sync + Send,
+    Impl: ObjectStorageSinkImpl<Upload> + Sync + Send,
 {
     pub(crate) sink_impl: Impl,
     current_upload: Option<Upload>,
@@ -208,9 +209,9 @@ where
 
 impl<Impl, Upload, Buffer> ConsistentSink<Impl, Upload, Buffer>
 where
-    Buffer: ObjectStorageBuffer,
-    Upload: ObjectStorageUpload,
-    Impl: ObjectStorageSinkImpl<Upload>,
+    Buffer: ObjectStorageBuffer + Sync + Send,
+    Upload: ObjectStorageUpload + Sync + Send,
+    Impl: ObjectStorageSinkImpl<Upload> + Sync + Send,
 {
     pub(crate) fn new(sink_impl: Impl) -> Self {
         let buffers = Buffer::new(sink_impl.buffer_size());
@@ -225,9 +226,9 @@ where
 #[async_trait::async_trait]
 impl<Impl, Upload, Buffer> Sink for ConsistentSink<Impl, Upload, Buffer>
 where
-    Buffer: ObjectStorageBuffer + Send + Sync,
-    Upload: ObjectStorageUpload + Send + Sync,
-    Impl: ObjectStorageSinkImpl<Upload> + Send + Sync,
+    Buffer: ObjectStorageBuffer + Send + Sync + 'static,
+    Upload: ObjectStorageUpload + Send + Sync + 'static,
+    Impl: ObjectStorageSinkImpl<Upload> + Send + Sync + 'static,
 {
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         self.buffers = Buffer::new(self.sink_impl.buffer_size());
@@ -294,9 +295,9 @@ where
 
 impl<Impl, Upload, Buffer> ConsistentSink<Impl, Upload, Buffer>
 where
-    Buffer: ObjectStorageBuffer,
-    Upload: ObjectStorageUpload,
-    Impl: ObjectStorageSinkImpl<Upload>,
+    Buffer: ObjectStorageBuffer + Sync + Send,
+    Upload: ObjectStorageUpload + Sync + Send,
+    Impl: ObjectStorageSinkImpl<Upload> + Sync + Send,
 {
     async fn on_event_inner(
         &mut self,
@@ -386,11 +387,12 @@ where
         Ok(())
     }
 }
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 pub(crate) struct YoloSink<Impl, Upload, Buffer>
 where
-    Impl: ObjectStorageSinkImpl<Upload>,
-    Upload: ObjectStorageUpload,
-    Buffer: ObjectStorageBuffer,
+    Impl: ObjectStorageSinkImpl<Upload> + Sync + Send,
+    Upload: ObjectStorageUpload + Sync + Send,
+    Buffer: ObjectStorageBuffer + Sync + Send,
 {
     pub(crate) sink_impl: Impl,
     current_upload: Option<Upload>,
@@ -399,9 +401,9 @@ where
 
 impl<Impl, Upload, Buffer> YoloSink<Impl, Upload, Buffer>
 where
-    Impl: ObjectStorageSinkImpl<Upload> + Send,
-    Upload: ObjectStorageUpload + Send,
-    Buffer: ObjectStorageBuffer + Send,
+    Impl: ObjectStorageSinkImpl<Upload> + Send + Sync,
+    Upload: ObjectStorageUpload + Send + Sync,
+    Buffer: ObjectStorageBuffer + Send + Sync,
 {
     pub(crate) fn new(sink_impl: Impl) -> Self {
         let buffer = Buffer::new(sink_impl.buffer_size());
@@ -416,9 +418,9 @@ where
 #[async_trait::async_trait]
 impl<Impl, Upload, Buffer> Sink for YoloSink<Impl, Upload, Buffer>
 where
-    Impl: ObjectStorageSinkImpl<Upload> + Send + Sync,
-    Upload: ObjectStorageUpload + Send + Sync,
-    Buffer: ObjectStorageBuffer + Send + Sync,
+    Impl: ObjectStorageSinkImpl<Upload> + Send + Sync + 'static,
+    Upload: ObjectStorageUpload + Send + Sync + 'static,
+    Buffer: ObjectStorageBuffer + Send + Sync + 'static,
 {
     async fn connect(&mut self, ctx: &SinkContext, _attempt: &Attempt) -> Result<bool> {
         // clear out the previous upload

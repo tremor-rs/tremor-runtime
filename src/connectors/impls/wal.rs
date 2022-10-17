@@ -12,10 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// #![cfg_attr(coverage, no_coverage)]
-use std::{sync::Arc, time::Duration};
-
 use crate::connectors::prelude::*;
+use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 
 use simd_json_derive::{Deserialize, Serialize};
@@ -126,6 +124,7 @@ impl Source for WalSource {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct WalSink {
     wal: Arc<Mutex<qwal::Wal>>,
 }

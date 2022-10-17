@@ -288,13 +288,15 @@ async fn ws_server_text_routing() -> Result<()> {
     let defn = literal!({
       "codec": "json",
       "config": {
-        "url": url.clone(),
         "backlog": 64,
         "socket_options": {
             "TCP_NODELAY": true,
             "SO_REUSEPORT": false
         }
-      }
+      },
+      "initial_commands": [
+         {"socket_server": {"listen": {"address": url.clone(), "handle": "a"}}}
+      ]
     });
 
     let mut harness =
@@ -342,7 +344,8 @@ async fn ws_server_text_routing() -> Result<()> {
             "peer": {
                 "host": peer_obj.get("host").map(Value::clone_static),
                 "port": c1.port()?,
-            }
+            },
+            "handle": "a"
         }
     });
     let echo_back = Event {
@@ -371,9 +374,12 @@ async fn ws_client_binary_routing() -> Result<()> {
     let defn = literal!({
       "codec": "json",
       "config": {
-          "url": format!("ws://127.0.0.1:{free_port}"),
-          "socket_options": {} // enforcing defaults during serialization
-      }
+          "socket_options": {}, // enforcing defaults during serialization
+          "default_handle": "a"
+      },
+        "initial_commands": [
+            {"socket_client": {"connect": {"address": format!("ws://127.0.0.1:{free_port}"), "handle": "a"}}}
+        ]
     });
 
     let harness =
@@ -420,8 +426,11 @@ async fn ws_client_text_routing() -> Result<()> {
     let defn = literal!({
       "codec": "json",
       "config": {
-          "url": format!("ws://127.0.0.1:{free_port}"),
-      }
+            "default_handle": "a"
+      },
+      "initial_commands": [
+        {"socket_client": {"connect": {"address": format!("ws://127.0.0.1:{free_port}"), "handle": "a"}}}
+      ]
     });
 
     let harness =
@@ -435,7 +444,8 @@ async fn ws_client_text_routing() -> Result<()> {
                 "host": "127.0.0.1",
                 "port": free_port,
                 "url": format!("ws://127.0.0.1:{free_port}"),
-            }
+            },
+            "handle": "a"
         }
     });
     let echo_back = Event {
@@ -467,13 +477,15 @@ async fn wss_server_text_routing() -> Result<()> {
     let defn = literal!({
       "codec": "json",
       "config": {
-          "url": format!("wss://localhost:{free_port}"),
           "tls": {
             "cert": "./tests/localhost.cert",
             "key": "./tests/localhost.key",
             "domain": "localhost"
           }
-        }
+        },
+      "initial_commands": [
+            {"socket_server": {"listen": {"address": format!("wss://localhost:{free_port}"), "handle": "a"}}}
+        ]
     });
 
     let mut harness =
@@ -523,7 +535,8 @@ async fn wss_server_text_routing() -> Result<()> {
             "peer": {
                 "host": peer_obj.get("host").map(Value::clone_static),
                 "port": c1.port()?,
-            }
+            },
+            "handle": "a"
         }
     });
     let echo_back = Event {
@@ -557,13 +570,15 @@ async fn wss_server_binary_routing() -> Result<()> {
     let defn = literal!({
       "codec": "json",
       "config": {
-        "url": format!("wss://localhost:{free_port}"),
         "tls": {
             "cert": "./tests/localhost.cert",
             "key": "./tests/localhost.key",
             "domain": "localhost"
-            }
-        }
+          }
+        },
+        "initial_commands": [
+            {"socket_server": {"listen": {"address": format!("wss://localhost:{free_port}"), "handle": "a"}}}
+        ]
     });
 
     let mut harness =
@@ -614,7 +629,8 @@ async fn wss_server_binary_routing() -> Result<()> {
             "peer": {
                 "host": peer_obj.get("host").map(Value::clone_static),
                 "port": c1.port()?,
-            }
+            },
+            "handle": "a"
         }
     });
     let echo_back = Event {

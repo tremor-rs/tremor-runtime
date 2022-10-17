@@ -94,10 +94,11 @@ pub(crate) struct SinkData {
 }
 
 /// tracking 1 channel per stream
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 pub(crate) struct ChannelSink<M, F, B>
 where
-    M: Hash + Eq + Send + 'static,
-    F: Fn(&Value<'_>) -> Option<M>,
+    M: Hash + Eq + Send + Sync + 'static,
+    F: Fn(&Value<'_>) -> Option<M> + Sync + Send,
     B: SinkMetaBehaviour,
 {
     _b: PhantomData<B>,
@@ -112,8 +113,8 @@ where
 
 impl<T, F> ChannelSink<T, F, NoMeta>
 where
-    T: Hash + Eq + Send + 'static,
-    F: Fn(&Value<'_>) -> Option<T>,
+    T: Hash + Eq + Send + Sync + 'static,
+    F: Fn(&Value<'_>) -> Option<T> + Sync + Send,
 {
     /// Construct a new instance that redacts metadata with prepared `rx` and `tx`
     pub(crate) fn from_channel_no_meta(
@@ -129,8 +130,8 @@ where
 
 impl<T, F> ChannelSink<T, F, WithMeta>
 where
-    T: Hash + Eq + Send + 'static,
-    F: Fn(&Value<'_>) -> Option<T>,
+    T: Hash + Eq + Send + Sync + 'static,
+    F: Fn(&Value<'_>) -> Option<T> + Sync + Send,
 {
     /// Construct a new instance of a channel sink with metadata support
     pub(crate) fn new_with_meta(
@@ -145,8 +146,8 @@ where
 
 impl<T, F, B> ChannelSink<T, F, B>
 where
-    T: Hash + Eq + Send + 'static,
-    F: Fn(&Value<'_>) -> Option<T>,
+    T: Hash + Eq + Send + Sync + 'static,
+    F: Fn(&Value<'_>) -> Option<T> + Sync + Send,
     B: SinkMetaBehaviour,
 {
     /// constructor of a `ChannelSink` that is sending the event metadata to the `StreamWriter`
@@ -362,8 +363,8 @@ fn get_sink_meta<'lt, 'value>(
 impl<T, F, B> Sink for ChannelSink<T, F, B>
 where
     T: Hash + Eq + Send + Sync,
-    F: (Fn(&Value<'_>) -> Option<T>) + Send + Sync,
-    B: SinkMetaBehaviour + Send + Sync,
+    F: (Fn(&Value<'_>) -> Option<T>) + Send + Sync + 'static,
+    B: SinkMetaBehaviour + Send + Sync + 'static,
 {
     /// Receives events and tries to route them to the correct connection/channel/stream
     async fn on_event(

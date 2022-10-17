@@ -248,6 +248,7 @@ impl Connector for Kv {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct KvSink {
     alias: Alias,
     app_ctx: AppContext,

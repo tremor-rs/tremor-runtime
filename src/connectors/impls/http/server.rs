@@ -345,6 +345,7 @@ impl Source for HttpServerSource {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct HttpServerSink {
     inflight: Arc<DashMap<RequestId, oneshot::Sender<Response<Body>>>>,
     codec_map: MimeCodecMap,

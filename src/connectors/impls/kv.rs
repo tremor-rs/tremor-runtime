@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// #![cfg_attr(coverage, no_coverage)]
 use crate::{
     channel::{bounded, Receiver, Sender},
     errors::already_created_error,
@@ -263,6 +262,7 @@ impl Connector for Kv {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct KvSink {
     db: Db,
     tx: Sender<SourceReply>,

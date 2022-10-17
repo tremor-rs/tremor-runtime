@@ -7,7 +7,7 @@ flow
   with
     codec = {"name": "json", "config": {"mode": "sorted"}},
     config = {
-      "url": "127.0.0.1:22222",
+      "default_handle": "a",
       "socket_options": {
         "SO_REUSEPORT": true
       }
@@ -18,7 +18,10 @@ flow
         "max_retries": 10,
         "growth_rate": 2.0
       }
-    }
+    },
+    initial_commands = [
+        {"socket_client": {"connect": {"address": "127.0.0.1:22222", "handle": "a"}}}
+    ]
   end;
   create connector client;
 

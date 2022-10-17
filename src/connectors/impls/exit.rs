@@ -74,7 +74,7 @@ impl ConnectorBuilder for Builder {
         }))
     }
 }
-#[derive(Clone)]
+#[derive(Clone, FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 pub(crate) struct Exit {
     kill_switch: KillSwitch,
     config: Config,

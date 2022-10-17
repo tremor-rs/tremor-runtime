@@ -28,6 +28,7 @@ pub(crate) mod utils;
 mod google;
 #[cfg(test)]
 pub(crate) mod tests;
+pub(crate) mod traits;
 
 use self::utils::quiescence::QuiescenceBeacon;
 use self::{prelude::Attempt, utils::reconnect};
@@ -55,10 +56,12 @@ use simd_json::{Builder, Mutable, ValueAccess};
 use std::{fmt::Display, time::Duration};
 use tokio::task::{self, JoinHandle};
 use tremor_common::{
-    ports::{Port, ERR, IN, OUT},
+    ports::{Port, CONTROL, ERR, IN, OUT},
     uids::{ConnectorUId, ConnectorUIdGen, SourceUId},
 };
+use tremor_pipeline::Event;
 use tremor_script::ast::DeployEndpoint;
+use tremor_script::EventPayload;
 use tremor_value::Value;
 
 /// Accept timeout
@@ -448,6 +451,7 @@ pub(crate) async fn spawn(
 ) -> Result<Addr> {
     // instantiate connector
     let connector = builder.build(alias, &config, kill_switch).await?;
+    connector.validate(&config)?;
     let r = connector_task(
         alias.clone(),
         connector,
@@ -751,6 +755,19 @@ async fn connector_task(
 
                     // initiate connect asynchronously
                     connector_addr.sender.send(Msg::Reconnect).await?;
+
+                    // Send any initial commands
+                    for cmd in &config.initial_commands {
+                        connector_addr
+                            .send_sink(SinkMsg::Event {
+                                event: Event {
+                                    data: EventPayload::from(tremor_value::to_value(cmd)?),
+                                    ..Event::default()
+                                },
+                                port: CONTROL,
+                            })
+                            .await?;
+                    }
                 }
                 Msg::Start(sender) => {
                     info!("{ctx} Ignoring Start Msg. Current state: {connector_state}",);
@@ -1105,6 +1122,14 @@ pub(crate) trait Connector: Send {
 
     /// Returns the codec requirements for the connector
     fn codec_requirements(&self) -> CodecReq;
+
+    fn validate(&self, config: &ConnectorConfig) -> Result<()> {
+        if !config.initial_commands.is_empty() {
+            return Err(Error::from("This connector does not support commands"));
+        }
+
+        Ok(())
+    }
 }
 
 /// Specifeis if a connector requires a codec

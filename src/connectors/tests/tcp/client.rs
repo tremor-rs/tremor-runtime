@@ -68,13 +68,16 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
         "preprocessors": ["separate"],
         "postprocessors": ["separate"],
         "config": {
-            "url": server_addr,
+            "default_handle": "a",
             "socket_options": {
                 "TCP_NODELAY": true
             },
             "buf_size": 1024,
             "tls": tls_config
-        }
+        },
+        "initial_commands": [
+            {"socket_client": {"connect": {"address": server_addr, "handle": "a"}}}
+        ]
     });
     let mut connector =
         ConnectorHarness::new(function_name!(), &tcp::client::Builder::default(), &config).await?;
@@ -105,7 +108,8 @@ async fn tcp_client_test(use_tls: bool) -> Result<()> {
                 "peer": {
                     "host": localhost_ip,
                     "port": free_port
-                }
+                },
+                "handle": "a"
             }
         }),
         response.data.suffix().meta()

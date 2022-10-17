@@ -586,7 +586,7 @@ pub(crate) mod tests {
 
         // simulate sink lifecycle
         sink.on_start(&context).await?;
-        sink.connect(&context, &Attempt::default()).await?;
+        Sink::connect(&mut sink, &context, &Attempt::default()).await?;
 
         let id1 = EventId::from_id(1, 1, 1);
         let event = Event {
@@ -772,7 +772,7 @@ pub(crate) mod tests {
 
         // simulate sink lifecycle
         sink.on_start(&context).await?;
-        sink.connect(&context, &Attempt::default()).await?;
+        Sink::connect(&mut sink, &context, &Attempt::default()).await?;
 
         upload_client(&mut sink).inject_failure(true);
 
@@ -946,7 +946,7 @@ pub(crate) mod tests {
 
         // simulate sink lifecycle
         sink.on_start(&context).await?;
-        sink.connect(&context, &Attempt::default()).await?;
+        Sink::connect(&mut sink, &context, &Attempt::default()).await?;
 
         let event = Event {
             data: (literal!({}), literal!({})).into(), // no gcs_streamer meta
@@ -1448,6 +1448,7 @@ pub(crate) mod tests {
             postprocessors: None,
             reconnect: Reconnect::None,
             metrics_interval_s: None,
+            initial_commands: vec![],
         };
         let kill_switch = KillSwitch::dummy();
         let alias = Alias::new("badger");
@@ -1484,6 +1485,7 @@ pub(crate) mod tests {
             postprocessors: None,
             reconnect: Reconnect::None,
             metrics_interval_s: None,
+            initial_commands: vec![],
         };
         let kill_switch = KillSwitch::dummy();
         let alias = Alias::new("badger");

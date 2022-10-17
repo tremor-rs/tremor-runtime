@@ -18,13 +18,23 @@
 pub(crate) mod channel_sink;
 /// Utility for limiting concurrency (by sending `CB::Close` messages when a maximum concurrency value is reached)
 pub(crate) mod concurrency_cap;
+pub(crate) mod prelude;
 
+use crate::config::{
+    Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
+};
+use crate::connectors::traits::{
+    Command, DatabaseWriter, FileIo, QueueSubscriber, SocketClient, SocketServer,
+};
+use crate::connectors::utils::reconnect::{Attempt, ConnectionLostNotifier};
 use crate::connectors::{utils::metrics::SinkReporter, CodecReq};
 use crate::connectors::{Alias, ConnectorType, Context, Msg, QuiescenceBeacon, StreamDone};
 use crate::errors::Result;
 use crate::pipeline;
 use crate::postprocessor::{finish, make_postprocessors, postprocess, Postprocessors};
 use crate::primerge::PriorityMerge;
+use crate::raft;
+use crate::system::flow::AppContext;
 use crate::{
     channel::{bounded, unbounded, Receiver, Sender, UnboundedReceiver, UnboundedSender},
     qsize,
@@ -33,22 +43,13 @@ use crate::{
     codec::{self, Codec},
     config::NameWithConfig,
 };
-use crate::{
-    config::{
-        Codec as CodecConfig, Connector as ConnectorConfig, Postprocessor as PostprocessorConfig,
-    },
-    system::flow::AppContext,
-};
-use crate::{
-    connectors::utils::reconnect::{Attempt, ConnectionLostNotifier},
-    raft,
-};
 use futures::StreamExt; // for .next() on PriorityMerge
 use std::collections::{btree_map::Entry, BTreeMap, HashSet};
 use std::fmt::Display;
 use std::{borrow::Borrow, sync::Arc};
 use tokio::task;
 use tokio_stream::wrappers::{ReceiverStream, UnboundedReceiverStream};
+use tremor_common::ports::CONTROL;
 use tremor_common::time::nanotime;
 use tremor_common::{
     ports::Port,
@@ -56,7 +57,7 @@ use tremor_common::{
 };
 use tremor_pipeline::{CbAction, Event, EventId, OpMeta, SignalKind, DEFAULT_STREAM_ID};
 use tremor_script::{ast::DeployEndpoint, EventPayload};
-use tremor_value::Value;
+use tremor_value::{structurize, Value};
 
 pub(crate) type ReplySender = UnboundedSender<AsyncSinkReply>;
 
@@ -145,7 +146,18 @@ pub(crate) enum AsyncSinkReply {
 
 /// connector sink - receiving events
 #[async_trait::async_trait]
-pub(crate) trait Sink: Send {
+pub(crate) trait Sink:
+    Send + Sync + FileIo + SocketServer + SocketClient + QueueSubscriber + DatabaseWriter + 'static
+{
+    async fn on_control(&mut self, command: Event, ctx: &SinkContext) -> Result<SinkReply> {
+        for v in command.value_iter() {
+            let command = structurize::<Command>(v.clone())?;
+            command.execute(self, ctx).await?;
+        }
+
+        Ok(SinkReply::default())
+    }
+
     /// called when receiving an event
     async fn on_event(
         &mut self,
@@ -685,7 +697,8 @@ where
                         }
                         SinkMsg::Connect(sender, attempt) => {
                             info!("{} Connecting...", &self.ctx);
-                            let connect_result = self.sink.connect(&self.ctx, &attempt).await;
+                            let connect_result =
+                                Sink::connect(&mut self.sink, &self.ctx, &attempt).await;
                             if let Ok(true) = connect_result {
                                 info!("{} Sink connected.", &self.ctx);
                             }
@@ -795,18 +808,19 @@ where
                             self.merged_operator_meta.merge(event.op_meta.clone());
                             let transactional = event.transactional;
                             let start = nanotime();
-
-                            let res = self
-                                .sink
-                                .on_event(
-                                    port.borrow(),
-                                    event,
-                                    &self.ctx,
-                                    &mut self.serializer,
-                                    start,
-                                )
-                                .await;
-
+                            let res = if port == CONTROL {
+                                self.sink.on_control(event, &self.ctx).await
+                            } else {
+                                self.sink
+                                    .on_event(
+                                        port.borrow(),
+                                        event,
+                                        &self.ctx,
+                                        &mut self.serializer,
+                                        start,
+                                    )
+                                    .await
+                            };
                             let duration = nanotime() - start;
                             match res {
                                 Ok(replies) => {

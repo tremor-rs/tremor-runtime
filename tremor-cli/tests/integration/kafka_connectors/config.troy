@@ -99,9 +99,6 @@ flow
           "127.0.0.1:9092"
         ],
         "group_id": "test1",
-        "topics": [
-          "tremor_test"
-        ],
         "mode": {
           "custom": {
             "retry_failed_events": false,
@@ -112,7 +109,10 @@ flow
             }
           }
         }
-      }
+      },
+      initial_commands = [
+          {"queue_subscriber": {"subscribe": {"topics": ["tremor_test"], "handle": "a"}}}
+      ]
   end;
 
   define pipeline consume

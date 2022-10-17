@@ -29,6 +29,8 @@
 #![allow(proc_macro_back_compat)]
 
 #[macro_use]
+extern crate tremor_connector_derive;
+#[macro_use]
 extern crate serde;
 #[macro_use]
 extern crate log;
@@ -39,6 +41,7 @@ extern crate lazy_static;
 #[macro_use]
 extern crate pretty_assertions;
 
+extern crate core;
 #[cfg(test)]
 extern crate test_case;
 

@@ -25,9 +25,14 @@ pub(crate) use crate::{
             SourceManagerBuilder, SourceReply, StreamReader,
         },
         spawn_task,
+        traits::{
+            Command, DatabaseWriter, FileIo, FileIoCommand, QueueSubscriber, SocketClient,
+            SocketServer,
+        },
         utils::{
             reconnect::Attempt,
             url::{Defaults, HttpsDefaults, Url},
+            ConnectionMetaWithHandle,
         },
         Alias, CodecReq, Connector, ConnectorBuilder, ConnectorContext, ConnectorType, Context,
         StreamDone, StreamIdGen, ACCEPT_TIMEOUT,
@@ -39,11 +44,12 @@ pub(crate) use crate::{
     Event,
 };
 pub(crate) use std::sync::atomic::Ordering;
-pub(crate) use tremor_common::ports::{Port, ERR, IN, OUT};
+pub(crate) use tremor_common::ports::{Port, CONTROL, ERR, IN, OUT};
 pub use tremor_pipeline::{
     CbAction, ConfigImpl, EventIdGenerator, EventOriginUri, DEFAULT_STREAM_ID,
 };
 pub(crate) use tremor_script::prelude::*;
+pub(crate) use tremor_value::structurize;
 /// default buf size used for reading from files and streams (sockets etc)
 ///
 /// equals default chunk size for `BufReader`

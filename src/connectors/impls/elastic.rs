@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::http::auth::Auth;
+use crate::connectors::traits::FileIo;
 use crate::system::KillSwitch;
 use crate::{
     connectors::{
@@ -290,6 +291,7 @@ impl ElasticClients {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct ElasticSink {
     clients: ElasticClients,
     response_tx: Sender<SourceReply>,

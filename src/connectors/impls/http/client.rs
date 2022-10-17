@@ -228,6 +228,7 @@ impl Source for HttpRequestSource {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct HttpRequestSink {
     request_counter: u64,
     client: Option<Arc<HyperClient<HttpsConnector<HttpConnector>>>>,

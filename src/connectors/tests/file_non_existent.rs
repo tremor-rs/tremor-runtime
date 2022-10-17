@@ -15,6 +15,8 @@
 use super::ConnectorHarness;
 use crate::{connectors::impls::file, errors::Result};
 use std::path::Path;
+use tremor_common::ports::CONTROL;
+use tremor_pipeline::Event;
 use tremor_value::prelude::*;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -29,14 +31,29 @@ async fn file_connector() -> Result<()> {
     let defn = literal!({
         "codec": "string",
         "preprocessors": ["separate"],
-        "config": {
-            "path": input_path.display().to_string(),
-            "mode": "read"
-        }
+        "config": {}
     });
 
     let harness = ConnectorHarness::new(function_name!(), &file::Builder::default(), &defn).await?;
-    assert!(harness.start().await.is_err());
+    assert!(harness.start().await.is_ok());
+    let command = literal!({
+        "FileIo": {
+            "Open": {
+                "mode": "read",
+                "path": input_path.display().to_string(),
+                "handle": "___"
+            }
+        }
+    });
+    harness
+        .send_to_sink(
+            Event {
+                data: command.into(),
+                ..Event::default()
+            },
+            CONTROL,
+        )
+        .await?;
 
     let (out_events, err_events) = harness.stop().await?;
     assert_eq!(out_events, vec![]);

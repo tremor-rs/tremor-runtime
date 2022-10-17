@@ -1,0 +1,15 @@
+[package]
+authors = ["The Tremor Team"]
+name = "tremor-connector-derive"
+version = "0.1.0"
+edition = "2021"
+homepage = "https://www.tremor.rs"
+license = "Apache-2.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = "2.0"
+quote = "1.0"

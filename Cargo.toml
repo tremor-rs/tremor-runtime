@@ -21,6 +21,7 @@ members = [
   "tremor-pipeline",
   "tremor-script",
   "tremor-value",
+  "tremor-connector-derive",
 ]
 default-members = ["tremor-cli"]
 exclude = ["tremor-script-nif"]
@@ -100,6 +101,7 @@ tremor-influx = { path = "tremor-influx" }
 tremor-pipeline = { path = "tremor-pipeline" }
 tremor-script = { path = "tremor-script", features = ["arena-delete"] }
 tremor-value = { path = "tremor-value" }
+tremor-connector-derive = { path = "tremor-connector-derive" }
 url = "2.3"
 value-trait = "0.5"
 zstd = "*"
@@ -204,6 +206,7 @@ itoa = "1"
 ryu = "1"
 lexical = "6.1.1"
 simdutf8 = "0.1"
+downcast-rs = "1.2"
 
 # Clustering
 tarpc = { version = "0.33", features = ["full"] }

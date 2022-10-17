@@ -23,7 +23,7 @@ use tremor_pipeline::ConfigImpl;
 
 #[derive(Deserialize, Clone)]
 pub(crate) struct Config {
-    pub table_id: String,
+    pub default_handle: String,
     pub connect_timeout: u64,
     pub request_timeout: u64,
     #[serde(default = "default_request_size_limit")]
@@ -61,6 +61,22 @@ impl Connector for Gbq {
     fn codec_requirements(&self) -> CodecReq {
         CodecReq::Structured
     }
+
+    fn validate(&self, config: &ConnectorConfig) -> Result<()> {
+        for command in &config.initial_commands {
+            match structurize::<Command>(command.clone())? {
+                Command::DatabaseWriter(_) => {}
+                _ => {
+                    return Err(ErrorKind::NotImplemented(
+                        "Only DatabaseWriter commands are supported for the GBQ writer connector."
+                            .to_string(),
+                    )
+                    .into())
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 #[async_trait::async_trait]
@@ -94,7 +110,7 @@ mod tests {
     pub async fn can_spawn_sink() -> Result<()> {
         let mut connector = Gbq {
             config: Config {
-                table_id: "test".into(),
+                default_handle: "a".into(),
                 connect_timeout: 1,
                 request_timeout: 1,
                 request_size_limit: 10 * 1024 * 1024,

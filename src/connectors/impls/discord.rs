@@ -150,6 +150,7 @@ impl Connector for Discord {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 struct DiscordSink {
     tx: Sender<Value<'static>>,
 }

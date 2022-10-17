@@ -10,7 +10,7 @@ flow
       "separate"
     ],
     config = {
-      "url": "127.0.0.1:22224",
+      "default_handle": "a",
       "socket_options": {
         "SO_REUSEPORT": true,
         "TCP_NODELAY": true
@@ -22,7 +22,10 @@ flow
         "max_retries": 10,
         "growth_rate": 2.0
       }
-    }
+    },
+    initial_commands = [
+        {"socket_client": {"connect": {"address": "127.0.0.1:22224", "handle": "a"}}}
+    ]
   end;
   create connector client;
 

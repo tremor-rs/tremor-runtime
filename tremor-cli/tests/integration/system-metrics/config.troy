@@ -23,9 +23,9 @@ flow
     metrics_interval_s = 3,
     codec = {"name": "json", "config": {"mode": "sorted"}},
     postprocessors = ["separate"],
+    initial_commands = [{"file_io": {"open": {"path": "events.log", "mode": "write_truncate", "handle": "output"}}}],
     config = {
-      "path": "events.log",
-      "mode": "write"
+      "default_handle": "output"
     }
   end;
 

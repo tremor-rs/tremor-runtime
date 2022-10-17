@@ -6253,6 +6253,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tremor-connector-derive"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn 2.0.14",
+]
+
+[[package]]
 name = "tremor-influx"
 version = "0.13.0-rc.12"
 dependencies = [
@@ -6346,6 +6354,7 @@ dependencies = [
  "cron",
  "csv",
  "dashmap",
+ "downcast-rs",
  "either",
  "elasticsearch",
  "env_logger",
@@ -6424,6 +6433,7 @@ dependencies = [
  "tokio-tungstenite",
  "tonic",
  "tremor-common",
+ "tremor-connector-derive",
  "tremor-influx",
  "tremor-otelapis",
  "tremor-pipeline",

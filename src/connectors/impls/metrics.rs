@@ -148,6 +148,7 @@ impl Source for MetricsSource {
     }
 }
 
+#[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
 pub(crate) struct MetricsSink {
     tx: Sender<MetricsMsg>,
 }

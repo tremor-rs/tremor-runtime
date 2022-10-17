@@ -128,16 +128,19 @@ impl<'script> ConnectorDefinition<'script> {
     pub const POSTPROCESSORS: &'static str = "postprocessors";
     /// param name for `metrics_interval_s`
     pub const METRICS_INTERVAL_S: &'static str = "metrics_interval_s";
-    /// param name for reconnct configuration
+    /// param name for reconnect configuration
     pub const RECONNECT: &'static str = "reconnect";
+    /// param name for initial command
+    pub const INITIAL_COMMANDS: &'static str = "initial_commands";
 
-    const AVAILABLE_PARAMS: [&'static str; 6] = [
+    const AVAILABLE_PARAMS: [&'static str; 7] = [
         Self::CODEC,
         Self::CONFIG,
         Self::METRICS_INTERVAL_S,
         Self::POSTPROCESSORS,
         Self::PREPROCESSORS,
         Self::RECONNECT,
+        Self::INITIAL_COMMANDS,
     ];
 }
 

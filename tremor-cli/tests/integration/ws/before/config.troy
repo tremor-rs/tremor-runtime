@@ -7,8 +7,10 @@ flow
   with
     codec = "json",
     config = {
-      "url": "127.0.0.1:4242",
-    }
+    },
+    initial_commands = [
+        {"socket_server": {"listen": {"address": "127.0.0.1:4242", "handle": "a"}}}
+    ]
   end;
 
   create connector in;

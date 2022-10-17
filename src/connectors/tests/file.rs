@@ -15,6 +15,8 @@
 use super::ConnectorHarness;
 use crate::{connectors::impls::file, errors::Result};
 use std::path::Path;
+use tremor_common::ports::CONTROL;
+use tremor_pipeline::Event;
 use tremor_value::literal;
 use value_trait::ValueAccess;
 
@@ -33,8 +35,6 @@ async fn file_connector() -> Result<()> {
         "codec": "string",
         "preprocessors": ["separate"],
         "config": {
-            "path": input_path.display().to_string(),
-            "mode": "read"
         }
     });
 
@@ -42,6 +42,25 @@ async fn file_connector() -> Result<()> {
         ConnectorHarness::new(function_name!(), &file::Builder::default(), &defn).await?;
     harness.start().await?;
     harness.wait_for_connected().await?;
+
+    let command = literal!({
+        "file_io": {
+            "open": {
+                "mode": "read",
+                "path": input_path.display().to_string(),
+                "handle": "___"
+            }
+        }
+    });
+    harness
+        .send_to_sink(
+            Event {
+                data: command.into(),
+                ..Event::default()
+            },
+            CONTROL,
+        )
+        .await?;
 
     let event = harness.out()?.get_event().await?;
     assert_eq!(1, event.len());

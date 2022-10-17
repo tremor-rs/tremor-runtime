@@ -380,7 +380,7 @@ async fn link(
             ))?;
             let to_pipeline = pipelines.get(to.alias()).ok_or(format!(
                 "Pipeline {} not found in: {}",
-                from.alias(),
+                to.alias(),
                 key_list(pipelines)
             ))?;
             let (tx_from, mut rx_from) = bounded(1);
@@ -1124,6 +1124,7 @@ mod tests {
             }
         }
 
+        #[derive(FileIo, SocketServer, SocketClient, QueueSubscriber, DatabaseWriter)]
         struct FakeSink {
             tx: UnboundedSender<Event>,
         }
