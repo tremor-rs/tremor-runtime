@@ -165,7 +165,7 @@ pub(crate) async fn run_process(
 
     // Assertions
     let assert_path = test_dir.join("assert.yaml");
-    let report = if (&assert_path).is_file() {
+    let report = if assert_path.is_file() {
         let assert_yaml = assert::load_assert(&assert_path)?;
         Some(assert::process(
             &fg_out_file,

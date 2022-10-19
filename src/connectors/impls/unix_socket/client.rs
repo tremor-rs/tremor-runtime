@@ -129,7 +129,7 @@ impl UnixSocketSink {
         Ok(())
     }
 
-    async fn close(&mut self) -> Result<()> {
+    fn close(&mut self) -> Result<()> {
         if let Some(stream) = self.stream.take() {
             stream.shutdown(std::net::Shutdown::Write)?;
         }
@@ -196,7 +196,7 @@ impl Sink for UnixSocketSink {
     /// when writing is done
     async fn on_stop(&mut self, ctx: &SinkContext) -> Result<()> {
         // ignore error here
-        if let Err(e) = self.close().await {
+        if let Err(e) = self.close() {
             error!("{ctx} Failed stopping: {e}..");
         }
         Ok(())
